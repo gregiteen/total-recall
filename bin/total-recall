@@ -1,0 +1,504 @@
+#!/usr/bin/env node
+/**
+ * total-recall — CLI entry point
+ *
+ * Usage:
+ *   total-recall init                      Scaffold .agent/ directory
+ *   total-recall search "term"             FTS5 full-text search (BM25 ranked)
+ *   total-recall search "term" --source X  Filter by source type
+ *   total-recall graph "slug"              Knowledge graph traversal
+ *   total-recall steer --type never "..."  Immediate behavioral cascade
+ *   total-recall reindex                   Rebuild FTS5 from filesystem
+ *   total-recall compile-surface           Regenerate DISTILLED MEMORY
+ *   total-recall lint                      Wiki integrity check
+ *   total-recall dream                     Run consolidation cycle
+ *   total-recall stats                     Memory system health report
+ */
+
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = process.cwd();
+
+const command = process.argv[2];
+const args = process.argv.slice(3);
+
+async function main() {
+  const { loadConfig, resolvePaths } = await import('../src/core/utils.mjs');
+  const config = await loadConfig(ROOT);
+  const paths = resolvePaths(ROOT, config);
+
+  switch (command) {
+    case 'init':
+      await runInit(paths, config);
+      break;
+
+    case 'search':
+      await runSearch(paths, args);
+      break;
+
+    case 'graph':
+      await runGraph(paths, args);
+      break;
+
+    case 'steer':
+      await runSteer(paths, config, args);
+      break;
+
+    case 'reindex':
+      await runReindex(paths);
+      break;
+
+    case 'compile-surface':
+      await runCompileSurface(paths, config);
+      break;
+
+    case 'lint':
+      await runLint(paths);
+      break;
+
+    case 'dream':
+      await runDream(paths);
+      break;
+
+    case 'stats':
+      await runStats(paths);
+      break;
+
+    default:
+      printUsage();
+      break;
+  }
+}
+
+// ─── INIT ───────────────────────────────────────────────────────────────────────
+
+async function runInit(paths, config) {
+  console.log('🧠 Total Recall — Initializing memory system...\n');
+
+  const dirs = [
+    paths.wikiDir,
+    path.join(paths.wikiDir, 'preferences'),
+    path.join(paths.wikiDir, 'patterns'),
+    path.join(paths.wikiDir, 'anti-patterns'),
+    path.join(paths.wikiDir, 'concepts'),
+    path.join(paths.wikiDir, 'decisions'),
+    path.join(paths.wikiDir, 'projects'),
+    paths.dailyLogsDir,
+    paths.episodesDir,
+    paths.handoffsDir,
+    path.join(paths.dataDir, 'learning'),
+    path.join(paths.dataDir, 'knowledge'),
+  ];
+
+  for (const dir of dirs) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`  📁 ${path.relative(ROOT, dir)}/`);
+  }
+
+  // Copy SCHEMA.md template
+  const templateSchema = path.join(__dirname, '..', 'templates', 'SCHEMA.md');
+  const targetSchema = path.join(paths.wikiDir, 'SCHEMA.md');
+  if (fs.existsSync(templateSchema) && !fs.existsSync(targetSchema)) {
+    fs.copyFileSync(templateSchema, targetSchema);
+    console.log(`  📄 ${path.relative(ROOT, targetSchema)}`);
+  }
+
+  // Create INDEX.md
+  const indexPath = path.join(paths.wikiDir, 'INDEX.md');
+  if (!fs.existsSync(indexPath)) {
+    fs.writeFileSync(indexPath, '# Wiki Index\n\n> Auto-generated. Run `total-recall lint` to validate.\n');
+    console.log(`  📄 ${path.relative(ROOT, indexPath)}`);
+  }
+
+  // Create identity files if they don't exist
+  const identityFiles = [
+    { path: paths.userMd, content: '# User Preferences\n\n> Agent-maintained user preference log.\n' },
+    { path: paths.soulMd, content: '# Soul\n\n> Ethical mandates and behavioral boundaries.\n' },
+    { path: paths.memoryMd, content: '# Memory\n\n> Condensed experience summary.\n' },
+    { path: paths.identityMd, content: '# Identity\n\n> Agent persona definition.\n' },
+  ];
+
+  for (const { path: fp, content } of identityFiles) {
+    if (!fs.existsSync(fp)) {
+      fs.writeFileSync(fp, content);
+      console.log(`  📄 ${path.relative(ROOT, fp)}`);
+    }
+  }
+
+  // Create config template
+  const configPath = path.join(ROOT, 'totalrecall.config.mjs');
+  if (!fs.existsSync(configPath)) {
+    const templateConfig = path.join(__dirname, '..', 'totalrecall.config.mjs');
+    if (fs.existsSync(templateConfig)) {
+      fs.copyFileSync(templateConfig, configPath);
+    } else {
+      fs.writeFileSync(configPath, `export default {\n  dataDir: '${config.dataDir}',\n  systemPromptFile: '${config.systemPromptFile}',\n};\n`);
+    }
+    console.log(`  ⚙️  totalrecall.config.mjs`);
+  }
+
+  // Initialize database
+  const { openDatabase } = await import('../src/core/fts5.mjs');
+  const db = openDatabase(paths.dbPath);
+  db.close();
+  console.log(`  💾 ${path.relative(ROOT, paths.dbPath)}`);
+
+  console.log('\n✅ Memory system initialized. Run `total-recall reindex` to build the search index.\n');
+}
+
+// ─── SEARCH ─────────────────────────────────────────────────────────────────────
+
+async function runSearch(paths, args) {
+  const term = args[0];
+  if (!term) {
+    console.log('Usage: total-recall search "term" [--source wiki|learning|daily-log|episode|handoff]');
+    return;
+  }
+
+  const sourceIdx = args.indexOf('--source');
+  const source = sourceIdx !== -1 ? args[sourceIdx + 1] : null;
+
+  const { openDatabase, search, reindex } = await import('../src/core/fts5.mjs');
+  const db = openDatabase(paths.dbPath);
+
+  // Auto-reindex if empty
+  const count = db.prepare('SELECT COUNT(*) as c FROM memory_fts').get().c;
+  if (count === 0) {
+    console.log('⚠️  FTS5 index is empty. Running reindex first...\n');
+    const result = reindex(db, paths);
+    console.log(`✅ Indexed ${result.totalIndexed} documents\n`);
+  }
+
+  const { results, error, fallback } = search(db, term, { source });
+
+  const icons = { wiki: '📖', learning: '🧠', 'daily-log': '📅', episode: '📼', handoff: '🤝' };
+
+  console.log(`🔍 Search: "${term}"${source ? ` [source: ${source}]` : ''}`);
+  console.log(`   ${results.length} result(s)${fallback ? ' (LIKE fallback)' : ', ranked by BM25'}\n`);
+
+  if (error) console.log(`   ⚠️  FTS5 error: ${error}\n`);
+
+  for (const r of results) {
+    const icon = icons[r.source] || '📄';
+    if (r.source) {
+      console.log(`  ${icon} [${r.source}] ${r.title}`);
+      console.log(`     Category: ${r.category} | ID: ${r.source_id}`);
+      console.log(`     ${r.snippet}`);
+    } else {
+      // Fallback result from learnings table
+      console.log(`  🧠 [learning/${r.importance}] ${r.content.slice(0, 80)}...`);
+    }
+    console.log('');
+  }
+
+  db.close();
+}
+
+// ─── GRAPH ──────────────────────────────────────────────────────────────────────
+
+async function runGraph(paths, args) {
+  const slug = args[0];
+  if (!slug) {
+    console.log('Usage: total-recall graph "slug" [--depth N]');
+    return;
+  }
+
+  const depthIdx = args.indexOf('--depth');
+  const depth = depthIdx !== -1 ? parseInt(args[depthIdx + 1], 10) : 2;
+
+  const { openDatabase, graphTraverse } = await import('../src/core/fts5.mjs');
+  const db = openDatabase(paths.dbPath);
+  const results = graphTraverse(db, slug, { depth });
+
+  console.log(`🕸️  Graph: "${slug}" (depth: ${depth})\n`);
+
+  if (results.length === 0) {
+    console.log(`  No node found. Try: total-recall reindex\n`);
+  } else {
+    for (const r of results) {
+      const indent = '  '.repeat(r.level);
+      const label = r.level === 0 ? '🎯' : `L${r.level}`;
+      console.log(`${indent}${label} ${r.title} [${r.category}]`);
+      for (const e of r.edges) {
+        console.log(`${indent}   ${e.direction} ${e.type}: ${e.connected}`);
+      }
+    }
+    console.log(`\n  Traversed ${results.length} nodes`);
+  }
+
+  db.close();
+}
+
+// ─── STEER ──────────────────────────────────────────────────────────────────────
+
+async function runSteer(paths, config, args) {
+  const typeIdx = args.indexOf('--type');
+  if (typeIdx === -1 || !args[typeIdx + 1]) {
+    console.log('Usage: total-recall steer --type never|always|correct|prefer "directive"');
+    return;
+  }
+
+  const type = args[typeIdx + 1];
+  const directiveArgs = [];
+  for (let i = typeIdx + 2; i < args.length; i++) {
+    if (args[i].startsWith('--')) break;
+    directiveArgs.push(args[i]);
+  }
+  const directive = directiveArgs.join(' ').trim();
+
+  if (!directive) {
+    console.log('❌ No directive text provided.');
+    return;
+  }
+
+  const intensityIdx = args.indexOf('--intensity');
+  const intensity = intensityIdx !== -1 ? parseInt(args[intensityIdx + 1], 10) : null;
+  const dryRun = args.includes('--dry-run');
+
+  const { openDatabase } = await import('../src/core/fts5.mjs');
+  const { steer } = await import('../src/core/steering.mjs');
+
+  let db = null;
+  if (fs.existsSync(paths.dbPath)) {
+    const Database = (await import('better-sqlite3')).default;
+    db = new Database(paths.dbPath);
+  }
+
+  console.log(`\n🔄 Steering: --type ${type} (${dryRun ? 'DRY RUN' : 'LIVE'})`);
+  console.log(`   "${directive}"\n`);
+
+  const result = steer({
+    type,
+    directive,
+    paths,
+    db,
+    intensity,
+    dryRun,
+    behavioralSurfaceHeader: config.behavioralSurfaceHeader,
+  });
+
+  if (result.conflicts.length > 0) {
+    console.log('   ⚠️  Potential conflicts:');
+    for (const c of result.conflicts) {
+      console.log(`      📖 ${c.title}`);
+    }
+    console.log('');
+  }
+
+  for (const [step, status] of Object.entries(result.steps)) {
+    const icon = status.includes('error') ? '❌' : status === 'dry-run' ? '🏜️' : '✅';
+    console.log(`   ${icon} ${step}: ${status}`);
+  }
+
+  console.log(`\n${dryRun ? '🏜️  DRY RUN complete.' : '✅ Steering complete.'}\n`);
+
+  if (db) db.close();
+}
+
+// ─── REINDEX ────────────────────────────────────────────────────────────────────
+
+async function runReindex(paths) {
+  const { openDatabase, reindex } = await import('../src/core/fts5.mjs');
+  const db = openDatabase(paths.dbPath);
+
+  console.log('🔄 Rebuilding FTS5 search index...\n');
+  const result = reindex(db, paths);
+
+  const { breakdown } = result;
+  console.log(`  📖 Wiki nodes: ${breakdown.wiki}`);
+  console.log(`  🧠 Learnings: ${breakdown.learnings}`);
+  console.log(`  📅 Daily logs: ${breakdown.dailyLogs}`);
+  console.log(`  📼 Episodes: ${breakdown.episodes}`);
+  console.log(`  🤝 Handoffs: ${breakdown.handoffs}`);
+  console.log(`\n✅ Indexed ${result.totalIndexed} documents`);
+  console.log(`🔗 ${result.edgeCount} edges in wiki_edges\n`);
+
+  db.close();
+}
+
+// ─── COMPILE SURFACE ────────────────────────────────────────────────────────────
+
+async function runCompileSurface(paths, config) {
+  const { compileSurface, writeSurface } = await import('../src/core/surface.mjs');
+
+  const preview = args.includes('--preview');
+  const statsOnly = args.includes('--stats');
+
+  const result = compileSurface({
+    wikiDir: paths.wikiDir,
+    root: paths.root,
+    ranking: config.ranking,
+  });
+
+  if (!result) {
+    console.log('📭 No wiki nodes with frontmatter found.\n');
+    return;
+  }
+
+  if (statsOnly) {
+    console.log('📊 Behavioral Surface — Ranking Details\n');
+    console.log(`Total nodes: ${result.stats.totalNodes}`);
+    console.log(`Negative: ${result.stats.negativeRules} | Positive: ${result.stats.positiveRules} | Corrective: ${result.stats.correctiveRules}`);
+    console.log(`Steered: ${result.stats.steeredNodes}\n`);
+    for (const n of result.nodes.slice(0, 15)) {
+      console.log(`  ${n.score.toFixed(2)} | [${n.type}/${n.sentiment}] ${n.title}`);
+    }
+    return;
+  }
+
+  if (preview) {
+    console.log('🔮 Preview:\n');
+    console.log('─'.repeat(60));
+    console.log(result.surface);
+    console.log('─'.repeat(60));
+    return;
+  }
+
+  const writeResult = writeSurface(
+    paths.systemPrompt,
+    result.surface,
+    config.behavioralSurfaceHeader,
+  );
+
+  if (writeResult.success) {
+    console.log('✅ Behavioral Surface written to', path.relative(ROOT, paths.systemPrompt));
+    console.log(`   ${result.stats.totalNodes} nodes → ${result.stats.negativeRules} negative, ${result.stats.positiveRules} positive\n`);
+  } else {
+    console.log(`❌ ${writeResult.error}\n`);
+  }
+}
+
+// ─── LINT ───────────────────────────────────────────────────────────────────────
+
+async function runLint(paths) {
+  const { lint } = await import('../src/core/wiki.mjs');
+  const result = lint(paths.wikiDir);
+
+  console.log(`🔍 Wiki Lint — ${result.pages} pages\n`);
+
+  if (result.issues.errors.length > 0) {
+    console.log(`🔴 ERRORS (${result.issues.errors.length}):`);
+    for (const e of result.issues.errors) console.log(`  ❌ [${e.type}] ${e.slug}: ${e.detail}`);
+    console.log('');
+  }
+
+  if (result.issues.warnings.length > 0) {
+    console.log(`🟡 WARNINGS (${result.issues.warnings.length}):`);
+    for (const w of result.issues.warnings) console.log(`  ⚠️  [${w.type}] ${w.slug}: ${w.detail}`);
+    console.log('');
+  }
+
+  if (result.issues.info.length > 0) {
+    console.log(`🔵 INFO (${result.issues.info.length}):`);
+    for (const i of result.issues.info) console.log(`  ℹ️  [${i.type}] ${i.slug}: ${i.detail}`);
+    console.log('');
+  }
+
+  const total = result.issues.errors.length + result.issues.warnings.length + result.issues.info.length;
+  if (total === 0) {
+    console.log('✅ Wiki is healthy.\n');
+  } else if (result.hasErrors) {
+    console.log('⛔ Fix all errors before proceeding.\n');
+    process.exit(1);
+  } else {
+    console.log('✅ No blocking errors.\n');
+  }
+}
+
+// ─── DREAM ──────────────────────────────────────────────────────────────────────
+
+async function runDream(paths) {
+  const { dream } = await import('../src/core/dream.mjs');
+  const dryRun = args.includes('--dry-run');
+
+  console.log(`💤 Dream Cycle${dryRun ? ' (DRY RUN)' : ''}...\n`);
+
+  const result = dream({
+    wikiDir: paths.wikiDir,
+    dailyLogsDir: paths.dailyLogsDir,
+    dryRun,
+  });
+
+  if (result.confidenceDecay.decayed > 0) {
+    console.log(`📉 Confidence decay: ${result.confidenceDecay.decayed} nodes`);
+    for (const d of result.confidenceDecay.details) {
+      console.log(`   ${d.slug}: ${d.from} → ${d.to} (${d.daysSince}d, ${d.type})`);
+    }
+  } else {
+    console.log('  No confidence decay needed.');
+  }
+
+  console.log(`\n✅ Dream cycle complete (${result.timestamp}).\n`);
+}
+
+// ─── STATS ──────────────────────────────────────────────────────────────────────
+
+async function runStats(paths) {
+  const { openDatabase, getStats } = await import('../src/core/fts5.mjs');
+  const db = openDatabase(paths.dbPath);
+  const stats = getStats(db, paths);
+
+  const icons = { wiki: '📖', learning: '🧠', 'daily-log': '📅', episode: '📼', handoff: '🤝' };
+
+  console.log('📊 Total Recall — Memory System Stats\n');
+  console.log('═══ Layer 1: Episode Archive ═══');
+  console.log(`  Episodes: ${stats.episodes}`);
+  console.log(`  Daily logs: ${stats.dailyLogs}`);
+
+  console.log('\n═══ Layer 2: Search Index (FTS5) ═══');
+  console.log(`  Indexed documents: ${stats.ftsCount}`);
+  for (const s of stats.ftsBySource) {
+    console.log(`    ${icons[s.source] || '📄'} ${s.source}: ${s.c}`);
+  }
+  console.log(`  Graph edges: ${stats.edgeCount}`);
+
+  console.log('\n═══ Layer 3: Knowledge Graph ═══');
+  console.log(`  Wiki nodes: ${stats.wikiNodes}`);
+
+  console.log('\n═══ Learnings ═══');
+  console.log(`  Total: ${stats.totalLearnings}`);
+  for (const c of stats.categories) {
+    console.log(`    ${c.category}: ${c.c} (avg importance: ${(c.avg_imp || 5).toFixed(1)})`);
+  }
+
+  console.log('');
+  db.close();
+}
+
+// ─── USAGE ──────────────────────────────────────────────────────────────────────
+
+function printUsage() {
+  console.log(`
+🧠 Total Recall — Cognitive Memory System for AI Agents
+
+Usage: total-recall <command> [options]
+
+Commands:
+  init                         Scaffold .agent/ directory structure
+  search "term"                FTS5 full-text search (BM25 ranked)
+  graph "slug"                 Knowledge graph traversal (backlinks)
+  steer --type TYPE "text"     Immediate behavioral cascade
+  reindex                      Rebuild FTS5 index from filesystem
+  compile-surface              Regenerate DISTILLED MEMORY section
+  lint                         Wiki integrity check
+  dream                        Run consolidation cycle
+  stats                        Memory system health report
+
+Options:
+  --source TYPE                Filter search by: wiki|learning|daily-log|episode|handoff
+  --depth N                    Graph traversal depth (default: 2)
+  --type never|always|correct|prefer  Steer type
+  --intensity N                Override sentiment intensity (1-10)
+  --dry-run                    Show changes without writing
+  --preview                    Preview surface without writing
+  --stats                      Show ranking details for compile-surface
+`);
+}
+
+main().catch(err => {
+  console.error('❌', err.message);
+  process.exit(1);
+});

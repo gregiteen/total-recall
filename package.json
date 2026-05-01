@@ -1,0 +1,49 @@
+{
+  "name": "total-recall",
+  "version": "0.1.0",
+  "description": "Local-only, Markdown-first cognitive memory system for AI coding agents. Four-layer architecture: Episode Archive → Search Index → Knowledge Graph → Behavioral Surface.",
+  "type": "module",
+  "main": "src/core/index.mjs",
+  "bin": {
+    "total-recall": "./bin/total-recall",
+    "tr-query": "./bin/tr-query",
+    "tr-steer": "./bin/tr-steer",
+    "tr-surface": "./bin/tr-surface",
+    "tr-reindex": "./bin/tr-reindex"
+  },
+  "exports": {
+    ".": "./src/core/index.mjs",
+    "./fts5": "./src/core/fts5.mjs",
+    "./wiki": "./src/core/wiki.mjs",
+    "./ranking": "./src/core/ranking.mjs",
+    "./surface": "./src/core/surface.mjs",
+    "./steering": "./src/core/steering.mjs",
+    "./dream": "./src/core/dream.mjs",
+    "./episodes": "./src/core/episodes.mjs"
+  },
+  "scripts": {
+    "test": "node --test src/**/*.test.mjs",
+    "lint": "echo 'No lint configured yet'",
+    "build": "echo 'Pure ESM — no build step needed'"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "memory",
+    "cognitive",
+    "zettelkasten",
+    "sqlite",
+    "fts5",
+    "markdown",
+    "llm",
+    "coding-agent"
+  ],
+  "author": "UltraChat",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

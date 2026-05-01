@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// Alias: tr-surface → total-recall compile-surface
+process.argv.splice(2, 0, 'compile-surface');
+await import('./total-recall');
