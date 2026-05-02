@@ -43,6 +43,10 @@ async function main() {
       await runInit(paths, config);
       break;
 
+    case 'uninstall':
+      await runUninstall(paths, config);
+      break;
+
     case 'search':
       await runSearch(paths, args);
       break;
@@ -303,6 +307,60 @@ async function runInit(paths, config) {
   console.log(`  💾 ${path.relative(ROOT, paths.dbPath)}`);
 
   console.log('\n✅ Memory system initialized. Run `total-recall reindex` to build the search index.\n');
+}
+
+// ─── UNINSTALL ──────────────────────────────────────────────────────────────────
+
+async function runUninstall(paths, config) {
+  const dryRun = args.includes('--dry-run');
+  console.log(`🗑️  Total Recall — Uninstalling from project${dryRun ? ' (DRY RUN)' : ''}...\n`);
+
+  // 1. Unsync IDE prompts
+  console.log('  1. Removing injected behavioral surface from IDE rules...');
+  process.argv.push('--unsync');
+  if (dryRun) process.argv.push('--dry-run');
+  await import('../src/core/sync-prompts.mjs');
+
+  // 2. Unregister from global brain
+  const GLOBAL_DIR = path.join(os.homedir(), '.total-recall');
+  const GLOBAL_CONFIG = path.join(GLOBAL_DIR, 'config.mjs');
+  const absRepo = path.resolve(ROOT);
+  const tildeRepo = absRepo.replace(os.homedir(), '~');
+  
+  const repos = await loadGlobalRepos(GLOBAL_CONFIG);
+  const filtered = repos.filter(r => r.replace(/^~/, os.homedir()) !== absRepo);
+  
+  if (filtered.length !== repos.length) {
+    if (!dryRun) await writeGlobalRepos(GLOBAL_CONFIG, filtered);
+    console.log(`\n  2. Unregistered "${tildeRepo}" from global registry`);
+  } else {
+    console.log(`\n  2. Repo was not registered in global registry`);
+  }
+
+  // 3. Remove .agent directory and config
+  console.log('  3. Deleting memory data...');
+  if (fs.existsSync(paths.dataDir)) {
+    if (dryRun) {
+      console.log(`     🏜️ Would delete directory: ${paths.dataDir}`);
+    } else {
+      fs.rmSync(paths.dataDir, { recursive: true, force: true });
+      console.log(`     ✅ Deleted directory: ${paths.dataDir}`);
+    }
+  } else {
+    console.log(`     ⏭️ Directory not found: ${paths.dataDir}`);
+  }
+
+  const configPath = path.join(ROOT, 'totalrecall.config.mjs');
+  if (fs.existsSync(configPath)) {
+    if (dryRun) {
+      console.log(`     🏜️ Would delete file: ${configPath}`);
+    } else {
+      fs.unlinkSync(configPath);
+      console.log(`     ✅ Deleted file: ${configPath}`);
+    }
+  }
+
+  console.log(`\n✅ Uninstall complete. Your IDE rules are clean and the memory database is gone.\n`);
 }
 
 // ─── SEARCH ─────────────────────────────────────────────────────────────────────
@@ -715,6 +773,7 @@ Commands:
   install --list               Show all registered repos
   install --remove [path]      Unregister a repo
   init                         Scaffold .agent/ directory structure
+  uninstall                    Unregister repo, unsync IDEs, and delete .agent/
   search "term"                FTS5 full-text search (BM25 ranked)
   graph "slug"                 Knowledge graph traversal (backlinks)
   steer --type TYPE "text"     Immediate behavioral cascade

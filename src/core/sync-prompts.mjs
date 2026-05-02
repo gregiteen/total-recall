@@ -173,12 +173,54 @@ async function syncToIDE(root, ide, surface, { dryRun = false } = {}) {
   return results;
 }
 
+// ─── UNSYNC SURFACE FROM IDE ──────────────────────────────────────────────────────
+
+export async function unsyncFromIDE(root, ide, { dryRun = false } = {}) {
+  const results = [];
+
+  for (const target of ide.targets) {
+    const targetPath = path.join(root, target);
+
+    if (ide.strategy === 'symlink-or-section') {
+      if (fs.existsSync(targetPath)) {
+        if (fs.lstatSync(targetPath).isSymbolicLink()) {
+          results.push({ target, status: 'skip', detail: 'Is a symlink — leaving alone' });
+          continue;
+        }
+        if (dryRun) {
+          results.push({ target, status: 'dry-run', detail: 'Would clear section' });
+        } else {
+          const { clearSurface } = await import('./surface.mjs');
+          const result = clearSurface(targetPath);
+          results.push({ target, status: result.success ? 'cleared' : 'error', detail: result.error || 'Section removed' });
+        }
+      } else {
+        results.push({ target, status: 'skip', detail: 'File not found' });
+      }
+    } else if (ide.strategy === 'mdc-file' || ide.strategy === 'section-file') {
+      if (fs.existsSync(targetPath)) {
+        if (dryRun) {
+          results.push({ target, status: 'dry-run', detail: 'Would delete file' });
+        } else {
+          fs.unlinkSync(targetPath);
+          results.push({ target, status: 'deleted', detail: 'File removed' });
+        }
+      } else {
+        results.push({ target, status: 'skip', detail: 'File not found' });
+      }
+    }
+  }
+
+  return results;
+}
+
 // ─── MAIN ───────────────────────────────────────────────────────────────────────
 
 async function main() {
   const args = process.argv.slice(2);
   const listOnly = args.includes('--list');
   const dryRun = args.includes('--dry-run');
+  const unsync = args.includes('--unsync');
 
   // Resolve root
   let root = process.cwd();
@@ -216,25 +258,30 @@ async function main() {
     return;
   }
 
-  // Load config and compile surface
+  // Load config and paths
   const { loadConfig, resolvePaths } = await import('./utils.mjs');
   const config = await loadConfig(root);
   const paths = resolvePaths(root, config);
 
-  const { compileSurface } = await import('./surface.mjs');
-  const result = compileSurface({
-    wikiDir: paths.wikiDir,
-    root,
-    ranking: config.ranking,
-  });
+  let result = null;
+  if (!unsync) {
+    const { compileSurface } = await import('./surface.mjs');
+    result = compileSurface({
+      wikiDir: paths.wikiDir,
+      root,
+      ranking: config.ranking,
+    });
 
-  if (!result) {
-    console.log('📭 No wiki nodes found. Run `total-recall init` first.\n');
-    return;
+    if (!result) {
+      console.log('📭 No wiki nodes found. Run `total-recall init` first.\n');
+      return;
+    }
   }
 
-  console.log(`\n🧠 Total Recall — Sync Prompts${dryRun ? ' (DRY RUN)' : ''}\n`);
-  console.log(`   Surface: ${result.stats.totalNodes} nodes → ${result.stats.negativeRules} negative, ${result.stats.positiveRules} positive, ${result.stats.correctiveRules} corrective\n`);
+  console.log(`\n🧠 Total Recall — ${unsync ? 'Unsync' : 'Sync'} Prompts${dryRun ? ' (DRY RUN)' : ''}\n`);
+  if (!unsync && result) {
+    console.log(`   Surface: ${result.stats.totalNodes} nodes → ${result.stats.negativeRules} negative, ${result.stats.positiveRules} positive, ${result.stats.correctiveRules} corrective\n`);
+  }
 
   if (ides.length === 0) {
     console.log('⚠️  No IDEs detected. Create one of these markers to enable:');
@@ -247,9 +294,13 @@ async function main() {
 
   for (const ide of ides) {
     console.log(`  📺 ${ide.label}:`);
-    const syncResults = await syncToIDE(root, ide, result.surface, { dryRun });
+    const syncResults = unsync 
+      ? await unsyncFromIDE(root, ide, { dryRun })
+      : await syncToIDE(root, ide, result.surface, { dryRun });
+      
     for (const r of syncResults) {
       const icon = r.status === 'written' || r.status === 'injected' ? '✅' :
+                   r.status === 'cleared' || r.status === 'deleted' ? '🗑️' :
                    r.status === 'symlink' ? '🔗' :
                    r.status === 'dry-run' ? '🏜️' :
                    r.status === 'skip' ? '⏭️' : '❌';
@@ -257,7 +308,7 @@ async function main() {
     }
   }
 
-  console.log(`\n${dryRun ? '🏜️  DRY RUN complete.' : '✅ All IDE rule files synced.'}\n`);
+  console.log(`\n${dryRun ? '🏜️  DRY RUN complete.' : unsync ? '✅ All IDE rule files unsynced.' : '✅ All IDE rule files synced.'}\n`);
 }
 
 main().catch(err => {
