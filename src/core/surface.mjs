@@ -310,3 +310,47 @@ export function writeSurfaceMulti(filePaths, surface, sectionHeader = '## DISTIL
   }
   return { results };
 }
+
+/**
+ * Remove the behavioral surface section entirely from the system prompt file.
+ *
+ * @param {string} filePath - Path to system prompt file
+ * @param {string} [sectionHeader] - Section header to find and remove
+ * @returns {{ success: boolean, error?: string }}
+ */
+export function clearSurface(filePath, sectionHeader = '## DISTILLED MEMORY (SUBJECT STATES)') {
+  if (!fs.existsSync(filePath)) {
+    return { success: false, error: `File not found: ${filePath}` };
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const sectionStart = content.indexOf(sectionHeader);
+
+  if (sectionStart === -1) {
+    return { success: false, error: `Section "${sectionHeader}" not found` };
+  }
+
+  const afterHeader = content.indexOf('\n', sectionStart);
+  const nextSection = content.indexOf('\n## ', afterHeader + 1);
+  const sectionEnd = nextSection !== -1 ? nextSection : content.length;
+
+  const newContent = content.slice(0, sectionStart).trimEnd() + '\n\n' + content.slice(sectionEnd).trimStart();
+  fs.writeFileSync(filePath, newContent);
+
+  return { success: true };
+}
+
+/**
+ * Remove the behavioral surface from ALL configured system prompt files.
+ *
+ * @param {string[]} filePaths - Array of absolute paths
+ * @param {string} [sectionHeader]
+ * @returns {{ results: Array<{ file: string, success: boolean, error?: string }> }}
+ */
+export function clearSurfaceMulti(filePaths, sectionHeader) {
+  const results = [];
+  for (const fp of filePaths) {
+    results.push({ file: fp, ...clearSurface(fp, sectionHeader) });
+  }
+  return { results };
+}
