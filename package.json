@@ -1,6 +1,6 @@
 {
-  "name": "total-recall",
-  "version": "0.1.0",
+  "name": "@ultrachat/total-recall",
+  "version": "1.0.0",
   "description": "Local-only, Markdown-first cognitive memory system for AI coding agents. Four-layer architecture: Episode Archive → Search Index → Knowledge Graph → Behavioral Surface.",
   "type": "module",
   "main": "src/core/index.mjs",
@@ -9,7 +9,11 @@
     "tr-query": "./bin/tr-query",
     "tr-steer": "./bin/tr-steer",
     "tr-surface": "./bin/tr-surface",
-    "tr-reindex": "./bin/tr-reindex"
+    "tr-reindex": "./bin/tr-reindex",
+    "tr-coprocessor": "./bin/tr-coprocessor",
+    "tr-episodes": "./bin/tr-episodes",
+    "tr-notify": "./src/coprocessor/notify.mjs",
+    "tr-memory-pipeline": "./src/agents/switch-memory-pipeline.mjs"
   },
   "exports": {
     ".": "./src/core/index.mjs",
@@ -19,12 +23,27 @@
     "./surface": "./src/core/surface.mjs",
     "./steering": "./src/core/steering.mjs",
     "./dream": "./src/core/dream.mjs",
-    "./episodes": "./src/core/episodes.mjs"
+    "./episodes": "./src/core/episodes.mjs",
+    "./crypto": "./src/core/crypto.mjs",
+    "./sync-prompts": "./src/core/sync-prompts.mjs",
+    "./coprocessor": "./src/coprocessor/daemon.mjs",
+    "./coprocessor/inject": "./src/coprocessor/inject.mjs",
+    "./coprocessor/checks/steering": "./src/coprocessor/checks/steering.mjs",
+    "./coprocessor/checks/sentiment": "./src/coprocessor/checks/sentiment.mjs",
+    "./coprocessor/checks/relevance": "./src/coprocessor/checks/relevance.mjs",
+    "./coprocessor/checks/contradiction": "./src/coprocessor/checks/contradiction.mjs",
+    "./coprocessor/checks/researcher": "./src/coprocessor/checks/researcher.mjs",
+    "./coprocessor/watchers/antigravity": "./src/coprocessor/watchers/antigravity.mjs",
+    "./coprocessor/watchers": "./src/coprocessor/watchers/index.mjs",
+    "./coprocessor/notify": "./src/coprocessor/notify.mjs",
+    "./agents/pipeline": "./src/agents/switch-memory-pipeline.mjs",
+    "./agents/adapters": "./src/agents/adapters/index.mjs"
   },
   "scripts": {
-    "test": "node --test src/**/*.test.mjs",
+    "test": "node --test src/tests/*.test.mjs",
     "lint": "echo 'No lint configured yet'",
-    "build": "echo 'Pure ESM — no build step needed'"
+    "build": "echo 'Pure ESM — no build step needed'",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "ai",
@@ -36,10 +55,32 @@
     "fts5",
     "markdown",
     "llm",
-    "coding-agent"
+    "coding-agent",
+    "total-recall",
+    "knowledge-graph",
+    "behavioral-surface",
+    "session-memory",
+    "agentskills"
   ],
-  "author": "UltraChat",
+  "author": "UltraChat <hello@ultrachat.ai>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ultrachat-ai/total-recall.git"
+  },
+  "homepage": "https://github.com/ultrachat-ai/total-recall#readme",
+  "bugs": {
+    "url": "https://github.com/ultrachat-ai/total-recall/issues"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "templates/",
+    "docs/ARCHITECTURE.md",
+    "docs/guides/",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "better-sqlite3": "^11.0.0"
   },

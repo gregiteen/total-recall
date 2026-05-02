@@ -3,3 +3,10 @@ node_modules/
 *.db-wal
 *.db-shm
 .DS_Store
+
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
