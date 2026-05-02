@@ -128,6 +128,7 @@ const DEFAULTS = {
   coprocessor: {
     enabled: true,
     intervalMs: 15000,
+    heartbeatIntervalMs: 1800000,  // 30 min — surface recompilation + decay + prune
     analysisModel: 'gemini-2.5-flash',
     researchEnabled: true,
     notificationsEnabled: true,
@@ -193,6 +194,7 @@ export function resolvePaths(root, config) {
     soulMd: path.join(dataDir, 'SOUL.md'),
     memoryMd: path.join(dataDir, 'MEMORY.md'),
     identityMd: path.join(dataDir, 'IDENTITY.md'),
+    dreamsFile: path.join(dataDir, 'DREAMS.md'),
     systemPrompt: path.join(root, config.systemPromptFile),
     // Multi-file injection: resolve all target files
     systemPromptFiles: resolveSystemPromptFiles(root, config),
