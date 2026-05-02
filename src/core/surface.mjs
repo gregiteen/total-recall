@@ -10,8 +10,87 @@
  */
 
 import fs from 'fs';
+import path from 'path';
 import { loadNodes } from './wiki.mjs';
 import { rankNodes } from './ranking.mjs';
+import { walkMarkdown, parseFrontmatter } from './utils.mjs';
+
+// ─── TEMPORAL CONTEXT ───────────────────────────────────────────────────────────
+
+function getTimeOfDayLabel(hour) {
+  if (hour < 6) return 'late night';
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  if (hour < 21) return 'evening';
+  return 'night';
+}
+
+/**
+ * Build a human-readable temporal context string using the local system timezone.
+ * @param {string} [tz] - Optional IANA timezone override
+ * @returns {string}
+ */
+export function buildTemporalContext(tz) {
+  const now = new Date();
+  const timezone = tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  let localHour, localDateStr, dayContext;
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false,
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    });
+    const parts = formatter.formatToParts(now);
+    localHour = parseInt(parts.find(p => p.type === 'hour')?.value || '12', 10);
+    const weekday = parts.find(p => p.type === 'weekday')?.value || '';
+    const month = parts.find(p => p.type === 'month')?.value || '';
+    const day = parts.find(p => p.type === 'day')?.value || '';
+    const isWeekend = ['Saturday', 'Sunday'].includes(weekday);
+    dayContext = `${weekday}${isWeekend ? ' (weekend)' : ''}`;
+    localDateStr = `${month} ${day}`;
+  } catch {
+    localHour = now.getHours();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    dayContext = days[now.getDay()];
+    localDateStr = now.toISOString().slice(0, 10);
+  }
+
+  const timeLabel = getTimeOfDayLabel(localHour);
+  return `Current time: ${localDateStr}, ${dayContext}, ${timeLabel} (${localHour}:00 ${timezone})`;
+}
+
+/**
+ * Load recent episodes from the episodes directory.
+ * @param {string} episodesDir
+ * @param {number} [limit=3]
+ * @returns {Array<{date: string, objective: string, mood: string}>}
+ */
+export function loadRecentEpisodes(episodesDir, limit = 3) {
+  if (!episodesDir || !fs.existsSync(episodesDir)) return [];
+
+  const files = walkMarkdown(episodesDir).sort().reverse();
+  const episodes = [];
+
+  for (const fp of files.slice(0, limit * 2)) { // Read extra to account for parsing failures
+    try {
+      const content = fs.readFileSync(fp, 'utf-8');
+      const { meta, body } = parseFrontmatter(content);
+      const titleMatch = body.match(/^#\s+(.+)/m);
+      episodes.push({
+        date: meta.date || meta.session_date || path.basename(fp, '.md'),
+        objective: meta.objective || titleMatch?.[1]?.trim() || body.slice(0, 100),
+        mood: meta.user_mood || '',
+      });
+      if (episodes.length >= limit) break;
+    } catch { continue; }
+  }
+
+  return episodes;
+}
 
 // ─── GENERATE ATTITUDE PARAGRAPH ────────────────────────────────────────────────
 
@@ -49,6 +128,9 @@ function generateAttitudeParagraph(nodes) {
  * @param {string} options.wikiDir - Path to wiki directory
  * @param {string} [options.root] - Repo root for relative paths
  * @param {Object} [options.ranking] - Ranking config overrides
+ * @param {boolean} [options.includeTemporalContext] - Inject time-of-day + recent episodes
+ * @param {string} [options.timezone] - IANA timezone override
+ * @param {string} [options.episodesDir] - Path to episodes directory for recent session summaries
  * @param {string} [options.triggerCommand] - Command for active triggers
  * @returns {Object|null} { surface, stats, nodes } or null if no nodes
  */
@@ -56,6 +138,9 @@ export function compileSurface({
   wikiDir,
   root,
   ranking = {},
+  includeTemporalContext = false,
+  timezone,
+  episodesDir,
   triggerCommand = 'total-recall note --category TYPE "Description"',
 } = {}) {
   const rawNodes = loadNodes(wikiDir, root);
@@ -80,6 +165,25 @@ export function compileSurface({
   // Build the surface
   const lines = [];
   lines.push('## DISTILLED MEMORY (SUBJECT STATES)');
+
+  // Temporal context (injected during heartbeat cycles)
+  if (includeTemporalContext) {
+    lines.push(`> **TEMPORAL CONTEXT** — ${buildTemporalContext(timezone)}`);
+    lines.push(`> Last compiled: ${new Date().toISOString()} | Nodes: ${nodes.length}`);
+    lines.push('');
+
+    // Recent episodes
+    const episodes = episodesDir ? loadRecentEpisodes(episodesDir) : [];
+    if (episodes.length > 0) {
+      lines.push('> [!NOTE]');
+      lines.push('> **RECENT SESSIONS**');
+      for (const ep of episodes) {
+        const mood = ep.mood ? ` [mood: ${ep.mood}]` : '';
+        lines.push(`> - ${ep.date}: ${ep.objective.slice(0, 120)}${mood}`);
+      }
+      lines.push('');
+    }
+  }
 
   // Part A: Attitude Paragraph
   lines.push('> [!NOTE]');

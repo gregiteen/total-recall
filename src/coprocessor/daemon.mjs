@@ -31,6 +31,8 @@ import { checkContradictions, detectUncertainClaims } from './checks/contradicti
 import { writeActiveContext, clearActiveContext } from './inject.mjs';
 import { detectResearchableClaims, batchResearch, createConclusionNode, indexConclusionNode, formatResearchResults } from './checks/researcher.mjs';
 import { enqueue, drain as drainNotifications, purgeStale } from './notify.mjs';
+import { compileSurface, writeSurfaceMulti } from '../core/surface.mjs';
+import { runConfidenceDecay, pruneStaleNodes, regenerateMemoryMd } from '../core/dream.mjs';
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────────
 
@@ -86,7 +88,10 @@ class CoProcessorDaemon {
       researchCompleted: 0,
       conclusionsCreated: 0,
       errors: 0,
+      heartbeatsRun: 0,
+      lastHeartbeat: null,
     };
+    this.heartbeatTimer = null;
   }
 
   // ─── LIFECYCLE ──────────────────────────────────────────────────────────────
@@ -127,6 +132,11 @@ class CoProcessorDaemon {
     this.running = true;
     log('INFO', 'Memory Co-Processor started', { pid: process.pid });
 
+    // Start heartbeat timer
+    const hbInterval = this.config.coprocessor.heartbeatIntervalMs || 1800000;
+    log('INFO', `Heartbeat scheduled every ${Math.round(hbInterval / 60000)} min`);
+    this.heartbeatTimer = setInterval(() => this.runHeartbeat(), hbInterval);
+
     // Handle graceful shutdown
     const shutdown = () => this.stop();
     process.on('SIGTERM', shutdown);
@@ -149,6 +159,12 @@ class CoProcessorDaemon {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
+    }
+
+    // Clear heartbeat timer
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
 
     // Close database
@@ -482,9 +498,91 @@ class CoProcessorDaemon {
       stats: this.stats,
       config: {
         intervalMs: this.config.coprocessor.intervalMs,
+        heartbeatIntervalMs: this.config.coprocessor.heartbeatIntervalMs,
         watchers: this.config.watchers,
       },
     };
+  }
+
+  // ─── HEARTBEAT ───────────────────────────────────────────────────────────────
+
+  /**
+   * Periodic heartbeat: recompile behavioral surface, run decay, prune, regenerate.
+   * Same logic as the Supabase Edge Function heartbeat, but running locally.
+   */
+  async runHeartbeat() {
+    if (this._heartbeatRunning) {
+      log('DEBUG', 'Skipping heartbeat — previous still running');
+      return;
+    }
+    this._heartbeatRunning = true;
+    const t0 = Date.now();
+
+    try {
+      log('INFO', 'Heartbeat starting — surface recompilation + maintenance');
+
+      // 1. Recompile behavioral surface with temporal context
+      const surfaceResult = compileSurface({
+        wikiDir: this.paths.wikiDir,
+        root: this.root,
+        ranking: this.config.ranking,
+        includeTemporalContext: true,
+        episodesDir: this.paths.episodesDir,
+      });
+
+      if (surfaceResult) {
+        // Write to all configured system prompt files
+        const targetFiles = this.paths.systemPromptFiles || [this.paths.systemPrompt];
+        const writeResult = writeSurfaceMulti(
+          targetFiles,
+          surfaceResult.surface,
+          this.config.behavioralSurfaceHeader,
+        );
+
+        const successes = writeResult.results.filter(r => r.success).length;
+        log('INFO', `Surface compiled: ${surfaceResult.stats.totalNodes} nodes → ${successes}/${targetFiles.length} files`, surfaceResult.stats);
+      } else {
+        log('DEBUG', 'No wiki nodes found — skipping surface compilation');
+      }
+
+      // 2. Confidence decay
+      const decay = runConfidenceDecay(this.paths.wikiDir);
+      if (decay.decayed > 0) {
+        log('INFO', `Confidence decay: ${decay.decayed} node(s) decayed`, decay.details.slice(0, 3));
+      }
+
+      // 3. Prune stale zero-access nodes
+      const prune = pruneStaleNodes({ wikiDir: this.paths.wikiDir, root: this.root });
+      if (prune.pruned > 0) {
+        log('INFO', `Pruned: ${prune.pruned} stale node(s) moved to .trash/`);
+      }
+
+      // 4. Regenerate MEMORY.md
+      if (this.paths.memoryMd) {
+        regenerateMemoryMd({ wikiDir: this.paths.wikiDir, memoryMd: this.paths.memoryMd });
+      }
+
+      // 5. Reindex FTS5 if database is open
+      if (this.db) {
+        try {
+          const { reindex } = await import('../core/fts5.mjs');
+          const result = reindex(this.db, this.paths);
+          log('DEBUG', `FTS5 reindexed: ${result.totalIndexed} items`);
+        } catch (err) {
+          log('WARN', 'FTS5 reindex failed (non-fatal)', { error: err.message });
+        }
+      }
+
+      this.stats.heartbeatsRun++;
+      this.stats.lastHeartbeat = new Date().toISOString();
+      log('INFO', `Heartbeat complete in ${Date.now() - t0}ms`);
+
+    } catch (err) {
+      log('ERROR', 'Heartbeat failed', { error: err.message });
+      this.stats.errors++;
+    } finally {
+      this._heartbeatRunning = false;
+    }
   }
 }
 
@@ -551,10 +649,9 @@ async function main() {
   const daemon = new CoProcessorDaemon(root, config);
   await daemon.start();
 
-  // Keep process alive
+  // Keep process alive — use heartbeat for status logging
   setInterval(() => {
-    // Heartbeat — PM2 monitors this process
-    log('DEBUG', 'heartbeat', daemon.stats);
+    log('DEBUG', 'keepalive', daemon.stats);
   }, 60000);
 }
 

@@ -87,6 +87,10 @@ async function main() {
       await runStatus(paths);
       break;
 
+    case 'heartbeat':
+      await runHeartbeatCmd(paths, config);
+      break;
+
     case 'sync-prompts':
       // Delegate to the sync-prompts module (it handles its own args)
       await import('../src/core/sync-prompts.mjs');
@@ -586,6 +590,84 @@ async function runDream(paths) {
   console.log(`\n✅ Dream cycle complete (${result.timestamp}).\n`);
 }
 
+// ─── HEARTBEAT (one-shot) ───────────────────────────────────────────────────
+
+async function runHeartbeatCmd(paths, config) {
+  const { compileSurface, writeSurfaceMulti } = await import('../src/core/surface.mjs');
+  const { runConfidenceDecay, pruneStaleNodes, regenerateMemoryMd } = await import('../src/core/dream.mjs');
+
+  const dryRun = args.includes('--dry-run');
+  const t0 = Date.now();
+
+  console.log(`💓 Heartbeat${dryRun ? ' (DRY RUN)' : ''}...\n`);
+
+  // 1. Recompile behavioral surface with temporal context
+  const surfaceResult = compileSurface({
+    wikiDir: paths.wikiDir,
+    root: paths.root,
+    ranking: config.ranking,
+    includeTemporalContext: true,
+    episodesDir: paths.episodesDir,
+  });
+
+  if (surfaceResult) {
+    if (!dryRun) {
+      const targetFiles = paths.systemPromptFiles || [paths.systemPrompt];
+      const writeResult = writeSurfaceMulti(
+        targetFiles,
+        surfaceResult.surface,
+        config.behavioralSurfaceHeader,
+      );
+      const successes = writeResult.results.filter(r => r.success).length;
+      console.log(`  🧠 Surface: ${surfaceResult.stats.totalNodes} nodes → ${successes}/${targetFiles.length} files`);
+    } else {
+      console.log(`  🧠 Surface: ${surfaceResult.stats.totalNodes} nodes (dry-run, not written)`);
+    }
+  } else {
+    console.log('  📭 No wiki nodes — skipping surface compilation');
+  }
+
+  // 2. Confidence decay
+  const decay = runConfidenceDecay(paths.wikiDir, { dryRun });
+  if (decay.decayed > 0) {
+    console.log(`  📉 Decay: ${decay.decayed} node(s)`);
+    for (const d of decay.details) {
+      console.log(`     ${d.slug}: ${d.from} → ${d.to} (${d.daysSince}d)`);
+    }
+  } else {
+    console.log('  📉 Decay: none needed');
+  }
+
+  // 3. Prune stale nodes
+  const prune = pruneStaleNodes({ wikiDir: paths.wikiDir, root: paths.root, dryRun });
+  if (prune.pruned > 0) {
+    console.log(`  🗑️  Pruned: ${prune.pruned} stale node(s) → .trash/`);
+  } else {
+    console.log('  🗑️  Pruned: none');
+  }
+
+  // 4. Regenerate MEMORY.md
+  if (paths.memoryMd && !dryRun) {
+    regenerateMemoryMd({ wikiDir: paths.wikiDir, memoryMd: paths.memoryMd });
+    console.log(`  📄 MEMORY.md regenerated`);
+  }
+
+  // 5. Reindex FTS5
+  if (!dryRun) {
+    try {
+      const { openDatabase, reindex } = await import('../src/core/fts5.mjs');
+      const db = openDatabase(paths.dbPath);
+      const result = reindex(db, paths);
+      console.log(`  🔍 FTS5: ${result.totalIndexed} items indexed`);
+      db.close();
+    } catch (err) {
+      console.log(`  ⚠️  FTS5 reindex failed: ${err.message}`);
+    }
+  }
+
+  console.log(`\n✅ Heartbeat complete in ${Date.now() - t0}ms\n`);
+}
+
 // ─── STATS ──────────────────────────────────────────────────────────────────────
 
 async function runStats(paths) {
@@ -646,6 +728,7 @@ Commands:
   notify --drain               Drain and display all queued
   sync-prompts                 Sync behavioral surface to all IDE rule files
   sync-prompts --list          List detected IDEs
+  heartbeat                    Run one heartbeat cycle (surface + decay + prune)
 
 Options:
   --source TYPE                Filter search by: wiki|learning|daily-log|episode|handoff
