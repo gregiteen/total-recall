@@ -188,3 +188,21 @@ export function writeSurface(filePath, surface, sectionHeader = '## DISTILLED ME
 
   return { success: true };
 }
+
+/**
+ * Write the behavioral surface to ALL configured system prompt files.
+ * Supports multi-file injection for different IDEs.
+ *
+ * @param {string[]} filePaths - Array of absolute paths to inject into
+ * @param {string} surface - The compiled surface text
+ * @param {string} [sectionHeader] - Section header to find and replace
+ * @returns {{ results: Array<{ file: string, success: boolean, error?: string }> }}
+ */
+export function writeSurfaceMulti(filePaths, surface, sectionHeader = '## DISTILLED MEMORY (SUBJECT STATES)') {
+  const results = [];
+  for (const filePath of filePaths) {
+    const result = writeSurface(filePath, surface, sectionHeader);
+    results.push({ file: filePath, ...result });
+  }
+  return { results };
+}

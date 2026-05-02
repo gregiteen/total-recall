@@ -13,9 +13,13 @@
  *   total-recall lint                      Wiki integrity check
  *   total-recall dream                     Run consolidation cycle
  *   total-recall stats                     Memory system health report
+ *   total-recall notify "title" "msg"      Enqueue notification
+ *   total-recall notify --list             List pending notifications
+ *   total-recall notify --drain            Drain and display all queued
  */
 
 import path from 'path';
+import os from 'os';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
@@ -31,6 +35,10 @@ async function main() {
   const paths = resolvePaths(ROOT, config);
 
   switch (command) {
+    case 'install':
+      await runInstall(paths, config);
+      break;
+
     case 'init':
       await runInit(paths, config);
       break;
@@ -67,10 +75,148 @@ async function main() {
       await runStats(paths);
       break;
 
+    case 'notify':
+      await runNotify(args);
+      break;
+
+    case 'setup':
+      await runSetup(args);
+      break;
+
+    case 'status':
+      await runStatus(paths);
+      break;
+
+    case 'sync-prompts':
+      // Delegate to the sync-prompts module (it handles its own args)
+      await import('../src/core/sync-prompts.mjs');
+      break;
+
     default:
       printUsage();
       break;
   }
+}
+
+// ─── INSTALL ────────────────────────────────────────────────────────────────────
+
+async function runInstall(paths, config) {
+  const GLOBAL_DIR = path.join(os.homedir(), '.total-recall');
+  const GLOBAL_CONFIG = path.join(GLOBAL_DIR, 'config.mjs');
+
+  // --list: show all registered repos
+  if (args.includes('--list')) {
+    const repos = await loadGlobalRepos(GLOBAL_CONFIG);
+    if (repos.length === 0) {
+      console.log('No repos registered. Run `total-recall install` inside a repo to register it.');
+      return;
+    }
+    console.log(`\n📂 Registered Repos (${repos.length})\n`);
+    for (const repo of repos) {
+      const expanded = repo.replace(/^~/, os.homedir());
+      const exists = fs.existsSync(expanded);
+      const hasAgent = fs.existsSync(path.join(expanded, '.agent'));
+      const status = !exists ? '❌ missing' : hasAgent ? '🟢 initialized' : '🟡 not initialized';
+      console.log(`  ${status}  ${repo}`);
+    }
+    console.log('');
+    return;
+  }
+
+  // Resolve which repo to install
+  const targetRepo = args[0] || ROOT;
+  const absRepo = path.resolve(targetRepo);
+  const tildeRepo = absRepo.replace(os.homedir(), '~');
+
+  // --remove: unregister a repo
+  if (args.includes('--remove')) {
+    const repos = await loadGlobalRepos(GLOBAL_CONFIG);
+    const filtered = repos.filter(r => {
+      const expanded = r.replace(/^~/, os.homedir());
+      return expanded !== absRepo;
+    });
+    if (filtered.length === repos.length) {
+      console.log(`⚠️  "${tildeRepo}" is not registered.`);
+      return;
+    }
+    await writeGlobalRepos(GLOBAL_CONFIG, filtered);
+    console.log(`🗑️  Removed "${tildeRepo}" from registry. (${filtered.length} repos remaining)`);
+    return;
+  }
+
+  // Validate it's a real directory
+  if (!fs.existsSync(absRepo)) {
+    console.log(`❌ Directory not found: ${absRepo}`);
+    process.exit(1);
+  }
+
+  // Register in global config
+  fs.mkdirSync(GLOBAL_DIR, { recursive: true });
+  const repos = await loadGlobalRepos(GLOBAL_CONFIG);
+  const alreadyRegistered = repos.some(r => r.replace(/^~/, os.homedir()) === absRepo);
+
+  if (alreadyRegistered) {
+    console.log(`✅ "${tildeRepo}" is already registered.`);
+  } else {
+    repos.push(tildeRepo);
+    await writeGlobalRepos(GLOBAL_CONFIG, repos);
+    console.log(`📌 Registered "${tildeRepo}" (${repos.length} repos total)`);
+  }
+
+  // Auto-init if not already initialized
+  const hasAgent = fs.existsSync(path.join(absRepo, '.agent'));
+  if (!hasAgent) {
+    console.log('\n🔧 Repo not initialized — running init...\n');
+    // Re-resolve paths for the target repo
+    const { loadConfig: lc, resolvePaths: rp } = await import('../src/core/utils.mjs');
+    const targetConfig = await lc(absRepo);
+    const targetPaths = rp(absRepo, targetConfig);
+    await runInit(targetPaths, targetConfig);
+  } else {
+    console.log(`   .agent/ already exists — skipping init.`);
+  }
+
+  console.log(`\n✅ Install complete. Run \`total-recall install --list\` to see all repos.\n`);
+}
+
+async function loadGlobalRepos(configPath) {
+  if (!fs.existsSync(configPath)) return [];
+  try {
+    const mod = await import(`file://${configPath}`);
+    return Array.isArray(mod.default?.repos) ? [...mod.default.repos] : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeGlobalRepos(configPath, repos) {
+  // Read existing config to preserve other fields
+  let existingConfig = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      const mod = await import(`file://${configPath}?t=${Date.now()}`);
+      existingConfig = { ...mod.default };
+    } catch { /* fresh config */ }
+  }
+
+  existingConfig.repos = repos;
+
+  const lines = [
+    '// ~/.total-recall/config.mjs — User-global Total Recall configuration',
+    'export default {',
+    `  repos: [`,
+    ...repos.map(r => `    '${r}',`),
+    '  ],',
+  ];
+
+  // Preserve other keys
+  for (const [key, value] of Object.entries(existingConfig)) {
+    if (key === 'repos') continue;
+    lines.push(`  ${key}: '${value}',`);
+  }
+
+  lines.push('};', '');
+  fs.writeFileSync(configPath, lines.join('\n'));
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────────
@@ -91,6 +237,12 @@ async function runInit(paths, config) {
     paths.handoffsDir,
     path.join(paths.dataDir, 'learning'),
     path.join(paths.dataDir, 'knowledge'),
+    // Project tracking Kanban (repo-level)
+    path.join(ROOT, 'docs', 'projects', 'in-progress'),
+    path.join(ROOT, 'docs', 'projects', 'backlog'),
+    path.join(ROOT, 'docs', 'projects', 'planned'),
+    path.join(ROOT, 'docs', 'projects', 'completed'),
+    path.join(ROOT, 'docs', 'projects', 'archived'),
   ];
 
   for (const dir of dirs) {
@@ -477,6 +629,9 @@ function printUsage() {
 Usage: total-recall <command> [options]
 
 Commands:
+  install [path]               Register a repo in the global brain
+  install --list               Show all registered repos
+  install --remove [path]      Unregister a repo
   init                         Scaffold .agent/ directory structure
   search "term"                FTS5 full-text search (BM25 ranked)
   graph "slug"                 Knowledge graph traversal (backlinks)
@@ -486,6 +641,11 @@ Commands:
   lint                         Wiki integrity check
   dream                        Run consolidation cycle
   stats                        Memory system health report
+  notify "title" "msg"         Enqueue notification (macOS + agent)
+  notify --list                List pending notifications
+  notify --drain               Drain and display all queued
+  sync-prompts                 Sync behavioral surface to all IDE rule files
+  sync-prompts --list          List detected IDEs
 
 Options:
   --source TYPE                Filter search by: wiki|learning|daily-log|episode|handoff
@@ -495,7 +655,353 @@ Options:
   --dry-run                    Show changes without writing
   --preview                    Preview surface without writing
   --stats                      Show ranking details for compile-surface
+  --agent NAME                 Override pipeline agent for all roles
 `);
+}
+
+// ─── SETUP ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Setup Total Recall from scratch or from a hosted config URL.
+ *
+ * Usage:
+ *   total-recall setup                        Interactive setup
+ *   total-recall setup --config <URL>          Pull config from URL (prompts for password if encrypted)
+ *   total-recall setup --share                 Encrypt and share config to stdout
+ */
+async function runSetup(setupArgs) {
+  const GLOBAL_DIR = path.join(os.homedir(), '.total-recall');
+  fs.mkdirSync(GLOBAL_DIR, { recursive: true, mode: 0o700 });
+
+  const { encrypt, decrypt, isEncrypted } = await import('../src/core/crypto.mjs');
+
+  // --share: encrypt config + env with a password and output to stdout
+  if (setupArgs.includes('--share')) {
+    const configPath = path.join(GLOBAL_DIR, 'config.mjs');
+    const envPath = path.join(GLOBAL_DIR, '.env');
+
+    // Collect all shareable content
+    const parts = [];
+    parts.push(`# Total Recall Config Bundle`);
+    parts.push(`# Generated: ${new Date().toISOString()}`);
+    parts.push(`# Machine: ${os.hostname()}\n`);
+
+    if (fs.existsSync(configPath)) {
+      parts.push('--- CONFIG.MJS ---');
+      parts.push(fs.readFileSync(configPath, 'utf-8'));
+    }
+    if (fs.existsSync(envPath)) {
+      parts.push('--- DOTENV ---');
+      parts.push(fs.readFileSync(envPath, 'utf-8'));
+    }
+
+    const plaintext = parts.join('\n');
+
+    // Prompt for password
+    const password = await promptPassword('🔑 Set a password for this config: ');
+    if (!password || password.length < 8) {
+      console.error('❌ Password must be at least 8 characters.');
+      process.exit(1);
+    }
+    const confirm = await promptPassword('🔑 Confirm password: ');
+    if (password !== confirm) {
+      console.error('❌ Passwords do not match.');
+      process.exit(1);
+    }
+
+    const blob = encrypt(plaintext, password);
+    console.log('\n' + blob);
+    console.error(`\n✅ Encrypted config ready. Copy the output above and share it.`);
+    console.error(`   Recipient runs: total-recall setup --config <URL-or-file>`);
+    return;
+  }
+
+  // --config <URL or file>: pull config, decrypt if needed
+  const configIdx = setupArgs.indexOf('--config');
+  if (configIdx !== -1 && setupArgs[configIdx + 1]) {
+    const source = setupArgs[configIdx + 1];
+    let content;
+
+    // Detect URL vs local file
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      console.log(`📡 Pulling config from: ${source}`);
+      try {
+        const response = await fetch(source);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        content = await response.text();
+      } catch (err) {
+        console.error(`❌ Failed to fetch: ${err.message}`);
+        process.exit(1);
+      }
+    } else {
+      // Local file
+      const filePath = path.resolve(source.replace(/^~/, os.homedir()));
+      if (!fs.existsSync(filePath)) {
+        console.error(`❌ File not found: ${filePath}`);
+        process.exit(1);
+      }
+      content = fs.readFileSync(filePath, 'utf-8');
+    }
+
+    // Decrypt if encrypted
+    if (isEncrypted(content.trim())) {
+      const password = await promptPassword('🔑 Enter password: ');
+      try {
+        content = decrypt(content.trim(), password);
+        console.log('🔓 Decrypted successfully.');
+      } catch (err) {
+        console.error(`❌ ${err.message}`);
+        process.exit(1);
+      }
+    }
+
+    // Parse the bundle and save files
+    saveConfigBundle(GLOBAL_DIR, content);
+
+    console.log(`\n🎉 Setup complete! Run \`total-recall status\` to verify.`);
+    return;
+  }
+
+  // Default: create skeleton config
+  const configPath = path.join(GLOBAL_DIR, 'config.mjs');
+  if (!fs.existsSync(configPath)) {
+    fs.writeFileSync(configPath, `/**
+ * Total Recall — Global Configuration
+ * Location: ~/.total-recall/config.mjs
+ *
+ * This file is portable — copy it to any machine to restore your setup.
+ * Share:  total-recall setup --share
+ * Import: total-recall setup --config <URL-or-file>
+ */
+export default {
+  repos: [],
+  notifications: {
+    channels: ['macos'],  // Add: 'slack', 'discord', 'email'
+  },
+  agents: {
+    default: null,  // Override all pipeline roles: 'gemini', 'claude', etc.
+  },
+};
+`);
+    console.log(`✅ Created ${configPath}`);
+  } else {
+    console.log(`✅ Config already exists at ${configPath}`);
+  }
+
+  // Create .env skeleton
+  const envPath = path.join(GLOBAL_DIR, '.env');
+  if (!fs.existsSync(envPath)) {
+    // Copy from .env.example in the package
+    const examplePath = path.join(__dirname, '..', '.env.example');
+    if (fs.existsSync(examplePath)) {
+      fs.copyFileSync(examplePath, envPath);
+      console.log(`✅ Created ${envPath} (from .env.example)`);
+    } else {
+      fs.writeFileSync(envPath, '# Total Recall Environment\n# See .env.example for available vars\n');
+      console.log(`✅ Created ${envPath}`);
+    }
+    // Lock .env to owner-only (secrets file)
+    fs.chmodSync(envPath, 0o600);
+  }
+
+  console.log(`\n📋 Next steps:`);
+  console.log(`   1. Edit ~/.total-recall/.env with your API keys/webhooks`);
+  console.log(`   2. Run \`total-recall install\` inside each repo`);
+  console.log(`   3. Run \`total-recall status\` to verify integration`);
+  console.log(`\n💡 To share this config: \`total-recall setup --share\``);
+}
+
+/**
+ * Prompt for a password with hidden input.
+ * @param {string} prompt
+ * @returns {Promise<string>}
+ */
+function promptPassword(prompt) {
+  return new Promise((resolve) => {
+    const { createInterface } = require('readline');
+    process.stderr.write(prompt);
+    const rl = createInterface({ input: process.stdin, output: process.stderr, terminal: true });
+
+    // Attempt to hide input
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      let password = '';
+      process.stdin.on('data', function handler(ch) {
+        const c = ch.toString();
+        if (c === '\n' || c === '\r' || c === '\u0004') {
+          process.stdin.setRawMode(false);
+          process.stdin.removeListener('data', handler);
+          process.stderr.write('\n');
+          rl.close();
+          resolve(password);
+        } else if (c === '\u007F' || c === '\b') {
+          // Backspace
+          if (password.length > 0) {
+            password = password.slice(0, -1);
+            process.stderr.write('\b \b');
+          }
+        } else {
+          password += c;
+          process.stderr.write('•');
+        }
+      });
+    } else {
+      // Non-TTY (piped input) — read line normally
+      rl.question('', (answer) => {
+        rl.close();
+        resolve(answer);
+      });
+    }
+  });
+}
+
+/**
+ * Parse a config bundle (plaintext or decrypted) and save files.
+ * Bundle format uses --- SECTION --- markers.
+ *
+ * @param {string} dir - Target directory (~/.total-recall/)
+ * @param {string} content - Bundle content
+ */
+function saveConfigBundle(dir, content) {
+  // Check for bundle section markers
+  const hasConfig = content.includes('--- CONFIG.MJS ---');
+  const hasEnv = content.includes('--- DOTENV ---');
+
+  if (hasConfig || hasEnv) {
+    // Parse bundle sections
+    if (hasConfig) {
+      const configStart = content.indexOf('--- CONFIG.MJS ---') + '--- CONFIG.MJS ---'.length;
+      const configEnd = hasEnv ? content.indexOf('--- DOTENV ---') : content.length;
+      const configContent = content.slice(configStart, configEnd).trim();
+      const dest = path.join(dir, 'config.mjs');
+      fs.writeFileSync(dest, configContent + '\n');
+      console.log(`✅ Saved config.mjs`);
+    }
+    if (hasEnv) {
+      const envStart = content.indexOf('--- DOTENV ---') + '--- DOTENV ---'.length;
+      const envContent = content.slice(envStart).trim();
+      const dest = path.join(dir, '.env');
+      fs.writeFileSync(dest, envContent + '\n');
+      fs.chmodSync(dest, 0o600);
+      console.log(`✅ Saved .env`);
+    }
+  } else if (content.includes('export default') || content.includes('module.exports')) {
+    const dest = path.join(dir, 'config.mjs');
+    fs.writeFileSync(dest, content);
+    console.log(`✅ Saved config.mjs`);
+  } else if (content.includes('TOTAL_RECALL_')) {
+    const dest = path.join(dir, '.env');
+    fs.writeFileSync(dest, content);
+    fs.chmodSync(dest, 0o600);
+    console.log(`✅ Saved .env`);
+  } else {
+    const dest = path.join(dir, 'config.mjs');
+    fs.writeFileSync(dest, content);
+    console.log(`✅ Saved to config.mjs`);
+  }
+}
+
+// ─── STATUS ─────────────────────────────────────────────────────────────────────
+
+async function runStatus(paths) {
+  const { loadEnv, getConfiguredIntegrations } = await import('../src/core/env.mjs');
+  loadEnv(ROOT);
+  const integrations = getConfiguredIntegrations();
+
+  console.log('\n🧠 Total Recall Status\n');
+
+  // Integrations
+  console.log('📡 Integrations:');
+  for (const [name, configured] of Object.entries(integrations)) {
+    console.log(`   ${configured ? '🟢' : '⚪'} ${name}`);
+  }
+
+  // Notification channels
+  try {
+    const { listChannels } = await import('../src/notifications/dispatcher.mjs');
+    const channels = listChannels();
+    console.log('\n🔔 Notification Channels:');
+    for (const [name, info] of Object.entries(channels)) {
+      console.log(`   ${info.configured ? '🟢' : '⚪'} ${info.label} (${name})`);
+    }
+  } catch { /* dispatcher not available */ }
+
+  // Registered repos
+  const GLOBAL_CONFIG = path.join(os.homedir(), '.total-recall', 'config.mjs');
+  try {
+    const repos = await loadGlobalRepos(GLOBAL_CONFIG);
+    console.log(`\n📂 Registered Repos: ${repos.length}`);
+    for (const repo of repos) {
+      console.log(`   ${repo}`);
+    }
+  } catch { /* no config */ }
+
+  // Available agents
+  try {
+    const { checkAvailability } = await import('../src/agents/adapters/index.mjs');
+    const agents = checkAvailability();
+    console.log('\n🤖 CLI Agents:');
+    for (const [name, info] of Object.entries(agents)) {
+      console.log(`   ${info.available ? '🟢' : '⚪'} ${info.label} (${name})`);
+    }
+  } catch { /* adapters not available */ }
+
+  // Available watchers
+  try {
+    const { listAvailable } = await import('../src/coprocessor/watchers/index.mjs');
+    console.log('\n👁️  Available Watchers:');
+    for (const name of listAvailable()) {
+      console.log(`   📺 ${name}`);
+    }
+  } catch { /* watchers not available */ }
+
+  console.log('');
+}
+
+// ─── NOTIFY ─────────────────────────────────────────────────────────────────────
+
+async function runNotify(notifyArgs) {
+  const { enqueue, drain, list, purgeStale } = await import('../src/coprocessor/notify.mjs');
+
+  if (notifyArgs.includes('--list')) {
+    const items = list();
+    if (items.length === 0) {
+      console.log('📭 No pending notifications');
+    } else {
+      console.log(`📬 ${items.length} pending notification(s):\n`);
+      for (const item of items) {
+        console.log(`  [${item.type.toUpperCase()}] ${item.title}`);
+        console.log(`    ${item.message}`);
+        console.log(`    ${item.timestamp}\n`);
+      }
+    }
+    return;
+  }
+
+  if (notifyArgs.includes('--drain')) {
+    const items = drain();
+    console.log(`📬 Drained ${items.length} notification(s)`);
+    for (const item of items) {
+      console.log(`  [${item.type.toUpperCase()}] ${item.label}: ${item.text}`);
+    }
+    return;
+  }
+
+  if (notifyArgs.includes('--purge')) {
+    const purged = purgeStale();
+    console.log(`🗑️  Purged ${purged} stale notification(s)`);
+    return;
+  }
+
+  // Default: enqueue
+  const title = notifyArgs[0] || 'Total Recall';
+  const message = notifyArgs[1] || 'Notification';
+  let type = 'note';
+  const typeIdx = notifyArgs.indexOf('--type');
+  if (typeIdx !== -1 && notifyArgs[typeIdx + 1]) type = notifyArgs[typeIdx + 1];
+
+  const result = enqueue({ title, message, type });
+  console.log(`✅ Notification queued${result.desktopSent ? ' + desktop sent' : ''}`);
 }
 
 main().catch(err => {

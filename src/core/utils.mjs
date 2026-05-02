@@ -7,6 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 // ─── YAML FRONTMATTER PARSER ────────────────────────────────────────────────────
 // Lightweight parser — zero dependencies. Handles wiki node YAML frontmatter.
@@ -106,9 +107,10 @@ export function extractTitle(body, fallback = 'Untitled') {
 const DEFAULTS = {
   dataDir: '.agent',
   systemPromptFile: 'INSTRUCTIONS.md',
+  systemPromptFiles: null,  // Array of files to inject surface into (e.g., ['INSTRUCTIONS.md', 'CLAUDE.md']). Overrides systemPromptFile.
   activeContextHeader: '## ACTIVE CONTEXT',
   behavioralSurfaceHeader: '## DISTILLED MEMORY (SUBJECT STATES)',
-  watcher: 'antigravity',
+  watchers: ['antigravity'],
   ranking: {
     halfLife: {
       preference: 90,
@@ -131,6 +133,7 @@ const DEFAULTS = {
     notificationsEnabled: true,
   },
   agents: {
+    default: null, // If set, ALL pipeline roles use this agent (e.g., 'gemini')
     archivist: { binary: 'gemini', model: 'gemini-2.5-flash' },
     synthesizer: { binary: 'claude', model: 'claude-sonnet-4-20250514' },
     factChecker: { binary: 'codex', model: 'o4-mini' },
@@ -148,6 +151,16 @@ export async function loadConfig(root) {
       // Silently fall back to defaults
     }
   }
+
+  // Backward compat: normalize `watcher` (string) → `watchers` (array)
+  if (userConfig.watcher && !userConfig.watchers) {
+    userConfig.watchers = [userConfig.watcher];
+    delete userConfig.watcher;
+  }
+  if (typeof userConfig.watchers === 'string') {
+    userConfig.watchers = [userConfig.watchers];
+  }
+
   return deepMerge(DEFAULTS, userConfig);
 }
 
@@ -181,5 +194,19 @@ export function resolvePaths(root, config) {
     memoryMd: path.join(dataDir, 'MEMORY.md'),
     identityMd: path.join(dataDir, 'IDENTITY.md'),
     systemPrompt: path.join(root, config.systemPromptFile),
+    // Multi-file injection: resolve all target files
+    systemPromptFiles: resolveSystemPromptFiles(root, config),
+    activeContextFile: path.join(os.homedir(), '.total-recall', 'active-context.md'),
   };
+}
+
+/**
+ * Resolve the list of system prompt files for behavioral surface injection.
+ * Supports both `systemPromptFile` (string, legacy) and `systemPromptFiles` (array, new).
+ */
+function resolveSystemPromptFiles(root, config) {
+  if (config.systemPromptFiles && Array.isArray(config.systemPromptFiles)) {
+    return config.systemPromptFiles.map(f => path.join(root, f));
+  }
+  return [path.join(root, config.systemPromptFile)];
 }

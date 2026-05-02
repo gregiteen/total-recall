@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { parseFrontmatter, walkMarkdown, slugify, extractTitle } from './utils.mjs';
 
-const VALID_TYPES = ['preference', 'pattern', 'anti-pattern', 'concept', 'decision', 'project'];
+const VALID_TYPES = ['preference', 'pattern', 'anti-pattern', 'concept', 'decision', 'project', 'conclusion'];
 const VALID_SENTIMENTS = ['positive', 'negative', 'neutral', 'corrective'];
 const VALID_CONFIDENCE = ['high', 'medium', 'low'];
 
@@ -22,6 +22,7 @@ const STALE_THRESHOLDS = {
   concept: 30,
   decision: 45,
   project: 14,
+  conclusion: 30,
 };
 
 // ─── LOAD ALL WIKI NODES ────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export function createNode(wikiDir, { slug, type, sentiment, intensity, directiv
     preference: 'preferences',
     decision: 'decisions',
     project: 'projects',
+    conclusion: 'conclusions',
   };
 
   const ALERT_MAP = {
@@ -102,6 +104,7 @@ export function createNode(wikiDir, { slug, type, sentiment, intensity, directiv
     preference: 'TIP',
     decision: 'NOTE',
     project: 'NOTE',
+    conclusion: 'IMPORTANT',
   };
 
   const categoryDir = path.join(wikiDir, TYPE_MAP[type] || type);
