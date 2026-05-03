@@ -473,6 +473,13 @@ async function runGraph(paths, args) {
 async function runNote(paths, config, noteArgs) {
   const catIdx = noteArgs.indexOf('--category');
   const category = catIdx !== -1 ? noteArgs[catIdx + 1] : null;
+
+  if (!category) {
+    console.error('❌ Error: --category is REQUIRED.');
+    console.error('Usage: total-recall note --category <critical-failure|user-preference|pattern|wiki> "Note content"');
+    process.exit(1);
+  }
+
   const contentArgs = noteArgs.filter((a, i) => {
     if (a === '--category') return false;
     if (i > 0 && noteArgs[i - 1] === '--category') return false;
