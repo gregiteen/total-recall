@@ -23,7 +23,7 @@ const TYPE_CONFIG = {
     defaultIntensity: 8,
     alertType: 'CAUTION',
     prefix: 'NEVER',
-    surfaceFormat: (d) => `> [!CAUTION]\n> **NEVER**: ${d}`,
+    surfaceFormat: (d) => `[NEVER] ${d}`,
   },
   always: {
     wikiType: 'pattern',
@@ -31,7 +31,7 @@ const TYPE_CONFIG = {
     defaultIntensity: 7,
     alertType: 'TIP',
     prefix: 'ALWAYS',
-    surfaceFormat: (d) => `> [!TIP]\n> **ALWAYS**: ${d}`,
+    surfaceFormat: (d) => `[ALWAYS] ${d}`,
   },
   correct: {
     wikiType: 'concept',
@@ -39,7 +39,7 @@ const TYPE_CONFIG = {
     defaultIntensity: 6,
     alertType: 'IMPORTANT',
     prefix: 'CORRECTION',
-    surfaceFormat: (d) => `> [!IMPORTANT]\n> **CORRECTION**: ${d}`,
+    surfaceFormat: (d) => `[CORRECT] ${d}`,
   },
   prefer: {
     wikiType: 'preference',
@@ -47,7 +47,7 @@ const TYPE_CONFIG = {
     defaultIntensity: 5,
     alertType: 'TIP',
     prefix: 'PREFER',
-    surfaceFormat: (d) => `> [!TIP]\n> **PREFER**: ${d}`,
+    surfaceFormat: (d) => `[PREFER] ${d}`,
   },
 };
 
@@ -170,33 +170,22 @@ export function steer({
       const nextSection = content.indexOf('\n## ', afterHeader + 1);
       const sectionEnd = nextSection !== -1 ? nextSection : content.length;
       const currentSection = content.slice(sectionStart, sectionEnd);
-
       const steeredRule = config.surfaceFormat(directive);
-
-      // Count existing steered rules
-      const existingSteers = (currentSection.match(/> \[!(?:CAUTION|TIP|IMPORTANT)\]\n> \*\*(?:NEVER|ALWAYS|CORRECTION|PREFER)\*\*/g) || []).length;
-
-      if (existingSteers >= 5) {
-        result.steps.systemPrompt = 'hot slots full (5/5)';
-      } else if (!dryRun) {
-        const triggersMarker = '> [!IMPORTANT]\n> **ACTIVE MEMORY TRIGGERS**';
-        const triggersIdx = currentSection.indexOf(triggersMarker);
-
-        let newSection;
-        if (triggersIdx !== -1) {
-          const beforeTriggers = currentSection.slice(0, triggersIdx).trimEnd();
-          const afterTriggers = currentSection.slice(triggersIdx);
-          newSection = `${beforeTriggers}\n${steeredRule}\n\n${afterTriggers}`;
-        } else {
-          newSection = `${currentSection.trimEnd()}\n${steeredRule}\n`;
-        }
-
-        const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
-        fs.writeFileSync(paths.systemPrompt, newContent);
-        result.steps.systemPrompt = `patched (${existingSteers + 1}/5 hot slots)`;
-      } else {
-        result.steps.systemPrompt = 'dry-run';
-      }
+      const lines = currentSection.split('\n');
+      const headerLine = lines[0];
+      const signalLines = lines.slice(1).map(l => l.trim()).filter(l => l.length > 0);
+      
+      // prepend the new steeredRule
+      signalLines.unshift(steeredRule);
+      
+      // Cap at 15
+      const prunedSignals = signalLines.slice(0, 15);
+      
+      const newSection = [headerLine, '', ...prunedSignals, ''].join('\n');
+      
+      const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
+      fs.writeFileSync(paths.systemPrompt, newContent);
+      result.steps.systemPrompt = `patched (${prunedSignals.length}/15 hot slots)`;
     }
   } else {
     result.steps.systemPrompt = 'file not found';
