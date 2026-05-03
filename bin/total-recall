@@ -8,6 +8,7 @@
  *   total-recall search "term" --source X  Filter by source type
  *   total-recall graph "slug"              Knowledge graph traversal
  *   total-recall steer --type never "..."  Immediate behavioral cascade
+ *   total-recall note --category TYPE "..."  Log note with full cascade
  *   total-recall reindex                   Rebuild FTS5 from filesystem
  *   total-recall compile-surface           Regenerate DISTILLED MEMORY
  *   total-recall lint                      Wiki integrity check
@@ -57,6 +58,10 @@ async function main() {
 
     case 'steer':
       await runSteer(paths, config, args);
+      break;
+
+    case 'note':
+      await runNote(paths, config, args);
       break;
 
     case 'reindex':
@@ -446,6 +451,149 @@ async function runGraph(paths, args) {
   db.close();
 }
 
+// ─── NOTE ───────────────────────────────────────────────────────────────────────
+
+/**
+ * total-recall note --category TYPE "content"
+ *
+ * Full 5-layer cascade:
+ *   1. Daily log  (.agent/memory/YYYY-MM-DD.md)       — always
+ *   2. Identity quad (MEMORY.md or USER.md)           — by category
+ *   3. steer()  → Total Recall wiki + INSTRUCTIONS.md — critical-failure / user-preference
+ *   4. FTS5 index                                     — via steer()
+ *   5. Learning DB                                    — critical-failure(9) / user-preference(8) / pattern(6)
+ *
+ * Categories:
+ *   critical-failure  → MEMORY.md + steer(never, intensity 9)  + learning(importance 9)
+ *   user-preference   → USER.md   + steer(prefer, intensity 8) + learning(importance 8)
+ *   pattern           → learning DB (importance 6) only
+ *   wiki              → wiki-queue for next dream cycle
+ *   (none)            → daily log only
+ */
+async function runNote(paths, config, noteArgs) {
+  const catIdx = noteArgs.indexOf('--category');
+  const category = catIdx !== -1 ? noteArgs[catIdx + 1] : null;
+  const contentArgs = noteArgs.filter((a, i) => {
+    if (a === '--category') return false;
+    if (i > 0 && noteArgs[i - 1] === '--category') return false;
+    return true;
+  });
+  const content = contentArgs.join(' ').trim();
+
+  if (!content) {
+    console.log('Usage: total-recall note [--category critical-failure|user-preference|pattern|wiki] "Note content"');
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const timeStr = now.toTimeString().split(' ')[0];
+
+  // ── 1. Daily log ────────────────────────────────────────────────────────────
+  const dailyLogPath = path.join(paths.dailyLogsDir, `${dateStr}.md`);
+  fs.mkdirSync(paths.dailyLogsDir, { recursive: true });
+  if (!fs.existsSync(dailyLogPath)) {
+    fs.writeFileSync(dailyLogPath, `# Daily Log — ${dateStr}\n\n`);
+  }
+  const categoryTag = category ? ` [${category}]` : '';
+  const entry = `- **${timeStr}**${categoryTag}: ${content}\n`;
+  fs.appendFileSync(dailyLogPath, entry);
+  console.log(`✅ Logged to daily: ${path.relative(ROOT, dailyLogPath)}`);
+
+  // ── 2. Identity quad ────────────────────────────────────────────────────────
+  if (category === 'critical-failure' && paths.memoryMd) {
+    if (fs.existsSync(paths.memoryMd)) {
+      fs.appendFileSync(paths.memoryMd, `\n## Active Memory Entry (${dateStr})\n- ${content}\n`);
+      console.log(`🧠 Routed to MEMORY.md`);
+    }
+  }
+  if (category === 'user-preference' && paths.userMd) {
+    if (fs.existsSync(paths.userMd)) {
+      fs.appendFileSync(paths.userMd, `\n- **${dateStr}**: ${content}\n`);
+    } else {
+      fs.writeFileSync(paths.userMd, `# User Preferences\n\n## Hard Rules\n- **${dateStr}**: ${content}\n`);
+    }
+    console.log(`👤 Routed to USER.md`);
+  }
+  if (category === 'wiki') {
+    const wikiQueuePath = path.join(paths.dailyLogsDir, '.wiki-queue');
+    fs.appendFileSync(wikiQueuePath, `${dateStr}|${content}\n`);
+    console.log(`📚 Queued for wiki-compile`);
+  }
+
+  // ── 3+4. steer() → wiki node + INSTRUCTIONS.md + FTS5 ──────────────────────
+  const steerTypeMap = { 'critical-failure': 'never', 'user-preference': 'prefer' };
+  const steerType = steerTypeMap[category];
+
+  if (steerType) {
+    const { steer } = await import('../src/core/steering.mjs');
+    const { openDatabase } = await import('../src/core/fts5.mjs');
+
+    let db = null;
+    if (fs.existsSync(paths.dbPath)) {
+      const Database = (await import('better-sqlite3')).default;
+      db = new Database(paths.dbPath);
+    }
+
+    const result = steer({
+      type: steerType,
+      directive: content,
+      paths,
+      db,
+      intensity: category === 'critical-failure' ? 9 : 8,
+      dryRun: false,
+      behavioralSurfaceHeader: config.behavioralSurfaceHeader,
+    });
+
+    const steps = Object.entries(result.steps || {});
+    for (const [step, status] of steps) {
+      const icon = status?.includes('error') ? '❌' : '✅';
+      console.log(`   ${icon} ${step}: ${status}`);
+    }
+    console.log(`🎯 Total Recall steer(${steerType}) complete — INSTRUCTIONS.md updated`);
+    if (db) db.close();
+  }
+
+  // ── 5. Learning DB ──────────────────────────────────────────────────────────
+  const importanceMap = { 'critical-failure': 9, 'user-preference': 8, 'pattern': 6 };
+  const importance = importanceMap[category];
+  const learningCategory = (category === 'critical-failure' || category === 'user-preference') ? 'user-pref' : category;
+
+  if (importance !== undefined) {
+    try {
+      const Database = (await import('better-sqlite3')).default;
+      fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
+      const db = new Database(paths.dbPath);
+
+      // Ensure learnings table exists
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS learnings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          created_at TEXT DEFAULT (datetime('now')),
+          category TEXT DEFAULT 'general',
+          importance INTEGER DEFAULT 5,
+          access_count INTEGER DEFAULT 0,
+          last_accessed TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_learnings_content ON learnings(substr(content, 1, 200));
+      `);
+
+      db.prepare(`
+        INSERT OR IGNORE INTO learnings (content, category, importance)
+        VALUES (?, ?, ?)
+      `).run(content, learningCategory || 'general', importance);
+
+      console.log(`📚 Learning DB → category: ${learningCategory}, importance: ${importance}`);
+      db.close();
+    } catch (err) {
+      console.warn(`⚠️  Learning DB write failed (non-fatal): ${err.message?.split('\n')[0]}`);
+    }
+  }
+
+  console.log(`\n📋 Note recorded → routed: ${category || 'daily log only'}`);
+}
+
 // ─── STEER ──────────────────────────────────────────────────────────────────────
 
 async function runSteer(paths, config, args) {
@@ -776,7 +924,8 @@ Commands:
   uninstall                    Unregister repo, unsync IDEs, and delete .agent/
   search "term"                FTS5 full-text search (BM25 ranked)
   graph "slug"                 Knowledge graph traversal (backlinks)
-  steer --type TYPE "text"     Immediate behavioral cascade
+  note --category TYPE "text"  Log note with full 5-layer cascade
+  steer --type TYPE "text"     Immediate behavioral cascade (fine-grained)
   reindex                      Rebuild FTS5 index from filesystem
   compile-surface              Regenerate DISTILLED MEMORY section
   lint                         Wiki integrity check

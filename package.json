@@ -8,6 +8,7 @@
     "total-recall": "./bin/total-recall",
     "tr-query": "./bin/tr-query",
     "tr-steer": "./bin/tr-steer",
+    "tr-note": "./bin/tr-note",
     "tr-surface": "./bin/tr-surface",
     "tr-reindex": "./bin/tr-reindex",
     "tr-coprocessor": "./bin/tr-coprocessor",
