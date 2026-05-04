@@ -129,15 +129,15 @@ const DEFAULTS = {
     enabled: true,
     intervalMs: 15000,
     heartbeatIntervalMs: 1800000,  // 30 min — surface recompilation + decay + prune
-    analysisModel: 'gemini-2.5-flash',
+    analysisModel: 'gemini-3.1-flash-lite',
     researchEnabled: true,
     notificationsEnabled: true,
   },
   agents: {
-    default: null, // If set, ALL pipeline roles use this agent (e.g., 'gemini')
-    archivist: { binary: 'gemini', model: 'gemini-2.5-flash' },
-    synthesizer: { binary: 'claude', model: 'claude-sonnet-4-20250514' },
-    factChecker: { binary: 'codex', model: 'o4-mini' },
+    default: null,
+    archivist: { binary: 'gemini', model: 'gemini-3.1-flash-lite' },
+    synthesizer: { binary: 'claude', model: 'claude-haiku-4-5' },
+    factChecker: { binary: 'codex', model: 'gpt-5.4-mini' },
   },
 };
 
