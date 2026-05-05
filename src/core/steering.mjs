@@ -218,3 +218,91 @@ export function steer({
 
   return result;
 }
+
+/**
+ * Delete a steering cascade.
+ *
+ * @param {Object} options
+ * @param {string} options.directive - The directive text to match
+ * @param {Object} options.paths - Resolved paths from utils.resolvePaths()
+ * @param {Object} [options.db] - Open database connection (for FTS5 update)
+ * @param {boolean} [options.dryRun] - Show changes without writing
+ * @param {string} [options.behavioralSurfaceHeader] - Section header in system prompt
+ * @returns {Object} Result with steps taken
+ */
+export function unsteer({
+  directive,
+  paths,
+  db = null,
+  dryRun = false,
+  behavioralSurfaceHeader = '## DISTILLED MEMORY (SUBJECT STATES)',
+}) {
+  const slug = slugify(directive);
+  const result = {
+    directive,
+    slug,
+    dryRun,
+    steps: {},
+  };
+
+  // 1. Delete Wiki node
+  const wikiFilePath = path.join(paths.wikiDir, `${slug}.md`);
+  if (fs.existsSync(wikiFilePath)) {
+    if (!dryRun) fs.unlinkSync(wikiFilePath);
+    result.steps.wiki = dryRun ? 'dry-run' : 'deleted';
+  } else {
+    result.steps.wiki = 'not found';
+  }
+
+  // 2. Remove from System Prompt / Surface
+  if (fs.existsSync(paths.systemPrompt)) {
+    const content = fs.readFileSync(paths.systemPrompt, 'utf-8');
+    const sectionStart = content.indexOf(behavioralSurfaceHeader);
+    
+    if (sectionStart !== -1) {
+      const afterHeader = content.indexOf('\n', sectionStart);
+      const nextSection = content.indexOf('\n## ', afterHeader + 1);
+      const sectionEnd = nextSection !== -1 ? nextSection : content.length;
+      const currentSection = content.slice(sectionStart, sectionEnd);
+      
+      const lines = currentSection.split('\n');
+      const headerLine = lines[0];
+      // Keep lines that DO NOT contain the directive
+      const signalLines = lines.slice(1)
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.includes(directive));
+      
+      const newSection = [headerLine, '', ...signalLines, ''].join('\n');
+      const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
+      
+      if (!dryRun) {
+        fs.writeFileSync(paths.systemPrompt, newContent);
+      }
+      result.steps.systemPrompt = dryRun ? 'dry-run' : 'patched (removed)';
+    } else {
+      result.steps.systemPrompt = 'section not found';
+    }
+  } else {
+    result.steps.systemPrompt = 'file not found';
+  }
+
+  // 3. Update FTS5 index
+  if (db && !dryRun) {
+    try {
+      const hasFts = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_fts'"
+      ).get();
+      if (hasFts) {
+        const relativePath = path.relative(paths.root, wikiFilePath);
+        db.prepare('DELETE FROM memory_fts WHERE source_id = ?').run(relativePath);
+        result.steps.fts5 = 'updated (removed)';
+      }
+    } catch (err) {
+      result.steps.fts5 = `error: ${err.message}`;
+    }
+  } else {
+    result.steps.fts5 = dryRun ? 'dry-run' : 'skipped (no db)';
+  }
+
+  return result;
+}
