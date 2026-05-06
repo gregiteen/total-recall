@@ -120,12 +120,12 @@ When the agent needs to remember:
 ```
 Agent starts new session
     │
-    ├─→ System prompt already contains Layer 4 (compiled rules)
-    │   → "Never use templates" is in INSTRUCTIONS.md
+    ├─→ IDE auto-injects .agent/rules/graph-context.md (Layer 4)
+    │   → "Never use templates" is in the compiled graph surface
+    │   → No tool call needed — IDE reads rules/ on every turn
     │
-    ├─→ Co-Processor runs relevance check
-    │   → Surfaces related wiki nodes via FTS5
-    │   → Injects into ACTIVE CONTEXT section
+    ├─→ On-demand: `total-recall consult --prompt "..."` 
+    │   → Synchronous graph query for immediate context
     │
     └─→ Programmatic search via tr-query
         → Full-text search across all 4 layers
@@ -153,7 +153,7 @@ src/
 │   ├── fts5.mjs                   # SQLite FTS5 search index
 │   ├── wiki.mjs                   # Knowledge graph (CRUD, lint)
 │   ├── ranking.mjs                # Signal score algorithm
-│   ├── surface.mjs                # Behavioral surface compiler + writeSurfaceMulti
+│   ├── surface.mjs                # Behavioral surface compiler + compileSurfaceFromGraph
 │   ├── steering.mjs               # Behavioral steering cascade
 │   ├── episodes.mjs               # Episode archive operations
 │   ├── dream.mjs                  # Dream daemon (NREM/REM/decay/prune)
@@ -262,36 +262,30 @@ CLI Adapters enable the multi-agent pipeline to dispatch work to any CLI-based A
 
 Each adapter handles stdin/stdout piping, model flags, and error extraction for its specific CLI tool.
 
-## Surface Sync System
+## Surface Sync System (Phase 20: SyncGraph Architecture)
 
-`total-recall sync-prompts` is the Phase 14 system that writes the behavioral surface to every detected IDE's native rule format:
+Phase 20 replaced the legacy section-injection model with a **standalone rule file** approach. Instead of finding and replacing a `## DISTILLED MEMORY` section inside `INSTRUCTIONS.md`, the surface compiler now writes the entire compiled output to `.agent/rules/graph-context.md`. The IDE auto-injects all files in `.agent/rules/` on every turn as hard rules — no tool calls required.
 
 ```
 ┌─────────────────┐     ┌──────────────┐     ┌────────────────────┐
-│   Wiki Graph    │────▶│   Surface    │────▶│   Format Adapter   │
+│   Wiki Graph    │────▶│   Surface    │────▶│   Rule File Write  │
 │  (Layer 3)      │     │  Compiler    │     │                    │
-└─────────────────┘     │  (ranking)   │     │  ┌──────────────┐  │
-                        └──────────────┘     │  │ Antigravity  │──▶ Section injection
-                                              │  │  (INSTRUCTIONS│    into INSTRUCTIONS.md
-                                              │  │   .md)       │  │
-                                              │  ├──────────────┤  │
-                                              │  │ Claude Code  │──▶ Symlink detection
-                                              │  │  (CLAUDE.md) │    (no write if symlink)
-                                              │  ├──────────────┤  │
-                                              │  │ Cursor       │──▶ MDC format with
-                                              │  │  (.mdc)      │    alwaysApply: true
-                                              │  ├──────────────┤  │
-                                              │  │ Windsurf/    │──▶ Plain markdown
-                                              │  │ Roo/Continue │    rule file
-                                              │  └──────────────┘  │
+└─────────────────┘     │  (ranking +  │     │  .agent/rules/     │
+                        │  graph mode) │     │  graph-context.md  │
+                        └──────────────┘     │                    │
+                                              │  IDE reads this    │
+                                              │  automatically on  │
+                                              │  every turn.       │
                                               └────────────────────┘
 ```
+
+Additionally, `total-recall consult --prompt "..."` provides **synchronous** graph querying. The prompt is classified (answer/execute/discuss/emergency), the graph is traversed, and the compiled surface is printed to stdout for immediate use.
 
 ### Format Strategies
 
 | IDE | File | Strategy | Notes |
 |-----|------|----------|-------|
-| Antigravity | `INSTRUCTIONS.md` | Section injection | Replaces `## DISTILLED MEMORY` block in-place |
+| Antigravity | `.agent/rules/graph-context.md` | Standalone rule file | Auto-injected every turn by IDE |
 | Claude Code | `CLAUDE.md` | Symlink detection | If symlink → skip; else section injection |
 | Cursor | `.cursor/rules/total-recall.mdc` | MDC file | YAML frontmatter + `alwaysApply: true` |
 | Windsurf | `.windsurf/rules/total-recall.md` | Rule file | Self-contained markdown with header |
@@ -300,6 +294,14 @@ Each adapter handles stdin/stdout piping, model flags, and error extraction for 
 
 ### Detection
 The sync system scans for IDE-specific markers (directories and files) to determine which IDEs are active. No configuration needed — detection is automatic.
+
+### Synchronous Consult (CLI)
+```bash
+# Query the graph for context-aware instructions
+total-recall consult --prompt "deploy the API to production"
+
+# Output: compiled surface tailored to "execute" mode
+```
 
 ## Concurrent Handoff Model
 
@@ -392,8 +394,8 @@ The daemon runs on a 15-second heartbeat (configurable). Each tick:
 │     ├─ Relevance:     FTS5 memory search          │
 │     └─ Contradiction: conflicts with wiki?        │
 │                                                   │
-│  4. Inject results into ACTIVE CONTEXT            │
-│     └─ Writes to ## ACTIVE CONTEXT in sys prompt  │
+│  4. Write graph surface to .agent/rules/           │
+│     └─ graph-context.md (auto-injected by IDE)    │
 │                                                   │
 │  5. Fire-and-forget: System 2 Research            │
 │     └─ Dispatches Gemini Flash for fact-checking  │
@@ -505,7 +507,7 @@ During `/switch` (session handoff), three agents work in parallel:
 - Reads the entire wiki graph
 - Ranks all nodes by signal score
 - Generates a new DISTILLED MEMORY block
-- Replaces it in INSTRUCTIONS.md (in-place, preserving all other content)
+- Writes to `.agent/rules/graph-context.md` (auto-injected by IDE)
 
 ### Fact-Checker (Codex)
 - Reads all wiki nodes

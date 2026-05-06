@@ -13,6 +13,8 @@ import fs from 'fs';
 import path from 'path';
 import { slugify } from './utils.mjs';
 import { createNode } from './wiki.mjs';
+import { compileSurfaceFromGraph, writeSurface } from './surface.mjs';
+import { detectConflicts } from './graph.mjs';
 
 // ─── TYPE CONFIGURATION ─────────────────────────────────────────────────────────
 
@@ -158,8 +160,48 @@ export function steer({
     result.steps.wiki = 'dry-run';
   }
 
-  // Step 3: Hot-patch system prompt
-  if (fs.existsSync(paths.systemPrompt)) {
+  // Step 3: Hot-patch system prompt & Step 4-6: Graph integration
+  if (db && !dryRun) {
+    try {
+      const hasGraph = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_nodes'").get();
+      if (hasGraph) {
+        // Step 4: Create/update graph node
+        const existing = db.prepare('SELECT weight FROM graph_nodes WHERE slug = ?').get(slug);
+        if (existing) {
+          db.prepare('UPDATE graph_nodes SET weight = weight + 1, priority = ?, updated_at = datetime("now") WHERE slug = ?')
+            .run(effectiveIntensity, slug);
+          result.steps.graph = 'updated (weight incremented)';
+        } else {
+          const actionType = config.sentiment === 'negative' ? 'suppress' : 'inject';
+          // Use 'absolute-invariant' for NEVER/ALWAYS, 'conditional' for prefer/correct
+          const nodeType = ['never', 'always'].includes(type) ? 'absolute-invariant' : 'conditional';
+          db.prepare(`
+            INSERT INTO graph_nodes (slug, meaning, condition, action_type, weight, priority, node_type, subgraph, source_files)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(slug, directive, '{}', actionType, 1.0, effectiveIntensity, nodeType, 'shared', JSON.stringify([`${slug}.md`]));
+          result.steps.graph = 'created';
+        }
+
+        // Step 5: Detect conflicts via graph.mjs
+        const newConflicts = detectConflicts(db, [slug]);
+        if (newConflicts.length > 0) {
+          result.steps.graph_conflicts = `detected ${newConflicts.length} graph conflicts`;
+        }
+
+        // Step 6: Recompile surface from graph
+        const compiled = compileSurfaceFromGraph(db, 'discuss', { tokenBudget: 2500 });
+        if (fs.existsSync(paths.systemPrompt)) {
+          const writeRes = writeSurface(paths.systemPrompt, compiled.surface, behavioralSurfaceHeader);
+          result.steps.systemPrompt = writeRes.success ? 'recompiled via graph' : `failed: ${writeRes.error}`;
+        }
+      }
+    } catch (err) {
+      result.steps.graph = `error: ${err.message}`;
+    }
+  }
+
+  // Fallback to legacy regex patching if db or graph_nodes is not available
+  if (!result.steps.systemPrompt && fs.existsSync(paths.systemPrompt) && !dryRun) {
     const content = fs.readFileSync(paths.systemPrompt, 'utf-8');
     const sectionStart = content.indexOf(behavioralSurfaceHeader);
 
@@ -175,20 +217,16 @@ export function steer({
       const headerLine = lines[0];
       const signalLines = lines.slice(1).map(l => l.trim()).filter(l => l.length > 0);
       
-      // prepend the new steeredRule
       signalLines.unshift(steeredRule);
-      
-      // Cap at 15
-      const prunedSignals = signalLines.slice(0, 15);
+      const prunedSignals = signalLines.slice(0, 15); // Cap at 15
       
       const newSection = [headerLine, '', ...prunedSignals, ''].join('\n');
-      
       const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
       fs.writeFileSync(paths.systemPrompt, newContent);
-      result.steps.systemPrompt = `patched (${prunedSignals.length}/15 hot slots)`;
+      result.steps.systemPrompt = `legacy hot-patched (${prunedSignals.length}/15 slots)`;
     }
-  } else {
-    result.steps.systemPrompt = 'file not found';
+  } else if (!result.steps.systemPrompt) {
+    result.steps.systemPrompt = dryRun ? 'dry-run' : 'file not found';
   }
 
   // Step 4: Update FTS5 index

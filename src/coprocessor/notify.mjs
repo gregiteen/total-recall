@@ -21,6 +21,23 @@ import os from 'os';
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────────
 
 const NOTIFY_DIR = path.join(os.homedir(), '.total-recall', 'notifications');
+const NOTIFY_LOG = path.join(NOTIFY_DIR, 'notification-log.jsonl');
+
+function appendNotificationLog(title, message, type) {
+  try {
+    fs.mkdirSync(NOTIFY_DIR, { recursive: true, mode: 0o700 });
+    const record = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      title,
+      message,
+      type,
+    });
+    fs.appendFileSync(NOTIFY_LOG, record + '\n');
+  } catch {
+    // Logging is best-effort — never block a notification
+  }
+}
+
 const STALENESS_MS = 30 * 60 * 1000; // 30 minutes
 
 // ─── ENSURE DIRECTORY ───────────────────────────────────────────────────────────
@@ -45,6 +62,9 @@ function ensureDir() {
  */
 export function enqueue({ title, message, type = 'note', desktop = true, channels }) {
   ensureDir();
+
+  // Persist to permanent audit log before anything else (survives drain + purge)
+  appendNotificationLog(title, message, type);
 
   const timestamp = Date.now();
   const id = `${timestamp}-${Math.random().toString(36).slice(2, 8)}`;

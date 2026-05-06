@@ -53,8 +53,9 @@ export function loadNodes(wikiDir, root) {
       ruleText = title;
     }
 
-    const isSteer = (meta.provenance || []).some(
-      p => typeof p === 'string' && p.startsWith('steer:')
+    const prov = Array.isArray(meta.provenance) ? meta.provenance : (meta.provenance ? [meta.provenance] : []);
+    const isSteer = prov.some(
+      (p) => p.includes('steer:') || p.includes('surface')
     );
 
     nodes.push({

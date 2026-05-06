@@ -347,17 +347,52 @@ async function main() {
       : `${failures.length}/${results.length} agents failed. Check .agent/memory-pipeline-errors.log`;
 
     try {
-      // Use execFileSync — no shell interpolation for notification content
       const { execFileSync } = await import('child_process');
-      execFileSync('osascript', [
-        '-e',
-        `display notification "${message.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with title "${title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
-      ], { stdio: 'ignore' });
+      const os = await import('os');
+      const path = await import('path');
+      const fs = await import('fs');
+      
+      const notifyLog = path.join(os.homedir(), '.total-recall', 'notifications', 'notification-log.md');
+      
+      // 1. Write to Notification Log FIRST
+      try {
+        fs.mkdirSync(path.dirname(notifyLog), { recursive: true });
+        const ts = new Date().toISOString();
+        const entry = [
+          `### [${ts}] ${title}`,
+          `> ${message.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}`,
+          ``,
+          `*info · memory-pipeline | Channels: os*`,
+          ``,
+          `---`,
+          ``,
+        ].join('\n');
+        const existing = fs.existsSync(notifyLog) ? fs.readFileSync(notifyLog, 'utf8') : '';
+        fs.writeFileSync(notifyLog, entry + existing);
+      } catch { /* best effort log */ }
+
+      // 2. Fire the OS popup
+      try {
+        execFileSync('terminal-notifier', [
+          '-title', title,
+          '-message', message,
+          '-open', `file://${notifyLog}`,
+          '-actions', 'View Log',
+          '-closeLabel', 'Dismiss',
+          '-group', 'total-recall-pipeline'
+        ], { stdio: 'ignore' });
+      } catch {
+        execFileSync('osascript', [
+          '-e',
+          `display notification "${message.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with title "${title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+        ], { stdio: 'ignore' });
+      }
     } catch { /* best effort */ }
 
     // Also use the notification skill if available
     try {
       const notifyPath = path.join(root, NOTIFY_SCRIPT);
+      const fs = await import('fs');
       if (fs.existsSync(notifyPath)) {
         const { spawn: spawnNotify } = await import('child_process');
         spawnNotify('node', [notifyPath, title, message], { stdio: 'ignore', detached: true }).unref();

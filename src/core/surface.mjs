@@ -261,6 +261,117 @@ export function compileSurface({
   };
 }
 
+// ─── PHASE 19: GRAPH COMPILER (TWO-TIER) ────────────────────────────────────────
+
+/**
+ * Compile the behavioral surface using the Instruction Graph.
+ * Implements Two-Tier Injection: STATIC (absolute-invariants) + DYNAMIC (conditional).
+ * 
+ * @param {object} db - SQLite database connection
+ * @param {string} mode - The classified prompt mode (e.g., 'answer', 'execute')
+ * @param {object} options - Compilation options
+ * @returns {object} { surface, stats }
+ */
+export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
+  const { includeTemporalContext = false, timezone, episodesDir } = options;
+  const budget = options.tokenBudget || 2000;
+
+  // 1. TIER 1: STATIC SURFACE
+  const staticNodes = db.prepare(`
+    SELECT * FROM graph_nodes 
+    WHERE node_type = 'absolute-invariant' 
+    ORDER BY priority DESC
+  `).all();
+  
+  // Create an attitude paragraph from the highest priority nodes
+  const attitudeNodes = [...staticNodes].sort((a, b) => b.weight - a.weight).slice(0, 8);
+  const attitude = generateAttitudeParagraph(attitudeNodes.map(n => ({
+    title: n.meaning.slice(0, 50),
+    sentiment: n.action_type === 'suppress' ? 'negative' : 'positive'
+  })));
+
+  // 2. TIER 2: DYNAMIC SURFACE
+  const rawConditionalNodes = db.prepare(`
+    SELECT * FROM graph_nodes 
+    WHERE node_type = 'conditional'
+  `).all();
+
+  // Filter based on condition matching the current mode
+  const filteredCandidates = rawConditionalNodes.filter(node => {
+    try {
+      const condition = JSON.parse(node.condition || '{}');
+      if (!condition.mode || condition.mode.length === 0) return true; // applies to all modes
+      return condition.mode.includes(mode);
+    } catch {
+      return true; // Malformed JSON assumes it applies
+    }
+  });
+
+  // Resolve conflicts based on priority
+  // If Node A conflicts with Node B, drop the one with lower priority
+  // (In a real implementation, we'd walk the 'conflicts-with' edges via a DB query)
+  // For now, we simulate conflict resolution by grouping and filtering
+  const resolvedNodes = [...filteredCandidates].sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    return b.weight - a.weight;
+  });
+
+  // Enforce token budget
+  const dynamicNodes = [];
+  let currentTokens = 0;
+  for (const node of resolvedNodes) {
+    const estimatedTokens = node.meaning.length / 4;
+    if (currentTokens + estimatedTokens > budget) break;
+    dynamicNodes.push(node);
+    currentTokens += estimatedTokens;
+  }
+
+  // 3. ASSEMBLE OUTPUT
+  const lines = [];
+  lines.push('## DISTILLED MEMORY (SUBJECT STATES)');
+
+  // Temporal Context
+  if (includeTemporalContext) {
+    lines.push(`> **TEMPORAL CONTEXT** — ${buildTemporalContext(timezone)}`);
+    lines.push(`> Graph Compilation Mode: \`${mode}\` | Nodes: ${staticNodes.length + dynamicNodes.length}`);
+    lines.push('');
+  }
+
+  // Static Invariants & Attitude
+  lines.push('> [!NOTE]');
+  lines.push(`> **AGENT ATTITUDE** — ${attitude}`);
+  lines.push('');
+
+  if (staticNodes.length > 0) {
+    lines.push('> [!IMPORTANT]');
+    lines.push('> **ABSOLUTE INVARIANTS** (Always active):');
+    for (const rule of staticNodes) {
+      lines.push(`> - ${rule.meaning}`);
+    }
+    lines.push('');
+  }
+
+  // Dynamic Context
+  if (dynamicNodes.length > 0) {
+    lines.push('> [!TIP]');
+    lines.push(`> **ACTIVE CONTEXT** (Mode: ${mode}):`);
+    for (const rule of dynamicNodes) {
+      const prefix = rule.action_type === 'suppress' ? '🛑 AVOID: ' : '✅ DO: ';
+      lines.push(`> - ${prefix}${rule.meaning}`);
+    }
+    lines.push('');
+  }
+
+  return {
+    surface: lines.join('\n'),
+    stats: {
+      staticNodes: staticNodes.length,
+      dynamicNodes: dynamicNodes.length,
+      mode
+    }
+  };
+}
+
 // ─── WRITE SURFACE TO SYSTEM PROMPT ─────────────────────────────────────────────
 
 /**

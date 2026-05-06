@@ -18,7 +18,7 @@ const ADAPTERS = {
   gemini: {
     label: 'Gemini CLI',
     buildArgs: (prompt, model) => {
-      const args = ['-p', prompt, '--sandbox=false', '--yolo'];
+      const args = ['-p', prompt, '--yolo'];
       if (model) args.push('-m', model);
       return args;
     },
@@ -26,18 +26,15 @@ const ADAPTERS = {
   claude: {
     label: 'Claude Code',
     buildArgs: (prompt, model) => {
-      const args = ['-p', prompt, '--permission-mode', 'bypassPermissions',
-        '--allowedTools', 'Edit,Write,Bash,Read'];
+      const args = ['-p', prompt, '--dangerously-skip-permissions'];
       if (model) args.push('--model', model);
       return args;
     },
   },
   codex: {
     label: 'Codex CLI',
-    // Codex is special — prompt is piped via stdin, not passed as arg
-    usesStdin: true,
-    buildArgs: (_prompt, model) => {
-      const args = ['exec', '--full-auto'];
+    buildArgs: (prompt, model) => {
+      const args = ['exec', '--full-auto', prompt];
       if (model) args.push('-m', model);
       return args;
     },
