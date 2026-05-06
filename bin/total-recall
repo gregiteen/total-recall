@@ -846,12 +846,12 @@ async function runConsult(paths, config, args) {
   }
   const prompt = args[promptArgIndex + 1];
 
-  const mode = classifyPrompt(prompt);
+  const classified = classifyPrompt(prompt);
   
   const db = openDatabase(paths.dbPath);
   try {
-    const result = compileSurfaceFromGraph(db, mode, {
-      tokenBudget: config.graph?.tokenBudget?.[mode] || 1500
+    const result = compileSurfaceFromGraph(db, classified.mode, {
+      tokenBudget: config.graph?.tokenBudget?.[classified.mode] || classified.budget || 1500
     });
 
     if (result) {
