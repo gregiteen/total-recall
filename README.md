@@ -55,7 +55,7 @@ Total Recall works with **any** IDE that uses a system prompt file. Run `total-r
 
 | IDE | Watcher | System Prompt | Rule File | Status |
 |-----|---------|---------------|-----------|--------|
-| **Antigravity** (Gemini) | `overview.txt` | `INSTRUCTIONS.md` | Section injection | ✅ Full support |
+| **Antigravity** (Gemini) | `overview.txt` | `.agent/rules/graph-context.md` | Standalone rule file | ✅ Full support |
 | **Claude Code** | `~/.claude/projects/` JSONL | `CLAUDE.md` | Symlink or section | ✅ Full support |
 | **Cursor** | Internal DB | `.cursorrules` | `.cursor/rules/total-recall.mdc` | ✅ Full support |
 | **Aider** | `.aider.chat.history.md` | Custom rules file | Section injection | ✅ Full support |
@@ -91,6 +91,9 @@ total-recall search "branding architecture"
 
 # Compile behavioral surface into your system prompt
 total-recall compile-surface
+
+# Synchronous graph consultation (returns tailored context for a specific prompt)
+total-recall consult --prompt "deploy the API"
 
 # Reindex after manual wiki edits
 total-recall reindex
@@ -182,7 +185,7 @@ tr-coprocessor status   # Check status
 tr-coprocessor stop     # Stop
 ```
 
-The daemon automatically injects relevant memories into `~/.total-recall/active-context.md` — the agent gets contextual reminders without any manual intervention.
+The daemon automatically writes the compiled graph surface to `.agent/rules/graph-context.md`. IDEs that support auto-injecting rule files (like Antigravity) will pick this up on every turn without any tool calls.
 
 ### System 2 Researcher
 
@@ -235,7 +238,8 @@ This writes:
 - **Windsurf**: `.windsurf/rules/total-recall.md`
 - **Roo Code**: `.roo/rules/total-recall.md`
 - **Continue**: `.continue/rules/total-recall.md`
-- **INSTRUCTIONS.md / CLAUDE.md**: Section injection (detects symlinks automatically)
+- **Antigravity**: `.agent/rules/graph-context.md` (standalone rule file, auto-injected every turn)
+- **CLAUDE.md**: Section injection (detects symlinks automatically)
 
 ## Configuration
 
@@ -359,6 +363,7 @@ your-project/
 | `total-recall setup --config <URL>` | Import config (decrypts if needed) |
 | `total-recall status` | Show integrations, channels, agents |
 | `total-recall notify "title" "msg"` | Enqueue notification |
+| `total-recall consult --prompt "text"` | Synchronous graph query — returns tailored context |
 
 **Short aliases** (via `package.json` bin entries):
 

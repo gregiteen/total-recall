@@ -129,13 +129,13 @@ const DEFAULTS = {
     enabled: true,
     intervalMs: 15000,
     heartbeatIntervalMs: 1800000,  // 30 min — surface recompilation + decay + prune
-    analysisModel: 'gemini-3.1-flash-lite',
+    analysisModel: 'gemini-3.1-pro-preview',
     researchEnabled: true,
     notificationsEnabled: true,
   },
   agents: {
     default: null,
-    archivist: { binary: 'gemini', model: 'gemini-3.1-flash-lite' },
+    archivist: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
     synthesizer: { binary: 'claude', model: 'claude-haiku-4-5' },
     factChecker: { binary: 'codex', model: 'gpt-5.4-mini' },
   },

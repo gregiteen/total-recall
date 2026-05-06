@@ -116,6 +116,61 @@ export function ensureSchema(db) {
       );
     `);
   }
+
+  // ─── PHASE 19: INSTRUCTION GRAPH TABLES ──────────────────────────────────
+
+  const hasGraphNodes = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='graph_nodes'"
+  ).get();
+
+  if (!hasGraphNodes) {
+    db.exec(`
+      CREATE TABLE graph_nodes (
+        slug TEXT PRIMARY KEY,
+        meaning TEXT NOT NULL,
+        condition TEXT,
+        action_type TEXT,
+        weight REAL DEFAULT 1.0,
+        priority INTEGER DEFAULT 5,
+        node_type TEXT DEFAULT 'conditional',
+        subgraph TEXT DEFAULT 'shared',
+        source_files TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
+
+  const hasGraphMetadata = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='graph_metadata'"
+  ).get();
+
+  if (!hasGraphMetadata) {
+    db.exec(`
+      CREATE TABLE graph_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+  }
+
+  const hasComplianceLog = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_log'"
+  ).get();
+
+  if (!hasComplianceLog) {
+    db.exec(`
+      CREATE TABLE compliance_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        turn_id TEXT,
+        mode TEXT,
+        injected_rules TEXT,
+        violated_rules TEXT,
+        compliance_score REAL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+  }
 }
 
 // ─── REINDEX ────────────────────────────────────────────────────────────────────

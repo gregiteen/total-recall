@@ -60,12 +60,20 @@ async function main() {
       await runSteer(paths, config, args);
       break;
 
+    case 'consult':
+      await runConsult(paths, config, args);
+      break;
+
     case 'note':
       await runNote(paths, config, args);
       break;
 
     case 'reindex':
       await runReindex(paths);
+      break;
+
+    case 'rebuild-graph':
+      await runRebuildGraph(paths, config);
       break;
 
     case 'compile-surface':
@@ -688,6 +696,27 @@ async function runReindex(paths) {
   db.close();
 }
 
+// ─── REBUILD GRAPH ──────────────────────────────────────────────────────────────
+
+async function runRebuildGraph(paths, config) {
+  const { openDatabase } = await import('../src/core/fts5.mjs');
+  const { rebuildGraph } = await import('../src/core/graph.mjs');
+  
+  const db = openDatabase(paths.dbPath);
+  
+  try {
+    console.log('🕸️  Rebuilding instruction graph from wiki nodes...\n');
+    const result = await rebuildGraph(db, paths, config);
+    console.log(`\n✅ Graph rebuild complete!`);
+    console.log(`  Nodes synthesized: ${result.nodeCount}`);
+    console.log(`  Edges inferred: ${result.edgeCount}\n`);
+  } catch (err) {
+    console.error(`\n❌ Graph rebuild failed: ${err.message}\n`);
+  } finally {
+    db.close();
+  }
+}
+
 // ─── COMPILE SURFACE ────────────────────────────────────────────────────────────
 
 async function runCompileSurface(paths, config) {
@@ -803,6 +832,40 @@ async function runDream(paths) {
   console.log(`\n✅ Dream cycle complete (${result.timestamp}).\n`);
 }
 
+// ─── CONSULT GRAPH ──────────────────────────────────────────────────────────────
+
+async function runConsult(paths, config, args) {
+  const { classifyPrompt } = await import('../src/core/classifier.mjs');
+  const { compileSurfaceFromGraph } = await import('../src/core/surface.mjs');
+  const { openDatabase } = await import('../src/core/fts5.mjs');
+
+  const promptArgIndex = args.indexOf('--prompt');
+  if (promptArgIndex === -1 || promptArgIndex === args.length - 1) {
+    console.error('❌ Missing --prompt argument.');
+    return;
+  }
+  const prompt = args[promptArgIndex + 1];
+
+  const mode = classifyPrompt(prompt);
+  
+  const db = openDatabase(paths.dbPath);
+  try {
+    const result = compileSurfaceFromGraph(db, mode, {
+      tokenBudget: config.graph?.tokenBudget?.[mode] || 1500
+    });
+
+    if (result) {
+      console.log(result.surface);
+    } else {
+      console.log('📭 No surface compiled from graph.');
+    }
+  } catch (err) {
+    console.error(`\n❌ Consult failed: ${err.message}\n`);
+  } finally {
+    db.close();
+  }
+}
+
 // ─── HEARTBEAT (one-shot) ───────────────────────────────────────────────────
 
 async function runHeartbeatCmd(paths, config) {
@@ -825,14 +888,15 @@ async function runHeartbeatCmd(paths, config) {
 
   if (surfaceResult) {
     if (!dryRun) {
-      const targetFiles = paths.systemPromptFiles || [paths.systemPrompt];
-      const writeResult = writeSurfaceMulti(
-        targetFiles,
-        surfaceResult.surface,
-        config.behavioralSurfaceHeader,
-      );
-      const successes = writeResult.results.filter(r => r.success).length;
-      console.log(`  🧠 Surface: ${surfaceResult.stats.totalNodes} nodes → ${successes}/${targetFiles.length} files`);
+      // PHASE 20: Write graph surface as standalone rule file for IDE auto-injection
+      const rulesGraphPath = path.join(paths.root, '.agent', 'rules', 'graph-context.md');
+      try {
+        fs.mkdirSync(path.dirname(rulesGraphPath), { recursive: true });
+        fs.writeFileSync(rulesGraphPath, surfaceResult.surface);
+        console.log(`  🧠 Surface: ${surfaceResult.stats.totalNodes} nodes → ${rulesGraphPath}`);
+      } catch (writeErr) {
+        console.error(`  ❌ Failed to write graph-context.md: ${writeErr.message}`);
+      }
     } else {
       console.log(`  🧠 Surface: ${surfaceResult.stats.totalNodes} nodes (dry-run, not written)`);
     }
