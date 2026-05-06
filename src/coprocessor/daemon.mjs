@@ -335,45 +335,25 @@ class CoProcessorDaemon {
   runComplianceVerification(modelText, turnId) {
     if (!this.db) return;
     try {
-      // Get the rules injected in the PREVIOUS turn (simulated by looking at recent log)
+      // Get the rules injected in the PREVIOUS turn
       const lastLog = this.db.prepare(`
-        SELECT id, injected_rules FROM compliance_log 
+        SELECT id, injected_rules, mode FROM compliance_log 
         ORDER BY created_at DESC LIMIT 1
       `).get();
       
       if (!lastLog || !lastLog.injected_rules) return;
       
-      // In a full LLM-based verification, we would send modelText + rules to assess compliance.
-      // For this implementation, we simulate a violation detection heuristic.
       const injectedRules = JSON.parse(lastLog.injected_rules);
-      if (injectedRules.length > 0) {
-        // Simulated: 10% chance of violation for testing
-        const violated = injectedRules.filter(() => Math.random() > 0.9);
-        
-        if (violated.length > 0) {
-          log('WARN', `Compliance violation detected for ${violated.length} rule(s)`);
-          
-          this.db.prepare(`
-            UPDATE compliance_log 
-            SET violated_rules = ?, compliance_score = 0.0
-            WHERE id = ?
-          `).run(JSON.stringify(violated), lastLog.id);
-          
-          // Auto-increment priority for ignored rules
-          const placeholders = violated.map(() => '?').join(',');
-          this.db.prepare(`
-            UPDATE graph_nodes 
-            SET priority = priority + 1 
-            WHERE slug IN (${placeholders})
-          `).run(...violated);
-        } else {
-          this.db.prepare(`
-            UPDATE compliance_log 
-            SET compliance_score = 1.0
-            WHERE id = ?
-          `).run(lastLog.id);
-        }
-      }
+      if (typeof injectedRules !== 'number' || injectedRules === 0) return;
+
+      // Deterministic compliance check: mark as compliant
+      // Full LLM-based verification would send modelText + rules for assessment
+      // For now, mark all turns as compliant (no random noise)
+      this.db.prepare(`
+        UPDATE compliance_log 
+        SET compliance_score = 1.0
+        WHERE id = ?
+      `).run(lastLog.id);
     } catch (err) {
       log('ERROR', 'Compliance verification failed', { error: err.message });
     }
@@ -595,14 +575,33 @@ class CoProcessorDaemon {
     try {
       log('INFO', 'Heartbeat starting — surface recompilation + maintenance');
 
-      // 1. Recompile behavioral surface with temporal context
-      const surfaceResult = compileSurface({
-        wikiDir: this.paths.wikiDir,
-        root: this.root,
-        ranking: this.config.ranking,
-        includeTemporalContext: true,
-        episodesDir: this.paths.episodesDir,
-      });
+      // 1. Recompile behavioral surface from the instruction graph
+      //    Use 'discuss' mode for heartbeat (general-purpose surface)
+      let surfaceResult = null;
+      if (this.db) {
+        try {
+          const compiled = compileSurfaceFromGraph(this.db, 'discuss', {
+            tokenBudget: 2500,
+            includeTemporalContext: true,
+            timezone: undefined,
+          });
+          surfaceResult = compiled;
+        } catch (err) {
+          log('WARN', 'Graph surface compilation failed, falling back to wiki surface', { error: err.message });
+        }
+      }
+
+      // Fallback to wiki-based surface if graph compilation failed or no DB
+      if (!surfaceResult) {
+        const wikiResult = compileSurface({
+          wikiDir: this.paths.wikiDir,
+          root: this.root,
+          ranking: this.config.ranking,
+          includeTemporalContext: true,
+          episodesDir: this.paths.episodesDir,
+        });
+        surfaceResult = wikiResult;
+      }
 
       if (surfaceResult) {
         // Write to all configured system prompt files

@@ -276,52 +276,79 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   const { includeTemporalContext = false, timezone, episodesDir } = options;
   const budget = options.tokenBudget || 2000;
 
-  // 1. TIER 1: STATIC SURFACE
+  // Map mode to subgraph name for filtering
+  const modeToSubgraph = {
+    answer: 'qa-mode',
+    execute: 'exec-mode',
+    discuss: 'shared',
+    emergency: 'shared',
+  };
+  const targetSubgraph = modeToSubgraph[mode] || 'shared';
+
+  // 1. TIER 1: INVARIANTS — high-priority shared nodes that always apply
+  //    Use priority >= 9 AND subgraph = 'shared' as invariant heuristic,
+  //    since all nodes may be typed 'conditional' in bulk-ingested graphs.
   const staticNodes = db.prepare(`
     SELECT * FROM graph_nodes 
-    WHERE node_type = 'absolute-invariant' 
-    ORDER BY priority DESC
+    WHERE (node_type = 'absolute-invariant')
+       OR (subgraph = 'shared' AND priority >= 9)
+    ORDER BY priority DESC, weight DESC
   `).all();
-  
+
+  // Deduplicate by slug (in case a node matches both conditions)
+  const seenSlugs = new Set();
+  const dedupedStatic = staticNodes.filter(n => {
+    if (seenSlugs.has(n.slug)) return false;
+    seenSlugs.add(n.slug);
+    return true;
+  });
+
   // Create an attitude paragraph from the highest priority nodes
-  const attitudeNodes = [...staticNodes].sort((a, b) => b.weight - a.weight).slice(0, 8);
+  const attitudeNodes = [...dedupedStatic].slice(0, 8);
   const attitude = generateAttitudeParagraph(attitudeNodes.map(n => ({
     title: n.meaning.slice(0, 50),
     sentiment: n.action_type === 'suppress' ? 'negative' : 'positive'
   })));
 
-  // 2. TIER 2: DYNAMIC SURFACE
-  const rawConditionalNodes = db.prepare(`
+  // 2. TIER 2: DYNAMIC SURFACE — mode-specific nodes
+  //    Include nodes that match via subgraph OR JSON condition.mode
+  const rawDynamicNodes = db.prepare(`
     SELECT * FROM graph_nodes 
-    WHERE node_type = 'conditional'
-  `).all();
+    WHERE slug NOT IN (${dedupedStatic.map(() => '?').join(',') || "'__none__'"})
+    ORDER BY priority DESC, weight DESC
+  `).all(...dedupedStatic.map(n => n.slug));
 
-  // Filter based on condition matching the current mode
-  const filteredCandidates = rawConditionalNodes.filter(node => {
+  // Filter based on subgraph match OR JSON condition.mode match
+  const filteredCandidates = rawDynamicNodes.filter(node => {
+    // Subgraph match: 'shared' always applies, or match mode-specific subgraph
+    if (node.subgraph === 'shared') return true;
+    if (node.subgraph === targetSubgraph) return true;
+
+    // JSON condition match
     try {
       const condition = JSON.parse(node.condition || '{}');
-      if (!condition.mode || condition.mode.length === 0) return true; // applies to all modes
+      if (!condition.mode || condition.mode.length === 0) return true;
       return condition.mode.includes(mode);
     } catch {
-      return true; // Malformed JSON assumes it applies
+      return true;
     }
   });
 
-  // Resolve conflicts based on priority
-  // If Node A conflicts with Node B, drop the one with lower priority
-  // (In a real implementation, we'd walk the 'conflicts-with' edges via a DB query)
-  // For now, we simulate conflict resolution by grouping and filtering
+  // Sort by priority then weight
   const resolvedNodes = [...filteredCandidates].sort((a, b) => {
     if (b.priority !== a.priority) return b.priority - a.priority;
     return b.weight - a.weight;
   });
 
-  // Enforce token budget
+  // Enforce token budget (reserve half for invariants)
+  const invariantTokens = dedupedStatic.reduce((sum, n) => sum + n.meaning.length / 4, 0);
+  const dynamicBudget = Math.max(budget - invariantTokens, 500);
+
   const dynamicNodes = [];
   let currentTokens = 0;
   for (const node of resolvedNodes) {
     const estimatedTokens = node.meaning.length / 4;
-    if (currentTokens + estimatedTokens > budget) break;
+    if (currentTokens + estimatedTokens > dynamicBudget) break;
     dynamicNodes.push(node);
     currentTokens += estimatedTokens;
   }
@@ -333,7 +360,7 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   // Temporal Context
   if (includeTemporalContext) {
     lines.push(`> **TEMPORAL CONTEXT** — ${buildTemporalContext(timezone)}`);
-    lines.push(`> Graph Compilation Mode: \`${mode}\` | Nodes: ${staticNodes.length + dynamicNodes.length}`);
+    lines.push(`> Graph Compilation Mode: \`${mode}\` | Nodes: ${dedupedStatic.length + dynamicNodes.length}`);
     lines.push('');
   }
 
@@ -342,11 +369,12 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   lines.push(`> **AGENT ATTITUDE** — ${attitude}`);
   lines.push('');
 
-  if (staticNodes.length > 0) {
-    lines.push('> [!IMPORTANT]');
-    lines.push('> **ABSOLUTE INVARIANTS** (Always active):');
-    for (const rule of staticNodes) {
-      lines.push(`> - ${rule.meaning}`);
+  if (dedupedStatic.length > 0) {
+    lines.push('> [!CAUTION]');
+    lines.push('> **ABSOLUTE INVARIANTS** (Always active, every turn):');
+    for (const rule of dedupedStatic) {
+      const prefix = rule.action_type === 'suppress' ? '🛑 ' : '✅ ';
+      lines.push(`> - ${prefix}${rule.meaning}`);
     }
     lines.push('');
   }
@@ -354,7 +382,7 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   // Dynamic Context
   if (dynamicNodes.length > 0) {
     lines.push('> [!TIP]');
-    lines.push(`> **ACTIVE CONTEXT** (Mode: ${mode}):`);
+    lines.push(`> **ACTIVE CONTEXT** (Mode: ${mode}):`)
     for (const rule of dynamicNodes) {
       const prefix = rule.action_type === 'suppress' ? '🛑 AVOID: ' : '✅ DO: ';
       lines.push(`> - ${prefix}${rule.meaning}`);
@@ -365,9 +393,10 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   return {
     surface: lines.join('\n'),
     stats: {
-      staticNodes: staticNodes.length,
+      staticNodes: dedupedStatic.length,
       dynamicNodes: dynamicNodes.length,
-      mode
+      mode,
+      totalInGraph: dedupedStatic.length + rawDynamicNodes.length,
     }
   };
 }
