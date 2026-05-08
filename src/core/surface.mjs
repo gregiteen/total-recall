@@ -340,13 +340,26 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
     return b.weight - a.weight;
   });
 
+  // Deduplication pass — remove near-duplicate meanings (Jaccard > 0.6)
+  const deduped = [];
+  for (const node of resolvedNodes) {
+    const words = new Set(node.meaning.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+    const isDuplicate = deduped.some(existing => {
+      const existingWords = new Set(existing.meaning.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+      const intersection = [...words].filter(w => existingWords.has(w)).length;
+      const union = new Set([...words, ...existingWords]).size;
+      return union > 0 && (intersection / union) > 0.6;
+    });
+    if (!isDuplicate) deduped.push(node);
+  }
+
   // Enforce token budget (reserve half for invariants)
   const invariantTokens = dedupedStatic.reduce((sum, n) => sum + n.meaning.length / 4, 0);
   const dynamicBudget = Math.max(budget - invariantTokens, 500);
 
   const dynamicNodes = [];
   let currentTokens = 0;
-  for (const node of resolvedNodes) {
+  for (const node of deduped) {
     const estimatedTokens = node.meaning.length / 4;
     if (currentTokens + estimatedTokens > dynamicBudget) break;
     dynamicNodes.push(node);

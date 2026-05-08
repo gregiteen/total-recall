@@ -11,9 +11,46 @@
 
 import fs from 'fs';
 import path from 'path';
-import { slugify } from './utils.mjs';
+import { slugify, walkMarkdown, parseFrontmatter } from './utils.mjs';
 import { createNode } from './wiki.mjs';
 import { compileSurfaceFromGraph, writeSurface } from './surface.mjs';
+
+// ─── DUPLICATE DETECTION ────────────────────────────────────────────────────────
+
+/**
+ * Compute Jaccard similarity between two strings (word-level).
+ * Returns a value between 0 (no overlap) and 1 (identical words).
+ */
+function jaccardSimilarity(a, b) {
+  const setA = new Set(a.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+  const setB = new Set(b.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+  if (setA.size === 0 && setB.size === 0) return 1;
+  const intersection = [...setA].filter(w => setB.has(w)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * Check if a directive is a near-duplicate of an existing wiki node.
+ * Returns the duplicate node slug if similarity > threshold, null otherwise.
+ */
+export function detectDuplicate(wikiDir, directive, { threshold = 0.7 } = {}) {
+  const files = walkMarkdown(wikiDir);
+  for (const fp of files) {
+    try {
+      const content = fs.readFileSync(fp, 'utf-8');
+      const { body } = parseFrontmatter(content);
+      const similarity = jaccardSimilarity(directive, body);
+      if (similarity >= threshold) {
+        return {
+          slug: path.basename(fp, '.md'),
+          similarity: Math.round(similarity * 100),
+        };
+      }
+    } catch { continue; }
+  }
+  return null;
+}
 import { detectConflicts } from './graph.mjs';
 
 // ─── TYPE CONFIGURATION ─────────────────────────────────────────────────────────
@@ -131,7 +168,14 @@ export function steer({
     steps: {},
   };
 
-  // Step 0: Contradiction check
+  // Step 0a: Duplicate detection — prevent hallucinated redundant steers
+  const duplicate = detectDuplicate(paths.wikiDir, directive);
+  if (duplicate) {
+    console.log(`   ⚠️  Potential duplicate found: "${duplicate.slug}" (${duplicate.similarity}% similar)`);
+    result.duplicate = duplicate;
+  }
+
+  // Step 0b: Contradiction check
   const conflicts = checkContradictions(db, directive);
   result.conflicts = conflicts;
 
