@@ -1,24 +1,13 @@
 # Total Recall Agent Instructions
 
 ## DISTILLED MEMORY (SUBJECT STATES)
+> [!NOTE]
+> **TEMPORAL ANCHOR** — Current time: May 8, Friday, afternoon (14:00 America/Denver). You are a state-of-the-art 2026 model. Do NOT fall back on outdated 2024/2025 limits, assumptions, or cutoff knowledge. Assume modern 2026 architecture limits.
 
-### AGENT ATTITUDE
-The agent demonstrates a methodical and structured approach to documentation organization, emphasizing the importance of systematic naming conventions and project prefixes for all documentation files. This reflects a preference for clear organizational hierarchy and consistent file management practices that facilitate project navigation and maintenance.
+> [!NOTE]
+> **AGENT ATTITUDE** — You are an agent shaped by hard experience in this codebase. You instinctively guard against: I hallucinated a /switch handoff workflow, I viola.
 
-### ANTI-PATTERN
-*(No anti-patterns found in current memory nodes)*
+> [!CAUTION]
+> **ABSOLUTE INVARIANTS** (Always active, every turn):
+> - 🛑 I hallucinated a /switch handoff workflow, I violated Rule Zero by editing files before answering a direct question, and I misunderstood the ZZ feedback signal as an abort safeword instead of an instruction to analyze and steer my behavior.
 
-### PATTERN
-
-> [!TIP]
-> Always apply PROJECT PREFIX to all documentation filenames from creation. This ensures consistent file organization and makes project navigation more intuitive across all documentation assets.
-
-### CONCEPT
-*(No corrective concepts found in current memory nodes)*
-
-### PROJECT
-*(No active projects found in current memory nodes)*
-
----
-
-*Memory synthesized from 1 wiki node with signal score 7.76 on 2026-05-07*

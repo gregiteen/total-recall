@@ -136,8 +136,8 @@ const DEFAULTS = {
   agents: {
     default: null,
     archivist: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
-    synthesizer: { binary: 'claude', model: 'claude-opus-4.7' },
-    factChecker: { binary: 'codex', model: 'gpt-5.5-instant' },
+    synthesizer: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
+    factChecker: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
   },
 };
 
@@ -198,7 +198,7 @@ export function resolvePaths(root, config) {
     systemPrompt: path.join(root, config.systemPromptFile),
     // Multi-file injection: resolve all target files
     systemPromptFiles: resolveSystemPromptFiles(root, config),
-    activeContextFile: path.join(os.homedir(), '.total-recall', 'active-context.md'),
+    activeContextFile: path.join(root, '.agent', 'rules', 'active-context.md'),
   };
 }
 

@@ -23,7 +23,7 @@ import { getAdapter, checkAvailability } from './adapters/index.mjs';
 
 // ─── CONSTANTS ──────────────────────────────────────────────────────────────────
 
-const NOTIFY_SCRIPT = '.agents/skills/notifications/scripts/notify.mjs';
+const NOTIFY_SCRIPT = '.agent/skills/notifications/scripts/notify.mjs';
 
 // ─── PROMPT TEMPLATES ───────────────────────────────────────────────────────────
 
@@ -52,31 +52,6 @@ function archivistPrompt(paths, conversationId) {
 - Report what you created at the end`;
 }
 
-function synthesizerPrompt(paths) {
-  return `You are the Memory Synthesizer. Your job is to compile the knowledge graph into a behavioral surface.
-
-## INPUT
-- Wiki directory: ${paths.wikiDir}
-- INSTRUCTIONS.md: ${paths.systemPrompt}
-- SCHEMA.md: ${path.join(paths.wikiDir, '..', 'memory-wiki', 'SCHEMA.md')}
-
-## TASKS
-1. Read ALL wiki nodes in ${paths.wikiDir}/ (recursively)
-2. Rank each node by: signal_score = intensity × (access+1)^0.5 × max(0.1, 0.5^(days/half_life))
-3. Generate a new DISTILLED MEMORY (SUBJECT STATES) block with:
-   - AGENT ATTITUDE: A personality paragraph derived from the top-ranked nodes
-   - ANTI-PATTERN: > [!CAUTION] blocks from negative sentiment nodes
-   - PATTERN: > [!TIP] blocks from positive sentiment nodes  
-   - CONCEPT: > [!IMPORTANT] blocks from corrective nodes
-   - PROJECT: > [!NOTE] blocks from active projects
-4. Replace the ## DISTILLED MEMORY (SUBJECT STATES) section in INSTRUCTIONS.md with your compiled output
-
-## RULES
-- Preserve ALL content before and after the DISTILLED MEMORY section
-- Cap the output at 30 rules maximum
-- Use the same formatting style already present in INSTRUCTIONS.md
-- Report what you changed at the end`;
-}
 
 function factCheckerPrompt(paths) {
   return `You are the Memory Fact-Checker. Your job is to verify wiki node claims against the actual codebase.
@@ -98,6 +73,7 @@ function factCheckerPrompt(paths) {
 - Do NOT modify the markdown body — only update YAML frontmatter fields
 - Only check nodes of type: pattern, anti-pattern, decision, concept
 - Skip preference and project nodes (they don't need codebase verification)
+- **CRITICAL**: If the node contains external technical claims (such as API limits, model names, or external documentation), you MUST use your web search tool to verify the claim against live documentation. Do NOT rely on training data.
 - Report a summary of findings at the end`;
 }
 
@@ -141,10 +117,9 @@ async function dispatchAgent(root, agentName, model, prompt, label, dryRun = fal
       child = spawn(adapter.bin, args, {
         cwd: root,
         env,
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'], // Ignore stdin to mimic < /dev/null
         timeout: 300000, // 5 min max per agent
       });
-      child.stdin.end(); // Close stdin to prevent hanging
     }
 
     let stdout = '';
@@ -211,12 +186,12 @@ async function main() {
   if (!dryRun) {
     const availability = checkAvailability();
     const archivistBin = uniformAgent || agents.archivist.binary || 'gemini';
-    const synthBin = uniformAgent || agents.synthesizer.binary || 'claude';
-    const fcBin = uniformAgent || agents.factChecker.binary || 'codex';
+    const synthBin = uniformAgent || agents.synthesizer.binary || 'gemini';
+    const fcBin = uniformAgent || agents.factChecker.binary || 'gemini';
 
     const needed = [];
     if (!skipArchivist) needed.push({ name: archivistBin, role: 'Archivist' });
-    if (!skipSynthesizer) needed.push({ name: synthBin, role: 'Synthesizer' });
+    if (!skipSynthesizer) needed.push({ name: 'node', role: 'Synthesizer (Deterministic)' });
     if (!skipFactChecker) needed.push({ name: fcBin, role: 'Fact-Checker' });
 
     const missing = needed.filter(n => !availability[n.name]?.available);
@@ -259,8 +234,8 @@ async function main() {
   const results = [];
 
   const archivistAgent = uniformAgent || agents.archivist.binary || 'gemini';
-  const synthAgent = uniformAgent || agents.synthesizer.binary || 'claude';
-  const fcAgent = uniformAgent || agents.factChecker.binary || 'codex';
+  const synthAgent = uniformAgent || agents.synthesizer.binary || 'gemini';
+  const fcAgent = uniformAgent || agents.factChecker.binary || 'gemini';
 
   if (!skipArchivist) {
     results.push(await dispatchAgent(root, archivistAgent, agents.archivist.model, archivistPrompt(paths, conversationId), `Archivist (${archivistAgent})`, dryRun));
@@ -270,9 +245,24 @@ async function main() {
   }
 
   if (!skipSynthesizer) {
-    results.push(await dispatchAgent(root, synthAgent, agents.synthesizer.model, synthesizerPrompt(paths), `Synthesizer (${synthAgent})`, dryRun));
-    if (!dryRun && !skipFactChecker) {
-      await new Promise(r => setTimeout(r, STAGGER_MS));
+    // Phase 20: Replace fragile Synthesizer LLM with deterministic surface compiler
+    console.log('\n🚀 Dispatching Synthesizer (Deterministic)...');
+    try {
+      const { openDatabase } = await import('../core/fts5.mjs');
+      const { compileSurfaceFromGraph } = await import('../core/surface.mjs');
+      const db = openDatabase(paths.dbPath);
+      
+      const compiled = compileSurfaceFromGraph(db, 'discuss', { tokenBudget: 2500, includeTemporalContext: true });
+      const rulesGraphPath = path.join(root, '.agent', 'rules', 'graph-context.md');
+      fs.mkdirSync(path.dirname(rulesGraphPath), { recursive: true });
+      fs.writeFileSync(rulesGraphPath, compiled.surface);
+      
+      console.log(`   ✅ Synthesizer (Deterministic) completed (compiled ${compiled.stats.dynamicNodes} nodes)`);
+      results.push({ success: true, label: 'Synthesizer (Deterministic)' });
+      db.close();
+    } catch (err) {
+      console.log(`   ❌ Synthesizer error: ${err.message}`);
+      results.push({ success: false, label: 'Synthesizer (Deterministic)', error: err.message });
     }
   }
 
@@ -307,7 +297,7 @@ async function main() {
     for (const f of failures) {
       logLines.push(`Agent: ${f.label || 'unknown'}`);
       logLines.push(`Exit code: ${f.code}`);
-      if (f.stderr) logLines.push(`Stderr:\n${f.stderr.slice(0, 500)}`);
+      if (f.stderr) logLines.push(`Stderr:\n${f.stderr.slice(-2000)}`);
       if (f.error) logLines.push(`Error: ${f.error}`);
       logLines.push('');
     }

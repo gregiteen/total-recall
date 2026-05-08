@@ -46,8 +46,8 @@ export default {
 
   // CLI agent configuration (Phase 4)
   agents: {
-    archivist: { binary: 'gemini', model: 'gemini-2.5-flash' },
-    synthesizer: { binary: 'claude', model: 'claude-sonnet-4-20250514' },
-    factChecker: { binary: 'codex', model: 'o4-mini' },
+    archivist: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
+    synthesizer: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
+    factChecker: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
   },
 };

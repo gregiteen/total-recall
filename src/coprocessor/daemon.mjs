@@ -290,6 +290,19 @@ class CoProcessorDaemon {
       this.stats.errors++;
     }
 
+    // Phase 19.5: Inject immediate ACTIVE CONTEXT for IDE auto-injection
+    try {
+      const { writeActiveContext, clearActiveContext } = await import('./inject.mjs');
+      if (contextItems.length > 0) {
+        writeActiveContext(this.paths.activeContextFile, contextItems, { append: false });
+        this.stats.contextInjections++;
+      } else {
+        clearActiveContext(this.paths.activeContextFile);
+      }
+    } catch (err) {
+      log('ERROR', 'Failed to inject active context', { error: err.message });
+    }
+
     // Phase 19: Inject graph-aware DYNAMIC CONTEXT based on classification
     if (this.db) {
       try {
