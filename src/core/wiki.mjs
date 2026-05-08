@@ -34,7 +34,13 @@ export function loadNodes(wikiDir, root) {
   for (const fp of files) {
     const content = fs.readFileSync(fp, 'utf-8');
     const { body, meta } = parseFrontmatter(content);
-    if (!meta.type) continue; // Skip nodes without frontmatter
+    
+    // Auto-heal missing frontmatter to prevent context drops
+    if (!meta.type) meta.type = 'concept';
+    if (!meta.provenance) meta.provenance = ['auto-healed'];
+    if (!meta.sentiment) meta.sentiment = 'neutral';
+    if (!meta.sentiment_intensity) meta.sentiment_intensity = 5;
+    if (!meta.confidence) meta.confidence = 'medium';
 
     const filename = path.basename(fp);
     const slug = slugify(filename);
@@ -207,17 +213,17 @@ export function lint(wikiDir) {
     const hasFrontmatter = Object.keys(meta).length > 0;
 
     if (!hasFrontmatter) {
-      issues.errors.push({ type: 'no-frontmatter', slug, detail: 'No YAML frontmatter found' });
+      issues.warnings.push({ type: 'no-frontmatter', slug, detail: 'No YAML frontmatter found (auto-healed in runtime)' });
     } else {
       if (!meta.type) {
-        issues.errors.push({ type: 'missing-type', slug, detail: 'Missing required field: type' });
+        issues.warnings.push({ type: 'missing-type', slug, detail: 'Missing required field: type (auto-healed in runtime)' });
       } else if (!VALID_TYPES.includes(meta.type)) {
         issues.warnings.push({ type: 'invalid-type', slug, detail: `type="${meta.type}" not in ${VALID_TYPES.join(', ')}` });
       }
 
       const provenance = meta.provenance;
       if (!provenance || (Array.isArray(provenance) && provenance.length === 0)) {
-        issues.errors.push({ type: 'missing-provenance', slug, detail: 'Missing required field: provenance' });
+        issues.warnings.push({ type: 'missing-provenance', slug, detail: 'Missing required field: provenance (auto-healed in runtime)' });
       }
 
       if (!meta.sentiment) {

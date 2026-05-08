@@ -9,6 +9,7 @@
     "tr-query": "./bin/tr-query",
     "tr-steer": "./bin/tr-steer",
     "tr-note": "./bin/tr-note",
+    "tr-retract": "./bin/tr-retract",
     "tr-surface": "./bin/tr-surface",
     "tr-reindex": "./bin/tr-reindex",
     "tr-coprocessor": "./bin/tr-coprocessor",

@@ -357,9 +357,15 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   const lines = [];
   lines.push('## DISTILLED MEMORY (SUBJECT STATES)');
 
+  // Dynamic Temporal Anchor (Always Included)
+  const currentYear = new Date().getFullYear();
+  const localTimeStr = buildTemporalContext(timezone);
+  lines.push(`> [!NOTE]`);
+  lines.push(`> **TEMPORAL ANCHOR** — ${localTimeStr}. You are a state-of-the-art ${currentYear} model. Do NOT fall back on outdated 2024/2025 limits, assumptions, or cutoff knowledge. Assume modern ${currentYear} architecture limits.`);
+  lines.push('');
+
   // Temporal Context
   if (includeTemporalContext) {
-    lines.push(`> **TEMPORAL CONTEXT** — ${buildTemporalContext(timezone)}`);
     lines.push(`> Graph Compilation Mode: \`${mode}\` | Nodes: ${dedupedStatic.length + dynamicNodes.length}`);
     lines.push('');
   }

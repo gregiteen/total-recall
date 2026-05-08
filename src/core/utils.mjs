@@ -136,8 +136,8 @@ const DEFAULTS = {
   agents: {
     default: null,
     archivist: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
-    synthesizer: { binary: 'claude', model: 'claude-haiku-4-5' },
-    factChecker: { binary: 'codex', model: 'gpt-5.4-mini' },
+    synthesizer: { binary: 'claude', model: 'claude-opus-4.7' },
+    factChecker: { binary: 'codex', model: 'gpt-5.5-instant' },
   },
 };
 
