@@ -64,6 +64,10 @@ async function main() {
       await runRetract(paths, args);
       break;
 
+    case 'edit':
+      await runEdit(paths, args);
+      break;
+
     case 'consult':
       await runConsult(paths, config, args);
       break;
@@ -654,6 +658,46 @@ async function runRetract(paths, args) {
   console.log(`🎯 Retraction complete. You may want to run \`total-recall compile-surface\` to update INSTRUCTIONS.md`);
 }
 
+// ─── EDIT ───────────────────────────────────────────────────────────────────────
+
+async function runEdit(paths, args) {
+  const slug = args[0];
+  if (!slug) {
+    console.log('Usage: total-recall edit "slug" [--overwrite "content"]');
+    return;
+  }
+
+  const { walkMarkdown } = await import('../src/core/utils.mjs');
+  const files = walkMarkdown(paths.wikiDir);
+  const target = files.find(f => path.basename(f) === `${slug}.md`);
+
+  if (!target) {
+    console.log(`❌ No memory node found with slug: "${slug}"`);
+    return;
+  }
+
+  const overwriteIdx = args.indexOf('--overwrite');
+  if (overwriteIdx !== -1 && args[overwriteIdx + 1]) {
+    fs.writeFileSync(target, args[overwriteIdx + 1]);
+    console.log(`✅ Overwrote memory node: ${slug}`);
+  } else {
+    const editor = process.env.EDITOR || 'vi';
+    console.log(`📝 Opening ${target} in ${editor}...`);
+    const { spawnSync } = await import('child_process');
+    spawnSync(editor, [target], { stdio: 'inherit' });
+    console.log(`✅ Edit complete: ${slug}`);
+  }
+
+  const { openDatabase, reindex } = await import('../src/core/fts5.mjs');
+  if (fs.existsSync(paths.dbPath)) {
+    const Database = (await import('better-sqlite3')).default;
+    const db = new Database(paths.dbPath);
+    reindex(db, paths);
+    db.close();
+    console.log(`🔄 Search index recompiled.`);
+  }
+}
+
 // ─── STEER ──────────────────────────────────────────────────────────────────────
 
 async function runSteer(paths, config, args) {
@@ -1028,12 +1072,67 @@ async function runHeartbeatCmd(paths, config) {
     }
   }
 
+  // 6. Deterministic Graph Rebuild (if changes detected)
+  if (!dryRun) {
+    try {
+      const { openDatabase } = await import('../src/core/fts5.mjs');
+      const { rebuildGraph } = await import('../src/core/graph.mjs');
+      const { walkMarkdown } = await import('../src/core/utils.mjs');
+      
+      const db = openDatabase(paths.dbPath);
+      
+      let lastRebuild = 0;
+      try {
+        const row = db.prepare("SELECT value FROM graph_metadata WHERE key = 'last_rebuild'").get();
+        if (row) lastRebuild = new Date(row.value).getTime();
+      } catch { /* table may not exist yet */ }
+      
+      const files = walkMarkdown(paths.wikiDir);
+      let maxMtime = 0;
+      for (const f of files) {
+        const mtime = fs.statSync(f).mtimeMs;
+        if (mtime > maxMtime) maxMtime = mtime;
+      }
+      
+      if (maxMtime > lastRebuild - 1000) {
+        console.log('  🕸️  Graph changes detected — running deterministic rebuild...');
+        const graphRes = await rebuildGraph(db, paths, config, { deterministic: true });
+        console.log(`  ✅ Graph rebuilt: ${graphRes.nodeCount} nodes, ${graphRes.edgeCount} edges`);
+      } else {
+        console.log('  🕸️  Graph: no changes detected, skipping rebuild');
+      }
+      
+      db.close();
+    } catch (err) {
+      console.log(`  ⚠️  Graph rebuild failed: ${err.message}`);
+    }
+  }
+
   console.log(`\n✅ Heartbeat complete in ${Date.now() - t0}ms\n`);
 }
 
 // ─── STATS ──────────────────────────────────────────────────────────────────────
 
 async function runStats(paths) {
+  if (args.includes('--decay')) {
+    const { runConfidenceDecay } = await import('../src/core/dream.mjs');
+    const decayInfo = runConfidenceDecay(paths.wikiDir, { dryRun: true });
+
+    console.log('\n📉 Confidence Decay Visualization\n');
+    console.log('  SLUG                                       FROM   TO     DAYS  TYPE');
+    console.log('  ────────────────────────────────────────────────────────────────────────');
+
+    if (decayInfo.details.length === 0) {
+      console.log('  (No rules are actively decaying past their thresholds)');
+    } else {
+      for (const d of decayInfo.details) {
+        console.log(`  ${d.slug.padEnd(42)} ${String(d.from).toUpperCase().padEnd(6)} ${String(d.to).toUpperCase().padEnd(6)} ${String(d.daysSince).padStart(4)}  ${d.type}`);
+      }
+    }
+    console.log(`\n  Total actively decaying rules: ${decayInfo.details.length}\n`);
+    return;
+  }
+
   const { openDatabase, getStats } = await import('../src/core/fts5.mjs');
   const db = openDatabase(paths.dbPath);
   const stats = getStats(db, paths);
@@ -1165,6 +1264,7 @@ Commands:
   lint                         Wiki integrity check
   dream                        Run consolidation cycle
   stats                        Memory system health report
+  stats --decay                Visualize actively decaying rules
   notify "title" "msg"         Enqueue notification (macOS + agent)
   notify --list                List pending notifications
   notify --drain               Drain and display all queued

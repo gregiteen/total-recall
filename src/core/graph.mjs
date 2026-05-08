@@ -260,7 +260,7 @@ function insertGraphEdge(db, edge) {
   `).run(edge.source, edge.target, edge.type);
 }
 
-async function inferEdges(db, config) {
+export async function inferEdges(db, config) {
   const nodes = db.prepare('SELECT slug, meaning, action_type FROM graph_nodes').all();
   const edges = [];
 
@@ -286,7 +286,7 @@ async function inferEdges(db, config) {
       if (union.size === 0) continue;
       const jaccard = intersection.length / union.size;
 
-      if (jaccard >= 0.3) {
+      if (jaccard >= 0.15) {
         // Determine edge type based on action_type compatibility
         const edgeType = (a.action_type !== b.action_type) ? 'conflicts-with' : 'related-to';
         edges.push({ source: a.slug, target: b.slug, type: edgeType });
