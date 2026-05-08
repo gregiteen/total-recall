@@ -18,7 +18,7 @@ const ADAPTERS = {
   gemini: {
     label: 'Gemini CLI',
     buildArgs: (prompt, model) => {
-      const args = ['-p', prompt, '--yolo', '--sandbox=/Users/greg/.gemini,/Users/greg/.total-recall'];
+      const args = ['-p', prompt, '--yolo', '--sandbox=false', '--include-directories', '/Users/greg/.gemini', '--include-directories', '/Users/greg/.total-recall'];
       if (model) args.push('-m', model);
       return args;
     },
@@ -33,8 +33,9 @@ const ADAPTERS = {
   },
   codex: {
     label: 'Codex CLI',
+    usesStdin: true,
     buildArgs: (prompt, model) => {
-      const args = ['exec', '--full-auto', '--sandbox=/Users/greg/.gemini,/Users/greg/.total-recall', prompt];
+      const args = ['exec', '--full-auto', '--sandbox', 'workspace-write', '--add-dir', '/Users/greg/.total-recall', '--add-dir', '/Users/greg/.gemini'];
       if (model) args.push('-m', model);
       return args;
     },

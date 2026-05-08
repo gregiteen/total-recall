@@ -125,29 +125,26 @@ async function dispatchAgent(root, agentName, model, prompt, label, dryRun = fal
     let child;
 
     if (adapter.usesStdin) {
-      // Codex-style: prompt is piped via stdin, not passed as arg
-      const tmpPrompt = path.join(root, '.agent', 'tmp', `${agentName}-prompt-${Date.now()}.txt`);
-      const tmpDir = path.dirname(tmpPrompt);
-      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-      fs.writeFileSync(tmpPrompt, prompt);
-
       // Build args WITHOUT the prompt — it comes from stdin
       const stdinArgs = adapter.buildArgs(null, model);
 
-      // Spawn without shell — pipe prompt file via stdin using a read stream
       child = spawn(adapter.bin, stdinArgs, {
         cwd: root,
         env,
-        stdio: [fs.openSync(tmpPrompt, 'r'), 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         timeout: 300000,
       });
+      child.stdin.write(prompt);
+      child.stdin.end();
     } else {
+      const args = adapter.buildArgs(prompt, model);
       child = spawn(adapter.bin, args, {
         cwd: root,
         env,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         timeout: 300000, // 5 min max per agent
       });
+      child.stdin.end(); // Close stdin to prevent hanging
     }
 
     let stdout = '';
