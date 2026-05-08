@@ -21,4 +21,4 @@ export { computeSignalScore, rankNodes } from './ranking.mjs';
 export { compileSurface, writeSurface } from './surface.mjs';
 
 // Steering
-export { steer, unsteer, checkContradictions, VALID_STEER_TYPES } from './steering.mjs';
+export { steer, unsteer, checkContradictions, detectDuplicate, VALID_STEER_TYPES } from './steering.mjs';

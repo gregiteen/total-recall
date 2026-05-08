@@ -197,9 +197,40 @@ function insertGraphEdge(db, edge) {
 }
 
 async function inferEdges(db, config) {
-  // For now, return empty or implement basic keyword-based inference
-  // Full implementation would use LLM to find conflicts/dependencies
-  return []; 
+  const nodes = db.prepare('SELECT slug, meaning, action_type FROM graph_nodes').all();
+  const edges = [];
+
+  // Extract significant keywords (>4 chars) from each node's meaning
+  const nodeKeywords = nodes.map(node => {
+    const words = new Set(
+      node.meaning.toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length > 4)
+        .map(w => w.replace(/[^a-z]/g, ''))
+        .filter(w => w.length > 4)
+    );
+    return { slug: node.slug, words, action_type: node.action_type };
+  });
+
+  for (let i = 0; i < nodeKeywords.length; i++) {
+    for (let j = i + 1; j < nodeKeywords.length; j++) {
+      const a = nodeKeywords[i];
+      const b = nodeKeywords[j];
+      const intersection = [...a.words].filter(w => b.words.has(w));
+      const union = new Set([...a.words, ...b.words]);
+
+      if (union.size === 0) continue;
+      const jaccard = intersection.length / union.size;
+
+      if (jaccard >= 0.3) {
+        // Determine edge type based on action_type compatibility
+        const edgeType = (a.action_type !== b.action_type) ? 'conflicts-with' : 'related-to';
+        edges.push({ source: a.slug, target: b.slug, type: edgeType });
+      }
+    }
+  }
+
+  return edges;
 }
 
 /**

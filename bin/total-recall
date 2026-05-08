@@ -649,6 +649,23 @@ async function runRetract(paths, args) {
 // ─── STEER ──────────────────────────────────────────────────────────────────────
 
 async function runSteer(paths, config, args) {
+  // --history: show all past steers from USER.md
+  if (args.includes('--history')) {
+    if (fs.existsSync(paths.userMd)) {
+      const content = fs.readFileSync(paths.userMd, 'utf-8');
+      const steerLines = content.split('\n').filter(l => l.includes('[STEER/'));
+      console.log(`\n\ud83d\udcdc Steer History (${steerLines.length} entries):\n`);
+      for (const line of steerLines) {
+        console.log(`  ${line.trim()}`);
+      }
+      if (steerLines.length === 0) console.log('  No steers recorded yet.');
+      console.log('');
+    } else {
+      console.log('No USER.md found.');
+    }
+    return;
+  }
+
   const typeIdx = args.indexOf('--type');
   if (typeIdx === -1 || !args[typeIdx + 1]) {
     console.log('Usage: total-recall steer --type never|always|correct|prefer "directive"');
