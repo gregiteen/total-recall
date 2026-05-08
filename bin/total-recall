@@ -88,6 +88,10 @@ async function main() {
       await runLint(paths);
       break;
 
+    case 'heal':
+      await runHeal(paths);
+      break;
+
     case 'dream':
       await runDream(paths);
       break;
@@ -858,6 +862,29 @@ async function runLint(paths) {
   } else {
     console.log('✅ No blocking errors.\n');
   }
+}
+
+// ─── HEAL ───────────────────────────────────────────────────────────────────────
+
+async function runHeal(paths) {
+  const { heal } = await import('../src/core/wiki.mjs');
+  const dryRun = args.includes('--dry-run');
+
+  console.log(`\ud83e\ude79 Wiki Heal${dryRun ? ' (DRY RUN)' : ''}...\n`);
+
+  const result = heal(paths.wikiDir, { dryRun });
+
+  for (const d of result.details) {
+    const icon = dryRun ? '\ud83c\udfdc\ufe0f' : '\u2705';
+    console.log(`  ${icon} ${d.slug}: ${d.action}`);
+  }
+
+  console.log(`\n  Healed: ${result.healed} | Skipped: ${result.skipped}`);
+
+  if (!dryRun && result.healed > 0) {
+    console.log('\n  \ud83d\udca1 Run `total-recall lint` to verify, then `total-recall reindex` to update the search index.');
+  }
+  console.log('');
 }
 
 // ─── DREAM ──────────────────────────────────────────────────────────────────────

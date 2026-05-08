@@ -12,7 +12,7 @@ export { parseFrontmatter, walkMarkdown, slugify, extractTitle, loadConfig, reso
 export { openDatabase, ensureSchema, reindex, search, graphTraverse, getStats } from './fts5.mjs';
 
 // Layer 3: Knowledge Graph
-export { loadNodes, createNode, lint } from './wiki.mjs';
+export { loadNodes, createNode, lint, heal } from './wiki.mjs';
 
 // Signal Scoring
 export { computeSignalScore, rankNodes } from './ranking.mjs';

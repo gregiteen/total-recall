@@ -276,3 +276,172 @@ export function lint(wikiDir) {
     hasErrors: issues.errors.length > 0,
   };
 }
+
+// ─── HEAL WIKI ──────────────────────────────────────────────────────────────────
+
+/**
+ * Permanently patch wiki nodes on disk to fix lint warnings.
+ * Injects missing YAML frontmatter, fixes invalid types, adds missing fields.
+ *
+ * @param {string} wikiDir - Path to wiki directory
+ * @param {Object} [options]
+ * @param {boolean} [options.dryRun] - Preview changes without writing
+ * @returns {{ healed: number, skipped: number, details: Array<{slug: string, action: string}> }}
+ */
+export function heal(wikiDir, { dryRun = false } = {}) {
+  const files = walkMarkdown(wikiDir);
+  const details = [];
+  let healed = 0;
+  let skipped = 0;
+
+  // Map invalid types to valid ones
+  const TYPE_FIX_MAP = {
+    'architectural_feature': 'concept',
+    'architectural_pattern': 'concept',
+    'service': 'concept',
+    'skill': 'concept',
+    'rule': 'pattern',
+  };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  for (const fp of files) {
+    const content = fs.readFileSync(fp, 'utf-8');
+    const { body, meta } = parseFrontmatter(content);
+    const slug = slugify(path.basename(fp));
+    const hasFrontmatter = Object.keys(meta).length > 0;
+    let needsWrite = false;
+    const actions = [];
+
+    if (!hasFrontmatter) {
+      // Derive type from directory name
+      const dirName = path.basename(path.dirname(fp));
+      const DIR_TYPE_MAP = {
+        'anti-patterns': 'anti-pattern',
+        'patterns': 'pattern',
+        'preferences': 'preference',
+        'concepts': 'concept',
+        'decisions': 'decision',
+        'projects': 'project',
+        'conclusions': 'conclusion',
+      };
+      const derivedType = DIR_TYPE_MAP[dirName] || 'concept';
+      const derivedSentiment = derivedType === 'anti-pattern' ? 'negative' : 'neutral';
+      const derivedIntensity = derivedType === 'anti-pattern' ? 8 : 5;
+
+      const frontmatter = `---
+type: ${derivedType}
+confidence: medium
+sentiment: ${derivedSentiment}
+sentiment_intensity: ${derivedIntensity}
+last_verified: ${today}
+created: ${today}
+access_count: 0
+provenance:
+  - "auto-healed:${today}"
+related: []
+supersedes: null
+superseded_by: null
+---
+
+`;
+      if (!dryRun) {
+        fs.writeFileSync(fp, frontmatter + body);
+      }
+      actions.push(`injected full frontmatter (type=${derivedType})`);
+      needsWrite = true;
+    } else {
+      // Fix individual missing/invalid fields
+      let newMeta = { ...meta };
+      let changed = false;
+
+      // Fix invalid types
+      if (meta.type && !VALID_TYPES.includes(meta.type)) {
+        const fixed = TYPE_FIX_MAP[meta.type] || 'concept';
+        newMeta.type = fixed;
+        actions.push(`type: "${meta.type}" → "${fixed}"`);
+        changed = true;
+      }
+
+      // Fix missing type
+      if (!meta.type) {
+        const dirName = path.basename(path.dirname(fp));
+        const DIR_TYPE_MAP = {
+          'anti-patterns': 'anti-pattern',
+          'patterns': 'pattern',
+          'preferences': 'preference',
+          'concepts': 'concept',
+          'decisions': 'decision',
+          'projects': 'project',
+        };
+        newMeta.type = DIR_TYPE_MAP[dirName] || 'concept';
+        actions.push(`added type="${newMeta.type}"`);
+        changed = true;
+      }
+
+      if (!meta.sentiment) {
+        newMeta.sentiment = newMeta.type === 'anti-pattern' ? 'negative' : 'neutral';
+        actions.push(`added sentiment="${newMeta.sentiment}"`);
+        changed = true;
+      }
+
+      if (!meta.sentiment_intensity) {
+        newMeta.sentiment_intensity = newMeta.type === 'anti-pattern' ? 8 : 5;
+        actions.push(`added sentiment_intensity=${newMeta.sentiment_intensity}`);
+        changed = true;
+      }
+
+      if (!meta.confidence) {
+        newMeta.confidence = 'medium';
+        actions.push('added confidence="medium"');
+        changed = true;
+      }
+
+      if (!meta.provenance || (Array.isArray(meta.provenance) && meta.provenance.length === 0)) {
+        newMeta.provenance = [`auto-healed:${today}`];
+        actions.push('added provenance');
+        changed = true;
+      }
+
+      if (changed) {
+        // Rebuild frontmatter YAML
+        const provStr = Array.isArray(newMeta.provenance)
+          ? newMeta.provenance.map(p => `  - "${p}"`).join('\n')
+          : `  - "${newMeta.provenance}"`;
+        const relatedStr = Array.isArray(newMeta.related) && newMeta.related.length > 0
+          ? '\n' + newMeta.related.map(r => `  - "${r}"`).join('\n')
+          : '[]';
+
+        const frontmatter = `---
+type: ${newMeta.type}
+confidence: ${newMeta.confidence}
+sentiment: ${newMeta.sentiment}
+sentiment_intensity: ${newMeta.sentiment_intensity}
+last_verified: ${newMeta.last_verified || today}
+created: ${newMeta.created || today}
+access_count: ${newMeta.access_count || 0}
+provenance:
+${provStr}
+related: ${relatedStr}
+supersedes: ${newMeta.supersedes || 'null'}
+superseded_by: ${newMeta.superseded_by || 'null'}
+---
+
+`;
+        if (!dryRun) {
+          fs.writeFileSync(fp, frontmatter + body);
+        }
+        needsWrite = true;
+      }
+    }
+
+    if (needsWrite) {
+      healed++;
+      details.push({ slug, action: actions.join('; ') });
+    } else {
+      skipped++;
+    }
+  }
+
+  return { healed, skipped, details };
+}
