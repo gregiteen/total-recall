@@ -20,7 +20,7 @@ import { getAdapter } from '../agents/adapters/index.mjs';
  * @param {object} paths - Resolved paths.
  * @param {object} config - Total Recall config.
  */
-export async function rebuildGraph(db, paths, config) {
+export async function rebuildGraph(db, paths, config, { deterministic = false } = {}) {
   console.log('🏗️  Rebuilding Instruction Graph...');
   
   // 1. Clear existing graph data
@@ -37,7 +37,7 @@ export async function rebuildGraph(db, paths, config) {
     let node = null;
     
     // Try LLM synthesis first, fall back to deterministic extraction
-    if (!llmFailed) {
+    if (!deterministic && !llmFailed) {
       try {
         node = await synthesizeNode(clusterId, files, config);
       } catch (err) {

@@ -761,15 +761,16 @@ async function runRebuildGraph(paths, config) {
   const { rebuildGraph } = await import('../src/core/graph.mjs');
   
   const db = openDatabase(paths.dbPath);
+  const deterministic = args.includes('--deterministic');
   
   try {
-    console.log('🕸️  Rebuilding instruction graph from wiki nodes...\n');
-    const result = await rebuildGraph(db, paths, config);
-    console.log(`\n✅ Graph rebuild complete!`);
+    console.log(`\ud83d\udd78\ufe0f  Rebuilding instruction graph from wiki nodes${deterministic ? ' (deterministic mode)' : ''}...\n`);
+    const result = await rebuildGraph(db, paths, config, { deterministic });
+    console.log(`\n\u2705 Graph rebuild complete!`);
     console.log(`  Nodes synthesized: ${result.nodeCount}`);
     console.log(`  Edges inferred: ${result.edgeCount}\n`);
   } catch (err) {
-    console.error(`\n❌ Graph rebuild failed: ${err.message}\n`);
+    console.error(`\n\u274c Graph rebuild failed: ${err.message}\n`);
   } finally {
     db.close();
   }
