@@ -60,6 +60,10 @@ async function main() {
       await runSteer(paths, config, args);
       break;
 
+    case 'retract':
+      await runRetract(paths, args);
+      break;
+
     case 'consult':
       await runConsult(paths, config, args);
       break;
@@ -607,6 +611,39 @@ async function runNote(paths, config, noteArgs) {
   }
 
   console.log(`\n📋 Note recorded → routed: ${category || 'daily log only'}`);
+}
+
+// ─── RETRACT ────────────────────────────────────────────────────────────────────
+
+async function runRetract(paths, args) {
+  const slug = args[0];
+  if (!slug) {
+    console.log('Usage: total-recall retract "slug"');
+    return;
+  }
+
+  const { walkMarkdown } = await import('../src/core/utils.mjs');
+  const files = walkMarkdown(paths.wikiDir);
+  const target = files.find(f => path.basename(f) === `${slug}.md`);
+
+  if (!target) {
+    console.log(`❌ No memory node found with slug: "${slug}"`);
+    return;
+  }
+
+  fs.unlinkSync(target);
+  console.log(`✅ Retracted memory node: ${slug}`);
+
+  const { openDatabase, reindex } = await import('../src/core/fts5.mjs');
+  if (fs.existsSync(paths.dbPath)) {
+    const Database = (await import('better-sqlite3')).default;
+    const db = new Database(paths.dbPath);
+    reindex(db, paths);
+    db.close();
+    console.log(`🔄 Search index recompiled.`);
+  }
+  
+  console.log(`🎯 Retraction complete. You may want to run \`total-recall compile-surface\` to update INSTRUCTIONS.md`);
 }
 
 // ─── STEER ──────────────────────────────────────────────────────────────────────
