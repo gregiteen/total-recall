@@ -121,6 +121,10 @@ async function main() {
       await import('../src/core/sync-prompts.mjs');
       break;
 
+    case 'health':
+      await runHealth(paths, config);
+      break;
+
     default:
       printUsage();
       break;
@@ -1055,6 +1059,83 @@ async function runStats(paths) {
   console.log(`  Total: ${stats.totalLearnings}`);
   for (const c of stats.categories) {
     console.log(`    ${c.category}: ${c.c} (avg importance: ${(c.avg_imp || 5).toFixed(1)})`);
+  }
+
+  console.log('');
+  db.close();
+}
+
+// ─── HEALTH ─────────────────────────────────────────────────────────────────────
+
+async function runHealth(paths, config) {
+  const { openDatabase, getStats } = await import('../src/core/fts5.mjs');
+  const { lint } = await import('../src/core/wiki.mjs');
+
+  console.log('\n\ud83c\udfe5 Total Recall — System Health Check\n');
+  console.log('\u2550'.repeat(50));
+
+  const checks = [];
+
+  // 1. Wiki lint
+  const lintResult = lint(paths.wikiDir);
+  const lintErrors = lintResult.issues.errors.length;
+  const lintWarnings = lintResult.issues.warnings.length;
+  const lintStatus = lintErrors > 0 ? '\u274c' : lintWarnings > 0 ? '\u26a0\ufe0f' : '\u2705';
+  console.log(`\n  ${lintStatus} Wiki Lint: ${lintResult.pages} pages, ${lintErrors} errors, ${lintWarnings} warnings`);
+  checks.push({ name: 'Wiki Lint', pass: lintErrors === 0 });
+
+  // 2. FTS5 index
+  const db = openDatabase(paths.dbPath);
+  const stats = getStats(db, paths);
+  const ftsHealthy = stats.ftsCount > 0;
+  console.log(`  ${ftsHealthy ? '\u2705' : '\u274c'} FTS5 Index: ${stats.ftsCount} documents indexed`);
+  checks.push({ name: 'FTS5 Index', pass: ftsHealthy });
+
+  // 3. Graph nodes
+  let graphNodeCount = 0;
+  try {
+    graphNodeCount = db.prepare('SELECT COUNT(*) as c FROM graph_nodes').get().c;
+  } catch { /* table may not exist */ }
+  const graphHealthy = graphNodeCount > 0;
+  console.log(`  ${graphHealthy ? '\u2705' : '\u26a0\ufe0f'} Graph Nodes: ${graphNodeCount} synthesized${!graphHealthy ? ' (run rebuild-graph --deterministic)' : ''}`);
+  checks.push({ name: 'Graph Nodes', pass: graphHealthy });
+
+  // 4. Edge coverage
+  const edgeCoverage = stats.edgeCount;
+  const edgeHealthy = edgeCoverage >= 5;
+  console.log(`  ${edgeHealthy ? '\u2705' : '\u26a0\ufe0f'} Graph Edges: ${edgeCoverage} edges`);
+  checks.push({ name: 'Graph Edges', pass: edgeHealthy });
+
+  // 5. Wiki to FTS sync
+  const wikiInFts = stats.ftsBySource.find(s => s.source === 'wiki')?.c || 0;
+  const syncHealthy = wikiInFts >= stats.wikiNodes * 0.9;
+  console.log(`  ${syncHealthy ? '\u2705' : '\u274c'} Wiki/FTS Sync: ${wikiInFts}/${stats.wikiNodes} wiki nodes indexed`);
+  checks.push({ name: 'Wiki/FTS Sync', pass: syncHealthy });
+
+  // 6. Learnings
+  const learningHealthy = stats.totalLearnings > 0;
+  console.log(`  ${learningHealthy ? '\u2705' : '\u26a0\ufe0f'} Learnings: ${stats.totalLearnings} stored across ${stats.categories.length} categories`);
+  checks.push({ name: 'Learnings', pass: learningHealthy });
+
+  // Summary
+  const passed = checks.filter(c => c.pass).length;
+  const total = checks.length;
+  const allPassed = passed === total;
+
+  console.log(`\n${'\u2550'.repeat(50)}`);
+  console.log(`  ${allPassed ? '\u2705' : '\u26a0\ufe0f'} Overall: ${passed}/${total} checks passed`);
+
+  if (!allPassed) {
+    const failed = checks.filter(c => !c.pass);
+    console.log('\n  \ud83d\udca1 Remediation:');
+    for (const f of failed) {
+      if (f.name === 'Wiki Lint') console.log('     \u2192 Run: total-recall heal && total-recall lint');
+      if (f.name === 'FTS5 Index') console.log('     \u2192 Run: total-recall reindex');
+      if (f.name === 'Graph Nodes') console.log('     \u2192 Run: total-recall rebuild-graph --deterministic');
+      if (f.name === 'Graph Edges') console.log('     \u2192 Run: total-recall rebuild-graph --deterministic');
+      if (f.name === 'Wiki/FTS Sync') console.log('     \u2192 Run: total-recall reindex');
+      if (f.name === 'Learnings') console.log('     \u2192 Run: total-recall note --category pattern "test"');
+    }
   }
 
   console.log('');
