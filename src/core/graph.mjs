@@ -31,8 +31,25 @@ export async function rebuildGraph(db, paths, config) {
   const clusters = detectClusters(wikiFiles);
   
   let nodeCount = 0;
+  let llmFailed = false;
+
   for (const [clusterId, files] of Object.entries(clusters)) {
-    const node = await synthesizeNode(clusterId, files, config);
+    let node = null;
+    
+    // Try LLM synthesis first, fall back to deterministic extraction
+    if (!llmFailed) {
+      try {
+        node = await synthesizeNode(clusterId, files, config);
+      } catch (err) {
+        console.warn(`  \u26a0\ufe0f LLM synthesis failed: ${err.message}. Switching to deterministic mode.`);
+        llmFailed = true;
+      }
+    }
+    
+    if (!node) {
+      node = synthesizeNodeDeterministic(clusterId, files);
+    }
+    
     if (node) {
       insertGraphNode(db, node);
       nodeCount++;
@@ -113,6 +130,53 @@ Determine the most appropriate subgraph: 'qa-mode' (for questions), 'exec-mode' 
     console.error(`Failed to parse synthesized node for ${clusterId}:`, e.message);
   }
   return null;
+}
+
+/**
+ * Deterministic fallback: extracts graph nodes directly from YAML frontmatter
+ * and alert blocks without requiring an LLM call.
+ */
+function synthesizeNodeDeterministic(clusterId, files) {
+  // Read the first (or only) file in the cluster
+  const fp = files[0];
+  const raw = fs.readFileSync(fp, 'utf-8');
+  const { meta, body } = parseFrontmatter(raw);
+  const slug = slugify(path.basename(fp));
+
+  // Extract meaning from alert block or title
+  const alertMatch = body.match(/>\s*\[!(CAUTION|TIP|IMPORTANT|NOTE)\]\s*\n((?:>\s*.+\n?)+)/);
+  let meaning;
+  if (alertMatch) {
+    meaning = alertMatch[2]
+      .split('\n')
+      .map(l => l.replace(/^>\s*/, '').trim())
+      .filter(l => l.length > 0)
+      .join(' ');
+  } else {
+    const titleMatch = body.match(/^#\s+(.+)/m);
+    meaning = titleMatch ? titleMatch[1].trim() : body.slice(0, 200).trim();
+  }
+
+  if (!meaning || meaning.length < 5) return null;
+
+  // Derive action_type and node_type from frontmatter
+  const type = meta.type || 'concept';
+  const sentiment = meta.sentiment || 'neutral';
+  const action_type = (type === 'anti-pattern' || sentiment === 'negative') ? 'suppress' : 'inject';
+  const intensity = meta.sentiment_intensity || 5;
+  const node_type = intensity >= 8 ? 'absolute-invariant' : 'conditional';
+
+  return {
+    slug,
+    meaning,
+    condition: JSON.stringify({}),
+    action_type,
+    weight: files.length,
+    priority: intensity,
+    node_type,
+    subgraph: 'shared',
+    source_files: JSON.stringify(files.map(f => path.basename(f))),
+  };
 }
 
 // ─── SUBGRAPH TRAVERSAL ────────────────────────────────────────────────────────
