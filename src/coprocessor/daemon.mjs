@@ -317,6 +317,10 @@ class CoProcessorDaemon {
           fs.mkdirSync(path.dirname(rulesGraphPath), { recursive: true });
           fs.writeFileSync(rulesGraphPath, compiled.surface);
           log('INFO', `Graph surface written to ${rulesGraphPath} (Mode: ${mode})`);
+          
+          if (targetFiles && targetFiles.length > 0) {
+            writeSurfaceMulti(targetFiles, compiled.surface);
+          }
         } catch (writeErr) {
           log('ERROR', `Failed to write graph-context.md: ${writeErr.message}`);
         }
@@ -625,6 +629,10 @@ class CoProcessorDaemon {
           fs.mkdirSync(path.dirname(rulesGraphPath), { recursive: true });
           fs.writeFileSync(rulesGraphPath, surfaceResult.surface);
           log('INFO', `Heartbeat surface written to ${rulesGraphPath}: ${surfaceResult.stats.totalNodes} nodes`);
+          
+          if (targetFiles && targetFiles.length > 0) {
+            writeSurfaceMulti(targetFiles, surfaceResult.surface);
+          }
         } catch (writeErr) {
           log('ERROR', `Failed to write graph-context.md: ${writeErr.message}`);
         }

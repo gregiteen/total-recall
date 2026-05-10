@@ -179,6 +179,32 @@ export function steer({
   const conflicts = checkContradictions(db, directive);
   result.conflicts = conflicts;
 
+  // CRITICAL FIX: Auto-Resolve Conflicts (Phase 20)
+  // Prevents the memory graph from holding contradictory rules which cause the agent to violate instructions.
+  if (conflicts.length > 0 && !dryRun) {
+    for (const c of conflicts) {
+      // 1. Delete the conflicting wiki node file
+      const conflictPath = path.join(paths.root, c.source_id);
+      if (fs.existsSync(conflictPath)) {
+        fs.unlinkSync(conflictPath);
+      }
+      // 2. Remove from FTS5 index
+      if (db) {
+        db.prepare('DELETE FROM memory_fts WHERE source_id = ?').run(c.source_id);
+      }
+      // 3. Remove from graph_nodes
+      if (db) {
+        const conflictSlug = path.basename(c.source_id, '.md');
+        try {
+          db.prepare('DELETE FROM graph_nodes WHERE slug = ?').run(conflictSlug);
+        } catch (e) {
+          // Ignore if graph_nodes table doesn't exist yet
+        }
+      }
+    }
+    result.steps.auto_resolved = `Deleted ${conflicts.length} conflicting older rules.`;
+  }
+
   // Step 1: Append to user preferences file
   const userEntry = `\n- **${today}**: [STEER/${type.toUpperCase()}] ${directive}`;
   if (!dryRun && fs.existsSync(paths.userMd)) {
@@ -363,6 +389,13 @@ export function unsteer({
         const relativePath = path.relative(paths.root, wikiFilePath);
         db.prepare('DELETE FROM memory_fts WHERE source_id = ?').run(relativePath);
         result.steps.fts5 = 'updated (removed)';
+      }
+      // Also remove from graph_nodes
+      try {
+        db.prepare('DELETE FROM graph_nodes WHERE slug = ?').run(slug);
+        result.steps.graph = 'deleted';
+      } catch (e) {
+        // Ignore if graph_nodes doesn't exist
       }
     } catch (err) {
       result.steps.fts5 = `error: ${err.message}`;

@@ -249,13 +249,18 @@ async function main() {
     console.log('\n🚀 Dispatching Synthesizer (Deterministic)...');
     try {
       const { openDatabase } = await import('../core/fts5.mjs');
-      const { compileSurfaceFromGraph } = await import('../core/surface.mjs');
+      const { compileSurfaceFromGraph, writeSurfaceMulti } = await import('../core/surface.mjs');
       const db = openDatabase(paths.dbPath);
       
       const compiled = compileSurfaceFromGraph(db, 'discuss', { tokenBudget: 2500, includeTemporalContext: true });
       const rulesGraphPath = path.join(root, '.agent', 'rules', 'graph-context.md');
       fs.mkdirSync(path.dirname(rulesGraphPath), { recursive: true });
       fs.writeFileSync(rulesGraphPath, compiled.surface);
+      
+      const targetFiles = paths.systemPromptFiles || [paths.systemPrompt];
+      if (targetFiles && targetFiles.length > 0) {
+        writeSurfaceMulti(targetFiles, compiled.surface);
+      }
       
       console.log(`   ✅ Synthesizer (Deterministic) completed (compiled ${compiled.stats.dynamicNodes} nodes)`);
       results.push({ success: true, label: 'Synthesizer (Deterministic)' });
