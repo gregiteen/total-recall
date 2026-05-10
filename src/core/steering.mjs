@@ -13,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { slugify, walkMarkdown, parseFrontmatter } from './utils.mjs';
 import { createNode } from './wiki.mjs';
-import { compileSurfaceFromGraph, writeSurface } from './surface.mjs';
+import { compileSurfaceFromGraph, writeSurfaceMulti, clearSurfaceMulti } from './surface.mjs';
 
 // ─── DUPLICATE DETECTION ────────────────────────────────────────────────────────
 
@@ -234,9 +234,10 @@ export function steer({
 
         // Step 6: Recompile surface from graph
         const compiled = compileSurfaceFromGraph(db, 'discuss', { tokenBudget: 2500 });
-        if (fs.existsSync(paths.systemPrompt)) {
-          const writeRes = writeSurface(paths.systemPrompt, compiled.surface, behavioralSurfaceHeader);
-          result.steps.systemPrompt = writeRes.success ? 'recompiled via graph' : `failed: ${writeRes.error}`;
+        if (paths.systemPromptFiles && paths.systemPromptFiles.length > 0) {
+          const writeRes = writeSurfaceMulti(paths.systemPromptFiles, compiled.surface, behavioralSurfaceHeader);
+          const allSuccess = writeRes.results.every(r => r.success);
+          result.steps.systemPromptFiles = allSuccess ? 'recompiled via graph' : `failed for some files: ${JSON.stringify(writeRes.results)}`;
         }
       }
     } catch (err) {
@@ -245,32 +246,36 @@ export function steer({
   }
 
   // Fallback to legacy regex patching if db or graph_nodes is not available
-  if (!result.steps.systemPrompt && fs.existsSync(paths.systemPrompt) && !dryRun) {
-    const content = fs.readFileSync(paths.systemPrompt, 'utf-8');
-    const sectionStart = content.indexOf(behavioralSurfaceHeader);
+  if (!result.steps.systemPromptFiles && paths.systemPromptFiles && paths.systemPromptFiles.length > 0 && !dryRun) {
+    let patchedCount = 0;
+    for (const promptFile of paths.systemPromptFiles) {
+      if (fs.existsSync(promptFile)) {
+        const content = fs.readFileSync(promptFile, 'utf-8');
+        const sectionStart = content.indexOf(behavioralSurfaceHeader);
 
-    if (sectionStart === -1) {
-      result.steps.systemPrompt = 'section not found';
-    } else {
-      const afterHeader = content.indexOf('\n', sectionStart);
-      const nextSection = content.indexOf('\n## ', afterHeader + 1);
-      const sectionEnd = nextSection !== -1 ? nextSection : content.length;
-      const currentSection = content.slice(sectionStart, sectionEnd);
-      const steeredRule = config.surfaceFormat(directive);
-      const lines = currentSection.split('\n');
-      const headerLine = lines[0];
-      const signalLines = lines.slice(1).map(l => l.trim()).filter(l => l.length > 0);
-      
-      signalLines.unshift(steeredRule);
-      const prunedSignals = signalLines.slice(0, 15); // Cap at 15
-      
-      const newSection = [headerLine, '', ...prunedSignals, ''].join('\n');
-      const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
-      fs.writeFileSync(paths.systemPrompt, newContent);
-      result.steps.systemPrompt = `legacy hot-patched (${prunedSignals.length}/15 slots)`;
+        if (sectionStart !== -1) {
+          const afterHeader = content.indexOf('\n', sectionStart);
+          const nextSection = content.indexOf('\n## ', afterHeader + 1);
+          const sectionEnd = nextSection !== -1 ? nextSection : content.length;
+          const currentSection = content.slice(sectionStart, sectionEnd);
+          const steeredRule = config.surfaceFormat(directive);
+          const lines = currentSection.split('\n');
+          const headerLine = lines[0];
+          const signalLines = lines.slice(1).map(l => l.trim()).filter(l => l.length > 0);
+          
+          signalLines.unshift(steeredRule);
+          const prunedSignals = signalLines.slice(0, 15); // Cap at 15
+          
+          const newSection = [headerLine, '', ...prunedSignals, ''].join('\n');
+          const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
+          fs.writeFileSync(promptFile, newContent);
+          patchedCount++;
+        }
+      }
     }
-  } else if (!result.steps.systemPrompt) {
-    result.steps.systemPrompt = dryRun ? 'dry-run' : 'file not found';
+    result.steps.systemPromptFiles = patchedCount > 0 ? `legacy hot-patched (${patchedCount} files)` : 'section not found';
+  } else if (!result.steps.systemPromptFiles) {
+    result.steps.systemPromptFiles = dryRun ? 'dry-run' : 'files not found';
   }
 
   // Step 4: Update FTS5 index
@@ -337,35 +342,15 @@ export function unsteer({
   }
 
   // 2. Remove from System Prompt / Surface
-  if (fs.existsSync(paths.systemPrompt)) {
-    const content = fs.readFileSync(paths.systemPrompt, 'utf-8');
-    const sectionStart = content.indexOf(behavioralSurfaceHeader);
-    
-    if (sectionStart !== -1) {
-      const afterHeader = content.indexOf('\n', sectionStart);
-      const nextSection = content.indexOf('\n## ', afterHeader + 1);
-      const sectionEnd = nextSection !== -1 ? nextSection : content.length;
-      const currentSection = content.slice(sectionStart, sectionEnd);
-      
-      const lines = currentSection.split('\n');
-      const headerLine = lines[0];
-      // Keep lines that DO NOT contain the directive
-      const signalLines = lines.slice(1)
-        .map(l => l.trim())
-        .filter(l => l.length > 0 && !l.includes(directive));
-      
-      const newSection = [headerLine, '', ...signalLines, ''].join('\n');
-      const newContent = content.slice(0, sectionStart) + newSection + content.slice(sectionEnd);
-      
-      if (!dryRun) {
-        fs.writeFileSync(paths.systemPrompt, newContent);
-      }
-      result.steps.systemPrompt = dryRun ? 'dry-run' : 'patched (removed)';
+  if (paths.systemPromptFiles && paths.systemPromptFiles.length > 0) {
+    if (!dryRun) {
+      const clearRes = clearSurfaceMulti(paths.systemPromptFiles, behavioralSurfaceHeader);
+      result.steps.systemPromptFiles = 'patched (removed from multi)';
     } else {
-      result.steps.systemPrompt = 'section not found';
+      result.steps.systemPromptFiles = 'dry-run';
     }
   } else {
-    result.steps.systemPrompt = 'file not found';
+    result.steps.systemPromptFiles = 'files not found';
   }
 
   // 3. Update FTS5 index

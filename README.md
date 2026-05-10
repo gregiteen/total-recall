@@ -205,7 +205,7 @@ A consolidation cycle (like sleep) that runs during `/start`:
 
 ### CLI Agent Pipeline
 
-During session handoff (`/switch`), three specialized CLI agents run in parallel:
+During session handoff (`/switch`), three specialized CLI agents run sequentially:
 
 | Agent | Engine | Job |
 |-------|--------|-----|
