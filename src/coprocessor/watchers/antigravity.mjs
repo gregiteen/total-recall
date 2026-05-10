@@ -102,7 +102,33 @@ export function parseTurnsFromText(text) {
   let currentLines = [];
 
   for (const line of lines) {
-    // Detect role boundaries — overview.txt uses various formats
+    if (!line.trim()) continue;
+    
+    // Try JSONL format first
+    if (line.trim().startsWith('{')) {
+      try {
+        const entry = JSON.parse(line);
+        // Flush legacy buffer if we switch formats
+        if (currentRole && currentLines.length > 0) {
+          turns.push({ role: currentRole.toLowerCase(), text: currentLines.join('\n').trim() });
+          currentRole = null;
+          currentLines = [];
+        }
+        
+        if (entry.source === 'USER_EXPLICIT' && entry.content) {
+          turns.push({ role: 'user', text: entry.content });
+        } else if (entry.source === 'MODEL' && entry.content) {
+          turns.push({ role: 'model', text: entry.content });
+        } else if (entry.source === 'MODEL' && entry.tool_calls) {
+          turns.push({ role: 'tool_call', text: JSON.stringify(entry.tool_calls) });
+        }
+        continue;
+      } catch {
+        // Fall through to legacy format if JSON parse fails
+      }
+    }
+
+    // Detect role boundaries — legacy overview.txt format
     const roleMatch = line.match(/^\[(USER|MODEL|TOOL_CALL|TOOL_RESULT)\]\s*(.*)/);
 
     if (roleMatch) {

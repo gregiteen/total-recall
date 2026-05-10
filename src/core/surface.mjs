@@ -297,11 +297,15 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
 
   // Deduplicate by slug (in case a node matches both conditions)
   const seenSlugs = new Set();
-  const dedupedStatic = staticNodes.filter(n => {
+  let dedupedStatic = staticNodes.filter(n => {
     if (seenSlugs.has(n.slug)) return false;
     seenSlugs.add(n.slug);
     return true;
   });
+
+  // CRITICAL FIX: Cap absolute invariants to prevent negative constraint saturation.
+  // Without this, the compiler dumps 150+ nodes into the prompt, breaking the LLM's attention.
+  dedupedStatic = dedupedStatic.slice(0, 15);
 
   // Create an attitude paragraph from the highest priority nodes
   const attitudeNodes = [...dedupedStatic].slice(0, 8);
@@ -493,7 +497,8 @@ export function clearSurface(filePath, sectionHeader = '## DISTILLED MEMORY (SUB
   const nextSection = content.indexOf('\n## ', afterHeader + 1);
   const sectionEnd = nextSection !== -1 ? nextSection : content.length;
 
-  const newContent = content.slice(0, sectionStart).trimEnd() + '\n\n' + content.slice(sectionEnd).trimStart();
+  // CRITICAL FIX: We must PRESERVE the section header so writeSurface can find it later!
+  const newContent = content.slice(0, sectionStart) + sectionHeader + '\n\n' + content.slice(sectionEnd);
   fs.writeFileSync(filePath, newContent);
 
   return { success: true };
