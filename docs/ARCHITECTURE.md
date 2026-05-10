@@ -495,7 +495,7 @@ If Gemini fails (timeout/rate-limit), falls back to Codex CLI with `--search`.
 
 ## Multi-Agent Pipeline
 
-During `/switch` (session handoff), three agents work in parallel:
+During `/switch` (session handoff), three agents work sequentially:
 
 ### Archivist (Gemini Flash)
 - Reads the conversation overview.txt

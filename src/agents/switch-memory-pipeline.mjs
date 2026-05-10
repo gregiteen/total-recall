@@ -3,7 +3,7 @@
 /**
  * switch-memory-pipeline.mjs — Autonomous Memory Extraction Pipeline
  *
- * Dispatches 3 specialized CLI agents in parallel during /switch:
+ * Dispatches 3 specialized CLI agents sequentially (staggered to avoid rate limits):
  *   1. Archivist (Gemini Flash) — Archives the conversation as an episode,
  *      extracts wiki nodes, updates USER.md/SOUL.md
  *   2. Synthesizer (Claude) — Reads the wiki graph, generates the attitude

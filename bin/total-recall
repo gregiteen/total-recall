@@ -862,17 +862,23 @@ async function runCompileSurface(paths, config) {
     return;
   }
 
-  const writeResult = writeSurface(
-    paths.systemPrompt,
-    result.surface,
-    config.behavioralSurfaceHeader,
-  );
-
-  if (writeResult.success) {
-    console.log('✅ Behavioral Surface written to', path.relative(ROOT, paths.systemPrompt));
-    console.log(`   ${result.stats.totalNodes} nodes → ${result.stats.negativeRules} negative, ${result.stats.positiveRules} positive\n`);
+  if (paths.systemPromptFiles && paths.systemPromptFiles.length > 0) {
+    const { writeSurfaceMulti } = await import('../src/core/surface.mjs');
+    const writeResult = writeSurfaceMulti(
+      paths.systemPromptFiles,
+      result.surface,
+      config.behavioralSurfaceHeader,
+    );
+    
+    const allSuccess = writeResult.results.every(r => r.success);
+    if (allSuccess) {
+      console.log('✅ Behavioral Surface written to', paths.systemPromptFiles.map(p => path.relative(ROOT, p)).join(', '));
+      console.log(`   ${result.stats.totalNodes} nodes → ${result.stats.negativeRules} negative, ${result.stats.positiveRules} positive\n`);
+    } else {
+      console.log(`❌ Some files failed to write: ${JSON.stringify(writeResult.results)}\n`);
+    }
   } else {
-    console.log(`❌ ${writeResult.error}\n`);
+    console.log(`❌ No systemPromptFiles configured.\n`);
   }
 }
 
