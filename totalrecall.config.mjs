@@ -8,14 +8,16 @@ export default {
   // Where memory data lives (relative to repo root)
   dataDir: '.agent',
 
-  // System prompt file to inject behavioral surface into
+  // ── SSSS 3-Tier paths (relative to repo root) ──────────────────────────────
+  // vaultDir: '.agent/memory-vault',         // override to move vault elsewhere
+  // skillsDir: '.agent/skills',              // or '.agents/skills' for dual layout
+  // derivedDir: '.agent/memory-derived',     // JSONL indexes (rebuildable)
+  // instructionsFile: 'INSTRUCTIONS.md',     // Tier 1 output
+
+  // System prompt file to inject behavioral surface into (legacy + new)
   systemPromptFile: 'INSTRUCTIONS.md',
 
-  // Section headers for in-place replacement
-  activeContextHeader: '## ACTIVE CONTEXT',
-  behavioralSurfaceHeader: '## DISTILLED MEMORY (SUBJECT STATES)',
-
-  // IDE conversation watcher (for co-processor)
+  // IDE watcher type — how the agent reads memory
   // 'antigravity' | 'claude-code' | 'cursor' | 'cline' | 'generic'
   watcher: 'antigravity',
 
@@ -35,19 +37,20 @@ export default {
     hotSlots: 5,            // max real-time steered rules
   },
 
-  // Co-processor configuration (Phase 7)
+  // Dream Cycle daemon configuration
   coprocessor: {
     enabled: true,
-    intervalMs: 15000,
+    schedule: '0 3 * * *',  // cron: 03:00 UTC nightly
     analysisModel: 'gemini-2.5-flash',
-    researchEnabled: true,
-    notificationsEnabled: true,
+    researchEnabled: false,
+    notificationsEnabled: false,
   },
 
-  // CLI agent configuration (Phase 4)
+  // CLI agent configuration
   agents: {
-    archivist: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
-    synthesizer: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
-    factChecker: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
+    archivist: { binary: 'gemini', model: 'gemini-2.5-pro' },
+    synthesizer: { binary: 'gemini', model: 'gemini-2.5-pro' },
+    factChecker: { binary: 'gemini', model: 'gemini-2.5-flash' },
   },
 };
+

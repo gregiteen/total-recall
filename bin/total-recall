@@ -3,20 +3,22 @@
  * total-recall — CLI entry point
  *
  * Usage:
- *   total-recall init                      Scaffold .agent/ directory
+ *   total-recall init                       Scaffold vault + detect IDE
+ *   total-recall compile                    Compile surface (Tier1 + skill injection)
+ *   total-recall compile --dry-run          Preview without writing
+ *   total-recall migrate                    Migrate legacy wiki → vault (dry-run by default)
+ *   total-recall migrate --execute          Write migrated nodes
+ *   total-recall resolve                    Resolve a quarantined conflict
+ *   total-recall daemon start               Start Dream Cycle daemon
+ *   total-recall daemon stop                Stop daemon
+ *   total-recall daemon status              Report last run, next scheduled, PID
+ *   total-recall dream                      Run one Dream Cycle immediately
  *   total-recall search "term"             FTS5 full-text search (BM25 ranked)
- *   total-recall search "term" --source X  Filter by source type
- *   total-recall graph "slug"              Knowledge graph traversal
  *   total-recall steer --type never "..."  Immediate behavioral cascade
- *   total-recall note --category TYPE "..."  Log note with full cascade
- *   total-recall reindex                   Rebuild FTS5 from filesystem
- *   total-recall compile-surface           Regenerate DISTILLED MEMORY
- *   total-recall lint                      Wiki integrity check
- *   total-recall dream                     Run consolidation cycle
- *   total-recall stats                     Memory system health report
- *   total-recall notify "title" "msg"      Enqueue notification
- *   total-recall notify --list             List pending notifications
- *   total-recall notify --drain            Drain and display all queued
+ *   total-recall note --category TYPE "..."  Log note
+ *   total-recall reindex                    Rebuild FTS5 from filesystem
+ *   total-recall stats                      Memory system health report
+ *   total-recall conflicts                  List pending conflicts
  */
 
 import path from 'path';
@@ -36,6 +38,26 @@ async function main() {
   const paths = resolvePaths(ROOT, config);
 
   switch (command) {
+    case 'compile':
+      await runCompile(paths, config, args);
+      break;
+
+    case 'migrate':
+      await runMigrate(paths, args);
+      break;
+
+    case 'resolve':
+      await runResolve(paths, args);
+      break;
+
+    case 'daemon':
+      await runDaemon(paths, config, args);
+      break;
+
+    case 'conflicts':
+      await runConflicts(paths, args);
+      break;
+
     case 'install':
       await runInstall(paths, config);
       break;
@@ -824,7 +846,183 @@ async function runRebuildGraph(paths, config) {
   }
 }
 
-// ─── COMPILE SURFACE ────────────────────────────────────────────────────────────
+// ─── COMPILE (SSSS 3-TIER) ───────────────────────────────────────────────────────
+
+async function runCompile(paths, config, compileArgs) {
+  const { compileSurface } = await import('../src/core/surface.mjs');
+  const dryRun = compileArgs.includes('--dry-run');
+
+  const vaultDir = paths.vaultDir ?? path.join(paths.dataDir, 'memory-vault');
+  const skillsDir = paths.skillsDir ?? path.join(ROOT, '.agent', 'skills');
+  const derivedDir = paths.derivedDir ?? path.join(paths.dataDir, 'memory-derived');
+  const instructionsFile = paths.instructionsFile
+    ?? path.join(ROOT, config.systemPromptFile ?? 'INSTRUCTIONS.md');
+
+  console.log('\n🧠 Total Recall — Surface Compiler (SSSS 3-Tier)\n');
+  console.log(`   Vault:        ${path.relative(ROOT, vaultDir)}`);
+  console.log(`   Skills:       ${path.relative(ROOT, skillsDir)}`);
+  console.log(`   Mode:         ${dryRun ? 'DRY RUN' : 'LIVE'}\n`);
+
+  if (!fs.existsSync(vaultDir)) {
+    console.error(`❌ Vault not found: ${vaultDir}`);
+    console.error('   Run `total-recall init` first.\n');
+    process.exit(1);
+  }
+
+  let db = null;
+  try {
+    const Database = (await import('better-sqlite3')).default;
+    const dbPath = paths.dbPath ?? path.join(paths.dataDir, 'memory.db');
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    db = new Database(dbPath);
+  } catch { /* TF-IDF only */ }
+
+  try {
+    const result = await compileSurface({
+      vaultDir, skillsDir, derivedDir,
+      instructionsFile: dryRun ? null : instructionsFile,
+      db,
+    });
+    console.log(`✅ Nodes: ${result.nodes.length} | Skills: ${result.skills.length} | Routes: ${result.routes.length}`);
+    if (dryRun) {
+      console.log('\n[DRY RUN] Tier 1 preview:\n');
+      console.log(result.tier1Instructions.slice(0, 600));
+      console.log('\n⚠️  Nothing written.\n');
+    } else {
+      console.log(`   Written: ${path.relative(ROOT, instructionsFile)}\n`);
+    }
+  } catch (err) {
+    console.error(`\n❌ Compile failed: ${err.message}\n`);
+    process.exit(1);
+  } finally {
+    if (db) db.close();
+  }
+}
+
+// ─── MIGRATE ─────────────────────────────────────────────────────────────────────
+
+async function runMigrate(paths, migrateArgs) {
+  const sourceIdx = migrateArgs.indexOf('--source');
+  const sourceDir = sourceIdx !== -1 ? migrateArgs[sourceIdx + 1]
+    : paths.wikiDir ?? path.join(paths.dataDir, 'memory-wiki');
+  const vaultDir = migrateArgs.indexOf('--vault') !== -1
+    ? migrateArgs[migrateArgs.indexOf('--vault') + 1]
+    : paths.vaultDir ?? path.join(paths.dataDir, 'memory-vault');
+  const execute = migrateArgs.includes('--execute');
+
+  const migrateScript = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname), '..', 'scripts', 'migrate-nodes.mjs'
+  );
+  const { spawnSync } = await import('child_process');
+  const result = spawnSync(process.execPath, [
+    migrateScript, execute ? '--execute' : '--dry-run',
+    '--source', sourceDir, '--vault', vaultDir,
+  ], { stdio: 'inherit' });
+  process.exit(result.status ?? 0);
+}
+
+// ─── RESOLVE ─────────────────────────────────────────────────────────────────────
+
+async function runResolve(paths, resolveArgs) {
+  const { cliResolve } = await import('../src/core/steering.mjs');
+  const vaultDir = paths.vaultDir ?? path.join(paths.dataDir, 'memory-vault');
+  const conflictsDir = path.join(paths.dataDir, 'memory-inbox', 'conflicts');
+
+  const argMap = {};
+  for (let i = 0; i < resolveArgs.length; i++) {
+    if (resolveArgs[i].startsWith('--')) { argMap[resolveArgs[i].slice(2)] = resolveArgs[i + 1]; i++; }
+  }
+
+  if (!argMap['conflict-id']) {
+    // List mode
+    if (!fs.existsSync(conflictsDir)) { console.log('✅ No conflicts.\n'); return; }
+    const files = fs.readdirSync(conflictsDir).filter(f => f.endsWith('.md'));
+    if (files.length === 0) { console.log('✅ No pending conflicts.\n'); return; }
+    console.log(`\n⚠️  Pending Conflicts (${files.length}):\n`);
+    for (const f of files) {
+      const raw = fs.readFileSync(path.join(conflictsDir, f), 'utf-8');
+      const m = raw.match(/reason:\s*['"]?(.+?)['"]?\n/);
+      console.log(`  📄 ${f.replace('.md', '')}`);
+      if (m) console.log(`     ${m[1].slice(0, 100)}`);
+    }
+    console.log('\nUsage: total-recall resolve --conflict-id <id> --keep <slug>\n');
+    return;
+  }
+
+  try { cliResolve(argMap, vaultDir, conflictsDir); }
+  catch (err) { console.error(`❌ ${err.message}\n`); process.exit(1); }
+}
+
+// ─── CONFLICTS LIST ───────────────────────────────────────────────────────────────
+
+async function runConflicts(paths) { await runResolve(paths, []); }
+
+// ─── DAEMON ───────────────────────────────────────────────────────────────────────
+
+const DAEMON_PID_FILE = path.join(os.homedir(), '.total-recall', 'daemon.pid');
+
+async function runDaemon(paths, config, daemonArgs) {
+  const sub = daemonArgs[0];
+  const vaultDir = paths.vaultDir ?? path.join(paths.dataDir, 'memory-vault');
+  const skillsDir = paths.skillsDir ?? path.join(ROOT, '.agent', 'skills');
+  const derivedDir = paths.derivedDir ?? path.join(paths.dataDir, 'memory-derived');
+  const sessionsDir = paths.sessionsDir ?? path.join(paths.dataDir, 'sessions');
+  const conflictsDir = path.join(paths.dataDir, 'memory-inbox', 'conflicts');
+  const backupsDir = path.join(paths.dataDir, '.backups');
+  const instructionsFile = paths.instructionsFile
+    ?? path.join(ROOT, config.systemPromptFile ?? 'INSTRUCTIONS.md');
+  const schedule = config.coprocessor?.schedule ?? '0 3 * * *';
+
+  if (sub === 'start') {
+    if (fs.existsSync(DAEMON_PID_FILE)) {
+      const existingPid = fs.readFileSync(DAEMON_PID_FILE, 'utf-8').trim();
+      try { process.kill(parseInt(existingPid), 0); console.log(`⚠️  Daemon already running (PID ${existingPid}).\n`); return; }
+      catch { fs.unlinkSync(DAEMON_PID_FILE); }
+    }
+    const dreamPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'src', 'core', 'dream.mjs');
+    const daemonConfig = JSON.stringify({ vaultDir, skillsDir, derivedDir, sessionsDir, conflictsDir, backupsDir, instructionsFile, schedule });
+    const { spawn } = await import('child_process');
+    const child = spawn(process.execPath, ['--input-type=module', '--eval',
+      `import { startDaemon } from '${dreamPath}'; await startDaemon(${daemonConfig});`
+    ], { detached: true, stdio: 'ignore' });
+    child.unref();
+    fs.mkdirSync(path.dirname(DAEMON_PID_FILE), { recursive: true });
+    fs.writeFileSync(DAEMON_PID_FILE, String(child.pid));
+    console.log(`🌙 Daemon started (PID ${child.pid}) — schedule: ${schedule} UTC\n`);
+
+  } else if (sub === 'stop') {
+    if (!fs.existsSync(DAEMON_PID_FILE)) { console.log('⚠️  No daemon running.\n'); return; }
+    const pid = parseInt(fs.readFileSync(DAEMON_PID_FILE, 'utf-8').trim(), 10);
+    try { process.kill(pid, 'SIGTERM'); console.log(`🛑 Daemon stopped (PID ${pid})\n`); }
+    catch { console.log(`⚠️  PID ${pid} already gone.\n`); }
+    fs.unlinkSync(DAEMON_PID_FILE);
+
+  } else if (sub === 'status') {
+    const alive = fs.existsSync(DAEMON_PID_FILE);
+    const reportPath = path.join(derivedDir, 'dream-report.jsonl');
+    let last = null;
+    if (fs.existsSync(reportPath)) {
+      const lines = fs.readFileSync(reportPath, 'utf-8').trim().split('\n').filter(Boolean);
+      try { last = JSON.parse(lines[lines.length - 1]); } catch {}
+    }
+    console.log('\n🌙 Dream Daemon Status\n');
+    console.log(`   Status:    ${alive ? `🟢 Running (PID ${fs.readFileSync(DAEMON_PID_FILE, 'utf-8').trim()})` : '⚫ Not running'}`);
+    if (last) {
+      console.log(`   Last run:  ${last.timestamp}`);
+      console.log(`   Duration:  ${last.duration_ms}ms`);
+      console.log(`   Processed: ${last.nodes_processed} nodes | Promoted: ${last.nodes_promoted} | Decayed: ${last.nodes_decayed} | Conflicts: ${last.conflicts_found}`);
+      if (last.errors?.length) console.log(`   Errors:    ${last.errors.join('; ')}`);
+    } else {
+      console.log('   Last run:  Never');
+    }
+    console.log('');
+
+  } else {
+    console.log('Usage: total-recall daemon start|stop|status\n');
+  }
+}
+
+// ─── COMPILE SURFACE (LEGACY — kept for backwards compat) ────────────────────────
 
 async function runCompileSurface(paths, config) {
   const { compileSurface, writeSurface } = await import('../src/core/surface.mjs');
