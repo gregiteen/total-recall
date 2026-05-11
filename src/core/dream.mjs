@@ -1,541 +1,568 @@
 /**
- * dream.mjs — Dream Daemon (Total Recall Layer 6)
+ * dream.mjs — SSSS Dream Cycle Daemon (Total Recall)
  *
- * Background consolidation cycle dispatched at /start.
- * Performs NREM (consolidation) and REM (cross-referencing)
- * sweeps over daily logs and wiki nodes.
+ * Three-phase Dream Cycle:
+ *   Phase 1 — Light Sleep: Scan vault modifications + new session logs → candidate nodes
+ *   Phase 2 — REM: Conflict detection, dream scoring, promotion/decay
+ *   Phase 3 — Deep Sleep: Recompile surface, rebuild indexes
+ *   Phase 4 — Recover: Restore from backup on error
  *
- * NREM Phase: Reads daily logs since last dream, extracts durable patterns,
- *             deduplicates against existing wiki nodes, prunes noise.
- * REM Phase:  Cross-references wiki nodes, merges duplicates, identifies
- *             emerging cross-day patterns, flags stale nodes.
- * Decay:      Confidence decay with type-differentiated thresholds.
- * Pruning:    Moves zero-access, low-confidence stale nodes to .trash/.
- * Rebuild:    Reindexes FTS5 after all changes.
- *
- * Output: Appends dream summary to .agent/DREAMS.md
+ * Runs on a cron schedule (03:00 UTC nightly) or can be triggered manually.
+ * Zero workspace-specific references. Configured by caller-supplied paths.
  */
 
 import fs from 'fs';
 import path from 'path';
-import { parseFrontmatter, walkMarkdown, slugify } from './utils.mjs';
+import { createRequire } from 'module';
 
-// ─── CONFIDENCE DECAY THRESHOLDS (days) ─────────────────────────────────────────
+const require = createRequire(import.meta.url);
+const matter = require('gray-matter');
 
-const DECAY_THRESHOLDS = {
-  preference:      { highToMedium: 90,  mediumToLow: 180 },
-  'anti-pattern':  { highToMedium: 60,  mediumToLow: 120 },
-  pattern:         { highToMedium: 30,  mediumToLow: 90  },
-  concept:         { highToMedium: 30,  mediumToLow: 90  },
-  decision:        { highToMedium: 45,  mediumToLow: 120 },
-  project:         { highToMedium: 14,  mediumToLow: 45  },
-  conclusion:      { highToMedium: 30,  mediumToLow: 90  },
-};
+import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
+import { detectConflicts, writeConflictFile, appendConflictIndex } from './steering.mjs';
+import { compileSurface } from './surface.mjs';
+import {
+  DREAM_PROMOTION_THRESHOLD,
+  DECAY_INACTIVE_DAYS,
+  DECAY_CONFIDENCE_DELTA,
+  PROMOTION_CONFIDENCE_BOOST,
+  CONFIDENCE_MAX,
+  CONFIDENCE_DEPRECATION_THRESHOLD,
+  DREAM_CRON_SCHEDULE,
+} from '../constants/schema.js';
 
-// Pruning threshold — low confidence + no access + stale beyond 2× medium threshold
-const PRUNE_MULTIPLIER = 2;
-
-// ─── CONFIDENCE DECAY ───────────────────────────────────────────────────────────
+// ─── HALF-LIFE DECAY ─────────────────────────────────────────────────────────────
 
 /**
- * Run confidence decay on all wiki nodes.
- *
- * @param {string} wikiDir - Path to wiki directory
- * @param {Object} [options]
- * @param {boolean} [options.dryRun]
- * @returns {{ decayed: number, details: Array }}
+ * Compute effective confidence after time-based half-life decay.
+ * @param {import('../types/memory.js').MemoryNode} node
+ * @returns {number} Effective confidence (0..1)
  */
-export function runConfidenceDecay(wikiDir, { dryRun = false } = {}) {
-  const files = walkMarkdown(wikiDir);
-  const today = new Date();
-  const details = [];
-
-  for (const fp of files) {
-    const content = fs.readFileSync(fp, 'utf-8');
-    const { meta } = parseFrontmatter(content);
-
-    if (!meta.type || !meta.last_verified || !meta.confidence) continue;
-
-    const thresholds = DECAY_THRESHOLDS[meta.type];
-    if (!thresholds) continue;
-
-    const lastVerified = new Date(meta.last_verified);
-    const daysSince = Math.floor((today - lastVerified) / 86400000);
-    const currentConfidence = meta.confidence;
-    let newConfidence = currentConfidence;
-
-    if (currentConfidence === 'high' && daysSince > thresholds.highToMedium) {
-      newConfidence = 'medium';
-    } else if (currentConfidence === 'medium' && daysSince > thresholds.mediumToLow) {
-      newConfidence = 'low';
-    }
-
-    if (newConfidence !== currentConfidence) {
-      details.push({
-        slug: path.basename(fp, '.md'),
-        from: currentConfidence,
-        to: newConfidence,
-        daysSince,
-        type: meta.type,
-      });
-
-      if (!dryRun) {
-        const updated = content.replace(
-          `confidence: ${currentConfidence}`,
-          `confidence: ${newConfidence}`
-        );
-        fs.writeFileSync(fp, updated);
-      }
-    }
-  }
-
-  return { decayed: details.length, details };
+export function applyHalfLifeDecay(node) {
+  const halfLifeDays = node.decay?.half_life_days ?? 180;
+  const lastAccessed = new Date(node.last_accessed ?? node.updated ?? node.created);
+  const daysSince = (Date.now() - lastAccessed.getTime()) / (1000 * 60 * 60 * 24);
+  const decayFactor = Math.pow(0.5, daysSince / halfLifeDays);
+  return node.confidence * decayFactor;
 }
 
-// ─── NREM: CONSOLIDATION ────────────────────────────────────────────────────────
+// ─── PHASE 1 — LIGHT SLEEP ──────────────────────────────────────────────────────
 
 /**
- * NREM Phase: Read daily logs since last dream, extract durable patterns,
- * categorize entries, and deduplicate against wiki.
- *
- * @param {Object} options
- * @param {string} options.dailyLogsDir
- * @param {string} options.wikiDir
- * @param {string} [options.lastDreamDate] - ISO date string
- * @param {boolean} [options.dryRun]
- * @returns {{ consolidated: number, entries: Array, categories: Object }}
+ * Scan the vault for .md files modified since a given timestamp.
+ * @param {string} vaultDir
+ * @param {number} sinceHours - Hours to look back (default: 24)
+ * @returns {string[]} Modified file paths
  */
-export function nremConsolidate({ dailyLogsDir, wikiDir, lastDreamDate, dryRun = false }) {
-  const logs = getDailyLogsSince(dailyLogsDir, lastDreamDate);
-  if (logs.length === 0) {
-    return { consolidated: 0, entries: [], categories: {} };
-  }
-
-  const categories = {
-    'critical-failure': [],
-    'user-preference': [],
-    'pattern': [],
-    'wiki': [],
-    'general': [],
-  };
-
-  const allEntries = [];
-
-  for (const log of logs) {
-    const lines = log.content.split('\n').filter(l => l.startsWith('- **'));
-    for (const line of lines) {
-      // Parse category tag from line
-      const catMatch = line.match(/\*\*\[([^\]]+)\]\*\*/);
-      const category = catMatch ? catMatch[1].toLowerCase() : 'general';
-      const text = line.replace(/^-\s*\*\*\[[^\]]*\]\*\*\s*/, '').replace(/^-\s*\*\*.*?\*\*:?\s*/, '').trim();
-
-      if (text.length < 10) continue; // Skip noise
-
-      const entry = { date: log.date, category, text };
-      allEntries.push(entry);
-
-      if (categories[category]) {
-        categories[category].push(entry);
-      } else {
-        categories['general'].push(entry);
-      }
+export function scanModifiedVault(vaultDir, sinceHours = 24) {
+  const cutoff = Date.now() - sinceHours * 60 * 60 * 1000;
+  return walkMd(vaultDir).filter(fp => {
+    try {
+      return fs.statSync(fp).mtimeMs >= cutoff;
+    } catch {
+      return false;
     }
-  }
-
-  // Deduplicate: check if similar entries already exist in wiki
-  const existingWikiSlugs = new Set();
-  if (fs.existsSync(wikiDir)) {
-    const wikiFiles = walkMarkdown(wikiDir);
-    for (const f of wikiFiles) {
-      existingWikiSlugs.add(path.basename(f, '.md'));
-    }
-  }
-
-  const unique = allEntries.filter(e => {
-    const slug = slugify(e.text.slice(0, 50));
-    return !existingWikiSlugs.has(slug);
   });
-
-  // 2. Incremental Community Detection (Phase 19)
-  // Process wiki nodes modified since last dream
-  let communityClusters = 0;
-  if (fs.existsSync(wikiDir) && lastDreamDate) {
-    const wikiFiles = walkMarkdown(wikiDir);
-    const modifiedNodes = [];
-    for (const f of wikiFiles) {
-      const stat = fs.statSync(f);
-      if (stat.mtime > new Date(lastDreamDate)) {
-        modifiedNodes.push(f);
-      }
-    }
-    
-    // Cluster if >5 members
-    if (modifiedNodes.length > 5) {
-      // In a full implementation, we'd call detectClusters() and synthesizeNode() from graph.mjs here
-      communityClusters = Math.floor(modifiedNodes.length / 5);
-    }
-  }
-
-  return {
-    consolidated: unique.length,
-    entries: unique,
-    categories: Object.fromEntries(
-      Object.entries(categories).map(([k, v]) => [k, v.length])
-    ),
-    totalLogs: logs.length,
-    communityClusters
-  };
 }
 
-// ─── REM: CROSS-REFERENCING ─────────────────────────────────────────────────────
-
 /**
- * REM Phase: Cross-reference wiki nodes, detect duplicates, identify patterns.
- *
- * @param {Object} options
- * @param {string} options.wikiDir
- * @param {boolean} [options.dryRun]
- * @returns {{ duplicates: Array, staleNodes: Array, orphanedNodes: Array }}
+ * Scan session JSONL files for new entries since the last dream cycle.
+ * @param {string} sessionsDir
+ * @param {string} lastCycleTimestamp - ISO 8601 timestamp
+ * @returns {import('../types/memory.js').SessionEntry[]}
  */
-export function remCrossReference({ wikiDir, dryRun = false }) {
-  const files = walkMarkdown(wikiDir);
-  const today = new Date();
-  const nodes = [];
-  const titleMap = new Map(); // title → [paths]
-  const duplicates = [];
-  const staleNodes = [];
-  const orphanedNodes = [];
+export function scanNewSessions(sessionsDir, lastCycleTimestamp) {
+  if (!fs.existsSync(sessionsDir)) return [];
 
-  for (const fp of files) {
-    const content = fs.readFileSync(fp, 'utf-8');
-    const { body, meta } = parseFrontmatter(content);
-    const slug = path.basename(fp, '.md');
+  const cutoff = new Date(lastCycleTimestamp).getTime();
+  const entries = [];
 
-    // Extract title
-    const titleMatch = body.match(/^#\s+(.+)/m);
-    const title = titleMatch ? titleMatch[1].trim().toLowerCase() : slug;
+  for (const file of fs.readdirSync(sessionsDir)) {
+    if (!file.endsWith('.jsonl')) continue;
+    const filePath = path.join(sessionsDir, file);
+    const stat = fs.statSync(filePath);
+    if (stat.mtimeMs < cutoff) continue;
 
-    nodes.push({ slug, title, meta, path: fp, body });
-
-    // Track titles for duplicate detection
-    const normalizedTitle = title.replace(/[^a-z0-9]+/g, ' ').trim();
-    if (!titleMap.has(normalizedTitle)) {
-      titleMap.set(normalizedTitle, []);
-    }
-    titleMap.get(normalizedTitle).push({ slug, path: fp });
-
-    // Stale detection
-    if (meta.last_verified && meta.type) {
-      const thresholds = DECAY_THRESHOLDS[meta.type];
-      if (thresholds) {
-        const lastVerified = new Date(meta.last_verified);
-        const daysSince = Math.floor((today - lastVerified) / 86400000);
-        if (daysSince > thresholds.mediumToLow) {
-          staleNodes.push({ slug, daysSince, type: meta.type, confidence: meta.confidence });
+    const lines = fs.readFileSync(filePath, 'utf-8').split('\n').filter(Boolean);
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (new Date(entry.ts).getTime() >= cutoff) {
+          entries.push(entry);
         }
+      } catch {
+        // Skip malformed lines
       }
     }
+  }
 
-    // Orphan detection (no related links, no backlinks)
-    const hasRelated = (meta.related || []).length > 0;
-    const bodyLinks = (body.match(/\[\[([^\]]+)\]\]/g) || []).length;
-    if (!hasRelated && bodyLinks === 0) {
-      orphanedNodes.push({ slug, type: meta.type });
+  return entries;
+}
+
+/**
+ * Extract candidate memory nodes from session entries.
+ * Looks for branch_summary entries with patterns suggesting new rules.
+ * @param {import('../types/memory.js').SessionEntry[]} sessions
+ * @returns {Partial<import('../types/memory.js').MemoryNode>[]}
+ */
+export function extractCandidates(sessions) {
+  const candidates = [];
+  const now = new Date().toISOString();
+
+  for (const entry of sessions) {
+    if (entry.type !== 'branch_summary' && entry.type !== 'observation') continue;
+    if (!entry.content || entry.content.length < 20) continue;
+
+    // Very simple heuristic: branch summaries with resolved/learned/discovered patterns
+    const lower = entry.content.toLowerCase();
+    const isCandidate =
+      lower.includes('resolved') ||
+      lower.includes('learned') ||
+      lower.includes('discovered') ||
+      lower.includes('pattern') ||
+      lower.includes('never') ||
+      lower.includes('always') ||
+      lower.includes('prefer') ||
+      lower.includes('fixed');
+
+    if (!isCandidate) continue;
+
+    // Build a minimal candidate node
+    const slug = `session-${entry.id}-${Date.now().toString(36)}`;
+    candidates.push({
+      type: 'memory',
+      slug,
+      category: 'patterns',
+      schema_version: 2,
+      title: entry.content.slice(0, 80).replace(/\n/g, ' '),
+      status: 'draft',
+      confidence: 0.5,
+      importance: 2,
+      created: entry.ts ?? now,
+      updated: now,
+      last_accessed: now,
+      source: {
+        type: 'mined',
+        session_id: entry.id,
+        evidence_count: 1,
+      },
+      supersedes: [],
+      superseded_by: null,
+      contradicts: [],
+      tags: [],
+      related: [],
+      routes_to_skills: [],
+      sentiment_polarity: 'descriptive',
+      sentiment_target: '',
+      modality: 'should',
+      subject: 'agent',
+      predicate: slug.replace(/-/g, '_'),
+      object: '',
+      decay: { half_life_days: 30, access_count: 0 },
+      body: entry.content,
+    });
+  }
+
+  return candidates;
+}
+
+// ─── PHASE 2 — REM ──────────────────────────────────────────────────────────────
+
+/**
+ * Compute a dream score for a candidate node.
+ * Higher score → more likely to be promoted to active.
+ *
+ * @param {{ evidence_count?: number, importance?: number, created?: string }} candidate
+ * @param {{ evidence_count: number, recency_factor: number, importance: number }} weights
+ * @returns {number} 0..1
+ */
+export function dreamScore(candidate, weights = {}) {
+  const evidenceCount = candidate.source?.evidence_count ?? 1;
+  const importance = candidate.importance ?? 2;
+  const createdAt = new Date(candidate.created ?? Date.now()).getTime();
+  const recencyFactor = Math.max(0, 1 - (Date.now() - createdAt) / (7 * 24 * 60 * 60 * 1000)); // decay over 7 days
+
+  return (
+    0.4 * Math.min(1, evidenceCount / 5) +
+    0.3 * recencyFactor +
+    0.3 * (importance / 5)
+  );
+}
+
+/**
+ * Evaluate candidate nodes against existing vault nodes.
+ * Runs conflict detection, dream scoring, promotion, and decay.
+ *
+ * @param {Partial<import('../types/memory.js').MemoryNode>[]} candidates
+ * @param {import('../types/memory.js').MemoryNode[]} existingNodes
+ * @param {string} conflictsDir
+ * @param {string} derivedDir
+ * @returns {{ promoted: import('../types/memory.js').MemoryNode[], conflicted: import('../types/memory.js').ConflictRecord[] }}
+ */
+export function evaluateCandidates(candidates, existingNodes, conflictsDir, derivedDir) {
+  const promoted = [];
+  const allConflicts = [];
+
+  for (const candidate of candidates) {
+    const conflicts = detectConflicts(candidate, existingNodes);
+
+    if (conflicts.length > 0) {
+      for (const c of conflicts) {
+        writeConflictFile(c, conflictsDir);
+        if (derivedDir) appendConflictIndex(c, derivedDir);
+      }
+      allConflicts.push(...conflicts);
+      continue; // Block promotion
+    }
+
+    const score = dreamScore(candidate);
+    if (score >= DREAM_PROMOTION_THRESHOLD) {
+      const node = {
+        ...candidate,
+        status: 'active',
+        confidence: Math.min(CONFIDENCE_MAX, (candidate.confidence ?? 0.5) + PROMOTION_CONFIDENCE_BOOST),
+      };
+      promoted.push(node);
+      existingNodes.push(node); // Add to existing so subsequent candidates see it
     }
   }
 
-  // Find duplicates (same normalized title)
-  for (const [title, paths] of titleMap) {
-    if (paths.length > 1) {
-      duplicates.push({ title, nodes: paths.map(p => p.slug) });
-    }
-  }
+  return { promoted, conflicted: allConflicts };
+}
 
-  // Phase 19: Batched Edge Inference (REM)
-  // Send orphans/new nodes in batches of 5 to LLM to infer 'depends-on', 'conflicts-with' edges
-  let inferredEdges = 0;
-  if (orphanedNodes.length > 0) {
-    // In a full implementation, we'd batch these and call inferEdges() from graph.mjs
-    // Simulated inference for tracker completion
-    inferredEdges = Math.floor(orphanedNodes.length / 2);
-  }
+/**
+ * Apply passive confidence decay to stale nodes.
+ * Mutates nodes in place (caller must re-write to vault).
+ *
+ * @param {import('../types/memory.js').MemoryNode[]} nodes
+ * @returns {import('../types/memory.js').MemoryNode[]} Mutated nodes (those that changed)
+ */
+export function decayStaleNodes(nodes) {
+  const changed = [];
+  const cutoffMs = DECAY_INACTIVE_DAYS * 24 * 60 * 60 * 1000;
+  const now = Date.now();
 
-  // Phase 19: Integrity Validation
-  // Validate `derived-from` edges point to existing .md files
-  let invalidEdges = 0;
   for (const node of nodes) {
-    if (node.meta['derived-from']) {
-      const targetSlug = slugify(node.meta['derived-from']);
-      const targetPath = path.join(wikiDir, `${targetSlug}.md`);
-      if (!fs.existsSync(targetPath)) {
-        invalidEdges++;
+    if (node.status !== 'active') continue;
+    if (node.priority === 'absolute') continue; // Never decay absolute invariants
+
+    const lastAccessed = new Date(node.last_accessed ?? node.updated ?? node.created).getTime();
+    const isStale = now - lastAccessed > cutoffMs;
+    const isLowImportance = (node.importance ?? 3) < 3;
+
+    if (isStale && isLowImportance) {
+      node.confidence = Math.max(0, (node.confidence ?? 0.5) - DECAY_CONFIDENCE_DELTA);
+      node.updated = new Date().toISOString();
+
+      if (node.confidence < CONFIDENCE_DEPRECATION_THRESHOLD) {
+        node.status = 'deprecated';
+      }
+
+      changed.push(node);
+    }
+  }
+
+  return changed;
+}
+
+// ─── BACKUP & RESTORE ────────────────────────────────────────────────────────────
+
+/**
+ * Create a timestamped backup of skills and derived indexes.
+ * @param {string} skillsDir
+ * @param {string} derivedDir
+ * @param {string} backupsDir
+ * @returns {string} Backup directory path
+ */
+export function createBackup(skillsDir, derivedDir, backupsDir) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = path.join(backupsDir, timestamp);
+
+  if (fs.existsSync(skillsDir)) {
+    fs.cpSync(skillsDir, path.join(backupPath, 'skills'), { recursive: true });
+  }
+  if (fs.existsSync(derivedDir)) {
+    fs.cpSync(derivedDir, path.join(backupPath, 'memory-derived'), { recursive: true });
+  }
+
+  return backupPath;
+}
+
+/**
+ * Restore skills and derived indexes from a backup.
+ * @param {string} backupDir
+ * @param {string} skillsDir
+ * @param {string} derivedDir
+ */
+export function restoreFromBackup(backupDir, skillsDir, derivedDir) {
+  const backupSkills = path.join(backupDir, 'skills');
+  const backupDerived = path.join(backupDir, 'memory-derived');
+
+  if (fs.existsSync(backupSkills)) {
+    fs.cpSync(backupSkills, skillsDir, { recursive: true, force: true });
+  }
+  if (fs.existsSync(backupDerived)) {
+    fs.cpSync(backupDerived, derivedDir, { recursive: true, force: true });
+  }
+}
+
+// ─── DREAM CYCLE ORCHESTRATOR ────────────────────────────────────────────────────
+
+/**
+ * Append a DreamReport entry to dream-report.jsonl.
+ * @param {Partial<import('../types/memory.js').DreamReport>} report
+ * @param {string} derivedDir
+ */
+function appendDreamReport(report, derivedDir) {
+  const reportPath = path.join(derivedDir, 'dream-report.jsonl');
+  fs.mkdirSync(derivedDir, { recursive: true });
+  fs.appendFileSync(reportPath, JSON.stringify({ ...report, timestamp: new Date().toISOString() }) + '\n');
+}
+
+/**
+ * Run the full Dream Cycle.
+ *
+ * @param {{
+ *   vaultDir: string,
+ *   skillsDir: string,
+ *   derivedDir: string,
+ *   sessionsDir: string,
+ *   conflictsDir: string,
+ *   backupsDir: string,
+ *   instructionsFile: string,
+ *   db?: import('better-sqlite3').Database | null,
+ *   dryRun?: boolean,
+ * }} paths
+ * @returns {Promise<import('../types/memory.js').DreamReport>}
+ */
+export async function runDreamCycle(paths) {
+  const {
+    vaultDir, skillsDir, derivedDir, sessionsDir, conflictsDir,
+    backupsDir, instructionsFile, db = null, dryRun = false,
+  } = paths;
+
+  const startMs = Date.now();
+  const report = {
+    phase: 'light-sleep',
+    nodes_processed: 0,
+    conflicts_found: 0,
+    nodes_decayed: 0,
+    nodes_promoted: 0,
+    errors: [],
+    duration_ms: 0,
+  };
+
+  // ── PHASE 0: Backup ──────────────────────────────────────────────────────────
+  let backupPath = null;
+  if (!dryRun) {
+    try {
+      fs.mkdirSync(backupsDir, { recursive: true });
+      backupPath = createBackup(skillsDir, derivedDir, backupsDir);
+      console.log(`  💾 Backup: ${backupPath}`);
+    } catch (err) {
+      report.errors.push(`backup: ${err.message}`);
+      console.warn(`  ⚠️  Backup failed: ${err.message}`);
+    }
+  }
+
+  // ── PHASE 1: LIGHT SLEEP ────────────────────────────────────────────────────
+  console.log('\n🌙 PHASE 1 — Light Sleep (Scan & Ingest)');
+  report.phase = 'light-sleep';
+
+  const modifiedFiles = scanModifiedVault(vaultDir);
+  console.log(`   Modified vault files: ${modifiedFiles.length}`);
+
+  // Load last dream timestamp
+  const dreamReportPath = path.join(derivedDir, 'dream-report.jsonl');
+  let lastCycleTs = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  if (fs.existsSync(dreamReportPath)) {
+    const lines = fs.readFileSync(dreamReportPath, 'utf-8').trim().split('\n').filter(Boolean);
+    if (lines.length > 0) {
+      try {
+        const last = JSON.parse(lines[lines.length - 1]);
+        lastCycleTs = last.timestamp ?? lastCycleTs;
+      } catch { /* use default */ }
+    }
+  }
+
+  const newSessions = scanNewSessions(sessionsDir, lastCycleTs);
+  const candidates = extractCandidates(newSessions);
+  console.log(`   New session entries: ${newSessions.length} → ${candidates.length} candidates`);
+
+  // Write candidates to scratchpad
+  const scratchpadPath = path.join(derivedDir, 'scratchpad.yml');
+  if (!dryRun && candidates.length > 0) {
+    const yaml = candidates.map(c => `- slug: ${c.slug}\n  title: "${c.title}"\n  confidence: ${c.confidence}`).join('\n');
+    atomicWrite(scratchpadPath, `# Dream Cycle Scratchpad\n# Generated: ${new Date().toISOString()}\npending_nodes:\n${yaml}\n`);
+  }
+
+  // ── PHASE 2: REM ─────────────────────────────────────────────────────────────
+  console.log('\n💫 PHASE 2 — REM (Pattern Recognition)');
+  report.phase = 'rem';
+
+  const existingNodes = loadNodes(vaultDir);
+  report.nodes_processed = existingNodes.length + candidates.length;
+
+  let promoted = [];
+  let conflicted = [];
+
+  try {
+    if (candidates.length > 0 && !dryRun) {
+      ({ promoted, conflicted } = evaluateCandidates(candidates, existingNodes, conflictsDir, derivedDir));
+      report.nodes_promoted = promoted.length;
+      report.conflicts_found = conflicted.length;
+      console.log(`   Promoted: ${promoted.length} | Conflicts: ${conflicted.length}`);
+
+      // Write promoted nodes to vault
+      for (const node of promoted) {
+        writeNode(node, vaultDir);
       }
     }
-  }
 
-  return { duplicates, staleNodes, orphanedNodes, inferredEdges, invalidEdges };
-}
+    // Phase 2b: Decay stale nodes
+    const decayed = decayStaleNodes(existingNodes);
+    report.nodes_decayed = decayed.length;
+    console.log(`   Decayed: ${decayed.length}`);
 
-// ─── PRUNING ────────────────────────────────────────────────────────────────────
-
-/**
- * Prune zero-access, low-confidence nodes past their type-specific threshold.
- * Moves to .trash/, never hard-deletes.
- *
- * @param {Object} options
- * @param {string} options.wikiDir
- * @param {string} options.root - Repository root
- * @param {boolean} [options.dryRun]
- * @returns {{ pruned: number, details: Array }}
- */
-export function pruneStaleNodes({ wikiDir, root, dryRun = false }) {
-  const files = walkMarkdown(wikiDir);
-  const today = new Date();
-  const details = [];
-  const trashDir = path.join(root, '.agent/.trash');
-
-  for (const fp of files) {
-    const content = fs.readFileSync(fp, 'utf-8');
-    const { meta } = parseFrontmatter(content);
-
-    if (!meta.type || !meta.last_verified || !meta.confidence) continue;
-    if (meta.confidence !== 'low') continue;
-    if ((meta.access_count || 0) > 0) continue; // Only prune zero-access
-
-    const thresholds = DECAY_THRESHOLDS[meta.type];
-    if (!thresholds) continue;
-
-    const lastVerified = new Date(meta.last_verified);
-    const daysSince = Math.floor((today - lastVerified) / 86400000);
-    const pruneThreshold = thresholds.mediumToLow * PRUNE_MULTIPLIER;
-
-    if (daysSince > pruneThreshold) {
-      const slug = path.basename(fp, '.md');
-      details.push({ slug, daysSince, type: meta.type, pruneThreshold });
-
-      if (!dryRun) {
-        if (!fs.existsSync(trashDir)) fs.mkdirSync(trashDir, { recursive: true });
-        const trashPath = path.join(trashDir, path.basename(fp));
-        fs.renameSync(fp, trashPath);
+    if (!dryRun) {
+      for (const node of decayed) {
+        writeNode(node, vaultDir);
       }
     }
-  }
+  } catch (err) {
+    report.errors.push(`rem: ${err.message}`);
+    console.error(`  ❌ REM error: ${err.message}`);
 
-  return { pruned: details.length, details };
-}
-
-// ─── MEMORY.MD REGENERATION ─────────────────────────────────────────────────────
-
-/**
- * Auto-regenerate MEMORY.md as a human-readable executive summary from the wiki.
- *
- * @param {Object} options
- * @param {string} options.wikiDir
- * @param {string} options.memoryMd - Path to MEMORY.md
- * @param {boolean} [options.dryRun]
- * @returns {{ nodeCount: number, categoryBreakdown: Object }}
- */
-export function regenerateMemoryMd({ wikiDir, memoryMd, dryRun = false }) {
-  const files = walkMarkdown(wikiDir);
-  const today = new Date().toISOString().split('T')[0];
-  const byCategory = {};
-
-  for (const fp of files) {
-    const content = fs.readFileSync(fp, 'utf-8');
-    const { body, meta } = parseFrontmatter(content);
-    if (!meta.type) continue;
-
-    const titleMatch = body.match(/^#\s+(.+)/m);
-    const title = titleMatch ? titleMatch[1].trim() : path.basename(fp, '.md');
-
-    const cat = meta.type;
-    if (!byCategory[cat]) byCategory[cat] = [];
-    byCategory[cat].push({
-      title,
-      confidence: meta.confidence || 'medium',
-      sentiment: meta.sentiment || 'neutral',
-      intensity: meta.sentiment_intensity || 5,
-      access: meta.access_count || 0,
-    });
-  }
-
-  // Sort each category by intensity × access
-  for (const cat of Object.keys(byCategory)) {
-    byCategory[cat].sort((a, b) => {
-      const scoreA = a.intensity * Math.sqrt(a.access + 1);
-      const scoreB = b.intensity * Math.sqrt(b.access + 1);
-      return scoreB - scoreA;
-    });
-  }
-
-  // Build MEMORY.md
-  const lines = [];
-  lines.push(`# Memory Index`);
-  lines.push(`> Auto-generated from wiki graph — ${today}`);
-  lines.push(`> ${files.length} nodes across ${Object.keys(byCategory).length} categories\n`);
-
-  const confidenceEmoji = { high: '🟢', medium: '🟡', low: '🔴' };
-
-  for (const [cat, nodes] of Object.entries(byCategory).sort()) {
-    lines.push(`## ${cat.charAt(0).toUpperCase() + cat.slice(1)} (${nodes.length})`);
-    const top5 = nodes.slice(0, 5);
-    for (const n of top5) {
-      lines.push(`- ${confidenceEmoji[n.confidence] || '⚪'} **${n.title}** — ${n.sentiment} (${n.intensity}/10)`);
+    // Phase 4: Recover
+    if (backupPath) {
+      console.log('  🔄 Recovering from backup...');
+      report.phase = 'recover';
+      restoreFromBackup(backupPath, skillsDir, derivedDir);
     }
-    if (nodes.length > 5) {
-      lines.push(`- _... and ${nodes.length - 5} more_`);
-    }
-    lines.push('');
+
+    report.duration_ms = Date.now() - startMs;
+    if (!dryRun) appendDreamReport(report, derivedDir);
+    return report;
   }
 
-  const output = lines.join('\n');
+  // ── PHASE 3: DEEP SLEEP ──────────────────────────────────────────────────────
+  console.log('\n🌊 PHASE 3 — Deep Sleep (Recompile)');
+  report.phase = 'deep-sleep';
 
   if (!dryRun) {
-    fs.writeFileSync(memoryMd, output);
+    try {
+      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, db });
+      console.log('   ✅ Surface recompiled');
+    } catch (err) {
+      report.errors.push(`deep-sleep: ${err.message}`);
+      console.error(`  ❌ Deep sleep error: ${err.message}`);
+
+      // Phase 4: Recover
+      if (backupPath) {
+        console.log('  🔄 Recovering from backup...');
+        report.phase = 'recover';
+        restoreFromBackup(backupPath, skillsDir, derivedDir);
+      }
+    }
+  } else {
+    console.log('   [dry-run] Skipping compileSurface');
   }
 
-  return {
-    nodeCount: files.length,
-    categoryBreakdown: Object.fromEntries(
-      Object.entries(byCategory).map(([k, v]) => [k, v.length])
-    ),
-  };
+  // ── FINALIZE ─────────────────────────────────────────────────────────────────
+  report.duration_ms = Date.now() - startMs;
+  console.log(`\n✅ Dream Cycle complete in ${report.duration_ms}ms`);
+
+  if (!dryRun) appendDreamReport(report, derivedDir);
+
+  return report;
 }
 
-// ─── FULL DREAM CYCLE ───────────────────────────────────────────────────────────
+// ─── DAEMON (cron + file watcher) ────────────────────────────────────────────────
 
 /**
- * Run the full dream cycle: NREM → REM → Decay → Prune → Regenerate MEMORY.md.
+ * Start the Dream Cycle daemon.
+ * Wires up:
+ *   - chokidar file watcher on vaultDir for real-time conflict checks
+ *   - node-cron schedule for nightly full dream cycles
  *
- * @param {Object} options
- * @param {string} options.wikiDir
- * @param {string} options.dailyLogsDir
- * @param {string} options.memoryMd
- * @param {string} options.root
- * @param {string} options.dreamsFile - Path to DREAMS.md
- * @param {boolean} [options.dryRun]
- * @returns {Object}
+ * @param {{
+ *   vaultDir: string,
+ *   skillsDir: string,
+ *   derivedDir: string,
+ *   sessionsDir: string,
+ *   conflictsDir: string,
+ *   backupsDir: string,
+ *   instructionsFile: string,
+ *   db?: import('better-sqlite3').Database | null,
+ *   schedule?: string,
+ * }} config
  */
-export function dream({ wikiDir, dailyLogsDir, memoryMd, root, dreamsFile, dryRun = false }) {
-  const lastDreamDate = getLastDreamDate(dreamsFile);
+export async function startDaemon(config) {
+  const schedule = config.schedule ?? DREAM_CRON_SCHEDULE;
+  let chokidar, nodeCron;
 
-  // Phase 1: NREM Consolidation
-  const nrem = nremConsolidate({ dailyLogsDir, wikiDir, lastDreamDate, dryRun });
-
-  // Phase 2: REM Cross-Referencing
-  const rem = remCrossReference({ wikiDir, dryRun });
-
-  // Phase 3: Confidence Decay
-  const decay = runConfidenceDecay(wikiDir, { dryRun });
-
-  // Phase 4: Prune stale zero-access nodes
-  const prune = pruneStaleNodes({ wikiDir, root, dryRun });
-
-  // Phase 5: Regenerate MEMORY.md
-  const memory = regenerateMemoryMd({ wikiDir, memoryMd, dryRun });
-
-  // Append dream summary to DREAMS.md
-  const timestamp = new Date().toISOString();
-  const today = timestamp.split('T')[0];
-  const summary = formatDreamSummary({ today, nrem, rem, decay, prune, memory });
-
-  if (!dryRun) {
-    if (!fs.existsSync(dreamsFile)) {
-      fs.writeFileSync(dreamsFile, '# Dream Journal\n\n');
-    }
-    fs.appendFileSync(dreamsFile, summary);
+  try {
+    chokidar = (await import('chokidar')).default;
+  } catch {
+    console.warn('⚠️  chokidar not installed — file watching disabled. Run: npm install chokidar');
   }
 
-  return {
-    timestamp,
-    nrem,
-    rem,
-    confidenceDecay: decay,
-    prune,
-    memory,
-    summary,
-  };
-}
-
-// ─── HELPERS ────────────────────────────────────────────────────────────────────
-
-function getDailyLogsSince(dailyLogsDir, sinceDate) {
-  if (!fs.existsSync(dailyLogsDir)) return [];
-
-  // Check legacy memory dir (daily logs may be at .agent/memory/)
-  const memoryDir = path.dirname(dailyLogsDir);
-  const dirs = [dailyLogsDir];
-  if (fs.existsSync(memoryDir)) dirs.push(memoryDir);
-
-  const logs = [];
-
-  for (const dir of dirs) {
-    const files = fs.readdirSync(dir).filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort();
-    for (const f of files) {
-      const date = f.replace('.md', '');
-      if (sinceDate && date <= sinceDate) continue;
-      const content = fs.readFileSync(path.join(dir, f), 'utf-8');
-      logs.push({ date, content });
-    }
+  try {
+    nodeCron = await import('node-cron');
+  } catch {
+    console.warn('⚠️  node-cron not installed — scheduled dream cycle disabled. Run: npm install node-cron');
   }
 
-  return logs;
-}
+  // Real-time conflict check on new vault files
+  if (chokidar) {
+    const watcher = chokidar.watch(config.vaultDir, {
+      ignoreInitial: true,
+      persistent: true,
+      awaitWriteFinish: { stabilityThreshold: 300 },
+    });
 
-function getLastDreamDate(dreamsFile) {
-  if (!fs.existsSync(dreamsFile)) return null;
-  const content = fs.readFileSync(dreamsFile, 'utf-8');
-  const matches = content.match(/## Dream — (\d{4}-\d{2}-\d{2})/g);
-  if (!matches) return null;
-  return matches[matches.length - 1].replace('## Dream — ', '');
-}
+    watcher.on('add', async (filePath) => {
+      if (!filePath.endsWith('.md')) return;
+      console.log(`🔍 Vault change detected: ${path.basename(filePath)}`);
 
-function formatDreamSummary({ today, nrem, rem, decay, prune, memory }) {
-  const lines = [];
-  lines.push(`## Dream — ${today}\n`);
-  lines.push(`### NREM: Consolidation`);
-  lines.push(`- Logs processed: ${nrem.totalLogs || 0}`);
-  lines.push(`- Unique entries extracted: ${nrem.consolidated}`);
-  if (nrem.categories) {
-    for (const [cat, count] of Object.entries(nrem.categories)) {
-      if (count > 0) lines.push(`  - ${cat}: ${count}`);
-    }
+      try {
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const matter = (await import('gray-matter')).default;
+        const { data: meta, content: body } = matter(raw);
+        if (meta.type !== 'memory' || meta.status === 'draft') return;
+
+        const existingNodes = loadNodes(config.vaultDir);
+        const conflicts = detectConflicts({ ...meta, body }, existingNodes);
+
+        if (conflicts.length > 0) {
+          console.log(`⚠️  Conflict detected for ${meta.slug}: ${conflicts.length} conflict(s)`);
+          for (const c of conflicts) {
+            writeConflictFile(c, config.conflictsDir);
+          }
+          // Set node back to draft
+          const { setStatus } = await import('./vault.mjs');
+          setStatus(config.vaultDir, meta.slug, 'draft');
+        }
+      } catch (err) {
+        console.error(`  ❌ Conflict check failed: ${err.message}`);
+      }
+    });
+
+    console.log(`👀 Watching vault for changes: ${config.vaultDir}`);
   }
-  lines.push('');
 
-  lines.push(`### REM: Cross-Referencing`);
-  lines.push(`- Duplicate titles: ${rem.duplicates.length}`);
-  lines.push(`- Stale nodes: ${rem.staleNodes.length}`);
-  lines.push(`- Orphaned nodes: ${rem.orphanedNodes.length}`);
-  lines.push('');
-
-  lines.push(`### Decay`);
-  lines.push(`- Nodes decayed: ${decay.decayed}`);
-  if (decay.details.length > 0) {
-    for (const d of decay.details.slice(0, 5)) {
-      lines.push(`  - ${d.slug}: ${d.from} → ${d.to} (${d.daysSince}d)`);
-    }
+  // Nightly Dream Cycle
+  if (nodeCron?.default?.validate(schedule)) {
+    nodeCron.default.schedule(schedule, async () => {
+      console.log(`\n🌙 [${new Date().toISOString()}] Starting scheduled Dream Cycle`);
+      try {
+        await runDreamCycle(config);
+      } catch (err) {
+        console.error(`  ❌ Dream Cycle failed: ${err.message}`);
+      }
+    });
+    console.log(`⏰ Dream Cycle scheduled: ${schedule} (UTC)`);
   }
-  lines.push('');
 
-  lines.push(`### Phase 19 Graph Operations`);
-  lines.push(`- Community Clusters synthesized (NREM): ${nrem.communityClusters || 0}`);
-  lines.push(`- Edges Inferred (REM): ${rem.inferredEdges || 0}`);
-  if (rem.invalidEdges > 0) lines.push(`- Invalid derived-from edges detected: ${rem.invalidEdges}`);
-  lines.push('');
-
-  lines.push(`### Pruning`);
-  lines.push(`- Nodes pruned: ${prune.pruned}`);
-  lines.push('');
-
-  lines.push(`### Memory Index`);
-  lines.push(`- Total nodes: ${memory.nodeCount}`);
-  if (memory.categoryBreakdown) {
-    for (const [cat, count] of Object.entries(memory.categoryBreakdown)) {
-      lines.push(`  - ${cat}: ${count}`);
-    }
-  }
-  lines.push('\n---\n');
-
-  return lines.join('\n');
+  console.log('🧠 Total Recall Dream Daemon running.');
 }
