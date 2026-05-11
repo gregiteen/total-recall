@@ -9,6 +9,15 @@ schema_version: 2
 
 You are now the expert administrator of this workspace's Total Recall memory system. This system replaces legacy context files with a 3-tier SSSS-compliant Markdown vault.
 
+## Universal Knowledge Domains
+Total Recall is domain-agnostic. It is not just for coding invariants. You can use it to map out:
+- **Worldbuilding & Lore**: `.agent/memory-vault/lore/`
+- **CRM & Stakeholder Profiles**: `.agent/memory-vault/facts/`
+- **Personal Preferences & Tastes**: `.agent/memory-vault/preferences/`
+- **Architectural Concepts**: `.agent/memory-vault/concepts/`
+
+Whenever you need to capture a piece of permanent knowledge (a fact about a user, a rule about a database, a character in a story), write an SSSS-compliant node to the appropriate vault directory.
+
 ## Your Mandate
 When the user tells you to "remember this" or "always do X":
 1. Do **NOT** try to edit \`INSTRUCTIONS.md\` directly.
