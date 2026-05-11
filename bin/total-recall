@@ -281,84 +281,83 @@ async function writeGlobalRepos(configPath, repos) {
 // ─── INIT ───────────────────────────────────────────────────────────────────────
 
 async function runInit(paths, config) {
-  console.log('🧠 Total Recall — Initializing memory system...\n');
+  console.log('🧠 Total Recall — Initializing SSSS 3-Tier Memory System...\n');
 
-  const dirs = [
-    paths.wikiDir,
-    path.join(paths.wikiDir, 'preferences'),
-    path.join(paths.wikiDir, 'patterns'),
-    path.join(paths.wikiDir, 'anti-patterns'),
-    path.join(paths.wikiDir, 'concepts'),
-    path.join(paths.wikiDir, 'decisions'),
-    path.join(paths.wikiDir, 'projects'),
-    paths.dailyLogsDir,
-    paths.episodesDir,
-    paths.handoffsDir,
-    path.join(paths.dataDir, 'learning'),
-    path.join(paths.dataDir, 'knowledge'),
-    // Project tracking Kanban (repo-level)
-    path.join(ROOT, 'docs', 'projects', 'in-progress'),
-    path.join(ROOT, 'docs', 'projects', 'backlog'),
-    path.join(ROOT, 'docs', 'projects', 'planned'),
-    path.join(ROOT, 'docs', 'projects', 'completed'),
-    path.join(ROOT, 'docs', 'projects', 'archived'),
+  // ── Auto-detect IDE ────────────────────────────────────────────────────────
+  const ideDetectors = [
+    { file: 'CLAUDE.md',       ide: 'claude-code',   watcher: 'claude-code' },
+    { file: '.cursorrules',    ide: 'Cursor',         watcher: 'cursor' },
+    { file: 'AGENTS.md',       ide: 'Antigravity',    watcher: 'antigravity' },
+    { file: 'INSTRUCTIONS.md', ide: 'Antigravity',    watcher: 'antigravity' },
+    { file: '.clinerules',     ide: 'Cline',          watcher: 'cline' },
+  ];
+  let detectedIde = 'generic';
+  let instructionsTarget = path.join(ROOT, 'INSTRUCTIONS.md');
+  for (const d of ideDetectors) {
+    if (fs.existsSync(path.join(ROOT, d.file))) {
+      detectedIde = d.ide;
+      instructionsTarget = path.join(ROOT, d.file);
+      break;
+    }
+  }
+  console.log(`  🔍 IDE detected: ${detectedIde}`);
+  console.log(`  📄 Instructions target: ${path.relative(ROOT, instructionsTarget)}\n`);
+
+  // ── Scaffold SSSS vault dirs ───────────────────────────────────────────────
+  const vaultDir = paths.vaultDir ?? path.join(paths.dataDir, 'memory-vault');
+  const vaultDirs = [
+    path.join(vaultDir, 'invariants'),
+    path.join(vaultDir, 'preferences'),
+    path.join(vaultDir, 'anti-patterns'),
+    path.join(vaultDir, 'patterns'),
+    path.join(vaultDir, 'decisions'),
+    path.join(vaultDir, 'concepts'),
+    path.join(paths.dataDir, 'memory-derived'),
+    path.join(paths.dataDir, 'memory-inbox', 'pending'),
+    path.join(paths.dataDir, 'memory-inbox', 'conflicts'),
+    path.join(paths.dataDir, 'sessions'),
   ];
 
-  for (const dir of dirs) {
+  for (const dir of vaultDirs) {
     fs.mkdirSync(dir, { recursive: true });
     console.log(`  📁 ${path.relative(ROOT, dir)}/`);
   }
 
-  // Copy SCHEMA.md template
-  const templateSchema = path.join(__dirname, '..', 'templates', 'SCHEMA.md');
-  const targetSchema = path.join(paths.wikiDir, 'SCHEMA.md');
-  if (fs.existsSync(templateSchema) && !fs.existsSync(targetSchema)) {
-    fs.copyFileSync(templateSchema, targetSchema);
-    console.log(`  📄 ${path.relative(ROOT, targetSchema)}`);
+  // ── Create INSTRUCTIONS.md stub if missing ────────────────────────────────
+  if (!fs.existsSync(instructionsTarget)) {
+    fs.writeFileSync(instructionsTarget,
+      `# Agent Rules\n> Tier 1 Hot Memory — compiled by Total Recall. Edit memory-vault/invariants/ to change rules.\n\n`
+    );
+    console.log(`  📄 ${path.relative(ROOT, instructionsTarget)} (created)`);
+  } else {
+    console.log(`  ✅ ${path.relative(ROOT, instructionsTarget)} already exists`);
   }
 
-  // Create INDEX.md
-  const indexPath = path.join(paths.wikiDir, 'INDEX.md');
-  if (!fs.existsSync(indexPath)) {
-    fs.writeFileSync(indexPath, '# Wiki Index\n\n> Auto-generated. Run `total-recall lint` to validate.\n');
-    console.log(`  📄 ${path.relative(ROOT, indexPath)}`);
-  }
-
-  // Create identity files if they don't exist
-  const identityFiles = [
-    { path: paths.userMd, content: '# User Preferences\n\n> Agent-maintained user preference log.\n' },
-    { path: paths.soulMd, content: '# Soul\n\n> Ethical mandates and behavioral boundaries.\n' },
-    { path: paths.memoryMd, content: '# Memory\n\n> Condensed experience summary.\n' },
-    { path: paths.identityMd, content: '# Identity\n\n> Agent persona definition.\n' },
-  ];
-
-  for (const { path: fp, content } of identityFiles) {
-    if (!fs.existsSync(fp)) {
-      fs.writeFileSync(fp, content);
-      console.log(`  📄 ${path.relative(ROOT, fp)}`);
-    }
-  }
-
-  // Create config template
+  // ── Create config if missing ───────────────────────────────────────────────
   const configPath = path.join(ROOT, 'totalrecall.config.mjs');
   if (!fs.existsSync(configPath)) {
     const templateConfig = path.join(__dirname, '..', 'totalrecall.config.mjs');
     if (fs.existsSync(templateConfig)) {
       fs.copyFileSync(templateConfig, configPath);
     } else {
-      fs.writeFileSync(configPath, `export default {\n  dataDir: '${config.dataDir}',\n  systemPromptFile: '${config.systemPromptFile}',\n};\n`);
+      fs.writeFileSync(configPath,
+        `export default {\n  dataDir: '.agent',\n  systemPromptFile: '${path.relative(ROOT, instructionsTarget)}',\n  watcher: '${detectedIde === 'generic' ? 'generic' : 'antigravity'}',\n};\n`
+      );
     }
     console.log(`  ⚙️  totalrecall.config.mjs`);
   }
 
-  // Initialize database
-  const { openDatabase } = await import('../src/core/fts5.mjs');
-  const db = openDatabase(paths.dbPath);
-  db.close();
-  console.log(`  💾 ${path.relative(ROOT, paths.dbPath)}`);
+  console.log(`
+✅ Total Recall initialized!
 
-  console.log('\n✅ Memory system initialized. Run `total-recall reindex` to build the search index.\n');
+Next steps:
+  1. Add memory nodes to ${path.relative(ROOT, vaultDir)}/invariants/
+  2. Run \`total-recall compile\` to build INSTRUCTIONS.md
+  3. Run \`total-recall daemon start\` to start the Dream Cycle
+  4. Run \`total-recall migrate\` if you have an existing memory-wiki to convert
+`);
 }
+
 
 // ─── UNINSTALL ──────────────────────────────────────────────────────────────────
 
