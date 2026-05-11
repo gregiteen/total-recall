@@ -320,6 +320,23 @@ function appendDreamReport(report, derivedDir) {
 }
 
 /**
+ * Dispatch desktop notification via the notifications skill
+ * @param {string} title 
+ * @param {string} message 
+ * @param {string} skillsDir 
+ */
+function sendNotification(title, message, skillsDir) {
+  try {
+    const notifyScript = path.join(skillsDir, 'notifications', 'scripts', 'notify.mjs');
+    if (fs.existsSync(notifyScript)) {
+      import('child_process').then(({ spawn }) => {
+        spawn('node', [notifyScript, title, message], { stdio: 'ignore', detached: true }).unref();
+      });
+    }
+  } catch (e) { /* ignore */ }
+}
+
+/**
  * Run the full Dream Cycle.
  *
  * @param {{
@@ -439,6 +456,8 @@ export async function runDreamCycle(paths) {
       report.phase = 'recover';
       restoreFromBackup(backupPath, skillsDir, derivedDir);
     }
+    
+    sendNotification('Total Recall: Error', `Dream Cycle REM phase failed: ${err.message}`, skillsDir);
 
     report.duration_ms = Date.now() - startMs;
     if (!dryRun) appendDreamReport(report, derivedDir);
@@ -463,6 +482,7 @@ export async function runDreamCycle(paths) {
         report.phase = 'recover';
         restoreFromBackup(backupPath, skillsDir, derivedDir);
       }
+      sendNotification('Total Recall: Error', `Deep Sleep recompile failed: ${err.message}`, skillsDir);
     }
   } else {
     console.log('   [dry-run] Skipping compileSurface');
@@ -498,6 +518,7 @@ export async function runDreamCycle(paths) {
             const proc = spawn(binary, ['--prompt', promptText], { stdio: 'ignore', detached: true });
             proc.unref();
             console.log(`   ✅ Clerk dispatched in background (PID: ${proc.pid})`);
+            sendNotification('Total Recall: Memory Clerk', `Dispatched Memory Clerk (${binary}) to resolve ${report.conflicts_found} conflicts in the background.`, skillsDir);
           }
         }
 
@@ -509,6 +530,7 @@ export async function runDreamCycle(paths) {
             const proc = spawn(binary, ['--prompt', promptText], { stdio: 'ignore', detached: true });
             proc.unref();
             console.log(`   ✅ Librarian dispatched in background (PID: ${proc.pid})`);
+            sendNotification('Total Recall: Vault Librarian', `Dispatched Vault Librarian (${binary}) to organize and deduplicate ${report.nodes_processed} memory nodes.`, skillsDir);
           }
         }
       } catch (e) {
