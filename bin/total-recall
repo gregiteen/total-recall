@@ -333,6 +333,45 @@ async function runInit(paths, config) {
     console.log(`  ✅ ${path.relative(ROOT, instructionsTarget)} already exists`);
   }
 
+  // ── Scaffold the Total Recall Expert Skill ──────────────────────────────────
+  const skillsDir = paths.skillsDir ?? path.join(paths.dataDir, 'skills');
+  const trSkillDir = path.join(skillsDir, 'total-recall');
+  const templateBundleDir = path.join(__dirname, '..', 'templates', 'skill-bundle');
+  
+  if (fs.existsSync(templateBundleDir)) {
+    if (!fs.existsSync(trSkillDir)) {
+      fs.cpSync(templateBundleDir, trSkillDir, { recursive: true });
+      console.log(`  📁 ${path.relative(ROOT, trSkillDir)}/ (Expert Skill Scaffolded)`);
+    } else {
+      console.log(`  ✅ ${path.relative(ROOT, trSkillDir)} already exists`);
+    }
+  } else {
+    // Fallback if template is missing
+    fs.mkdirSync(path.join(trSkillDir, 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(trSkillDir, 'references'), { recursive: true });
+    const trSkillPath = path.join(trSkillDir, 'SKILL.md');
+    if (!fs.existsSync(trSkillPath)) {
+      fs.writeFileSync(trSkillPath, `---
+name: total-recall
+description: The ultimate SSOT for the workspace memory system. Use this skill to add rules, resolve memory conflicts, run the compiler, and manage the Dream Cycle.
+version: 1.0.0
+schema_version: 2
+---
+
+# Total Recall (Memory Manager)
+
+You are now the expert administrator of this workspace's Total Recall memory system. This system replaces legacy context files with a 3-tier SSSS-compliant Markdown vault.
+
+## Your Mandate
+When the user tells you to "remember this" or "always do X":
+1. Do **NOT** try to edit \`INSTRUCTIONS.md\` directly.
+2. Create or update an SSSS-compliant Markdown node in \`.agent/memory-vault/\`.
+3. Run \`npx total-recall compile\` to automatically route your node into the hot memory.
+`);
+      console.log(`  📁 ${path.relative(ROOT, trSkillDir)}/ (Expert Skill Scaffolded via Fallback)`);
+    }
+  }
+
   // ── Create config if missing ───────────────────────────────────────────────
   const configPath = path.join(ROOT, 'totalrecall.config.mjs');
   if (!fs.existsSync(configPath)) {
