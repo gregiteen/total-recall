@@ -30,7 +30,7 @@ import {
   TIER1_TOKEN_CEILING,
   INJECTION_BEGIN,
   INJECTION_END,
-} from '../constants/schema.js';
+} from '../constants/schema.mjs';
 
 // ─── TOKENIZATION ────────────────────────────────────────────────────────────────
 

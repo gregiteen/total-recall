@@ -21,7 +21,7 @@ import {
   CONFLICT_SIMILARITY_THRESHOLD,
   CONFLICT_NP_OVERLAP_THRESHOLD,
   TRIGRAM_DIM,
-} from '../constants/schema.js';
+} from '../constants/schema.mjs';
 
 const require = createRequire(import.meta.url);
 const matter = require('gray-matter');
