@@ -132,7 +132,7 @@ Classify each item by:
 
 Severity:
 
-- `P0-critical`: blocks login, workspace access, assistant chat, data safety, or production operation.
+- `P0-critical`: blocks core kernel execution, VFS integrity, Code Mode sandbox, or daemon operations.
 - `P1-high`: seriously damages beta workflow but has workaround.
 - `P2-medium`: annoying, confusing, or incomplete, but testers can continue.
 - `P3-low`: polish, copy, visual cleanup, nice-to-have.
@@ -347,7 +347,7 @@ Walkthrough checklist:
 - Date:
 
 ### Steps
-- [ ] Open app from production/beta URL
+- [ ] Open dashboard from local/proxy URL
 - [ ] Sign up or log in
 - [ ] Reach first meaningful screen
 - [ ] Create or enter workspace
@@ -465,12 +465,11 @@ Do not merge PRs that make the beta path worse unless they fix a larger blocker.
 
 ### Branches & Trunk-Based Development
 
-The repository strictly follows **Trunk-Based Development** (also known as Dark Launching):
+The repository strictly follows **Trunk-Based Development**:
 
-- `production` — **Active Trunk Branch**. All development and hotfixes are pushed here. Triggers auto-deploy watcher immediately.
-- `main` — **Stable Backup Branch**. Auto-synced by the server watcher at the end of every successful deploy. Never push here directly unless fixing a sync split.
+- `main` — **Active Trunk Branch**. All development and hotfixes are pushed here.
 - `feat/description`, `bugfix/description`, `chore/description` — Ephemeral feature branches.
-- We do NOT maintain a heavy, long-running staging site. All code is pushed to `production` rapidly but hidden behind Feature Flags.
+- All code is pushed to `main` rapidly. For major experimental features, use feature branches and merge only when stable.
 
 ### Feature Flag Management Protocol
 
@@ -484,10 +483,10 @@ Every feature flag introduces technical debt. When a feature reaches 100% rollou
 
 ### Deployment Standards
 
-All changes must follow the `/push` and `/deploy` protocols:
+All changes must follow standard verification protocols:
 
 - **Verify-Commit-Push-Verify**: Always run code quality checks BEFORE pushing.
-- **Verification**: Always verify container health after push.
+- **Verification**: Always verify daemon health and VFS integrity after making architecture changes.
 
 ### Testing Protocol
 
@@ -686,7 +685,7 @@ The product reaches private beta when the clean-account walkthrough passes and r
 When waiting on a background command, work through this list top-to-bottom. Skip items that are already done or not applicable.
 
 **Tier 1: Immediate Value (do these first)**
-1. ✅ Sync `main` branch: `git push origin production:main && git fetch origin main && git branch -f main origin/main`
+1. ✅ Push `main` branch: `git push origin main`
 2. 📝 Update HANDOFF.md with current session state
 3. 🔍 Audit recent code changes for missing try/catch on dynamic imports
 4. 📋 Check and update project trackers with completed work
