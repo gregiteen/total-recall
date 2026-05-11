@@ -29,7 +29,7 @@ import {
   CONFIDENCE_MAX,
   CONFIDENCE_DEPRECATION_THRESHOLD,
   DREAM_CRON_SCHEDULE,
-} from '../constants/schema.js';
+} from '../constants/schema.mjs';
 
 // ─── HALF-LIFE DECAY ─────────────────────────────────────────────────────────────
 
