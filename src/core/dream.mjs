@@ -468,6 +468,55 @@ export async function runDreamCycle(paths) {
     console.log('   [dry-run] Skipping compileSurface');
   }
 
+  // ── PHASE 4: AUTONOMOUS SUBAGENT DISPATCH ────────────────────────────────────
+  if (!dryRun) {
+    const hasConflicts = report.conflicts_found > 0;
+    const isCluttered = report.nodes_processed > 50 && Math.random() > 0.8; // Run librarian 20% of the time if large vault
+    
+    if (hasConflicts || isCluttered) {
+      console.log('\n🤖 PHASE 4 — Autonomous Subagent Dispatch');
+      try {
+        const { spawn } = await import('child_process');
+        
+        // Attempt to load user config to find their preferred CLI agent
+        let binary = 'gemini'; // default fallback
+        try {
+          const configPath = path.join(process.cwd(), 'totalrecall.config.mjs');
+          if (fs.existsSync(configPath)) {
+            const configModule = await import(configPath);
+            if (configModule.default?.agents?.archivist?.binary) {
+              binary = configModule.default.agents.archivist.binary;
+            }
+          }
+        } catch (e) { /* ignore config load errors */ }
+
+        if (hasConflicts) {
+          console.log(`   Dispatching Memory Clerk via [${binary}] to resolve conflicts...`);
+          const clerkPrompt = path.join(skillsDir, 'total-recall', 'subagents', 'memory-clerk.md');
+          if (fs.existsSync(clerkPrompt)) {
+            const promptText = fs.readFileSync(clerkPrompt, 'utf8');
+            const proc = spawn(binary, ['--prompt', promptText], { stdio: 'ignore', detached: true });
+            proc.unref();
+            console.log(`   ✅ Clerk dispatched in background (PID: ${proc.pid})`);
+          }
+        }
+
+        if (isCluttered && !hasConflicts) {
+          console.log(`   Dispatching Vault Librarian via [${binary}] to organize memory...`);
+          const librarianPrompt = path.join(skillsDir, 'total-recall', 'subagents', 'vault-librarian.md');
+          if (fs.existsSync(librarianPrompt)) {
+            const promptText = fs.readFileSync(librarianPrompt, 'utf8');
+            const proc = spawn(binary, ['--prompt', promptText], { stdio: 'ignore', detached: true });
+            proc.unref();
+            console.log(`   ✅ Librarian dispatched in background (PID: ${proc.pid})`);
+          }
+        }
+      } catch (e) {
+        console.warn(`   ⚠️  Failed to dispatch subagent: ${e.message}`);
+      }
+    }
+  }
+
   // ── FINALIZE ─────────────────────────────────────────────────────────────────
   report.duration_ms = Date.now() - startMs;
   console.log(`\n✅ Dream Cycle complete in ${report.duration_ms}ms`);
