@@ -464,6 +464,90 @@ npx total-recall deploy
 
 **Target: Full deployment in under 10 minutes** (bottlenecked by the ~16GB model download).
 
+### 4.2 Workspace Client Architecture (Brain + Projections)
+
+Total Recall operates as a **centralized brain with distributed projections**. The brain is the sovereign OS running on the VM (§4.1). Projections are lightweight, read-only snapshots of compiled memory synced into individual workspaces so that IDE agents (Antigravity, Cursor, Claude Code) can read behavioral rules without an MCP connection.
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  BRAIN (Oracle VM — always on)                             │
+│                                                            │
+│  memory-vault/   ← Source of truth (Tier 3)                │
+│  dream.mjs       ← Dream Cycle, conflict detection         │
+│  surface.mjs     ← Compile vault → INSTRUCTIONS.md + SKILLs│
+│  scheduler/      ← Autonomous task queue                   │
+│  Dashboard, API, MCP Gateway, SearXNG, Kokoro              │
+│                                                            │
+│  Exposes:                                                  │
+│    • MCP Gateway (agents connect live)                     │
+│    • Sync API (projections pull compiled output)            │
+│    • Dashboard (human access)                              │
+│    • /v1/chat/completions (direct model access)            │
+└────────────┬───────────────────────┬───────────────────────┘
+             │ MCP (live)            │ Sync (pull)
+             ▼                      ▼
+    ┌─────────────────┐    ┌─────────────────────────────┐
+    │ MCP-capable IDE  │    │ Workspace Projection        │
+    │ (Claude Desktop, │    │ ~/Github/ultrachat/         │
+    │  Cursor, Zed)    │    │   INSTRUCTIONS.md  (Tier 1) │
+    │                  │    │   .agent/skills/*/SKILL.md   │
+    │ Reads vault live │    │     <!-- INJECTED MEMORY --> │
+    │ via MCP Gateway  │    │   .cursorrules → symlink     │
+    │ No local files   │    │   CLAUDE.md → symlink        │
+    └─────────────────┘    └─────────────────────────────┘
+```
+
+#### 4.2.1 `total-recall init` (Workspace Registration)
+
+Run once per workspace to connect it to the brain:
+
+```bash
+cd ~/Github/ultrachat-ai-powered
+npx total-recall init --brain https://my-brain.example.com
+
+# Performs:
+# 1. Authenticates with the brain via PAT or OAuth
+# 2. Registers this workspace (path + git remote) with the brain
+# 3. Creates totalrecall.config.mjs (per-repo config)
+# 4. Scaffolds .agent/ directory (empty vault structure)
+# 5. Detects IDE (Antigravity/Cursor/Claude) → creates adapter shims
+# 6. Runs initial sync → pulls compiled INSTRUCTIONS.md + skill injections
+```
+
+#### 4.2.2 `total-recall sync` (Pull Compiled Memory)
+
+Pulls the latest compiled memory from the brain into the workspace:
+
+```bash
+npx total-recall sync
+
+# Performs:
+# 1. Fetches compiled Tier 1 (INSTRUCTIONS.md) from brain
+# 2. Fetches skill injection blocks for this workspace's skills
+# 3. Writes <!-- BEGIN INJECTED MEMORY --> blocks into SKILL.md files
+# 4. Updates IDE adapter shims (.cursorrules, CLAUDE.md, AGENTS.md)
+# 5. Reports: "Synced 42 rules, 7 skills updated, 2 conflicts pending"
+```
+
+**Sync is one-directional:** The brain compiles; workspaces receive. Workspaces never write to the vault directly. New observations from IDE agents are submitted to the brain via the MCP Gateway or Sync API, where they enter `memory-inbox/pending/` and go through normal conflict detection.
+
+**Sync frequency:**
+- Manual: `npx total-recall sync` (on demand)
+- Automatic: Git hook (`post-checkout`, `post-merge`) triggers sync
+- Background: Optional file watcher polls the brain every 60 seconds
+
+#### 4.2.3 MCP-First, Sync-Fallback
+
+MCP-capable agents (Claude Desktop, Cursor with MCP, Zed) connect directly to the brain's MCP Gateway and read the vault live. They don't need local files at all — the projection is a **fallback for agents that can only read local files** (or for offline access).
+
+| Agent Capability | Connection Mode | Local Files Needed? |
+|:---|:---|:---|
+| MCP-capable | Live MCP Gateway | No — reads vault directly |
+| File-only (Antigravity, basic Cursor) | Sync projection | Yes — `INSTRUCTIONS.md` + SKILL.md injections |
+| Offline | Cached projection | Yes — last synced state |
+
+> **The brain is always the authority.** If a workspace's `INSTRUCTIONS.md` is stale, running `total-recall sync` refreshes it. If an MCP agent reads the vault live, it always gets the latest state. There is exactly one source of truth.
+
 ---
 
 ## 5. Interface Requirements (The Omnichannel Surface)
@@ -551,6 +635,7 @@ The CLI is the primary scripting and automation interface. Every command has a c
 
 | Command | Purpose |
 |:---|:---|
+| | **Brain Commands (run on the VM)** |
 | `npx total-recall deploy` | One-command deployment on fresh Ubuntu ARM VM (see §4.1.3) |
 | `npx total-recall compile` | Rebuild all derived indexes, skill capsules, and Tier 1 instructions |
 | `npx total-recall compile --tier1-only` | Recompile only INSTRUCTIONS.md from `priority: absolute` rules |
@@ -566,6 +651,11 @@ The CLI is the primary scripting and automation interface. Every command has a c
 | `npx total-recall restore --from <path>` | Restore full system state from encrypted tarball (see §8.2) |
 | `npx total-recall export --output <path>` | Export the entire VFS as a portable tarball (see §10.2) |
 | `npx total-recall import --from <path>` | Import a VFS tarball on a new host |
+| | **Workspace Commands (run in any repo)** |
+| `npx total-recall init --brain <url>` | Register this workspace with a brain, scaffold `.agent/`, run initial sync (see §4.2.1) |
+| `npx total-recall sync` | Pull latest compiled memory from the brain into this workspace (see §4.2.2) |
+| `npx total-recall sync --watch` | Continuous sync — poll the brain every 60s for changes |
+| `npx total-recall status` | Show connection status, last sync time, pending conflicts, and stale rule count |
 
 ---
 
