@@ -1,515 +1,554 @@
 /**
- * surface.mjs — Behavioral Surface Compiler (Total Recall Layer 4)
+ * surface.mjs — 3-Tier SSSS Memory Surface Compiler (Total Recall)
  *
- * Auto-generates the DISTILLED MEMORY section from the knowledge graph.
- * Produces a 4-part behavioral surface:
- *   1. Attitude Paragraph — emergent character description
- *   2. Curated Rules — top-ranked negative + positive + corrective
- *   3. Steering Queue — hot-patched same-session directives
- *   4. Active Triggers — memory collection rules
+ * Implements the Routing Algorithm from the SSSS architecture spec:
+ *   1. Tokenize vault nodes
+ *   2. BM25 scoring via SQLite FTS5
+ *   3. TF-IDF scoring (pure JS fallback)
+ *   4. Z-normalize + combine (0.7 * bm25 + 0.3 * tfidf)
+ *   5. Inject top-K slugs into each SKILL.md
+ *   6. Compile absolute-priority rules into INSTRUCTIONS.md (Tier 1)
+ *   7. Emit graph-index.jsonl + skill-routes.jsonl
+ *
+ * Zero workspace-specific references. Configured entirely by caller-supplied paths.
  */
 
 import fs from 'fs';
 import path from 'path';
-import { loadNodes } from './wiki.mjs';
-import { rankNodes } from './ranking.mjs';
-import { walkMarkdown, parseFrontmatter } from './utils.mjs';
+import crypto from 'crypto';
+import { loadNodes, loadSkills, atomicWrite } from './vault.mjs';
+import {
+  STOPWORDS,
+  BM25_WEIGHT,
+  TFIDF_WEIGHT,
+  ROUTING_THRESHOLD,
+  ROUTING_TOP_K,
+  ROUTING_BODY_CHARS,
+  FTS_MAX_TOKENS,
+  MAX_RULES_PER_SKILL,
+  SKILL_TOKEN_BUDGET,
+  TIER1_TOKEN_CEILING,
+  INJECTION_BEGIN,
+  INJECTION_END,
+} from '../constants/schema.js';
 
-// ─── TEMPORAL CONTEXT ───────────────────────────────────────────────────────────
+// ─── TOKENIZATION ────────────────────────────────────────────────────────────────
 
-function getTimeOfDayLabel(hour) {
-  if (hour < 6) return 'late night';
-  if (hour < 12) return 'morning';
-  if (hour < 17) return 'afternoon';
-  if (hour < 21) return 'evening';
-  return 'night';
+/**
+ * Tokenize a string: lowercase, strip punctuation, filter stopwords.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function tokenize(text) {
+  if (!text) return [];
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 1 && !STOPWORDS.has(t));
 }
 
 /**
- * Build a human-readable temporal context string using the local system timezone.
- * @param {string} [tz] - Optional IANA timezone override
+ * Approximate token count (1 token ≈ 4 characters).
+ * @param {string} text
+ * @returns {number}
+ */
+export function approxTokenCount(text) {
+  return Math.ceil((text ?? '').length / 4);
+}
+
+/**
+ * SHA-256 hash of text, truncated to 16 hex chars.
+ * @param {string} text
  * @returns {string}
  */
-export function buildTemporalContext(tz) {
-  const now = new Date();
-  const timezone = tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  let localHour, localDateStr, dayContext;
+export function sha256(text) {
+  return crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+}
+
+// ─── TF-IDF ENGINE ───────────────────────────────────────────────────────────────
+
+/**
+ * Build a TF-IDF model from an array of documents.
+ * @param {{ id: string, text: string }[]} docs
+ * @returns {{ tf: Map<string, Map<string, number>>, idf: Map<string, number>, N: number }}
+ */
+export function buildTfidf(docs) {
+  const N = docs.length;
+  const tf = new Map();   // docId → (term → frequency)
+  const df = new Map();   // term → document frequency
+
+  for (const { id, text } of docs) {
+    const tokens = tokenize(text);
+    const termFreq = new Map();
+    for (const t of tokens) {
+      termFreq.set(t, (termFreq.get(t) ?? 0) + 1);
+    }
+    // Normalize TF by document length
+    for (const [t, count] of termFreq) {
+      termFreq.set(t, count / tokens.length);
+    }
+    tf.set(id, termFreq);
+    for (const t of termFreq.keys()) {
+      df.set(t, (df.get(t) ?? 0) + 1);
+    }
+  }
+
+  const idf = new Map();
+  for (const [term, docFreq] of df) {
+    idf.set(term, Math.log(1 + N / docFreq));
+  }
+
+  return { tf, idf, N };
+}
+
+/**
+ * Compute TF-IDF score for a query against a document.
+ * @param {string} query
+ * @param {string} docId
+ * @param {{ tf: Map, idf: Map }} model
+ * @returns {number}
+ */
+export function tfidfScore(query, docId, model) {
+  const queryTokens = tokenize(query);
+  const docTf = model.tf.get(docId);
+  if (!docTf) return 0;
+
+  let score = 0;
+  for (const t of queryTokens) {
+    const tf = docTf.get(t) ?? 0;
+    const idf = model.idf.get(t) ?? 0;
+    score += tf * idf;
+  }
+  return score;
+}
+
+// ─── BM25 VIA FTS5 ───────────────────────────────────────────────────────────────
+
+/**
+ * Sanitize and format a query for FTS5 MATCH expression.
+ * OR-joins quoted tokens, capped at FTS_MAX_TOKENS.
+ * @param {string} query
+ * @returns {string}
+ */
+export function sanitizeFtsQuery(query) {
+  const tokens = tokenize(query).slice(0, FTS_MAX_TOKENS);
+  if (tokens.length === 0) return '';
+  return tokens.map(t => `"${t}"`).join(' OR ');
+}
+
+/**
+ * Build the FTS5 skill index in SQLite.
+ * Drops and recreates the table, then inserts one row per skill.
+ * @param {import('better-sqlite3').Database} db
+ * @param {import('../types/memory.js').SkillManifest[]} skills
+ */
+export function buildSkillIndex(db, skills) {
+  db.exec(`DROP TABLE IF EXISTS skill_fts`);
+  db.exec(`
+    CREATE VIRTUAL TABLE skill_fts USING fts5(
+      skill_name,
+      description,
+      body,
+      content=''
+    )
+  `);
+
+  const insert = db.prepare(`INSERT INTO skill_fts (skill_name, description, body) VALUES (?, ?, ?)`);
+  const insertMany = db.transaction(rows => {
+    for (const row of rows) insert.run(row.name, row.description, row.body);
+  });
+  insertMany(skills);
+}
+
+/**
+ * Query the FTS5 index for BM25 scores against a text query.
+ * FTS5 BM25 scores are negative (more negative = better match) — we negate them.
+ * @param {import('better-sqlite3').Database} db
+ * @param {string} query
+ * @param {number} [limit=20]
+ * @returns {{ skill_name: string, score: number }[]}
+ */
+export function bm25Query(db, query, limit = 20) {
+  const ftsQuery = sanitizeFtsQuery(query);
+  if (!ftsQuery) return [];
 
   try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: 'numeric',
-      hour12: false,
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
-    });
-    const parts = formatter.formatToParts(now);
-    localHour = parseInt(parts.find(p => p.type === 'hour')?.value || '12', 10);
-    const weekday = parts.find(p => p.type === 'weekday')?.value || '';
-    const month = parts.find(p => p.type === 'month')?.value || '';
-    const day = parts.find(p => p.type === 'day')?.value || '';
-    const isWeekend = ['Saturday', 'Sunday'].includes(weekday);
-    dayContext = `${weekday}${isWeekend ? ' (weekend)' : ''}`;
-    localDateStr = `${month} ${day}`;
+    return db.prepare(`
+      SELECT skill_name, -bm25(skill_fts) AS score
+      FROM skill_fts
+      WHERE skill_fts MATCH ?
+      ORDER BY score DESC
+      LIMIT ?
+    `).all(ftsQuery, limit);
   } catch {
-    localHour = now.getHours();
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    dayContext = days[now.getDay()];
-    localDateStr = now.toISOString().slice(0, 10);
+    return [];
   }
-
-  const timeLabel = getTimeOfDayLabel(localHour);
-  return `Current time: ${localDateStr}, ${dayContext}, ${timeLabel} (${localHour}:00 ${timezone})`;
 }
 
+// ─── Z-NORMALIZATION ─────────────────────────────────────────────────────────────
+
 /**
- * Load recent episodes from the episodes directory.
- * @param {string} episodesDir
- * @param {number} [limit=3]
- * @returns {Array<{date: string, objective: string, mood: string}>}
+ * Z-normalize an array of (id, score) pairs.
+ * Returns a Map<id, normalized_score>. Handles zero-variance gracefully.
+ * @param {{ id: string, score: number }[]} scored
+ * @returns {Map<string, number>}
  */
-export function loadRecentEpisodes(episodesDir, limit = 3) {
-  if (!episodesDir || !fs.existsSync(episodesDir)) return [];
+function zNormalize(scored) {
+  if (scored.length === 0) return new Map();
 
-  const files = walkMarkdown(episodesDir).sort().reverse();
-  const episodes = [];
+  const values = scored.map(s => s.score);
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
+  const std = Math.sqrt(variance) || 1; // avoid division by zero
 
-  for (const fp of files.slice(0, limit * 2)) { // Read extra to account for parsing failures
-    try {
-      const content = fs.readFileSync(fp, 'utf-8');
-      const { meta, body } = parseFrontmatter(content);
-      const titleMatch = body.match(/^#\s+(.+)/m);
-      episodes.push({
-        date: meta.date || meta.session_date || path.basename(fp, '.md'),
-        objective: meta.objective || titleMatch?.[1]?.trim() || body.slice(0, 100),
-        mood: meta.user_mood || '',
-      });
-      if (episodes.length >= limit) break;
-    } catch { continue; }
-  }
-
-  return episodes;
+  return new Map(scored.map(s => [s.id, (s.score - mean) / std]));
 }
 
-// ─── GENERATE ATTITUDE PARAGRAPH ────────────────────────────────────────────────
-
-function generateAttitudeParagraph(nodes) {
-  const antiPatterns = nodes.filter(n => n.sentiment === 'negative' || n.type === 'anti-pattern').slice(0, 5);
-  const positivePatterns = nodes.filter(n => n.sentiment === 'positive').slice(0, 5);
-  const corrections = nodes.filter(n => n.sentiment === 'corrective').slice(0, 3);
-
-  const parts = ['You are an agent shaped by hard experience in this codebase.'];
-
-  if (antiPatterns.length > 0) {
-    const avoids = antiPatterns.slice(0, 3).map(n => n.title).join('; ');
-    parts.push(`You instinctively guard against: ${avoids}.`);
-  }
-
-  if (positivePatterns.length > 0) {
-    const practices = positivePatterns.slice(0, 3).map(n => n.title).join('; ');
-    parts.push(`You actively practice: ${practices}.`);
-  }
-
-  if (corrections.length > 0) {
-    const corrects = corrections.slice(0, 2).map(n => n.title).join('; ');
-    parts.push(`You know from experience: ${corrects}.`);
-  }
-
-  return parts.join(' ');
-}
-
-// ─── COMPILE BEHAVIORAL SURFACE ─────────────────────────────────────────────────
+// ─── HYBRID ROUTER ───────────────────────────────────────────────────────────────
 
 /**
- * Compile the behavioral surface from wiki nodes.
+ * Route a set of memory nodes to skills using the hybrid BM25+TF-IDF algorithm.
  *
- * @param {Object} options
- * @param {string} options.wikiDir - Path to wiki directory
- * @param {string} [options.root] - Repo root for relative paths
- * @param {Object} [options.ranking] - Ranking config overrides
- * @param {boolean} [options.includeTemporalContext] - Inject time-of-day + recent episodes
- * @param {string} [options.timezone] - IANA timezone override
- * @param {string} [options.episodesDir] - Path to episodes directory for recent session summaries
- * @param {string} [options.triggerCommand] - Command for active triggers
- * @returns {Object|null} { surface, stats, nodes } or null if no nodes
+ * @param {import('../types/memory.js').MemoryNode[]} nodes
+ * @param {import('../types/memory.js').SkillManifest[]} skills
+ * @param {import('better-sqlite3').Database | null} db
+ * @param {{ topK?: number, threshold?: number }} [opts]
+ * @returns {import('../types/memory.js').RouteScore[]}
  */
-export function compileSurface({
-  wikiDir,
-  root,
-  ranking = {},
-  includeTemporalContext = false,
-  timezone,
-  episodesDir,
-  triggerCommand = 'total-recall note --category TYPE "Description"',
-} = {}) {
-  const rawNodes = loadNodes(wikiDir, root);
+export function routeNodesToSkills(nodes, skills, db, opts = {}) {
+  const topK = opts.topK ?? ROUTING_TOP_K;
+  const threshold = opts.threshold ?? ROUTING_THRESHOLD;
 
-  if (rawNodes.length === 0) {
-    return null;
-  }
+  // Build TF-IDF model over skill corpus
+  const skillDocs = skills.map(s => ({
+    id: s.name,
+    text: `${s.name} ${s.description} ${s.body}`,
+  }));
+  const tfidfModel = buildTfidf(skillDocs);
 
-  const surfaceCap = ranking.surfaceCap || 30;
-  const hotSlots = ranking.hotSlots || 5;
-  const compiledSlots = surfaceCap - hotSlots;
-
-  const nodes = rankNodes(rawNodes, ranking);
-
-  // Separate steered rules from ranked rules
-  const steeredNodes = nodes.filter(n => n.isSteer).slice(0, hotSlots);
-  const rankedNodes = nodes.filter(n => !n.isSteer).slice(0, compiledSlots);
-
-  // Generate attitude paragraph
-  const attitude = generateAttitudeParagraph(nodes);
-
-  // Build the surface
-  const lines = [];
-  lines.push('## DISTILLED MEMORY (SUBJECT STATES)');
-
-  // Temporal context (injected during heartbeat cycles)
-  if (includeTemporalContext) {
-    lines.push(`> **TEMPORAL CONTEXT** — ${buildTemporalContext(timezone)}`);
-    lines.push(`> Last compiled: ${new Date().toISOString()} | Nodes: ${nodes.length}`);
-    lines.push('');
-
-    // Recent episodes
-    const episodes = episodesDir ? loadRecentEpisodes(episodesDir) : [];
-    if (episodes.length > 0) {
-      lines.push('> [!NOTE]');
-      lines.push('> **RECENT SESSIONS**');
-      for (const ep of episodes) {
-        const mood = ep.mood ? ` [mood: ${ep.mood}]` : '';
-        lines.push(`> - ${ep.date}: ${ep.objective.slice(0, 120)}${mood}`);
-      }
-      lines.push('');
-    }
-  }
-
-  // Part A: Attitude Paragraph
-  lines.push('> [!NOTE]');
-  lines.push(`> **AGENT ATTITUDE** — ${attitude}`);
-  lines.push('');
-
-  // Part B: Curated Rules — Negative
-  const negativeRules = rankedNodes.filter(n =>
-    n.sentiment === 'negative' || n.type === 'anti-pattern'
-  );
-  if (negativeRules.length > 0) {
-    lines.push('> [!CAUTION]');
-    for (const rule of negativeRules.slice(0, 10)) {
-      lines.push(`> **${rule.type.toUpperCase()}** — ${rule.ruleText}`);
-    }
-    lines.push('');
-  }
-
-  // Part B: Curated Rules — Positive
-  const positiveRules = rankedNodes.filter(n =>
-    n.sentiment === 'positive' && n.type !== 'anti-pattern'
-  );
-  if (positiveRules.length > 0) {
-    lines.push('> [!TIP]');
-    for (const rule of positiveRules.slice(0, 10)) {
-      lines.push(`> **${rule.type.toUpperCase()}** — ${rule.ruleText}`);
-    }
-    lines.push('');
-  }
-
-  // Part B: Curated Rules — Corrective
-  const correctiveRules = rankedNodes.filter(n => n.sentiment === 'corrective');
-  if (correctiveRules.length > 0) {
-    lines.push('> [!IMPORTANT]');
-    for (const rule of correctiveRules.slice(0, 5)) {
-      lines.push(`> **${rule.type.toUpperCase()}** — ${rule.ruleText}`);
-    }
-    lines.push('');
-  }
-
-  // Part C: Steering Queue
-  if (steeredNodes.length > 0) {
-    for (const steer of steeredNodes) {
-      const alertType = steer.sentiment === 'negative' ? 'CAUTION' :
-                       steer.sentiment === 'corrective' ? 'IMPORTANT' : 'TIP';
-      lines.push(`> [!${alertType}]`);
-      lines.push(`> **STEERED**: ${steer.ruleText}`);
-    }
-    lines.push('');
-  }
-
-  // Part D: Active Triggers
-  lines.push('> [!IMPORTANT]');
-  lines.push(`> **ACTIVE MEMORY TRIGGERS** — When any of these occur, log immediately via \`${triggerCommand}\`:`);
-  lines.push('> - User frustration/anger → `critical-failure`');
-  lines.push('> - Fix takes >3 attempts → `pattern`');
-  lines.push('> - User corrects agent knowledge → `user-preference`');
-  lines.push('> - User expresses satisfaction/praise → `user-preference` (POSITIVE)');
-  lines.push('> - New architectural pattern → `wiki`');
-  lines.push('> - Ghost file reference → `critical-failure`');
-  lines.push('> - UI hallucination → `critical-failure`');
-
-  const surface = lines.join('\n');
-
-  return {
-    surface,
-    stats: {
-      totalNodes: nodes.length,
-      negativeRules: negativeRules.length,
-      positiveRules: positiveRules.length,
-      correctiveRules: correctiveRules.length,
-      steeredNodes: steeredNodes.length,
-    },
-    nodes,
-  };
-}
-
-// ─── PHASE 19: GRAPH COMPILER (TWO-TIER) ────────────────────────────────────────
-
-/**
- * Compile the behavioral surface using the Instruction Graph.
- * Implements Two-Tier Injection: STATIC (absolute-invariants) + DYNAMIC (conditional).
- * 
- * @param {object} db - SQLite database connection
- * @param {string} mode - The classified prompt mode (e.g., 'answer', 'execute')
- * @param {object} options - Compilation options
- * @returns {object} { surface, stats }
- */
-export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
-  const { includeTemporalContext = false, timezone, episodesDir } = options;
-  const budget = options.tokenBudget || 2000;
-
-  // Map mode to subgraph name for filtering
-  const modeToSubgraph = {
-    answer: 'qa-mode',
-    execute: 'exec-mode',
-    discuss: 'shared',
-    emergency: 'shared',
-  };
-  const targetSubgraph = modeToSubgraph[mode] || 'shared';
-
-  // 1. TIER 1: INVARIANTS — high-priority shared nodes that always apply
-  //    Use priority >= 9 AND subgraph = 'shared' as invariant heuristic,
-  //    since all nodes may be typed 'conditional' in bulk-ingested graphs.
-  const staticNodes = db.prepare(`
-    SELECT * FROM graph_nodes 
-    WHERE (node_type = 'absolute-invariant')
-       OR (subgraph = 'shared' AND priority >= 9)
-    ORDER BY priority DESC, weight DESC
-  `).all();
-
-  // Deduplicate by slug (in case a node matches both conditions)
-  const seenSlugs = new Set();
-  let dedupedStatic = staticNodes.filter(n => {
-    if (seenSlugs.has(n.slug)) return false;
-    seenSlugs.add(n.slug);
-    return true;
-  });
-
-  // CRITICAL FIX: Cap absolute invariants to prevent negative constraint saturation.
-  // We must be hyper-aggressive here (max 7) because these are injected directly into INSTRUCTIONS.md.
-  // If we exceed 7-10 negative constraints, the LLM suffers from severe rule amnesia.
-  dedupedStatic = dedupedStatic.slice(0, 7);
-
-  // Create an attitude paragraph from the highest priority nodes
-  const attitudeNodes = [...dedupedStatic].slice(0, 8);
-  const attitude = generateAttitudeParagraph(attitudeNodes.map(n => ({
-    title: n.meaning.slice(0, 50),
-    sentiment: n.action_type === 'suppress' ? 'negative' : 'positive'
-  })));
-
-  // 2. TIER 2: DYNAMIC SURFACE — mode-specific nodes
-  //    Include nodes that match via subgraph OR JSON condition.mode
-  const rawDynamicNodes = db.prepare(`
-    SELECT * FROM graph_nodes 
-    WHERE slug NOT IN (${dedupedStatic.map(() => '?').join(',') || "'__none__'"})
-    ORDER BY priority DESC, weight DESC
-  `).all(...dedupedStatic.map(n => n.slug));
-
-  // Filter based on subgraph match OR JSON condition.mode match
-  const filteredCandidates = rawDynamicNodes.filter(node => {
-    // Subgraph match: 'shared' always applies, or match mode-specific subgraph
-    if (node.subgraph === 'shared') return true;
-    if (node.subgraph === targetSubgraph) return true;
-
-    // JSON condition match
+  // Build FTS5 index if db is available
+  let ftsAvailable = false;
+  if (db) {
     try {
-      const condition = JSON.parse(node.condition || '{}');
-      if (!condition.mode || condition.mode.length === 0) return true;
-      return condition.mode.includes(mode);
+      buildSkillIndex(db, skills);
+      ftsAvailable = true;
     } catch {
-      return true;
+      // FTS5 unavailable — fall back to TF-IDF only
     }
-  });
-
-  // Sort by priority then weight
-  const resolvedNodes = [...filteredCandidates].sort((a, b) => {
-    if (b.priority !== a.priority) return b.priority - a.priority;
-    return b.weight - a.weight;
-  });
-
-  // Deduplication pass — remove near-duplicate meanings (Jaccard > 0.6)
-  const deduped = [];
-  for (const node of resolvedNodes) {
-    const words = new Set(node.meaning.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-    const isDuplicate = deduped.some(existing => {
-      const existingWords = new Set(existing.meaning.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-      const intersection = [...words].filter(w => existingWords.has(w)).length;
-      const union = new Set([...words, ...existingWords]).size;
-      return union > 0 && (intersection / union) > 0.6;
-    });
-    if (!isDuplicate) deduped.push(node);
   }
 
-  // Enforce token budget (reserve half for invariants)
-  const invariantTokens = dedupedStatic.reduce((sum, n) => sum + n.meaning.length / 4, 0);
-  const dynamicBudget = Math.max(budget - invariantTokens, 500);
+  const allRoutes = [];
 
-  const dynamicNodes = [];
-  let currentTokens = 0;
-  for (const node of deduped) {
-    const estimatedTokens = node.meaning.length / 4;
-    if (currentTokens + estimatedTokens > dynamicBudget) break;
-    dynamicNodes.push(node);
-    currentTokens += estimatedTokens;
+  for (const node of nodes) {
+    // Build routing text: title + tags + first 240 chars of body
+    const routingText = [
+      node.title,
+      node.tags.join(' '),
+      (node.body ?? '').slice(0, ROUTING_BODY_CHARS),
+    ].join(' ');
+
+    // Step 1: BM25 scores
+    const bm25Scores = ftsAvailable
+      ? bm25Query(db, routingText).map(r => ({ id: r.skill_name, score: r.score }))
+      : skills.map(s => ({ id: s.name, score: 0 }));
+
+    // Step 2: TF-IDF scores
+    const tfidfScores = skills.map(s => ({
+      id: s.name,
+      score: tfidfScore(routingText, s.name, tfidfModel),
+    }));
+
+    // Step 3: Z-normalize
+    const zBm25 = zNormalize(bm25Scores);
+    const zTfidf = zNormalize(tfidfScores);
+
+    // Step 4: Combine
+    const combined = skills.map(s => ({
+      slug: node.slug,
+      skill: s.name,
+      bm25: zBm25.get(s.name) ?? 0,
+      tfidf: zTfidf.get(s.name) ?? 0,
+      combined: BM25_WEIGHT * (zBm25.get(s.name) ?? 0) + TFIDF_WEIGHT * (zTfidf.get(s.name) ?? 0),
+    }));
+
+    // Step 5: Filter by threshold + top-K
+    const qualified = combined
+      .filter(r => r.combined >= threshold)
+      .sort((a, b) => b.combined - a.combined)
+      .slice(0, topK);
+
+    // Step 6: Union with explicit routes_to_skills from frontmatter
+    const explicit = (node.routes_to_skills ?? []).map(skillName => ({
+      slug: node.slug,
+      skill: skillName,
+      bm25: 0,
+      tfidf: 0,
+      combined: 1.0, // explicit overrides always included
+    }));
+
+    const merged = [...explicit];
+    for (const r of qualified) {
+      if (!merged.some(e => e.skill === r.skill)) merged.push(r);
+    }
+
+    allRoutes.push(...merged);
   }
 
-  // 3. ASSEMBLE OUTPUT
-  const lines = [];
-  lines.push('## DISTILLED MEMORY (SUBJECT STATES)');
+  return allRoutes;
+}
 
-  // Dynamic Temporal Anchor (Always Included)
-  const currentYear = new Date().getFullYear();
-  const localTimeStr = buildTemporalContext(timezone);
-  lines.push(`> [!NOTE]`);
-  lines.push(`> **TEMPORAL ANCHOR** — ${localTimeStr}. You are a state-of-the-art ${currentYear} model. Do NOT fall back on outdated 2024/2025 limits, assumptions, or cutoff knowledge. Assume modern ${currentYear} architecture limits.`);
+// ─── SKILL INJECTION ─────────────────────────────────────────────────────────────
+
+/**
+ * Render the injected memory block for a SKILL.md.
+ * @param {import('../types/memory.js').MemoryNode[]} nodes - Nodes routed to this skill
+ * @param {string} generatedAt - ISO 8601 timestamp
+ * @returns {string}
+ */
+function renderInjectionBlock(nodes, generatedAt) {
+  const lines = [
+    INJECTION_BEGIN,
+    `<!-- @route: hybrid-bm25-tfidf, generated_at: ${generatedAt} -->`,
+    '',
+  ];
+
+  // Sort by combined score (desc), then importance, then slug for determinism
+  const sorted = [...nodes].sort((a, b) => {
+    if (b.importance !== a.importance) return b.importance - a.importance;
+    if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+    return a.slug.localeCompare(b.slug);
+  });
+
+  for (const node of sorted.slice(0, MAX_RULES_PER_SKILL)) {
+    const bodySnippet = (node.body ?? '').replace(/\n+/g, ' ').slice(0, 160);
+    lines.push(`- **${node.slug}** (confidence ${node.confidence.toFixed(2)}, importance ${node.importance}):`);
+    lines.push(`  ${bodySnippet}`);
+  }
+
   lines.push('');
+  lines.push(INJECTION_END);
+  return lines.join('\n');
+}
 
-  // Temporal Context
-  if (includeTemporalContext) {
-    lines.push(`> Graph Compilation Mode: \`${mode}\` | Nodes: ${dedupedStatic.length + dynamicNodes.length}`);
+/**
+ * Inject memory capsule into a SKILL.md file.
+ * Replaces existing block if present, or inserts after "## Authoritative Rules".
+ * Uses atomicWrite to prevent corruption.
+ *
+ * @param {import('../types/memory.js').SkillManifest} skill
+ * @param {import('../types/memory.js').MemoryNode[]} nodes - Nodes to inject
+ * @param {string} generatedAt - ISO 8601 timestamp
+ */
+export function injectIntoSkillManifest(skill, nodes, generatedAt) {
+  const raw = fs.readFileSync(skill.path, 'utf-8');
+  const block = renderInjectionBlock(nodes, generatedAt);
+
+  let updated;
+  const beginIdx = raw.indexOf(INJECTION_BEGIN);
+  const endIdx = raw.indexOf(INJECTION_END);
+
+  if (beginIdx !== -1 && endIdx !== -1) {
+    // Replace existing block
+    updated = raw.slice(0, beginIdx) + block + raw.slice(endIdx + INJECTION_END.length);
+  } else {
+    // Insert after "## Authoritative Rules" or at end
+    const insertAfter = '## Authoritative Rules';
+    const insertIdx = raw.indexOf(insertAfter);
+    if (insertIdx !== -1) {
+      const afterHeader = raw.indexOf('\n', insertIdx) + 1;
+      updated = raw.slice(0, afterHeader) + '\n' + block + '\n' + raw.slice(afterHeader);
+    } else {
+      updated = raw + '\n\n' + block + '\n';
+    }
+  }
+
+  atomicWrite(skill.path, updated);
+}
+
+// ─── TIER 1 COMPILATION ──────────────────────────────────────────────────────────
+
+/**
+ * Compile absolute-priority rules into a Tier 1 INSTRUCTIONS.md section.
+ * Hard-fails if token count exceeds TIER1_TOKEN_CEILING.
+ *
+ * @param {import('../types/memory.js').MemoryNode[]} nodes - All vault nodes
+ * @returns {string} Compiled Tier 1 instructions block
+ * @throws {Error} If the compiled block exceeds TIER1_TOKEN_CEILING tokens
+ */
+export function compileTier1Instructions(nodes) {
+  const absoluteRules = nodes
+    .filter(n => n.status === 'active' && n.priority === 'absolute')
+    .sort((a, b) => a.slug.localeCompare(b.slug)); // deterministic order
+
+  const lines = [
+    '# Behavioral Rules (Tier 1 — Absolute Invariants)',
+    '',
+    '> These rules are compiled from `memory-vault/invariants/` and are always active.',
+    '> They are immutable — do not edit this block by hand.',
+    '',
+  ];
+
+  for (const rule of absoluteRules) {
+    const prefix = rule.modality === 'must_not' ? '🛑 NEVER' : '✅ ALWAYS';
+    lines.push(`**${rule.slug}**: ${prefix} — ${(rule.body ?? rule.title).replace(/\n+/g, ' ').slice(0, 240)}`);
     lines.push('');
   }
 
-  // Static Invariants & Attitude
-  lines.push('> [!NOTE]');
-  lines.push(`> **AGENT ATTITUDE** — ${attitude}`);
-  lines.push('');
+  const content = lines.join('\n');
+  const tokenCount = approxTokenCount(content);
 
-  if (dedupedStatic.length > 0) {
-    lines.push('> [!CAUTION]');
-    lines.push('> **ABSOLUTE INVARIANTS** (Always active, every turn):');
-    for (const rule of dedupedStatic) {
-      const prefix = rule.action_type === 'suppress' ? '🛑 ' : '✅ ';
-      lines.push(`> - ${prefix}${rule.meaning}`);
-    }
-    lines.push('');
+  if (tokenCount > TIER1_TOKEN_CEILING) {
+    throw new Error(
+      `Tier 1 compilation exceeded token ceiling: ${tokenCount} tokens > ${TIER1_TOKEN_CEILING}. ` +
+      `Remove absolute rules or increase TIER1_TOKEN_CEILING. Absolute rules: ${absoluteRules.map(r => r.slug).join(', ')}`
+    );
   }
 
-  // DYNAMIC CONTEXT IS DISABLED FOR SYSTEM PROMPT INJECTION.
-  // The LLM will never voluntarily read a secondary file, but injecting 2000 tokens of 
-  // dynamic context directly into INSTRUCTIONS.md causes catastrophic context rot.
-  // We only inject the 7 Absolute Invariants above.
+  return content;
+}
 
+// ─── INDEX EMISSION ──────────────────────────────────────────────────────────────
+
+/**
+ * Serialize a MemoryNode as an IndexNode for graph-index.jsonl.
+ * @param {import('../types/memory.js').MemoryNode} node
+ * @param {string} vaultDir - Used to compute relative path
+ * @returns {object}
+ */
+function toIndexNode(node, vaultDir) {
+  const bodyText = node.body ?? node.title ?? '';
   return {
-    surface: lines.join('\n'),
-    stats: {
-      staticNodes: dedupedStatic.length,
-      dynamicNodes: dynamicNodes.length,
-      mode,
-      totalInGraph: dedupedStatic.length + rawDynamicNodes.length,
-    }
+    v: 2,
+    slug: node.slug,
+    path: path.join('.agent/memory-vault', node.category, `${node.slug}.md`),
+    type: 'memory',
+    title: node.title,
+    category: node.category,
+    status: node.status,
+    confidence: node.confidence,
+    importance: node.importance,
+    tags: node.tags,
+    routes_to_skills: node.routes_to_skills,
+    sentiment_polarity: node.sentiment_polarity,
+    sentiment_target: node.sentiment_target,
+    modality: node.modality,
+    subject: node.subject,
+    predicate: node.predicate,
+    object: node.object,
+    token_count: approxTokenCount(bodyText),
+    updated: node.updated,
+    content_sha256: sha256(bodyText),
   };
 }
 
-// ─── WRITE SURFACE TO SYSTEM PROMPT ─────────────────────────────────────────────
+// ─── ORCHESTRATOR ────────────────────────────────────────────────────────────────
 
 /**
- * Replace the behavioral surface section in the system prompt file.
+ * Full surface compilation: load → route → inject → compile Tier 1 → emit indexes.
  *
- * @param {string} filePath - Path to system prompt file (e.g., INSTRUCTIONS.md)
- * @param {string} surface - The compiled surface text
- * @param {string} [sectionHeader] - Section header to find and replace
- * @returns {{ success: boolean, error?: string }}
+ * @param {{
+ *   vaultDir: string,
+ *   skillsDir: string,
+ *   derivedDir: string,
+ *   instructionsFile: string,
+ *   db?: import('better-sqlite3').Database | null,
+ * }} paths
+ * @returns {import('../types/memory.js').CompileResult}
  */
-export function writeSurface(filePath, surface, sectionHeader = '## DISTILLED MEMORY (SUBJECT STATES)') {
-  if (!fs.existsSync(filePath)) {
-    return { success: false, error: `File not found: ${filePath}` };
+export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, db = null }) {
+  const generatedAt = new Date().toISOString();
+
+  // 1. Load nodes and skills
+  const nodes = loadNodes(vaultDir);
+  const skills = loadSkills(skillsDir);
+
+  if (nodes.length === 0) {
+    console.warn('⚠️  surface: no active nodes found in vault. Skipping injection.');
   }
 
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const sectionStart = content.indexOf(sectionHeader);
+  // 2. Route nodes to skills
+  const routes = skills.length > 0
+    ? routeNodesToSkills(nodes, skills, db)
+    : [];
 
-  if (sectionStart === -1) {
-    return { success: false, error: `Section "${sectionHeader}" not found` };
+  // 3. Build skill → nodes map (capped at MAX_RULES_PER_SKILL)
+  const skillNodeMap = new Map(); // skill name → MemoryNode[]
+  for (const route of routes) {
+    const list = skillNodeMap.get(route.skill) ?? [];
+    const node = nodes.find(n => n.slug === route.slug);
+    if (node && !list.some(n => n.slug === node.slug)) {
+      list.push(node);
+    }
+    skillNodeMap.set(route.skill, list);
   }
 
-  const afterHeader = content.indexOf('\n', sectionStart);
-  const nextSection = content.indexOf('\n## ', afterHeader + 1);
-  const sectionEnd = nextSection !== -1 ? nextSection : content.length;
+  // 4. Inject into each SKILL.md
+  for (const skill of skills) {
+    const injectedNodes = (skillNodeMap.get(skill.name) ?? [])
+      .sort((a, b) => b.importance - a.importance)
+      .slice(0, MAX_RULES_PER_SKILL);
 
-  const newContent = content.slice(0, sectionStart) + surface + '\n' + content.slice(sectionEnd);
-  fs.writeFileSync(filePath, newContent);
+    if (injectedNodes.length > 0) {
+      try {
+        injectIntoSkillManifest(skill, injectedNodes, generatedAt);
+        // Update routes_to_skills on each node
+        for (const node of injectedNodes) {
+          if (!node.routes_to_skills.includes(skill.name)) {
+            node.routes_to_skills.push(skill.name);
+          }
+        }
+      } catch (err) {
+        console.error(`surface: failed to inject into ${skill.name}: ${err.message}`);
+      }
+    }
+  }
 
-  return { success: true };
+  // 5. Compile Tier 1
+  let tier1Instructions = '';
+  try {
+    tier1Instructions = compileTier1Instructions(nodes);
+  } catch (err) {
+    console.error(`surface: Tier 1 compilation failed: ${err.message}`);
+    throw err;
+  }
+
+  // 6. Emit indexes
+  fs.mkdirSync(derivedDir, { recursive: true });
+
+  const indexLines = nodes.map(n => JSON.stringify(toIndexNode(n, vaultDir)));
+  atomicWrite(path.join(derivedDir, 'graph-index.jsonl'), indexLines.join('\n') + '\n');
+
+  const routeLines = routes.map(r => JSON.stringify(r));
+  atomicWrite(path.join(derivedDir, 'skill-routes.jsonl'), routeLines.join('\n') + '\n');
+
+  // 7. Write Tier 1 to INSTRUCTIONS.md
+  if (instructionsFile) {
+    atomicWrite(instructionsFile, tier1Instructions);
+  }
+
+  return {
+    nodes,
+    skills,
+    routes,
+    indexJsonl: indexLines.join('\n'),
+    tier1Instructions,
+    ftsRebuilt: !!db,
+    compiledAt: generatedAt,
+  };
 }
 
 /**
- * Write the behavioral surface to ALL configured system prompt files.
- * Supports multi-file injection for different IDEs.
+ * Write a full CompileResult to the filesystem.
+ * All writes are atomic to prevent corruption.
  *
- * @param {string[]} filePaths - Array of absolute paths to inject into
- * @param {string} surface - The compiled surface text
- * @param {string} [sectionHeader] - Section header to find and replace
- * @returns {{ results: Array<{ file: string, success: boolean, error?: string }> }}
+ * @param {import('../types/memory.js').CompileResult} result
+ * @param {{ derivedDir: string, instructionsFile: string }} paths
  */
-export function writeSurfaceMulti(filePaths, surface, sectionHeader = '## DISTILLED MEMORY (SUBJECT STATES)') {
-  const results = [];
-  for (const filePath of filePaths) {
-    const result = writeSurface(filePath, surface, sectionHeader);
-    results.push({ file: filePath, ...result });
-  }
-  return { results };
-}
+export function writeSurface(result, paths) {
+  const { derivedDir, instructionsFile } = paths;
+  fs.mkdirSync(derivedDir, { recursive: true });
 
-/**
- * Remove the behavioral surface section entirely from the system prompt file.
- *
- * @param {string} filePath - Path to system prompt file
- * @param {string} [sectionHeader] - Section header to find and remove
- * @returns {{ success: boolean, error?: string }}
- */
-export function clearSurface(filePath, sectionHeader = '## DISTILLED MEMORY (SUBJECT STATES)') {
-  if (!fs.existsSync(filePath)) {
-    return { success: false, error: `File not found: ${filePath}` };
-  }
-
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const sectionStart = content.indexOf(sectionHeader);
-
-  if (sectionStart === -1) {
-    return { success: false, error: `Section "${sectionHeader}" not found` };
-  }
-
-  const afterHeader = content.indexOf('\n', sectionStart);
-  const nextSection = content.indexOf('\n## ', afterHeader + 1);
-  const sectionEnd = nextSection !== -1 ? nextSection : content.length;
-
-  // CRITICAL FIX: We must PRESERVE the section header so writeSurface can find it later!
-  const newContent = content.slice(0, sectionStart) + sectionHeader + '\n\n' + content.slice(sectionEnd);
-  fs.writeFileSync(filePath, newContent);
-
-  return { success: true };
-}
-
-/**
- * Remove the behavioral surface from ALL configured system prompt files.
- *
- * @param {string[]} filePaths - Array of absolute paths
- * @param {string} [sectionHeader]
- * @returns {{ results: Array<{ file: string, success: boolean, error?: string }> }}
- */
-export function clearSurfaceMulti(filePaths, sectionHeader) {
-  const results = [];
-  for (const fp of filePaths) {
-    results.push({ file: fp, ...clearSurface(fp, sectionHeader) });
-  }
-  return { results };
+  atomicWrite(path.join(derivedDir, 'graph-index.jsonl'), result.indexJsonl);
+  atomicWrite(instructionsFile, result.tier1Instructions);
 }

@@ -1,7 +1,7 @@
 {
   "name": "@ultrachat/total-recall",
   "version": "1.0.0",
-  "description": "Local-only, Markdown-first cognitive memory system for AI coding agents. Four-layer architecture: Episode Archive → Search Index → Knowledge Graph → Behavioral Surface.",
+  "description": "Local-only, SSSS-compliant three-tier memory system for AI coding agents. Drop into any IDE or CLI (Cursor, Claude Code, Antigravity, Gemini, Cline). No database — pure Markdown vault.",
   "type": "module",
   "main": "src/core/index.mjs",
   "bin": {
@@ -15,16 +15,18 @@
     "tr-coprocessor": "./bin/tr-coprocessor",
     "tr-episodes": "./bin/tr-episodes",
     "tr-notify": "./src/coprocessor/notify.mjs",
-    "tr-memory-pipeline": "./src/agents/switch-memory-pipeline.mjs"
+    "tr-memory-pipeline": "./src/agents/switch-memory-pipeline.mjs",
+    "tr-migrate": "./scripts/migrate-nodes.mjs"
   },
   "exports": {
     ".": "./src/core/index.mjs",
-    "./fts5": "./src/core/fts5.mjs",
-    "./wiki": "./src/core/wiki.mjs",
-    "./ranking": "./src/core/ranking.mjs",
+    "./vault": "./src/core/vault.mjs",
     "./surface": "./src/core/surface.mjs",
     "./steering": "./src/core/steering.mjs",
     "./dream": "./src/core/dream.mjs",
+    "./fts5": "./src/core/fts5.mjs",
+    "./wiki": "./src/core/wiki.mjs",
+    "./ranking": "./src/core/ranking.mjs",
     "./episodes": "./src/core/episodes.mjs",
     "./crypto": "./src/core/crypto.mjs",
     "./sync-prompts": "./src/core/sync-prompts.mjs",
@@ -45,6 +47,7 @@
     "test": "node --test src/tests/*.test.mjs",
     "lint": "echo 'No lint configured yet'",
     "build": "echo 'Pure ESM — no build step needed'",
+    "migrate": "node scripts/migrate-nodes.mjs",
     "prepublishOnly": "npm test"
   },
   "keywords": [
@@ -77,14 +80,21 @@
   "files": [
     "src/",
     "bin/",
+    "scripts/",
     "templates/",
+    "docs/SSSS.md",
     "docs/ARCHITECTURE.md",
     "docs/guides/",
     "README.md",
     "LICENSE"
   ],
   "dependencies": {
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.0.0",
+    "gray-matter": "^4.0.3"
+  },
+  "optionalDependencies": {
+    "chokidar": "^4.0.0",
+    "node-cron": "^3.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
