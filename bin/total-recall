@@ -312,6 +312,8 @@ async function runInit(paths, config) {
     path.join(vaultDir, 'patterns'),
     path.join(vaultDir, 'decisions'),
     path.join(vaultDir, 'concepts'),
+    path.join(vaultDir, 'facts'),
+    path.join(vaultDir, 'lore'),
     path.join(paths.dataDir, 'memory-derived'),
     path.join(paths.dataDir, 'memory-inbox', 'pending'),
     path.join(paths.dataDir, 'memory-inbox', 'conflicts'),
