@@ -1,0 +1,22 @@
+{
+  "assertions": [
+    {
+      "id": "tr-eval-1",
+      "description": "Verify INSTRUCTIONS.md exists and is under 1,000 tokens",
+      "command": "node scripts/health-check.mjs --target instructions",
+      "expected_exit_code": 0
+    },
+    {
+      "id": "tr-eval-2",
+      "description": "Verify memory vault schema adherence for all nodes",
+      "command": "node scripts/health-check.mjs --target vault",
+      "expected_exit_code": 0
+    },
+    {
+      "id": "tr-eval-3",
+      "description": "Verify no unresolved conflicts in the inbox",
+      "command": "npx total-recall conflicts --exit-code",
+      "expected_exit_code": 0
+    }
+  ]
+}
