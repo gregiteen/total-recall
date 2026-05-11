@@ -69,7 +69,7 @@ const IDE_CONFIGS = {
 
 // ─── DETECT IDEs ────────────────────────────────────────────────────────────────
 
-function detectIDEs(root) {
+function detectIDEs(root, appConfig = null) {
   const detected = [];
 
   for (const [id, config] of Object.entries(IDE_CONFIGS)) {
@@ -78,7 +78,12 @@ function detectIDEs(root) {
       return fs.existsSync(markerPath);
     });
     if (found) {
-      detected.push({ id, ...config });
+      const clonedIde = { id, ...config };
+      // Agnostic override: If user config provides systemPromptFiles, dynamically override targets
+      if (appConfig && appConfig.systemPromptFiles && clonedIde.strategy === 'symlink-or-section') {
+        clonedIde.targets = appConfig.systemPromptFiles;
+      }
+      detected.push(clonedIde);
     }
   }
 
@@ -229,8 +234,13 @@ async function main() {
     root = path.resolve(args[rootIdx + 1]);
   }
 
+  // Load config and paths early to support agnostic dynamic target injection
+  const { loadConfig, resolvePaths } = await import('./utils.mjs');
+  const config = await loadConfig(root);
+  const paths = resolvePaths(root, config);
+
   // Detect IDEs
-  const ides = detectIDEs(root);
+  const ides = detectIDEs(root, config);
 
   if (listOnly) {
     console.log(`\n🔍 Detected IDEs in ${root}:\n`);
@@ -257,11 +267,6 @@ async function main() {
     }
     return;
   }
-
-  // Load config and paths
-  const { loadConfig, resolvePaths } = await import('./utils.mjs');
-  const config = await loadConfig(root);
-  const paths = resolvePaths(root, config);
 
   let result = null;
   if (!unsync) {

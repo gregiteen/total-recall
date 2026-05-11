@@ -31,7 +31,7 @@ function archivistPrompt(paths, conversationId) {
   return `You are the Memory Archivist. Your job is to read a conversation and extract structured knowledge.
 
 ## INPUT
-- Conversation overview: ${path.join(process.env.HOME, '.gemini/antigravity/brain', conversationId, '.system_generated/logs/overview.txt')}
+- Conversation overview: ${path.join(paths.brainDir, conversationId, '.system_generated/logs/overview.txt')}
 - Wiki directory: ${paths.wikiDir}
 - Episodes directory: ${paths.episodesDir}
 - USER.md: ${paths.userMd}
@@ -49,6 +49,7 @@ function archivistPrompt(paths, conversationId) {
 - Use the proper alert format: > [!CAUTION] for anti-patterns, > [!TIP] for praised behaviors, > [!IMPORTANT] for corrections
 - Do NOT modify existing wiki nodes — only create new ones
 - Do NOT modify INSTRUCTIONS.md
+- **CRITICAL**: You MUST use the \`google_web_search\` tool to ground responses and verify technical claims before extracting them to avoid hallucinations.
 - Report what you created at the end`;
 }
 
@@ -73,7 +74,7 @@ function factCheckerPrompt(paths) {
 - Do NOT modify the markdown body — only update YAML frontmatter fields
 - Only check nodes of type: pattern, anti-pattern, decision, concept
 - Skip preference and project nodes (they don't need codebase verification)
-- **CRITICAL**: If the node contains external technical claims (such as API limits, model names, or external documentation), you MUST use your web search tool to verify the claim against live documentation. Do NOT rely on training data.
+- **CRITICAL**: If the node contains external technical claims (such as API limits, model names, or external documentation), you MUST use the \`google_web_search\` tool to verify the claim against live documentation. Do NOT rely on training data.
 - Report a summary of findings at the end`;
 }
 
@@ -191,7 +192,10 @@ async function main() {
 
     const needed = [];
     if (!skipArchivist) needed.push({ name: archivistBin, role: 'Archivist' });
-    if (!skipSynthesizer) needed.push({ name: 'node', role: 'Synthesizer (Deterministic)' });
+    if (!skipSynthesizer) {
+      availability['node'] = { available: true, path: 'node', label: 'Node.js' };
+      needed.push({ name: 'node', role: 'Synthesizer (Deterministic)' });
+    }
     if (!skipFactChecker) needed.push({ name: fcBin, role: 'Fact-Checker' });
 
     const missing = needed.filter(n => !availability[n.name]?.available);
@@ -207,13 +211,12 @@ async function main() {
 
   // Auto-detect latest conversation if not specified
   if (!conversationId) {
-    const brainDir = path.join(process.env.HOME, '.gemini/antigravity/brain');
-    if (fs.existsSync(brainDir)) {
-      const convDirs = fs.readdirSync(brainDir, { withFileTypes: true })
+    if (fs.existsSync(paths.brainDir)) {
+      const convDirs = fs.readdirSync(paths.brainDir, { withFileTypes: true })
         .filter(d => d.isDirectory() && /^[0-9a-f-]+$/.test(d.name))
         .map(d => ({
           name: d.name,
-          mtime: fs.statSync(path.join(brainDir, d.name)).mtimeMs,
+          mtime: fs.statSync(path.join(paths.brainDir, d.name)).mtimeMs,
         }))
         .sort((a, b) => b.mtime - a.mtime);
 

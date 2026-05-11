@@ -304,8 +304,9 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
   });
 
   // CRITICAL FIX: Cap absolute invariants to prevent negative constraint saturation.
-  // Without this, the compiler dumps 150+ nodes into the prompt, breaking the LLM's attention.
-  dedupedStatic = dedupedStatic.slice(0, 15);
+  // We must be hyper-aggressive here (max 7) because these are injected directly into INSTRUCTIONS.md.
+  // If we exceed 7-10 negative constraints, the LLM suffers from severe rule amnesia.
+  dedupedStatic = dedupedStatic.slice(0, 7);
 
   // Create an attitude paragraph from the highest priority nodes
   const attitudeNodes = [...dedupedStatic].slice(0, 8);
@@ -402,16 +403,10 @@ export function compileSurfaceFromGraph(db, mode = 'discuss', options = {}) {
     lines.push('');
   }
 
-  // Dynamic Context
-  if (dynamicNodes.length > 0) {
-    lines.push('> [!TIP]');
-    lines.push(`> **ACTIVE CONTEXT** (Mode: ${mode}):`)
-    for (const rule of dynamicNodes) {
-      const prefix = rule.action_type === 'suppress' ? '🛑 AVOID: ' : '✅ DO: ';
-      lines.push(`> - ${prefix}${rule.meaning}`);
-    }
-    lines.push('');
-  }
+  // DYNAMIC CONTEXT IS DISABLED FOR SYSTEM PROMPT INJECTION.
+  // The LLM will never voluntarily read a secondary file, but injecting 2000 tokens of 
+  // dynamic context directly into INSTRUCTIONS.md causes catastrophic context rot.
+  // We only inject the 7 Absolute Invariants above.
 
   return {
     surface: lines.join('\n'),

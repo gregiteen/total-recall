@@ -11,6 +11,8 @@
  */
 
 import { execSync } from 'child_process';
+import path from 'path';
+import os from 'os';
 
 // ─── ADAPTER DEFINITIONS ────────────────────────────────────────────────────────
 
@@ -19,7 +21,9 @@ const ADAPTERS = {
     label: 'Gemini CLI',
     buildArgs: (prompt, model) => {
       const groundedPrompt = prompt + '\n\nIMPORTANT: You must use the google_web_search tool to ground your response and verify any technical claims (like model names or limits) before answering.';
-      const args = ['-p', groundedPrompt, '--yolo', '--no-sandbox', '--include-directories', '/Users/greg/.gemini', '--include-directories', '/Users/greg/.total-recall'];
+      const geminiDir = path.join(os.homedir(), '.gemini');
+      const trDir = path.join(os.homedir(), '.total-recall');
+      const args = ['-p', groundedPrompt, '--yolo', '--no-sandbox', '--include-directories', geminiDir, '--include-directories', trDir];
       if (model) args.push('-m', model);
       return args;
     },
@@ -36,7 +40,9 @@ const ADAPTERS = {
     label: 'Codex CLI',
     usesStdin: true,
     buildArgs: (prompt, model) => {
-      const args = ['exec', '--full-auto', '--sandbox', 'workspace-write', '--add-dir', '/Users/greg/.total-recall', '--add-dir', '/Users/greg/.gemini'];
+      const trDir = path.join(os.homedir(), '.total-recall');
+      const geminiDir = path.join(os.homedir(), '.gemini');
+      const args = ['exec', '--full-auto', '--sandbox', 'workspace-write', '--add-dir', trDir, '--add-dir', geminiDir];
       if (model) args.push('-m', model);
       args.push('-'); // Explicitly tell Codex to read prompt from stdin
       return args;

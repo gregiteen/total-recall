@@ -110,7 +110,7 @@ const DEFAULTS = {
   systemPromptFiles: null,  // Array of files to inject surface into (e.g., ['INSTRUCTIONS.md', 'CLAUDE.md']). Overrides systemPromptFile.
   activeContextHeader: '## ACTIVE CONTEXT',
   behavioralSurfaceHeader: '## DISTILLED MEMORY (SUBJECT STATES)',
-  watchers: ['antigravity'],
+  watchers: [],
   ranking: {
     halfLife: {
       preference: 90,
@@ -139,6 +139,8 @@ const DEFAULTS = {
     synthesizer: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
     factChecker: { binary: 'gemini', model: 'gemini-3.1-pro-preview' },
   },
+  // Default to Antigravity brain dir, but this can be overridden per repo
+  brainDir: path.join(os.homedir(), '.gemini/antigravity/brain'),
 };
 
 export async function loadConfig(root) {
@@ -199,6 +201,7 @@ export function resolvePaths(root, config) {
     // Multi-file injection: resolve all target files
     systemPromptFiles: resolveSystemPromptFiles(root, config),
     activeContextFile: path.join(root, '.agent', 'rules', 'active-context.md'),
+    brainDir: config.brainDir,
   };
 }
 
