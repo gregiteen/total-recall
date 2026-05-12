@@ -154,6 +154,7 @@ export async function handleToolCall(toolCall) {
       const result = await updateDesign(args.markdown);
       return result;
     }
+    return `Unknown tool: ${name}`;
   } catch (err) {
     console.error(`[Tools] Error handling tool call ${name}:`, err);
     return `Tool execution failed: ${err.message}`;

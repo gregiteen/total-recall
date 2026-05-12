@@ -72,6 +72,29 @@ export async function sendChat(messages: { role: string; content: string }[], si
   return data.choices?.[0]?.message?.content ?? '(empty response)'
 }
 
+// ─── TTS (Kokoro-82M) ──────────────────────────────────────────────────────────
+
+export async function fetchTtsStatus(): Promise<{ enabled: boolean }> {
+  try {
+    const res = await apiFetch(API_BASE + '/api/tts/status')
+    if (!res.ok) return { enabled: false }
+    return res.json()
+  } catch {
+    return { enabled: false }
+  }
+}
+
+export async function fetchTtsAudio(text: string): Promise<Blob | null> {
+  const res = await apiFetch(API_BASE + '/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (res.status === 503) return null  // Kokoro not configured — caller should fall back.
+  if (!res.ok) throw new Error(`TTS error: ${res.status}`)
+  return res.blob()
+}
+
 // ─── Health ────────────────────────────────────────────────────────────────────
 
 export async function fetchHealth(): Promise<HealthData> {

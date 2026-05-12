@@ -207,6 +207,55 @@ These are completely separate. Dev skills never ship with the product. Product s
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### 4.1 Network Edge & TLS Termination (DuckDNS + Caddy)
+
+Total Recall is designed to run on a single internet-reachable host. Public
+traffic terminates at Caddy on `:443`. Caddy auto-provisions a Let's Encrypt
+certificate via the HTTP-01 challenge using the user's DuckDNS subdomain.
+Express only listens on `127.0.0.1:3000` — no path between the public IP and
+the Node process bypasses Caddy.
+
+```text
+   Internet
+      │  https://<user>.duckdns.org   (TLS 1.3)
+      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Caddy (host, port 443/80)                                      │
+│  • Let's Encrypt auto-cert (HTTP-01)                            │
+│  • H2/H3 termination                                            │
+│  • Forwards to Express on 127.0.0.1:3000 over HTTP/1.1          │
+└────────────────────┬────────────────────────────────────────────┘
+                     │ loopback only — never bound to public IP
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Express (src/server/index.mjs) — bind: 127.0.0.1:3000          │
+│   POST /v1/chat/completions   → api.mjs                         │
+│   POST|GET|DELETE /mcp        → mcp.mjs                         │
+│   GET  /api/instructions      → sync consumers                  │
+│   POST /api/tts               → Kokoro façade                   │
+│   GET  /health                → diagnostics (public-safe)       │
+│   /*                          → React SPA (frontend/dist/)      │
+└────────────────────┬────────────────────────────────────────────┘
+                     │ localhost-only
+                     ▼
+   Ollama 11434 · SearXNG 8888 · Kokoro 8880 · whisper-cli
+```
+
+**DuckDNS update job.** When `--duckdns-token <tok>` is passed to
+`total-recall deploy`, the CLI installs `/etc/cron.d/duckdns` on the target.
+That cron job calls the DuckDNS `update` endpoint every 5 minutes so the A
+record stays pinned to the droplet IP even after a reboot or IP rotation.
+
+**Security cookies.** `secure: true` is set in production. Because Caddy is
+the only TLS terminator, any direct `http://<ip>:3000` request from a
+browser will be rejected by the cookie policy — login simply will not work
+over plain HTTP, which is the intended fail-closed behavior.
+
+**Bind-to-loopback enforcement.** `~/.agent/config/security.yml` sets
+`bind.host: 127.0.0.1` after the first successful HTTPS verification. This
+turns the daemon into a Caddy-only application; the public IP is no longer
+a valid target for Express directly.
+
 ---
 
 ## 5. Module Responsibilities

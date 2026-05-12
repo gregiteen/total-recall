@@ -1,0 +1,34 @@
+# Total Recall — Voice Configuration
+#
+# Wires the Sovereign OS to local speech engines. Both TTS (Kokoro-82M) and
+# STT (whisper.cpp) are optional — the system functions without either, but
+# the dashboard's voice mode and the iOS/Android shortcut voice-memory bank
+# both depend on these being configured.
+#
+# To enable Kokoro:
+#   1. Install kokoro-fastapi (or any OpenAI-compatible Kokoro server).
+#   2. Run it on the host as a systemd service bound to 127.0.0.1:8880.
+#   3. Change `engine: disabled` to `engine: kokoro` below.
+#   4. systemctl restart total-recall-server
+
+tts:
+  # "kokoro" → POST to the endpoint below using the OpenAI /v1/audio/speech contract.
+  # "disabled" → /api/tts returns 503 and the dashboard falls back to browser speechSynthesis.
+  engine: disabled
+  endpoint: http://127.0.0.1:8880/v1/audio/speech
+  voice: af_heart
+  format: wav        # wav | mp3 | flac | opus | pcm
+  speed: 1.0
+
+stt:
+  # "whisper" → call out to a local whisper.cpp binary for /api/voice/memorize.
+  # "disabled" → voice memory bank disabled; mobile shortcuts will receive 503.
+  engine: disabled
+  model_path: ~/.agent/models/whisper/ggml-tiny.en.bin
+  binary: whisper-cli   # must be on $PATH or absolute
+
+capture:
+  archive_audio: true             # keep raw audio in ~/.agent/files/voice/
+  max_duration_seconds: 120
+  auto_categorize: true           # let Gemma decide the SSSS category
+  respond_with_voice: false       # if true, dashboard plays a TTS reply automatically

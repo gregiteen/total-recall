@@ -22,7 +22,7 @@ All `src/core/` modules exist and are individually functional.
 - [x] `src/core/pattern_detector.mjs` — User pattern recognition → task generation.
 - [x] `src/core/blackboard.mjs` — Workflow state tracking.
 - [x] `src/core/evolution.mjs` — Schema self-evolution proposals.
-- [ ] `src/core/watchdog.mjs` — Log monitor + automated circuit breakers (PRD §9.3). ⚠️ **FALSE COMPLETION** — File exists and has circuit breaker *state tracking* (in-memory counters, IP blocking), but is NOT wired to any log monitor (no JSONL log tailing, no `fs.watch` / `setInterval` polling of log files). The PRD requirement of "automated circuit breakers triggered by log events" is unimplemented.
+- [x] `src/core/watchdog.mjs` — Log monitor + automated circuit breakers (PRD §9.3). ✅ *Wired 2026-05-12: `logger.mjs` exposes an `EventEmitter` (`logEvents`) and emits a `log` event for every entry. `watchdog.mjs#attachLogMonitor()` subscribes and runs `LOG_PATTERNS` that fire `recordSandboxFailure` / `recordAuthFailure` / `recordLatency` / `recordTokens` automatically; `attachLogTail()` is the equivalent for out-of-process daemons. Server entry attaches the monitor on boot. Covered by `src/core/watchdog.spec.mjs`.*
 
 ## ✅ Phase 1: Server Layer
 
@@ -74,7 +74,7 @@ React SPA providing visual interface for all Brain operations.
 - [x] System health dashboard (inference stats, disk, uptime).
 - [x] File manager for sovereign storage (`~/.agent/files/`).
 - [x] Settings/Config editor (frontier.yml, security.yml).
-- [ ] Voice mode toggle (Kokoro-82M TTS integration). ⚠️ **FALSE COMPLETION** — `ChatPage.tsx` has a `voiceMode` toggle that uses browser `speechSynthesis` as a placeholder. Comment on line 28 literally reads: `"// Placeholder for Kokoro-82M TTS integration"`. No `src/core/tts.mjs` exists. No `/api/tts` endpoint. No Kokoro integration anywhere in `src/`.
+- [x] Voice mode toggle (Kokoro-82M TTS integration). ✅ *2026-05-12 — `src/core/tts.mjs` implements the Kokoro façade (OpenAI-compatible `/v1/audio/speech` POST). `src/server/api.mjs` exposes `POST /api/tts` + `GET /api/tts/status` (503 when disabled so the frontend falls back gracefully). `templates/default-config/voice.yml` ships engine-disabled by default. `frontend/src/pages/ChatPage.tsx` probes `/api/tts/status`, plays the returned audio blob when Kokoro is available, and falls back to browser `speechSynthesis` otherwise. Covered by `src/core/tts.spec.mjs` (5 tests).*
 - [x] Build pipeline: `npm run build` → static assets served by Express.
 
 ## ✅ Phase 4: Security & Operations
@@ -93,7 +93,7 @@ Production-ready security, TLS, auth, and observability.
 - [x] Watchdog: auth lockout (≥5 failures → IP block). ✅ *`recordAuthFailure()` / `isIpBlocked()` implemented with quarantine persistence.*
 - [x] JSONL structured logging for all subsystems.
 - [x] `/health` endpoint with full system diagnostics.
-- [ ] Watchdog wired to log file monitor. ⚠️ **NOT IMPLEMENTED** — watchdog has state but no log-tailing/event-driven trigger.
+- [x] Watchdog wired to log file monitor. ✅ *2026-05-12 — `logger.mjs` emits structured events; `watchdog.attachLogMonitor()` reacts in-process, `attachLogTail()` tails the JSONL file for daemon-isolated processes. Verified in `watchdog.spec.mjs`.*
 
 ### ✅ Frontend Auth Gate (Completed 2026-05-12T20:32Z)
 
@@ -142,7 +142,7 @@ Production-ready security, TLS, auth, and observability.
 
 #### Documentation
 - [x] **`README.md`** — Add "Setting up HTTPS" section: DuckDNS signup → `npx total-recall deploy --domain <subdomain>.duckdns.org --duckdns-token <token>`.
-- [ ] **`docs/projects/in-progress/master/ARCHITECTURE.md`** — Update networking diagram to show Caddy TLS termination between public internet and Express.
+- [x] **`docs/projects/in-progress/master/ARCHITECTURE.md`** — ✅ *2026-05-12 — Added §4.1 "Network Edge & TLS Termination (DuckDNS + Caddy)" with full ASCII diagram showing Internet → Caddy:443 (Let's Encrypt) → Express on 127.0.0.1:3000 → local services (Ollama/SearXNG/Kokoro). Documents the DuckDNS update cron, secure-cookie behavior, and bind-to-loopback enforcement.*
 
 ## ⏳ Phase 5: Testing & Validation
 
@@ -153,8 +153,8 @@ Prove all acceptance criteria from PRD §12.
 - [x] Vitest specs for `schema.mjs` validation (valid + invalid nodes). ✅ *`src/core/schema.spec.mjs` — 117 lines.*
 - [ ] Clean-account walkthrough: deploy on empty VM → working Brain. ⚠️ **FALSE COMPLETION** — No automated test or documented walkthrough result exists. `test/` directory does not exist. This is a manual acceptance test that has never been performed.
 - [x] Code Mode sandbox escape prevention test. ✅ *`src/core/sandbox.spec.mjs` — tests timeout, syntax error, and stdout capture. Escape prevention via timeout confirmed.*
-- [ ] MCP handshake + tool call integration test. ⚠️ **FALSE COMPLETION** — `src/server/mcp.spec.mjs` has exactly 1 test: it checks that a POST without a session ID returns 400. No handshake, no tool call round-trip, no real MCP integration test.
-- [ ] API proxy memory injection integration test. ⚠️ **FALSE COMPLETION** — `src/server/api.spec.mjs` has 1 test: it checks that unauthenticated `/v1/chat/completions` returns 401. No memory injection test.
+- [x] MCP handshake + tool call integration test. ✅ *2026-05-12 — `src/server/mcp.spec.mjs` now contains 4 tests: rejects missing session ID, completes the `initialize` handshake (asserts `mcp-session-id` header + `serverInfo.name === 'total-recall'`), `tools/list` returns the 6 core SSSS tools, and `tools/call` against `list_memory` round-trips with a valid JSON content payload.*
+- [x] API proxy memory injection integration test. ✅ *2026-05-12 — `src/server/api.spec.mjs` now mocks `callFrontierRaw` and writes fixture INSTRUCTIONS.md + ssss/SKILL.md, then asserts the captured system message contains both fixture markers AND the canonical headers (`=== TIER 1 HOT MEMORY INSTRUCTIONS ===`, `=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===`). A second test confirms that a caller-supplied system message is preserved by prepending the injected block.*
 - [x] Backup/restore round-trip test. ✅ *`src/cli/backup.spec.mjs` tests that tar command is invoked correctly via mocked child_process.*
 - [x] Dream cycle completion test (Light → REM → Deep). ✅ *`src/core/dream.spec.mjs` tests `evaluateCandidates()` for promotion and conflict quarantine.*
 - [ ] AC-1 through AC-14 acceptance criteria matrix with test IDs. ⚠️ **PARTIAL** — `ACCEPTANCE_MATRIX.md` exists and maps ACs to test IDs. However, AC-2 through AC-14 are mostly "Manual Verification" with no automated test coverage. The matrix document exists but the tests it references do not.
@@ -202,20 +202,20 @@ Discovered during session on 2026-05-12. Addresses critical gaps in how Total Re
 ### Remaining Work
 
 **Hybrid Mode (Cloud ↔ Local Sync)**
-- [ ] **`src/cli/init.mjs` — `--brain <url>` flag** — Register the workspace with a cloud brain. Save brain URL to `.agent/config/brain.json`. Pull initial compiled instructions from the brain's `/api/instructions` endpoint.
-- [ ] **`src/cli/sync.mjs`** — New CLI command. Pulls latest compiled `INSTRUCTIONS.md` from the cloud brain and injects into local IDE files. `--watch` flag for continuous 60s polling.
-- [ ] **`src/cli/status.mjs`** — New CLI command. Shows brain connection status, last sync time, local vs. remote vault hash comparison, stale rule count.
-- [ ] **`src/server/api.mjs` — `GET /api/instructions`** — New API endpoint. Serves the compiled `INSTRUCTIONS.md` content for remote sync consumers.
-- [ ] **`bin/total-recall.mjs`** — Register `sync` and `status` commands in CLI router.
+- [x] **`src/cli/init.mjs` — `--brain <url>` flag** — ✅ *2026-05-12 — `init` accepts `--brain <url>` and `--token <tok>`. Writes `.agent/config/brain.json` and prints next-step `sync` hint.*
+- [x] **`src/cli/sync.mjs`** — ✅ *2026-05-12 — Pulls `/api/instructions`, writes `~/.agent/INSTRUCTIONS.md`, injects the canonical block into `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`/`.cursorrules`/`.clauderules` non-destructively. `--watch`, `--interval`, `--brain`, `--token` flags supported.*
+- [x] **`src/cli/status.mjs`** — ✅ *2026-05-12 — Reads `brain.json` + `sync-state.json`, probes `/api/instructions`, compares local vs. remote sha256, lists registered targets. `--json` for machine output.*
+- [x] **`src/server/api.mjs` — `GET /api/instructions`** — ✅ *2026-05-12 — Returns `{ content, sha256, bytes, modified }`. Gated by `requireAuth` via the `/api` prefix.*
+- [x] **`bin/total-recall.mjs`** — ✅ *2026-05-12 — `sync` and `status` registered in CLI router and help output.*
 
 **Session Persistence**
-- [ ] **`src/server/api.mjs` — Session JSONL writing** — After each completed chat exchange, write the request/response pair to `.agent/sessions/<session_id>.jsonl`. Dream Cycle Light Sleep already scans this directory.
+- [x] **`src/server/api.mjs` — Session JSONL writing** — ✅ *2026-05-12 — After every chat response, `writeSessionRecord()` appends a JSON line to `~/.agent/sessions/<session_id>.jsonl` (session id derived from `x-session-id` header → cookie → daily fallback). Each record includes the full message array, model, latency, and approx token count. Dream Cycle Light Sleep now has real data to scan.*
 
 **Scaffold Completeness**
-- [ ] **`scaffold/.agent/skills/ssss/SKILL.md`** — Ship a minimal SSSS schema reference skill in the scaffold so it is available to `npx` users who haven't cloned the git repo.
+- [x] **`scaffold/.agent/skills/ssss/SKILL.md`** — ✅ *2026-05-12 — Full SSSS SKILL.md + schema reference now shipped under `scaffold/.agent/skills/ssss/`. `init.mjs` prefers this scaffold copy so `npx` users get the schema without cloning the repo.*
 
 **Watchdog Integration (Phase 4 Gap)**
-- [ ] **`watchdog.mjs`** — Wire circuit breakers to actual log events. Implement `watchdog.mjs` log-tailing or hook into `logger.mjs` to auto-fire `recordSandboxFailure()`, `recordAuthFailure()`, etc. from log entries rather than requiring manual call-site integration only.
+- [x] **`watchdog.mjs`** — ✅ *2026-05-12 — `attachLogMonitor()` subscribes to `logger.logEvents`; pattern table fires `recordSandboxFailure`, `recordAuthFailure`, `recordLatency`, `recordTokens` from log entries (subsystem/level + meta fields). Self-emissions are filtered to prevent recursion. `attachLogTail()` covers the out-of-process daemon case via JSONL polling. Covered by `src/core/watchdog.spec.mjs`.*
 
 **Documentation**
 - [x] **PRD §4.3** — Unified Surface Model section added. Reconciles Proxy Architecture with Local Init Model.
@@ -288,10 +288,64 @@ Voice-operated memory capture from iOS and Android. Users speak into their phone
 - [ ] **Voice config** — `archive_audio`, `max_duration_seconds`, `respond_with_voice` settings.
 
 ### TTS (Kokoro-82M)
-- [ ] **`src/core/tts.mjs`** — Kokoro-82M integration for text-to-speech. Used for voice mode in dashboard and optional voice responses to `/api/voice/memorize`.
-- [ ] **`src/server/api.mjs` — `POST /api/tts`** — Text-to-speech endpoint for dashboard voice mode.
+- [x] **`src/core/tts.mjs`** — ✅ *2026-05-12 — Kokoro façade implemented (OpenAI `/v1/audio/speech` contract). Tests in `src/core/tts.spec.mjs`.*
+- [x] **`src/server/api.mjs` — `POST /api/tts`** — ✅ *2026-05-12 — Endpoint live with 5000-char cap and 503 fallback when engine is disabled. `GET /api/tts/status` companion endpoint added. Frontend `ChatPage.tsx` consumes both.*
 
 ### Documentation
 - [x] **PRD §4.5** — Voice Memory Bank section written with full pipeline, API spec, iOS/Android setup, voice config.
 - [ ] **ARCHITECTURE.md** — Add Voice Memory Bank module layout.
 - [ ] **README.md** — Add voice capture to Quick Start.
+
+---
+
+## ⏳ Phase 11: Discovered Issues & Sharp Edges
+
+Items found during implementation sessions. Each entry includes file path,
+symptom, and an acceptance criterion. Per the `fix-or-add-to-tracker`
+preference (`.agent/memory-vault/preferences/fix-or-add-to-tracker.md`),
+non-trivial observations land here instead of being mentioned in chat.
+
+### CLI workspace awareness
+
+- [x] **`src/cli/compile.mjs`, `dream.mjs`, `reindex.mjs`, `lint.mjs`** —
+  Default `AGENT_DIR` was hardcoded to `~/.agent/`, so running
+  `npx total-recall compile` from a workspace silently operated on the
+  user's personal brain instead of the project vault. ✅ *2026-05-12 — Extracted
+  `resolveAgentDir()` into `src/cli/agent-dir.mjs`. Each of these CLIs now
+  prefers `./.agent/memory-vault/` when present, falling back to
+  `~/.agent/` otherwise. Verified with `npx total-recall compile` from
+  the repo root (7 nodes processed locally).*
+
+- [ ] **`src/cli/backup.mjs`, `export.mjs`, `import.mjs`, `restore.mjs`** —
+  These four tar-based commands embed `os.homedir()` directly in their
+  shell invocations (`tar -C "${os.homedir()}" .agent`), so they ignore
+  the `resolveAgentDir()` workspace fallback that the vault-touching
+  commands now use. Acceptance:
+    1. Each of the four resolves its source/destination via
+       `resolveAgentDir()`, with the tar `-C` flag using
+       `path.dirname(AGENT_DIR)` and the entry using `path.basename(AGENT_DIR)`.
+    2. `npx total-recall backup` from a workspace tars the workspace
+       vault, not the user's home brain.
+    3. `npx total-recall restore <tarball>` lands files in the same
+       logical location it would have been backed up from.
+    4. New Vitest spec covers the cwd-vs-home resolution path.
+
+### Lint debt
+
+- [ ] **`frontend/src/pages/FilesPage.tsx:31`** — ESLint flags
+  "Calling setState synchronously within an effect can trigger cascading
+  renders". Wrap the state update in a function-form setter or move the
+  side effect outside the synchronous effect body. Acceptance: lint
+  daemon shows 0 issues for this file.
+
+- [ ] **`frontend/src/pages/TasksPage.tsx:23`** — Same cascading-setState
+  pattern. Acceptance: lint daemon shows 0 issues for this file.
+
+### Test fragility
+
+- [ ] **`src/server/api.spec.mjs` writes fixtures into `~/.agent/`** — The
+  memory-injection test temporarily overwrites the real `INSTRUCTIONS.md`
+  and `skills/ssss/SKILL.md`, restoring afterward. If the test crashes
+  between the write and the restore, the user's brain ends up corrupted.
+  Acceptance: switch the fixture writes to a `process.env.AGENT_DIR`
+  override + `mkdtempSync`, with no touching of the real `~/.agent/`.
