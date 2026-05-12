@@ -21,10 +21,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_DIR = path.join(os.homedir(), '.agent');
 
 function parseArgs(args) {
-  const opts = { vault: null, quiet: false, help: false };
+  const opts = { vault: null, skills: null, derived: null, instructions: null, quiet: false, help: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--vault': opts.vault = args[++i]; break;
+      case '--skills': opts.skills = args[++i]; break;
+      case '--derived': opts.derived = args[++i]; break;
+      case '--instructions': opts.instructions = args[++i]; break;
       case '--quiet': case '-q': opts.quiet = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -39,9 +42,12 @@ function printHelp() {
   Usage: total-recall compile [options]
 
   Options:
-    --vault <path>     Override vault directory (default: ~/.agent/memory-vault)
-    --quiet, -q        Suppress detailed output
-    --help, -h         Show this help
+    --vault <path>         Override vault directory (default: ~/.agent/memory-vault)
+    --skills <path>        Override skills directory (default: ~/.agent/skills)
+    --derived <path>       Override derived directory (default: ~/.agent/memory-derived)
+    --instructions <path>  Override instructions file (default: ~/.agent/INSTRUCTIONS.md)
+    --quiet, -q            Suppress detailed output
+    --help, -h             Show this help
 `);
 }
 
@@ -50,9 +56,9 @@ export default async function compile(args) {
   if (opts.help) { printHelp(); return; }
 
   const vaultDir = opts.vault || path.join(AGENT_DIR, 'memory-vault');
-  const skillsDir = path.join(AGENT_DIR, 'skills');
-  const derivedDir = path.join(AGENT_DIR, 'memory-derived');
-  const instructionsFile = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+  const skillsDir = opts.skills || path.join(AGENT_DIR, 'skills');
+  const derivedDir = opts.derived || path.join(AGENT_DIR, 'memory-derived');
+  const instructionsFile = opts.instructions || path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
   if (!opts.quiet) {
     console.error('\n  🔄 Compiling surface...');

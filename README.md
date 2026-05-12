@@ -36,11 +36,34 @@ Total Recall 3.0 implements a **Zero-Parser Kernel** that reads, writes, and exe
 
 ## 🛠 Quick Start
 
-### 1. Provision the Sovereign OS
-Total Recall 3.0 is packaged as a standard npm executable. To deploy the system onto a fresh Linux/Mac environment:
+### Option A — Adding to an Existing Project (Recommended)
 
-> **☁️ Recommended: Cloud VM Deployment**
-> For the absolute best 24/7 autonomous experience, we highly recommend running Total Recall 3.0 on a dedicated Cloud VM. **Oracle Cloud's "Always Free" tier** offers an Ampere ARM A1 instance with 4 OCPUs and **24GB of RAM** — the perfect zero-cost environment to run our 26B parameter model natively. See our [Cloud VM Deployment Guide](./docs/how-to/deploy-cloud-vm.md) for full instructions.
+If you already have a project with instructions set up for Cursor, Claude Code, Antigravity, or any other IDE agent, run this from your project root:
+
+```bash
+cd ~/my-project
+npx total-recall init
+```
+
+This will:
+1. Create a `.agent/memory-vault/` directory structure in your project
+2. Seed the core SSSS schema skill so your AI knows how to write memory nodes
+3. Inject a clearly-marked `<!-- BEGIN INJECTED MEMORY -->` block into your **existing** `GEMINI.md`, `.cursorrules`, `CLAUDE.md`, or `AGENTS.md` — without touching any of your existing instructions
+4. If none of those files exist, it creates `INSTRUCTIONS.md` with IDE symlinks automatically
+
+> Your existing IDE instructions are **never overwritten**. Total Recall only manages its own clearly-marked section.
+
+After init, your AI can immediately start saving memories:
+```bash
+# Rebuild the memory surface after adding new vault nodes
+npx total-recall compile
+```
+
+---
+
+### Option B — Full Sovereign OS Deployment (Cloud VM / Dedicated Machine)
+
+To deploy the full autonomous AI stack on a fresh Linux/Mac environment:
 
 ```bash
 # Provision models, VFS, and system services

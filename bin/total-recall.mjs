@@ -7,6 +7,7 @@
  * Routes subcommands to handlers in src/cli/.
  *
  * Usage:
+ *   npx total-recall init            Bootstrap Total Recall into an existing project
  *   npx total-recall deploy          Provision a target machine
  *   npx total-recall compile         Rebuild indexes + INSTRUCTIONS.md
  *   npx total-recall dream           Trigger a dream cycle
@@ -28,6 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 
 const COMMANDS = {
+  init:     'init.mjs',
   deploy:   'deploy.mjs',
   compile:  'compile.mjs',
   dream:    'dream.mjs',
@@ -51,6 +53,7 @@ function printHelp() {
   Usage: total-recall <command> [options]
 
   Commands:
+    init                Bootstrap Total Recall into an existing project repo
     deploy              Provision a target machine (Ollama, models, VFS, Caddy, systemd)
     compile             Rebuild indexes + INSTRUCTIONS.md from the memory vault
     dream               Manually trigger a dream cycle (Light → REM → Deep)

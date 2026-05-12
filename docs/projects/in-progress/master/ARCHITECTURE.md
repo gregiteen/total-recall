@@ -32,8 +32,11 @@ total-recall/
 │   └── total-recall.mjs              # CLI entrypoint (npx total-recall <cmd>)
 ├── src/
 │   ├── cli/                           # CLI subcommand handlers
+│   │   ├── init.mjs                   #   Bootstrap Total Recall into existing repo
 │   │   ├── deploy.mjs                 #   Provision host (Ollama, models, VFS, systemd)
 │   │   ├── compile.mjs                #   Rebuild indexes + INSTRUCTIONS.md
+│   │   ├── sync.mjs                   #   Pull instructions from cloud brain
+│   │   ├── status.mjs                 #   Show brain connection + sync status
 │   │   ├── dream.mjs                  #   Trigger dream cycle manually
 │   │   ├── reindex.mjs                #   Delete + regenerate derived indexes
 │   │   ├── lint.mjs                   #   Validate vault nodes against schema v2
@@ -237,8 +240,11 @@ These are completely separate. Dev skills never ship with the product. Product s
 
 | Module | CLI Command | Responsibility |
 |:---|:---|:---|
+| `init.mjs` | `total-recall init [--brain <url>]` | Bootstrap Total Recall into an existing project repo |
 | `deploy.mjs` | `total-recall deploy` | Provision host: Ollama, models, VFS, Caddy, systemd |
-| `compile.mjs` | `total-recall compile` | Rebuild all derived indexes + INSTRUCTIONS.md |
+| `compile.mjs` | `total-recall compile` | Rebuild all derived indexes + INSTRUCTIONS.md + IDE shims |
+| `sync.mjs` | `total-recall sync [--watch]` | Pull compiled instructions from cloud brain into local workspace |
+| `status.mjs` | `total-recall status` | Show brain connection, last sync, vault hash, stale rules |
 | `dream.mjs` | `total-recall dream` | Manually trigger a dream cycle |
 | `reindex.mjs` | `total-recall reindex` | Delete + regenerate all derived indexes |
 | `lint.mjs` | `total-recall lint` | Validate all vault nodes against schema v2 |
@@ -264,7 +270,24 @@ All traffic flows through Caddy for auto-TLS on port 443.
 
 ---
 
-## 7. Data Flow
+## 7. IDE Instruction File Management
+
+The `compile` command (and the `init` command on first run) automatically manages IDE-specific instruction files:
+
+| File | IDE | Managed By |
+|:---|:---|:---|
+| `INSTRUCTIONS.md` | Canonical source | Written fresh by `surface.mjs` on every compile |
+| `GEMINI.md` | Antigravity (Google DeepMind) | Symlink → `INSTRUCTIONS.md` (if new) or injected block (if existing) |
+| `AGENTS.md` | Cross-tool / Codex | Symlink → `INSTRUCTIONS.md` (if new) or injected block (if existing) |
+| `.cursorrules` | Cursor | Symlink → `INSTRUCTIONS.md` (if new) or injected block (if existing) |
+| `CLAUDE.md` | Claude Code | Symlink → `INSTRUCTIONS.md` (if new) or injected block (if existing) |
+| `.clauderules` | Claude Code (alt) | Symlink → `INSTRUCTIONS.md` (if new) or injected block (if existing) |
+
+**Non-destructive injection:** If an IDE file already exists with user-authored content, Total Recall injects a `<!-- BEGIN INJECTED MEMORY -->` block at the bottom. This block is replaced on every compile. User content above and below the block is never modified.
+
+---
+
+## 8. Data Flow
 
 ```text
 User Request (IDE / Dashboard / MCP Client)
@@ -291,3 +314,67 @@ Express Server (src/server/index.mjs)
     └─► /* (static React SPA)
           Dashboard UI for all operations
 ```
+
+---
+
+## 9. Sync Fabric Architecture
+
+The Sync Fabric distributes compiled knowledge from the brain to registered targets and ingests changes from bidirectional targets. See PRD §4.4.
+
+### 9.1 Module Layout
+
+```text
+src/core/sync/
+├── engine.mjs              # Orchestrator: diff → push → pull → conflict check
+├── state.mjs               # Per-target sync state (hashes, timestamps)
+└── adapters/
+    ├── workspace.mjs        # Local filesystem (direct read/write)
+    ├── git.mjs              # Git CLI (pull → commit → push)
+    ├── s3.mjs               # S3-compatible API (AWS, B2, R2, MinIO)
+    ├── gdrive.mjs           # Google Drive API v3
+    └── webhook.mjs          # HTTP POST event notifications
+```
+
+### 9.2 Sync Data Flow
+
+```text
+Dream Cycle Compile / Manual Compile / Chat Session End
+        │
+        ▼
+  surface.mjs → INSTRUCTIONS.md rebuilt
+        │
+        ▼
+  sync/engine.mjs → detectChanges(lastSyncState)
+        │
+        ├─► Push to each target (per sync mode):
+        │     workspace  → fs.writeFile + injectIntoExisting()
+        │     git        → git add + commit + push
+        │     s3         → putObject() for changed files
+        │     gdrive     → files.update() / files.create()
+        │     webhook    → POST event payload
+        │
+        ├─► Pull from bidirectional targets:
+        │     workspace  → scan .agent/memory-vault/ for new/changed .md
+        │     git        → git pull, detect new commits
+        │     gdrive     → list changes since last sync token
+        │
+        ├─► For each pulled change:
+        │     vault.mjs  → parse frontmatter
+        │     steering.mjs → 2-layer conflict detection
+        │     conflict?  → quarantine to memory-inbox/conflicts/
+        │     clean?     → activate node, trigger recompile
+        │
+        └─► Log all events to ~/.agent/logs/sync.jsonl
+```
+
+### 9.3 Configuration
+
+Sync targets are defined in `~/.agent/config/sync.yml`. The schema is validated by `schema.mjs` at startup.
+
+Each target specifies:
+- `name` — Unique identifier
+- `type` — Transport adapter (`workspace`, `git`, `s3`, `gdrive`, `webhook`)
+- `mode` — What to sync (`instructions-only`, `skills`, `vault`, `full`, `notifications`)
+- `direction` — `push` (brain → target) or `bidirectional` (two-way)
+- Transport-specific fields (path, repo URL, bucket, folder ID, webhook URL)
+- Credentials reference via `{{secrets.*}}` mustache syntax

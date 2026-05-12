@@ -25,6 +25,7 @@
  *   --skip-systemd      Skip systemd unit installation
  *   --skip-compile      Skip initial compile
  *   --domain <domain>   Set domain for Caddyfile (default: localhost)
+ *   --duckdns-token <t> DuckDNS API token — installs IP-update cron job
  *   --dry-run           Print what would be done without executing
  *   --help              Show this help
  */
@@ -94,6 +95,7 @@ function parseArgs(args) {
     skipSystemd: false,
     skipCompile: false,
     domain: 'localhost',
+    duckdnsToken: null,
     dryRun: false,
     help: false,
   };
@@ -106,6 +108,7 @@ function parseArgs(args) {
       case '--skip-systemd': opts.skipSystemd = true; break;
       case '--skip-compile': opts.skipCompile = true; break;
       case '--domain': opts.domain = args[++i]; break;
+      case '--duckdns-token': opts.duckdnsToken = args[++i]; break;
       case '--dry-run': opts.dryRun = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -127,8 +130,15 @@ function printHelp() {
     --skip-systemd      Skip systemd unit installation
     --skip-compile      Skip initial compile
     --domain <domain>   Set domain for Caddyfile (default: localhost)
+    --duckdns-token <t> DuckDNS API token — installs IP-update cron (*.duckdns.org domains)
     --dry-run           Print plan without executing
     --help, -h          Show this help
+
+  DuckDNS HTTPS setup:
+    1. Sign up at https://www.duckdns.org and claim a subdomain
+    2. Point the subdomain at your server IP
+    3. Run: npx total-recall deploy --domain yourname.duckdns.org --duckdns-token YOUR_TOKEN
+    4. Caddy auto-provisions a Let's Encrypt TLS cert (port 80 must be open)
 `);
 }
 
@@ -369,7 +379,38 @@ export default async function deploy(args) {
     }
   }
 
-  // ── Step 9: Install systemd units ──
+  // ── Step 8.5: DuckDNS IP-update cron job ──
+  if (opts.duckdnsToken && opts.domain.endsWith('.duckdns.org')) {
+    logStep('8.5/11', 'Installing DuckDNS IP-update cron job');
+    const subdomain = opts.domain.replace('.duckdns.org', '');
+    const cronLine = `*/5 * * * * root curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o /var/log/duckdns.log`;
+    const cronFile = '/etc/cron.d/total-recall-duckdns';
+    if (opts.dryRun) {
+      log(`  Would write cron job to ${cronFile}`);
+      log(`  Cron: ${cronLine}`);
+    } else if (platform === 'linux') {
+      // Immediately update DNS record
+      try {
+        run(`curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o /tmp/duckdns-update.log`);
+        const result = fs.readFileSync('/tmp/duckdns-update.log', 'utf8').trim();
+        if (result === 'OK') {
+          logOk(`DuckDNS record updated for ${opts.domain}`);
+        } else {
+          logWarn(`DuckDNS update response: ${result} — check your token`);
+        }
+      } catch (e) {
+        logWarn(`DuckDNS update failed: ${e.message}`);
+      }
+      // Install cron job for ongoing updates
+      fs.writeFileSync('/tmp/total-recall-duckdns', cronLine + '\n');
+      run('sudo cp /tmp/total-recall-duckdns ' + cronFile);
+      run('sudo chmod 644 ' + cronFile);
+      logOk(`DuckDNS cron installed at ${cronFile} (updates every 5 minutes)`);
+    } else {
+      logWarn('DuckDNS cron install only supported on Linux — run curl manually or use a launchd plist on macOS');
+    }
+  }
+
   logStep('9/11', 'Installing systemd units');
   if (opts.skipSystemd || !hasSystemd()) {
     if (!hasSystemd() && !opts.skipSystemd) {

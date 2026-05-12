@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import './App.css'
-import { getApiBase, setApiBase } from './api'
+import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback } from './api'
+import LoginPage from './pages/LoginPage'
 import ChatPage from './pages/ChatPage'
 import MemoryPage from './pages/MemoryPage'
 import HealthPage from './pages/HealthPage'
@@ -10,7 +11,16 @@ import SettingsPage from './pages/SettingsPage'
 import TasksPage from './pages/TasksPage'
 import FilesPage from './pages/FilesPage'
 
-function Sidebar() {
+// ─── Auth state type ──────────────────────────────────────────────────────────
+type AuthState = 'loading' | 'authed' | 'unauthed'
+
+// ─── Sidebar ─────────────────────────────────────────────────────────────────
+
+interface SidebarProps {
+  onLogout: () => void
+}
+
+function Sidebar({ onLogout }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -63,12 +73,12 @@ function Sidebar() {
       </nav>
       <div className="sidebar-footer">
         <div style={{ marginBottom: 12 }}>
-          <select 
-            value={getApiBase()} 
+          <select
+            value={getApiBase()}
             onChange={e => setApiBase(e.target.value)}
-            style={{ 
-              width: '100%', 
-              background: 'var(--bg-secondary)', 
+            style={{
+              width: '100%',
+              background: 'var(--bg-secondary)',
               color: 'var(--text-secondary)',
               border: '1px solid var(--border)',
               borderRadius: 6,
@@ -81,13 +91,45 @@ function Sidebar() {
             <option value="http://104.131.81.127:3001">DigitalOcean (104.131.81.127)</option>
           </select>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-          <span className="pulse" /> System Online
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
+            <span className="pulse" /> System Online
+          </div>
+          {/* Logout button */}
+          <button
+            id="btn-logout"
+            onClick={onLogout}
+            title="Sign out"
+            style={{
+              background: 'none',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              color: 'var(--text-tertiary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 8px',
+              fontSize: 11,
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#ef4444'; (e.currentTarget as HTMLElement).style.borderColor = '#ef4444' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-tertiary)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sign out
+          </button>
         </div>
       </div>
     </aside>
   )
 }
+
+// ─── Main content (routes) ────────────────────────────────────────────────────
 
 function MainContent() {
   const location = useLocation();
@@ -101,7 +143,7 @@ function MainContent() {
   }, []);
 
   const showChat = isChat || floatingChat;
-  
+
   const chatStyle: React.CSSProperties = floatingChat ? {
     display: 'flex',
     position: 'fixed',
@@ -152,11 +194,59 @@ function MainContent() {
   );
 }
 
+// ─── Root App with auth gate ──────────────────────────────────────────────────
+
 function App() {
+  const [authState, setAuthState] = useState<AuthState>('loading')
+
+  // Register 401 interceptor so any API call that gets a 401 flips us to unauthed
+  useEffect(() => {
+    registerUnauthedCallback(() => setAuthState('unauthed'))
+    return () => {}
+  }, [])
+
+  // Session check on mount — probe /auth/me before rendering anything
+  useEffect(() => {
+    checkSession().then(ok => setAuthState(ok ? 'authed' : 'unauthed'))
+  }, [])
+
+  async function handleLogout() {
+    await logout()
+    setAuthState('unauthed')
+  }
+
+  function handleAuthenticated() {
+    setAuthState('authed')
+  }
+
+  // Loading state — blank dark screen, no flash of unprotected content
+  if (authState === 'loading') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-primary)',
+      }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  // Unauthed — show login screen only
+  if (authState === 'unauthed') {
+    return <LoginPage onAuthenticated={handleAuthenticated} />
+  }
+
+  // Authed — render full dashboard
   return (
     <BrowserRouter>
       <div className="app-layout">
-        <Sidebar />
+        <Sidebar onLogout={handleLogout} />
         <MainContent />
       </div>
     </BrowserRouter>

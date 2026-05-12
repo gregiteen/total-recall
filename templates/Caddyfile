@@ -1,9 +1,14 @@
 # Total Recall — Caddy Reverse Proxy Configuration
 #
-# Deployed to /etc/caddy/Caddyfile during `npx total-recall deploy`
-# Caddy automatically provisions TLS certificates via Let's Encrypt.
+# Deployed to /etc/caddy/Caddyfile during `npx total-recall deploy --domain <your-domain>`
 #
-# Replace YOUR_DOMAIN with your actual domain.
+# HTTPS Setup (DuckDNS — free):
+#   1. Go to https://www.duckdns.org — sign in, claim a subdomain, point it at your server IP
+#   2. Deploy with: npx total-recall deploy --domain yourname.duckdns.org
+#   3. Caddy auto-provisions a Let's Encrypt TLS cert via HTTP-01 challenge (port 80 must be open)
+#   4. Your dashboard will be at https://yourname.duckdns.org
+#
+# Caddy replaces YOUR_DOMAIN below with your --domain value at deploy time.
 
 YOUR_DOMAIN {
     # Reverse proxy to Express server
@@ -14,7 +19,10 @@ YOUR_DOMAIN {
         X-Content-Type-Options nosniff
         X-Frame-Options SAMEORIGIN
         Referrer-Policy strict-origin-when-cross-origin
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-XSS-Protection "1; mode=block"
+        # Prevent clickjacking
+        Content-Security-Policy "frame-ancestors 'self'"
     }
 
     # Logging

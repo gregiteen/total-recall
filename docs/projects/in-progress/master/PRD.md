@@ -471,9 +471,7 @@ npx total-recall deploy
 
 ### 4.2 The Proxy Architecture (IDE Agnosticism)
 
-Total Recall operates as an **OpenAI-Compatible Proxy Server**. Because it runs as a central brain (either on a cloud VM or local host), trying to synchronize and symlink files into a developer's local workspace is fragile and difficult to scale across ever-changing IDEs.
-
-Instead, Total Recall acts directly as the LLM provider for your IDE.
+Total Recall operates as an **OpenAI-Compatible Proxy Server**. When running as a central brain (either on a cloud VM or local host), it intercepts every completion request and injects behavioral memory before forwarding to the LLM.
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
@@ -505,20 +503,11 @@ Instead, Total Recall acts directly as the LLM provider for your IDE.
 
 Model Context Protocol (MCP) allows IDEs to query memory, but it does *not* force behavioral rules into the model's core system prompt. By acting as the proxy API endpoint, Total Recall **guarantees** that behavioral invariants (e.g., "Never use Tailwind", "Always write tests") are aggressively injected into every single prompt before the LLM sees it. The IDE cannot bypass or ignore the rules.
 
-#### 4.2.2 Zero Local Configuration
-
-To connect any new workspace or tool to Total Recall:
-1. Open the IDE settings.
-2. Set the custom OpenAI endpoint URL to your Total Recall brain (e.g., `https://my-brain.example.com/v1`).
-3. Set the API key (configured in Total Recall's `frontier.yml`).
-
-No local `.cursorrules` files. No `total-recall init` sync scripts. No workspace crawling. It works immediately and universally for any tool that supports custom endpoints.
-
-#### 4.2.3 MCP for Read/Write Access
+#### 4.2.2 MCP for Read/Write Access
 
 While the proxy API handles behavioral control during chat, Total Recall also exposes an MCP Gateway (see §5.3). If an IDE supports MCP, it can use the gateway to actively read the memory graph or execute tools. The proxy API and the MCP gateway operate side-by-side to provide total behavioral control *and* rich memory interaction.
 
-#### 4.2.4 The Scoping Rule (Global vs. Local)
+#### 4.2.3 The Scoping Rule (Global vs. Local)
 
 Because Total Recall acts as a proxy, it receives the entire `messages` array from the IDE, which often includes local project context (e.g., local `.cursorrules` or open files). Total Recall manages this using **Scope-Based Resolution**:
 1. **Global Scope (Total Recall)**: Injected at the *top* of the system prompt.
@@ -528,13 +517,365 @@ By standard LLM prompting mechanics, instructions closer to the end of the promp
 - A developer leaves local `.cursorrules` completely blank by default, letting Total Recall handle all baseline behavior.
 - If a specific project requires an exception (e.g., "Use React 17 for this legacy app"), the developer adds it to the local `.cursorrules`. Total Recall sees this, injects its global rules at the top, and the LLM natively respects the local project override at the bottom.
 
-Furthermore, if Total Recall's OS Daemon has been instructed to watch a specific workspace directory, it will automatically consume any local `.agent/skills/` files natively to that project and merge them into the proxy request dynamically when it detects the IDE is operating in that directory path.
+### 4.3 The Unified Surface Model
+
+Not all IDEs support custom OpenAI endpoints. Antigravity (Google DeepMind) reads `GEMINI.md` from the filesystem. Codex (OpenAI) uses `AGENTS.md`. These tools cannot be pointed at a proxy — they use their own model backends.
+
+Total Recall therefore supports **three deployment tiers** to cover every real-world use case:
+
+| Tier | User Profile | Setup | Brain Location |
+|:---|:---|:---|:---|
+| **Standalone Local** | Developer who just wants memory in their IDE | `npx total-recall init` in repo | Local `.agent/` per repo |
+| **Central Cloud Brain** | Power user with a 24/7 autonomous VM | `npx total-recall deploy` on cloud VM | `~/.agent/` on cloud VM |
+| **Hybrid** | Power user who uses IDE + cloud chat + mobile | `npx total-recall init --brain <url>` connects local workspace to cloud brain | Cloud is source of truth; local syncs |
+
+#### 4.3.1 Standalone Local (No Cloud Required)
+
+The simplest deployment. A developer runs `npx total-recall init` inside their project repo:
+
+1. Scaffolds `.agent/memory-vault/` with the full SSSS category layout
+2. Seeds the SSSS skill so the AI knows the proprietary schema
+3. Copies default operating protocol invariant nodes
+4. Compiles `INSTRUCTIONS.md` and non-destructively injects the Total Recall memory block into any existing IDE instruction files (`GEMINI.md`, `.cursorrules`, `CLAUDE.md`, etc.)
+
+The AI immediately begins operating the memory system — reading vault nodes, writing new ones, and recompiling. No cloud VM required. No account. No API key.
+
+> **Non-destructive injection:** Total Recall never overwrites existing IDE instruction files. It manages a clearly-marked `<!-- BEGIN INJECTED MEMORY -->` block that is inserted or updated within existing files. All user-authored instructions remain untouched.
+
+#### 4.3.2 Hybrid Mode (Local + Cloud Brain)
+
+For users who also run a cloud brain (`npx total-recall deploy`), the local workspace can be connected to it:
+
+```bash
+npx total-recall init --brain https://my-brain.example.com
+```
+
+This registers the brain URL in `.agent/config/brain.json`. The workspace then syncs from the cloud brain:
+
+- **`npx total-recall sync`** — Pull the latest compiled `INSTRUCTIONS.md` from the brain's `/api/instructions` endpoint and inject it into local IDE files
+- **`npx total-recall sync --watch`** — Poll the brain every 60s in the background for changes
+- **`npx total-recall status`** — Show connection status, last sync time, vault hash comparison, and stale rule count
+
+The cloud brain is always the **source of truth** for behavioral rules. Local workspaces are synchronized consumers. Project-specific rules (local `.cursorrules` or local `.agent/skills/`) are additive — they augment, not replace, the global brain.
+
+#### 4.3.3 Session Persistence & Cross-Surface Memory
+
+A fundamental limitation of IDE-based AI agents: **IDE chat history is proprietary and inaccessible**. Antigravity, Cursor, and Claude Code store conversations internally with no public API or filesystem export. Total Recall cannot read past IDE conversations.
+
+The mitigation is architectural: the compiled operating instructions mandate that the AI **proactively distills learnings into vault nodes** during every session. The conversation transcript is ephemeral, but the extracted knowledge persists.
+
+For the **cloud dashboard and API surfaces**, Total Recall has full control. Every chat exchange is persisted to `.agent/sessions/<session_id>.jsonl` in the SSSS branching DAG format. The Dream Cycle's Light Sleep phase scans these session logs and extracts candidate observations for vault promotion.
+
+```text
+IDE Chat ──► Agent writes vault nodes ──► compile ──► All surfaces updated
+Cloud Chat ──► Session JSONL logged ──► Dream Cycle extracts ──► vault nodes ──► compile
+Dashboard ──► Full session history visible and searchable
+```
+
+**The result:** Regardless of which surface originated the conversation — IDE, cloud API, dashboard, Siri Shortcut — the extracted knowledge flows back into the same vault, gets compiled into the same `INSTRUCTIONS.md`, and propagates to every connected surface.
+
+### 4.4 The Sync Fabric (Ubiquitous Knowledge Distribution)
+
+The cloud brain runs ~1,400 inference calls per day autonomously — building skills through web research, analyzing codebases, running frontier evals, compressing knowledge, resolving conflicts. All of this produces Markdown files. Without distribution, that knowledge sits on the VM and the user never benefits from it unless they open the dashboard.
+
+The Sync Fabric solves this: **after every compile cycle, the brain pushes compiled knowledge to all registered sync targets.** Changes observed at any target can be pulled back. The brain becomes a living, breathing knowledge layer that follows the user everywhere.
+
+#### 4.4.1 Sync Targets
+
+A sync target is any destination that can receive Markdown files. Targets are configured in `~/.agent/config/sync.yml`:
+
+```yaml
+targets:
+  # ── Developer Workspaces ──────────────────────────────────
+  - name: "my-app"
+    type: workspace
+    path: /home/user/projects/my-app
+    mode: instructions-only       # Only push compiled INSTRUCTIONS.md
+    direction: push               # Brain → workspace (one-way)
+
+  - name: "total-recall-dev"
+    type: workspace
+    path: /home/user/projects/total-recall
+    mode: full                    # Push instructions + skills + vault nodes
+    direction: bidirectional      # Workspace can write vault nodes back
+
+  # ── Cloud Storage ─────────────────────────────────────────
+  - name: "google-drive-brain"
+    type: gdrive
+    folder_id: "1aBcDeFgHiJkLmN"
+    credentials: "{{secrets.gdrive_oauth}}"
+    mode: full                    # Full vault mirror
+    direction: bidirectional      # User edits files in Drive → brain picks up
+    
+  - name: "brain-archive"
+    type: s3
+    bucket: "my-brain-backup"
+    prefix: "total-recall/"
+    credentials: "{{secrets.aws_key}}"
+    mode: full
+    direction: push               # Archive only
+
+  # ── Git Repository ────────────────────────────────────────
+  - name: "vault-repo"
+    type: git
+    repo: "git@github.com:user/brain-vault.git"
+    branch: main
+    mode: vault                   # Only the memory-vault directory
+    direction: bidirectional      # Commit + push after compile
+    auto_commit: true
+    commit_message: "🧠 Brain sync: {{node_count}} nodes, {{skill_count}} skills"
+
+  # ── Webhook ───────────────────────────────────────────────
+  - name: "notify-phone"
+    type: webhook
+    url: "https://ntfy.sh/my-brain-updates"
+    mode: notifications           # Just send event notifications
+    events: [skill_validated, conflict_detected, research_complete]
+```
+
+#### 4.4.2 Sync Modes
+
+| Mode | What Gets Pushed | Use Case |
+|:---|:---|:---|
+| `instructions-only` | Compiled `INSTRUCTIONS.md` + IDE shims | Developer workspace — just keep behavioral rules current |
+| `skills` | `INSTRUCTIONS.md` + all validated `SKILL.md` files | Project repos that need domain expertise (e.g., stripe-expert) |
+| `vault` | The full `memory-vault/` directory tree | Git-backed vault archival or shared-brain setups |
+| `full` | Everything: vault, skills, instructions, config, sessions | Full brain mirror (Google Drive, second machine) |
+| `notifications` | Event payloads only (no files) | Phone alerts, Slack/Discord webhooks |
+
+#### 4.4.3 Sync Lifecycle
+
+```text
+Dream Cycle / Task Runner / User Chat
+        │
+        ▼
+  Knowledge Created (new vault node, validated skill, research result)
+        │
+        ▼
+  surface.mjs compile → INSTRUCTIONS.md rebuilt
+        │
+        ▼
+  Sync Daemon detects compile event
+        │
+        ├─► FOR EACH registered target:
+        │     1. Diff: what changed since last sync?
+        │     2. Push changed files to target
+        │     3. Log sync event to sync.jsonl
+        │
+        ├─► FOR EACH bidirectional target:
+        │     1. Pull: check for changes at the target
+        │     2. Import changed vault nodes into brain
+        │     3. Run steering.mjs conflict detection on imports
+        │     4. If conflict → quarantine to memory-inbox/conflicts/
+        │     5. If clean → activate and recompile
+        │
+        └─► Emit webhook events to notification targets
+```
+
+#### 4.4.4 Transport Adapters
+
+Each target type has a transport adapter in `src/core/sync/`:
+
+| Adapter | Transport | Auth | Notes |
+|:---|:---|:---|:---|
+| `workspace.mjs` | Direct filesystem read/write | None (local paths) | Fastest. Uses `injectIntoExisting()` from `surface.mjs` for IDE files |
+| `gdrive.mjs` | Google Drive API v3 | OAuth 2.0 (refresh token in secrets) | Maps vault categories to Drive folders. Supports Docs ↔ Markdown conversion |
+| `s3.mjs` | S3-compatible API | AWS Signature V4 / any S3 client | Works with AWS, Backblaze B2, Cloudflare R2, MinIO |
+| `git.mjs` | Git CLI (ssh or https) | SSH key or PAT in secrets | Auto-commit + push after compile. Pull before push for bidirectional |
+| `webhook.mjs` | HTTP POST | Bearer token or HMAC signature | Sends JSON event payloads. No file transfer |
+
+#### 4.4.5 Real-World Scenarios
+
+**Scenario: "My brain researches while I sleep, I benefit when I code"**
+1. 2:00 AM — Brain's Dream Cycle triggers a P3 research task: "User asked about Stripe Connect 3 times this week."
+2. 2:15 AM — Brain web searches Stripe Connect docs, generates `stripe-connect-expert.md` skill (~5 inference calls).
+3. 2:45 AM — Brain self-tests the skill, sends to frontier for eval (~$0.012).
+4. 3:00 AM — Skill validated. Compile runs. INSTRUCTIONS.md updated with new skill routing.
+5. 3:01 AM — **Sync Fabric pushes the updated INSTRUCTIONS.md to the user's `my-app` workspace** (workspace target).
+6. 3:01 AM — Sync also pushes the full skill file to Google Drive (gdrive target).
+7. 3:01 AM — Webhook fires to ntfy.sh: "🧠 New skill: Stripe Connect Expert (validated)".
+8. 9:00 AM — User opens Cursor in `my-app`. Cursor reads the already-updated `.cursorrules`. The Stripe Connect expertise is immediately available.
+
+**Scenario: "I correct the brain in my IDE, the cloud brain learns"**
+1. User is in Antigravity working on `my-app`.
+2. Agent writes a wrong vault node (e.g., "Always use pm2 stop").
+3. User corrects: "No, always use pm2 reload for zero-downtime."
+4. Agent writes corrected node to `.agent/memory-vault/patterns/pm2-reload.md`.
+5. Next sync cycle (or `npx total-recall sync`): brain detects the new node at the workspace target.
+6. Brain imports, runs conflict detection, activates the node, recompiles.
+7. The correction now propagates to ALL other workspaces and surfaces.
+
+**Scenario: "I edit a memory node in Google Drive from my phone"**
+1. User opens Google Drive on their iPhone.
+2. Opens `brain/memory-vault/preferences/dark-mode.md`.
+3. Changes `importance: 3` to `importance: 5`.
+4. Next sync cycle: brain detects the change via Drive API.
+5. Brain imports the updated node, recompiles, pushes to all workspace targets.
+
+#### 4.4.6 Sync Configuration CLI
+
+| Command | Purpose |
+|:---|:---|
+| `npx total-recall sync add --type workspace --path /path/to/repo` | Register a new sync target |
+| `npx total-recall sync add --type gdrive --folder-id <id>` | Register Google Drive target |
+| `npx total-recall sync add --type git --repo <url>` | Register git repository target |
+| `npx total-recall sync list` | Show all registered targets and last sync times |
+| `npx total-recall sync remove <name>` | Unregister a target |
+| `npx total-recall sync now` | Force immediate sync to all targets |
+| `npx total-recall sync --watch` | Run continuous sync daemon (polls bidirectional targets) |
+
+#### 4.4.7 Sync Safety
+
+- **Conflict detection is mandatory.** Incoming changes from bidirectional targets go through the same `steering.mjs` 2-layer conflict detection as locally written nodes. Conflicts are quarantined, never auto-resolved.
+- **Sync is append-friendly.** New nodes and modified nodes are synced. Deletions at a target do NOT propagate back to the brain unless explicitly confirmed — preventing accidental vault wipes.
+- **Sync audit trail.** Every sync event is logged to `~/.agent/logs/sync.jsonl` with timestamps, target name, files changed, and direction. Fully auditable.
+- **Credentials are sovereign.** OAuth tokens, SSH keys, and API keys for sync targets live in `secrets.enc` (AES-256-GCM). They are injected at runtime and never written to plaintext config files.
+
+---
+
+### 4.5 Voice Memory Bank (Capture Memories from Anywhere)
+
+The system's memory vault shouldn't require a keyboard. Users should be able to capture a thought, correction, or instruction by speaking into their phone — whether they're driving, walking, or lying in bed — and have it appear as a structured vault node, compiled and synced across all surfaces.
+
+#### 4.5.1 Voice Capture Pipeline
+
+```text
+Phone (iOS / Android)
+    │
+    │  User taps shortcut, records voice memo
+    │
+    ▼
+POST /api/voice/memorize  (multipart/form-data: audio file)
+    │
+    ▼
+Brain Server (api.mjs)
+    │
+    ├─► 1. Archive raw audio to ~/.agent/files/voice/<timestamp>.wav
+    │
+    ├─► 2. Transcribe audio → text transcript
+    │      (whisper.cpp tiny model, loaded on-demand, ~390MB temporary)
+    │      (NOT always-resident — loaded when audio arrives, unloaded after)
+    │
+    ├─► 3. Send transcript to Gemma 4 kernel with extraction prompt:
+    │      "Extract structured memory nodes from this voice memo.
+    │       For each distinct observation, create an SSSS vault node
+    │       with appropriate category, importance, and modality."
+    │
+    ├─► 4. Kernel outputs one or more vault nodes
+    │
+    ├─► 5. Write nodes to ~/.agent/memory-vault/<category>/
+    │
+    ├─► 6. Compile → INSTRUCTIONS.md updated
+    │
+    ├─► 7. Sync Fabric pushes to all registered targets
+    │
+    └─► 8. Return confirmation + extracted nodes to phone
+            (optional: Kokoro-82M reads back a summary via TTS)
+```
+
+> **Why a dedicated STT model?** Gemma 4 26B-A4B supports text, image, and video understanding but does **not** support native audio input — only the smaller E2B/E4B edge variants do. Kokoro-82M is TTS-only (text → speech). A lightweight open-source STT model (whisper.cpp, ~390MB on-demand, Apache/MIT licensed, runs on the same ARM CPU) bridges this gap without adding permanent RAM cost or external API dependencies.
+
+#### 4.5.2 Transcription Model
+
+| Attribute | Value |
+|:---|:---|
+| **Engine** | `whisper.cpp` (MIT license, self-hosted, fully sovereign) |
+| **Model** | `tiny` or `small` (user-configurable in `~/.agent/config/voice.yml`) |
+| **RAM** | ~390MB (tiny) or ~1GB (small) — loaded on-demand, NOT always-resident |
+| **Speed** | Faster-than-real-time on ARM CPU (a 30-second memo transcribes in <15 seconds) |
+| **Languages** | 99 languages supported |
+| **Deployment** | Compiled from source during `npx total-recall deploy` alongside llama.cpp |
+
+whisper.cpp is to OpenAI's Whisper what llama.cpp is to Meta's LLaMA — a fully independent, open-source C++ reimplementation that runs locally. No data leaves the machine. No API keys. No costs.
+
+#### 4.5.3 iOS Shortcut Setup
+
+Total Recall ships a downloadable `.shortcut` file (hosted at `https://brain.example.com/shortcuts/memorize.shortcut`) that users install with one tap:
+
+**Shortcut Actions:**
+1. **Record Audio** — Opens the microphone recorder
+2. **Set Variable** — Capture the audio file
+3. **Get Contents of URL** — `POST https://brain.example.com/api/voice/memorize`
+   - Method: POST
+   - Headers: `Authorization: Bearer <PAT>`, `Content-Type: multipart/form-data`
+   - Body: Form field `audio` = recorded audio file
+4. **Show Result** — Display the extracted memory node titles as confirmation
+
+**User Experience:**
+- Add the shortcut to the iPhone home screen or Apple Watch
+- Tap → speak → hang up → memory saved
+- Total time: however long the memo is + ~15 seconds processing
+- Optional: enable Siri trigger ("Hey Siri, save a memory")
+
+#### 4.5.4 Android Setup
+
+**Option A: Tasker (Power Users)**
+1. Create a Task with `Media → Record Audio`
+2. Add `Net → HTTP Request` — POST to `https://brain/api/voice/memorize` with the recorded file
+3. Bind to a home screen widget, lock screen shortcut, or NFC tag
+
+**Option B: Dedicated App Widget**
+Total Recall can provide a minimal companion Android app (or PWA shortcut) that:
+1. Opens a single-button recording interface
+2. Records and uploads to the brain API
+3. Shows confirmation with extracted nodes
+4. Supports a persistent notification for one-tap access
+
+#### 4.5.5 Voice Capture API
+
+```
+POST /api/voice/memorize
+Authorization: Bearer <PAT>
+Content-Type: multipart/form-data
+
+Body:
+  audio: <binary audio file (WAV, M4A, MP3, OGG, WEBM)>
+  category: <optional — override auto-detection>
+  importance: <optional — default: 3>
+  respond_voice: <optional — if true, return TTS audio of confirmation>
+
+Response (200):
+{
+  "status": "memorized",
+  "transcript": "Always use pm2 reload instead of stop and start for zero-downtime deploys",
+  "nodes_created": [
+    {
+      "slug": "pm2-reload-preference",
+      "title": "Use pm2 reload for zero-downtime deploys",
+      "category": "patterns",
+      "importance": 4
+    }
+  ],
+  "audio_archived": "~/.agent/files/voice/2026-05-12T20-00-00.wav",
+  "voice_response": "<base64 TTS audio if respond_voice=true>"
+}
+```
+
+#### 4.5.6 Voice Configuration
+
+```yaml
+# ~/.agent/config/voice.yml
+tts:
+  model: kokoro:82m              # Text-to-speech (always-resident)
+  default_voice: af_heart         # Kokoro voice preset
+
+stt:
+  model: whisper-tiny             # Speech-to-text (on-demand)
+  language: auto                  # Auto-detect, or force e.g. "en"
+  
+capture:
+  auto_categorize: true           # Let Gemma 4 choose the category
+  default_importance: 3           # Override with importance param
+  archive_audio: true             # Keep raw audio files
+  max_duration_seconds: 300       # Max recording length (5 minutes)
+  respond_with_voice: false       # Return TTS confirmation by default
+```
 
 ---
 
 ## 5. Interface Requirements (The Omnichannel Surface)
 
-The system exposes four distinct interface layers, accessible simultaneously from any client ecosystem.
+The system exposes five distinct interface layers, accessible simultaneously from any client ecosystem.
 
 ### 5.1 Standalone Dashboard (Home Base)
 
@@ -1180,5 +1521,6 @@ When the schema version increments (e.g., v2 → v3):
 | **P4: Interfaces** | Dashboard SPA + OpenAI-compatible API + MCP Gateway + MCP Apps | P0 | ⚪ Planned |
 | **P5: Security & Ops** | TLS + auth + backup/restore + observability + health checks | P0 | ⚪ Planned |
 | **P6: Recursive Self-Improvement** | SSSS schema evolution engine + friction detection + proposal/test/validate pipeline | P1, P3 | ⚪ Future |
-
+| **P7: IDE Integration** | Non-destructive `init` command + `compile` IDE shim management + `--brain` hybrid mode | P2 | ⏳ In Progress |
 | **P8: LoRA Fine-Tuning** | Optional QLoRA pipeline — cloud-burst or on-device training for SSSS execution fluency | P1, P2 | ⚪ Gated |
+| **P9: Sync Fabric** | Ubiquitous knowledge distribution — bi-directional sync to workspaces, Google Drive, S3, git, webhooks | P7, P1 | ⚪ Planned |

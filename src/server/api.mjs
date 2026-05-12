@@ -12,6 +12,7 @@ export const apiRouter = express.Router();
 
 apiRouter.post('/auth/login', loginHandler);
 apiRouter.post('/auth/logout', logoutHandler);
+apiRouter.get('/auth/me', requireAuth, (req, res) => res.json({ authenticated: true }));
 
 apiRouter.use('/v1', apiRateLimiter(), requireAuth);
 apiRouter.use('/api', requireAuth);
