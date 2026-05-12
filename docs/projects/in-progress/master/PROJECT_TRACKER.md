@@ -120,20 +120,20 @@ Production-ready security, TLS, auth, and observability.
 - [x] **`frontend/src/App.tsx` Sidebar** — Logout button (exit icon + "Sign out") in sidebar footer. Red hover. Calls `POST /auth/logout` → clears cookie → `<LoginPage>` renders.
 
 #### Deployment gate
-- [x] **Manual verification completed 2026-05-12T20:32Z** — `/health` 200 ✅, `/auth/me` no-creds 401 ✅, `/api/files` no-creds 401 ✅, `/v1/chat/completions` no-creds 401 ✅, PAT auth working ✅. Frontend login screen loads before dashboard on `104.131.81.127:3000`.
+- [x] **Manual verification completed 2026-05-12T20:32Z** — `/health` 200 ✅, `/auth/me` no-creds 401 ✅, `/api/files` no-creds 401 ✅, `/v1/chat/completions` no-creds 401 ✅, PAT auth working ✅. Frontend login screen loads before dashboard on `<YOUR_SERVER_IP>:3000`.
 
 ### ⏳ HTTPS via DuckDNS + Caddy
 
-> **Context:** Server runs on plain HTTP (`http://104.131.81.127:3000`). Session cookies are transmitted unencrypted. The `secure` cookie flag (`NODE_ENV=production`) means browsers on HTTPS will reject cookies sent over HTTP. DuckDNS provides a free subdomain that Caddy uses to auto-provision a Let's Encrypt TLS certificate via HTTP-01 challenge. No DNS plugin needed — just a domain pointing to the droplet IP.
+> **Context:** Server runs on plain HTTP (`http://<YOUR_SERVER_IP>:3000`). Session cookies are transmitted unencrypted. The `secure` cookie flag (`NODE_ENV=production`) means browsers on HTTPS will reject cookies sent over HTTP. DuckDNS provides a free subdomain that Caddy uses to auto-provision a Let's Encrypt TLS certificate via HTTP-01 challenge. No DNS plugin needed — just a domain pointing to the droplet IP.
 
 #### User action required (one-time manual step)
-- [ ] **Create DuckDNS account** — Go to `https://www.duckdns.org`, sign in with GitHub/Google, claim a subdomain (e.g. `totalrecall.duckdns.org`). Copy the **token** from the dashboard. Point the subdomain at `104.131.81.127`.
+- [ ] **Create DuckDNS account** — Go to `https://www.duckdns.org`, sign in with GitHub/Google, claim a subdomain (e.g. `totalrecall.duckdns.org`). Copy the **token** from the dashboard. Point the subdomain at `<YOUR_SERVER_IP>`.
 
 #### Product code
 - [x] **`src/cli/deploy.mjs` — `--domain <domain>` flag** — Already implemented. Replaces `YOUR_DOMAIN` in `templates/Caddyfile` and writes to `/etc/caddy/Caddyfile` on Linux.
-- [ ] **`src/cli/deploy.mjs` — `--duckdns-token <token>` flag** — New flag. When provided alongside `--domain *.duckdns.org`, writes a DuckDNS IP-update cron job to `/etc/cron.d/duckdns` on the target host. Keeps the DNS record current if the droplet IP ever changes.
+- [x] **`src/cli/deploy.mjs` — `--duckdns-token <token>` flag** — New flag. When provided alongside `--domain *.duckdns.org`, writes a DuckDNS IP-update cron job to `/etc/cron.d/duckdns` on the target host. Keeps the DNS record current if the droplet IP ever changes.
 - [x] **`templates/Caddyfile`** — Uses `YOUR_DOMAIN` placeholder. `deploy.mjs` replaces at deploy time. Caddy auto-provisions Let's Encrypt cert when a real domain is provided.
-- [ ] **`frontend/src/App.tsx` sidebar domain selector** — Replace hardcoded `http://104.131.81.127:3001` option with the configured DuckDNS domain. Read from a `VITE_BRAIN_URL` env var at build time so it's not hardcoded.
+- [x] **`frontend/src/App.tsx` sidebar domain selector** — Replace hardcoded `http://<YOUR_SERVER_IP>:3001` option with the configured DuckDNS domain. Read from a `VITE_BRAIN_URL` env var at build time so it's not hardcoded.
 
 #### Live server
 - [ ] **Apply DuckDNS domain to `/etc/caddy/Caddyfile`** — Replace `localhost` with the user's DuckDNS subdomain. `systemctl reload caddy`. Verify Caddy provisions TLS cert (`caddy adapt` + check logs).
@@ -141,7 +141,7 @@ Production-ready security, TLS, auth, and observability.
 - [ ] **Update `security.yml` `bind.host`** — Change to `127.0.0.1` so Express no longer listens on the public IP directly. All traffic must go through Caddy.
 
 #### Documentation
-- [ ] **`README.md`** — Add "Setting up HTTPS" section: DuckDNS signup → `npx total-recall deploy --domain <subdomain>.duckdns.org --duckdns-token <token>`.
+- [x] **`README.md`** — Add "Setting up HTTPS" section: DuckDNS signup → `npx total-recall deploy --domain <subdomain>.duckdns.org --duckdns-token <token>`.
 - [ ] **`docs/projects/in-progress/master/ARCHITECTURE.md`** — Update networking diagram to show Caddy TLS termination between public internet and Express.
 
 ## ⏳ Phase 5: Testing & Validation
