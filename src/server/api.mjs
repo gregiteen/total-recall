@@ -188,7 +188,44 @@ CRITICAL RULE: You are equipped with 'search_web', 'execute_code', and 'update_d
   }
 });
 
-// ─── Text-to-Speech (Kokoro-82M) ───────────────────────────────────────────────
+apiRouter.get('/v1/chat/history', requireAuth, (req, res) => {
+  try {
+    const sessionId = getSessionId(req);
+    const file = path.join(SESSIONS_DIR, `${sessionId}.jsonl`);
+    if (!fs.existsSync(file)) {
+      return res.json({ messages: [] });
+    }
+    
+    // Read the file and parse the last valid JSON line
+    const content = fs.readFileSync(file, 'utf8').trim().split('\n');
+    if (content.length === 0 || !content[0]) {
+      return res.json({ messages: [] });
+    }
+    
+    // The last exchange contains the cumulative messages
+    const lastLine = content[content.length - 1];
+    const record = JSON.parse(lastLine);
+    
+    // Filter out system messages so they don't clutter the UI
+    const chatHistory = (record.messages || [])
+      .filter(m => m.role !== 'system')
+      .map((m, idx) => ({
+        id: `hist-${idx}`,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(record.timestamp).getTime(),
+        versions: [m.content],
+        currentVersionIndex: 0
+      }));
+      
+    res.json({ messages: chatHistory });
+  } catch (err) {
+    console.error('[API] Error loading chat history:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Voice / TTS (Kokoro / System) ───────────────────────────────────────────────
 
 apiRouter.get('/api/tts/status', (_req, res) => {
   res.json({ enabled: isTtsEnabled() });

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory } from '../api'
 import type { ChatMessage } from '../types'
 
 let msgId = 0
@@ -22,6 +22,19 @@ export default function ChatPage() {
   }, [])
 
   useEffect(scrollToBottom, [messages, scrollToBottom])
+
+  // Load chat history on mount
+  useEffect(() => {
+    fetchChatHistory()
+      .then(history => {
+        if (history && history.length > 0) {
+          setMessages(history as ChatMessage[]);
+          // Update msgId to avoid collisions
+          msgId = Math.max(msgId, history.length + 1);
+        }
+      })
+      .catch(console.error)
+  }, [])
 
   // Probe the Kokoro endpoint once when voice mode is turned on so we know
   // whether to call /api/tts or fall back to the browser engine.
