@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-// Alias: tr-query → total-recall search
-process.argv.splice(2, 0, 'search');
-await import('./total-recall');

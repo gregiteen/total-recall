@@ -79,8 +79,8 @@ async function runLint() {
 
   killActiveChild();
 
-  const lint = spawn('nice', ['-n', '19', 'npx', 'eslint', '.', '--max-warnings', '0', '--cache', '--cache-strategy', 'content'], {
-    cwd: ROOT,
+  const lint = spawn('npx', ['eslint', '.', '--max-warnings', '0', '--cache', '--cache-strategy', 'content'], {
+    cwd: path.join(ROOT, 'frontend'),
     env: { ...process.env, NODE_OPTIONS: `--max-old-space-size=${CONFIG.memoryLimit}` }
   });
   activeChild = lint;

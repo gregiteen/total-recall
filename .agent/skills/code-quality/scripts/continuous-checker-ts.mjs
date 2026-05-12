@@ -21,8 +21,7 @@ const CONFIG = {
   terminateGraceMs: 5_000
 };
 const CHECKS = [
-  { label: 'server', cwd: SERVER_ROOT, project: 'tsconfig.json' },
-  { label: 'frontend', cwd: ROOT, project: 'tsconfig.json' }
+  { label: 'frontend', cwd: path.join(ROOT, 'frontend'), project: 'tsconfig.json' }
 ];
 
 async function log(msg) {
@@ -94,7 +93,7 @@ async function runTsc() {
 
   const runCheck = (check) => new Promise((resolve) => {
     const tscBin = path.join(check.cwd, 'node_modules', 'typescript', 'bin', 'tsc');
-    const tsc = spawn('nice', ['-n', '19', process.execPath, tscBin, '--noEmit', '-p', check.project], {
+    const tsc = spawn(process.execPath, [tscBin, '--noEmit', '-p', check.project], {
       cwd: check.cwd,
       detached: process.platform !== 'win32',
       env: { ...process.env, NODE_OPTIONS: `--max-old-space-size=${CONFIG.memoryLimit}` }

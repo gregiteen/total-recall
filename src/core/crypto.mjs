@@ -1,113 +1,74 @@
-/**
- * crypto.mjs — Config Encryption/Decryption
- *
- * AES-256-GCM encryption using Node's built-in crypto module.
- * Used by `total-recall setup --share` and `--config` for
- * password-protected config portability.
- *
- * Format: base64-encoded JSON envelope:
- *   { v: 1, salt, iv, tag, data }
- *
- * Key derivation: PBKDF2 with 600K iterations + random salt (OWASP 2024).
- * No npm dependencies.
- */
-
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import argon2 from 'argon2';
 
 const ALGORITHM = 'aes-256-gcm';
-const KEY_LENGTH = 32;          // 256 bits
-const IV_LENGTH = 16;           // 128 bits
-const SALT_LENGTH = 32;         // 256 bits
-const ITERATIONS = 600_000;      // OWASP 2024 minimum for PBKDF2-HMAC-SHA512
-const DIGEST = 'sha512';
-const ENVELOPE_VERSION = 1;
-const MAGIC_PREFIX = 'TOTALRECALL:';  // Identifies encrypted blobs
+const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+const SECRETS_FILE = path.join(AGENT_DIR, 'config', 'secrets.enc');
 
 /**
- * Derive an encryption key from a password using PBKDF2.
- * @param {string} password
- * @param {Buffer} salt
- * @returns {Buffer}
+ * Derives a 32-byte encryption key from a master password using Argon2id.
  */
-function deriveKey(password, salt) {
-  return crypto.pbkdf2Sync(password, salt, ITERATIONS, KEY_LENGTH, DIGEST);
+export async function deriveKey(password, salt) {
+  // Hash raw bytes for key using argon2
+  const hash = await argon2.hash(password, {
+    type: argon2.argon2id,
+    salt,
+    raw: true, // raw buffer for AES key
+    hashLength: 32, // 256 bits
+    timeCost: 3,
+    memoryCost: 65536,
+    parallelism: 1
+  });
+  return hash;
 }
 
 /**
- * Encrypt plaintext with a password.
- *
- * @param {string} plaintext - Content to encrypt
- * @param {string} password - User-provided password
- * @returns {string} Encrypted blob (TOTALRECALL:<base64>)
+ * Encrypts a JSON object into a buffer.
+ * Format: [16 bytes salt][12 bytes IV][ciphertext][16 bytes auth tag]
  */
-export function encrypt(plaintext, password) {
-  const salt = crypto.randomBytes(SALT_LENGTH);
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = deriveKey(password, salt);
-
+export async function encryptSecrets(secretsObj, password) {
+  const salt = crypto.randomBytes(16);
+  const key = await deriveKey(password, salt);
+  const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([
-    cipher.update(plaintext, 'utf-8'),
-    cipher.final(),
-  ]);
-  const tag = cipher.getAuthTag();
-
-  const envelope = {
-    v: ENVELOPE_VERSION,
-    salt: salt.toString('base64'),
-    iv: iv.toString('base64'),
-    tag: tag.toString('base64'),
-    data: encrypted.toString('base64'),
-  };
-
-  return MAGIC_PREFIX + Buffer.from(JSON.stringify(envelope)).toString('base64');
+  
+  const plaintext = JSON.stringify(secretsObj);
+  let ciphertext = cipher.update(plaintext, 'utf8');
+  ciphertext = Buffer.concat([ciphertext, cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  
+  return Buffer.concat([salt, iv, ciphertext, authTag]);
 }
 
-/**
- * Decrypt an encrypted blob with a password.
- *
- * @param {string} blob - Encrypted blob (TOTALRECALL:<base64>)
- * @param {string} password - User-provided password
- * @returns {string} Decrypted plaintext
- * @throws {Error} If password is wrong or blob is corrupt
- */
-export function decrypt(blob, password) {
-  if (!blob.startsWith(MAGIC_PREFIX)) {
-    throw new Error('Not an encrypted Total Recall config (missing magic prefix)');
-  }
-
-  const envelopeJson = Buffer.from(blob.slice(MAGIC_PREFIX.length), 'base64').toString('utf-8');
-  const envelope = JSON.parse(envelopeJson);
-
-  if (envelope.v !== ENVELOPE_VERSION) {
-    throw new Error(`Unsupported encryption version: ${envelope.v}`);
-  }
-
-  const salt = Buffer.from(envelope.salt, 'base64');
-  const iv = Buffer.from(envelope.iv, 'base64');
-  const tag = Buffer.from(envelope.tag, 'base64');
-  const data = Buffer.from(envelope.data, 'base64');
-  const key = deriveKey(password, salt);
-
+export async function decryptSecrets(encryptedBuffer, password) {
+  const salt = encryptedBuffer.subarray(0, 16);
+  const iv = encryptedBuffer.subarray(16, 28);
+  const authTag = encryptedBuffer.subarray(encryptedBuffer.length - 16);
+  const ciphertext = encryptedBuffer.subarray(28, encryptedBuffer.length - 16);
+  
+  const key = await deriveKey(password, salt);
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(tag);
-
-  try {
-    const decrypted = Buffer.concat([
-      decipher.update(data),
-      decipher.final(),
-    ]);
-    return decrypted.toString('utf-8');
-  } catch {
-    throw new Error('Wrong password or corrupt data');
-  }
+  decipher.setAuthTag(authTag);
+  
+  let decrypted = decipher.update(ciphertext);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  
+  return JSON.parse(decrypted.toString('utf8'));
 }
 
-/**
- * Check if a string is an encrypted Total Recall blob.
- * @param {string} content
- * @returns {boolean}
- */
-export function isEncrypted(content) {
-  return typeof content === 'string' && content.trimStart().startsWith(MAGIC_PREFIX);
+export async function writeSecrets(secretsObj, password) {
+  const buf = await encryptSecrets(secretsObj, password);
+  fs.mkdirSync(path.dirname(SECRETS_FILE), { recursive: true });
+  fs.writeFileSync(SECRETS_FILE, buf);
+}
+
+export async function readSecrets(password) {
+  if (!fs.existsSync(SECRETS_FILE)) {
+    return null;
+  }
+  const buf = fs.readFileSync(SECRETS_FILE);
+  return await decryptSecrets(buf, password);
 }

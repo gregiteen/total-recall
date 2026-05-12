@@ -1,0 +1,21 @@
+[Unit]
+Description=Total Recall Dream Cycle Daemon (Background Intelligence)
+After=network.target ollama.service total-recall-server.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/total-recall
+ExecStart=/usr/bin/node src/core/dream.mjs
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+StandardOutput=append:/var/log/total-recall/daemon.log
+StandardError=append:/var/log/total-recall/daemon.log
+
+# Prevent idle reclamation by keeping CPU active
+# dream.mjs naturally maintains >10% CPU via inference loops
+CPUAccounting=true
+
+[Install]
+WantedBy=multi-user.target

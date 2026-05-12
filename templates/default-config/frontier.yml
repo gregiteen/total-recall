@@ -1,0 +1,24 @@
+# Default Frontier API Configuration
+# Copy to ~/.agent/config/frontier.yml and customize
+
+# Provider settings (BYOK — Bring Your Own Key)
+provider: deepseek
+endpoint: https://api.deepseek.com/v1/chat/completions
+model: deepseek-chat
+api_key: YOUR_API_KEY_HERE
+
+# Inference settings
+temperature: 0.1
+max_tokens: 4096
+
+# Local kernel (Ollama)
+local:
+  endpoint: http://127.0.0.1:11434/v1/chat/completions
+  model: gemma4:26b
+
+# Confidence routing
+# Tasks below this confidence threshold escalate to the frontier API
+confidence_threshold: 0.7
+
+# Monthly budget cap for frontier API calls (USD)
+monthly_budget_usd: 15.00

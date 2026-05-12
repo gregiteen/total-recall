@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-// Alias: tr-reindex → total-recall reindex
-process.argv.splice(2, 0, 'reindex');
-await import('./total-recall');

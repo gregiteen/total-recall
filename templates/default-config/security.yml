@@ -1,0 +1,40 @@
+# Total Recall Security Configuration
+# Copy to ~/.agent/config/security.yml and customize
+
+# Privacy controls
+privacy:
+  # Nodes with privacy: local_only are NEVER sent to frontier API
+  enforce_local_only: true
+
+  # Default export policy for frontier API calls
+  # Options: always | ask_per_skill | never
+  allow_frontier_export: ask_per_skill
+
+# YOLO Mode (fully autonomous operation)
+yolo_mode: false
+
+# Dashboard authentication
+dashboard:
+  # Set a bcrypt-hashed password (generate with: npx total-recall hash-password)
+  password_hash: null
+
+  # Session TTL in hours
+  session_ttl_hours: 24
+
+# API authentication
+api:
+  # Personal Access Tokens for /v1/chat/completions
+  # Generate with: npx total-recall generate-pat
+  pats:
+    - "local"
+
+# Rate limiting
+rate_limits:
+  api_requests_per_minute: 60
+  mcp_requests_per_minute: 120
+
+# Network binding
+bind:
+  # Use 127.0.0.1 for local-only access, 0.0.0.0 for public
+  host: "0.0.0.0"
+  port: 3000
