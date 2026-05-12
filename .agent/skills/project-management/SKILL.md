@@ -45,12 +45,14 @@ All project documentation lives in `docs/projects/` organized as a Kanban board:
 
 | Folder | Purpose |
 |--------|---------|
-| `in-progress/` | Active work with `*_PROJECT_TRACKER.md` and `*_DEVELOPMENT_PLAN.md` |
+| `in-progress/` | Active work with `*_PROJECT_TRACKER.md` and `*_DEV_PLAN.md` |
 | `completed/` | Shipped projects (moved here after archival) |
 | `archived/` | Abandoned or superseded projects |
 | `planned/` | Scoped but not yet started |
 | `backlog/` | Rough ideas not yet scoped |
 | `DEFERRED_BACKLOG.md` | **Global safety net** — deferred tasks, future enhancements, and unfinished items extracted from completed project trackers |
+
+**Naming Rule**: NEVER use generic filenames like `DEV_PLAN.md` or `PROJECT_TRACKER.md`. You MUST always prefix the files with the project name (e.g., `DEEP_RESEARCH_DEV_PLAN.md`).
 
 **Archival Rule**: When completing a project, the agent MUST:
 1. **Verify Testing Phase**: Ensure the project tracker has an explicit testing phase (e.g., `## ⏳ Phase X: Testing & Verification`) and that all testing steps have been fully executed and checked off. A project CANNOT be moved to `completed/` without passing its Testing Phase.

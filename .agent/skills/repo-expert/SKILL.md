@@ -130,9 +130,9 @@ Unlike earlier agent frameworks that use brittle ASTs or regex loops to parse co
 ### 3.2 SSSS Workflow Execution
 The LLM reads `type: workflow` files and autonomously executes steps like `## Step N:`, parallel fanout `[Parallel]`, and error bounds `[Retry: N, OnError: Step M]`. It translates these intent structures directly into kernel tool invocations (Sandbox execution, file write, web search).
 
-## 4. Continuous Intelligence (Infinite Compute)
+## 4. Continuous Intelligence & Observability
 
-The OS daemon orchestrates a priority-driven task scheduler that ensures the kernel is constantly working (1,000+ daily inferences at $0 cost).
+The OS daemon orchestrates a priority-driven task scheduler that ensures the kernel is constantly working (1,000+ daily inferences at $0 cost). A dedicated `watchdog.mjs` service continuously tails immutable JSONL logs to execute active safety nets and automated triggers, especially critical during YOLO Mode.
 
 ### Priority Queue Weights:
 - **P0:** User-Facing (Real-time Chat, Dashboard usage)
@@ -141,6 +141,11 @@ The OS daemon orchestrates a priority-driven task scheduler that ensures the ker
 - **P3:** Proactive Research (Web searching current events, knowledge refresh)
 - **P4:** Self-Evaluation (Frontier eval runs)
 - **P5:** Exploration (Speculative background curiosities)
+
+### Automated Triggers:
+- **Sandbox Circuit Breakers:** Automatically quarantines workflows upon >3 consecutive non-zero exit codes.
+- **Exfiltration Anomalies:** Triggers instant API routing suspensions if abnormal token limits are detected.
+- **Resource Recovery:** Flushes KV cache if latency drifts >2x baseline.
 
 ## 5. SSSS Frontmatter Schema (v2)
 
@@ -200,12 +205,26 @@ While Gemma 4 26B-A4B handles 99% of work locally and securely, high-stakes reas
 | **`dream.mjs`** | Memory Maintenance | Light Sleep (scan modified), REM (pattern recognition, dream scoring), Deep Sleep (recompile surface). Decays stale memories, promotes active ones. |
 | **`steering.mjs`** | Conflict Detection | Layer 1: O(1) Ontology Check (SPO). Layer 2: Fuzzy Similarity (Jaccard + Cosine). Quarantines conflicts to `.agent/memory-inbox/conflicts/`. |
 | **`surface.mjs`** | Skill Routing | Hybrid BM25 + TF-IDF router. Injects top 7 memory nodes into relevant `SKILL.md` boundaries. Compiles T1 `INSTRUCTIONS.md` from `priority: absolute` nodes. |
-| **Sandbox** | JIT Code Execution | Opt-in network, scoped to `.agent/`, 512MB RAM cap, 60s timeout. Credential injection via `{{secrets.*}}` AES-256 decrypted at runtime. |
+| **Sandbox** | JIT Code Execution | Default offline network namespace, scoped to `.agent/`, 512MB RAM cap, 60s timeout. `yolo_mode: true` bypasses manual user-approval blockers. Credential injection via `{{secrets.*}}` AES-256 decrypted at runtime. |
 | **Dashboard** | Omnichannel Interface | React SPA reverse proxied by Caddy, exposes visual SSSS manager, code playground, and file explorer. Renderable inside IDEs via MCP iframe. |
 
 ## 8. Backup & Security Model
 
-- **Security List**: Ports 443 (HTTPS) and 22 (SSH Key-Only) allowed.
-- **Code Mode Isolation**: Scripts run in experimental-vm-modules Node threads. Cannot access host outside `~/.agent/`. No `child_process.exec` un-sandboxed.
-- **Backup Strategy**: Nightly encrypted tarballs (AES-256 + GPG) to local block storage, with optional rsync to S3/B2. Recovers via `npx total-recall restore`.
-- **Secrets Management**: Argon2id master password protects AES-256-GCM `secrets.enc`. No plaintext keys written to disk.
+- **Data Sovereignty:** The "Frontier Firewall" redacts `privacy: local_only` nodes before routing to Cloud APIs. Defaults to `allow_frontier_export: ask_per_skill`, or `always` for YOLO Mode.
+- **Network & Access:** Ports 443 (HTTPS) and 22 (SSH Key-Only) allowed. Auth via bcrypt + TOTP (Dashboard) and OAuth 2.1 (MCP). Token bucket rate limits apply.
+- **Code Mode Isolation:** Scripts run offline by default in experimental-vm-modules Node threads. Cannot access host outside `~/.agent/`.
+- **Encryption at Rest:** The entire SSSS Virtual File System is encrypted at the block volume layer.
+- **Backup Strategy:** Nightly encrypted tarballs (AES-256 + GPG) to local block storage, with optional rsync to S3/B2. Recovers via `npx total-recall restore`.
+- **Secrets Management:** Argon2id master password protects AES-256-GCM `secrets.enc`. No plaintext keys written to disk.
+
+## 9. Repo-Expert Utilities
+
+The `repo-expert` skill includes autonomous automation scripts located in `.agent/skills/repo-expert/scripts/` to help manage the Omnichannel Surface capabilities:
+
+### 9.1 API Mapping (`map-api.mjs`)
+Scans `src/server/api.mjs` using regular expressions to dynamically extract all registered Express routes (`GET`, `POST`, `PUT`, `DELETE`). It outputs a localized routing index (`api-map.json`) which serves as a source of truth for the available API endpoints.
+- **Usage:** `node .agent/skills/repo-expert/scripts/map-api.mjs`
+
+### 9.2 MCP Tool Scaffolding (`create-mcp-tools.mjs`)
+Consumes the `api-map.json` index to autonomously scaffold Model Context Protocol (MCP) tool registrations. This allows agents to seamlessly map any newly created REST endpoints directly to the MCP gateway in `src/server/mcp.mjs`.
+- **Usage:** `node .agent/skills/repo-expert/scripts/create-mcp-tools.mjs`

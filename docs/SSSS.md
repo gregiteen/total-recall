@@ -15,7 +15,7 @@ SSSS is a **database-free, Markdown-first schema** for AI agent memory. Every ru
 | **No Relational Databases** | Workspace configuration must not live in Postgres or any external database. |
 | **Markdown is Law** | Every memory primitive (rule, pattern, decision, concept) exists as a `.md` file. |
 | **Semantic Frontmatter** | Every file MUST contain YAML frontmatter with a `type` field that identifies how engines interpret it. |
-| **Disposable Indexes** | SQLite FTS5 indexes are ephemeral caches, fully rebuildable from the Markdown vault. Delete them freely. |
+| **Disposable Indexes** | Derived JSONL indexes are ephemeral caches, fully rebuildable from the Markdown vault. Delete them freely. |
 | **Git-Versioned** | The vault directory is version-controlled. History = provenance. |
 
 ---

@@ -1,103 +1,50 @@
 {
-  "name": "@ultrachat/total-recall",
-  "version": "1.0.0",
-  "description": "Local-only, SSSS-compliant three-tier memory system for AI coding agents. Drop into any IDE or CLI (Cursor, Claude Code, Antigravity, Gemini, Cline). No database — pure Markdown vault.",
+  "name": "total-recall",
+  "version": "3.0.0",
+  "description": "Sovereign AI system — database-free, SSSS-powered personal intelligence engine deployable to any POSIX host.",
   "type": "module",
-  "main": "src/core/index.mjs",
   "bin": {
-    "total-recall": "./bin/total-recall",
-    "tr-query": "./bin/tr-query",
-    "tr-steer": "./bin/tr-steer",
-    "tr-note": "./bin/tr-note",
-    "tr-retract": "./bin/tr-retract",
-    "tr-surface": "./bin/tr-surface",
-    "tr-reindex": "./bin/tr-reindex",
-    "tr-coprocessor": "./bin/tr-coprocessor",
-    "tr-episodes": "./bin/tr-episodes",
-    "tr-notify": "./src/coprocessor/notify.mjs",
-    "tr-memory-pipeline": "./src/agents/switch-memory-pipeline.mjs",
-    "tr-migrate": "./scripts/migrate-nodes.mjs"
-  },
-  "exports": {
-    ".": "./src/core/index.mjs",
-    "./vault": "./src/core/vault.mjs",
-    "./surface": "./src/core/surface.mjs",
-    "./steering": "./src/core/steering.mjs",
-    "./dream": "./src/core/dream.mjs",
-    "./fts5": "./src/core/fts5.mjs",
-    "./wiki": "./src/core/wiki.mjs",
-    "./ranking": "./src/core/ranking.mjs",
-    "./episodes": "./src/core/episodes.mjs",
-    "./crypto": "./src/core/crypto.mjs",
-    "./sync-prompts": "./src/core/sync-prompts.mjs",
-    "./coprocessor": "./src/coprocessor/daemon.mjs",
-    "./coprocessor/inject": "./src/coprocessor/inject.mjs",
-    "./coprocessor/checks/steering": "./src/coprocessor/checks/steering.mjs",
-    "./coprocessor/checks/sentiment": "./src/coprocessor/checks/sentiment.mjs",
-    "./coprocessor/checks/relevance": "./src/coprocessor/checks/relevance.mjs",
-    "./coprocessor/checks/contradiction": "./src/coprocessor/checks/contradiction.mjs",
-    "./coprocessor/checks/researcher": "./src/coprocessor/checks/researcher.mjs",
-    "./coprocessor/watchers/antigravity": "./src/coprocessor/watchers/antigravity.mjs",
-    "./coprocessor/watchers": "./src/coprocessor/watchers/index.mjs",
-    "./coprocessor/notify": "./src/coprocessor/notify.mjs",
-    "./agents/pipeline": "./src/agents/switch-memory-pipeline.mjs",
-    "./agents/adapters": "./src/agents/adapters/index.mjs"
+    "total-recall": "./bin/total-recall.mjs"
   },
   "scripts": {
-    "test": "node --test src/tests/*.test.mjs",
-    "lint": "echo 'No lint configured yet'",
-    "build": "echo 'Pure ESM — no build step needed'",
-    "migrate": "node scripts/migrate-nodes.mjs",
-    "prepublishOnly": "npm test"
+    "dev": "node src/server/index.mjs",
+    "start": "node src/server/index.mjs",
+    "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gregiteen/total-recall.git"
   },
   "keywords": [
     "ai",
-    "agent",
+    "sovereign",
+    "mcp",
+    "ssss",
     "memory",
-    "cognitive",
-    "zettelkasten",
-    "sqlite",
-    "fts5",
-    "markdown",
-    "llm",
-    "coding-agent",
-    "total-recall",
-    "knowledge-graph",
-    "behavioral-surface",
-    "session-memory",
-    "agentskills"
+    "local-llm"
   ],
-  "author": "UltraChat <hello@ultrachat.ai>",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ultrachat-ai/total-recall.git"
-  },
-  "homepage": "https://github.com/ultrachat-ai/total-recall#readme",
+  "author": "gregiteen",
+  "license": "ISC",
   "bugs": {
-    "url": "https://github.com/ultrachat-ai/total-recall/issues"
+    "url": "https://github.com/gregiteen/total-recall/issues"
   },
-  "files": [
-    "src/",
-    "bin/",
-    "scripts/",
-    "templates/",
-    "docs/SSSS.md",
-    "docs/ARCHITECTURE.md",
-    "docs/guides/",
-    "README.md",
-    "LICENSE"
-  ],
+  "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "better-sqlite3": "^11.0.0",
-    "gray-matter": "^4.0.3"
+    "argon2": "^0.44.0",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.1",
+    "gray-matter": "^4.0.3",
+    "jsonwebtoken": "^9.0.3",
+    "natural": "^8.1.1",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
-  "optionalDependencies": {
-    "chokidar": "^4.0.0",
-    "node-cron": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
+  "devDependencies": {
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.6"
   }
 }

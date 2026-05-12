@@ -1,0 +1,47 @@
+[
+  {
+    "name": "transport-is-streamable-http",
+    "assertion": "Server uses StreamableHTTPServerTransport, NOT SSEServerTransport",
+    "severity": "error"
+  },
+  {
+    "name": "single-mcp-endpoint",
+    "assertion": "All three HTTP methods (POST, GET, DELETE) point to the same /mcp endpoint path",
+    "severity": "error"
+  },
+  {
+    "name": "session-id-from-header",
+    "assertion": "Session ID is read from req.headers['mcp-session-id'], NOT from query params",
+    "severity": "error"
+  },
+  {
+    "name": "uses-register-tool",
+    "assertion": "Tools are registered via server.registerTool(), NOT the deprecated server.tool()",
+    "severity": "error"
+  },
+  {
+    "name": "input-schema-is-raw-shape",
+    "assertion": "inputSchema is a plain object of Zod fields like { slug: z.string() }, NOT wrapped in z.object()",
+    "severity": "error"
+  },
+  {
+    "name": "no-stdout-logging",
+    "assertion": "No console.log() calls exist — all logging uses console.error() (stderr only)",
+    "severity": "error"
+  },
+  {
+    "name": "server-per-session",
+    "assertion": "A new McpServer instance is created per session, not shared globally",
+    "severity": "warning"
+  },
+  {
+    "name": "capabilities-declared",
+    "assertion": "Server advertises tools, resources, and/or prompts capabilities in the initialize response",
+    "severity": "warning"
+  },
+  {
+    "name": "initialize-check",
+    "assertion": "POST handler checks for req.body.method === 'initialize' when no session ID is present",
+    "severity": "error"
+  }
+]

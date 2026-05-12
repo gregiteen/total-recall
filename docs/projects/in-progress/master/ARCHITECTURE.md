@@ -1,233 +1,293 @@
-# Total Recall 3.0 — Architecture Document
+# Total Recall 3.0 — Architecture
 
-> Derived directly from the PRD v3.0. Total Recall is a sovereign AI system powered by the proprietary SSSS schema and a local Gemma 4 26B-A4B kernel running on any infrastructure substrate (Local Machine, Cloud, Oracle VM) with >= 24GB RAM.
+> Derived from PRD v3.0. This document defines **what this repo is** and **how it becomes the running product**.
 
-## 1. System Topology (The Sovereign Cloud)
+---
 
-```mermaid
-flowchart TB
-    subgraph INFRA["INFRASTRUCTURE (Local / Cloud / Oracle VM, >=24GB RAM, 4+ CPU)"]
-        
-        subgraph DAEMON["OS Daemon (Node.js)"]
-            DREAM["dream.mjs\n(Dream Cycle)"]
-            SURFACE["surface.mjs\n(Router/Compiler)"]
-            SCHEDULER["task_runner.mjs\n(Autonomous Scheduler)"]
-            STEER["steering.mjs\n(Conflict Engine)"]
-        end
+## 1. What This Repo Is
 
-        subgraph KERNEL["Intelligence Kernel"]
-            OLLAMA["Ollama Engine\n(Q4_K_M, Q4_0 KV Cache)"]
-            GEMMA["Gemma 4 26B-A4B\n(Zero-Parser LLM)"]
-            KOKORO["Kokoro-82M\n(Voice TTS)"]
-        end
-        
-        subgraph VFS["Virtual File System (.agent/)"]
-            T3["TIER 3: memory-vault/"]
-            T2["TIER 2: skills/*/SKILL.md"]
-            T1["TIER 1: INSTRUCTIONS.md"]
-            INBOX["memory-inbox/ (conflicts)"]
-            TASKS["scheduler/queue/"]
-        end
-
-        subgraph TOOLS["Kernel Tool Suite"]
-            SANDBOX["Code Mode Sandbox\n(Node.js / Bash)"]
-            SEARXNG["SearXNG (Web Search)"]
-            SCRAPER["Web Scraper"]
-        end
-
-        subgraph SURFACE_API["Omnichannel Surface"]
-            CADDY["Caddy (TLS/Proxy)"]
-            API_DIR["/v1/chat/completions"]
-            MCP["MCP Gateway (Streamable HTTP)"]
-            DASH["React Dashboard SPA"]
-        end
-
-        %% Connections
-        DAEMON <--> VFS
-        DREAM --> SURFACE
-        DREAM --> STEER
-        SCHEDULER --> KERNEL
-        KERNEL --> OLLAMA
-        OLLAMA --> GEMMA
-        GEMMA <--> TOOLS
-        KERNEL <--> VFS
-        
-        CADDY --> API_DIR
-        CADDY --> MCP
-        CADDY --> DASH
-        API_DIR --> KERNEL
-        MCP --> VFS
-        DASH --> KERNEL
-        DASH --> VFS
-    end
-
-    subgraph FRONTIER["Frontier API (e.g., DeepSeek V4 Pro)"]
-        EVALS["Validation & Eval Loop"]
-    end
-    KERNEL -- "Confidence Routing\n(<$15/mo)" --> EVALS
-
-    subgraph CLIENTS["Remote Workspaces & Clients"]
-        IDE["Cursor / Claude Desktop"]
-        SYNC["total-recall sync\n(Workspace Projections)"]
-        WEB["Browser"]
-    end
-    
-    IDE -- "MCP" --> MCP
-    SYNC -- "Pulls T1 & T2" --> VFS
-    WEB --> CADDY
-```
-
-## 2. Component Boundaries & Engines
-
-| Component | Responsibility | Mechanics |
-|:---|:---|:---|
-| **`dream.mjs`** | Memory Maintenance | Light Sleep (scan modified), REM (pattern recognition, dream scoring), Deep Sleep (recompile surface). Decays stale memories, promotes active ones. |
-| **`steering.mjs`** | Conflict Detection | Layer 1: O(1) Ontology Check (SPO). Layer 2: Fuzzy Similarity (Jaccard + Cosine). Quarantines conflicts to `.agent/memory-inbox/conflicts/`. |
-| **`surface.mjs`** | Skill Routing | Hybrid BM25 + TF-IDF router. Injects top 7 memory nodes into relevant `SKILL.md` boundaries. Compiles T1 `INSTRUCTIONS.md` from `priority: absolute` nodes. |
-| **`task_runner.mjs`** | Autonomous Scheduler | Priority-driven background compute queue (P0-P5) running Continuous Intelligence workflows across 1000+ daily inference calls. |
-| **Sandbox** | JIT Code Execution | Opt-in network, scoped to `.agent/`, 512MB RAM cap, 60s timeout. Credential injection via `{{secrets.*}}` AES-256 decrypted at runtime. |
-| **Dashboard** | Omnichannel Interface | React SPA reverse proxied by Caddy, exposes visual SSSS manager, code playground, and file explorer. Renderable inside IDEs via MCP iframe. |
-
-## 3. Directory Layout & SSSS Memory Vault
+This repository is an **npm package** that deploys a sovereign AI system onto any POSIX host with ≥24GB RAM.
 
 ```text
-.agent/
-├── memory-vault/                      # TIER 3: Permanent Vault (Source of Truth)
-│   ├── invariants/                    # priority: absolute (compiles to T1)
-│   ├── preferences/                   # User preferences
-│   ├── anti-patterns/                 # Negative examples ("Never do X")
-│   ├── patterns/                      # Positive examples ("Always do X")
-│   ├── decisions/                     # Architectural logic
-│   ├── concepts/                      # Domain concepts
-│   ├── facts/                         # Assertions
-│   └── lore/                          # Backstory and context
-├── memory-derived/                    # Disposable JSONL indexes
-│   ├── graph-index.jsonl              
-│   └── dream-report.jsonl             
-├── memory-inbox/                      # Quarantine for new observations
-│   ├── pending/                       # Awaiting conflict resolution
-│   └── conflicts/                     # Needs explicit human resolution
-├── skills/                            # TIER 2: Progressive Disclosure
-│   └── <skill-name>/
-│       └── SKILL.md                   # Contains <!-- BEGIN INJECTED MEMORY -->
-├── scheduler/                         # Continuous Intelligence
-│   └── queue/                         # type: task Markdown files
-├── config/                            # Secrets & Auth
-│   ├── frontier.yml                   
-│   ├── auth.yml                       
-│   └── secrets.enc                    
-├── files/                             # Sovereign 200GB Storage
-├── logs/                              # JSONL system logs
-└── .backups/                          # Nightly tar.gpg archives
-
-INSTRUCTIONS.md                        # TIER 1: Compiled Hot Memory
+github.com/gregiteen/total-recall  →  npm publish  →  npx total-recall deploy
 ```
 
-## 4. The Zero-Parser Kernel
+The repo contains three layers:
 
-Unlike earlier agent frameworks that use brittle ASTs or regex loops to parse commands, Total Recall natively uses **Gemma 4 26B-A4B** as the workflow interpreter.
+| Layer | Location | Purpose | Ships with product? |
+|:---|:---|:---|:---|
+| **Product Runtime** | `src/core/`, `src/server/` | The Brain — modules that run 24/7 on the target machine | ✅ Yes |
+| **CLI & Deploy** | `bin/`, `src/cli/`, `templates/` | Provisioning, management, and maintenance commands | ✅ Yes |
+| **Frontend** | `frontend/` | React SPA dashboard — built to static assets, served by Caddy | ✅ Yes (built) |
+| **Dev Skills** | `.agent/skills/` | Intelligence that helps agents build this repo | ❌ No |
+| **Docs & Planning** | `docs/` | PRD, dev plan, tracker | ❌ No |
 
-### 4.1 Inference Engine Specification
-- **Model**: Gemma 4 26B-A4B (MoE, ~3.8B active parameters)
-- **Quantization**: Q4_K_M (~15.5GB RAM usage)
-- **Context Capacity**: 256K max, but restricted to ~32K-48K via Q4_0 KV Cache to fit within the 24GB RAM constraint of the host infrastructure.
-- **In-Context Learning Strategy**: No fine-tuning required out of the box. Context is heavily packed with: `[Hot Memory] + [Progressive Skills] + [Few-Shot SSSS Examples] + [Current Task]`.
-
-### 4.2 SSSS Workflow Execution
-The LLM reads `type: workflow` files and autonomously executes steps like `## Step N:`, parallel fanout `[Parallel]`, and error bounds `[Retry: N, OnError: Step M]`. It translates these intent structures directly into kernel tool invocations (Sandbox execution, file write, web search).
-
-## 5. Interface Requirements (Omnichannel Surface)
-
-The UI architecture ensures CLI/UI Parity across 4 distinct interface layers:
-
-1. **Standalone Dashboard (React SPA)**: Statically served via Caddy, enabling chat, Voice Mode (Kokoro), web search tools, File Manager, and Workflow builder.
-2. **Direct Model API**: Exposes standard `/v1/chat/completions` (OpenAI API spec) proxying to local Ollama.
-3. **MCP Gateway**: Exposes Streamable HTTP for Claude Desktop/Cursor to ingest Memory Vault.
-4. **MCP Apps**: Renders Dashboard React SPA inside IDEs via iframe messaging for visual SSSS exploration.
-
-## 6. Workspace Client Architecture (Sync)
-
-Total Recall is a centralized brain with distributed projections.
-Workspaces do not store true memory, but *projections* of the Brain.
-
-- `npx total-recall init --brain <url>` connects the workspace.
-- `npx total-recall sync` pulls down the Tier 1 `INSTRUCTIONS.md` and Tier 2 `SKILL.md` injected blocks.
-- Works as a fallback for agents that only rely on local files (Antigravity). MCP agents use live read.
-
-## 7. Continuous Intelligence (Infinite Compute)
-
-The OS daemon orchestrates a priority-driven task scheduler that ensures the kernel is constantly working (1,000+ daily inferences at $0 cost).
-
-### Priority Queue Weights:
-- **P0:** User-Facing (Real-time Chat, Dashboard usage)
-- **P1:** Memory Maintenance (Dream Cycle, compression, indexing)
-- **P2:** Skill Engineering (Autonomous research to draft `SKILL.md` files)
-- **P3:** Proactive Research (Web searching current events, knowledge refresh)
-- **P4:** Self-Evaluation (Frontier eval runs)
-- **P5:** Exploration (Speculative background curiosities)
-
-## 8. SSSS Frontmatter Schema (v2)
-
-All VFS files rely on strict YAML frontmatter, verified by Zod.
-
-```yaml
 ---
-# === Identity ===
-type: memory                          # memory | task | workflow | assistant | rule
-slug: descriptive-lowercase-slug
-category: patterns                    # invariants | preferences | etc.
-title: "Human-readable description"
-schema_version: 2
 
-# === Lifecycle ===
-status: active                        # active | draft | superseded | deprecated
-created: 2026-05-01T14:30:00Z
-updated: 2026-05-10T14:03:00Z
-last_accessed: 2026-05-09T17:55:00Z
+## 2. Repository Structure
 
-# === Weight & Enforcement ===
-importance: 3                         # 1–5
-priority: normal                      # normal | high | absolute
-confidence: 0.92                      # 0.00–1.00
-modality: must                        # must | must_not | should | should_not | descriptive | preference
-
-# === Semantic Ontology (O(1) conflict check) ===
-subject: agent
-predicate: use_pm2_reload
-object: deployment
-sentiment_polarity: directive_must
-sentiment_target: "deployment"
-
-# === Provenance & Relationships ===
-source:
-  type: chat
-  session_id: 7f3a2b1c
-supersedes: []
-superseded_by: null
-contradicts: []
-tags: [deploy, ops, pm2, zero-downtime]
-routes_to_skills: []
----
+```text
+total-recall/
+├── bin/
+│   └── total-recall.mjs              # CLI entrypoint (npx total-recall <cmd>)
+├── src/
+│   ├── cli/                           # CLI subcommand handlers
+│   │   ├── deploy.mjs                 #   Provision host (Ollama, models, VFS, systemd)
+│   │   ├── compile.mjs                #   Rebuild indexes + INSTRUCTIONS.md
+│   │   ├── dream.mjs                  #   Trigger dream cycle manually
+│   │   ├── reindex.mjs                #   Delete + regenerate derived indexes
+│   │   ├── lint.mjs                   #   Validate vault nodes against schema v2
+│   │   ├── daemon.mjs                 #   start | stop | status for background daemon
+│   │   ├── backup.mjs                 #   Encrypted tarball creation
+│   │   ├── restore.mjs                #   Restore from backup
+│   │   ├── export.mjs                 #   Portable VFS export
+│   │   ├── import.mjs                 #   Import VFS on new host
+│   │   └── upgrade.mjs                #   Swap kernel model
+│   ├── core/                          # Product runtime (Brain modules)
+│   │   ├── vault.mjs                  #   SSSS vault read/write/walk
+│   │   ├── surface.mjs                #   BM25+TF-IDF skill routing + T1 compiler
+│   │   ├── steering.mjs               #   Conflict detection (SPO + fuzzy)
+│   │   ├── dream.mjs                  #   Dream cycle daemon (Light/REM/Deep)
+│   │   ├── sandbox.mjs                #   Isolated code execution
+│   │   ├── frontier.mjs               #   BYOK frontier API routing
+│   │   ├── task_runner.mjs            #   P0-P5 autonomous task scheduler
+│   │   ├── schema.mjs                 #   Zod validators for schema v2
+│   │   ├── watchdog.mjs               #   Log monitor + automated triggers
+│   │   ├── pattern_detector.mjs       #   User pattern recognition
+│   │   ├── blackboard.mjs             #   Workflow state tracking
+│   │   └── evolution.mjs              #   SSSS schema self-evolution
+│   └── server/                        # HTTP layer
+│       ├── index.mjs                  #   Main server (mounts api + mcp + static)
+│       ├── api.mjs                    #   /v1/chat/completions proxy
+│       └── mcp.mjs                    #   /mcp Streamable HTTP gateway
+├── frontend/                          # React SPA dashboard
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── vite.config.ts
+├── templates/                         # Deploy templates (copied to target)
+│   ├── Caddyfile                      #   Reverse proxy + auto-TLS
+│   ├── total-recall-server.service    #   systemd: Express + MCP server
+│   ├── total-recall-daemon.service    #   systemd: dream cycle background loop
+│   └── default-config/               #   Initial config files
+│       ├── frontier.yml               #   BYOK frontier API config
+│       └── security.yml               #   Privacy + export controls
+├── scaffold/                          # VFS directory skeleton
+│   └── .agent/                        #   Created at ~/.agent/ on deploy
+│       ├── memory-vault/
+│       │   ├── invariants/
+│       │   ├── patterns/
+│       │   ├── anti-patterns/
+│       │   ├── preferences/
+│       │   ├── decisions/
+│       │   ├── concepts/
+│       │   ├── facts/
+│       │   └── lore/
+│       ├── memory-derived/
+│       ├── memory-inbox/
+│       │   ├── pending/
+│       │   └── conflicts/
+│       ├── skills/                    # PRODUCT skills (kernel creates these)
+│       ├── scheduler/queue/
+│       ├── sessions/
+│       ├── config/
+│       ├── logs/
+│       ├── files/
+│       └── .backups/
+├── docs/                              # Planning docs (not shipped)
+│   └── projects/in-progress/master/
+│       ├── PRD.md
+│       ├── ARCHITECTURE.md            # THIS FILE
+│       ├── DEV_PLAN.md
+│       └── PROJECT_TRACKER.md
+├── .agent/                            # DEV SKILLS (not shipped)
+│   └── skills/
+│       ├── skill/
+│       ├── mcp-expert/
+│       ├── ssss/
+│       ├── cli-agents/
+│       └── ...
+├── package.json                       # npm package with "bin" field
+└── README.md
 ```
 
-## 9. Recursive Self-Improvement
-The memory system modifies its own architecture:
-Level 0: Execute SSSS workflows
-Level 1: Build skills/memory
-Level 2: Identify friction/limitations
-Level 3: Propose, test, and validate new SSSS primitives
-Level 4: Frontier Eval + Update SSSS Spec
+---
 
-## 10. Tiered Intelligence Architecture
+## 3. Deployment Model
 
-While Gemma 4 26B-A4B handles 99% of work locally and securely, high-stakes reasoning or self-evaluation utilizes a BYOK (Bring Your Own Key) **Frontier API** (e.g., DeepSeek V4 Pro, OpenAI).
+```text
+Developer Machine                         Target Machine (Oracle VM / Mac / Linux)
+┌────────────────┐                        ┌──────────────────────────────────────┐
+│                │   npx total-recall     │                                      │
+│  npm registry  │──── deploy ──────────▶ │  /opt/total-recall/                  │
+│  (or git clone)│                        │    src/core/*.mjs                    │
+│                │                        │    src/server/*.mjs                  │
+└────────────────┘                        │    frontend/dist/                    │
+                                          │    node_modules/                     │
+                                          │                                      │
+                                          │  ~/.agent/          (VFS — user data)│
+                                          │    memory-vault/                     │
+                                          │    skills/           (product skills)│
+                                          │    config/                           │
+                                          │    logs/                             │
+                                          │                                      │
+                                          │  Caddy (auto-TLS, ports 443/80)      │
+                                          │  Ollama (Gemma 4 26B-A4B)            │
+                                          │  SearXNG (Docker, port 8888)         │
+                                          │                                      │
+                                          │  systemd:                            │
+                                          │    total-recall-server.service       │
+                                          │    total-recall-daemon.service       │
+                                          └──────────────────────────────────────┘
+```
 
-- **Confidence Routing**: If Gemma 4 lacks confidence on a complex step, it escalates to the Frontier API.
-- **Eval Loop Flywheel**: Gemma 4 autonomously builds skills -> self-tests -> sends to Frontier model for ~$0.012 eval -> receives corrections -> applies them to VFS -> learns from it as a few-shot example on future iterations.
+### What `npx total-recall deploy` does:
 
-## 11. Backup & Security Model
+1. Detect host architecture (aarch64/x86_64)
+2. Install Ollama (if not present)
+3. Pull Gemma 4 26B-A4B model (~16GB)
+4. Pull Kokoro-82M voice model (~200MB)
+5. Install Caddy reverse proxy
+6. Copy `scaffold/.agent/` → `~/.agent/` (VFS skeleton)
+7. Copy `templates/default-config/` → `~/.agent/config/`
+8. Install systemd unit files from `templates/`
+9. Build frontend (`cd frontend && npm run build`)
+10. Install the package globally or to `/opt/total-recall/`
+11. Start services via systemd
+12. Run initial `compile` to generate INSTRUCTIONS.md + indexes
 
-- **Security List**: Ports 443 (HTTPS) and 22 (SSH Key-Only) allowed.
-- **Code Mode Isolation**: Scripts run in experimental-vm-modules Node threads. Cannot access host outside `~/.agent/`. No `child_process.exec` un-sandboxed.
-- **Backup Strategy**: Nightly encrypted tarballs (AES-256 + GPG) to local block storage, with optional rsync to S3/B2. Recovers via `npx total-recall restore`.
-- **Secrets Management**: Argon2id master password protects AES-256-GCM `secrets.enc`. No plaintext keys written to disk.
+### Dev Skills vs Product Skills
+
+| Type | Location | Created by | Purpose |
+|:---|:---|:---|:---|
+| **Dev Skills** | `total-recall/.agent/skills/` (this repo) | Human developers | Help agents build and maintain the Total Recall codebase |
+| **Product Skills** | `~/.agent/skills/` (target machine) | The kernel itself | Domain expertise the kernel builds autonomously |
+
+These are completely separate. Dev skills never ship with the product. Product skills are created by the kernel's Skill Engineering loop (P2 priority) on the target machine.
+
+---
+
+## 4. Runtime Topology (on Target Machine)
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│  TOTAL RECALL BRAIN (Target Machine)                             │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  Express Server (src/server/index.mjs)                      │ │
+│  │                                                             │ │
+│  │  Routes:                                                    │ │
+│  │    POST /v1/chat/completions  → api.mjs (OpenAI proxy)     │ │
+│  │    POST|GET|DELETE /mcp       → mcp.mjs (MCP gateway)      │ │
+│  │    GET  /health               → health check               │ │
+│  │    /*   (static)              → frontend/dist/ (React SPA) │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  OS Daemon (src/core/dream.mjs)                             │ │
+│  │                                                             │ │
+│  │  Background loops:                                          │ │
+│  │    Dream Cycle (Light → REM → Deep Sleep)                   │ │
+│  │    Task Scheduler (P0–P5 priority queue)                    │ │
+│  │    Watchdog (log monitor + circuit breakers)                │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────┐│
+│  │ Ollama        │  │ SearXNG       │  │ ~/.agent/ (VFS)       ││
+│  │ (Gemma 4)     │  │ (Web Search)  │  │   memory-vault/       ││
+│  │ (Kokoro-82M)  │  │ (Docker)      │  │   skills/ (product)   ││
+│  └───────────────┘  └───────────────┘  │   config/             ││
+│                                         │   logs/               ││
+│                                         └───────────────────────┘│
+│                                                                  │
+│  Caddy (reverse proxy, auto-TLS on port 443)                    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Module Responsibilities
+
+### Core Modules (`src/core/`)
+
+| Module | Responsibility |
+|:---|:---|
+| `vault.mjs` | Atomic read/write of SSSS memory nodes. Walks vault, parses frontmatter. |
+| `surface.mjs` | Routes memory nodes to skills via BM25+TF-IDF. Compiles Tier 1 INSTRUCTIONS.md. |
+| `steering.mjs` | Conflict detection: Layer 1 (O(1) SPO ontology) + Layer 2 (fuzzy Jaccard+cosine). |
+| `dream.mjs` | Background daemon: Light Sleep (scan), REM (pattern recognition), Deep Sleep (recompile). |
+| `sandbox.mjs` | Isolated Node.js/Bash execution. Timeout, memory cap, credential injection. |
+| `frontier.mjs` | BYOK frontier API routing. Reads `config/frontier.yml` for provider config. |
+| `task_runner.mjs` | P0–P5 priority queue. Processes `type: task` markdown files from `scheduler/queue/`. |
+| `schema.mjs` | Zod validators for all SSSS frontmatter (memory, task, workflow, skill, rule). |
+| `watchdog.mjs` | Tails JSONL logs. Circuit breakers, exfiltration monitor, latency anomaly triggers. |
+| `pattern_detector.mjs` | Watches user interactions for recurring topics → generates skill engineering tasks. |
+| `blackboard.mjs` | Workflow state tracking via scratchpad files (`runs/data_${run_id}.json`). |
+| `evolution.mjs` | Schema self-improvement proposals, testing, and application. |
+
+### Server Modules (`src/server/`)
+
+| Module | Responsibility |
+|:---|:---|
+| `index.mjs` | Main Express app. Mounts api, mcp, health, static frontend. Starts listening. |
+| `api.mjs` | OpenAI-compatible `/v1/chat/completions` proxy with memory injection. |
+| `mcp.mjs` | MCP Gateway — Streamable HTTP transport exposing tools, resources, prompts. |
+
+### CLI Modules (`src/cli/`)
+
+| Module | CLI Command | Responsibility |
+|:---|:---|:---|
+| `deploy.mjs` | `total-recall deploy` | Provision host: Ollama, models, VFS, Caddy, systemd |
+| `compile.mjs` | `total-recall compile` | Rebuild all derived indexes + INSTRUCTIONS.md |
+| `dream.mjs` | `total-recall dream` | Manually trigger a dream cycle |
+| `reindex.mjs` | `total-recall reindex` | Delete + regenerate all derived indexes |
+| `lint.mjs` | `total-recall lint` | Validate all vault nodes against schema v2 |
+| `daemon.mjs` | `total-recall daemon start\|stop\|status` | Manage background daemon |
+| `backup.mjs` | `total-recall backup` | Create encrypted VFS tarball |
+| `restore.mjs` | `total-recall restore --from <path>` | Restore from backup |
+| `export.mjs` | `total-recall export` | Portable VFS export |
+| `import.mjs` | `total-recall import --from <path>` | Import VFS on new host |
+| `upgrade.mjs` | `total-recall upgrade --model <name>` | Swap kernel model |
+
+---
+
+## 6. Interface Endpoints (on Target Machine)
+
+| Endpoint | Purpose | Auth |
+|:---|:---|:---|
+| `POST /v1/chat/completions` | OpenAI-compatible proxy for IDEs | Bearer PAT |
+| `POST\|GET\|DELETE /mcp` | MCP Gateway for Claude/Cursor/ChatGPT | OAuth 2.1 / Bearer PAT |
+| `GET /health` | System diagnostics | None (local only) |
+| `/*` | React SPA dashboard | Session cookie + bcrypt |
+
+All traffic flows through Caddy for auto-TLS on port 443.
+
+---
+
+## 7. Data Flow
+
+```text
+User Request (IDE / Dashboard / MCP Client)
+    │
+    ▼
+Caddy (TLS termination, port 443)
+    │
+    ▼
+Express Server (src/server/index.mjs)
+    │
+    ├─► /v1/chat/completions (api.mjs)
+    │     1. Load Tier 1 from INSTRUCTIONS.md
+    │     2. Load relevant Tier 2 from skills/
+    │     3. Prepend memory to user's messages
+    │     4. Forward to Ollama (local) or Frontier API
+    │     5. Stream response back
+    │
+    ├─► /mcp (mcp.mjs)
+    │     1. Streamable HTTP session management
+    │     2. Route tool calls to core modules
+    │     3. Expose resources (vault, indexes)
+    │     4. Serve prompt templates
+    │
+    └─► /* (static React SPA)
+          Dashboard UI for all operations
+```

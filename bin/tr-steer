@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-// Alias: tr-steer → total-recall steer
-process.argv.splice(2, 0, 'steer');
-await import('./total-recall');

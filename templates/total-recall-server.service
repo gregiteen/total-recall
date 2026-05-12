@@ -1,0 +1,18 @@
+[Unit]
+Description=Total Recall HTTP Server (API + MCP + Dashboard)
+After=network.target ollama.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/total-recall
+ExecStart=/usr/bin/node src/server/index.mjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+StandardOutput=append:/var/log/total-recall/server.log
+StandardError=append:/var/log/total-recall/server.log
+
+[Install]
+WantedBy=multi-user.target

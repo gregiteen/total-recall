@@ -1,556 +1,147 @@
-# Architecture Guide
+# Total Recall: Sovereign OS Architecture
 
-> Deep dive into how Total Recall works under the hood.
+> Deep dive into how the Total Recall Sovereign AI System (v3.0) works under the hood.
 
 ## Table of Contents
 
 - [Mental Model](#mental-model)
-- [Multi-Repo Architecture](#multi-repo-architecture)
-- [Data Flow](#data-flow)
-- [Module Map](#module-map)
-- [IDE Adapter Architecture](#ide-adapter-architecture)
-- [Surface Sync System](#surface-sync-system)
-- [Concurrent Handoff Model](#concurrent-handoff-model)
-- [Signal Scoring Deep Dive](#signal-scoring-deep-dive)
-- [Co-Processor Pipeline](#co-processor-pipeline)
-- [Dream Cycle](#dream-cycle)
-- [System 2 Research](#system-2-research)
-- [Multi-Agent Pipeline](#multi-agent-pipeline)
-- [Wiki Node Lifecycle](#wiki-node-lifecycle)
+- [The SSSS Memory Architecture](#the-ssss-memory-architecture)
+- [Three-Tier Memory Hierarchy](#three-tier-memory-hierarchy)
+- [Zero-Parser Kernel & Context](#zero-parser-kernel--context)
+- [Continuous Intelligence & Task Scheduler](#continuous-intelligence--task-scheduler)
+- [Kernel Tool Suite](#kernel-tool-suite)
+- [Tiered Intelligence & Routing](#tiered-intelligence--routing)
+- [Omnichannel Interfaces](#omnichannel-interfaces)
+- [Workspace Projections](#workspace-projections)
+- [Code Mode Sandbox](#code-mode-sandbox)
+- [Dream Cycle Coprocessor](#dream-cycle-coprocessor)
+- [Security & Disaster Recovery](#security--disaster-recovery)
 
 ---
 
 ## Mental Model
 
-Think of Total Recall as a **brain with four distinct memory systems**, similar to how neuroscience describes human memory:
-
-| Human Memory | Total Recall Layer | What It Stores | Durability |
-|---|---|---|---|
-| **Episodic Memory** | Layer 1: Episodes | "Remember that session where we fixed the auth bug?" | Permanent, append-only |
-| **Associative Recall** | Layer 2: FTS5 Index | "This reminds me of..." (fast lookup) | Disposable, rebuilt on demand |
-| **Semantic Memory** | Layer 3: Wiki Graph | "I know that templates are banned" | Durable, versioned, linked |
-| **Muscle Memory** | Layer 4: Behavioral Surface | Instinctive rules — no thinking required | Compiled, always in context |
-
-The key insight: **each layer serves a different purpose**, and information flows upward through compilation, not downward through queries.
-
-```
-Episodes → [Dream Daemon] → Wiki Nodes → [Surface Compiler] → System Prompt
-          (consolidation)                  (ranking + compilation)
-```
-
-## Multi-Repo Architecture
-
-Total Recall operates at two levels: **per-repo** (local `.agent/` directory) and **global** (`~/.total-recall/`).
-
-```
-~/.total-recall/                          # Global brain (cross-repo)
-├── config.mjs                            # Repo registry + global settings
-│   └── repos: ['~/Github/project-a',     # All known repos
-│                '~/Github/project-b']
-├── threads/                              # Thread-to-project tags
-│   └── <conversation-id>.tag             # Which repo/project this thread belongs to
-├── thread-registry.md                    # All threads across all repos
-└── knowledge/                            # Global knowledge (user-level)
-
-~/Github/project-a/                       # Per-repo memory
-├── .agent/                               # Local brain (repo-scoped)
-│   ├── memory-wiki/                      # Knowledge graph for this repo
-│   ├── memory/episodes/                  # Session archive for this repo
-│   └── learning/learning.db              # FTS5 index for this repo
-└── docs/projects/                        # Project tracking Kanban
-    ├── in-progress/                      # Active work
-    ├── backlog/                          # Queued
-    ├── planned/                          # Designed
-    ├── completed/                        # Done
-    └── archived/                         # Historical
-```
-
-### Repo Registration
-
-`total-recall install` registers a repo in the global brain:
-
-1. Adds the repo path to `~/.total-recall/config.mjs → repos[]`
-2. Auto-runs `init` to scaffold `.agent/` and `docs/projects/` if missing
-3. Health-checks with `install --list` (🟢 initialized / 🟡 not initialized / ❌ missing)
-
-### Thread Isolation
-
-Every conversation thread is tagged with a project slug via `project-detect.mjs`. The detection heuristic:
-
-1. **Explicit** — user names the project (semantic inference by the LLM)
-2. **Open files** — IDE open files match `docs/projects/in-progress/<slug>/`
-3. **Git activity** — recent commits touch project directories
-4. **Fallback** — `general`
-
-Tags live in `~/.total-recall/threads/<id>.tag`. The thread registry provides cross-repo visibility into all active and historical threads.
-
-### Project Tracking
-
-Each repo has a `docs/projects/` directory with a Kanban-style layout. Projects move between states:
-
-```
-planned → backlog → in-progress → completed → archived
-```
-
-Each project directory can contain a `*_PROJECT_TRACKER.md` (task ledger), `*_DEVELOPMENT_PLAN.md` (architecture), `HANDOFF.md` (session state), and any related documentation.
-
-## Data Flow
-
-### Write Path (Learning)
-
-When something happens in a session:
-
-```
-User says "NEVER use templates" 
-    │
-    ├─→ [Steering]  Creates wiki node: anti-patterns/no-templates.md
-    │                Hot-patches INSTRUCTIONS.md immediately
-    │                Appends to USER.md
-    │
-    ├─→ [Co-Processor] Detects sentiment (negative, intensity 9)
-    │                   Logs to daily log
-    │
-    └─→ [Episode Archive] Session archived as episodes/2026/05/01/session-xxx.md
-```
-
-### Read Path (Recall)
-
-When the agent needs to remember:
-
-```
-Agent starts new session
-    │
-    ├─→ IDE auto-injects .agent/rules/graph-context.md (Layer 4)
-    │   → "Never use templates" is in the compiled graph surface
-    │   → No tool call needed — IDE reads rules/ on every turn
-    │
-    ├─→ On-demand: `total-recall consult --prompt "..."` 
-    │   → Synchronous graph query for immediate context
-    │
-    └─→ Programmatic search via tr-query
-        → Full-text search across all 4 layers
-```
-
-### Consolidation Path (Dream)
-
-Background maintenance:
-
-```
-Daily Logs ─→ [NREM] ─→ Extract patterns, deduplicate ─→ New wiki nodes
-Wiki Nodes ─→ [REM]  ─→ Cross-reference, detect duplicates
-Wiki Nodes ─→ [Decay] ─→ Reduce confidence over time
-Wiki Nodes ─→ [Prune] ─→ Move zero-access stale nodes to .trash/
-Wiki Graph ─→ [Memory] ─→ Regenerate MEMORY.md summary
-```
-
-## Module Map
-
-```
-src/
-├── core/                          # The engine (stateless, testable)
-│   ├── index.mjs                  # Public API re-exports
-│   ├── utils.mjs                  # YAML parsing, slugify, config loading
-│   ├── fts5.mjs                   # SQLite FTS5 search index
-│   ├── wiki.mjs                   # Knowledge graph (CRUD, lint)
-│   ├── ranking.mjs                # Signal score algorithm
-│   ├── surface.mjs                # Behavioral surface compiler + compileSurfaceFromGraph
-│   ├── steering.mjs               # Behavioral steering cascade
-│   ├── episodes.mjs               # Episode archive operations
-│   ├── dream.mjs                  # Dream daemon (NREM/REM/decay/prune)
-│   ├── crypto.mjs                 # AES-256-GCM config encryption (PBKDF2 600K)
-│   └── sync-prompts.mjs           # Multi-IDE surface sync (Phase 14)
-│
-├── coprocessor/                   # Real-time background daemon
-│   ├── daemon.mjs                 # Main daemon loop (heartbeat-based)
-│   ├── inject.mjs                 # ACTIVE CONTEXT injection into system prompt
-│   ├── notify.mjs                 # Multi-channel notification dispatcher
-│   ├── checks/
-│   │   ├── steering.mjs           # Detect "always/never/correct" directives
-│   │   ├── sentiment.mjs          # Detect user mood shifts
-│   │   ├── relevance.mjs          # Surface related memories
-│   │   ├── contradiction.mjs      # Flag conflicting statements
-│   │   └── researcher.mjs         # System 2: web-backed fact checking
-│   └── watchers/
-│       └── antigravity.mjs        # IDE-specific conversation watcher
-│
-├── notifications/                 # Notification channel adapters
-│   └── channels/
-│       ├── macos.mjs              # macOS native notifications (osascript)
-│       ├── slack.mjs              # Slack webhook
-│       ├── discord.mjs            # Discord webhook
-│       └── email.mjs              # SMTP email
-│
-├── agents/                        # Multi-agent orchestration
-│   └── switch-memory-pipeline.mjs # 3-agent extraction pipeline
-│
-├── tests/                         # Node.js built-in test runner (73 tests)
-│   ├── utils.test.mjs
-│   ├── ranking.test.mjs
-│   ├── wiki.test.mjs
-│   ├── episodes.test.mjs
-│   ├── dream.test.mjs
-│   ├── fts5.test.mjs
-│   ├── crypto.test.mjs
-│   └── watchers.test.mjs
-│
-templates/                         # Customizable prompt templates
-└── prompts/
-    ├── archivist.md               # Memory extraction prompt
-    ├── synthesizer.md             # Surface compilation prompt
-    └── fact-checker.md            # Codebase verification prompt
-```
-
-## IDE Adapter Architecture
-
-Total Recall is IDE-agnostic via two adapter interfaces: **Watchers** (input) and **CLI Adapters** (output).
-
-### Watcher Interface
-
-Watchers monitor IDE-specific conversation logs and extract new turns for the co-processor:
-
-```
-┌───────────────────────────────────────────────────────────┐
-│                    WATCHER INTERFACE                       │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  getLatestTurns()                                         │
-│  → Returns: Array<{ role: string, text: string }>         │
-│  → Purpose: Extract new conversation turns since last     │
-│             check for the co-processor pipeline           │
-│                                                           │
-│  Available Watchers:                                      │
-│  ┌─────────────┬──────────────────────────────────┐      │
-│  │ antigravity │ overview.txt (plain text log)     │      │
-│  │ claude-code │ ~/.claude/projects/*.jsonl         │      │
-│  │ cursor      │ .cursor/ internal DB              │      │
-│  │ aider       │ .aider.chat.history.md            │      │
-│  │ windsurf    │ .windsurf/ hooks                  │      │
-│  │ generic     │ User-specified path + format      │      │
-│  └─────────────┴──────────────────────────────────┘      │
-│                                                           │
-└───────────────────────────────────────────────────────────┘
-```
-
-Each watcher lives in `src/coprocessor/watchers/<name>.mjs` and exports a class with `getLatestTurns()`.
-
-### CLI Adapter Interface
-
-CLI Adapters enable the multi-agent pipeline to dispatch work to any CLI-based AI agent:
-
-```
-┌───────────────────────────────────────────────────────────┐
-│                  CLI ADAPTER INTERFACE                     │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  buildCommand(model, promptFile)                          │
-│  → Returns: { binary: string, args: string[] }            │
-│  → Purpose: Construct CLI invocation for each agent       │
-│                                                           │
-│  Built-in Adapters:                                       │
-│  ┌──────────┬────────────┬───────────────────────────┐   │
-│  │ gemini   │ gemini     │ -p <prompt> --sandbox=no  │   │
-│  │ claude   │ claude     │ -p <prompt> --allowedTools│   │
-│  │ codex    │ codex      │ <prompt file via stdin>   │   │
-│  │ aider    │ aider      │ --message <prompt>        │   │
-│  │ copilot  │ gh copilot │ <prompt>                  │   │
-│  └──────────┴────────────┴───────────────────────────┘   │
-│                                                           │
-│  Override all with: agents.default in config              │
-│                                                           │
-└───────────────────────────────────────────────────────────┘
-```
-
-Each adapter handles stdin/stdout piping, model flags, and error extraction for its specific CLI tool.
-
-## Surface Sync System (Phase 20: SyncGraph Architecture)
-
-Phase 20 replaced the legacy section-injection model with a **standalone rule file** approach. Instead of finding and replacing a `## DISTILLED MEMORY` section inside `INSTRUCTIONS.md`, the surface compiler now writes the entire compiled output to `.agent/rules/graph-context.md`. The IDE auto-injects all files in `.agent/rules/` on every turn as hard rules — no tool calls required.
-
-```
-┌─────────────────┐     ┌──────────────┐     ┌────────────────────┐
-│   Wiki Graph    │────▶│   Surface    │────▶│   Rule File Write  │
-│  (Layer 3)      │     │  Compiler    │     │                    │
-└─────────────────┘     │  (ranking +  │     │  .agent/rules/     │
-                        │  graph mode) │     │  graph-context.md  │
-                        └──────────────┘     │                    │
-                                              │  IDE reads this    │
-                                              │  automatically on  │
-                                              │  every turn.       │
-                                              └────────────────────┘
-```
-
-Additionally, `total-recall consult --prompt "..."` provides **synchronous** graph querying. The prompt is classified (answer/execute/discuss/emergency), the graph is traversed, and the compiled surface is printed to stdout for immediate use.
-
-### Format Strategies
-
-| IDE | File | Strategy | Notes |
-|-----|------|----------|-------|
-| Antigravity | `.agent/rules/graph-context.md` | Standalone rule file | Auto-injected every turn by IDE |
-| Claude Code | `CLAUDE.md` | Symlink detection | If symlink → skip; else section injection |
-| Cursor | `.cursor/rules/total-recall.mdc` | MDC file | YAML frontmatter + `alwaysApply: true` |
-| Windsurf | `.windsurf/rules/total-recall.md` | Rule file | Self-contained markdown with header |
-| Roo Code | `.roo/rules/total-recall.md` | Rule file | Self-contained markdown |
-| Continue | `.continue/rules/total-recall.md` | Rule file | Self-contained markdown |
-
-### Detection
-The sync system scans for IDE-specific markers (directories and files) to determine which IDEs are active. No configuration needed — detection is automatic.
-
-### Synchronous Consult (CLI)
-```bash
-# Query the graph for context-aware instructions
-total-recall consult --prompt "deploy the API to production"
-
-# Output: compiled surface tailored to "execute" mode
-```
-
-## Concurrent Handoff Model
-
-Phase 17 solved the handoff bottleneck: both outgoing and incoming agents can be alive simultaneously.
-
-```
-OUTGOING AGENT (/switch)                 INCOMING AGENT (/start)
-────────────────────────                 ───────────────────────
-Step 1: Write HANDOFF.md ─────────▶ HANDOFF.md available immediately
-    │                                        │
-    │   (self-sufficient: includes           ▼
-    │    session state, next steps,    Priority cascade:
-    │    file refs, agent mandates)    1. START.md (if fresh)
-    │                                  2. HANDOFF.md ← always available
-Step 2: Identity reflection          3. Raw files (legacy fallback)
-Step 3: Daily log entry                      │
-Step 4: Code quality checks                  ▼
-Step 5: repo-expert update            Agent starts working
-Step 6: Learning persistence         (no waiting for /switch)
-Step 7: Wiki maintenance
-Step 8: Memory pipeline (background)
-Step 9: Code quality verify
-Step 10: Distill START.md ──────────▶ START.md enriches NEXT session
-```
-
-### Key Properties
-- **HANDOFF.md is Step 1**: Written first, self-sufficient. The incoming agent can start immediately.
-- **START.md is Step 10**: Written last (by Gemini Flash distillation). Enriches the next session but is not required.
-- **Resilient boot**: `/start` uses a priority cascade. Missing START.md is a warning, not a failure.
-- **Zero blocking**: Steps 2-10 are fire-and-forget enrichment. The outgoing agent works at its own pace.
-
-## Signal Scoring Deep Dive
-
-The ranking algorithm determines which wiki nodes appear in the behavioral surface. It's deliberately simple — no ML, no embeddings, just math that maps to human intuition:
-
-```
-signal_score = intensity × (access + 1)^0.5 × max(0.1, 0.5^(days / half_life))
-```
-
-### The Three Factors
-
-**1. Intensity** (1-10): How emotionally significant was the experience?
-- User screams "NEVER DO THIS AGAIN" → intensity 9-10
-- User says "nice, that works" → intensity 5-6
-- Routine observation → intensity 3-4
-
-**2. Access Factor** `(access + 1)^0.5`: How often is this knowledge retrieved?
-- Square root means diminishing returns — 100 accesses isn't 10x more important than 1
-- The `+1` ensures even never-accessed nodes get a nonzero factor
-
-**3. Recency Decay** `max(0.1, 0.5^(days / half_life))`: How fresh is this?
-- Half-life is type-specific:
-  ```
-  preference:   90 days  (user tastes change slowly)
-  anti-pattern: 60 days  (bad habits are memorable)
-  pattern:      30 days  (good patterns need reinforcement)
-  concept:      30 days
-  decision:     45 days  (decisions are somewhat sticky)
-  project:      14 days  (project context ages fast)
-  conclusion:   30 days  (research conclusions moderate)
-  ```
-- The `0.1` floor means nothing ever fully decays — a user preference from 6 months ago still gets 10% weight
-
-### Example Scores
-
-| Node | Intensity | Access | Days Old | Half-Life | Score |
-|------|-----------|--------|----------|-----------|-------|
-| "Never use templates" | 9 | 12 | 2 | 60 | 9 × 3.6 × 0.98 = **31.7** |
-| "Use dark mode" | 5 | 0 | 30 | 90 | 5 × 1.0 × 0.79 = **4.0** |
-| "Project X uses Redis" | 4 | 2 | 60 | 14 | 4 × 1.7 × 0.1 = **0.7** |
-
-## Co-Processor Pipeline
-
-The daemon runs on a 15-second heartbeat (configurable). Each tick:
-
-```
-┌──────────────────────────────────────────────────┐
-│                DAEMON HEARTBEAT                   │
-├──────────────────────────────────────────────────┤
-│                                                   │
-│  1. Poll Watcher → Any new conversation turns?    │
-│     └─ Antigravity: reads overview.txt changes    │
-│                                                   │
-│  2. Extract text from new turns                   │
-│     └─ User messages + Model responses            │
-│                                                   │
-│  3. Run 4 parallel checks:                        │
-│     ├─ Steering:      "always/never/correct"?     │
-│     ├─ Sentiment:     mood shift detected?        │
-│     ├─ Relevance:     FTS5 memory search          │
-│     └─ Contradiction: conflicts with wiki?        │
-│                                                   │
-│  4. Write graph surface to .agent/rules/           │
-│     └─ graph-context.md (auto-injected by IDE)    │
-│                                                   │
-│  5. Fire-and-forget: System 2 Research            │
-│     └─ Dispatches Gemini Flash for fact-checking  │
-│        (never blocks the main pipeline)           │
-│                                                   │
-└──────────────────────────────────────────────────┘
-```
-
-### Injection Format
-
-The daemon writes to a designated section in the system prompt file:
-
-```markdown
-## ACTIVE CONTEXT
-
-> [!TIP]
-> **Related Memory**: The user previously expressed strong preference for
-> zero-shot generation over templates (intensity: 9/10).
-
-> [!IMPORTANT]
-> **Fact Check**: GPT Image 2 supports 2048px native resolution.
-> DALL-E is completely deprecated. (Verified via web search)
-```
-
-This section is volatile — it's overwritten each cycle with the most relevant context.
-
-## Dream Cycle
-
-The dream cycle runs at `/start` (session boot) and mimics sleep consolidation:
-
-### NREM (Slow-Wave Sleep)
-- Reads daily logs since the last dream
-- Extracts entries by category: critical-failures, user-preferences, patterns, wiki
-- Deduplicates against existing wiki nodes (by slug matching)
-- Counts raw → unique ratio to measure information density
-
-### REM (Rapid Eye Movement)
-- Walks the entire wiki graph
-- **Duplicate detection**: Normalizes titles and finds nodes with identical concepts
-- **Stale detection**: Flags nodes past their type-specific medium threshold
-- **Orphan detection**: Finds nodes with no `related` links and no `[[backlinks]]`
-
-### Confidence Decay
-- Scans all wiki nodes with `last_verified` dates
-- Applies type-specific thresholds:
-  - `high → medium` at the first threshold (e.g., 30 days for patterns)
-  - `medium → low` at the second threshold (e.g., 90 days for patterns)
-- Access or re-verification resets the clock
-
-### Pruning
-- Only prunes nodes that are: `confidence: low` AND `access_count: 0` AND past 2× their medium threshold
-- Moves to `.trash/` — never hard-deletes
-- This is the most conservative operation in the system
-
-### MEMORY.md Regeneration
-- Reads the full wiki graph
-- Groups by category, sorts by signal score
-- Writes a human-readable summary with top-5 per category
-- Uses confidence emoji: 🟢 high, 🟡 medium, 🔴 low
-
-## System 2 Research
-
-Named after Kahneman's "Thinking, Fast and Slow" — this is the slow, deliberate reasoning system.
-
-### Detection
-
-The researcher scans model responses for two types of claims:
-
-**Uncertain claims** (8 patterns):
-- "I think...", "I believe...", "IIRC..."
-- "probably", "might be", "should be..."
-- "if I remember correctly", "not sure but..."
-
-**Verifiable technical claims** (7 patterns):
-- Version numbers: "X uses v2.3"
-- API references: "the endpoint is /api/v1/..."
-- Architecture: "X uses Y internally"
-- Deprecation: "X was deprecated in..."
-
-### Research Pipeline
-
-```
-Claim detected → Gemini Flash (web search) → Parse JSON result
-                                                    │
-                                     ┌──────────────┼──────────────┐
-                                     │              │              │
-                                  verified      contradicted    inconclusive
-                                     │              │              │
-                              create wiki     create wiki       skip
-                              node (TIP)    node (CAUTION)
-                                     │              │
-                              inject into    inject + notify
-                             ACTIVE CONTEXT   via macOS alert
-```
-
-If Gemini fails (timeout/rate-limit), falls back to Codex CLI with `--search`.
-
-## Multi-Agent Pipeline
-
-During `/switch` (session handoff), three agents work sequentially:
-
-### Archivist (Gemini Flash)
-- Reads the conversation overview.txt
-- Creates a structured episode in `episodes/YYYY/MM/DD/`
-- Extracts new wiki nodes from the conversation
-- Updates USER.md and SOUL.md if new preferences/rules emerged
-
-### Synthesizer (Claude)
-- Reads the entire wiki graph
-- Ranks all nodes by signal score
-- Generates a new DISTILLED MEMORY block
-- Writes to `.agent/rules/graph-context.md` (auto-injected by IDE)
-
-### Fact-Checker (Codex)
-- Reads all wiki nodes
-- For each technical claim, verifies against the current codebase
-- Updates `last_verified` for confirmed claims
-- Sets `confidence: low` for contradicted claims
-
-All three run via `Promise.allSettled` — one failure doesn't block the others.
-
-## Wiki Node Lifecycle
-
-```
-                    ┌─────────┐
-    User directive  │ Created │  (confidence: high)
-    or extraction   └────┬────┘
-                         │
-              ┌──────────┼──────────┐
-              │          │          │
-         accessed    not accessed   │
-         (score ↑)   (score ↓)    fact-checked
-              │          │          │
-              │     ┌────┴────┐    verified
-              │     │ Decayed │    (last_verified
-              │     │ to      │     reset)
-              │     │ medium  │
-              │     └────┬────┘
-              │          │
-              │     ┌────┴────┐
-              │     │ Decayed │
-              │     │ to low  │
-              │     └────┬────┘
-              │          │
-              │     ┌────┴────────────┐
-              │     │ access > 0?     │
-              │     │  YES → keep     │
-              │     │  NO + 2× stale  │
-              │     │  → .trash/      │
-              │     └─────────────────┘
-              │
-         still active
-         (stays in surface)
-```
-
----
-
-*Total Recall is MIT licensed. Built for the [AgentSkills.io](https://agentskills.io) ecosystem.*
+Total Recall is a **Sovereign AI System** operating as a general-purpose intelligence engine that lives on user-owned infrastructure. The architecture is built around the **Structured Semantic Syntax System (SSSS)** — a database-free architecture where all memory, logic, agents, and state are semantically typed Markdown files.
+
+There are no external databases (no Postgres, Redis, or vector DBs). The filesystem *is* the database. The system consists of:
+1. **The Brain (Host Node):** Runs 24/7 on dedicated infrastructure (e.g., Oracle Cloud ARM VM, minimum 24GB RAM), hosting the SSSS Memory Vault, the local LLM kernel (Gemma 4 26B-A4B), the task scheduler, and API gateways.
+2. **The Intelligence:** A combination of a free, 24/7 local workhorse model (Gemma 4) and a pluggable frontier judge (e.g., DeepSeek V4 Pro) for high-stakes evaluations.
+3. **The Projections:** Distributed, read-only snapshots of compiled memory synced into individual workspaces for IDE agents (Antigravity, Cursor, Claude Code) to consume.
+
+## The SSSS Memory Architecture
+
+The core tenet of the architecture is **Markdown is Law**. The state machine, knowledge graph, and automation engine exist entirely as `.md` and `.yml` files in the Virtual File System (VFS).
+
+### SSSS Primitive Types
+
+- `memory`: Knowledge graph nodes (`slug`, `category`, `status`, `importance`, `modality`).
+- `assistant`: System instructions and chat logs.
+- `workflow`: Automation pipelines (`[Parallel]`, `[Retry]`, `[Lock]`).
+- `task`: Autonomous scheduler work items.
+- `rule`: Global configurations and logic.
+
+Every file contains semantic YAML frontmatter that is validated at runtime (e.g., via Zod). The kernel reads, writes, and updates these files natively without relying on complex regex parsers or abstract syntax trees. This enables **Recursive Self-Improvement**, where the kernel can identify schema frictions, propose new primitive tags, test them, and autonomously upgrade the SSSS architecture.
+
+## Three-Tier Memory Hierarchy
+
+Memory is stratified to balance context constraints with deep knowledge retrieval:
+
+1. **Tier 1 (Hot Memory):** Injected directly into the system prompt. Contains active behavioral rules and critical invariants (`priority: absolute`, `modality: must`). Latency is 0ms.
+2. **Tier 2 (Progressive Disclosure):** Curated knowledge surfaced based on semantic relevance via hybrid BM25 + TF-IDF scoring. Injected into `SKILL.md` files or queried via JSONL indexes.
+3. **Tier 3 (Permanent Vault):** The full knowledge graph located in `.agent/memory-vault/`. Contains historical logs, superseded memories, and raw data.
+
+## Zero-Parser Kernel & Context
+
+The core engine is a locally hosted **Gemma 4 26B-A4B** (released April 2, 2026 by Google DeepMind), running via Ollama. It uses a Mixture-of-Experts (MoE) architecture, with 26 billion total parameters but only ~3.8 billion active during inference, making it highly efficient. It is quantized to Q4_K_M format.
+
+Instead of traditional compilation or database querying, the LLM itself is the parser. The system utilizes **aggressive in-context learning**. The 32K–48K token context window is filled with:
+- Hot Memory (Tier 1)
+- Semantically retrieved Progressive Disclosure (Tier 2)
+- Few-shot examples (curated from past successful executions)
+- The current conversation or task
+
+**ARM Ampere A1 KV Cache Optimization:** 
+Because the system targets 24GB ARM instances (like Oracle Cloud's Ampere A1), KV cache footprint must be strictly managed. The architecture utilizes `export OLLAMA_KV_CACHE_TYPE=q8_0` (a ~50% reduction in KV cache memory with negligible quality loss) or `q4_0` (an aggressive ~75% reduction), coupled with `export OLLAMA_FLASH_ATTENTION=1`. Managing the context window size (`num_ctx`) ensures the model fits comfortably in the system RAM without triggering OS-level disk swapping.
+
+The system adapts by mutating its memory vault, creating patterns and few-shot examples, rather than requiring frequent fine-tuning. If necessary, cloud-burst LoRA fine-tuning provides an optional upgrade path.
+
+## Continuous Intelligence & Task Scheduler
+
+A background daemon (`dream.mjs`) orchestrates a **priority-driven autonomous task scheduler**, leveraging the fact that local inference has zero marginal cost. 
+
+It dynamically allocates a daily budget of ~1,400–1,900 inference calls across:
+- **P0 User-Facing:** Immediate responses and conversations.
+- **P1 Memory Maintenance:** Dream cycle, compression, conflict resolution.
+- **P2 Skill Engineering:** Proactively building, testing, and refining SSSS skills.
+- **P3 Proactive Research:** Web searches to maintain knowledge currency.
+- **P4 Self-Evaluation:** Testing capabilities and generating evals.
+- **P5 Exploration:** Speculative background work.
+
+## Kernel Tool Suite
+
+The kernel possesses a suite of self-hosted tools to interact with the world:
+- **Web Search & Scraping:** Uses an embedded SearXNG container and Mozilla Readability to ingest live data for proactive research and skill-building.
+- **VFS Read/Write:** Natively reads and writes to the memory vault.
+- **Voice Synthesis:** Real-time speech and narration powered by **Kokoro-82M**, an open-weights (Apache licensed) 82-million parameter Text-to-Speech model. Its lightweight architecture provides incredibly fast, high-quality audio output on edge and low-power CPU systems, often outperforming much larger legacy TTS models.
+- **Code Execution:** The Code Mode Sandbox (Node.js/Bash).
+- **Task Scheduling & Index Query:** Manages autonomous work queues and searches semantic memory nodes.
+
+## Tiered Intelligence & Routing
+
+The architecture implements a **Confidence-Based Routing** system to balance cost and capability:
+
+- **Local Workhorse (Gemma 4 26B-A4B):** Handles 99% of tasks, including all background processing, memory maintenance, and standard conversations, for free.
+- **Frontier Judge (BYOK / Any OpenAI-Compatible API):** Evaluates complex reasoning tasks, quality gates, and self-built skills. Standardized on **DeepSeek-V4-Pro** (released April 24, 2026). DeepSeek-V4-Pro is a 1.6-trillion parameter MoE model (49B active) featuring a hybrid attention architecture (CSA/HCA) that excels at long-horizon reasoning and complex software engineering at a highly competitive cost. (Alternatively, DeepSeek-V4-Flash can be used for a lighter, more economical variant).
+
+The local kernel assesses its confidence; if a task exceeds its capabilities or requires validation, it seamlessly escalates to the frontier model. Corrections from the frontier model are written to the VFS, serving as few-shot examples that continuously improve the local model's future performance.
+
+## Omnichannel Interfaces
+
+The system exposes four interface layers concurrently:
+
+1. **Standalone Dashboard:** A React SPA providing a chat interface, rich-text SSSS editor, task scheduler UI, memory graph explorer, and system management tools. It enforces the *CLI/UI Parity Mandate* (anything doable in CLI has a UI equivalent).
+2. **Direct Model API:** An OpenAI-compatible `/v1/chat/completions` endpoint exposed directly by Ollama for webhook integrations, Siri Shortcuts, and custom scripts.
+3. **MCP Gateway:** A stateless Streamable HTTP endpoint adhering to the **Model Context Protocol (MCP)**. Originally created by Anthropic and donated to the Linux Foundation's **Agentic AI Foundation (AAIF)** in December 2025, MCP acts as a vendor-neutral standard for AI connectivity. It allows remote agents (Claude Desktop, Cursor) to securely connect to and read the Sovereign Memory Vault live, escaping isolation.
+4. **MCP Apps:** Embeds the visual dashboard as an interactive app within compatible MCP clients via `postMessage` JSON-RPC.
+5. **CLI (`total-recall`):** The primary automation interface for deploying the brain, syncing workspaces, and compiling memory.
+
+## Workspace Projections
+
+Total Recall operates as a centralized brain with distributed projections. 
+Workspaces (e.g., local git repositories) sync read-only compiled memory from the brain via the CLI:
+- `total-recall init`: Registers the workspace and scaffolds the local `.agent/` directory.
+- `total-recall sync`: Pulls compiled Tier 1 rules (`INSTRUCTIONS.md`) and injects Tier 2 memory blocks directly into local `SKILL.md` files (using HTML comments to preserve human edits).
+
+IDE agents can either connect live via the MCP Gateway or read the synchronized local projections as a fallback offline-capable mode.
+
+## Code Mode Sandbox
+
+The kernel executes generated scripts (Node.js/Bash) in an isolated sandbox to interact with external APIs natively. 
+- **Isolation:** Scoped filesystem access (`~/.agent/`), memory caps (512MB), process limitations, and execution timeouts (60s).
+- **Credentials:** Injected at runtime via mustache syntax (`{{secrets.*}}`) from an AES-256-GCM encrypted keychain. Secrets are never persisted in plaintext Markdown.
+- **Feedback Loop:** `stdout`/`stderr` are piped back to the kernel for self-reflection and error recovery.
+
+## Dream Cycle Coprocessor
+
+The `dream.mjs` daemon performs essential background memory maintenance across distinct phases:
+
+- **Phase 1: Light Sleep (Scan & Ingest):** Scans recently modified VFS files and session logs to extract candidate memory observations.
+- **Phase 2: REM (Conflict Detection):** Evaluates new nodes against the active vault using a 2-layer algorithm (O(1) semantic ontology check + fuzzy similarity). Detects contradictions and surfaces them to `memory-inbox/conflicts/` for explicit human resolution.
+- **Phase 3: Deep Sleep (Recompile):** Rebuilds memory indexes, computes hybrid BM25 + TF-IDF routing tables, updates skill capsules, and compiles Tier 1 instructions.
+
+## Observability & Automated Triggers
+
+Extensive, structured logging is enforced across all subsystems via immutable JSONL streams. A dedicated `watchdog.mjs` daemon constantly tails these logs in real-time. When `yolo_mode` is enabled for full automation, the watchdog acts as both a deterministic audit trail and an active safety net by executing automated triggers:
+- **Sandbox Circuit Breakers:** Automatically quarantines any SSSS workflow that registers consecutive non-zero exit codes in the sandbox to prevent runaway execution loops.
+- **Exfiltration Anomalies:** Triggers instant API routing suspensions if abnormal token limits or unauthorized domains are detected in the Frontier Judge logs.
+- **Resource Recovery:** Automatically flushes the KV cache or triggers log rotation if inference latency spikes or disk space constraints are breached.
+
+## Security, Privacy & Disaster Recovery
+
+- **Data Sovereignty & Privacy:** A strict "Frontier Firewall" intercepts all outbound requests to cloud models (Frontier Judges). Memory nodes tagged with `privacy: local_only` (default for preferences and invariants) are aggressively redacted. Global settings default to `allow_frontier_export: ask_per_skill` to prevent accidental PII leakage. Users can opt-in to 100% automation by setting `allow_frontier_export: always` (YOLO Mode).
+- **Code Isolation:** The Node.js/Bash sandbox defaults to a strictly offline network namespace. Explicit user approval is required for scripts declaring `needs: [network]`. For fully autonomous execution, a global `yolo_mode: true` toggle bypasses these manual safety blocks.
+- **Encryption at Rest:** The entire SSSS Virtual File System is encrypted at the block volume layer. Execution secrets are AES-256-GCM encrypted in the keychain.
+- **Network:** TLS termination via Caddy, strict IP allowlisting (optional), and token bucket rate limiting on all APIs.
+- **Auth:** Session-based auth (bcrypt + TOTP) for the Dashboard; Bearer PATs for the API; OAuth 2.1 for MCP with rigorous scopes.
+- **Backup Strategy:** Configurable nightly encrypted tarballs (AES-256 GCM) of the `~/.agent/` directory mapped to local, rsync, or S3-compatible destinations with a ≤24h RPO.
+- **Portability:** The entire VFS can be exported via `total-recall export` and imported onto any POSIX-compliant host.

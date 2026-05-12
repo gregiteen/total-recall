@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-// Alias: tr-note → total-recall note
-process.argv.splice(2, 0, 'note');
-await import('./total-recall');

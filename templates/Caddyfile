@@ -1,0 +1,25 @@
+# Total Recall — Caddy Reverse Proxy Configuration
+#
+# Deployed to /etc/caddy/Caddyfile during `npx total-recall deploy`
+# Caddy automatically provisions TLS certificates via Let's Encrypt.
+#
+# Replace YOUR_DOMAIN with your actual domain.
+
+YOUR_DOMAIN {
+    # Reverse proxy to Express server
+    reverse_proxy localhost:3000
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+}

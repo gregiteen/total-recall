@@ -1,0 +1,32 @@
+[
+  {
+    "name": "frontmatter-has-type",
+    "assertion": "Every memory node .md file has a 'type' field in YAML frontmatter",
+    "severity": "error"
+  },
+  {
+    "name": "slug-matches-filename",
+    "assertion": "The 'slug' field matches the filename (without .md extension)",
+    "severity": "error"
+  },
+  {
+    "name": "category-matches-directory",
+    "assertion": "The 'category' field matches the parent directory name",
+    "severity": "error"
+  },
+  {
+    "name": "schema-version-is-2",
+    "assertion": "All memory nodes have schema_version: 2",
+    "severity": "error"
+  },
+  {
+    "name": "required-spo-fields",
+    "assertion": "Nodes with modality must/must_not have subject, predicate, and object fields for O(1) conflict detection",
+    "severity": "warning"
+  },
+  {
+    "name": "no-skill-fields-in-memory",
+    "assertion": "Memory nodes do NOT contain skill-only fields (name, description). Skills do NOT contain memory fields (slug, category, importance).",
+    "severity": "error"
+  }
+]
