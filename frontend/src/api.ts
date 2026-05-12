@@ -72,6 +72,13 @@ export async function sendChat(messages: { role: string; content: string }[], si
   return data.choices?.[0]?.message?.content ?? '(empty response)'
 }
 
+export async function fetchChatHistory(): Promise<{ role: string; content: string }[]> {
+  const res = await apiFetch(API_BASE + '/v1/chat/history')
+  if (!res.ok) throw new Error(`Chat history error: ${res.status}`)
+  const data = await res.json()
+  return data.messages ?? []
+}
+
 // ─── TTS (Kokoro-82M) ──────────────────────────────────────────────────────────
 
 export async function fetchTtsStatus(): Promise<{ enabled: boolean }> {
