@@ -88,7 +88,9 @@ function Sidebar({ onLogout }: SidebarProps) {
             }}
           >
             <option value="">Localhost (Proxy)</option>
-            <option value="http://104.131.81.127:3001">DigitalOcean (104.131.81.127)</option>
+            {import.meta.env.VITE_BRAIN_URL && (
+              <option value={import.meta.env.VITE_BRAIN_URL}>{new URL(import.meta.env.VITE_BRAIN_URL).host}</option>
+            )}
           </select>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
