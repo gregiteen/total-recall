@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio } from '../api'
 import type { ChatMessage } from '../types'
 
 let msgId = 0
@@ -11,8 +11,10 @@ export default function ChatPage() {
   const messagesEnd = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const [voiceMode, setVoiceMode] = useState(false)
+  const [kokoroEnabled, setKokoroEnabled] = useState<boolean | null>(null)
   const [deepResearchMode, setDeepResearchMode] = useState(false)
 
   const scrollToBottom = useCallback(() => {
@@ -21,14 +23,45 @@ export default function ChatPage() {
 
   useEffect(scrollToBottom, [messages, scrollToBottom])
 
-  const speak = (text: string) => {
-    if (!voiceMode || !('speechSynthesis' in window)) return
+  // Probe the Kokoro endpoint once when voice mode is turned on so we know
+  // whether to call /api/tts or fall back to the browser engine.
+  useEffect(() => {
+    if (!voiceMode || kokoroEnabled !== null) return
+    fetchTtsStatus().then(s => setKokoroEnabled(s.enabled)).catch(() => setKokoroEnabled(false))
+  }, [voiceMode, kokoroEnabled])
+
+  const speakBrowser = (text: string) => {
+    if (!('speechSynthesis' in window)) return
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
-    // Placeholder for Kokoro-82M TTS integration
     utterance.rate = 1.05
     utterance.pitch = 0.95
     window.speechSynthesis.speak(utterance)
+  }
+
+  const speak = async (text: string) => {
+    if (!voiceMode || !text.trim()) return
+    if (kokoroEnabled === false) { speakBrowser(text); return }
+    try {
+      const blob = await fetchTtsAudio(text)
+      if (!blob) {
+        // 503 → Kokoro not configured. Remember that and fall back.
+        setKokoroEnabled(false)
+        speakBrowser(text)
+        return
+      }
+      const url = URL.createObjectURL(blob)
+      if (audioRef.current) {
+        audioRef.current.pause()
+        URL.revokeObjectURL(audioRef.current.src)
+      }
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => URL.revokeObjectURL(url)
+      audio.play().catch(() => speakBrowser(text))
+    } catch {
+      speakBrowser(text)
+    }
   }
 
   const handleSend = async () => {

@@ -44,6 +44,8 @@ const COMMANDS = {
   finetune: 'finetune.mjs',
   friction: 'friction.mjs',
   chat:     'chat.mjs',
+  sync:     'sync.mjs',
+  status:   'status.mjs',
 };
 
 function printHelp() {
@@ -68,6 +70,8 @@ function printHelp() {
     finetune            Run QLoRA pipeline to generate custom weights
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
+    sync                Pull INSTRUCTIONS.md from the brain and refresh IDE shims
+    status              Show brain connection and sync state
 
   Options:
     --help, -h          Show this help message

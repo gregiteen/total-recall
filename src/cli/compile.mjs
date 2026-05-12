@@ -13,12 +13,12 @@
  *   --help             Show this help
  */
 
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveAgentDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AGENT_DIR = path.join(os.homedir(), '.agent');
+const AGENT_DIR = resolveAgentDir();
 
 function parseArgs(args) {
   const opts = { vault: null, skills: null, derived: null, instructions: null, quiet: false, help: false };

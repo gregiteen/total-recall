@@ -21,6 +21,11 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 
+// ─── Watchdog ───────────────────────────────────────────────────────────────────
+// Attach circuit-breaker log monitor before any subsystem can emit events.
+import { attachLogMonitor } from '../core/watchdog.mjs';
+attachLogMonitor();
+
 // ─── App ────────────────────────────────────────────────────────────────────────
 
 const app = express();

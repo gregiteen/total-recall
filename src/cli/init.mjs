@@ -68,10 +68,13 @@ function copyDirMerge(src, dest, dryRun) {
 }
 
 function parseArgs(args) {
-  const opts = { dryRun: false, help: false };
-  for (const arg of args) {
+  const opts = { dryRun: false, help: false, brain: null, token: null };
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
     if (arg === '--dry-run') opts.dryRun = true;
-    if (arg === '--help' || arg === '-h') opts.help = true;
+    else if (arg === '--help' || arg === '-h') opts.help = true;
+    else if (arg === '--brain') opts.brain = args[++i];
+    else if (arg === '--token') opts.token = args[++i];
   }
   return opts;
 }
@@ -151,7 +154,11 @@ export default async function init(args) {
   // ── Step 2: Seed the SSSS skill ──
   logStep('2/4', 'Installing SSSS skill into .agent/skills/ssss/');
 
-  const ssssSrc = path.join(ROOT, '.agent', 'skills', 'ssss');
+  // Prefer the shipped scaffold copy (always present in npm tarball); fall back
+  // to the dev-repo .agent copy if the scaffold one is missing.
+  const ssssScaffold = path.join(ROOT, 'scaffold', '.agent', 'skills', 'ssss');
+  const ssssDev = path.join(ROOT, '.agent', 'skills', 'ssss');
+  const ssssSrc = fs.existsSync(ssssScaffold) ? ssssScaffold : ssssDev;
   const ssssDest = path.join(agentDir, 'skills', 'ssss');
 
   if (!fs.existsSync(ssssSrc)) {
@@ -195,6 +202,16 @@ export default async function init(args) {
   } catch (err) {
     logWarn(`Compile failed: ${err.message}`);
     logWarn('You can run `npx total-recall compile` manually once the issue is resolved.');
+  }
+
+  // ── Optional: register a remote brain for hybrid mode ──
+  if (opts.brain) {
+    const cfgDir = path.join(agentDir, 'config');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    const brainCfg = { url: opts.brain };
+    if (opts.token) brainCfg.token = opts.token;
+    fs.writeFileSync(path.join(cfgDir, 'brain.json'), JSON.stringify(brainCfg, null, 2));
+    logOk(`Registered brain at ${opts.brain}. Run \`npx total-recall sync\` to pull instructions.`);
   }
 
   console.error(`

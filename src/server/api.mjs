@@ -1,12 +1,42 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'node:crypto';
 import { callFrontier, callFrontierRaw, loadFrontierConfig } from '../core/frontier.mjs';
 import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
 import { requireAuth, loginHandler, logoutHandler, apiRateLimiter } from './auth.mjs';
+import { logger } from '../core/logger.mjs';
+import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import matter from 'gray-matter';
+
+const SESSIONS_DIR = path.join(os.homedir(), '.agent', 'sessions');
+
+function getSessionId(req) {
+  const fromHeader = req.headers['x-session-id'];
+  if (typeof fromHeader === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(fromHeader)) {
+    return fromHeader;
+  }
+  const cookieSession = req.cookies?.session_id;
+  if (typeof cookieSession === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(cookieSession)) {
+    return cookieSession;
+  }
+  // Fall back to a date-based id so concurrent unauthenticated requests share a file.
+  return `daily-${new Date().toISOString().split('T')[0]}`;
+}
+
+function writeSessionRecord(sessionId, record) {
+  try {
+    if (!fs.existsSync(SESSIONS_DIR)) {
+      fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    }
+    const file = path.join(SESSIONS_DIR, `${sessionId}.jsonl`);
+    fs.appendFileSync(file, JSON.stringify(record) + '\n');
+  } catch (err) {
+    logger.error('api', `Failed to write session record: ${err.message}`);
+  }
+}
 
 export const apiRouter = express.Router();
 
@@ -108,13 +138,36 @@ CRITICAL RULE: You are equipped with 'search_web', 'execute_code', and 'update_d
       finalMessage = currentMessages[currentMessages.length - 1];
     }
     
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+    const elapsedMs = Date.now() - startTime;
+    const elapsed = (elapsedMs / 1000).toFixed(2);
     console.error(`[API] === CHAT RESPONSE GENERATED (${elapsed}s) ===`);
     if (finalMessage.content) {
       console.error(`[API] Response: "${finalMessage.content.slice(0, 150)}${finalMessage.content.length > 150 ? '...' : ''}"`);
     } else if (finalMessage.tool_calls) {
       console.error(`[API] Response: [Triggered ${finalMessage.tool_calls.length} tool calls]`);
     }
+
+    // Persist this exchange so dream-cycle Light Sleep can scan it for candidates.
+    const sessionId = getSessionId(req);
+    const promptText = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n');
+    const promptTokens = Math.ceil((promptText.length || 0) / 4);
+    const completionTokens = Math.ceil(((finalMessage.content || '').length || 0) / 4);
+    writeSessionRecord(sessionId, {
+      id: `exchange-${crypto.randomUUID()}`,
+      session_id: sessionId,
+      timestamp: new Date().toISOString(),
+      model: activeConfig.model,
+      latency_ms: elapsedMs,
+      messages: currentMessages,
+      response: finalMessage,
+      tokens: promptTokens + completionTokens
+    });
+    // Emit latency + tokens so the watchdog log monitor can react to anomalies.
+    logger.info('api', 'chat exchange completed', {
+      session_id: sessionId,
+      latency_ms: elapsedMs,
+      tokens: promptTokens + completionTokens
+    });
 
     res.json({
       id: `chatcmpl-${Date.now()}`,
@@ -131,6 +184,57 @@ CRITICAL RULE: You are equipped with 'search_web', 'execute_code', and 'update_d
     });
   } catch (error) {
     console.error('[API Error]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Text-to-Speech (Kokoro-82M) ───────────────────────────────────────────────
+
+apiRouter.get('/api/tts/status', (_req, res) => {
+  res.json({ enabled: isTtsEnabled() });
+});
+
+apiRouter.post('/api/tts', async (req, res) => {
+  try {
+    const { text, voice, format, speed } = req.body || {};
+    if (typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ error: 'Missing or empty `text` field.' });
+    }
+    if (text.length > 5000) {
+      return res.status(413).json({ error: 'Text exceeds 5000-character limit.' });
+    }
+
+    const { buffer, mimeType } = await synthesizeTts(text, { voice, format, speed });
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
+  } catch (err) {
+    if (err instanceof TtsNotConfiguredError) {
+      return res.status(503).json({ error: err.message, code: err.code });
+    }
+    logger.error('api', `TTS error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Instructions (sync consumers) ─────────────────────────────────────────────
+
+apiRouter.get('/api/instructions', (req, res) => {
+  try {
+    const instructionsPath = path.join(os.homedir(), '.agent', 'INSTRUCTIONS.md');
+    if (!fs.existsSync(instructionsPath)) {
+      return res.status(404).json({ error: 'INSTRUCTIONS.md not yet compiled' });
+    }
+    const content = fs.readFileSync(instructionsPath, 'utf8');
+    const stat = fs.statSync(instructionsPath);
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    res.json({
+      content,
+      sha256: hash,
+      bytes: stat.size,
+      modified: stat.mtime.toISOString()
+    });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
