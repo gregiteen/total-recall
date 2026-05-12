@@ -51,7 +51,7 @@ export function routeNodesToSkills(nodes, skills) {
 
     const routingText = [
       node.title,
-      node.tags.join(' '),
+      (node.tags || []).join(' '),
       (node.body || '').slice(0, 1000)
     ].join(' ');
 
@@ -124,14 +124,15 @@ export function injectSkills(skills, allNodes, routes) {
 }
 
 /**
- * Compile absolute priority rules into Tier 1 (INSTRUCTIONS.md).
+ * Build the Total Recall injection block content from absolute nodes.
  */
-export function compileTier1(nodes, instructionsFile) {
+function buildInjectionBlock(nodes) {
   const absolutes = nodes.filter(n => n.priority === 'absolute' && n.status === 'active');
-  
+  const generatedAt = new Date().toISOString();
+
   const lines = [
-    '# Tier 1 Invariants (Total Recall Hot Memory)',
-    '> This file is compiled automatically. Do not edit directly.',
+    INJECTION_BEGIN,
+    `<!-- @tier: 1, generated_at: ${generatedAt} -->`,
     ''
   ];
 
@@ -141,7 +142,69 @@ export function compileTier1(nodes, instructionsFile) {
     lines.push('');
   }
 
-  atomicWrite(instructionsFile, lines.join('\n'));
+  lines.push(INJECTION_END);
+  return lines.join('\n');
+}
+
+/**
+ * Inject or update a Total Recall block inside an existing instruction file.
+ * Preserves all content the user already has. Only manages the clearly-marked block.
+ */
+function injectIntoExisting(filePath, injectionBlock) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const escapedBegin = INJECTION_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedEnd = INJECTION_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`${escapedBegin}[\\s\\S]*?${escapedEnd}`, 'g');
+
+  let newRaw;
+  if (regex.test(raw)) {
+    // Update existing block
+    newRaw = raw.replace(regex, injectionBlock);
+  } else {
+    // Append new block at the bottom
+    newRaw = raw.trimEnd() + '\n\n' + injectionBlock + '\n';
+  }
+  atomicWrite(filePath, newRaw);
+}
+
+/**
+ * Compile absolute priority rules into Tier 1 (INSTRUCTIONS.md)
+ * and inject into all existing IDE instruction files non-destructively.
+ */
+export function compileTier1(nodes, instructionsFile) {
+  const injectionBlock = buildInjectionBlock(nodes);
+
+  // Always write the canonical INSTRUCTIONS.md fresh
+  const header = [
+    '# Tier 1 Invariants (Total Recall Hot Memory)',
+    '> This file is compiled automatically. Do not edit directly.',
+    ''
+  ].join('\n');
+  atomicWrite(instructionsFile, header + injectionBlock + '\n');
+
+  // For each IDE shim: inject into existing files, or create a symlink if missing
+  const shims = ['.cursorrules', 'CLAUDE.md', '.clauderules', 'AGENTS.md', 'GEMINI.md'];
+  const baseDir = path.dirname(instructionsFile);
+  const baseName = path.basename(instructionsFile);
+
+  for (const shim of shims) {
+    const shimPath = path.join(baseDir, shim);
+    try {
+      if (fs.existsSync(shimPath)) {
+        const stat = fs.lstatSync(shimPath);
+        if (!stat.isSymbolicLink()) {
+          // Real file with existing content — inject non-destructively
+          injectIntoExisting(shimPath, injectionBlock);
+        }
+        // If it's already a symlink to INSTRUCTIONS.md, nothing to do
+      } else {
+        // Doesn't exist — create a symlink pointing to INSTRUCTIONS.md
+        fs.symlinkSync(baseName, shimPath);
+      }
+    } catch (err) {
+      // Ignore permission errors etc.
+    }
+  }
 }
 
 /**
