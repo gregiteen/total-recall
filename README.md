@@ -23,14 +23,14 @@ Total Recall 3.0 implements a **Zero-Parser Kernel** that reads, writes, and exe
 - **VFS Explorer & Task Scheduler**: Visually traverse the `~/.agent/files/` virtual file system and inspect the P0-P5 background task queue.
 
 ### 3. Production-Ready Deployment
-- **`npx total-recall deploy`**: A one-click provisioning pipeline that scaffolds the VFS, pulls required Ollama models, and registers systemd services on any POSIX host.
+- **`npx total-recall deploy`**: A one-click provisioning pipeline that scaffolds the VFS, pulls required Ollama models, and installs the Cloud Agent trigger via cron.
 - **Automated Security**: Caddy reverse proxy for auto-TLS, Argon2id + AES-256-GCM encryption for secrets, and Bearer PAT authentication for API access.
-- **Watchdog Circuit Breakers**: Built-in exfiltration monitors, sandbox infinite-loop protection, and disk space guards ensure the system survives 24/7 autonomous operation without human supervision.
+- **Cloud Agent Auto-Tasking**: The autonomous agent wakes up every 5 minutes to process tasks, research your priorities, and push syncs. It messages you proactively via Telegram when it finishes something important.
 
 ### 4. Advanced Extensibility
-- **MCP Gateway**: Fully standard-compliant Model Context Protocol server over Streamable HTTP. Plug Total Recall into Claude Desktop, Cursor, or any MCP client.
-- **Friction Detection**: Automatically analyzes JSONL logs to identify workflow bottlenecks and self-optimize.
-- **Custom Weights (QLoRA)**: Built-in dataset compiler (`npx total-recall finetune`) to scrape your SSSS vault and generate instruction-tuning sets for custom `TotalRecall-Gemma-SSSS` weights.
+- **Omnichannel Dashboard**: A sleek, dark-mode unified dashboard for managing your memory vault, tasks, and files.
+- **Proactive Telegram Integration**: Provide your Telegram Bot token during the onboarding interview, and Total Recall will message you on your phone with updates, research, and questions.
+- **Custom Weights (QLoRA)**: Built-in dataset compiler (`npx total-recall finetune`) to scrape your SSSS vault and generate instruction-tuning sets.
 
 ---
 
@@ -49,15 +49,9 @@ This will:
 1. Create a `.agent/memory-vault/` directory structure in your project
 2. Seed the core SSSS schema skill so your AI knows how to write memory nodes
 3. Inject a clearly-marked `<!-- BEGIN INJECTED MEMORY -->` block into your **existing** `GEMINI.md`, `.cursorrules`, `CLAUDE.md`, or `AGENTS.md` — without touching any of your existing instructions
-4. If none of those files exist, it creates `INSTRUCTIONS.md` with IDE symlinks automatically
+4. Queue an `onboarding-interview.md` task so the agent asks about your goals on your first chat
 
 > Your existing IDE instructions are **never overwritten**. Total Recall only manages its own clearly-marked section.
-
-After init, your AI can immediately start saving memories:
-```bash
-# Rebuild the memory surface after adding new vault nodes
-npx total-recall compile
-```
 
 ---
 
@@ -66,16 +60,13 @@ npx total-recall compile
 To deploy the full autonomous AI stack on a fresh Linux/Mac environment:
 
 ```bash
-# Provision models, VFS, and system services
+# Provision models, VFS, and install the Agent Cron Trigger
 npx total-recall deploy
-
-# Start the background daemon
-npx total-recall daemon start
 ```
 
-### 2. Access the Omnichannel Dashboard
+### 2. Access the Dashboard & Onboard
 Navigate to `https://localhost` (or your server's IP). 
-Authenticate using your generated admin credentials to access the Chat, Code Sandbox, and VFS Explorer.
+When you start your first chat, the agent will enter **Interview Mode** to learn about your priorities, projects, and configure your Telegram notification settings.
 
 ### 3. CLI Command Reference
 
@@ -83,15 +74,15 @@ Total Recall is fully manageable via the CLI, ensuring 100% parity with the web 
 
 | Command | Description |
 |---------|-------------|
-| `npx total-recall deploy` | Provision target machine (VFS, Ollama, Caddy, systemd) |
-| `npx total-recall compile`| Rebuild indexes and the active `INSTRUCTIONS.md` |
-| `npx total-recall backup` | Create an AES-256 encrypted VFS tarball |
-| `npx total-recall restore`| Restore from an encrypted backup |
-| `npx total-recall export` | Export a portable, unencrypted VFS tarball |
-| `npx total-recall import` | Import a VFS payload |
+| `npx total-recall deploy` | Provision target machine (VFS, Ollama, Caddy, Cron) |
+| `npx total-recall dream`  | Manually trigger a dream cycle (Light → REM → Deep) |
 | `npx total-recall lint`   | Validate all vault nodes against the current SSSS schema |
+| `npx total-recall daemon` | Manage the background daemon (start/stop/status) |
+| `npx total-recall restore`| Restore from an encrypted backup |
 | `npx total-recall finetune`| Generate a QLoRA JSONL dataset from the SSSS vault |
 | `npx total-recall friction`| Analyze watchdog logs for workflow bottlenecks |
+
+*(Note: Legacy commands like `compile`, `backup`, `sync`, and `reindex` have been removed. The Cloud Agent now handles these autonomously via SSSS task nodes in the scheduler queue.)*
 
 ---
 
@@ -100,7 +91,7 @@ Total Recall is fully manageable via the CLI, ensuring 100% parity with the web 
 Total Recall 3.0 is comprised of three core layers:
 
 1. **The Core Runtime (`src/core/`)**: The database-free SSSS memory engine, sandbox execution, and background evolution tools.
-2. **The Server Layer (`src/server/`)**: An Express host that binds the MCP gateway, the OpenAI-compatible `/v1/chat/completions` proxy, and the React Dashboard.
+2. **The Server Layer (`src/server/`)**: An Express host that binds the OpenAI-compatible `/v1/chat/completions` proxy and the React Dashboard REST APIs.
 3. **The Deploy Pipeline (`src/cli/`)**: The lifecycle management tooling used to provision, backup, and upgrade the host machine.
 
 ---
@@ -110,7 +101,7 @@ Total Recall 3.0 is comprised of three core layers:
 The Sovereign OS is designed under a **Zero-Trust** execution policy.
 - All code generated by the agent is executed within a hardened `src/core/sandbox.mjs` environment.
 - Strict token-exfiltration monitors prevent accidental leakage of sensitive `secrets.enc` keys.
-- **YOLO Mode**: Total Recall can operate 100% autonomously, with structured JSONL logging providing a fully verifiable audit trail.
+- **Always-On Autonomy**: Total Recall operates 100% autonomously via cron, with structured JSONL logging providing a fully verifiable audit trail of its idle-time research and tasks.
 
 ---
 
