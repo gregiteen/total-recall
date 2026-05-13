@@ -55,8 +55,8 @@ TRIGGER_EOF
 
 chmod +x "$TRIGGER_SCRIPT"
 
-# Install into crontab (idempotent)
-(crontab -l 2>/dev/null || true | grep -v "agent-trigger"; echo "*/5 * * * * $TRIGGER_SCRIPT") | crontab -
+# Install into crontab (idempotent — clear old entry then add fresh)
+{ crontab -l 2>/dev/null | grep -v "agent-trigger" || true; echo "*/5 * * * * $TRIGGER_SCRIPT"; } | crontab -
 
 echo "✅ Total Recall cron installed."
 echo "   Trigger: $TRIGGER_SCRIPT"
