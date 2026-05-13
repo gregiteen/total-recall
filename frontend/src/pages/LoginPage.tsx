@@ -6,13 +6,15 @@ interface Props {
 
 export default function LoginPage({ onAuthenticated }: Props) {
   const [password, setPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [needsReset, setNeedsReset] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
-  }, [])
+  }, [needsReset])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -20,17 +22,43 @@ export default function LoginPage({ onAuthenticated }: Props) {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ password }),
-      })
-      if (res.ok) {
-        onAuthenticated()
+      if (needsReset) {
+        if (newPassword.length < 8) {
+          setError('New password must be at least 8 characters')
+          setLoading(false)
+          return
+        }
+        const res = await fetch('/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ newPassword }),
+        })
+        if (res.ok) {
+          onAuthenticated()
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setError(data.error || 'Failed to change password')
+        }
       } else {
-        const data = await res.json().catch(() => ({}))
-        setError(data.error || 'Invalid password')
+        const res = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ password }),
+        })
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}))
+          if (data.requiresPasswordReset) {
+            setNeedsReset(true)
+            setPassword('') // Clear for security
+          } else {
+            onAuthenticated()
+          }
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setError(data.error || 'Invalid password')
+        }
       }
     } catch {
       setError('Network error — is the server running?')
@@ -64,36 +92,51 @@ export default function LoginPage({ onAuthenticated }: Props) {
             width: 48,
             height: 48,
             borderRadius: 12,
-            background: 'linear-gradient(135deg, var(--accent), #7c3aed)',
+            background: needsReset ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, var(--accent), #7c3aed)',
             margin: '0 auto 16px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
-              <path d="M12 2a10 10 0 0 1 10 10"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
+            {needsReset ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a10 10 0 1 0 10 10H12V2z"/>
+                <path d="M12 2a10 10 0 0 1 10 10"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            )}
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Total Recall</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Sovereign Brain v3.0</p>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            {needsReset ? 'Action Required' : 'Total Recall'}
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+            {needsReset ? 'You must change your temporary password to continue.' : 'Sovereign Brain v3.0'}
+          </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <label htmlFor="login-password" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Password
+              {needsReset ? 'New Password' : 'Password'}
             </label>
             <input
               id="login-password"
               ref={inputRef}
               type="password"
-              value={password}
-              onChange={e => { setPassword(e.target.value); setError('') }}
-              placeholder="Enter admin password"
-              autoComplete="current-password"
+              value={needsReset ? newPassword : password}
+              onChange={e => {
+                if (needsReset) setNewPassword(e.target.value)
+                else setPassword(e.target.value)
+                setError('')
+              }}
+              placeholder={needsReset ? 'Minimum 8 characters' : 'Enter admin password'}
+              autoComplete={needsReset ? 'new-password' : 'current-password'}
               disabled={loading}
               style={{
                 background: 'var(--bg-primary)',
@@ -120,7 +163,7 @@ export default function LoginPage({ onAuthenticated }: Props) {
               alignItems: 'center',
               gap: 8,
             }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
               {error}
@@ -130,16 +173,16 @@ export default function LoginPage({ onAuthenticated }: Props) {
           <button
             id="login-submit"
             type="submit"
-            disabled={loading || !password}
+            disabled={loading || (needsReset ? !newPassword : !password)}
             style={{
-              background: loading || !password ? 'var(--bg-tertiary)' : 'var(--accent)',
-              color: loading || !password ? 'var(--text-tertiary)' : 'white',
+              background: (loading || (needsReset ? !newPassword : !password)) ? 'var(--bg-tertiary)' : 'var(--accent)',
+              color: (loading || (needsReset ? !newPassword : !password)) ? 'var(--text-tertiary)' : 'white',
               border: 'none',
               borderRadius: 8,
               padding: '11px 0',
               fontSize: 14,
               fontWeight: 600,
-              cursor: loading || !password ? 'not-allowed' : 'pointer',
+              cursor: (loading || (needsReset ? !newPassword : !password)) ? 'not-allowed' : 'pointer',
               transition: 'background 0.15s, color 0.15s',
               display: 'flex',
               alignItems: 'center',
@@ -152,15 +195,17 @@ export default function LoginPage({ onAuthenticated }: Props) {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                 </svg>
-                Authenticating…
+                {needsReset ? 'Saving…' : 'Authenticating…'}
               </>
-            ) : 'Sign In'}
+            ) : (needsReset ? 'Save & Continue' : 'Sign In')}
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>
-          Set password in <code style={{ color: 'var(--accent)', fontSize: 11 }}>~/.agent/config/security.yml</code>
-        </p>
+        {!needsReset && (
+          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>
+            Set password in <code style={{ color: 'var(--accent)', fontSize: 11 }}>~/.agent/config/security.yml</code>
+          </p>
+        )}
       </div>
 
       <style>{`

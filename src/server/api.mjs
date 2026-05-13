@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { callFrontier, callFrontierRaw, loadFrontierConfig } from '../core/frontier.mjs';
 import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
-import { requireAuth, loginHandler, logoutHandler, apiRateLimiter } from './auth.mjs';
+import { requireAuth, loginHandler, logoutHandler, changePasswordHandler, apiRateLimiter } from './auth.mjs';
 import { logger } from '../core/logger.mjs';
 import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
 import { loadKeys, issueKey, revokeKey } from './keys.mjs';
@@ -55,6 +55,7 @@ export const apiRouter = express.Router();
 
 apiRouter.post('/auth/login', loginHandler);
 apiRouter.post('/auth/logout', logoutHandler);
+apiRouter.post('/auth/change-password', requireAuth, changePasswordHandler);
 apiRouter.get('/auth/me', requireAuth, (req, res) => res.json({ authenticated: true }));
 
 apiRouter.use('/v1', apiRateLimiter(), requireAuth);
