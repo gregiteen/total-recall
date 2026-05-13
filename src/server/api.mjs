@@ -6,6 +6,7 @@ import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
 import { requireAuth, loginHandler, logoutHandler, apiRateLimiter } from './auth.mjs';
 import { logger } from '../core/logger.mjs';
 import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
+import { loadKeys, issueKey, revokeKey } from './keys.mjs';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -410,6 +411,53 @@ apiRouter.put('/api/config/:name', (req, res) => {
     }
     fs.writeFileSync(filePath, req.body.content, 'utf8');
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── API Key Lifecycle ──────────────────────────────────────────────────────────
+
+// List all keys (tokens are masked after creation)
+apiRouter.get('/api/keys', requireAuth, (req, res) => {
+  try {
+    const keys = loadKeys().map(k => ({
+      id: k.id,
+      name: k.name,
+      token_preview: k.token ? `${k.token.slice(0, 8)}…` : '—',
+      created_at: k.created_at,
+      last_used_at: k.last_used_at,
+      hit_count: k.hit_count || 0,
+      revoked: k.revoked || false,
+    }));
+    res.json(keys);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Issue a new key — returns the full token ONCE
+apiRouter.post('/api/keys', requireAuth, (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || name.trim().length < 1) {
+      return res.status(400).json({ error: 'A key name is required.' });
+    }
+    const key = issueKey(name.trim());
+    logger.info('api', `API key issued: ${key.name} (${key.id})`);
+    res.status(201).json(key); // full token returned here only
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Revoke a key by ID
+apiRouter.delete('/api/keys/:id', requireAuth, (req, res) => {
+  try {
+    const key = revokeKey(req.params.id);
+    if (!key) return res.status(404).json({ error: 'Key not found.' });
+    logger.info('api', `API key revoked: ${key.name} (${key.id})`);
+    res.json({ success: true, id: key.id });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
