@@ -12,11 +12,10 @@ node_modules/
 *.pem
 
 # Total Recall Workspace Projection
-# The .agent/skills/ directory IS tracked, but we block everything else just in case.
-.agent/memory-vault/
+# The brain vault and queue must be tracked so the cloud agent can sync them.
 .agent/memory-derived/
 .agent/memory-inbox/
-.agent/scheduler/
+.agent/config/
 .agent/config/
 .agent/files/
 .agent/logs/
