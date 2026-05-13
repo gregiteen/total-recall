@@ -20,8 +20,10 @@ const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
-
-const SESSIONS_DIR = path.join(os.homedir(), '.agent', 'sessions');
+const SESSIONS_DIR = path.join(AGENT_DIR, 'sessions');
+const FILES_DIR = path.join(AGENT_DIR, 'files');
+const TASKS_DIR = path.join(AGENT_DIR, 'scheduler', 'queue');
+const CONFIG_DIR = path.join(AGENT_DIR, 'config');
 
 function getSessionId(req) {
   const fromHeader = req.headers['x-session-id'];
@@ -288,8 +290,6 @@ apiRouter.get('/api/instructions', (req, res) => {
 
 // ─── Files API ─────────────────────────────────────────────────────────────────
 
-const FILES_DIR = path.join(os.homedir(), '.agent', 'files');
-
 apiRouter.get('/api/files', (req, res) => {
   try {
     if (!fs.existsSync(FILES_DIR)) {
@@ -312,7 +312,7 @@ apiRouter.get('/api/files', (req, res) => {
 
 // ─── Skills API ────────────────────────────────────────────────────────────────
 
-const SKILLS_DIR = path.join(os.homedir(), '.agent', 'skills');
+
 
 apiRouter.get('/api/skills', (req, res) => {
   try {
@@ -336,8 +336,6 @@ apiRouter.get('/api/skills', (req, res) => {
 });
 
 // ─── Tasks API ─────────────────────────────────────────────────────────────────
-
-const TASKS_DIR = path.join(os.homedir(), '.agent', 'scheduler', 'queue');
 
 apiRouter.get('/api/tasks', (req, res) => {
   try {
@@ -393,8 +391,6 @@ apiRouter.post('/api/tasks', (req, res) => {
 });
 
 // ─── Config API ────────────────────────────────────────────────────────────────
-
-const CONFIG_DIR = path.join(os.homedir(), '.agent', 'config');
 
 apiRouter.get('/api/config/:name', (req, res) => {
   try {
