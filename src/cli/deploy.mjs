@@ -97,6 +97,7 @@ function parseArgs(args) {
     domain: 'localhost',
     duckdnsToken: null,
     brainRepo: null,
+    cloudflareToken: null,
     dryRun: false,
     help: false,
   };
@@ -111,6 +112,7 @@ function parseArgs(args) {
       case '--domain': opts.domain = args[++i]; break;
       case '--duckdns-token': opts.duckdnsToken = args[++i]; break;
       case '--brain-repo': opts.brainRepo = args[++i]; break;
+      case '--cloudflare-token': opts.cloudflareToken = args[++i]; break;
       case '--dry-run': opts.dryRun = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -357,29 +359,52 @@ export default async function deploy(args) {
   // ── Step 6: Copy default config ──
   copyDefaultConfig(opts.dryRun);
 
-  // ── Step 7: Install Caddy ──
-  logStep('7/11', 'Caddy reverse proxy installation');
-  if (opts.skipCaddy) {
-    logSkip('Skipped (--skip-caddy)');
-  } else if (commandExists('caddy')) {
-    logOk('Caddy already installed');
-  } else {
-    if (opts.dryRun) {
-      log('  Would install Caddy for the target platform');
+  // ── Step 7: Install Reverse Proxy / Tunnel ──
+  if (opts.cloudflareToken) {
+    logStep('7/11', 'Cloudflare Zero Trust Tunnel installation');
+    if (commandExists('cloudflared')) {
+      logOk('cloudflared already installed');
     } else {
-      if (platform === 'linux') {
-        run('sudo apt-get update -qq && sudo apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl', { ignoreErrors: true });
-        run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg', { ignoreErrors: true });
-        run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | sudo tee /etc/apt/sources.list.d/caddy-stable.list', { ignoreErrors: true });
-        run('sudo apt-get update -qq && sudo apt-get install -y caddy');
-      } else if (platform === 'macos') {
-        if (commandExists('brew')) {
-          run('brew install caddy');
-        } else {
-          logWarn('Homebrew not found — install Caddy manually: https://caddyserver.com/docs/install');
+      if (opts.dryRun) {
+        log('  Would install cloudflared and route traffic via Zero Trust');
+      } else {
+        if (platform === 'linux') {
+          run('curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb');
+          run('sudo dpkg -i cloudflared.deb');
+          run('rm cloudflared.deb');
+          run(`sudo cloudflared service install ${opts.cloudflareToken}`);
+          logOk('Cloudflare tunnel installed and running securely');
+        } else if (platform === 'macos') {
+          run('brew install cloudflare/cloudflare/cloudflared');
+          logWarn(`Run this manually: sudo cloudflared service install ${opts.cloudflareToken}`);
         }
       }
-      logOk('Caddy installed');
+    }
+    opts.skipCaddy = true; // Tunnel replaces Caddy
+  } else {
+    logStep('7/11', 'Caddy reverse proxy installation');
+    if (opts.skipCaddy) {
+      logSkip('Skipped (--skip-caddy)');
+    } else if (commandExists('caddy')) {
+      logOk('Caddy already installed');
+    } else {
+      if (opts.dryRun) {
+        log('  Would install Caddy for the target platform');
+      } else {
+        if (platform === 'linux') {
+          run('sudo apt-get update -qq && sudo apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl', { ignoreErrors: true });
+          run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg', { ignoreErrors: true });
+          run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | sudo tee /etc/apt/sources.list.d/caddy-stable.list', { ignoreErrors: true });
+          run('sudo apt-get update -qq && sudo apt-get install -y caddy');
+        } else if (platform === 'macos') {
+          if (commandExists('brew')) {
+            run('brew install caddy');
+          } else {
+            logWarn('Homebrew not found — install Caddy manually: https://caddyserver.com/docs/install');
+          }
+        }
+        logOk('Caddy installed');
+      }
     }
   }
 
