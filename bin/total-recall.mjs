@@ -31,20 +31,14 @@ const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 const COMMANDS = {
   init:     'init.mjs',
   deploy:   'deploy.mjs',
-  compile:  'compile.mjs',
   dream:    'dream.mjs',
-  reindex:  'reindex.mjs',
   lint:     'lint.mjs',
   daemon:   'daemon.mjs',
-  backup:   'backup.mjs',
   restore:  'restore.mjs',
-  export:   'export.mjs',
-  import:   'import.mjs',
   upgrade:  'upgrade.mjs',
   finetune: 'finetune.mjs',
   friction: 'friction.mjs',
   chat:     'chat.mjs',
-  sync:     'sync.mjs',
   status:   'status.mjs',
 };
 
@@ -56,22 +50,20 @@ function printHelp() {
 
   Commands:
     init                Bootstrap Total Recall into an existing project repo
-    deploy              Provision a target machine (Ollama, models, VFS, Caddy, systemd)
-    compile             Rebuild indexes + INSTRUCTIONS.md from the memory vault
+    deploy              Provision a target machine (Ollama, models, VFS, Caddy, systemd, cron)
     dream               Manually trigger a dream cycle (Light → REM → Deep)
-    reindex             Delete + regenerate all derived indexes
     lint                Validate all vault nodes against SSSS schema v2
     daemon <start|stop|status>  Manage the background daemon
-    backup              Create an encrypted VFS tarball
     restore <path>      Restore from an encrypted backup
-    export              Export VFS as a portable tarball
-    import <path>       Import VFS on a new host
     upgrade --model <n> Swap the kernel model (e.g., gemma5-32b)
     finetune            Run QLoRA pipeline to generate custom weights
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
-    sync                Pull INSTRUCTIONS.md from the brain and refresh IDE shims
     status              Show brain connection and sync state
+
+  Autonomous operations (sync, compile, backup) are now handled by the
+  Cloud Agent via SSSS task nodes in .agent/scheduler/queue/.
+  The agent cron trigger (every 5 min) processes these automatically.
 
   Options:
     --help, -h          Show this help message
@@ -79,8 +71,7 @@ function printHelp() {
 
   Examples:
     npx total-recall deploy
-    npx total-recall compile
-    npx total-recall backup
+    npx total-recall dream
     npx total-recall daemon status
 `);
 }
