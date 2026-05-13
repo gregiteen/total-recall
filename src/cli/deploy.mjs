@@ -98,6 +98,7 @@ function parseArgs(args) {
     duckdnsToken: null,
     brainRepo: null,
     cloudflareToken: null,
+    cloudflareQuick: false,
     dryRun: false,
     help: false,
   };
@@ -113,6 +114,7 @@ function parseArgs(args) {
       case '--duckdns-token': opts.duckdnsToken = args[++i]; break;
       case '--brain-repo': opts.brainRepo = args[++i]; break;
       case '--cloudflare-token': opts.cloudflareToken = args[++i]; break;
+      case '--cloudflare-quick': opts.cloudflareQuick = true; break;
       case '--dry-run': opts.dryRun = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -360,7 +362,7 @@ export default async function deploy(args) {
   copyDefaultConfig(opts.dryRun);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──
-  if (opts.cloudflareToken) {
+  if (opts.cloudflareToken || opts.cloudflareQuick) {
     logStep('7/11', 'Cloudflare Zero Trust Tunnel installation');
     if (commandExists('cloudflared')) {
       logOk('cloudflared already installed');
@@ -369,14 +371,30 @@ export default async function deploy(args) {
         log('  Would install cloudflared and route traffic via Zero Trust');
       } else {
         if (platform === 'linux') {
-          run('curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb');
-          run('sudo dpkg -i cloudflared.deb');
+          run('curl -L -s --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb');
+          run('sudo dpkg -i cloudflared.deb > /dev/null');
           run('rm cloudflared.deb');
-          run(`sudo cloudflared service install ${opts.cloudflareToken}`);
-          logOk('Cloudflare tunnel installed and running securely');
+          logOk('cloudflared binary installed');
         } else if (platform === 'macos') {
           run('brew install cloudflare/cloudflare/cloudflared');
-          logWarn(`Run this manually: sudo cloudflared service install ${opts.cloudflareToken}`);
+        }
+      }
+    }
+
+    if (!opts.dryRun) {
+      if (opts.cloudflareToken && platform === 'linux') {
+        run(`sudo cloudflared service install ${opts.cloudflareToken}`);
+        logOk('Cloudflare tunnel running securely via token');
+      } else if (opts.cloudflareQuick) {
+        log('  Starting Zero-Config Quick Tunnel (trycloudflare.com)...');
+        run(`mkdir -p ${AGENT_DIR}/logs`);
+        run(`nohup cloudflared tunnel --url http://localhost:3000 > ${AGENT_DIR}/logs/cloudflared.log 2>&1 &`);
+        run('sleep 4');
+        try {
+          const url = run(`grep -o "https://.*\\.trycloudflare\\.com" ${AGENT_DIR}/logs/cloudflared.log | head -1`);
+          logOk(`Quick Tunnel Active: ${url}`);
+        } catch (e) {
+          logWarn(`Could not extract Quick Tunnel URL. Check ${AGENT_DIR}/logs/cloudflared.log`);
         }
       }
     }
