@@ -177,8 +177,6 @@ Recursive self-improvement and fine-tuning.
 - [x] Friction detection (identify workflow bottlenecks). ✅ *`src/core/friction.mjs` — parses JSONL logs, computes error rates, latency stats.*
 - [ ] **Context Injection Engine (9B Optimization)** — Update `src/core/surface.mjs` to inject exactly 30k tokens of high-signal SSSS node context into every prompt to compensate for the smaller 9B parameter model.
 - [ ] **SSSS Multi-shot Prompting** — Embed exact examples of correctly formatted SSSS YAML files inside the system prompt so the smaller model never hallucinates the syntax.
-- [ ] QLoRA fine-tuning pipeline (cloud-burst or on-device). ⚠️ **FALSE COMPLETION** — `src/cli/finetune.mjs` generates a dataset JSONL file and prints the `mlx-lm.lora` command to run. It does NOT execute QLoRA training. It is a dataset prep tool + CLI hint, not a pipeline.
-- [ ] `TotalRecall-Gemma-SSSS` custom weights generation. ⚠️ **FALSE COMPLETION** — No custom weights have been generated. This depends on QLoRA being run, which has never been executed. This is aspirational documentation.
 
 ## ⏳ Phase 7: Autonomous Web Search (SearXNG)
 
