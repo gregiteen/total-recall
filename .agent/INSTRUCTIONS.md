@@ -1,7 +1,7 @@
 # Tier 1 Invariants (Total Recall Hot Memory)
 > This file is compiled automatically. Do not edit directly.
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @tier: 1, generated_at: 2026-05-13T02:02:19.248Z -->
+<!-- @tier: 1, generated_at: 2026-05-13T02:13:33.381Z -->
 
 ## Never run raw tsc/eslint/npm-build — use the /code-quality skill scripts
 # Never run raw `tsc`, `eslint`, `npm run lint`, or `npm run build`

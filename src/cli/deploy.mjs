@@ -468,21 +468,42 @@ export default async function deploy(args) {
     log('    total-recall daemon start          # Background daemon');
   }
 
-  // ── Step 11: Initial compile ──
-  logStep('11/11', 'Running initial compile');
+  // ── Step 11: Initial compile + cron setup ──
+  logStep('11/11', 'Running initial compile + installing agent cron');
   if (opts.skipCompile) {
     logSkip('Skipped (--skip-compile)');
   } else {
     if (opts.dryRun) {
-      log('  Would run: total-recall compile');
+      log('  Would compile vault surface (INSTRUCTIONS.md)');
+      log('  Would install agent scheduler cron via scripts/setup-cron.sh');
     } else {
       try {
-        const { default: compile } = await import('./compile.mjs');
-        await compile([]);
+        // Compile vault surface directly (compile.mjs no longer exists — SSSS migration)
+        const path = await import('node:path');
+        const osm = await import('node:os');
+        const { compileSurface } = await import('../core/surface.mjs');
+        const AGENT = path.default.join(osm.default.homedir(), '.agent');
+        await compileSurface({
+          vaultDir: path.default.join(AGENT, 'memory-vault'),
+          skillsDir: path.default.join(AGENT, 'skills'),
+          derivedDir: path.default.join(AGENT, 'memory-derived'),
+          instructionsFile: path.default.join(AGENT, 'INSTRUCTIONS.md'),
+        });
         logOk('Initial compile complete');
       } catch (err) {
         logWarn(`Compile failed: ${err.message}`);
-        log('  Run manually: npx total-recall compile');
+      }
+      // Install the agent scheduler cron
+      try {
+        const setupCron = path.join(ROOT, 'scripts', 'setup-cron.sh');
+        if (fs.existsSync(setupCron)) {
+          run(`bash "${setupCron}"`, { silent: true });
+          logOk('Agent scheduler cron installed (fires every 5 minutes)');
+        } else {
+          logWarn('scripts/setup-cron.sh not found — cron not installed');
+        }
+      } catch (err) {
+        logWarn(`Cron setup failed: ${err.message}`);
       }
     }
   }
@@ -495,11 +516,11 @@ export default async function deploy(args) {
   │  VFS:        ~/.agent/                           │
   │  Config:     ~/.agent/config/                    │
   │  API:        http://${opts.domain}:3000/v1/chat/completions │
-  │  MCP:        http://${opts.domain}:3000/mcp      │
+  │  Memory:     http://${opts.domain}:3000/api/memory         │
   │  Dashboard:  http://${opts.domain}/              │
+  │  Cron:       Every 5 min — agent processes queue │
   │                                                  │
   │  Next steps:                                     │
-  │    npx total-recall compile   # rebuild indexes  │
   │    npx total-recall daemon status                │
   └─────────────────────────────────────────────────┘
 `);
