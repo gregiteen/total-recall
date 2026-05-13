@@ -122,6 +122,16 @@ Production-ready security, TLS, auth, and observability.
 #### Deployment gate
 - [x] **Manual verification completed 2026-05-12T20:32Z** — `/health` 200 ✅, `/auth/me` no-creds 401 ✅, `/api/files` no-creds 401 ✅, `/v1/chat/completions` no-creds 401 ✅, PAT auth working ✅. Frontend login screen loads before dashboard on `<YOUR_SERVER_IP>:3000`.
 
+### ✅ Forced Temporary Password Onboarding (Completed 2026-05-12T20:54Z)
+
+> **Context:** Deployment previously left `password_hash: null` in the template, meaning the server booted securely but without a way for the user to log in until they manually hashed a password via CLI. This implements an automatic secure onboarding flow.
+
+- [x] **`src/cli/deploy.mjs`** — Copy default config securely. If `security.yml` doesn't exist, generate a secure temporary password using `crypto.randomBytes`, hash it with `bcrypt`, write it with `force_password_reset: true`, and print the raw password to the user terminal.
+- [x] **`src/server/auth.mjs` — `POST /auth/login` update** — Read `force_password_reset` from `security.yml`. If true, return `requiresPasswordReset: true` to the frontend upon successful credential validation.
+- [x] **`src/server/auth.mjs` — `POST /auth/change-password` endpoint** — Securely accept a new password (min 8 chars), hash it, overwrite the temporary hash in `security.yml`, and set `force_password_reset: false`.
+- [x] **`frontend/src/api.ts`** — Update `login` signature to pass through `requiresPasswordReset`. Add new `changePassword` helper.
+- [x] **`frontend/src/pages/LoginPage.tsx`** — Intercept the `requiresPasswordReset` flag. Render an orange "Action Required" UI, forcing the user to submit a new password to gain access. Automatically log in after successful change.
+
 ### ⏳ HTTPS via DuckDNS + Caddy
 
 > **Context:** Server runs on plain HTTP (`http://<YOUR_SERVER_IP>:3000`). Session cookies are transmitted unencrypted. The `secure` cookie flag (`NODE_ENV=production`) means browsers on HTTPS will reject cookies sent over HTTP. DuckDNS provides a free subdomain that Caddy uses to auto-provision a Let's Encrypt TLS certificate via HTTP-01 challenge. No DNS plugin needed — just a domain pointing to the droplet IP.
