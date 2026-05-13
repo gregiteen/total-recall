@@ -116,6 +116,24 @@ export async function loginHandler(req, res) {
     sameSite: 'lax'
   });
   
+  const requiresReset = !!config.dashboard?.force_password_reset;
+  res.json({ success: true, requiresPasswordReset: requiresReset });
+}
+
+export async function changePasswordHandler(req, res) {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const config = loadSecurityConfig();
+  const hash = await bcrypt.hash(newPassword, 10);
+  
+  if (!config.dashboard) config.dashboard = {};
+  config.dashboard.password_hash = hash;
+  config.dashboard.force_password_reset = false;
+
+  fs.writeFileSync(CONFIG_FILE, yaml.stringify(config));
   res.json({ success: true });
 }
 
