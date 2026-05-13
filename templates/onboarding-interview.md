@@ -35,9 +35,17 @@ Once the user has answered all questions (or says they want to skip any), write 
 
 7. **What would success look like?** — "Six months from now, if I've done my job perfectly, what would be different for you?"
 
+8. **Telegram Notifications** — "Would you like me to message you on Telegram when I finish background tasks or find something interesting during my idle time? If yes, you'll need to create a bot on Telegram via BotFather and give me the Bot Token and your Chat ID."
+
 ## After the Interview
 
 Write the following files using your terminal tools:
+
+**`.agent/config/notifications.yml`** — If they provided Telegram details, write them exactly like this:
+```yaml
+telegram_bot_token: "their-token-here"
+telegram_chat_id: "their-chat-id-here"
+```
 
 **`.agent/memory-vault/preferences/user-profile.md`** — Full SSSS memory node with the user's identity, role, and communication style.
 
