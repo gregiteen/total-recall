@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { watchdog } from '../core/watchdog.mjs';
+import { isValidToken, recordKeyUsage } from './keys.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 const CONFIG_FILE = path.join(AGENT_DIR, 'config', 'security.yml');
@@ -54,10 +55,17 @@ export function requireAuth(req, res, next) {
 
   const config = loadSecurityConfig();
   
-  // 1. Check Bearer PAT
+  // 1. Check Bearer PAT — validated against keys.jsonl (+ legacy 'local' sentinel via security.yml)
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
+    // Check dynamic keys store first
+    if (isValidToken(token)) {
+      recordKeyUsage(token);
+      return next();
+    }
+    // Fallback: check legacy static PATs in security.yml
+    const config = loadSecurityConfig();
     const validPats = config.api?.pats || [];
     if (validPats.includes(token)) {
       return next();

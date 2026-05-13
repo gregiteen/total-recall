@@ -214,3 +214,40 @@ export async function saveConfig(name: string, content: string): Promise<void> {
   })
   if (!res.ok) throw new Error(`Config API error: ${res.status}`)
 }
+
+// ─── API Key Lifecycle ──────────────────────────────────────────────────────────
+
+export interface ApiKey {
+  id: string
+  name: string
+  token_preview: string
+  created_at: string
+  last_used_at: string | null
+  hit_count: number
+  revoked: boolean
+}
+
+export interface IssuedApiKey extends ApiKey {
+  token: string // full token — only returned on creation
+}
+
+export async function listApiKeys(): Promise<ApiKey[]> {
+  const res = await apiFetch(`${API_BASE}/api/keys`)
+  if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
+  return res.json()
+}
+
+export async function issueApiKey(name: string): Promise<IssuedApiKey> {
+  const res = await apiFetch(`${API_BASE}/api/keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
+  return res.json()
+}
+
+export async function revokeApiKey(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/keys/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
+}

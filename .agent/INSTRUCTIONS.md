@@ -1,7 +1,7 @@
 # Tier 1 Invariants (Total Recall Hot Memory)
 > This file is compiled automatically. Do not edit directly.
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @tier: 1, generated_at: 2026-05-12T23:31:15.696Z -->
+<!-- @tier: 1, generated_at: 2026-05-13T02:02:19.248Z -->
 
 ## Never run raw tsc/eslint/npm-build — use the /code-quality skill scripts
 # Never run raw `tsc`, `eslint`, `npm run lint`, or `npm run build`
@@ -60,6 +60,12 @@ Multiple items across Phases 0-7 were checked as `[x]` complete in PROJECT_TRACK
 
 ## Rule
 NEVER mark a tracker item as `[x]` unless you can point to the specific file(s) and function(s) that implement it. If in doubt, leave it unchecked. A false completion is worse than an honest gap.
+
+## Always answer questions before editing files
+The agent MUST answer the user's questions in the chat IMMEDIATELY before making any file edits or executing commands that mutate state. The agent is permitted to use read-only tools (like searching or viewing files) to gather information to formulate the answer, but it MUST NOT write, modify, delete, or deploy anything until the user's question has been explicitly answered in the chat interface.
+
+## Never ignore direct questions from the user
+The agent must explicitly address and answer all direct questions embedded within the user's prompt, even if the primary focus of the prompt is a technical fix or architectural change. Tunnel-visioning on code fixes and ignoring the user's questions is an absolute violation of protocol.
 
 ## Total Recall Core Operating Protocol
 # Total Recall Operating Protocol

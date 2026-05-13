@@ -23,10 +23,11 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { registerGeneratedTools } from './mcp-generated.mjs';
+import { resolveAgentDir } from '../cli/agent-dir.mjs';
 
 // ─── Paths ──────────────────────────────────────────────────────────────────────
 
-const AGENT_DIR = path.join(os.homedir(), '.agent');
+const AGENT_DIR = resolveAgentDir();
 const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
