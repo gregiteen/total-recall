@@ -181,6 +181,31 @@ export default async function init(args) {
     logOk('Default invariants seeded');
   }
 
+  // ── Step 3.5: Seed the onboarding interview task ──
+  logStep('3.5/4', 'Seeding onboarding interview into scheduler queue');
+
+  const queueDir = path.join(agentDir, 'scheduler', 'queue');
+  const interviewDest = path.join(queueDir, 'onboarding-interview.md');
+  const interviewSrc = path.join(ROOT, 'templates', 'onboarding-interview.md');
+
+  if (!fs.existsSync(interviewDest)) {
+    if (!opts.dryRun) {
+      fs.mkdirSync(queueDir, { recursive: true });
+      if (fs.existsSync(interviewSrc)) {
+        const now = new Date().toISOString();
+        const content = fs.readFileSync(interviewSrc, 'utf8').replace(/\{\{CREATED_AT\}\}/g, now);
+        fs.writeFileSync(interviewDest, content);
+        logOk('Onboarding interview task queued — agent will conduct it on first chat');
+      } else {
+        logWarn('Interview template not found — skipping');
+      }
+    } else {
+      log(`  Would write ${path.relative(cwd, interviewDest)}`);
+    }
+  } else {
+    logSkip('onboarding-interview.md already in queue');
+  }
+
   // ── Step 4: Run compile to inject memory block into existing IDE files ──
   logStep('4/4', 'Compiling vault and injecting into IDE instruction files');
 
@@ -203,6 +228,7 @@ export default async function init(args) {
     logWarn(`Compile failed: ${err.message}`);
     logWarn('You can run `npx total-recall compile` manually once the issue is resolved.');
   }
+
 
   // ── Optional: register a remote brain for hybrid mode ──
   if (opts.brain) {

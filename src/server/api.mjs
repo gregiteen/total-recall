@@ -100,19 +100,49 @@ apiRouter.post('/v1/chat/completions', async (req, res) => {
 CRITICAL RULE: You are equipped with 'search_web', 'execute_code', and 'update_design' tools. You MUST use 'search_web' to answer questions about current events or facts outside your training. You MUST use 'execute_code' to write scripts or integrate with APIs. You MUST use 'update_design' to write markdown directly to the Sandbox DESIGN.md file when the user asks you to create a UI, page, or document.`;
 
     try {
-      const instructionsPath = path.join(os.homedir(), '.agent', 'INSTRUCTIONS.md');
+      const instructionsPath = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
       if (fs.existsSync(instructionsPath)) {
         const instructions = fs.readFileSync(instructionsPath, 'utf8');
         baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${instructions}`;
       }
-      
-      const ssssPath = path.join(os.homedir(), '.agent', 'skills', 'ssss', 'SKILL.md');
+
+      const ssssPath = path.join(AGENT_DIR, 'skills', 'ssss', 'SKILL.md');
       if (fs.existsSync(ssssPath)) {
         const ssssContent = fs.readFileSync(ssssPath, 'utf8');
         baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nYou are the orchestrator of this system. Here is the architectural specification:\n${ssssContent}`;
       }
+
+      // Load user profile — drives all personalisation and idle work
+      const profilePath = path.join(AGENT_DIR, 'memory-vault', 'preferences', 'user-profile.md');
+      const prioritiesPath = path.join(AGENT_DIR, 'memory-vault', 'preferences', 'user-priorities.md');
+      const interviewTaskPath = path.join(AGENT_DIR, 'scheduler', 'queue', 'onboarding-interview.md');
+
+      if (fs.existsSync(profilePath)) {
+        const profile = fs.readFileSync(profilePath, 'utf8');
+        baseSystemPrompt += `\n\n=== USER PROFILE ===\n${profile}`;
+        if (fs.existsSync(prioritiesPath)) {
+          const priorities = fs.readFileSync(prioritiesPath, 'utf8');
+          baseSystemPrompt += `\n\n=== USER PRIORITIES & GOALS ===\n${priorities}`;
+        }
+      } else if (fs.existsSync(interviewTaskPath)) {
+        // No profile yet — enter interview mode
+        const interviewTask = fs.readFileSync(interviewTaskPath, 'utf8');
+        baseSystemPrompt += `\n\n=== ONBOARDING INTERVIEW MODE ===
+This user has not been onboarded yet. You MUST conduct the onboarding interview before doing anything else.
+DO NOT answer any other questions until the interview is complete.
+Ask questions one at a time, warmly and conversationally. Listen carefully. Reflect back what you hear.
+After the interview, write the user's answers to:
+  - ${AGENT_DIR}/memory-vault/preferences/user-profile.md
+  - ${AGENT_DIR}/memory-vault/preferences/user-priorities.md
+  - ${AGENT_DIR}/memory-vault/preferences/user-interests.md
+Then mark ${interviewTaskPath} as status: done.
+
+INTERVIEW TASK:
+${interviewTask}`;
+      }
     } catch (e) {
       console.error('[API] Failed to load system documentation:', e.message);
+
     }
 
     let currentMessages = [...messages];
