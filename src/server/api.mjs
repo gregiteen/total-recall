@@ -10,12 +10,13 @@ import { loadKeys, issueKey, revokeKey } from './keys.mjs';
 import { loadNodes, writeNode, createNodeFromMcpPayload } from '../core/vault.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
+import { resolveAgentDir } from '../cli/agent-dir.mjs';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import matter from 'gray-matter';
 
-const AGENT_DIR = path.join(os.homedir(), '.agent');
+const AGENT_DIR = resolveAgentDir();
 const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');

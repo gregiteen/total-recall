@@ -96,6 +96,7 @@ function parseArgs(args) {
     skipCompile: false,
     domain: 'localhost',
     duckdnsToken: null,
+    brainRepo: null,
     dryRun: false,
     help: false,
   };
@@ -109,6 +110,7 @@ function parseArgs(args) {
       case '--skip-compile': opts.skipCompile = true; break;
       case '--domain': opts.domain = args[++i]; break;
       case '--duckdns-token': opts.duckdnsToken = args[++i]; break;
+      case '--brain-repo': opts.brainRepo = args[++i]; break;
       case '--dry-run': opts.dryRun = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -131,6 +133,9 @@ function printHelp() {
     --skip-compile      Skip initial compile
     --domain <domain>   Set domain for Caddyfile (default: localhost)
     --duckdns-token <t> DuckDNS API token — installs IP-update cron (*.duckdns.org domains)
+    --brain-repo <url>  Git repo URL to clone as the brain vault into ~/.agent/
+                        e.g. https://github.com/you/my-brain.git
+                        If the vault is inside the project repo (default), omit this.
     --dry-run           Print plan without executing
     --help, -h          Show this help
 
@@ -159,6 +164,38 @@ function scaffoldVfs(dryRun) {
   // Recursively copy scaffold, skipping existing files
   copyDirMerge(scaffoldSrc, AGENT_DIR, dryRun);
   logOk('VFS scaffolded');
+
+  // ── Step 5.5: Pull brain from git repo if specified ──
+  // Also check if this project's .agent/memory-vault has nodes (in-repo brain)
+  const inRepoVault = path.join(ROOT, '.agent', 'memory-vault');
+  if (opts?.brainRepo) {
+    logStep('5.5/11', `Pulling brain vault from ${opts.brainRepo}`);
+    if (dryRun) {
+      log(`  Would clone ${opts.brainRepo} into ${AGENT_DIR}`);
+    } else {
+      try {
+        if (commandExists('git')) {
+          // Clone into a temp dir then merge into AGENT_DIR
+          const tmpBrain = path.join(os.tmpdir(), `brain-${Date.now()}`);
+          run(`git clone --depth=1 "${opts.brainRepo}" "${tmpBrain}"`);
+          copyDirMerge(tmpBrain, AGENT_DIR, false);
+          run(`rm -rf "${tmpBrain}"`);
+          logOk(`Brain vault restored from ${opts.brainRepo}`);
+        } else {
+          logWarn('git not found — cannot clone brain repo');
+        }
+      } catch (err) {
+        logWarn(`Brain clone failed: ${err.message}`);
+      }
+    }
+  } else if (fs.existsSync(inRepoVault)) {
+    logStep('5.5/11', 'Brain vault found in project repo — copying to ~/.agent/');
+    if (!dryRun) copyDirMerge(inRepoVault, path.join(AGENT_DIR, 'memory-vault'), false);
+    logOk('In-repo brain vault merged into ~/.agent/');
+  } else {
+    logWarn('No brain repo specified and no in-repo vault found — starting with empty brain.');
+    log('  Tip: npx total-recall deploy --brain-repo https://github.com/you/my-brain.git');
+  }
 }
 
 function copyDirMerge(src, dest, dryRun) {
