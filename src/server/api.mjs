@@ -7,10 +7,19 @@ import { requireAuth, loginHandler, logoutHandler, apiRateLimiter } from './auth
 import { logger } from '../core/logger.mjs';
 import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
 import { loadKeys, issueKey, revokeKey } from './keys.mjs';
+import { loadNodes, writeNode, createNodeFromMcpPayload } from '../core/vault.mjs';
+import { compileSurface } from '../core/surface.mjs';
+import { runInSandbox } from '../core/sandbox.mjs';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import matter from 'gray-matter';
+
+const AGENT_DIR = path.join(os.homedir(), '.agent');
+const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
+const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
+const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
+const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
 const SESSIONS_DIR = path.join(os.homedir(), '.agent', 'sessions');
 
@@ -462,4 +471,75 @@ apiRouter.delete('/api/keys/:id', requireAuth, (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ─── Memory REST API (replaces MCP for dashboard) ──────────────────────────────
+
+apiRouter.get('/api/memory', requireAuth, (req, res) => {
+  try {
+    const { category, status } = req.query;
+    const nodes = loadNodes(VAULT_DIR)
+      .filter(n => !category || n.category === category)
+      .filter(n => !status || n.status === status)
+      .map(({ body, ...n }) => n);
+    res.json(nodes);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+apiRouter.get('/api/memory/search', requireAuth, (req, res) => {
+  try {
+    const { q, category, limit = 20 } = req.query;
+    if (!q) return res.status(400).json({ error: 'q is required' });
+    const nodes = loadNodes(VAULT_DIR)
+      .filter(n => n.status === 'active')
+      .filter(n => !category || n.category === category)
+      .filter(n => [n.title, n.slug, (n.tags||[]).join(' '), n.body||''].join(' ').toLowerCase().includes(String(q).toLowerCase()))
+      .slice(0, Number(limit))
+      .map(n => ({ slug: n.slug, title: n.title, category: n.category, importance: n.importance, excerpt: (n.body||'').slice(0, 200) }));
+    res.json(nodes);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+apiRouter.get('/api/memory/:slug', requireAuth, (req, res) => {
+  try {
+    const node = loadNodes(VAULT_DIR).find(n => n.slug === req.params.slug);
+    if (!node) return res.status(404).json({ error: 'Node not found' });
+    res.json(node);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+apiRouter.post('/api/memory', requireAuth, (req, res) => {
+  try {
+    const { slug, title, category, content } = req.body;
+    if (!slug || !title || !category) return res.status(400).json({ error: 'slug, title, category required' });
+    const node = createNodeFromMcpPayload({ slug, title, category, content: content || '' });
+    writeNode(node, VAULT_DIR);
+    res.status(201).json({ slug, written: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+apiRouter.post('/api/memory/recompile', requireAuth, async (req, res) => {
+  try {
+    const stats = await compileSurface({ vaultDir: VAULT_DIR, skillsDir: SKILLS_DIR, derivedDir: DERIVED_DIR, instructionsFile: INSTRUCTIONS_FILE });
+    res.json(stats);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Sandbox REST API (replaces MCP for dashboard) ─────────────────────────────
+
+apiRouter.post('/api/sandbox', requireAuth, async (req, res) => {
+  const { code, timeout_ms = 5000 } = req.body;
+  if (!code) return res.status(400).json({ error: 'code is required' });
+  const tmpPath = path.join(os.tmpdir(), `sandbox-${Date.now()}.mjs`);
+  try {
+    fs.writeFileSync(tmpPath, code);
+    const result = await runInSandbox(tmpPath, timeout_ms);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ success: false, output: e.message });
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+  }
+});
+
+
 

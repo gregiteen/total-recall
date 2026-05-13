@@ -110,60 +110,47 @@ export async function fetchHealth(): Promise<HealthData> {
   return res.json()
 }
 
-// ─── MCP ───────────────────────────────────────────────────────────────────────
-
-async function mcpCall(toolName: string, args: Record<string, unknown> = {}): Promise<unknown> {
-  const toolRes = await apiFetch(API_BASE + '/mcp', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-sync-rpc': 'true',
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'tools/call',
-      params: { name: toolName, arguments: args },
-    }),
-  })
-
-  if (!toolRes.ok) throw new Error(`MCP tool error: ${toolRes.status}`)
-
-  const data = await toolRes.json()
-  if (data.error) throw new Error(data.error.message)
-
-  const content = data.result?.content?.[0]?.text
-  return content ? JSON.parse(content) : null
-}
+// ─── Memory REST API ───────────────────────────────────────────────────────────
 
 export async function listMemory(category?: string, status?: string): Promise<MemoryNode[]> {
-  const args: Record<string, string> = {}
-  if (category) args.category = category
-  if (status) args.status = status
-  const result = await mcpCall('list_memory', args)
-  return (result as MemoryNode[]) ?? []
+  const params = new URLSearchParams()
+  if (category) params.set('category', category)
+  if (status) params.set('status', status)
+  const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+  if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
+  return res.json()
 }
 
 export async function searchMemory(query: string, category?: string): Promise<MemoryNode[]> {
-  const args: Record<string, unknown> = { query }
-  if (category) args.category = category
-  const result = await mcpCall('search_memory', args)
-  return (result as MemoryNode[]) ?? []
+  const params = new URLSearchParams({ q: query })
+  if (category) params.set('category', category)
+  const res = await apiFetch(`${API_BASE}/api/memory/search?${params}`)
+  if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
+  return res.json()
 }
 
 export async function readMemory(slug: string): Promise<MemoryNode | null> {
-  const result = await mcpCall('read_memory', { slug })
-  return (result as MemoryNode) ?? null
+  const res = await apiFetch(`${API_BASE}/api/memory/${slug}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
+  return res.json()
 }
 
 export async function runSandbox(code: string, timeoutMs = 5000): Promise<SandboxResult> {
   try {
-    const result = await mcpCall('run_sandbox', { code, timeout_ms: timeoutMs })
-    return { success: true, output: String(result ?? '(no output)') }
+    const res = await apiFetch(`${API_BASE}/api/sandbox`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, timeout_ms: timeoutMs }),
+    })
+    if (!res.ok) throw new Error(`Sandbox API error: ${res.status}`)
+    const data = await res.json()
+    return { success: data.success, output: data.output || '(no output)', isError: !data.success }
   } catch (e) {
     return { success: false, output: (e as Error).message, isError: true }
   }
 }
+
 
 // ─── Tasks ─────────────────────────────────────────────────────────────────────
 

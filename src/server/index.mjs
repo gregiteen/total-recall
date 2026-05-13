@@ -3,7 +3,6 @@
  *
  * Mounts all HTTP routes on a single Express app:
  *   - /v1/chat/completions  → API proxy (api.mjs)
- *   - /mcp                  → MCP Gateway (mcp.mjs)
  *   - /health               → System diagnostics
  *   - /*                    → React SPA (frontend/dist/)
  *
@@ -153,7 +152,8 @@ app.get(/^(.*)$/, (req, res) => {
         message: 'Total Recall Brain is running.',
         endpoints: {
           api: 'POST /v1/chat/completions',
-          mcp: 'POST|GET|DELETE /mcp',
+          memory: 'GET /api/memory',
+          sandbox: 'POST /api/sandbox',
           health: 'GET /health',
           dashboard: 'Build frontend first: cd frontend && npm run build'
         }
@@ -171,8 +171,8 @@ app.listen(PORT, () => {
   console.error(`  │  Total Recall Brain v3.0.0                  │`);
   console.error(`  │                                             │`);
   console.error(`  │  API:       http://localhost:${PORT}/v1/chat/completions │`);
-  console.error(`  │  MCP:       http://localhost:${PORT}/mcp               │`);
-  console.error(`  │  Health:    http://localhost:${PORT}/health             │`);
-  console.error(`  │  Dashboard: http://localhost:${PORT}/                   │`);
+  console.error(`  │  Memory:    http://localhost:${PORT}/api/memory           │`);
+  console.error(`  │  Health:    http://localhost:${PORT}/health               │`);
+  console.error(`  │  Dashboard: http://localhost:${PORT}/                     │`);
   console.error(`  └─────────────────────────────────────────────┘\n`);
 });

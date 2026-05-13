@@ -17,7 +17,7 @@ const JWT_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString
 
 export function loadSecurityConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
-    return { dashboard: {}, api: { pats: [] }, rate_limits: { api_requests_per_minute: 60, mcp_requests_per_minute: 120 } };
+    return { dashboard: {}, api: { pats: [] }, rate_limits: { api_requests_per_minute: 60 } };
   }
   return yaml.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
 }
@@ -34,17 +34,6 @@ export function apiRateLimiter() {
   });
 }
 
-export function mcpRateLimiter() {
-  const config = loadSecurityConfig();
-  const limit = config.rate_limits?.mcp_requests_per_minute || 120;
-  return rateLimit({
-    windowMs: 60 * 1000,
-    max: limit,
-    message: 'Too many requests to the MCP gateway',
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
-}
 
 // Global authentication middleware
 export function requireAuth(req, res, next) {
