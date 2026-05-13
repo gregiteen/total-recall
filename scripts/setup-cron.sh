@@ -65,6 +65,10 @@ YOUR DUTIES THIS CYCLE:
 
 5. LOG YOUR WORK — Append to .agent/logs/agent-activity.log: [ISO timestamp] | [action taken] | [outcome/files written]
 
+6. NOTIFY THE USER — If you completed a significant task, did valuable research, or need the user's input, use the Telegram tool to message them proactively.
+   Command: bash scripts/telegram.sh "Your summary message here"
+   (Note: Only send a message if you did something worth interrupting them for.)
+
 CURRENT QUEUE:
 $QUEUE_SUMMARY
 
