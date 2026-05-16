@@ -1,4 +1,4 @@
-# Total Recall: Sovereign OS Architecture
+# Total Recall: SSSS Sovereign AI OS Architecture
 
 > Deep dive into how the Total Recall Sovereign AI System (v3.0) works under the hood.
 
@@ -21,23 +21,30 @@
 
 ## Mental Model
 
-Total Recall is a **Sovereign AI System** operating as a general-purpose intelligence engine that lives on user-owned infrastructure. The architecture is built around the **Structured Semantic Syntax System (SSSS)** — a database-free architecture where all memory, logic, agents, and state are semantically typed Markdown files.
+Total Recall is a **Sovereign AI System** operating as a general-purpose intelligence engine that lives on user-owned infrastructure. It is also the canonical open-source reference implementation for **Structured Semantic Syntax System (SSSS)**, the database-free architecture where memory, logic, agents, models, tasks, workflows, and state are semantically typed files.
 
-There are no external databases (no Postgres, Redis, or vector DBs). The filesystem *is* the database. The system consists of:
+UltraChat uses this substrate as the hosted product layer. Total Recall owns the open spec, local brain, validator, CLI, Dream Cycle, and conformance suite. UltraChat owns the product UX, collaboration, model management UI, marketplace, billing, and projection health.
+
+There are no required external databases for canonical operation. The filesystem *is* the database. External stores may exist in downstream products as disposable projections, but the source of truth is SSSS. The system consists of:
 1. **The Brain (Host Node):** Runs 24/7 on dedicated infrastructure (e.g., Oracle Cloud ARM VM, minimum 24GB RAM), hosting the SSSS Memory Vault, the local LLM kernel (Gemma 4 26B-A4B), the task scheduler, and API gateways.
 2. **The Intelligence:** A combination of a free, 24/7 local workhorse model (Gemma 4) and a pluggable frontier judge (e.g., DeepSeek V4 Pro) for high-stakes evaluations.
-3. **The Projections:** Distributed, read-only snapshots of compiled memory synced into individual workspaces for IDE agents (Antigravity, Cursor, Claude Code) to consume.
+3. **The Projections:** Distributed snapshots and generated indexes compiled from SSSS for IDE agents, product UIs, search, embeddings, and compatibility layers.
+4. **The Conformance Layer:** Shared fixtures, validators, and migration tests that define what it means to be SSSS-compatible.
 
 ## The SSSS Memory Architecture
 
-The core tenet of the architecture is **Markdown is Law**. The state machine, knowledge graph, and automation engine exist entirely as `.md` and `.yml` files in the Virtual File System (VFS).
+The core tenet of the architecture is **Markdown is Law**. The state machine, knowledge graph, model catalog, scheduler, and automation engine exist as `.md`, `.yml`, `.jsonl`, and sealed secret artifacts in the Virtual File System (VFS).
 
 ### SSSS Primitive Types
 
 - `memory`: Knowledge graph nodes (`slug`, `category`, `status`, `importance`, `modality`).
 - `assistant`: System instructions and chat logs.
 - `workflow`: Automation pipelines (`[Parallel]`, `[Retry]`, `[Lock]`).
+- `model`: Runtime/provider metadata, benchmark notes, costs, and routing policy.
 - `task`: Autonomous scheduler work items.
+- `proposal`: Staged background optimizer improvements awaiting validation or approval.
+- `operation`: Model-emitted SSSS actions to be validated by the deterministic kernel.
+- `event`: Append-only ledger/history facts that compile into projections.
 - `rule`: Global configurations and logic.
 
 Every file contains semantic YAML frontmatter that is validated at runtime (e.g., via Zod). The kernel reads, writes, and updates these files natively without relying on complex regex parsers or abstract syntax trees. This enables **Recursive Self-Improvement**, where the kernel can identify schema frictions, propose new primitive tags, test them, and autonomously upgrade the SSSS architecture.

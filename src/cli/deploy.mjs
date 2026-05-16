@@ -153,8 +153,9 @@ function printHelp() {
 
 // ─── Scaffold VFS ───────────────────────────────────────────────────────────────
 
-function scaffoldVfs(dryRun) {
-  logStep('5/11', 'Scaffolding VFS at ~/.agent/');
+function scaffoldVfs(opts) {
+  const dryRun = opts.dryRun;
+  logStep('6/12', 'Scaffolding VFS at ~/.agent/');
 
   const scaffoldSrc = path.join(ROOT, 'scaffold', '.agent');
   if (!fs.existsSync(scaffoldSrc)) {
@@ -172,8 +173,8 @@ function scaffoldVfs(dryRun) {
   // ── Step 5.5: Pull brain from git repo if specified ──
   // Also check if this project's .agent/memory-vault has nodes (in-repo brain)
   const inRepoVault = path.join(ROOT, '.agent', 'memory-vault');
-  if (opts?.brainRepo) {
-    logStep('5.5/11', `Pulling brain vault from ${opts.brainRepo}`);
+  if (opts.brainRepo) {
+    logStep('6.5/12', `Pulling brain vault from ${opts.brainRepo}`);
     if (dryRun) {
       log(`  Would clone ${opts.brainRepo} into ${AGENT_DIR}`);
     } else {
@@ -193,7 +194,7 @@ function scaffoldVfs(dryRun) {
       }
     }
   } else if (fs.existsSync(inRepoVault)) {
-    logStep('5.5/11', 'Brain vault found in project repo — copying to ~/.agent/');
+    logStep('6.5/12', 'Brain vault found in project repo — copying to ~/.agent/');
     if (!dryRun) copyDirMerge(inRepoVault, path.join(AGENT_DIR, 'memory-vault'), false);
     logOk('In-repo brain vault merged into ~/.agent/');
   } else {
@@ -206,8 +207,8 @@ function copyDirMerge(src, dest, dryRun) {
   if (!fs.existsSync(src)) return;
 
   if (!fs.existsSync(dest)) {
-    if (dryRun) { log(`  mkdir ${dest}`); return; }
-    fs.mkdirSync(dest, { recursive: true });
+    if (dryRun) { log(`  mkdir ${dest}`); }
+    else { fs.mkdirSync(dest, { recursive: true }); }
   }
 
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -225,10 +226,15 @@ function copyDirMerge(src, dest, dryRun) {
 // ─── Copy Default Config ────────────────────────────────────────────────────────
 
 function copyDefaultConfig(dryRun) {
-  logStep('6/11', 'Copying default configuration');
+  logStep('7/12', 'Copying default configuration');
 
   const configSrc = path.join(ROOT, 'templates', 'default-config');
   const configDest = path.join(AGENT_DIR, 'config');
+
+  if (!fs.existsSync(configSrc)) {
+    logWarn(`Default config template directory not found: ${configSrc}`);
+    return;
+  }
 
   if (!fs.existsSync(configDest)) {
     if (!dryRun) fs.mkdirSync(configDest, { recursive: true });
@@ -256,22 +262,28 @@ export default async function deploy(args) {
   const arch = detectArch();
   const platform = detectPlatform();
 
+  const bannerWidth = 49;
+  const contentWidth = bannerWidth - 4; // account for "│  " and " │"
+  const fmtLine = (label, value) => {
+    const content = `${label}${value}`;
+    return `  │  ${content.padEnd(contentWidth)}│`;
+  };
   console.error(`
-  ┌─────────────────────────────────────────────────┐
-  │  Total Recall Deploy                             │
-  │  Architecture: ${arch.padEnd(40)}│
-  │  Platform:     ${platform.padEnd(40)}│
-  │  Target VFS:   ~/.agent/                         │
-  └─────────────────────────────────────────────────┘
+  ┌${'─'.repeat(bannerWidth)}┐
+${fmtLine('Total Recall Deploy', '')}
+${fmtLine('Architecture: ', arch)}
+${fmtLine('Platform:     ', platform)}
+${fmtLine('Target VFS:   ', '~/.agent/')}
+  └${'─'.repeat(bannerWidth)}┘
 `);
 
   if (opts.dryRun) logWarn('DRY RUN — no changes will be made\n');
 
   // ── Step 1: Detect architecture ──
-  logStep('1/11', `Architecture detected: ${arch} (${platform})`);
+  logStep('1/12', `Architecture detected: ${arch} (${platform})`);
 
   // ── Step 2: Install Ollama ──
-  logStep('2/11', 'Ollama installation');
+  logStep('2/12', 'Ollama installation');
   if (opts.skipOllama) {
     logSkip('Skipped (--skip-ollama)');
   } else if (commandExists('ollama')) {
@@ -287,7 +299,7 @@ export default async function deploy(args) {
   }
 
   // ── Step 3: Pull Gemma 4 model ──
-  logStep('3/11', 'Pulling Gemma 4 26B model');
+  logStep('3/12', 'Pulling Gemma 4 26B model');
   if (opts.skipModels) {
     logSkip('Skipped (--skip-models)');
   } else if (!commandExists('ollama')) {
@@ -355,15 +367,15 @@ export default async function deploy(args) {
     }
   }
 
-  // ── Step 5: Scaffold VFS ──
-  scaffoldVfs(opts.dryRun);
+  // ── Step 6: Scaffold VFS ──
+  scaffoldVfs(opts);
 
-  // ── Step 6: Copy default config ──
+  // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──
   if (opts.cloudflareToken || opts.cloudflareQuick) {
-    logStep('7/11', 'Cloudflare Zero Trust Tunnel installation');
+    logStep('8/12', 'Cloudflare Zero Trust Tunnel installation');
     if (commandExists('cloudflared')) {
       logOk('cloudflared already installed');
     } else {
@@ -400,7 +412,7 @@ export default async function deploy(args) {
     }
     opts.skipCaddy = true; // Tunnel replaces Caddy
   } else {
-    logStep('7/11', 'Caddy reverse proxy installation');
+    logStep('8/12', 'Caddy reverse proxy installation');
     if (opts.skipCaddy) {
       logSkip('Skipped (--skip-caddy)');
     } else if (commandExists('caddy')) {
@@ -427,7 +439,7 @@ export default async function deploy(args) {
   }
 
   // ── Step 8: Deploy Caddyfile ──
-  logStep('8/11', 'Deploying Caddyfile');
+  logStep('9/12', 'Deploying Caddyfile');
   if (opts.skipCaddy) {
     logSkip('Skipped (--skip-caddy)');
   } else {
@@ -461,7 +473,7 @@ export default async function deploy(args) {
 
   // ── Step 8.5: DuckDNS IP-update cron job ──
   if (opts.duckdnsToken && opts.domain.endsWith('.duckdns.org')) {
-    logStep('8.5/11', 'Installing DuckDNS IP-update cron job');
+    logStep('9.5/12', 'Installing DuckDNS IP-update cron job');
     const subdomain = opts.domain.replace('.duckdns.org', '');
     const cronLine = `*/5 * * * * root curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o /var/log/duckdns.log`;
     const cronFile = '/etc/cron.d/total-recall-duckdns';
@@ -491,7 +503,7 @@ export default async function deploy(args) {
     }
   }
 
-  logStep('9/11', 'Installing systemd units');
+  logStep('10/12', 'Installing systemd units');
   if (opts.skipSystemd || !hasSystemd()) {
     if (!hasSystemd() && !opts.skipSystemd) {
       logWarn(`systemd not available on ${platform} — skipping`);
@@ -529,7 +541,7 @@ export default async function deploy(args) {
   }
 
   // ── Step 10: Start services ──
-  logStep('10/11', 'Starting services');
+  logStep('11/12', 'Starting services');
   if (hasSystemd() && !opts.skipSystemd) {
     if (opts.dryRun) {
       log('  Would enable and start total-recall-server + total-recall-daemon');
@@ -549,7 +561,7 @@ export default async function deploy(args) {
   }
 
   // ── Step 11: Initial compile + cron setup ──
-  logStep('11/11', 'Running initial compile + installing agent cron');
+  logStep('12/12', 'Running initial compile + installing agent cron');
   if (opts.skipCompile) {
     logSkip('Skipped (--skip-compile)');
   } else {
@@ -559,15 +571,12 @@ export default async function deploy(args) {
     } else {
       try {
         // Compile vault surface directly (compile.mjs no longer exists — SSSS migration)
-        const path = await import('node:path');
-        const osm = await import('node:os');
         const { compileSurface } = await import('../core/surface.mjs');
-        const AGENT = path.default.join(osm.default.homedir(), '.agent');
         await compileSurface({
-          vaultDir: path.default.join(AGENT, 'memory-vault'),
-          skillsDir: path.default.join(AGENT, 'skills'),
-          derivedDir: path.default.join(AGENT, 'memory-derived'),
-          instructionsFile: path.default.join(AGENT, 'INSTRUCTIONS.md'),
+          vaultDir: path.join(AGENT_DIR, 'memory-vault'),
+          skillsDir: path.join(AGENT_DIR, 'skills'),
+          derivedDir: path.join(AGENT_DIR, 'memory-derived'),
+          instructionsFile: path.join(AGENT_DIR, 'INSTRUCTIONS.md'),
         });
         logOk('Initial compile complete');
       } catch (err) {

@@ -121,8 +121,15 @@ export function loadSkills(skillsDir) {
       try {
         const raw = fs.readFileSync(skillPath, 'utf8');
         const { data, content } = matter(raw);
-        if (data.type === 'skill') {
-          skills.push({ ...data, body: content.trim(), filepath: skillPath });
+        // Accept either `type: skill` or files that simply have a `name` field
+        // (which is the convention for all real SKILL.md files)
+        if (data.type === 'skill' || data.name) {
+          skills.push({
+            ...data,
+            name: data.name || skillName,
+            body: content.trim(),
+            filepath: skillPath,
+          });
         }
       } catch (err) {
         console.warn(`Failed to parse ${skillPath}: ${err.message}`);

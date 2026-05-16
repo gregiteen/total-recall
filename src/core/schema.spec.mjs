@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { MemoryNodeSchema, ConflictRecordSchema, TaskSchema } from './schema.mjs';
+import {
+  MemoryNodeSchema,
+  ConflictRecordSchema,
+  TaskSchema,
+  ProposalSchema,
+  SchemaProposalSchema,
+  MigrationSchema,
+  ReleaseSchema,
+} from './schema.mjs';
 
 describe('Schema Validations', () => {
   describe('MemoryNodeSchema', () => {
@@ -111,6 +119,103 @@ describe('Schema Validations', () => {
         progress: 0
       };
       const result = TaskSchema.safeParse(task);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('ProposalSchema', () => {
+    it('validates a correct proposal', () => {
+      const proposal = {
+        type: 'proposal',
+        proposal_id: 'prop-2026-05-15-001',
+        category: 'memory-cleanup',
+        status: 'pending',
+        target_path: '.agent/memory-vault/patterns/stale-node.md',
+        summary: 'Remove stale node with 0 access in 90 days',
+        rationale: 'Confidence decayed below 0.1',
+        proposed_by: 'dream-cycle',
+        proposed_at: new Date().toISOString(),
+        reviewed_at: null,
+        reviewed_by: null,
+        rejection_reason: null,
+      };
+      const result = ProposalSchema.safeParse(proposal);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid proposal category', () => {
+      const result = ProposalSchema.safeParse({
+        type: 'proposal',
+        proposal_id: 'p1',
+        category: 'invalid-cat',
+        status: 'pending',
+        summary: 'test',
+        proposed_by: 'test',
+        proposed_at: new Date().toISOString(),
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('SchemaProposalSchema', () => {
+    it('validates a correct schema proposal', () => {
+      const schemaProposal = {
+        type: 'schema-proposal',
+        proposal_id: 'sp-2026-05-15-001',
+        status: 'draft',
+        from_version: 2,
+        to_version: 3,
+        summary: 'Add vector_embedding field to memory nodes',
+        breaking: false,
+        proposed_by: 'admin',
+        proposed_at: new Date().toISOString(),
+      };
+      const result = SchemaProposalSchema.safeParse(schemaProposal);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects incomplete schema proposal', () => {
+      const result = SchemaProposalSchema.safeParse({ type: 'schema-proposal' });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('MigrationSchema', () => {
+    it('validates a correct migration', () => {
+      const migration = {
+        type: 'migration',
+        migration_id: 'mig-v2-to-v3',
+        from_version: 2,
+        to_version: 3,
+        status: 'pending',
+        description: 'Add vector_embedding field with null default',
+      };
+      const result = MigrationSchema.safeParse(migration);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects incomplete migration', () => {
+      const result = MigrationSchema.safeParse({ type: 'migration' });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('ReleaseSchema', () => {
+    it('validates a correct release', () => {
+      const release = {
+        type: 'release',
+        release_id: 'rel-3.1.0',
+        version: '3.1.0',
+        schema_version: 3,
+        summary: 'Added proposal and migration file types',
+        released_at: new Date().toISOString(),
+      };
+      const result = ReleaseSchema.safeParse(release);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects incomplete release', () => {
+      const result = ReleaseSchema.safeParse({ type: 'release' });
       expect(result.success).toBe(false);
     });
   });

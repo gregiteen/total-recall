@@ -1,14 +1,42 @@
-# Total Recall 3.0 — Sovereign OS
+# Total Recall 3.0 — SSSS Sovereign AI OS
 
 > **A database-free, SSSS-compliant Sovereign AI Operating System.**
 
-Total Recall 3.0 is a complete reimagining of the cognitive memory system. We have completely stripped out SQLite and all third-party database dependencies. Total Recall is now a fully standalone, hardware-agnostic Sovereign OS that runs a local React dashboard, a standard Model Context Protocol (MCP) gateway, and an Express-powered OpenAPI proxy, all backed exclusively by **SSSS (Structured Semantic Syntax System)** Markdown memory.
+Total Recall 3.0 is the open-source canonical home of **SSSS (Structured Semantic Syntax System)** and the reference implementation of a sovereign AI brain. It proves that memory, skills, workflows, model routing, scheduler tasks, and learning loops can live as portable Markdown files with semantic frontmatter instead of opaque hosted database state.
+
+UltraChat is the hosted product layer and commercial experience. Total Recall is the spec, local brain, CLI, validator, Dream Cycle, and conformance suite that makes the SSSS substrate real.
+
+## Repository Role
+
+```text
+total-recall
+-> canonical SSSS spec
+-> reference kernel and validator
+-> local sovereign brain
+-> Dream Cycle optimizer
+-> conformance tests
+-> CLI and deploy tooling
+
+ultrachat-ai-powered
+-> hosted product UX
+-> workspace collaboration
+-> model/runtime management UI
+-> marketplace, billing, projections
+-> launch and distribution
+```
 
 ## 🚀 The Sovereign Vision
 
 You shouldn't need a cloud provider to remember your life. You shouldn't need a vector database to recall context. 
 
-Total Recall 3.0 implements a **Zero-Parser Kernel** that reads, writes, and executes raw Markdown. Every memory, rule, system prompt, and configuration is an SSSS-compliant `.md` file. It's a system designed to be completely hardware-agnostic, easily deployable to an Oracle Cloud VM or a local Mac, and managed autonomously by the AI itself.
+Total Recall 3.0 implements a **Zero-Parser Kernel** that reads, writes, and executes raw Markdown. Every memory, rule, system prompt, workflow, model runtime record, scheduler task, and proposal is an SSSS-compliant file. The system is hardware-agnostic, deployable to a cloud VM or local machine, and managed by a deterministic kernel plus a local AI optimizer.
+
+The strategic thesis is simple:
+
+```text
+Databases were built for apps.
+SSSS is built for sovereign AI.
+```
 
 ## ✨ Core Features
 
@@ -110,6 +138,7 @@ The Sovereign OS is designed under a **Zero-Trust** execution policy.
 For specific guides on modifying or interacting with Total Recall, refer to the Diátaxis-compliant documentation folder:
 - **`/docs/developer/`**: For architectural design decisions, PRDs, and core mechanics.
 - **`/docs/projects/`**: For historical tracking of development phases.
+- **`/docs/projects/in-progress/ssss-sovereign-ai-os/`**: The single active master roadmap.
 
 ---
 *Built for the future. Sovereign, Unrestricted, Database-Free.*

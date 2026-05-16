@@ -47,15 +47,35 @@ app.get('/health', async (req, res) => {
   }
 
   let ollamaStatus = 'unknown';
+  let ollamaModels = [];
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1000);
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
     const ollamaRes = await fetch('http://localhost:11434/', { signal: controller.signal });
     clearTimeout(timeoutId);
     ollamaStatus = ollamaRes.ok ? 'online' : 'offline';
+
+    if (ollamaStatus === 'online') {
+      try {
+        const modelsController = new AbortController();
+        const modelsTimeout = setTimeout(() => modelsController.abort(), 2000);
+        const modelsRes = await fetch('http://localhost:11434/api/tags', { signal: modelsController.signal });
+        clearTimeout(modelsTimeout);
+        if (modelsRes.ok) {
+          const data = await modelsRes.json();
+          ollamaModels = (data.models || []).map(m => m.name);
+        }
+      } catch (e) {
+        // ignore model list fetch failures
+      }
+    }
   } catch (e) {
     ollamaStatus = 'offline';
   }
+
+  const import_os = await import('node:os');
+  const agentDir = path.join(import_os.default.homedir(), '.agent');
+  const vaultExists = fs.existsSync(path.join(agentDir, 'memory-vault'));
 
   res.json({
     status: 'healthy',
@@ -63,7 +83,71 @@ app.get('/health', async (req, res) => {
     uptime_seconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     disk,
-    ollama: ollamaStatus
+    ollama: ollamaStatus,
+    ollama_models: ollamaModels,
+    vfs: {
+      exists: vaultExists,
+      path: agentDir,
+    },
+  });
+});
+
+// ─── Brain Health Check (MODEL.md contract) ─────────────────────────────────────
+
+app.get('/api/health', async (req, res) => {
+  let ollamaOnline = false;
+  let activeModel = null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const ollamaRes = await fetch('http://localhost:11434/', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    ollamaOnline = ollamaRes.ok;
+
+    if (ollamaOnline) {
+      try {
+        const modelsController = new AbortController();
+        const modelsTimeout = setTimeout(() => modelsController.abort(), 2000);
+        const modelsRes = await fetch('http://localhost:11434/api/tags', { signal: modelsController.signal });
+        clearTimeout(modelsTimeout);
+        if (modelsRes.ok) {
+          const data = await modelsRes.json();
+          const models = data.models || [];
+          // Prefer gemma4:26b, fall back to first available
+          const gemma = models.find(m => m.name.startsWith('gemma4'));
+          activeModel = gemma ? gemma.name : (models[0]?.name || null);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  } catch (e) {
+    // Ollama offline
+  }
+
+  if (!ollamaOnline) {
+    return res.status(503).json({
+      status: 'degraded',
+      model: null,
+      runtime: 'ollama',
+      uptime_seconds: Math.floor(process.uptime()),
+      capabilities: [],
+      reason: 'Ollama runtime is offline',
+    });
+  }
+
+  res.json({
+    status: 'ok',
+    model: activeModel,
+    runtime: 'ollama',
+    uptime_seconds: Math.floor(process.uptime()),
+    capabilities: [
+      'text-generation',
+      'function-calling',
+      'system-instructions',
+      'structured-output',
+    ],
   });
 });
 

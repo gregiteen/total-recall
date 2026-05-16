@@ -84,7 +84,7 @@ export default function SandboxPage() {
           <div className="sandbox-editor-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <select 
               value={fileMode} 
-              onChange={e => setFileMode(e.target.value as any)}
+              onChange={e => setFileMode(e.target.value as 'script.mjs' | 'DESIGN.md')}
               style={{ background: 'transparent', color: 'white', border: 'none', outline: 'none', fontWeight: 600 }}
             >
               <option value="script.mjs">script.mjs</option>
