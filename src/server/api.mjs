@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
 import { callFrontier, callFrontierRaw, loadFrontierConfig } from '../core/frontier.mjs';
+import { callLocalRuntimeRaw, loadRuntimeConfig, checkRuntimeHealth } from '../core/runtime.mjs';
 import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
 import { requireAuth, loginHandler, logoutHandler, changePasswordHandler, apiRateLimiter } from './auth.mjs';
 import { logger } from '../core/logger.mjs';
@@ -65,8 +66,8 @@ apiRouter.use('/api', requireAuth);
 
 apiRouter.post('/v1/chat/completions', async (req, res) => {
   try {
-    const configPath = path.join(os.homedir(), '.agent', 'config', 'frontier.yml');
-    const config = loadFrontierConfig(configPath);
+    const frontierConfigPath = path.join(CONFIG_DIR, 'frontier.yml');
+    const runtimeConfigPath = path.join(CONFIG_DIR, 'runtime.yml');
     
     const { messages, model, temperature } = req.body;
     
@@ -80,21 +81,39 @@ apiRouter.post('/v1/chat/completions', async (req, res) => {
     if (!messages || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
+    
+    let activeConfig = null;
+    let isLocal = false;
 
-    const systemMessage = messages.find(m => m.role === 'system')?.content || '';
-    const userPrompt = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n');
+    // Determine whether to use local runtime or frontier
+    if (fs.existsSync(runtimeConfigPath)) {
+      const rtConfig = loadRuntimeConfig(runtimeConfigPath);
+      const health = await checkRuntimeHealth(rtConfig);
+      if (health.status === 'healthy') {
+        activeConfig = {
+          ...rtConfig,
+          model: model || rtConfig.model,
+          temperature: temperature || rtConfig.temperature
+        };
+        isLocal = true;
+      }
+    }
+    
+    if (!isLocal) {
+      const fConfig = loadFrontierConfig(frontierConfigPath);
+      activeConfig = fConfig.local?.endpoint ? {
+        ...fConfig,
+        endpoint: fConfig.local.endpoint,
+        model: model || fConfig.local.model || fConfig.model,
+        temperature: temperature || fConfig.temperature,
+        api_key: null
+      } : {
+        ...fConfig,
+        model: model || fConfig.model,
+        temperature: temperature || fConfig.temperature
+      };
+    }
 
-    const activeConfig = config.local?.endpoint ? {
-      ...config,
-      endpoint: config.local.endpoint,
-      model: model || config.local.model || config.model,
-      temperature: temperature || config.temperature,
-      api_key: null
-    } : {
-      ...config,
-      model: model || config.model,
-      temperature: temperature || config.temperature
-    };
 
     const dateStr = new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZoneName: 'short' });
     let baseSystemPrompt = `You are Total Recall, a Sovereign AI OS running a database-free, Markdown-first Structured Semantic Syntax System (SSSS) architecture. The current date and time is ${dateStr}. 
@@ -157,8 +176,10 @@ ${interviewTask}`;
 
     // Tool loop (up to 5 iterations to prevent infinite loops)
     for (let i = 0; i < 5; i++) {
-      console.error(`[API] Invoking frontier model (Iteration ${i + 1})...`);
-      const message = await callFrontierRaw(currentMessages, activeConfig, AVAILABLE_TOOLS);
+      console.error(`[API] Invoking ${isLocal ? 'local' : 'frontier'} model (Iteration ${i + 1})...`);
+      const message = isLocal 
+        ? await callLocalRuntimeRaw(currentMessages, activeConfig, AVAILABLE_TOOLS)
+        : await callFrontierRaw(currentMessages, activeConfig, AVAILABLE_TOOLS);
       currentMessages.push(message);
 
       if (message.tool_calls && message.tool_calls.length > 0) {

@@ -33,7 +33,7 @@ export default function FilesPage() {
   }, [])
 
   useEffect(() => {
-    fetchFiles()
+    void fetchFiles()
   }, [fetchFiles])
 
   return (

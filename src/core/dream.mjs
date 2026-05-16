@@ -3,6 +3,11 @@ import path from 'path';
 import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
 import { detectConflicts, quarantineConflict } from './steering.mjs';
 import { compileSurface } from './surface.mjs';
+import { 
+  generateMemoryCleanupProposals, 
+  generateStaleKnowledgeRefreshProposals,
+  evaluateProposalGate
+} from './optimizer.mjs';
 
 const DREAM_PROMOTION_THRESHOLD = 0.7;
 
@@ -85,6 +90,30 @@ export async function runDreamCycle({
     console.log('   ✅ Surface recompiled successfully');
   } catch (err) {
     console.error(`   ❌ Deep Sleep compile failed: ${err.message}`);
+  }
+
+  console.log('\n🧠 PHASE 4 — Lucid Dreaming (Optimizer Proposals)');
+  try {
+    const proposalsDir = path.join(vaultDir, 'proposals');
+    if (!fs.existsSync(proposalsDir)) fs.mkdirSync(proposalsDir, { recursive: true });
+
+    const cleanupProposals = await generateMemoryCleanupProposals(vaultDir);
+    const staleProposals = await generateStaleKnowledgeRefreshProposals(vaultDir);
+    const allProposals = [...cleanupProposals, ...staleProposals];
+    
+    if (allProposals.length > 0) {
+      console.log(`   Generated ${allProposals.length} optimization proposals.`);
+      for (const p of allProposals) {
+        // Run Local Eval Gate
+        const passed = await evaluateProposalGate(p, null);
+        console.log(`   - Proposal [${p.category}]: ${p.summary} -> ${passed ? 'ACCEPTED' : 'REJECTED'}`);
+        writeNode(p, proposalsDir);
+      }
+    } else {
+      console.log('   No new proposals generated.');
+    }
+  } catch (err) {
+    console.error(`   ❌ Optimizer failed: ${err.message}`);
   }
 
   return { status: 'success' };

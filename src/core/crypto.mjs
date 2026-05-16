@@ -72,3 +72,34 @@ export async function readSecrets(password) {
   const buf = fs.readFileSync(SECRETS_FILE);
   return await decryptSecrets(buf, password);
 }
+
+/**
+ * Generates an Ed25519 keypair for signing releases.
+ */
+export function generateSignatureKeyPair() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+  return {
+    publicKey: publicKey.export({ type: 'spki', format: 'pem' }),
+    privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' })
+  };
+}
+
+/**
+ * Signs a payload using an Ed25519 private key.
+ */
+export function signPayload(payload, privateKeyPem) {
+  const sign = crypto.createSign('sha512');
+  sign.update(payload);
+  sign.end();
+  return sign.sign(privateKeyPem, 'base64');
+}
+
+/**
+ * Verifies a signature using an Ed25519 public key.
+ */
+export function verifySignature(payload, signatureBase64, publicKeyPem) {
+  const verify = crypto.createVerify('sha512');
+  verify.update(payload);
+  verify.end();
+  return verify.verify(publicKeyPem, signatureBase64, 'base64');
+}

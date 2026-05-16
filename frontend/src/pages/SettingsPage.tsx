@@ -9,10 +9,6 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    loadTab(activeTab);
-  }, [activeTab]);
-
   const loadTab = async (file: string) => {
     setLoading(true);
     setError(null);
@@ -20,12 +16,16 @@ export default function SettingsPage() {
     try {
       const data = await fetchConfig(file);
       setContent(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load configuration.');
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to load configuration.');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void loadTab(activeTab);
+  }, [activeTab]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -35,8 +35,8 @@ export default function SettingsPage() {
       await saveConfig(activeTab, content);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to save configuration.');
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to save configuration.');
     } finally {
       setSaving(false);
     }

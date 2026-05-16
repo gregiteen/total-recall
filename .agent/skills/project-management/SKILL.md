@@ -30,14 +30,22 @@ Primary repo:
 
 Current phase:
 
-- Architecture Scoping → Core Implementation
+- SSSS Sovereign AI OS Consolidation → Reference Implementation
 
 Important existing project-management files:
 
-- `docs/projects/in-progress/master/PROJECT_TRACKER.md`
-- `docs/projects/in-progress/master/DEV_PLAN.md`
-- `docs/projects/in-progress/master/ARCHITECTURE.md`
+- `docs/projects/in-progress/ssss-sovereign-ai-os/SSSS_SOVEREIGN_AI_OS_PROJECT_TRACKER.md`
+- `docs/projects/in-progress/ssss-sovereign-ai-os/SSSS_SOVEREIGN_AI_OS_DEVELOPMENT_PLAN.md`
+- `docs/projects/in-progress/ssss-sovereign-ai-os/SSSS_SOVEREIGN_AI_OS_PRD.md`
 - `docs/projects/DEFERRED_BACKLOG.md`
+
+Strategic override as of 2026-05-15:
+
+- The single active Total Recall epic is `docs/projects/in-progress/ssss-sovereign-ai-os/`.
+- Prior active projects (`master`, `ssss-migration`, `deep-research`, `multilingual-ssss-memory`) are archived as superseded history.
+- Total Recall owns the canonical SSSS spec, reference kernel, local sovereign brain, Dream Cycle optimizer, CLI, and conformance suite.
+- UltraChat owns hosted UX, marketplace, billing, collaboration, model management UI, and product projections.
+- User-local optimizer work can improve user/workspace data, but SSSS protocol changes require admin-reviewed schema proposals, migrations, and tests.
 
 ### Docs Kanban System
 
@@ -45,7 +53,7 @@ All project documentation lives in `docs/projects/` organized as a Kanban board:
 
 | Folder | Purpose |
 |--------|---------|
-| `in-progress/` | Active work with `*_PROJECT_TRACKER.md` and `*_DEV_PLAN.md` |
+| `in-progress/` | Active work with `*_PROJECT_TRACKER.md` and `*_DEVELOPMENT_PLAN.md` / `*_DEV_PLAN.md` |
 | `completed/` | Shipped projects (moved here after archival) |
 | `archived/` | Abandoned or superseded projects |
 | `planned/` | Scoped but not yet started |
@@ -96,7 +104,7 @@ Use when the user asks what to work on, what matters, or how close Total Recall 
 
 Actions:
 
-1. Check the `PROJECT_TRACKER.md` for incomplete tasks in the current phase.
+1. Check the active `*_PROJECT_TRACKER.md` for incomplete tasks in the current phase.
 2. Check whether the Clean-Account Initialization has been completed.
 3. Identify core kernel blockers before UI polish.
 4. Select 3–7 issues for the session.
@@ -270,8 +278,8 @@ We strictly follow the Traditional SWE Methodology:
 1. **Discovery (PRD & Architecture)**:
    - Define *what* we are building (`PRD.md`) and *how* the systems connect (`ARCHITECTURE.md`).
 2. **Planning (Dev Plan & Tracker)**:
-   - Break the architecture down into a step-by-step `DEV_PLAN.md`.
-   - Extract the binary yes/no tasks into a Markdown `PROJECT_TRACKER.md`.
+   - Break the architecture down into a step-by-step project-prefixed development plan.
+   - Extract the binary yes/no tasks into a project-prefixed Markdown tracker.
 3. **Execution (Implementation)**:
    - **Never code blindly**. Every PR must check off a specific box on the tracker.
    - Do not allow agents to drift into Phase 4 while Phase 1 is incomplete.

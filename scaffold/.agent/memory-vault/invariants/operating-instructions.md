@@ -5,6 +5,7 @@ category: invariants
 title: "Total Recall Core Operating Protocol"
 schema_version: 2
 status: active
+confidence: 1.0
 importance: 5
 priority: absolute
 immutable: true
@@ -12,6 +13,25 @@ modality: must
 subject: agent
 predicate: operate
 object: memory_system
+created: 2026-05-01T00:00:00Z
+updated: 2026-05-15T00:00:00Z
+last_accessed: 2026-05-15T00:00:00Z
+source:
+  type: scaffold
+  session_id: scaffold-seed
+  agent: total-recall
+  evidence_count: 1
+supersedes: []
+superseded_by: null
+contradicts: []
+tags: [ssss, sovereignty, memory, protocol]
+related: []
+routes_to_skills: [ssss]
+sentiment_polarity: directive_must
+sentiment_target: memory_system
+decay:
+  half_life_days: 365
+  access_count: 1
 ---
 
 # Total Recall Operating Protocol

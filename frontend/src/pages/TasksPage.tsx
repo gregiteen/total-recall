@@ -20,7 +20,7 @@ export default function TasksPage() {
   }, [])
 
   useEffect(() => {
-    fetchTasks()
+    void fetchTasks()
   }, [fetchTasks])
 
   return (

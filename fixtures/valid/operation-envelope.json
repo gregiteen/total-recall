@@ -1,0 +1,9 @@
+{
+  "type": "operation",
+  "idempotency_key": "op-fixture-001-abcdef",
+  "path": "assistants/test-assistant/ASSISTANT.md",
+  "workspace_id": "ws-fixture-001",
+  "content": "---\ntype: assistant\nname: Test Assistant\n---\nA test assistant.",
+  "intent": "Create a test assistant for conformance testing",
+  "dry_run": true
+}

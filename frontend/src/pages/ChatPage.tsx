@@ -119,8 +119,8 @@ export default function ChatPage() {
       const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: Date.now(), versions: [reply], currentVersionIndex: 0 }
       setMessages(prev => [...prev, assistantMsg])
       speak(reply)
-    } catch (e: any) {
-      if (e.name === 'AbortError') {
+    } catch (e: unknown) {
+      if ((e as Error).name === 'AbortError') {
         setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '⛔ Generation stopped by user.', timestamp: Date.now(), versions: ['⛔ Generation stopped by user.'], currentVersionIndex: 0 }])
       } else {
         const errorMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: `⚠️ Error: ${(e as Error).message}`, timestamp: Date.now(), versions: [`⚠️ Error: ${(e as Error).message}`], currentVersionIndex: 0 }
@@ -150,8 +150,8 @@ export default function ChatPage() {
         return next
       })
       speak(reply)
-    } catch (e: any) {
-      if (e.name !== 'AbortError') console.error(e)
+    } catch (e: unknown) {
+      if ((e as Error).name !== 'AbortError') console.error(e)
     } finally {
       setLoading(false)
       abortControllerRef.current = null

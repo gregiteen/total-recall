@@ -11,19 +11,19 @@ export default function ApiKeysPage() {
   const [newlyIssued, setNewlyIssued] = useState<IssuedApiKey | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true)
     setError(null)
     try {
       setKeys(await listApiKeys())
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { void load(false) }, [load])
 
   const handleIssue = async () => {
     if (!newKeyName.trim()) return
@@ -33,9 +33,9 @@ export default function ApiKeysPage() {
       const key = await issueApiKey(newKeyName.trim())
       setNewlyIssued(key)
       setNewKeyName('')
-      await load()
-    } catch (e: any) {
-      setError(e.message)
+      await load(true)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     } finally {
       setIssuing(false)
     }
@@ -45,9 +45,9 @@ export default function ApiKeysPage() {
     if (!confirm(`Revoke key "${name}"? This cannot be undone.`)) return
     try {
       await revokeApiKey(id)
-      await load()
-    } catch (e: any) {
-      setError(e.message)
+      await load(true)
+    } catch (e: unknown) {
+      setError((e as Error).message)
     }
   }
 

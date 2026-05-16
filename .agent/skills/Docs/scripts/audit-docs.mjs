@@ -37,6 +37,7 @@ const rootWhitelist = [
   'AGENTS.md',
   'AGENT.md',
   'CLAUDE.md',
+  'GEMINI.md',
   'COPILOT_INSTRUCTIONS.md',
   '.claude.md',
   'HANDOFF.md'

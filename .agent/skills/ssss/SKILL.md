@@ -3,16 +3,28 @@ name: ssss
 description: "Use this skill when reading, writing, parsing, or verifying the Structured Semantic Syntax System (SSSS) markdown memory format. MANDATORY: You MUST read the full SKILL.md file before executing."
 ---
 
-# SSSS — Structured Semantic Syntax System
+# SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
 <!-- END INJECTED MEMORY -->
 
-> The schema specification that `total-recall` uses for all vault files, session logs, and derived indexes.
+> **This file describes how Total Recall implements SSSS.** For the canonical,
+> vendor-neutral definition of SSSS itself — the file format, primitive types,
+> operation contract, validation and conformance rules — read the ground-truth
+> spec: [`references/ssss-spec.md`](references/ssss-spec.md).
+>
+> The spec is authoritative. This file is a conformant consumer of it. If this
+> file and the spec ever disagree, the spec wins and this file MUST be corrected.
 
-SSSS is a **database-free, Markdown-first schema** for AI agent memory. Every rule, fact, preference, and observation is a plain `.md` file with YAML frontmatter. There is no relational database, no binary format, and no proprietary lock-in.
+Total Recall is the **open-source reference kernel** for SSSS — the canonical
+implementation of the spec, the local sovereign brain, and the conformance suite.
+UltraChat is the commercial product layer that runs on top of it. Both vendor the
+same `references/ssss-spec.md`.
 
-`total-recall` implements SSSS as its storage layer. Any IDE plugin, CLI tool, or AI agent framework that can read Markdown can interoperate with a `total-recall` vault.
+SSSS is a **database-free, Markdown-first schema and mutation contract** for AI
+agent state. Every rule, fact, preference, skill, task, and observation is a plain
+`.md` file with YAML frontmatter. There is no relational database, no binary
+format, and no proprietary lock-in.
 
 ---
 

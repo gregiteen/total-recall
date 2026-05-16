@@ -1,15 +1,11 @@
-REPORT_UPDATED: 2026-05-12T23:23:17.781Z
+REPORT_UPDATED: 2026-05-16T06:32:16.847Z
 STATUS: STABLE
-TOTAL_ERRORS: 8
+TOTAL_ERRORS: 4
 EXIT_CODE: 1
 
 
-/Users/greg/Github/total-recall/frontend/src/pages/ChatPage.tsx
-  109:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
-  140:17  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
-
-/Users/greg/Github/total-recall/frontend/src/pages/FilesPage.tsx
-  36:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+/Users/greg/Github/total-recall/frontend/src/pages/ApiKeysPage.tsx
+  26:26  error  Error: Calling setState synchronously within an effect can trigger cascading renders
 
 Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
 * Update external systems with the latest state from React.
@@ -17,54 +13,35 @@ Effects are intended to synchronize state between React and external systems suc
 
 Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
 
-/Users/greg/Github/total-recall/frontend/src/pages/FilesPage.tsx:36:5
+/Users/greg/Github/total-recall/frontend/src/pages/ApiKeysPage.tsx:26:26
+  24 |   }, [])
+  25 |
+> 26 |   useEffect(() => { void load(false) }, [load])
+     |                          ^^^^ Avoid calling setState() directly within an effect
+  27 |
+  28 |   const handleIssue = async () => {
+  29 |     if (!newKeyName.trim()) return  react-hooks/set-state-in-effect
+
+/Users/greg/Github/total-recall/frontend/src/pages/FilesPage.tsx
+  36:10  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/greg/Github/total-recall/frontend/src/pages/FilesPage.tsx:36:10
   34 |
   35 |   useEffect(() => {
-> 36 |     fetchFiles()
-     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+> 36 |     void fetchFiles()
+     |          ^^^^^^^^^^ Avoid calling setState() directly within an effect
   37 |   }, [fetchFiles])
   38 |
   39 |   return (  react-hooks/set-state-in-effect
 
-/Users/greg/Github/total-recall/frontend/src/pages/SandboxPage.tsx
-  87:60  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
-
 /Users/greg/Github/total-recall/frontend/src/pages/SettingsPage.tsx
-  13:5   error  Error: Cannot access variable before it is declared
-
-`loadTab` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
-
-/Users/greg/Github/total-recall/frontend/src/pages/SettingsPage.tsx:13:5
-  11 |
-  12 |   useEffect(() => {
-> 13 |     loadTab(activeTab);
-     |     ^^^^^^^ `loadTab` accessed before it is declared
-  14 |   }, [activeTab]);
-  15 |
-  16 |   const loadTab = async (file: string) => {
-
-/Users/greg/Github/total-recall/frontend/src/pages/SettingsPage.tsx:16:3
-  14 |   }, [activeTab]);
-  15 |
-> 16 |   const loadTab = async (file: string) => {
-     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-> 17 |     setLoading(true);
-     | ^^^^^^^^^^^^^^^^^^^^^
-> 18 |     setError(null);
-     …
-     | ^^^^^^^^^^^^^^^^^^^^^
-> 27 |     }
-     | ^^^^^^^^^^^^^^^^^^^^^
-> 28 |   };
-     | ^^^^^ `loadTab` is declared here
-  29 |
-  30 |   const handleSave = async () => {
-  31 |     setSaving(true);  react-hooks/immutability
-  23:19  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
-  38:19  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              @typescript-eslint/no-explicit-any
-
-/Users/greg/Github/total-recall/frontend/src/pages/TasksPage.tsx
-  23:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+  27:10  error  Error: Calling setState synchronously within an effect can trigger cascading renders
 
 Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
 * Update external systems with the latest state from React.
@@ -72,14 +49,32 @@ Effects are intended to synchronize state between React and external systems suc
 
 Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
 
-/Users/greg/Github/total-recall/frontend/src/pages/TasksPage.tsx:23:5
+/Users/greg/Github/total-recall/frontend/src/pages/SettingsPage.tsx:27:10
+  25 |
+  26 |   useEffect(() => {
+> 27 |     void loadTab(activeTab);
+     |          ^^^^^^^ Avoid calling setState() directly within an effect
+  28 |   }, [activeTab]);
+  29 |
+  30 |   const handleSave = async () => {  react-hooks/set-state-in-effect
+
+/Users/greg/Github/total-recall/frontend/src/pages/TasksPage.tsx
+  23:10  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/greg/Github/total-recall/frontend/src/pages/TasksPage.tsx:23:10
   21 |
   22 |   useEffect(() => {
-> 23 |     fetchTasks()
-     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+> 23 |     void fetchTasks()
+     |          ^^^^^^^^^^ Avoid calling setState() directly within an effect
   24 |   }, [fetchTasks])
   25 |
   26 |   return (  react-hooks/set-state-in-effect
 
-✖ 8 problems (8 errors, 0 warnings)
+✖ 4 problems (4 errors, 0 warnings)
 

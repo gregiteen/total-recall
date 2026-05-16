@@ -40,6 +40,9 @@ const COMMANDS = {
   friction: 'friction.mjs',
   chat:     'chat.mjs',
   status:   'status.mjs',
+  rebuild:  'rebuild.mjs',
+  snapshot: 'snapshot.mjs',
+  migrate:  'migrate.mjs',
 };
 
 function printHelp() {
@@ -60,6 +63,9 @@ function printHelp() {
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
     status              Show brain connection and sync state
+    rebuild [--check]   Detect index drift and deterministically rebuild projections
+    snapshot            Manage fast point-in-time VFS snapshots and rollbacks
+    migrate             Run backwards-incompatible SSSS schema migrations
 
   Autonomous operations (sync, compile, backup) are now handled by the
   Cloud Agent via SSSS task nodes in .agent/scheduler/queue/.

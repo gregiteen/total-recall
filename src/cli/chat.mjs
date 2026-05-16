@@ -1,7 +1,8 @@
 import readline from 'readline';
-import { callFrontier, loadFrontierConfig } from '../core/frontier.mjs';
 import path from 'path';
 import os from 'os';
+import { callFrontier, loadFrontierConfig } from '../core/frontier.mjs';
+import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core/runtime.mjs';
 
 /**
  * Total Recall CLI Chat Interface
@@ -10,13 +11,30 @@ import os from 'os';
 export default async function runChat(args) {
   console.log('🤖 Total Recall CLI Chat initialized. Type "exit" to quit.\n');
 
-  const configPath = path.join(os.homedir(), '.agent', 'config', 'frontier.yml');
+  const useFrontier = args.includes('--frontier');
+  
+  const configDir = path.join(os.homedir(), '.agent', 'config');
+  
   let config;
+  let caller;
+  
   try {
-    config = loadFrontierConfig(configPath);
-    console.log(`[Config] Connected to ${config.model} endpoint.\n`);
+    if (useFrontier) {
+      config = loadFrontierConfig(path.join(configDir, 'frontier.yml'));
+      caller = (prompt, system) => callFrontier(prompt, system, config);
+      console.log(`[Config] Connected to Frontier endpoint: ${config.model}\n`);
+    } else {
+      config = loadRuntimeConfig(path.join(configDir, 'runtime.yml'));
+      const health = await checkRuntimeHealth(config);
+      if (health.status === 'degraded') {
+        console.warn(`[!] Local runtime degraded: ${health.reason}`);
+        console.warn(`    Falling back to Frontier if available, or try --frontier flag.\n`);
+      }
+      caller = (prompt, system) => callLocalRuntime(prompt, system, config);
+      console.log(`[Config] Connected to Local Runtime: ${config.runtime} (${config.model})\n`);
+    }
   } catch (e) {
-    console.error(`[!] Failed to load frontier config: ${e.message}`);
+    console.error(`[!] Failed to load configuration: ${e.message}`);
     process.exit(1);
   }
 
@@ -50,7 +68,7 @@ export default async function runChat(args) {
     messages.push({ role: 'user', content: input });
     
     try {
-      const response = await callFrontier(fullPrompt, systemMessage, config);
+      const response = await caller(fullPrompt, systemMessage);
       console.log(`\nBrain: ${response}\n`);
       messages.push({ role: 'assistant', content: response });
     } catch (err) {

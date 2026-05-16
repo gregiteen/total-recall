@@ -1,0 +1,23 @@
+# Total Recall Local Runtime Configuration
+#
+# This configuration determines how the Sovereign AI OS interacts with
+# the local model for cognitive tasks (Dream Cycle, watchdogs, local chat).
+
+# ----------------------------------------------------------------------------
+# Option 1: Ollama (Default)
+# ----------------------------------------------------------------------------
+runtime: "ollama"
+endpoint: "http://127.0.0.1:11434/v1/chat/completions"
+model: "gemma4:26b"
+temperature: 0.2
+
+# ----------------------------------------------------------------------------
+# Option 2: llama.cpp (High Performance)
+# Uncomment the block below and comment out the Ollama block above
+# to use a dedicated llama.cpp server.
+# ----------------------------------------------------------------------------
+# runtime: "llama.cpp"
+# endpoint: "http://127.0.0.1:8080/v1/chat/completions"
+# health_endpoint: "http://127.0.0.1:8080/health"
+# model: "gemma4-26b-q4_k_m.gguf"
+# temperature: 0.2
