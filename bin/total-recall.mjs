@@ -32,6 +32,7 @@
 
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { TRError, emitError } from '../src/errors.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
@@ -120,9 +121,11 @@ async function main() {
 
   const handlerFile = COMMANDS[command];
   if (!handlerFile) {
-    console.error(`Unknown command: ${command}`);
-    console.error(`Run 'total-recall --help' for usage.`);
-    process.exit(1);
+    emitError(new TRError(
+      'UNKNOWN_COMMAND',
+      `Unknown command: '${command}'`,
+      { command, available: Object.keys(COMMANDS) },
+    ));
   }
 
   const handlerPath = path.join(CLI_DIR, handlerFile);
@@ -132,12 +135,22 @@ async function main() {
     await handler.default(args.slice(1));
   } catch (err) {
     if (err.code === 'ERR_MODULE_NOT_FOUND') {
-      console.error(`Command '${command}' is not yet implemented.`);
-      console.error(`Expected handler at: ${handlerPath}`);
-      process.exit(1);
+      emitError(new TRError(
+        'NOT_IMPLEMENTED',
+        `Command '${command}' is not yet implemented.`,
+        { command, expectedHandler: handlerPath },
+        err,
+      ));
     }
-    console.error(`Error executing '${command}':`, err.message);
-    process.exit(1);
+    if (err instanceof TRError) {
+      emitError(err);
+    }
+    emitError(new TRError(
+      'HANDLER_CRASH',
+      `Command '${command}' crashed: ${err.message}`,
+      { command },
+      err,
+    ));
   }
 }
 

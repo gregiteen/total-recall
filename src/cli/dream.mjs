@@ -14,6 +14,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
+import { TRError, emitError } from '../errors.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_DIR = resolveAgentDir();
@@ -72,8 +73,14 @@ export default async function dream(args) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     console.error(`\n  ✅ Dream cycle complete (${elapsed}s) — status: ${result.status}`);
   } catch (err) {
-    console.error(`\n  ❌ Dream cycle failed: ${err.message}`);
-    console.error(err.stack);
-    process.exit(1);
+    if (err instanceof TRError) {
+      emitError(err);
+    }
+    emitError(new TRError(
+      'COMPILE_FAIL',
+      `Dream cycle failed: ${err.message}`,
+      { vaultDir },
+      err,
+    ));
   }
 }

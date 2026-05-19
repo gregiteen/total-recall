@@ -4,6 +4,7 @@ import { compileSurface } from '../core/surface.mjs';
 import { detectIndexDrift } from '../core/drift-detector.mjs';
 import { resolveAgentDir } from './agent-dir.mjs';
 import { logger } from '../core/logger.mjs';
+import { TRError, emitError } from '../errors.mjs';
 
 /**
  * SSSS Projection Rebuild Command
@@ -33,18 +34,11 @@ export async function runRebuild(options = {}) {
       console.log('✅ Indexes are fully synchronized. No drift detected.');
       return 0;
     } else {
-      console.log('⚠️ Drift detected between canonical vault and derived indexes:');
-      if (drift.missing_in_index.length > 0) {
-        console.log(`   - ${drift.missing_in_index.length} nodes missing in index`);
-      }
-      if (drift.stale_in_index.length > 0) {
-        console.log(`   - ${drift.stale_in_index.length} nodes out of sync in index`);
-      }
-      if (drift.missing_in_vault.length > 0) {
-        console.log(`   - ${drift.missing_in_vault.length} ghost records in index (deleted from vault)`);
-      }
-      console.log('\nRun `total-recall rebuild` (without --check) to repair.');
-      return 1;
+      throw new TRError('DRIFT_DETECTED', 'Index drift detected between canonical vault and derived indexes.', {
+        missing_in_index: drift.missing_in_index.length,
+        stale_in_index:   drift.stale_in_index.length,
+        ghost_in_index:   drift.missing_in_vault.length,
+      });
     }
   }
 
@@ -68,18 +62,25 @@ export async function runRebuild(options = {}) {
       logger.info('rebuild', `Rebuild completed successfully. Processed ${stats.nodesProcessed} nodes.`);
       return 0;
     } else {
-      console.error('❌ Post-build verification failed! Drift remains.');
-      return 1;
+      throw new TRError('DRIFT_PERSIST', 'Post-rebuild verification failed: drift remains after recompile.', {
+        missing_in_index: drift.missing_in_index.length,
+        stale_in_index:   drift.stale_in_index.length,
+        ghost_in_index:   drift.missing_in_vault.length,
+      });
     }
   } catch (err) {
-    console.error(`❌ Rebuild failed: ${err.message}`);
+    if (err instanceof TRError) throw err;
     logger.error('rebuild', `Rebuild failed: ${err.message}`);
-    return 1;
+    throw new TRError('REBUILD_FAIL', `Rebuild failed: ${err.message}`, { vaultDir }, err);
   }
 }
 
 export default async function cli(args) {
   const options = { check: args.includes('--check') };
-  const code = await runRebuild(options);
-  process.exit(code);
+  try {
+    const code = await runRebuild(options);
+    process.exit(code);
+  } catch (err) {
+    emitError(err);
+  }
 }
