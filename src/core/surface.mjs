@@ -310,9 +310,11 @@ function buildSkillRoutingTable(skillsDir) {
     const skills = loadSkills(skillsDir);
     if (skills.length === 0) return '';
 
-    const rows = skills.map(s => {
+    const rows = skills.flatMap(s => {
       const relPath = `.agent/skills/${s.name}/SKILL.md`;
-      return `| ${s.name} | ${relPath} |`;
+      const primary = `| ${s.name} | ${relPath} |`;
+      const aliasRows = (s.aliases || []).map(a => `| ${a} | ${relPath} |`);
+      return [primary, ...aliasRows];
     });
 
     return [

@@ -313,16 +313,56 @@ async function remoteSetup(ip, user, opts = {}) {
   return { pat: pat || null };
 }
 
+// ─── GitHub fork ─────────────────────────────────────────────────────────────
+
+const UPSTREAM_OWNER = 'gregiteen';
+const UPSTREAM_REPO  = 'total-recall';
+
+async function forkRepo(githubToken) {
+  info('Forking gregiteen/total-recall to your GitHub account...');
+  const res = await httpRequest(
+    'POST',
+    `https://api.github.com/repos/${UPSTREAM_OWNER}/${UPSTREAM_REPO}/forks`,
+    {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        'User-Agent': 'total-recall-setup',
+        Accept: 'application/vnd.github+json',
+      },
+    }
+  );
+  if (res.status !== 202 && res.status !== 200) {
+    throw new Error(`GitHub fork failed (${res.status}): ${JSON.stringify(res.body)}`);
+  }
+  const fork = res.body;
+  ok(`Forked → ${fork.html_url}`);
+  // GitHub forks are async — wait a moment for it to be clonable
+  await new Promise(r => setTimeout(r, 4000));
+  return { cloneUrl: fork.clone_url, htmlUrl: fork.html_url, fullName: fork.full_name };
+}
+
+async function getGitHubUser(githubToken) {
+  const res = await httpRequest('GET', 'https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${githubToken}`,
+      'User-Agent': 'total-recall-setup',
+      Accept: 'application/vnd.github+json',
+    },
+  });
+  if (res.status !== 200) return null;
+  return res.body;
+}
+
 // ─── Store brain config ───────────────────────────────────────────────────────
 
-function storeBrainConfig(agentDir, brainUrl, token, provider, apiKey) {
+function storeBrainConfig(agentDir, brainUrl, token, provider, apiKey, extra = {}) {
   const configDir = path.join(agentDir, 'config');
   fs.mkdirSync(configDir, { recursive: true });
 
   // brain.json
   fs.writeFileSync(
     path.join(configDir, 'brain.json'),
-    JSON.stringify({ url: brainUrl, token, provider }, null, 2),
+    JSON.stringify({ url: brainUrl, token, provider, ...extra }, null, 2),
     'utf8'
   );
 
@@ -366,6 +406,54 @@ export default async function setup(args) {
   const deployTarget = deployment.value || deployment;
   let ip = null, user = 'root', apiKey = null, brainUrl = null, pat = null;
   let domain = null;
+  let forkUrl = null, forkFullName = null;
+
+  // ── Step 1.5: GitHub fork (free backup + multi-machine sync) ─────────────────
+
+  hr();
+  console.log('\n  📦 GitHub Backup (recommended)');
+  console.log('  Fork total-recall to your GitHub account to get:');
+  console.log('    • Free encrypted backup of your brain vault');
+  console.log('    • Multi-machine sync via git pull');
+  console.log('    • Full version history of every memory change\n');
+
+  const wantGitHub = yes ? 'y' : (await prompt('Set up GitHub backup? [Y/n]:')).toLowerCase();
+  if (wantGitHub !== 'n' && wantGitHub !== 'no') {
+    console.log('\n  Create a GitHub token at: https://github.com/settings/tokens/new');
+    console.log('  Required scopes: repo (for private forks) or public_repo (for public)\n');
+    const githubToken = await promptSecret('GitHub Personal Access Token:');
+    if (githubToken) {
+      const ghUser = await getGitHubUser(githubToken).catch(() => null);
+      if (ghUser) {
+        info(`Authenticated as @${ghUser.login}`);
+        if (!dryRun) {
+          try {
+            const fork = await forkRepo(githubToken);
+            forkUrl = fork.cloneUrl;
+            forkFullName = fork.fullName;
+            ok(`Your fork: ${fork.htmlUrl}`);
+            ok('Run `npx total-recall sync --push` anytime to back up your vault to GitHub.');
+          } catch (e) {
+            warn(`Could not fork: ${e.message}`);
+            warn('You can fork manually at https://github.com/gregiteen/total-recall');
+          }
+        } else {
+          info('[dry-run] would fork gregiteen/total-recall to your account');
+        }
+        // Store GitHub token for sync --push
+        const secretsPath = path.join(resolveAgentDir(), 'config', 'secrets.enc');
+        fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
+        let secrets = {};
+        if (fs.existsSync(secretsPath)) { try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')); } catch {} }
+        secrets.github_token = githubToken;
+        if (!dryRun) fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), 'utf8');
+      } else {
+        warn('Could not authenticate with that token — skipping GitHub backup.');
+      }
+    } else {
+      info('Skipping GitHub backup. You can set it up later with: npx total-recall connect github');
+    }
+  }
 
   // ── Step 2: Provider-specific provisioning ──────────────────────────────────
 
