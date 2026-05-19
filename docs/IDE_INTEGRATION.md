@@ -298,6 +298,112 @@ npx total-recall connect --brain https://your-brain.duckdns.org --token YOUR_PAT
 
 ---
 
+## Compatibility & Coexistence: Will Total Recall Break Anything?
+
+**No. You do not need to disable any tool's native memory system.** They operate on different layers and are designed to feed each other.
+
+### Why They Don't Conflict
+
+Total Recall and each tool's native memory occupy **different roles**:
+
+| Layer | Owner | What it is |
+|-------|-------|------------|
+| **Curated / Durable** | Total Recall | `INSTRUCTIONS.md`, `CLAUDE.md`, `AGENTS.md` — distilled, high-signal, continuously improved by Gemma 4 |
+| **Ephemeral / Session** | Each tool's native system | Auto-memories, session summaries, inline notes — recent context that helps the tool feel oriented |
+
+These layers are **additive**. The tool reads both at startup. More signal = better outputs.
+
+### Tool-by-Tool Compatibility
+
+#### ✅ Claude Code — Full Coexistence, No Conflict
+
+Total Recall writes `CLAUDE.md`. Claude Code's auto-memory writes to `~/.claude/memories/` — a completely separate location. Claude reads both. They stack.
+
+**The virtuous cycle:** Claude's auto-memory writes preferences → relay captures those sessions → Gemma 4 extracts the patterns → promotes them into `INSTRUCTIONS.md` → next session Claude gets an even stronger `CLAUDE.md` that already contains those learned preferences at tier-1 priority.
+
+**Do NOT disable Claude auto-memory.** It feeds Total Recall.
+
+#### ✅ Codex — Full Coexistence, No Conflict
+
+Total Recall controls `AGENTS.md`. Codex's memories live in `~/.codex/memories/` — separate. Same virtuous cycle applies.
+
+**Do NOT disable Codex memories** (`memories = false` in config.toml). They feed Total Recall.
+
+#### ✅ Antigravity — Full Coexistence, No Conflict
+
+Total Recall controls `AGENTS.md`. Antigravity's Knowledge Items are stored as artifacts in its own system. They don't touch the same files.
+
+The relay watches Antigravity session logs. KI artifacts are exactly the kind of high-signal observations that Gemma 4 promotes into durable vault nodes.
+
+#### ✅ Cursor — No Native Memory to Conflict With
+
+Cursor has no built-in auto-memory. Total Recall fills this gap entirely. Total Recall writes `.cursor/rules/total-recall.mdc` and that's the only memory Cursor has. Nothing to conflict with.
+
+#### ✅ VS Code Copilot — Full Coexistence, No Conflict
+
+Total Recall writes `.github/copilot-instructions.md`. Copilot's native Memory system writes to its own scoped storage. They're separate. Stack cleanly.
+
+**Keep Copilot Memory enabled.** Captured user/repo preferences become relay input.
+
+#### ✅ Pi Coding Agent — Full Coexistence, No Conflict
+
+Total Recall symlinks `~/.pi/agent/AGENTS.md`. Pi's session tree lives in `~/.pi/agent/sessions/*.jsonl`. Pi memory extensions (gentle-engram, honcho-memory) write to their own SQLite databases. No overlap.
+
+**Keep Pi memory extensions running.** They capture session context that the relay ships to Total Recall's brain.
+
+#### ⚠️ Hermes — Managed Coexistence (Total Recall takes ownership of MEMORY.md)
+
+Hermes writes its own auto-generated `MEMORY.md`. Total Recall also writes to `~/.hermes/memories/MEMORY.md`.
+
+**Strategy:** Total Recall wins. Total Recall's Gemma 4 produces a far higher-quality, curated `MEMORY.md` than Hermes's auto-generation (which is just naive summarization). The dream cycle re-writes `MEMORY.md` every time it fires.
+
+**What to do:** After running `total-recall connect hermes`, Hermes should be configured to treat `MEMORY.md` as read-only (don't let Hermes overwrite it). Hermes's SQLite `state.db` is unaffected and continues to provide session search — the relay reads it as a source.
+
+**Concrete setting:** In Hermes config, set `memory.autoWrite = false` or `memory.curated = true` if the option exists. This tells Hermes to stop auto-generating the file and trust what's already there.
+
+#### ⚠️ OpenClaw — Managed Coexistence (Total Recall takes ownership of MEMORY.md + AGENTS.md)
+
+OpenClaw's pre-compaction flush writes to `MEMORY.md` and daily log files. Total Recall also writes `MEMORY.md`.
+
+**Strategy:** Total Recall owns `MEMORY.md` and `AGENTS.md`. OpenClaw's daily logs (`memory/YYYY-MM-DD.md`) are *untouched* by Total Recall and continue to work. The relay watches them.
+
+**The flow:**
+```
+OpenClaw session happens
+    │
+    ▼ OpenClaw writes today's log: memory/2026-05-19.md
+    │
+    ▼ Relay ships it to brain every 60s
+    │
+    ▼ Gemma 4 extracts facts from daily log
+    │
+    ▼ Dream cycle updates MEMORY.md with distilled facts
+    │
+    ▼ Next OpenClaw session starts with an even better MEMORY.md
+```
+
+**What NOT to do:** Don't disable OpenClaw's daily logging — that's the raw input that feeds Total Recall. Only `MEMORY.md` write-back should be disabled if OpenClaw offers the option.
+
+---
+
+### The Summary Rule
+
+> **If the tool writes to a file Total Recall also writes to → Total Recall takes ownership. Everything else the tool writes is input to Total Recall, not competition.**
+
+| File | Who owns it | Other tool's writes |
+|------|-------------|---------------------|
+| `CLAUDE.md` | Total Recall | Claude auto-memories → separate location, relay captures |
+| `AGENTS.md` | Total Recall | Tool's session memory → separate location, relay captures |
+| `MEMORY.md` (Hermes) | Total Recall | Disable Hermes auto-write; its state.db still works |
+| `MEMORY.md` (OpenClaw) | Total Recall | Daily logs continue untouched; relay captures them |
+| `copilot-instructions.md` | Total Recall | Copilot native memory → separate scoped storage |
+| `~/.pi/agent/AGENTS.md` | Total Recall | Pi extensions → their own SQLite, relay captures |
+| `.cursor/rules/total-recall.mdc` | Total Recall | Cursor has no native memory |
+
+**Bottom line:** Leave all native memory systems running. Total Recall is additive to every one of them except where it explicitly takes ownership of a specific file (Hermes MEMORY.md, OpenClaw MEMORY.md). In those cases, it produces a substantially better output than the tool's native system anyway — and it uses the tool's session data as input to do so.
+
+---
+
 ## See Also
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — full system topology
