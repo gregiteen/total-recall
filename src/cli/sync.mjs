@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -11,6 +12,7 @@ function parseArgs(args) {
     brain: null,
     token: null,
     watch: false,
+    push: false,
     intervalSeconds: 60,
     help: false
   };
@@ -20,6 +22,7 @@ function parseArgs(args) {
       case '--brain': opts.brain = args[++i]; break;
       case '--token': opts.token = args[++i]; break;
       case '--watch': opts.watch = true; break;
+      case '--push': opts.push = true; break;
       case '--interval': opts.intervalSeconds = Number(args[++i]) || 60; break;
       case '--help':
       case '-h':
@@ -33,7 +36,7 @@ function parseArgs(args) {
 
 function printHelp() {
   console.log(`
-  total-recall sync — Pull compiled instructions from a remote brain
+  total-recall sync — Sync brain instructions and back up vault to GitHub
 
   Usage: total-recall sync [options]
 
@@ -42,7 +45,14 @@ function printHelp() {
     --token <token>     Bearer PAT. Defaults to brain.json or TOTAL_RECALL_TOKEN
     --watch             Keep syncing on an interval
     --interval <sec>    Watch interval in seconds (default: 60)
+    --push              Back up vault to your GitHub fork (git add -f + push)
     --help, -h          Show this help
+
+  Backup workflow (--push):
+    Commits .agent/memory-vault/, .agent/INSTRUCTIONS.md, and
+    .agent/config/brain.json to your fork via force-add (bypasses .gitignore).
+    Secrets (.agent/config/secrets.enc, .env) are NEVER committed.
+    Run 'npx total-recall setup' to configure your GitHub fork first.
 `);
 }
 
@@ -162,10 +172,76 @@ async function runOnce(opts) {
   };
 }
 
+// ─── GitHub fork backup ──────────────────────────────────────────────────────
+
+// Paths to force-add to the fork (bypasses .gitignore).
+// secrets.enc and .env are intentionally excluded — never committed.
+const VAULT_FORCE_ADD = [
+  '.agent/memory-vault',
+  '.agent/INSTRUCTIONS.md',
+  '.agent/config/brain.json',
+];
+
+function gitRun(args, opts = {}) {
+  const result = spawnSync('git', args, {
+    stdio: opts.silent ? 'pipe' : 'inherit',
+    encoding: 'utf8',
+  });
+  if (result.status !== 0 && !opts.ignoreErrors) {
+    throw new Error(`git ${args[0]} failed: ${(result.stderr || '').trim()}`);
+  }
+  return (result.stdout || '').trim();
+}
+
+function pushToFork() {
+  // Verify we're in a git repo
+  const root = gitRun(['rev-parse', '--show-toplevel'], { silent: true, ignoreErrors: true });
+  if (!root) throw new Error('Not inside a git repository.');
+
+  // Warn if origin appears to be the upstream (not a personal fork)
+  const originUrl = gitRun(['remote', 'get-url', 'origin'], { silent: true, ignoreErrors: true });
+  if (originUrl.includes('gregiteen/total-recall')) {
+    console.error('  ⚠️  origin is the upstream repo, not your personal fork.');
+    console.error('  Set up your fork first:');
+    console.error('    git remote rename origin upstream');
+    console.error('    git remote add origin https://github.com/YOUR_USERNAME/total-recall.git');
+    throw new Error('Configure your fork as origin before using sync --push.');
+  }
+
+  // Force-add vault files (bypasses .gitignore)
+  for (const target of VAULT_FORCE_ADD) {
+    if (fs.existsSync(path.join(root, target))) {
+      gitRun(['add', '-f', target], { ignoreErrors: true });
+    }
+  }
+
+  // Nothing staged? Already up to date.
+  const status = gitRun(['status', '--porcelain'], { silent: true });
+  if (!status) {
+    console.error('  ℹ  Vault is already up to date with origin — nothing to push.');
+    return { committed: false };
+  }
+
+  const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  gitRun(['commit', '-m', `vault: backup ${timestamp}`]);
+  gitRun(['push', 'origin', 'main']);
+  console.error(`  ✅ Vault backed up to origin at ${timestamp}`);
+
+  return { committed: true, timestamp };
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+
 export default async function sync(args) {
   const opts = parseArgs(args);
   if (opts.help) {
     printHelp();
+    return;
+  }
+
+  // --push mode: back up vault to GitHub fork
+  if (opts.push) {
+    pushToFork();
     return;
   }
 
