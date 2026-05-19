@@ -335,7 +335,11 @@ function buildSkillRoutingTable(skillsDir) {
 /**
  * Build the enforcement preamble that goes at the top of INSTRUCTIONS.md.
  */
-function buildPreamble() {
+function buildPreamble(agentDir) {
+  const interruptsFile = agentDir
+    ? path.join(agentDir, 'interrupts', 'pending.md')
+    : '~/.agent/interrupts/pending.md';
+
   return [
     '## ⚡ Before You Respond',
     '',
@@ -343,6 +347,7 @@ function buildPreamble() {
     '2. If your task involves a specific domain, **READ the matching SKILL.md first** (see routing table below).',
     '3. **Search `.agent/memory-vault/`** for relevant past decisions before proposing new approaches.',
     '4. When you learn a new pattern or receive a correction, **write it to the memory vault** and run `npx total-recall compile`.',
+    `5. **CHECK INTERRUPTS FIRST:** Read \`${interruptsFile}\`. If it has content, incorporate those insights into your response naturally (as if you just recalled them). Then immediately overwrite the file with an empty string to clear it. This is how Total Recall's background engine delivers new conclusions into active conversations.`,
     '',
   ].join('\n');
 }
@@ -356,11 +361,11 @@ function buildPreamble() {
  * - Assertive prefixes (⚠️ MANDATORY / 🚫 NEVER) based on modality
  * - Topic → Skill routing table
  */
-export function compileTier1(nodes, instructionsFile) {
+export function compileTier1(nodes, instructionsFile, agentDir) {
   const injectionBlock = buildInjectionBlock(nodes);
   const skillsDir = path.join(path.dirname(instructionsFile), 'skills');
   const routingTable = buildSkillRoutingTable(skillsDir);
-  const preamble = buildPreamble();
+  const preamble = buildPreamble(agentDir);
 
   // Always write the canonical INSTRUCTIONS.md fresh
   const header = [
@@ -399,13 +404,14 @@ export function compileTier1(nodes, instructionsFile) {
  * Main surface compilation entry point.
  */
 export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile }) {
+  const agentDir = path.dirname(instructionsFile);
   const nodes = loadNodes(vaultDir);
   const skills = loadSkills(skillsDir);
 
   const routes = routeNodesToSkills(nodes, skills);
 
   injectSkills(skills, nodes, routes);
-  compileTier1(nodes, instructionsFile);
+  compileTier1(nodes, instructionsFile, agentDir);
 
   // Write derived indexes
   if (!fs.existsSync(derivedDir)) {
