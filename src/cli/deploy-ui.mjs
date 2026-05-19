@@ -436,6 +436,31 @@ const HTML = `<!DOCTYPE html>
   .notice.info { background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.2); }
   .notice.warn { background: rgba(210,153,34,.07); border: 1px solid rgba(210,153,34,.2); }
   .notice.success { background: rgba(63,185,80,.07); border: 1px solid rgba(63,185,80,.2); }
+
+  /* ── IDE picker ── */
+  .ide-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    position: relative;
+  }
+  .ide-card:hover { border-color: var(--blue); background: rgba(88,166,255,.04); }
+  .ide-card input[type=checkbox] { display: none; }
+  .ide-card .ide-icon { font-size: 22px; flex-shrink: 0; }
+  .ide-card .ide-name { font-weight: 600; font-size: 13px; }
+  .ide-card .ide-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .ide-card .ide-check { position: absolute; top: 10px; right: 10px; color: var(--green); font-size: 16px; display: none; }
+  .ide-card.selected { border-color: var(--green); background: rgba(63,185,80,.06); }
+  .ide-card.selected .ide-check { display: block; }
+  .connect-result-line { padding: 2px 0; }
+  .connect-result-line.ok  { color: var(--green); }
+  .connect-result-line.err { color: var(--red); }
+  .connect-result-line.info { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -717,117 +742,130 @@ const HTML = `<!DOCTYPE html>
     </section>
 
     <!-- ═══════════════════════════════ PHASE 4 — Integrations ════════════════ -->
+    <!-- ═══════════════════════════════ PHASE 4 — Connect Your Tools ═══════════ -->
     <section class="phase" id="phase-4">
       <div class="phase-header">
         <h1>Connect Your Tools</h1>
-        <p>Use the tabs below to set up each integration. Commands auto-fill with your domain and API key.</p>
+        <p>Select every IDE and agent you use. Total Recall will wire them up automatically — no manual config needed.</p>
       </div>
 
-      <div class="tab-bar">
-        <button class="tab-btn active" onclick="openTab('tab-cc')">Claude Code</button>
-        <button class="tab-btn" onclick="openTab('tab-cursor')">Cursor / Windsurf</button>
-        <button class="tab-btn" onclick="openTab('tab-uc')">UltraChat</button>
-        <button class="tab-btn" onclick="openTab('tab-mcp')">MCP</button>
-        <button class="tab-btn" onclick="openTab('tab-obsidian')">Obsidian</button>
-        <button class="tab-btn" onclick="openTab('tab-other')">Other IDEs</button>
+      <div class="card">
+        <h3 style="margin-bottom:14px">Which IDEs and coding agents do you use?</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:18px">Select all that apply. Total Recall's relay will watch their session logs and compile your memory automatically.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="ide-grid">
+          <label class="ide-card" id="ide-claude-code">
+            <input type="checkbox" value="claude-code" onchange="toggleIde(this)">
+            <span class="ide-icon">🤖</span>
+            <div>
+              <div class="ide-name">Claude Code</div>
+              <div class="ide-desc">Anthropic's coding agent — CLAUDE.md + auto memory</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-codex">
+            <input type="checkbox" value="codex" onchange="toggleIde(this)">
+            <span class="ide-icon">🟢</span>
+            <div>
+              <div class="ide-name">Codex (OpenAI)</div>
+              <div class="ide-desc">OpenAI's CLI agent — AGENTS.md + memories</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-cursor">
+            <input type="checkbox" value="cursor" onchange="toggleIde(this)">
+            <span class="ide-icon">🖱️</span>
+            <div>
+              <div class="ide-name">Cursor</div>
+              <div class="ide-desc">.cursor/rules/ — modular scoped rules</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-antigravity">
+            <input type="checkbox" value="antigravity" onchange="toggleIde(this)">
+            <span class="ide-icon">⚡</span>
+            <div>
+              <div class="ide-name">Antigravity</div>
+              <div class="ide-desc">Google DeepMind — AGENTS.md + Knowledge Items</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-vscode">
+            <input type="checkbox" value="vscode" onchange="toggleIde(this)">
+            <span class="ide-icon">💙</span>
+            <div>
+              <div class="ide-name">VS Code Copilot</div>
+              <div class="ide-desc">.github/copilot-instructions.md + native memory</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-gemini">
+            <input type="checkbox" value="gemini" onchange="toggleIde(this)">
+            <span class="ide-icon">💎</span>
+            <div>
+              <div class="ide-name">Gemini CLI</div>
+              <div class="ide-desc">GEMINI.md + session context</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-pi">
+            <input type="checkbox" value="pi" onchange="toggleIde(this)">
+            <span class="ide-icon">π</span>
+            <div>
+              <div class="ide-name">Pi Coding Agent</div>
+              <div class="ide-desc">~/.pi/agent/AGENTS.md + JSONL session trees</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-hermes">
+            <input type="checkbox" value="hermes" onchange="toggleIde(this)">
+            <span class="ide-icon">🔱</span>
+            <div>
+              <div class="ide-name">Hermes Agent</div>
+              <div class="ide-desc">Nous Research — MEMORY.md + USER.md injection</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-openclaw">
+            <input type="checkbox" value="openclaw" onchange="toggleIde(this)">
+            <span class="ide-icon">🦀</span>
+            <div>
+              <div class="ide-name">OpenClaw</div>
+              <div class="ide-desc">MEMORY.md + SOUL.md + daily logs + SQLite index</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+          <label class="ide-card" id="ide-obsidian">
+            <input type="checkbox" value="obsidian" onchange="toggleIde(this)">
+            <span class="ide-icon">🔮</span>
+            <div>
+              <div class="ide-name">Obsidian</div>
+              <div class="ide-desc">Vault sync — browse memory in graph view</div>
+            </div>
+            <span class="ide-check">✓</span>
+          </label>
+        </div>
       </div>
 
-      <!-- Claude Code -->
-      <div class="tab-pane active" id="tab-cc">
-        <div class="card">
-          <h3>1. Connect &amp; Ingest</h3>
-          <div class="code-block" id="cc-connect"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-        </div>
-        <div class="card">
-          <h3>2. MCP config (<code>~/.claude/claude_desktop_config.json</code> or <code>.mcp.json</code>)</h3>
-          <div class="code-block" id="cc-mcp"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-        </div>
-        <div class="card">
-          <h3>MCP Tools available</h3>
-          <ul style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding-left:0;list-style:none">
-            <li>• <code>read_memory</code></li>
-            <li>• <code>write_memory</code></li>
-            <li>• <code>search_memory</code></li>
-            <li>• <code>list_memory</code></li>
-            <li>• <code>run_sandbox</code></li>
-            <li>• <code>recompile_surface</code></li>
-          </ul>
-        </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px">🔄 Relay Daemon</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">The relay watches your IDE session files and ships them to your brain every 60 seconds automatically — no manual steps needed.</p>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="install-relay" checked style="width:16px;height:16px;accent-color:var(--green)">
+          <span>Install relay as system service (starts on boot, runs forever)</span>
+        </label>
       </div>
 
-      <!-- Cursor / Windsurf -->
-      <div class="tab-pane" id="tab-cursor">
-        <div class="card">
-          <h3>Connect</h3>
-          <div class="code-block" id="cursor-connect"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-        </div>
-        <div class="card">
-          <h3>Cursor Settings</h3>
-          <p style="margin-bottom:10px">Go to <strong>Cursor → Settings → Models → OpenAI</strong> and set:</p>
-          <ul>
-            <li>Base URL: <code id="cursor-base-url" style="color:var(--blue)">…</code></li>
-            <li>API Key: your PAT above</li>
-            <li>Model: <code>total-recall</code></li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- UltraChat -->
-      <div class="tab-pane" id="tab-uc">
-        <div class="card">
-          <h3>Settings</h3>
-          <ul>
-            <li>Base URL: <code id="uc-base-url" style="color:var(--blue)">…</code></li>
-            <li>Model: <code>total-recall/gemma4</code></li>
-            <li>API Key: your PAT</li>
-          </ul>
-          <p style="margin-top:10px">Or use the auto-config URL:</p>
-          <div class="code-block" id="uc-autoconfig"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-        </div>
-      </div>
-
-      <!-- MCP -->
-      <div class="tab-pane" id="tab-mcp">
-        <div class="card">
-          <h3>Add to any MCP-compatible app</h3>
-          <div class="code-block" id="mcp-config"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-        </div>
-      </div>
-
-      <!-- Obsidian -->
-      <div class="tab-pane" id="tab-obsidian">
-        <div class="card">
-          <h3>AI Plugin Setup</h3>
-          <p style="margin-bottom:10px">Install <strong>Smart Connections</strong> or <strong>Text Generator</strong> from Obsidian Community Plugins, then configure:</p>
-          <ul>
-            <li>Base URL: <code id="obs-base-url" style="color:var(--blue)">…</code></li>
-            <li>API Key: your PAT</li>
-          </ul>
-        </div>
-        <div class="card">
-          <h3>Vault Sync</h3>
-          <div class="code-block" id="obs-sync"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-          <p style="margin-top:8px;font-size:12px;color:var(--muted)">Then pair with Obsidian Sync or iCloud for off-host backup.</p>
-        </div>
-      </div>
-
-      <!-- Other IDEs -->
-      <div class="tab-pane" id="tab-other">
-        <div class="card">
-          <h3>Aider / Codex / Gemini CLI</h3>
-          <div class="code-block" id="other-connect"><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-        </div>
-        <div class="card">
-          <h3>Any OpenAI-compatible app</h3>
-          <p>Point the OpenAI base URL to <code id="other-base-url" style="color:var(--blue)">…</code> and set the API key to your PAT. The model name is <code>total-recall</code>.</p>
-        </div>
+      <div class="card" id="connect-results" style="display:none">
+        <h3 style="margin-bottom:10px">Connection Results</h3>
+        <div id="connect-log" style="font-family:monospace;font-size:12px;line-height:1.8"></div>
       </div>
 
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goPhase(3)">← Back</button>
-        <button class="btn btn-primary" onclick="goPhase(5)">Next: API Reference →</button>
+        <button class="btn btn-primary" id="btn-connect-ides" onclick="connectSelectedIDEs()">Connect Selected Tools →</button>
       </div>
     </section>
+
 
     <!-- ═══════════════════════════════ PHASE 5 — API Reference ═══════════════ -->
     <section class="phase" id="phase-5">
@@ -1217,51 +1255,79 @@ const HTML = `<!DOCTYPE html>
   };
 
   // ── Phase 4: Integrations ──
-  function populateIntegrations() {
-    var domain = W.domain || 'your-domain.example';
-    var baseUrl = domain === 'localhost' ? 'http://localhost:3000' : ('https://' + domain);
-    var pat = W.pat || '<YOUR-PAT>';
+  // IDE picker toggle
+  window.toggleIde = function(checkbox) {
+    var label = checkbox.closest('.ide-card');
+    if (checkbox.checked) {
+      label.classList.add('selected');
+    } else {
+      label.classList.remove('selected');
+    }
+  };
 
-    setText('cc-connect',
-      'npx total-recall connect claude-code --brain ' + baseUrl + ' --token ' + pat + '\\n' +
-      'npx total-recall ingest --sources claude-code --watch');
-
-    setCode('cc-mcp', JSON.stringify({
-      mcpServers: {
-        'total-recall': {
-          type: 'http',
-          url: baseUrl + '/mcp',
-          headers: { Authorization: 'Bearer ' + pat },
-        },
-      },
-    }, null, 2));
-
-    setText('cursor-connect', 'npx total-recall connect cursor --brain ' + baseUrl + ' --token ' + pat);
-    document.getElementById('cursor-base-url').textContent = baseUrl + '/v1';
-
-    document.getElementById('uc-base-url').textContent = baseUrl + '/v1';
-    setText('uc-autoconfig', baseUrl + '/.well-known/total-recall.json');
-
-    setCode('mcp-config', JSON.stringify({
-      mcpServers: {
-        'total-recall': {
-          type: 'http',
-          url: baseUrl + '/mcp',
-          headers: { Authorization: 'Bearer ' + pat },
-        },
-      },
-    }, null, 2));
-
-    document.getElementById('obs-base-url').textContent = baseUrl + '/v1';
-    setText('obs-sync', 'npx total-recall deploy --backup-obsidian ~/Documents/ObsidianVault');
-
-    setText('other-connect',
-      'npx total-recall connect aider  --brain ' + baseUrl + ' --token ' + pat + '\\n' +
-      'npx total-recall connect codex  --brain ' + baseUrl + ' --token ' + pat + '\\n' +
-      'npx total-recall connect gemini --brain ' + baseUrl + ' --token ' + pat);
-
-    document.getElementById('other-base-url').textContent = baseUrl + '/v1';
+  // Auto-detect installed IDEs on page load
+  function autoDetectIDEs() {
+    fetch('/api/detect-ides')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.detected) return;
+        data.detected.forEach(function(ide) {
+          var cb = document.querySelector('#ide-' + ide + ' input[type=checkbox]');
+          if (cb && !cb.checked) { cb.checked = true; toggleIde(cb); }
+        });
+      })
+      .catch(function() { /* auto-detect optional */ });
   }
+
+  function populateIntegrations() {
+    autoDetectIDEs();
+  }
+
+  // Connect all selected IDEs
+  window.connectSelectedIDEs = function() {
+    var selected = [];
+    document.querySelectorAll('#ide-grid input[type=checkbox]:checked').forEach(function(cb) {
+      selected.push(cb.value);
+    });
+    var installRelay = document.getElementById('install-relay').checked;
+
+    var resultsCard = document.getElementById('connect-results');
+    var logEl = document.getElementById('connect-log');
+    resultsCard.style.display = '';
+    logEl.innerHTML = '<div class="connect-result-line info">Connecting ' + (selected.length || 'no') + ' tools' + (installRelay ? ' + relay' : '') + '...</div>';
+
+    document.getElementById('btn-connect-ides').disabled = true;
+    document.getElementById('btn-connect-ides').textContent = 'Connecting...';
+
+    fetch('/api/connect-ides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ides: selected, installRelay: installRelay, brainUrl: W.apiUrl, token: W.pat })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      logEl.innerHTML = '';
+      (data.results || []).forEach(function(r) {
+        var cls = r.ok ? 'ok' : (r.skipped ? 'info' : 'err');
+        var icon = r.ok ? '✅' : (r.skipped ? '⚪' : '❌');
+        logEl.innerHTML += '<div class="connect-result-line ' + cls + '">' + icon + ' ' + r.label + ': ' + r.message + '</div>';
+      });
+      if (data.relayResult) {
+        var rc = data.relayResult.ok ? 'ok' : 'err';
+        logEl.innerHTML += '<div class="connect-result-line ' + rc + '">' + (data.relayResult.ok ? '✅' : '❌') + ' Relay: ' + data.relayResult.message + '</div>';
+      }
+      logEl.innerHTML += '<div class="connect-result-line info" style="margin-top:8px">🔄 Memory will start compiling automatically. Ready!</div>';
+      document.getElementById('btn-connect-ides').textContent = 'Done — Continue →';
+      document.getElementById('btn-connect-ides').disabled = false;
+      document.getElementById('btn-connect-ides').onclick = function() { goPhase(5); };
+    })
+    .catch(function(e) {
+      logEl.innerHTML += '<div class="connect-result-line err">❌ Error: ' + e.message + '</div>';
+      document.getElementById('btn-connect-ides').textContent = 'Retry';
+      document.getElementById('btn-connect-ides').disabled = false;
+    });
+  };
+
 
   // ── Phase 5: API Reference ──
   function populateApiRef() {
@@ -1447,6 +1513,111 @@ export function startDeployUI(port = 3001) {
           });
 
           res.end(JSON.stringify({ ok: true, message: 'Provisioning started — watch the progress log' }));
+        });
+        return;
+      }
+
+      // ── GET /api/detect-ides — probe filesystem for installed IDEs ──
+      if (url === '/api/detect-ides' && req.method === 'GET') {
+        const HOME = os.homedir();
+        const fs2 = await import('node:fs');
+        const detected = [];
+        const checks = {
+          'claude-code': [HOME + '/.claude/projects', HOME + '/.claude/CLAUDE.md'],
+          'codex':       [HOME + '/.codex/sessions', HOME + '/.codex/AGENTS.md'],
+          'cursor':      [HOME + '/.cursor/projects', HOME + '/.cursor'],
+          'antigravity': [HOME + '/.gemini/antigravity'],
+          'vscode':      [HOME + '/Library/Application Support/Code', HOME + '/.vscode'],
+          'gemini':      [HOME + '/.gemini'],
+          'pi':          [HOME + '/.pi/agent'],
+          'hermes':      [HOME + '/.hermes'],
+          'openclaw':    [HOME + '/.openclaw'],
+          'obsidian':    [HOME + '/Library/Application Support/obsidian', HOME + '/.config/obsidian'],
+        };
+        for (const [ide, paths] of Object.entries(checks)) {
+          if (paths.some(p => { try { return fs2.default.existsSync(p); } catch { return false; } })) {
+            detected.push(ide);
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ detected }));
+        return;
+      }
+
+      // ── POST /api/connect-ides — run connect + relay install ──
+      if (url === '/api/connect-ides' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          let opts;
+          try { opts = JSON.parse(body || '{}'); } catch { opts = {}; }
+          const { ides = [], installRelay = true, brainUrl, token } = opts;
+          const results = [];
+
+          // IDE-to-connect-client mapping
+          const IDE_CLIENTS = {
+            'claude-code': { client: 'claude-code', label: 'Claude Code' },
+            'codex':       { client: 'codex',       label: 'Codex' },
+            'cursor':      { client: 'cursor',       label: 'Cursor' },
+            'antigravity': { client: 'antigravity',  label: 'Antigravity' },
+            'vscode':      { client: 'vscode',       label: 'VS Code Copilot' },
+            'gemini':      { client: 'gemini',       label: 'Gemini CLI' },
+            'pi':          { client: 'pi',           label: 'Pi Coding Agent' },
+            'hermes':      { client: 'hermes',       label: 'Hermes Agent' },
+            'openclaw':    { client: 'openclaw',     label: 'OpenClaw' },
+            'obsidian':    { client: 'obsidian',     label: 'Obsidian' },
+          };
+
+          const { spawnSync: sp } = await import('node:child_process');
+          const nodeBin = process.execPath;
+          const scriptPath = new URL('../../bin/total-recall.mjs', import.meta.url).pathname;
+
+          for (const ide of ides) {
+            const mapping = IDE_CLIENTS[ide];
+            if (!mapping) { results.push({ label: ide, ok: false, message: 'Unknown IDE' }); continue; }
+            const args = ['connect', mapping.client];
+            if (brainUrl) args.push('--brain', brainUrl);
+            if (token) args.push('--token', token);
+            args.push('--force');
+            try {
+              const r = sp(nodeBin, [scriptPath, ...args], { encoding: 'utf8', timeout: 30000 });
+              if (r.status === 0) {
+                results.push({ label: mapping.label, ok: true, message: 'Connected' });
+              } else {
+                const err = (r.stderr || r.stdout || '').trim().split('\n').pop() || 'failed';
+                results.push({ label: mapping.label, ok: false, skipped: err.includes('exists'), message: err });
+              }
+            } catch (e) {
+              results.push({ label: mapping.label, ok: false, message: e.message });
+            }
+          }
+
+          // Install relay as system service
+          let relayResult = null;
+          if (installRelay) {
+            try {
+              const relayArgs = [scriptPath, 'relay', 'install'];
+              if (brainUrl) {
+                // Write brain config so relay knows where to ship
+                const { resolveAgentDir } = await import('./agent-dir.mjs');
+                const fs2 = await import('node:fs');
+                const path2 = await import('node:path');
+                const agentDir = resolveAgentDir();
+                const configDir = path2.default.join(agentDir, 'config');
+                fs2.default.mkdirSync(configDir, { recursive: true });
+                const config = { url: brainUrl };
+                if (token) config.token = token;
+                fs2.default.writeFileSync(path2.default.join(configDir, 'brain.json'), JSON.stringify(config, null, 2));
+              }
+              const rr = sp(nodeBin, relayArgs, { encoding: 'utf8', timeout: 30000 });
+              relayResult = { ok: rr.status === 0, message: rr.status === 0 ? 'Installed as system service (starts on boot)' : (rr.stderr || rr.stdout || '').trim().split('\n').pop() };
+            } catch (e) {
+              relayResult = { ok: false, message: e.message };
+            }
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, results, relayResult }));
         });
         return;
       }
