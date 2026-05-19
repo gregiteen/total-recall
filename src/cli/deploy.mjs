@@ -6,6 +6,8 @@
  *   2. Install Ollama (if not present)
  *   3. Pull Gemma 4 26B model (~16GB)
  *   4. Pull Kokoro-82M voice model (~200MB)
+ *   4.5. Install SearXNG (native Python, no Docker) for web search on port 8888
+ *   5.5. Install Playwright + computer use deps (xdotool, scrot, xvfb)
  *   5. Scaffold VFS at ~/.agent/
  *   6. Copy default config templates
  *   7. Install Caddy reverse proxy (if not present)
@@ -19,13 +21,15 @@
  *
  * Options:
  *   --skip-ollama       Skip Ollama installation
- *   --skip-searxng      Skip SearXNG Docker installation
+ *   --skip-searxng      Skip SearXNG installation
  *   --skip-models       Skip model pulling
  *   --skip-caddy        Skip Caddy installation
  *   --skip-systemd      Skip systemd unit installation
  *   --skip-compile      Skip initial compile
  *   --domain <domain>   Set domain for Caddyfile (default: localhost)
  *   --duckdns-token <t> DuckDNS API token — installs IP-update cron job
+ *   --ui                Open install progress UI in browser (localhost:3001)
+ *   --ui-port <port>    Port for the install UI server (default: 3001)
  *   --dry-run           Print what would be done without executing
  *   --help              Show this help
  */
@@ -43,11 +47,14 @@ const AGENT_DIR = path.join(os.homedir(), '.agent');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
-function log(msg) { console.error(`  ${msg}`); }
-function logStep(step, msg) { console.error(`\n  [${step}] ${msg}`); }
-function logOk(msg) { console.error(`  ✅ ${msg}`); }
-function logSkip(msg) { console.error(`  ⏭  ${msg}`); }
-function logWarn(msg) { console.error(`  ⚠️  ${msg}`); }
+// Deploy UI emitter — set by deploy() if --ui flag is used
+let _uiEmit = null;
+
+function log(msg)          { console.error(`  ${msg}`); }
+function logStep(step, msg){ console.error(`\n  [${step}] ${msg}`); _uiEmit?.('step', `[${step}] ${msg}`); }
+function logOk(msg)        { console.error(`  ✅ ${msg}`); _uiEmit?.('ok', msg); }
+function logSkip(msg)      { console.error(`  ⏭  ${msg}`); _uiEmit?.('info', msg); }
+function logWarn(msg)      { console.error(`  ⚠️  ${msg}`); _uiEmit?.('warn', msg); }
 
 function commandExists(cmd) {
   try {
@@ -128,6 +135,8 @@ function parseArgs(args) {
     cloudflareToken: null,
     cloudflareQuick: false,
     allowInsecureHttp: false,
+    ui: false,
+    uiPort: 3001,
     dryRun: false,
     help: false,
   };
@@ -147,6 +156,8 @@ function parseArgs(args) {
       case '--cloudflare-token': opts.cloudflareToken = args[++i]; break;
       case '--cloudflare-quick': opts.cloudflareQuick = true; break;
       case '--allow-insecure-http': opts.allowInsecureHttp = true; break;
+      case '--ui': opts.ui = true; break;
+      case '--ui-port': opts.uiPort = parseInt(args[++i], 10) || 3001; break;
       case '--dry-run': opts.dryRun = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -162,7 +173,7 @@ function printHelp() {
 
   Options:
     --skip-ollama       Skip Ollama installation
-    --skip-searxng      Skip SearXNG Docker installation
+    --skip-searxng      Skip SearXNG installation
     --skip-models       Skip model pulling
     --skip-caddy        Skip Caddy installation
     --skip-systemd      Skip systemd unit installation
@@ -184,6 +195,9 @@ function printHelp() {
                         Obsidian Sync or iCloud for off-host backup.
     --allow-insecure-http
                         Permit a local/test deploy without public HTTPS.
+    --ui                Open a real-time install progress page in the browser.
+                        Served at http://localhost:3001 during the deploy.
+    --ui-port <port>    Port for the install UI (default: 3001).
     --dry-run           Print plan without executing
     --help, -h          Show this help
 
@@ -347,6 +361,21 @@ export default async function deploy(args) {
   const arch = detectArch();
   const platform = detectPlatform();
 
+  // ── Start optional deploy UI ──
+  if (opts.ui) {
+    try {
+      const { startDeployUI, emitProgress, openBrowser } = await import('./deploy-ui.mjs');
+      const uiUrl = await startDeployUI(opts.uiPort);
+      _uiEmit = emitProgress;
+      console.error(`\n  ┌─────────────────────────────────────────────┐`);
+      console.error(`  │  Install UI: ${uiUrl.padEnd(34)}│`);
+      console.error(`  └─────────────────────────────────────────────┘\n`);
+      openBrowser(uiUrl);
+    } catch (e) {
+      console.error(`  ⚠️  Could not start deploy UI: ${e.message}`);
+    }
+  }
+
   const bannerWidth = 49;
   const contentWidth = bannerWidth - 4; // account for "│  " and " │"
   const fmtLine = (label, value) => {
@@ -427,37 +456,121 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
     }
   }
 
-  // ── Step 4.5: Install SearXNG ──
-  logStep('5/12', 'Deploying SearXNG (Docker)');
+  // ── Step 4.5: Install SearXNG (native Python, no Docker required) ──
+  logStep('5/12', 'Deploying SearXNG');
   if (opts.skipSearxng) {
     logSkip('Skipped (--skip-searxng)');
+  } else if (opts.dryRun) {
+    log('  Would install SearXNG via pip and start on port 8888');
   } else {
-    if (!commandExists('docker')) {
-      if (opts.dryRun) {
-        log('  Would install Docker');
+    try {
+      const searxngDir = '/opt/searxng';
+      const venvPython = `${searxngDir}/venv/bin/python`;
+      const venvPip    = `${searxngDir}/venv/bin/pip`;
+
+      if (!commandExists('python3')) {
+        run('apt-get install -y python3 python3-pip python3-venv');
+      }
+
+      if (!fs.existsSync(searxngDir)) {
+        log('  Cloning SearXNG...');
+        run(`git clone https://github.com/searxng/searxng.git ${searxngDir}`);
       } else {
-        log('  Installing Docker...');
-        run('curl -fsSL https://get.docker.com | sh');
-        logOk('Docker installed');
+        log('  SearXNG already cloned, pulling latest...');
+        run(`git -C ${searxngDir} pull --ff-only`, { ignoreErrors: true });
       }
+
+      // Create venv + install
+      if (!fs.existsSync(venvPython)) {
+        log('  Creating virtualenv...');
+        run(`python3 -m venv ${searxngDir}/venv`);
+      }
+      log('  Installing SearXNG dependencies...');
+      run(`${venvPip} install --quiet -e '${searxngDir}[test]'`);
+
+      // Write minimal settings.yml
+      const settingsDir = '/etc/searxng';
+      fs.mkdirSync(settingsDir, { recursive: true });
+      const settingsPath = `${settingsDir}/settings.yml`;
+      if (!fs.existsSync(settingsPath)) {
+        fs.writeFileSync(settingsPath, [
+          'use_default_settings: true',
+          'server:',
+          '  bind_address: "127.0.0.1"',
+          '  port: 8888',
+          '  secret_key: "' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + '"',
+          '  base_url: "http://127.0.0.1:8888/"',
+          'search:',
+          '  formats: [html, json]',
+        ].join('\n'));
+      }
+
+      // Write systemd unit (Linux) or start directly
+      if (detectPlatform() === 'linux' && !opts.skipSystemd) {
+        const unit = [
+          '[Unit]',
+          'Description=SearXNG (Total Recall web search)',
+          'After=network.target',
+          '',
+          '[Service]',
+          'Type=simple',
+          `ExecStart=${venvPython} -m searx.webapp`,
+          'Environment=SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml',
+          'Restart=on-failure',
+          'RestartSec=5',
+          '',
+          '[Install]',
+          'WantedBy=multi-user.target',
+        ].join('\n');
+        fs.writeFileSync('/etc/systemd/system/searxng.service', unit);
+        run('systemctl daemon-reload', { ignoreErrors: true });
+        run('systemctl enable --now searxng', { ignoreErrors: true });
+        logOk('SearXNG systemd service installed and started');
+      } else {
+        // No systemd (container/macOS) — start via nohup
+        run(
+          `SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml ` +
+          `nohup ${venvPython} -m searx.webapp > /var/log/searxng.log 2>&1 &`,
+          { ignoreErrors: true }
+        );
+        logOk('SearXNG started on port 8888 (nohup)');
+      }
+    } catch (e) {
+      logWarn(`SearXNG install failed: ${e.message}`);
+      logWarn('Web search will be unavailable. Re-run deploy to retry.');
     }
-    
-    if (opts.dryRun) {
-      log('  Would run: docker run -d -p 8888:8080 searxng/searxng');
-    } else {
-      try {
-        const isRunning = run('docker ps -q -f name=total-recall-searxng', { ignoreErrors: true });
-        if (isRunning) {
-          logOk('SearXNG container already running');
-        } else {
-          log('  Starting SearXNG container on port 8888...');
-          run('docker rm -f total-recall-searxng', { ignoreErrors: true });
-          run('docker run -d --name total-recall-searxng -p 8888:8080 -e "SEARXNG_BASE_URL=http://127.0.0.1:8888/" -e "INSTANCE_NAME=total-recall" searxng/searxng', { ignoreErrors: true });
-          logOk('SearXNG container started');
+  }
+
+  // ── Step 5.5: Install Playwright + Computer Use deps ──
+  logStep('5.5/12', 'Installing Playwright + computer use dependencies');
+  if (opts.dryRun) {
+    log('  Would install: playwright chromium, xdotool, scrot, xvfb');
+  } else {
+    try {
+      // Install Node.js Playwright package
+      log('  Installing playwright npm package...');
+      run(`cd "${ROOT}" && npm install --no-save playwright`, { timeout: 120_000, ignoreErrors: true });
+
+      // Install Chromium browser via playwright
+      log('  Installing Chromium via playwright...');
+      run(`cd "${ROOT}" && npx playwright install chromium`, { timeout: 300_000, ignoreErrors: true });
+
+      // Install X11 / desktop control tools (Linux only)
+      if (platform === 'linux') {
+        log('  Installing xdotool, scrot, xvfb...');
+        run('apt-get install -y -qq xdotool scrot xvfb', { ignoreErrors: true });
+        logOk('Computer use deps installed (Playwright + xdotool + scrot + xvfb)');
+      } else if (platform === 'macos') {
+        if (commandExists('brew')) {
+          run('brew install xdotool', { ignoreErrors: true });
         }
-      } catch (e) {
-        logWarn('Failed to start SearXNG container: ' + e.message);
+        logOk('Playwright installed (macOS computer use uses system accessibility APIs)');
+      } else {
+        logOk('Playwright installed');
       }
+    } catch (e) {
+      logWarn(`Playwright/computer use install failed: ${e.message}`);
+      logWarn('Browser + computer use tools may be unavailable. Re-run deploy to retry.');
     }
   }
 
@@ -841,15 +954,19 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   }
 
   // ── Done ──
+  const apiUrl    = `https://${opts.domain}/v1/chat/completions`;
+  const dashUrl   = `https://${opts.domain}/`;
+  const healthUrl = `https://${opts.domain}/health`;
+
   console.error(`
   ┌─────────────────────────────────────────────────┐
   │  ✅ Deploy complete!                             │
   │                                                  │
   │  VFS:        ~/.agent/                           │
   │  Config:     ~/.agent/config/                    │
-  │  API:        https://${opts.domain}/v1/chat/completions │
+  │  API:        ${apiUrl.padEnd(35)}│
   │  Memory:     https://${opts.domain}/api/memory         │
-  │  Dashboard:  https://${opts.domain}/              │
+  │  Dashboard:  ${dashUrl.padEnd(35)}│
   │  Cron:       Every 5 min — agent processes queue │
   │  Backup:     Daily 2 AM — git push to backup repo│
   │                                                  │
@@ -857,4 +974,14 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   │    npx total-recall daemon status                │
   └─────────────────────────────────────────────────┘
 `);
+
+  // Signal the deploy UI (if running) that install is done
+  if (opts.ui && _uiEmit) {
+    try {
+      const { finishDeployUI } = await import('./deploy-ui.mjs');
+      finishDeployUI({ apiUrl, dashUrl, healthUrl });
+      // Give the browser time to receive the done event before exiting
+      await new Promise(r => setTimeout(r, 4500));
+    } catch {}
+  }
 }
