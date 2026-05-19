@@ -11,14 +11,29 @@ node_modules/
 *.key
 *.pem
 
-# Total Recall Workspace Projection
-# The .agent/skills/ directory IS tracked, but we block everything else just in case.
+# Total Recall runtime — never commit
+# The .agent/skills/ directory IS tracked (it ships with the package).
+# Everything else .agent/ generates at runtime is excluded below.
 .agent/memory-vault/
 .agent/memory-derived/
 .agent/memory-inbox/
 .agent/scheduler/
 .agent/config/
-.agent/config/
 .agent/files/
 .agent/logs/
 .agent/.backups/
+.agent/memory/episodes/
+.agent/memory/daily-logs/
+.agent/memory-pipeline-errors.log
+
+# Daemon / checker runtime state
+.remember/
+.last-successful-ts.txt
+*.checker.log
+.agent/skills/code-quality/scripts/*.log
+.agent/skills/mcp-expert/.watch-state.json
+
+# Build artifacts
+dist/
+build/
+*.js.map
