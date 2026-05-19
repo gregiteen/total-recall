@@ -162,6 +162,16 @@ app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res
   });
 });
 
+// ─── REST API (/api/*, /v1/models, /.well-known/*) ───────────────────────────
+
+try {
+  const { restRouter } = await import('./rest.mjs');
+  app.use(restRouter);
+  console.error('[Server] REST API mounted (/api/*, /v1/models, /.well-known/total-recall.json)');
+} catch (err) {
+  console.error('[Server] REST API failed to load:', err.message);
+}
+
 // ─── API Routes (/v1/chat/completions) ──────────────────────────────────────────
 
 try {
