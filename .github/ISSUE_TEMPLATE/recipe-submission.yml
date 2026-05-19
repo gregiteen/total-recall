@@ -1,0 +1,54 @@
+name: Recipe Submission
+description: Submit a workflow recipe (multi-step skill composition) for Total Recall
+labels: ["recipe-submission", "community"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Recipe Submission
+
+        Recipes are multi-step workflows that compose existing skills. Before submitting:
+        - All referenced skills must already exist in Total Recall or be submitted alongside this recipe
+        - The recipe must be a valid SSSS markdown file
+
+  - type: input
+    id: recipe_name
+    attributes:
+      label: Recipe name (slug)
+      placeholder: my-workflow-recipe
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What does this recipe accomplish?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps (ordered list)
+      description: List each step and which skill it uses
+    validations:
+      required: true
+
+  - type: input
+    id: pr_or_branch
+    attributes:
+      label: PR or branch URL
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: All referenced skills exist in Total Recall
+          required: true
+        - label: Recipe file has valid SSSS YAML frontmatter
+          required: true
+        - label: No personal or proprietary data included
+          required: true

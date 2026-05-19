@@ -1,0 +1,75 @@
+name: Skill Submission
+description: Submit a new skill for inclusion in Total Recall
+labels: ["skill-submission", "community"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Skill Submission
+
+        Skills extend Total Recall's cognitive routing. Before submitting, ensure your skill:
+        - Has a valid `SKILL.md` with correct SSSS YAML frontmatter
+        - Passes `npx total-recall lint` with zero errors
+        - Includes at least one usage example
+
+  - type: input
+    id: skill_name
+    attributes:
+      label: Skill name (slug)
+      description: Kebab-case identifier, e.g. `code-review`
+      placeholder: my-skill-name
+    validations:
+      required: true
+
+  - type: dropdown
+    id: skill_category
+    attributes:
+      label: Category
+      options:
+        - engineering
+        - research
+        - writing
+        - planning
+        - data
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What does this skill do?
+      description: One paragraph. What cognitive capability does it add?
+    validations:
+      required: true
+
+  - type: textarea
+    id: metadata
+    attributes:
+      label: SKILL.md frontmatter (YAML)
+      description: Paste the YAML frontmatter block from your SKILL.md
+      render: yaml
+    validations:
+      required: true
+
+  - type: input
+    id: pr_or_branch
+    attributes:
+      label: PR or branch URL
+      description: Link to the branch or PR containing the skill files
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: SKILL.md has valid SSSS YAML frontmatter (schema_version 2)
+          required: true
+        - label: "`npx total-recall lint` reports 0 errors on the skill file"
+          required: true
+        - label: At least one usage example is included in the SKILL.md body
+          required: true
+        - label: No proprietary or personal data in the skill content
+          required: true
