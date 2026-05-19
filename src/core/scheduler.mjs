@@ -139,20 +139,30 @@ let _idleCycleCounter = 0;
 
 /**
  * Generate an idle improvement task when the explicit queue is empty.
- * Round-robins through the four cognitive layers to ensure balanced work.
+ * Weighted toward proactive research — 3 of every 9 ticks do real web search.
  *
- * @param {object} opts
- * @param {string} opts.vaultDir      Path to memory vault
- * @param {string} opts.sessionsDir   Path to sessions directory
- * @returns {object} A generated task
+ * Cycle (9 ticks):
+ *   0: proactive-research   — web search + synthesize from agenda
+ *   1: inference            — draw System 2 conclusions from vault clusters
+ *   2: proactive-research   — web search (second topic)
+ *   3: staleness-check      — flag outdated facts
+ *   4: proactive-research   — web search (third topic)
+ *   5: inference            — draw more conclusions
+ *   6: post-mortem          — re-analyze most recent session
+ *   7: clarity-review       — improve a vault node
+ *   8: cutoff-audit         — check for training-drift
  */
 export function generateIdleTask({ vaultDir, sessionsDir }) {
   const strategies = [
-    () => generateClarityReviewTask(vaultDir),
-    () => generateStalenessCheckTask(vaultDir),
-    () => generateInferenceTask(vaultDir),
-    () => generatePostMortemTask(sessionsDir),
-    () => generateCutoffAuditTask(),        // Every 5th idle tick
+    () => generateProactiveResearchTask(),      // 0
+    () => generateInferenceTask(vaultDir),      // 1
+    () => generateProactiveResearchTask(),      // 2
+    () => generateStalenessCheckTask(vaultDir), // 3
+    () => generateProactiveResearchTask(),      // 4
+    () => generateInferenceTask(vaultDir),      // 5
+    () => generatePostMortemTask(sessionsDir),  // 6
+    () => generateClarityReviewTask(vaultDir),  // 7
+    () => generateCutoffAuditTask(),            // 8
   ];
 
   const strategy = strategies[_idleCycleCounter % strategies.length];
@@ -161,18 +171,26 @@ export function generateIdleTask({ vaultDir, sessionsDir }) {
   try {
     return strategy();
   } catch {
-    // Fallback: always return something
-    return {
-      type: 'task',
-      slug: `idle-maintenance-${Date.now().toString(36)}`,
-      priority: 20,
-      category: 'memory-maintenance',
-      status: 'pending',
-      created_by: 'scheduler',
-      reason: 'Idle task: general vault health check',
-      body: 'Review vault for any obvious issues.',
-    };
+    // Fallback: always return a research task — never go idle doing nothing
+    return generateProactiveResearchTask();
   }
+}
+
+/**
+ * Generate a proactive research task — pulls the next topic from the agenda
+ * and queues a full web search + synthesis cycle.
+ */
+function generateProactiveResearchTask() {
+  return {
+    type: 'task',
+    slug: `proactive-research-${Date.now().toString(36)}`,
+    priority: 55,
+    category: 'proactive-research',
+    status: 'pending',
+    created_by: 'scheduler-idle',
+    reason: 'Idle task: pull next topic from research agenda and execute web search + synthesis.',
+    body: 'Run one knowledge acquisition cycle: pull highest-priority pending topic from agenda, gather from web/wikipedia/arXiv/npm/github, synthesize with LLM, write cited fact node to vault.',
+  };
 }
 
 /**
