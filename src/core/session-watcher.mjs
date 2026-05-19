@@ -110,14 +110,22 @@ export function createSessionEntry({
 
 /**
  * Claude Code adapter.
- * Claude Code writes JSONL to ~/.claude/projects/<project>/<session-id>.jsonl
- * Each line is a JSON object with role, content, and optional tool_use fields.
+ *
+ * Claude Code JSONL format (actual, verified from ~/.claude/projects/):
+ *   { parentUuid, uuid, timestamp, type, message: { role, content }, sessionId, cwd, ... }
+ *
+ * The content field inside message follows the Anthropic API format:
+ *   - string  (user messages)
+ *   - array of content blocks: [{ type: 'text', text: '...' }, { type: 'tool_use', ... }]
+ *
+ * Legacy lines may have role/content at the top level — we fall back gracefully.
  */
 export function parseClaudeCode(filePath) {
   const raw = fs.readFileSync(filePath, 'utf8');
   const lines = raw.split('\n').filter(Boolean);
   const entries = [];
-  let prevId = null;
+  // Build uuid→id map so we can preserve the real parent DAG
+  const uuidToId = new Map();
 
   for (const line of lines) {
     let parsed;
@@ -128,40 +136,57 @@ export function parseClaudeCode(filePath) {
     }
 
     const id = crypto.randomBytes(4).toString('hex');
-    const role = parsed.role || 'assistant';
 
-    // Map Claude roles to SSSS entry types
-    let type = 'observation';
-    if (role === 'user') type = 'task';
-    else if (role === 'assistant' && parsed.tool_use) type = 'tool_call';
-    else if (role === 'tool') type = 'tool_call';
+    // ── Resolve parent ──────────────────────────────────────────────────────
+    const parentUuid = parsed.parentUuid || null;
+    const parentId = parentUuid ? (uuidToId.get(parentUuid) ?? null) : null;
+    if (parsed.uuid) uuidToId.set(parsed.uuid, id);
 
-    // Extract content — Claude may nest it in content blocks
+    // ── Extract role & content ───────────────────────────────────────────────
+    // Real Claude Code format: role/content inside parsed.message
+    // Legacy/fallback: role/content at top level
+    const msgObj   = parsed.message || parsed;
+    const role     = msgObj.role || parsed.type || 'assistant';
+    const rawContent = msgObj.content ?? '';
+
     let content = '';
-    if (typeof parsed.content === 'string') {
-      content = parsed.content;
-    } else if (Array.isArray(parsed.content)) {
-      content = parsed.content
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
+    if (typeof rawContent === 'string') {
+      content = rawContent;
+    } else if (Array.isArray(rawContent)) {
+      content = rawContent
+        .map((block) => {
+          if (block.type === 'text') return block.text || '';
+          if (block.type === 'tool_use') return `[tool_use: ${block.name}]`;
+          if (block.type === 'tool_result') {
+            const c = block.content;
+            if (typeof c === 'string') return `[tool_result] ${c}`;
+            if (Array.isArray(c)) return c.filter(b => b.type === 'text').map(b => b.text).join(' ');
+          }
+          return '';
+        })
+        .filter(Boolean)
         .join('\n');
     }
-    if (parsed.tool_use) {
-      content = `[tool: ${parsed.tool_use.name}] ${content}`;
-    }
+
+    // ── Map role → SSSS entry type ───────────────────────────────────────────
+    let type = 'observation';
+    if (role === 'user') type = 'task';
+    else if (role === 'assistant' && content.includes('[tool_use:')) type = 'tool_call';
+    else if (role === 'tool') type = 'tool_call';
+
+    if (!content.trim()) continue; // skip empty lines (sidechain warmups, etc.)
 
     entries.push(
       createSessionEntry({
         id,
-        parentId: prevId,
+        parentId,
         type,
-        ts: parsed.timestamp || new Date().toISOString(),
+        ts: parsed.timestamp || msgObj.timestamp || new Date().toISOString(),
         content: content.slice(0, 5000), // cap individual entries
         role,
         source: 'claude-code',
       }),
     );
-    prevId = id;
   }
 
   return entries;
