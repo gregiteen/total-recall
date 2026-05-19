@@ -33,6 +33,7 @@ export default function FilesPage() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate one-time data fetch on mount
     void fetchFiles()
   }, [fetchFiles])
 

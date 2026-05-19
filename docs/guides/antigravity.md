@@ -12,40 +12,30 @@
 ### 1. Install into your project
 ```bash
 cd ~/my-project
-total-recall install
+npx total-recall init
 ```
 
-### 2. Configure the watcher
-Antigravity stores conversations in `~/.gemini/antigravity/brain/<conversation-id>/.system_generated/logs/overview.txt`. Total Recall reads this automatically — no watcher configuration needed.
+### 2. Connect Antigravity
 
-In your `totalrecall.config.mjs`:
-```javascript
-export default {
-  watchers: ['antigravity'],
-};
-```
-
-### 3. Configure the system prompt
-Antigravity reads `AGENTS.md` which should symlink to `INSTRUCTIONS.md`:
 ```bash
-ln -sf INSTRUCTIONS.md AGENTS.md
+npx total-recall connect antigravity
 ```
 
-Total Recall injects the behavioral surface directly into `INSTRUCTIONS.md` via section replacement.
+Antigravity reads `AGENTS.md`; the connect command creates the projection.
 
-### 4. Sync prompts
+### 3. Ingest Antigravity sessions
 ```bash
-total-recall sync-prompts
+npx total-recall ingest --sources antigravity --watch
 ```
 
-### 5. Start the co-processor
+### 4. Run the background daemon
 ```bash
-tr-coprocessor start
+npx total-recall daemon start
 ```
 
 ## How It Works
-- The co-processor daemon watches `overview.txt` for new conversation activity
-- On each check cycle (15s default), it analyzes the latest messages for steering directives, sentiment shifts, and relevant memories
+- The ingest watcher reads `overview.txt` for new conversation activity
+- The daemon analyzes sessions for steering directives, sentiment shifts, and relevant memories
 - Behavioral surface is auto-compiled into the `## DISTILLED MEMORY (SUBJECT STATES)` section of `INSTRUCTIONS.md`
 - Active context (real-time reminders) is written to `~/.total-recall/active-context.md`
 

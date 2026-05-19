@@ -66,3 +66,15 @@
 - Add import/export round-trip tests.
 - Add Dream Cycle proposal tests.
 - Add model runtime health tests.
+
+## Phase 8: Active Intelligence Engine
+
+- Implement session ingestion with file watchers for Claude Code, Codex, Gemini CLI, Antigravity, and Cursor local conversation logs.
+- Add UltraChat conversation sync through the Sync Fabric.
+- Build a task scheduler with a priority queue that keeps the local LLM continuously busy (queue is never empty).
+- Wire the local Gemma 4 runtime into a Conscious Layer (rule compliance auditor, session post-mortem, assertive injection with topic→skill routing).
+- Wire the local Gemma 4 runtime into a System 2 Layer (inference engine, memory synthesizer, conclusion writer that validates research drafts before promotion).
+- Wire the local Gemma 4 runtime into a Research Layer (fact seeker for knowledge gap detection, staleness verifier, evidence collector).
+- Add memory maintenance engines for clarity rewriting and LLM-evaluated smart decay.
+- Optional: add an LLM proxy mode for universal session logging through Total Recall's endpoint.
+

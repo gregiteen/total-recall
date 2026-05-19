@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MEMORY_LAYERS } from './memory-layers.mjs';
 
 // gray-matter parses ISO 8601 strings into JS Date objects.
 // This helper coerces Date → ISO string so Zod validators work
@@ -51,6 +52,7 @@ export const MemoryNodeSchema = z.object({
     access_count: z.number().int(),
   }),
   schema_version: z.literal(2),
+  x_memory_layer: z.enum(MEMORY_LAYERS).optional(),
   // Absolute Invariant Extensions
   priority: z.literal('absolute').optional(),
   immutable: z.boolean().optional()
@@ -75,6 +77,7 @@ export const TaskSchema = z.object({
   priority: z.number().int(),
   category: z.enum([
     'memory-maintenance',
+    'system2-deliberation',
     'skill-engineering',
     'proactive-research',
     'self-evaluation',
@@ -91,6 +94,7 @@ export const TaskSchema = z.object({
   reason: z.string().optional(),
   workflow_id: z.string().optional(),
   progress: z.number().optional(),
+  x_memory_layer: z.enum(MEMORY_LAYERS).optional(),
 });
 
 export const SkillSchema = z.object({
@@ -295,4 +299,3 @@ export const SSSS_SCHEMAS = {
   migration: MigrationSchema,
   release: ReleaseSchema,
 };
-

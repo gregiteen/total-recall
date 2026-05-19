@@ -24,6 +24,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate config fetch when the active tab changes
     void loadTab(activeTab);
   }, [activeTab]);
 

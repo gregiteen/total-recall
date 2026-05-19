@@ -16,6 +16,14 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  corsOptions,
+  loadSecurityConfig,
+  requireAuth,
+  requireAuthOrLocal,
+  requireHttps,
+  requireScope
+} from './auth.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -28,7 +36,10 @@ attachLogMonitor();
 // ─── App ────────────────────────────────────────────────────────────────────────
 
 const app = express();
-app.use(cors());
+app.disable('x-powered-by');
+app.set('trust proxy', 'loopback');
+app.use(requireHttps);
+app.use(cors(corsOptions()));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -36,7 +47,7 @@ import fs from 'node:fs';
 
 // ─── Health Check ───────────────────────────────────────────────────────────────
 
-app.get('/health', async (req, res) => {
+app.get('/health', requireAuthOrLocal, async (req, res) => {
   let disk = { free: 0, total: 0 };
   try {
     const stat = fs.statfsSync('/');
@@ -74,7 +85,7 @@ app.get('/health', async (req, res) => {
   }
 
   const import_os = await import('node:os');
-  const agentDir = path.join(import_os.default.homedir(), '.agent');
+  const agentDir = process.env.AGENT_DIR || path.join(import_os.default.homedir(), '.agent');
   const vaultExists = fs.existsSync(path.join(agentDir, 'memory-vault'));
 
   res.json({
@@ -94,7 +105,7 @@ app.get('/health', async (req, res) => {
 
 // ─── Brain Health Check (MODEL.md contract) ─────────────────────────────────────
 
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res) => {
   let ollamaOnline = false;
   let activeModel = null;
 
@@ -211,9 +222,9 @@ try {
 
 try {
   const { mountMcp } = await import('./mcp.mjs');
-  const { requireAuth, mcpRateLimiter } = await import('./auth.mjs');
+  const { mcpRateLimiter } = await import('./auth.mjs');
   if (mountMcp) {
-    app.use('/mcp', mcpRateLimiter(), requireAuth);
+    app.use('/mcp', mcpRateLimiter(), requireAuth, requireScope('mcp:use'));
     mountMcp(app);
     console.error('[Server] MCP gateway mounted at /mcp');
   }
@@ -248,15 +259,24 @@ app.get(/^(.*)$/, (req, res) => {
 
 // ─── Start ──────────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3000;
+const serverSecurityConfig = loadSecurityConfig();
+const PORT = process.env.PORT || serverSecurityConfig.bind?.port || 3000;
+const configuredHost = process.env.HOST || serverSecurityConfig.bind?.host || '127.0.0.1';
+const publicBindRequested = configuredHost === '0.0.0.0' || configuredHost === '::';
+const HOST = process.env.NODE_ENV === 'production' && publicBindRequested && serverSecurityConfig.bind?.allow_public_bind !== true
+  ? '127.0.0.1'
+  : configuredHost;
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
+  if (HOST !== configuredHost) {
+    console.error(`[Server] Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
+  }
   console.error(`\n  ┌─────────────────────────────────────────────┐`);
   console.error(`  │  Total Recall Brain v3.0.0                  │`);
   console.error(`  │                                             │`);
-  console.error(`  │  API:       http://localhost:${PORT}/v1/chat/completions │`);
-  console.error(`  │  Memory:    http://localhost:${PORT}/api/memory           │`);
-  console.error(`  │  Health:    http://localhost:${PORT}/health               │`);
-  console.error(`  │  Dashboard: http://localhost:${PORT}/                     │`);
+  console.error(`  │  API:       http://${HOST}:${PORT}/v1/chat/completions │`);
+  console.error(`  │  Memory:    http://${HOST}:${PORT}/api/memory           │`);
+  console.error(`  │  Health:    http://${HOST}:${PORT}/health               │`);
+  console.error(`  │  Dashboard: http://${HOST}:${PORT}/                     │`);
   console.error(`  └─────────────────────────────────────────────┘\n`);
 });

@@ -1,6 +1,74 @@
 import fs from 'fs';
 import path from 'path';
 import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
+
+/**
+ * Write a daily dream-cycle summary to memory-vault/daily/YYYY-MM-DD.md.
+ * SSSS node natively; Obsidian Daily Notes plugin reads these files directly.
+ */
+function writeDailyNote(vaultDir, summaryLines) {
+  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date().toISOString();
+  const dailyDir = path.join(vaultDir, 'daily');
+  if (!fs.existsSync(dailyDir)) fs.mkdirSync(dailyDir, { recursive: true });
+
+  const filePath = path.join(dailyDir, `${today}.md`);
+
+  if (fs.existsSync(filePath)) {
+    // Append this run's summary to the existing note
+    const existing = fs.readFileSync(filePath, 'utf8');
+    const runBlock = `\n## Dream Cycle – ${now}\n\n${summaryLines.map(l => `- ${l}`).join('\n')}\n`;
+    atomicWrite(filePath, existing.trimEnd() + runBlock);
+    return;
+  }
+
+  const frontmatter = [
+    '---',
+    'type: memory',
+    `slug: "daily-${today}"`,
+    'category: daily',
+    `title: "Daily Note: ${today}"`,
+    'status: active',
+    'confidence: 1.0',
+    'importance: 2',
+    `created: "${now}"`,
+    `updated: "${now}"`,
+    `last_accessed: "${now}"`,
+    'source:',
+    '  type: dream-cycle',
+    `  session_id: "dream-${today}"`,
+    '  evidence_count: 1',
+    'supersedes: []',
+    'superseded_by: null',
+    'contradicts: []',
+    'tags: [daily, dream-cycle]',
+    'related: []',
+    'routes_to_skills: []',
+    'sentiment_polarity: descriptive',
+    'sentiment_target: system',
+    'modality: should',
+    'subject: system',
+    'predicate: ran',
+    'object: dream-cycle',
+    'decay:',
+    '  half_life_days: 30',
+    '  access_count: 0',
+    'schema_version: 2',
+    '---',
+    ''
+  ].join('\n');
+
+  const body = [
+    `# Daily Note: ${today}`,
+    '',
+    `## Dream Cycle – ${now}`,
+    '',
+    ...summaryLines.map(l => `- ${l}`),
+    ''
+  ].join('\n');
+
+  atomicWrite(filePath, frontmatter + body);
+}
 import { detectConflicts, quarantineConflict } from './steering.mjs';
 import { compileSurface } from './surface.mjs';
 import { 
@@ -64,6 +132,18 @@ export function evaluateCandidates(candidates, existingNodes, conflictsDir) {
 export async function runDreamCycle({
   vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile
 }) {
+  const agentDir = path.dirname(vaultDir);
+  const sessionsDir = path.join(agentDir, 'sessions');
+
+  console.log('\n👁️  PHASE 0 — Session Ingestion (IDE Conversation Logs)');
+  try {
+    const { scanAndIngest } = await import('./session-watcher.mjs');
+    const ingestResult = scanAndIngest(sessionsDir);
+    console.log(`   Ingested: ${ingestResult.ingested} new sessions`);
+  } catch (err) {
+    console.log(`   ⚠️  Session ingestion skipped: ${err.message}`);
+  }
+
   console.log('\n🌙 PHASE 1 — Light Sleep (Scan)');
   const modified = scanModifiedVault(vaultDir);
   console.log(`   Modified vault files: ${modified.length}`);
@@ -93,6 +173,7 @@ export async function runDreamCycle({
   }
 
   console.log('\n🧠 PHASE 4 — Lucid Dreaming (Optimizer Proposals)');
+  let proposalCount = 0;
   try {
     const proposalsDir = path.join(vaultDir, 'proposals');
     if (!fs.existsSync(proposalsDir)) fs.mkdirSync(proposalsDir, { recursive: true });
@@ -100,20 +181,32 @@ export async function runDreamCycle({
     const cleanupProposals = await generateMemoryCleanupProposals(vaultDir);
     const staleProposals = await generateStaleKnowledgeRefreshProposals(vaultDir);
     const allProposals = [...cleanupProposals, ...staleProposals];
-    
+
     if (allProposals.length > 0) {
       console.log(`   Generated ${allProposals.length} optimization proposals.`);
       for (const p of allProposals) {
-        // Run Local Eval Gate
         const passed = await evaluateProposalGate(p, null);
         console.log(`   - Proposal [${p.category}]: ${p.summary} -> ${passed ? 'ACCEPTED' : 'REJECTED'}`);
         writeNode(p, proposalsDir);
+        if (passed) proposalCount++;
       }
     } else {
       console.log('   No new proposals generated.');
     }
   } catch (err) {
     console.error(`   ❌ Optimizer failed: ${err.message}`);
+  }
+
+  // Write daily note summary (native SSSS node; Obsidian Daily Notes reads it directly)
+  try {
+    const existingNodes = loadNodes(vaultDir);
+    writeDailyNote(vaultDir, [
+      `Modified vault files scanned: ${modified.length}`,
+      `Active nodes: ${existingNodes.filter(n => n.status === 'active').length}`,
+      `Proposals accepted: ${proposalCount}`,
+    ]);
+  } catch (err) {
+    console.error(`   ⚠️  Daily note write failed: ${err.message}`);
   }
 
   return { status: 'success' };

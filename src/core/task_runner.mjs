@@ -50,7 +50,7 @@ export function updateTaskStatus(task, newStatus, error = null) {
  */
 export async function executeTask(task, context) {
   console.log(`[Task Runner] Executing Task [P${task.priority}]: ${task.target}`);
-  updateTaskStatus(task, 'in-progress');
+  updateTaskStatus(task, 'in_progress');
 
   try {
     // In a real implementation, this would route to specific subagents/workflows
@@ -61,6 +61,9 @@ export async function executeTask(task, context) {
         break;
       case 'memory-maintenance':
         await handleMemoryMaintenance(task, context);
+        break;
+      case 'system2-deliberation':
+        await handleSystem2Deliberation(task, context);
         break;
       case 'proactive-research':
         console.log(`[Task Runner] Handling Deep Research...`);
@@ -78,7 +81,7 @@ export async function executeTask(task, context) {
         throw new Error(`Unknown task category: ${task.category}`);
     }
 
-    updateTaskStatus(task, 'completed');
+    updateTaskStatus(task, 'done');
     console.log(`[Task Runner] ✅ Completed Task: ${task.target}`);
   } catch (err) {
     console.error(`[Task Runner] ❌ Failed Task: ${task.target}`, err.message);
@@ -93,6 +96,10 @@ async function handleSkillEngineering(task, context) {
 
 async function handleMemoryMaintenance(task, context) {
   console.log(`   Running memory maintenance for: ${task.target}`);
+}
+
+async function handleSystem2Deliberation(task, context) {
+  console.log(`   Running System 2 deliberation for: ${task.target}`);
 }
 
 /**

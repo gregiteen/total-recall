@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'node:crypto';
-import { atomicWrite, walkMd, loadNodes } from './vault.mjs';
+import { atomicWrite, walkMd, loadNodes, writeNode } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -93,7 +93,7 @@ const DEFAULT_THRESHOLDS = {
  * @param {object} candidate - The new/updated memory node (parsed frontmatter).
  * @param {object[]} existingNodes - Array of existing memory nodes.
  * @param {object} [thresholds] - Override default thresholds.
- * @returns {object[]} Array of conflict records.
+ * @returns {object[]} Array of conflict records enriched with provenance metadata.
  */
 export function detectSemanticConflicts(candidate, existingNodes, thresholds = {}) {
   const t = { ...DEFAULT_THRESHOLDS, ...thresholds };
@@ -135,6 +135,9 @@ export function detectSemanticConflicts(candidate, existingNodes, thresholds = {
         reason: `Polarity flip on overlapping semantic target with similarity ${similarity.toFixed(3)} ≥ ${t.conflictThreshold}`,
         resolution: null,
         resolved_at: null,
+        // Provenance metadata for auto-resolution
+        _new_node: candidate,
+        _existing_node: existing,
       });
 
       if (conflicts.length >= t.maxConflicts) break;
@@ -227,6 +230,243 @@ export function computeFileHash(vaultRoot, vfsPath) {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+// ─── Auto-Resolution Engine ─────────────────────────────────────────────────
+
+/**
+ * Determine the source authority of a memory node.
+ * Returns 'user' for direct user/chat-created nodes, 'machine' for
+ * optimizer/dream-cycle generated nodes, 'unknown' otherwise.
+ */
+function sourceAuthority(node) {
+  const src = node.source?.type;
+  if (!src) return 'unknown';
+  const userSources = new Set(['chat', 'user', 'correction', 'mcp-client', 'steering']);
+  const machineSources = new Set(['dream-cycle', 'optimizer', 'kernel', 'auto-distill']);
+  if (userSources.has(src)) return 'user';
+  if (machineSources.has(src)) return 'machine';
+  return 'unknown';
+}
+
+/**
+ * Check whether a node is a protected invariant (priority: absolute or immutable).
+ */
+function isProtectedInvariant(node) {
+  return node.priority === 'absolute' || node.immutable === true;
+}
+
+/**
+ * Attempt to automatically resolve a conflict using tiered heuristics.
+ *
+ * Resolution tiers (checked in order):
+ *
+ * 1. **Protected invariant clash** — Both nodes are `priority: absolute` or
+ *    `immutable: true`. Cannot auto-resolve; requires human review.
+ *
+ * 2. **User supersedes machine** — The newer node is from the user, the older
+ *    is machine-generated. Auto-supersede (user intent wins).
+ *
+ * 3. **Machine vs user** — The newer node is machine-generated, the older is
+ *    from the user. Auto-keep (user intent wins over machine inference).
+ *
+ * 4. **Recency with clear provenance** — Both nodes are from the same source
+ *    authority. The newer one supersedes the older one (latest preference wins).
+ *
+ * 5. **Borderline similarity** — Similarity is between conflictThreshold and
+ *    0.90. Accept both, but reduce confidence on the older node.
+ *
+ * @param {object} conflict - The conflict record with _new_node and _existing_node.
+ * @returns {{ resolved: boolean, action: string, reason: string }}
+ */
+export function autoResolveConflict(conflict) {
+  const newNode = conflict._new_node;
+  const existingNode = conflict._existing_node;
+
+  if (!newNode || !existingNode) {
+    return { resolved: false, action: 'quarantine', reason: 'Missing node provenance metadata.' };
+  }
+
+  const newAuth = sourceAuthority(newNode);
+  const existingAuth = sourceAuthority(existingNode);
+  const newIsProtected = isProtectedInvariant(newNode);
+  const existingIsProtected = isProtectedInvariant(existingNode);
+
+  // Tier 1: Both are protected invariants — require human review
+  if (newIsProtected && existingIsProtected) {
+    return {
+      resolved: false,
+      action: 'quarantine',
+      reason: 'Both nodes are protected invariants (priority: absolute / immutable). Human review required.',
+    };
+  }
+
+  // Tier 2: Protected invariant vs non-protected — the invariant always wins
+  if (existingIsProtected && !newIsProtected) {
+    return {
+      resolved: true,
+      action: 'keep',
+      winner: existingNode.slug,
+      loser: newNode.slug,
+      reason: `Existing node '${existingNode.slug}' is a protected invariant. New node auto-rejected.`,
+    };
+  }
+  if (newIsProtected && !existingIsProtected) {
+    return {
+      resolved: true,
+      action: 'supersede',
+      winner: newNode.slug,
+      loser: existingNode.slug,
+      reason: `New node '${newNode.slug}' is a protected invariant. Existing node auto-superseded.`,
+    };
+  }
+
+  // Tier 3: User vs machine — user intent always wins
+  if (newAuth === 'user' && existingAuth === 'machine') {
+    return {
+      resolved: true,
+      action: 'supersede',
+      winner: newNode.slug,
+      loser: existingNode.slug,
+      reason: `User-created node supersedes machine-generated node '${existingNode.slug}'.`,
+    };
+  }
+  if (newAuth === 'machine' && existingAuth === 'user') {
+    return {
+      resolved: true,
+      action: 'keep',
+      winner: existingNode.slug,
+      loser: newNode.slug,
+      reason: `Machine-generated node rejected in favor of user-created node '${existingNode.slug}'.`,
+    };
+  }
+
+  // Tier 4: Same authority — latest preference wins (recency)
+  const newDate = new Date(newNode.updated || newNode.created || 0).getTime();
+  const existingDate = new Date(existingNode.updated || existingNode.created || 0).getTime();
+
+  if (newDate > existingDate) {
+    return {
+      resolved: true,
+      action: 'supersede',
+      winner: newNode.slug,
+      loser: existingNode.slug,
+      reason: `Same source authority ('${newAuth}'). Newer node wins by recency.`,
+    };
+  }
+  if (existingDate > newDate) {
+    return {
+      resolved: true,
+      action: 'keep',
+      winner: existingNode.slug,
+      loser: newNode.slug,
+      reason: `Same source authority ('${existingAuth}'). Existing node is more recent.`,
+    };
+  }
+
+  // Tier 5: Identical timestamps or truly ambiguous — quarantine
+  return {
+    resolved: false,
+    action: 'quarantine',
+    reason: 'Could not determine a clear winner. Identical provenance and timestamps.',
+  };
+}
+
+/**
+ * Apply the resolution result to the vault and conflict record.
+ *
+ * When auto-resolved:
+ * - The losing node is marked `status: superseded` and gets a `superseded_by` pointer.
+ * - The winning node gets a `supersedes` entry pointing to the loser.
+ * - The conflict record is marked `status: auto-resolved`.
+ *
+ * @param {object} conflict - The conflict record.
+ * @param {object} resolution - The result from autoResolveConflict().
+ * @param {string} vaultDir - Path to the memory vault.
+ * @returns {object} Updated conflict record.
+ */
+export function applyAutoResolution(conflict, resolution, vaultDir) {
+  if (!resolution.resolved) return conflict;
+
+  const winner = resolution.winner;
+  const loser = resolution.loser;
+
+  // Update the losing node in the vault
+  if (vaultDir && conflict._existing_node && conflict._new_node) {
+    const loserNode = resolution.action === 'keep' ? conflict._new_node : conflict._existing_node;
+    const winnerNode = resolution.action === 'keep' ? conflict._existing_node : conflict._new_node;
+
+    // Mark the loser as superseded
+    loserNode.status = 'superseded';
+    loserNode.superseded_by = winner;
+    loserNode.updated = new Date().toISOString();
+
+    // Add the loser to the winner's supersedes list
+    if (!winnerNode.supersedes) winnerNode.supersedes = [];
+    if (!winnerNode.supersedes.includes(loser)) {
+      winnerNode.supersedes.push(loser);
+    }
+    winnerNode.updated = new Date().toISOString();
+
+    try {
+      writeNode(loserNode, vaultDir);
+      writeNode(winnerNode, vaultDir);
+    } catch (err) {
+      logger.error('conflict-detector', `Failed to apply auto-resolution: ${err.message}`);
+    }
+  }
+
+  // Update the conflict record itself
+  conflict.status = 'auto-resolved';
+  conflict.resolution = `${resolution.action}: ${winner}`;
+  conflict.resolution_reason = resolution.reason;
+  conflict.resolved_at = new Date().toISOString();
+
+  return conflict;
+}
+
+/**
+ * Detect conflicts and attempt auto-resolution. Only quarantine what
+ * cannot be resolved automatically.
+ *
+ * This is the primary entry point for conflict handling.
+ *
+ * @param {object} candidate - The new memory node.
+ * @param {object[]} existingNodes - Existing vault nodes.
+ * @param {object} options - { vaultDir, inboxDir, thresholds }
+ * @returns {{ autoResolved: object[], quarantined: object[] }}
+ */
+export function detectAndResolve(candidate, existingNodes, options = {}) {
+  const { vaultDir, inboxDir, thresholds } = options;
+  const conflicts = detectSemanticConflicts(candidate, existingNodes, thresholds);
+
+  const autoResolved = [];
+  const quarantined = [];
+
+  for (const conflict of conflicts) {
+    const resolution = autoResolveConflict(conflict);
+
+    if (resolution.resolved) {
+      const resolved = applyAutoResolution(conflict, resolution, vaultDir);
+      autoResolved.push(resolved);
+      logger.info('conflict-detector', `Auto-resolved ${conflict.conflict_id}: ${resolution.reason}`);
+    } else {
+      quarantined.push(conflict);
+      logger.info('conflict-detector', `Quarantined ${conflict.conflict_id}: ${resolution.reason}`);
+    }
+  }
+
+  // Only write quarantined conflicts to the inbox for human review
+  if (inboxDir && quarantined.length > 0) {
+    writeConflicts(quarantined, inboxDir);
+  }
+
+  // Write auto-resolved records as well (for audit trail)
+  if (inboxDir && autoResolved.length > 0) {
+    writeConflicts(autoResolved, inboxDir);
+  }
+
+  return { autoResolved, quarantined };
+}
+
 // ─── Conflict Persistence ───────────────────────────────────────────────────
 
 /**
@@ -243,7 +483,8 @@ export function writeConflicts(conflicts, inboxDir) {
 
   for (const conflict of conflicts) {
     const filePath = path.join(conflictsDir, `${conflict.conflict_id}.md`);
-    const { ...frontmatter } = conflict;
+    // Strip internal provenance refs before persisting
+    const { _new_node, _existing_node, ...frontmatter } = conflict;
     const body = `Conflict detected between \`${conflict.new_slug}\` and \`${conflict.existing_slug}\`.\n\nReason: ${conflict.reason}`;
     const raw = matter.stringify(body, frontmatter);
     atomicWrite(filePath, raw);

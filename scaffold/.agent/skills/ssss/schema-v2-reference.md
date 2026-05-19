@@ -18,7 +18,12 @@ subject: agent                 # who is constrained
 predicate: use_atomic_write    # what action (snake_case verb)
 object: file_system            # what target
 sentiment_polarity: directive_must
+x_memory_layer: conscious        # optional: conscious | system2 | research
 ```
+
+`x_memory_layer` is Total Recall implementation metadata, not vendor-neutral
+protocol law. Use it when the node's cognitive role is explicit; otherwise the
+surface compiler infers the layer from category, tags, source, and priority.
 
 ## Category Taxonomy
 

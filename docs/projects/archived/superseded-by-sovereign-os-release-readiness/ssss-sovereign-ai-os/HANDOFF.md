@@ -40,11 +40,28 @@ Total Recall is the canonical open SSSS spec and local sovereign brain. UltraCha
 
 15. ✅ **Implemented Admin SSSS Protocol Evolution** — Built `total-recall migrate` for breaking changes and `total-recall upgrade --protocol` for verifying and applying signed release metadata. Added Ed25519 signature verification to ensure the local optimizer cannot silently rewrite the OS laws without cryptographic authorization.
 
+## Completed This Session (2026-05-17)
+
+1. ✅ **Exported Conformance Fixtures** — Updated `package.json` with an `exports` block to expose `./fixtures/*` and `./src/core/*` for UltraChat and other clients to consume.
+2. ✅ **Added UltraChat Smoke-Test Instructions** — Created `docs/projects/in-progress/ssss-sovereign-ai-os/ULTRACHAT_SMOKE_TEST.md`.
+3. ✅ **Added SSSS Compatibility Test** — Created `fixtures/compatibility.spec.mjs` to ensure bidirectional archive compatibility between UltraChat and Total Recall.
+4. ✅ **Completed Phase 6** — Marked Phase 6 as complete in the project tracker.
+5. ✅ **Implemented Conflict Auto-Resolution Engine** — Replaced the manual quarantine-all conflict model with a 5-tier heuristic auto-resolver in `src/core/conflict-detector.mjs`. Tiers: invariant clashes → quarantine; invariant vs non-protected → invariant wins; user vs machine → user wins; same authority → recency wins; identical → quarantine. Added `autoResolveConflict()`, `applyAutoResolution()`, and `detectAndResolve()`. 13 new tests (24 total), all passing.
+6. ✅ **Phase 8 Plan: Active Intelligence Engine** — Designed the complete Phase 8 architecture covering session ingestion (file watchers for Claude Code, Codex, Gemini CLI, Antigravity, Cursor), task scheduler, 3-layer cognitive engines (Conscious enforcement, System 2 reasoning, Research acquisition), and memory maintenance. Added to tracker and development plan.
+
 ## Immediate Next Work
 
-1. Document Total Recall brain model registration contract (Phase 6).
-2. Provide sample `models/catalog/total-recall/gemma4/MODEL.md` (Phase 6).
-3. Add UltraChat smoke-test instructions and export conformance fixture (Phase 6).
+### Phase 7: Testing And Verification (in parallel)
+1. Verify clean-host deploy test passes.
+2. Verify brain endpoint smoke test passes.
+3. Ensure SSSS conformance suite, import/export round-trip, Dream Cycle proposal, projection rebuild, and migration rehearsal tests pass.
+
+### Phase 8: Active Intelligence Engine (priority build order)
+1. **Session Watcher** — `src/core/session-watcher.mjs` with Claude Code and Codex adapters (they write JSONL natively, zero user friction).
+2. **Task Scheduler** — `src/core/scheduler.mjs` with priority queue, layer-weighted dispatch, and idle task generation.
+3. **Assertive Injection** — Upgrade `surface.mjs` to prefix rules with ⚠️/🚫 and add topic→skill routing hints to INSTRUCTIONS.md.
+4. **Session Post-Mortem** — Extract patterns, facts, and skill gaps from every ingested conversation.
+5. **Fact Seeker** — Wire LLM into `research.mjs` for autonomous knowledge gap detection.
 
 ## Guardrails
 
@@ -52,3 +69,5 @@ Total Recall is the canonical open SSSS spec and local sovereign brain. UltraCha
 - Do not let user-local optimizers mutate SSSS core without admin protocol review.
 - Do not require Postgres, Redis, or vector DBs for canonical Total Recall operation.
 - Do not break export/import sovereignty.
+- All Phase 8 engines produce proposals, never direct mutations. The optimizer boundary policy is law.
+
