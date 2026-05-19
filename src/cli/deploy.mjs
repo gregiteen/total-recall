@@ -364,13 +364,30 @@ export default async function deploy(args) {
   // ── Start optional deploy UI ──
   if (opts.ui) {
     try {
-      const { startDeployUI, emitProgress, openBrowser } = await import('./deploy-ui.mjs');
+      const { startDeployUI, waitForInstallOptions, emitProgress, openBrowser } = await import('./deploy-ui.mjs');
       const uiUrl = await startDeployUI(opts.uiPort);
       _uiEmit = emitProgress;
       console.error(`\n  ┌─────────────────────────────────────────────┐`);
       console.error(`  │  Install UI: ${uiUrl.padEnd(34)}│`);
+      console.error(`  │  Waiting for you to click Install...         │`);
       console.error(`  └─────────────────────────────────────────────┘\n`);
       openBrowser(uiUrl);
+
+      // Block until the wizard's Phase 1 form is submitted
+      const wizardOpts = await waitForInstallOptions();
+
+      // Merge wizard config into opts
+      if (wizardOpts.domain)         opts.domain         = wizardOpts.domain;
+      if (wizardOpts.duckdnsToken)   opts.duckdnsToken   = wizardOpts.duckdnsToken;
+      if (wizardOpts.cloudflareToken) opts.cloudflareToken = wizardOpts.cloudflareToken;
+      if (wizardOpts.httpsMethod === 'cloudflare-quick') opts.cloudflareQuick   = true;
+      if (wizardOpts.httpsMethod === 'local')            opts.allowInsecureHttp = true;
+      if (wizardOpts.skipSearxng) opts.skipSearxng = true;
+      if (wizardOpts.skipCaddy)   opts.skipCaddy   = true;
+      if (wizardOpts.skipCompile) opts.skipCompile  = true;
+      if (wizardOpts.skipModels)  opts.skipModels   = true;
+
+      console.error(`  ✅ Wizard config received — domain: ${opts.domain}`);
     } catch (e) {
       console.error(`  ⚠️  Could not start deploy UI: ${e.message}`);
     }

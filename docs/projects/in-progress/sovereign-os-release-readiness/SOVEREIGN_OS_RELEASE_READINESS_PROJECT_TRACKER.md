@@ -283,12 +283,13 @@ file-native — no database, no vector store. New UI gated behind a
 - [x] Skill routing aliases (`push/backup/sync/fork/github` → push SKILL.md).
 
 ### Setup Wizard UI
-- [ ] Rewrite `src/cli/deploy-ui.mjs` as a full multi-phase setup wizard:
+- [x] Rewrite `src/cli/deploy-ui.mjs` as a full multi-phase setup wizard:
   - Phase 0 Welcome: overview of how Total Recall works, architecture diagram
   - Phase 1 Configure: domain, HTTPS method (DuckDNS/Cloudflare/local), model choice, skip options — POSTs back to trigger deploy
   - Phase 2 Installing: live SSE progress bar + step log
   - Phase 3 Auth: generate first PAT, copy token, show scopes
-  - Phase 4 Integrations (tabbed): Claude Code, Cursor/Windsurf, UltraChat/OpenWebUI, MCP config, Obsidian
-  - Phase 5 API Docs: full endpoint reference, curl examples, auth header
-- [ ] Wire `deploy.mjs --ui` to await wizard config before starting install.
+  - Phase 4 Integrations (tabbed): Claude Code, Cursor/Windsurf, UltraChat, MCP config, Obsidian, Other IDEs
+  - Phase 5 API Docs: full endpoint reference table, curl examples, auth header
+  - Phase 6 Done: live URLs with open links, health check button
+- [x] Wire `deploy.mjs --ui` to await wizard config before starting install (`waitForInstallOptions()`).
 - [ ] Test wizard flow end-to-end.

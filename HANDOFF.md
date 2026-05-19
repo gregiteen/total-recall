@@ -6,9 +6,9 @@
 
 ---
 
-## #1 PRIORITY: Finish the Setup Wizard (`src/cli/deploy-ui.mjs`)
+## ✅ COMPLETED THIS SESSION: Setup Wizard (`src/cli/deploy-ui.mjs`)
 
-The current `deploy-ui.mjs` is **only a basic SSE progress bar**. The user explicitly wants a full multi-phase setup wizard. **Do this first.**
+The wizard is fully implemented as a 7-phase single-file HTML wizard (vanilla JS, no framework). `deploy.mjs --ui` now blocks on `waitForInstallOptions()` until the user clicks Install in Phase 1.
 
 ### What the wizard must include:
 > "walkthrough, interaction with the different install options and integrations, obsidian set up, any api keys or auth, an overview of how it works, etc... everything"
