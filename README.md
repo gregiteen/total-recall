@@ -1,144 +1,199 @@
-# Total Recall 3.0 — SSSS Sovereign AI OS
+# Total Recall — SSSS Sovereign AI OS
 
-> **A database-free, SSSS-compliant Sovereign AI Operating System.**
+> **A database-free, filesystem-native AI memory layer.** Works in any IDE. Self-hosts on any VM. Costs nothing to store.
 
-Total Recall 3.0 is the open-source canonical home of **SSSS (Structured Semantic Syntax System)** and the reference implementation of a sovereign AI brain. It proves that memory, skills, workflows, model routing, scheduler tasks, and learning loops can live as portable Markdown files with semantic frontmatter instead of opaque hosted database state.
+Total Recall is the open-source reference implementation of **SSSS (Structured Semantic Syntax System)** — a spec for storing AI memory, skills, and workflows as plain Markdown files instead of opaque hosted databases.
 
-UltraChat is the hosted product layer and commercial experience. Total Recall is the spec, local brain, CLI, validator, Dream Cycle, and conformance suite that makes the SSSS substrate real.
-
-## Repository Role
-
-```text
-total-recall
--> canonical SSSS spec
--> reference kernel and validator
--> local sovereign brain
--> Dream Cycle optimizer
--> conformance tests
--> CLI and deploy tooling
-
-ultrachat-ai-powered
--> hosted product UX
--> workspace collaboration
--> model/runtime management UI
--> marketplace, billing, projections
--> launch and distribution
+```
+your AI brain = ~/.agent/memory-vault/*.md
 ```
 
-## 🚀 The Sovereign Vision
-
-You shouldn't need a cloud provider to remember your life. You shouldn't need a vector database to recall context. 
-
-Total Recall 3.0 implements a **Zero-Parser Kernel** that reads, writes, and executes raw Markdown. Every memory, rule, system prompt, workflow, model runtime record, scheduler task, and proposal is an SSSS-compliant file. The system is hardware-agnostic, deployable to a cloud VM or local machine, and managed by a deterministic kernel plus a local AI optimizer.
-
-The strategic thesis is simple:
-
-```text
-Databases were built for apps.
-SSSS is built for sovereign AI.
-```
-
-## ✨ Core Features
-
-### 1. Database-Free SSSS Memory
-- **100% Markdown Storage**: No SQLite. No Vector DBs. The memory vault is a file-system native, three-tiered graph (Hot Memory, Curated Skills, Permanent Vault).
-- **Schema Evolution Engine**: The AI proposes, tests, and applies backwards-compatible updates to its own Zod validation schemas.
-- **Dream Cycle Daemon**: A background coprocessor that handles garbage collection, pattern extraction, and confidence decay.
-
-### 2. Omnichannel Dashboard
-- **React SPA**: A sleek, dark-mode unified dashboard served directly by the Express host.
-- **Unified Interface**: Chat, Voice (Kokoro-82M TTS), and Code Mode Sandbox execution all from the browser.
-- **VFS Explorer & Task Scheduler**: Visually traverse the `~/.agent/files/` virtual file system and inspect the P0-P5 background task queue.
-
-### 3. Production-Ready Deployment
-- **`npx total-recall deploy`**: A one-click provisioning pipeline that scaffolds the VFS, pulls required Ollama models, and installs the Cloud Agent trigger via cron.
-- **Automated Security**: Caddy reverse proxy for auto-TLS, Argon2id + AES-256-GCM encryption for secrets, and Bearer PAT authentication for API access.
-- **Cloud Agent Auto-Tasking**: The autonomous agent wakes up every 5 minutes to process tasks, research your priorities, and push syncs. It messages you proactively via Telegram when it finishes something important.
-
-### 4. Advanced Extensibility
-- **Omnichannel Dashboard**: A sleek, dark-mode unified dashboard for managing your memory vault, tasks, and files.
-- **Proactive Telegram Integration**: Provide your Telegram Bot token during the onboarding interview, and Total Recall will message you on your phone with updates, research, and questions.
+No vector DB. No cloud lock-in. Your thoughts, your machine.
 
 ---
 
-## 🛠 Quick Start
+## Choose Your Setup
 
-### Option A — Adding to an Existing Project (Recommended)
+### 🖥 IDE Memory Only (2 minutes)
 
-If you already have a project with instructions set up for Cursor, Claude Code, Antigravity, or any other IDE agent, run this from your project root:
+Add persistent memory to Claude Code, Cursor, Codex, Windsurf, or any IDE agent — in your existing project:
 
 ```bash
 cd ~/my-project
-npx total-recall init
+npx total-recall init         # scaffold ~/.agent/ and INSTRUCTIONS.md
+npx total-recall connect claude-code   # symlink CLAUDE.md → INSTRUCTIONS.md
 ```
 
-This will:
-1. Create a `.agent/memory-vault/` directory structure in your project
-2. Seed the core SSSS schema skill so your AI knows how to write memory nodes
-3. Inject a clearly-marked `<!-- BEGIN INJECTED MEMORY -->` block into your **existing** `GEMINI.md`, `.cursorrules`, `CLAUDE.md`, or `AGENTS.md` — without touching any of your existing instructions
-4. Queue an `onboarding-interview.md` task so the agent asks about your goals on your first chat
+Supported IDEs:
 
-> Your existing IDE instructions are **never overwritten**. Total Recall only manages its own clearly-marked section.
+| Command | What it does |
+|---------|-------------|
+| `npx total-recall connect claude-code` | Symlinks `CLAUDE.md` → compiled memory |
+| `npx total-recall connect codex` | Symlinks `AGENTS.md` → compiled memory |
+| `npx total-recall connect antigravity` | Symlinks `AGENTS.md` → compiled memory |
+| `npx total-recall connect gemini` | Symlinks `GEMINI.md` → compiled memory |
+| `npx total-recall connect cursor` | Writes `.cursor/rules/total-recall.mdc` |
+| `npx total-recall connect windsurf` | Writes `.windsurf/rules/total-recall.md` |
+| `npx total-recall connect aider` | Writes `.aider.rules.md` |
+
+> Your existing IDE config is **never overwritten**. Total Recall only manages its own clearly-marked `<!-- BEGIN INJECTED MEMORY -->` section.
 
 ---
 
-### Option B — Full Sovereign OS Deployment (Cloud VM / Dedicated Machine)
+### 🧠 Full Brain + Local Model (30 minutes)
 
-To deploy the full autonomous AI stack on a fresh Linux/Mac environment:
+Deploy the full autonomous stack — OpenAI-compatible API, React dashboard, MCP gateway, Dream Cycle daemon — on a cloud VM or your own machine.
+
+**What you need:**
+- A Linux server (see [Cloud Provider Guide](docs/reference/cloud-providers.md) for pricing)
+- SSH access
+- A domain name (optional, for HTTPS)
+
+**Recommended default:** [Hetzner CX42](https://www.hetzner.com/cloud) — €18/mo, 16 GB RAM, runs `gemma4:26b` (the default model)
 
 ```bash
-# Provision models, VFS, and install the Agent Cron Trigger
-npx total-recall deploy
+# On your local machine — set up the wizard:
+npx total-recall setup
+
+# The wizard asks:
+#   1. Where are you deploying? (Hetzner / DO / RunPod / Vast.ai / other)
+#   2. Which IDEs do you use?
+#   3. Which chat apps? (UltraChat / Claude / other)
+#   4. Your API key (masked input, never logged)
+# Then provisions the server, installs Ollama + gemma4:26b, and connects your IDEs.
 ```
 
-### 2. Access the Dashboard & Onboard
-Navigate to `https://localhost` (or your server's IP). 
-When you start your first chat, the agent will enter **Interview Mode** to learn about your priorities, projects, and configure your Telegram notification settings.
+Or manually on the server:
 
-### 3. CLI Command Reference
+```bash
+# On the server (Ubuntu 22.04+):
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull gemma4:26b          # ~10 GB download, ~16 GB RAM needed
+npx total-recall deploy         # scaffold VFS, Caddy, cron trigger
+```
 
-Total Recall is fully manageable via the CLI, ensuring 100% parity with the web dashboard.
+Then back on your local machine:
+
+```bash
+npx total-recall connect claude-code --brain https://your-server.com --token YOUR_PAT
+```
+
+---
+
+### 📔 Obsidian Integration
+
+See your entire memory vault in Obsidian — graph view, backlinks, Dataview queries, all native:
+
+```bash
+npx total-recall connect obsidian
+# Auto-detects your vault on macOS; pass --vault ~/path/to/vault on Linux
+```
+
+This symlinks `~/.agent/memory-vault/` into your vault as a `Total Recall/` folder and installs four Dataview query dashboards (active nodes, skills, conflicts, daily notes).
+
+---
+
+### 💬 UltraChat Integration
+
+UltraChat connects to your brain via the OpenAI-compatible API. No file projection needed:
+
+```bash
+npx total-recall connect ultrachat --brain https://your-server.com --token YOUR_PAT
+# Prints: baseURL, model name, auth header
+```
+
+---
+
+## Model Guide
+
+Total Recall uses [Ollama](https://ollama.com) for local inference. Default model: **`gemma4:26b`**
+
+| Model | RAM | Use case |
+|-------|-----|----------|
+| `gemma4:e4b` | ~6 GB | Edge / laptop (fastest) |
+| `gemma4:26b` ⭐ | ~16 GB | Default — MoE model, only ~4B active params |
+| `gemma4:31b` | ~32 GB | Max quality (dense model) |
+
+> **`gemma4:26b` is Mixture-of-Experts** — 26B total params but only ~4B are active at inference time. A 16 GB server runs it comfortably.
+
+---
+
+## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `npx total-recall deploy` | Provision target machine (VFS, Ollama, Caddy, Cron) |
-| `npx total-recall dream`  | Manually trigger a dream cycle (Light → REM → Deep) |
-| `npx total-recall lint`   | Validate all vault nodes against the current SSSS schema |
+| `npx total-recall init` | Initialize `~/.agent/` vault + `INSTRUCTIONS.md` |
+| `npx total-recall setup` | Interactive wizard: provider → API key → provision → connect IDEs |
+| `npx total-recall connect <client>` | Wire an IDE or chat app to your brain |
+| `npx total-recall deploy` | Provision server: Ollama + model + Caddy + cron |
+| `npx total-recall compile` | Rebuild `INSTRUCTIONS.md` from vault nodes |
+| `npx total-recall dream` | Manually trigger a Dream Cycle (GC + pattern extraction) |
+| `npx total-recall lint` | Validate all vault nodes against the SSSS schema |
+| `npx total-recall backup` | Encrypt and snapshot the vault |
+| `npx total-recall sync` | Pull compiled instructions from a remote brain |
+| `npx total-recall status` | Show brain health, connected clients, last dream |
+| `npx total-recall generate-pat` | Create a Bearer token for API/IDE auth |
 | `npx total-recall daemon` | Manage the background daemon (start/stop/status) |
-| `npx total-recall restore`| Restore from an encrypted backup |
-| `npx total-recall connect`| Configure an IDE or external system (Cursor, Claude Code, Codex, UltraChat, MCP, …) |
-| `npx total-recall sync`   | Pull compiled instructions from a remote brain |
-| `npx total-recall friction`| Analyze watchdog logs for workflow bottlenecks |
-
-*(Note: `compile`, `backup`, and `sync` remain available as manual CLI commands; the Cloud Agent also runs them autonomously via SSSS task nodes in the scheduler queue. The legacy `reindex` command has been removed — use `compile` (alias `rebuild`) to regenerate derived indexes.)*
+| `npx total-recall friction` | Analyze watchdog logs for bottlenecks |
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
-Total Recall 3.0 is comprised of three core layers:
+```
+~/.agent/
+  memory-vault/       ← SSSS nodes (Markdown + YAML frontmatter)
+    skills/           ← reusable behavioral patterns
+    patterns/         ← learned habits and preferences
+    concepts/         ← domain knowledge
+    daily/            ← Dream Cycle daily notes (written automatically)
+    queries/          ← Obsidian Dataview dashboards
+    graph.canvas      ← Obsidian Canvas (generated on compile)
+  config/
+    runtime.yml       ← model config (ollama / llama.cpp)
+    brain.json        ← remote brain URL + PAT
+    clients.json      ← connected IDE registry
+    secrets.enc       ← AES-256-GCM encrypted provider keys
 
-1. **The Core Runtime (`src/core/`)**: The database-free SSSS memory engine, sandbox execution, and background evolution tools.
-2. **The Server Layer (`src/server/`)**: An Express host that binds the OpenAI-compatible `/v1/chat/completions` proxy and the React Dashboard REST APIs.
-3. **The Deploy Pipeline (`src/cli/`)**: The lifecycle management tooling used to provision, backup, and upgrade the host machine.
+src/
+  core/
+    surface.mjs       ← SSSS compiler: vault → INSTRUCTIONS.md
+    dream.mjs         ← Dream Cycle daemon
+    watchdog.mjs      ← friction monitor
+  server/
+    index.mjs         ← Express: OpenAI-compat API + MCP gateway + React SPA
+  cli/
+    index.mjs         ← CLI entry point
+    connect.mjs       ← IDE connector
+    deploy.mjs        ← server provisioner
+    setup.mjs         ← interactive wizard
+```
 
----
-
-## 🛡 Security Mandate
-
-The Sovereign OS is designed under a **Zero-Trust** execution policy.
-- All code generated by the agent is executed within a hardened `src/core/sandbox.mjs` environment.
-- Strict token-exfiltration monitors prevent accidental leakage of sensitive `secrets.enc` keys.
-- **Always-On Autonomy**: Total Recall operates 100% autonomously via cron, with structured JSONL logging providing a fully verifiable audit trail of its idle-time research and tasks.
+**Runtime flow:**
+1. `compile` reads vault → resolves `[[wikilinks]]` → writes `INSTRUCTIONS.md`
+2. Every chat request injects `INSTRUCTIONS.md` as the system prompt
+3. After each conversation the Dream Cycle GCs low-confidence nodes and extracts patterns
+4. Daily notes are written automatically to `memory-vault/daily/YYYY-MM-DD.md`
 
 ---
 
 ## 📚 Documentation
 
-For specific guides on modifying or interacting with Total Recall, refer to the Diátaxis-compliant documentation folder:
-- **`/docs/developer/`**: For architectural design decisions, PRDs, and core mechanics.
-- **`/docs/projects/`**: For historical tracking of development phases.
-- **`/docs/projects/in-progress/ssss-sovereign-ai-os/`**: The single active master roadmap.
+- **[Cloud Provider Guide](docs/reference/cloud-providers.md)** — pricing, ease-of-use, and recommendations for Hetzner, DigitalOcean, RunPod, Vast.ai, AWS, and more
+- **[SSSS Spec](docs/SSSS.md)** — the full Structured Semantic Syntax System specification
+- **[Architecture](docs/ARCHITECTURE.md)** — deep dive into the runtime layers
+- **[How-To Guides](docs/how-to/)** — deploy to cloud, set up Obsidian, integrate UltraChat
+- **[CLI Reference](docs/reference/cli-reference.md)** — full flag documentation
 
 ---
-*Built for the future. Sovereign, Unrestricted, Database-Free.*
+
+## Security
+
+- Provider API keys: AES-256-GCM encrypted in `~/.agent/config/secrets.enc` — masked input during setup, never logged
+- Bearer PAT authentication for all API and MCP endpoints
+- Argon2id for password hashing
+- All agent-generated code runs in a hardened `sandbox.mjs` environment
+
+---
+
+*Sovereign. Database-free. Yours.*
