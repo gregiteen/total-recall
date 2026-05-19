@@ -16,6 +16,7 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { execSync } from 'node:child_process';
 import { loadRuntimeConfig } from './runtime.mjs';
 import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
@@ -126,6 +127,37 @@ async function runConsciousTask(task, runtimeConfig) {
 
 // ─── System 2 Layer Engine ──────────────────────────────────────────────────────
 
+// Path where the daemon writes new conclusions for connected IDEs to pick up.
+const INTERRUPTS_FILE = path.join(AGENT_DIR, 'interrupts', 'pending.md');
+
+/**
+ * Write a System 2 conclusion to the interrupts file so connected IDEs
+ * pick it up on their next turn, and fire a macOS notification.
+ */
+function pushConclusion(conclusions = []) {
+  if (!conclusions.length) return;
+
+  const lines = [
+    `\n\n---`,
+    `<!-- total-recall interrupt: ${new Date().toISOString()} -->`,
+    `## 🧠 New Insight Available`,
+    ...conclusions.map(c => `- ${c}`),
+    ``,
+    `*Query \`search_memory\` or check vault for full context.*`,
+  ];
+
+  const dir = path.dirname(INTERRUPTS_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(INTERRUPTS_FILE, lines.join('\n'));
+
+  // macOS notification — works regardless of which IDE is open
+  const title = 'Total Recall';
+  const msg = conclusions[0]?.slice(0, 100) || 'New System 2 conclusion ready';
+  try {
+    execSync(`osascript -e 'display notification "${msg.replace(/"/g, "'")}" with title "${title}"'`, { timeout: 3000 });
+  } catch { /* non-macOS or osascript unavailable — silent */ }
+}
+
 async function runSystem2Task(task, runtimeConfig) {
   if (task.slug.includes('inference') && task.target) {
     const { runInferenceTask } = await import('./inference-engine.mjs');
@@ -135,9 +167,17 @@ async function runSystem2Task(task, runtimeConfig) {
       inboxDir: path.join(AGENT_DIR, 'memory-inbox', 'pending'),
       runtimeConfig,
     });
+
+    // Push conclusions to IDEs + macOS notification immediately
+    if (result.conclusions?.length) {
+      pushConclusion(result.conclusions.map(c =>
+        typeof c === 'string' ? c : (c.title || c.conclusion || JSON.stringify(c))
+      ));
+    }
+
     return {
       success: !result.error,
-      output: `Drew ${result.conclusions?.length || 0} conclusions`,
+      output: `Drew ${result.conclusions?.length || 0} conclusions${result.conclusions?.length ? ' — pushed to interrupts' : ''}`,
     };
   }
 
@@ -171,11 +211,16 @@ async function runResearchTask(task, runtimeConfig) {
       queueDir: QUEUE_DIR,
       runtimeConfig,
       forceTopic,
+      // Surface paths: high-confidence results bypass inbox and recompile immediately
+      skillsDir: SKILLS_DIR,
+      derivedDir: DERIVED_DIR,
+      instructionsFile: INSTRUCTIONS_FILE,
     });
     if (result.skipped) return { success: true, output: `Knowledge acquisition: ${result.skipped}` };
+    const surfaceNote = result.surfaced ? ' [SURFACED IMMEDIATELY]' : ' [staged for validation]';
     return {
       success: true,
-      output: `Researched "${result.topic}": ${result.sources?.join(', ')} | confidence: ${result.confidence || 'n/a'} | slug: ${result.factSlug}`,
+      output: `Researched "${result.topic}": ${result.sources?.join(', ')} | confidence: ${result.confidence || 'n/a'} | slug: ${result.factSlug}${surfaceNote}`,
     };
   }
 

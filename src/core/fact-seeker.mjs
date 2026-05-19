@@ -4,7 +4,7 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import os from 'os';
 import { callLocalRuntime } from './runtime.mjs';
-import { loadNodes, atomicWrite } from './vault.mjs';
+import { loadNodes, writeNode, atomicWrite } from './vault.mjs';
 import { logger } from './logger.mjs';
 import {
   loadResearchConfig,
@@ -342,10 +342,15 @@ async function synthesizeFacts(topic, results, runtimeConfig) {
   }
 }
 
+// Confidence threshold above which research bypasses the inbox and writes
+// directly to the vault as an active node, triggering an immediate surface recompile.
+const FAST_PATH_CONFIDENCE = 0.7;
+
 /**
- * Write a synthesized fact as a draft node to the inbox with full citation metadata.
+ * Build the shared node body and frontmatter for a cited fact.
+ * Used by both the fast path (direct vault write) and the inbox path.
  */
-function writeCitedFactNode(topic, synthesis, sourceResults, inboxDir) {
+function buildCitedFactNode(topic, synthesis, sourceResults, status = 'draft') {
   const slug = `fact-${crypto.randomBytes(5).toString('hex')}`;
   const now = new Date().toISOString();
 
@@ -373,12 +378,10 @@ function writeCitedFactNode(topic, synthesis, sourceResults, inboxDir) {
     bodyLines.push('', '## Further Research Needed');
     synthesis.further_research_needed.forEach(g => bodyLines.push(`- ${g}`));
   }
-
   if ((synthesis.recommended_apis || []).length > 0) {
     bodyLines.push('', '## Recommended APIs / Integrations');
     synthesis.recommended_apis.forEach(a => bodyLines.push(`- ${a}`));
   }
-
   if ((synthesis.contradictions || []).length > 0) {
     bodyLines.push('', '## Source Contradictions Noted');
     synthesis.contradictions.forEach(c => bodyLines.push(`- ${c}`));
@@ -389,9 +392,9 @@ function writeCitedFactNode(topic, synthesis, sourceResults, inboxDir) {
     slug,
     category: 'facts',
     title: synthesis.title || `Research: ${topic}`,
-    status: 'draft',
+    status,
     confidence: synthesis.confidence || 0.6,
-    importance: 4,
+    importance: synthesis.confidence >= FAST_PATH_CONFIDENCE ? 6 : 4,
     created: now,
     updated: now,
     last_accessed: now,
@@ -404,7 +407,7 @@ function writeCitedFactNode(topic, synthesis, sourceResults, inboxDir) {
     supersedes: [],
     superseded_by: null,
     contradicts: [],
-    tags: ['fact-seeker', 'auto-researched', 'cited'],
+    tags: ['fact-seeker', 'auto-researched', 'cited', status === 'active' ? 'fast-path' : 'pending-validation'],
     related: [],
     routes_to_skills: [],
     sentiment_polarity: 'descriptive',
@@ -422,14 +425,65 @@ function writeCitedFactNode(topic, synthesis, sourceResults, inboxDir) {
     x_citations: citations,
   };
 
-  if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
+  return { slug, body: bodyLines.join('\n'), frontmatter };
+}
 
+/**
+ * Write a high-confidence fact node DIRECTLY to the vault (bypassing inbox)
+ * and immediately trigger a surface recompile so it appears in INSTRUCTIONS.md
+ * within seconds.
+ *
+ * @param {string} topic
+ * @param {object} synthesis
+ * @param {object[]} sourceResults
+ * @param {string} vaultDir
+ * @param {string} skillsDir
+ * @param {string} derivedDir
+ * @param {string} instructionsFile
+ * @returns {string} slug
+ */
+async function writeAndSurfaceImmediately(topic, synthesis, sourceResults, {
+  vaultDir, skillsDir, derivedDir, instructionsFile,
+}) {
+  const { slug, body, frontmatter } = buildCitedFactNode(topic, synthesis, sourceResults, 'active');
+
+  // Write directly to vault as active node — available via search_memory immediately
+  writeNode({ ...frontmatter, body }, vaultDir);
+
+  for (const sr of sourceResults) {
+    try { registerSource(sr, slug); } catch { /* non-fatal */ }
+  }
+
+  logger.info({
+    subsystem: 'fact-seeker',
+    message: `[FAST-PATH] "${topic}" written to vault as active (conf: ${synthesis.confidence}). Recompiling surface…`,
+  });
+
+  // Immediately recompile so INSTRUCTIONS.md reflects this new knowledge
+  try {
+    const { compileSurface } = await import('./surface.mjs');
+    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
+    logger.info({ subsystem: 'fact-seeker', message: `[FAST-PATH] Surface recompiled — "${topic}" now live in INSTRUCTIONS.md` });
+  } catch (err) {
+    logger.info({ subsystem: 'fact-seeker', message: `[FAST-PATH] Surface recompile failed (non-fatal): ${err.message}` });
+  }
+
+  return slug;
+}
+
+/**
+ * Write a low-confidence fact as a draft node to the inbox for validation.
+ * The conclusion-writer will promote it to the vault after review.
+ */
+function writeDraftToInbox(topic, synthesis, sourceResults, inboxDir) {
+  const { slug, body, frontmatter } = buildCitedFactNode(topic, synthesis, sourceResults, 'draft');
+
+  if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
   atomicWrite(
     path.join(inboxDir, `${slug}.md`),
-    matter.stringify(bodyLines.join('\n'), frontmatter),
+    matter.stringify(body, frontmatter),
   );
 
-  // Register each source in the source registry
   for (const sr of sourceResults) {
     try { registerSource(sr, slug); } catch { /* non-fatal */ }
   }
@@ -554,6 +608,10 @@ export async function runKnowledgeAcquisitionCycle({
   queueDir,
   runtimeConfig,
   forceTopic = null,
+  // Surface paths — needed for immediate recompile on fast path
+  skillsDir,
+  derivedDir,
+  instructionsFile,
 }) {
   const researchConfig = loadResearchConfig();
 
@@ -595,19 +653,36 @@ export async function runKnowledgeAcquisitionCycle({
     return { topic, sources: sourcesUsed, skipped: 'synthesis-failed' };
   }
 
-  // Write cited fact node
-  const factSlug = writeCitedFactNode(topic, synthesis, results, inboxDir);
+  const confidence = synthesis.confidence || 0;
 
-  // Calculate coverage score (more sources + higher confidence = better coverage)
-  const coverageScore = Math.min(1.0, (results.length / 5) * (synthesis.confidence || 0.5));
+  // ─── Fast Path: high-confidence → vault immediately + surface recompile ────────
+  // Low-confidence → inbox for human/validation review
+  let factSlug;
+  let surfaced = false;
+  if (confidence >= FAST_PATH_CONFIDENCE && skillsDir && derivedDir && instructionsFile) {
+    factSlug = await writeAndSurfaceImmediately(topic, synthesis, results, {
+      vaultDir, skillsDir, derivedDir, instructionsFile,
+    });
+    surfaced = true;
+  } else {
+    // Low confidence: stage for validation before vault promotion
+    factSlug = writeDraftToInbox(topic, synthesis, results, inboxDir);
+    logger.info({
+      subsystem: 'fact-seeker',
+      message: `[INBOX-PATH] "${topic}" staged for validation (conf: ${confidence} < ${FAST_PATH_CONFIDENCE})`,
+    });
+  }
+
+  // Calculate coverage score
+  const coverageScore = Math.min(1.0, (results.length / 5) * confidence);
   markTopicResearched(topicId, { coverageScore, sourcesConsulted: sourcesUsed });
 
-  // Enqueue follow-up research for identified gaps
+  // Enqueue follow-up research for identified gaps (self-multiplication)
   const gaps = synthesis.further_research_needed || [];
-  for (const gap of gaps.slice(0, 2)) {
+  for (const gap of gaps.slice(0, 3)) {
     addToAgenda({
       topic: gap,
-      priority: topicEntry.priority - 15,
+      priority: Math.max(20, topicEntry.priority - 15),
       source: `follow-up:${topic}`,
       rationale: `Gap identified while researching "${topic}"`,
     });
@@ -615,10 +690,10 @@ export async function runKnowledgeAcquisitionCycle({
 
   logger.info({
     subsystem: 'fact-seeker',
-    message: `"${topic}" complete: ${results.length} sources, confidence ${synthesis.confidence}, slug ${factSlug}`,
+    message: `"${topic}" complete: ${results.length} sources, confidence ${confidence}, slug ${factSlug}, surfaced: ${surfaced}`,
   });
 
-  return { topic, factSlug, sources: sourcesUsed, confidence: synthesis.confidence };
+  return { topic, factSlug, sources: sourcesUsed, confidence, surfaced };
 }
 
 /**
