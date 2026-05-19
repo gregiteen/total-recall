@@ -8,6 +8,11 @@
 # ----------------------------------------------------------------------------
 runtime: "ollama"
 endpoint: "http://127.0.0.1:11434/v1/chat/completions"
+# gemma4:26b is a Mixture-of-Experts model — 26B total params, ~4B active.
+# Requires ~16 GB RAM. Multimodal, 256K context window.
+# Alternatives:
+#   gemma4:e4b   — edge model, ~6 GB RAM, fastest
+#   gemma4:31b   — dense model, ~32 GB RAM, highest quality
 model: "gemma4:26b"
 temperature: 0.2
 
