@@ -58,6 +58,7 @@ const COMMANDS = {
   ingest:   'ingest.mjs',
   connect:  'connect.mjs',
   sync:     'sync.mjs',
+  relay:    'relay.mjs',
 };
 
 function printHelp() {
@@ -87,6 +88,8 @@ function printHelp() {
     ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
     connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, MCP, etc.
     sync [--watch]      Pull remote brain instructions into the current workspace
+    relay <cmd>         Local background relay: ship IDE sessions to remote brain
+                        Commands: start | stop | status | once | install | uninstall
 
   Autonomous operations (sync, compile, backup) are now handled by the
   Cloud Agent via SSSS task nodes in .agent/scheduler/queue/.

@@ -60,6 +60,15 @@ const SOURCES = [
     filter: (filename) => filename.endsWith('.jsonl'),
     adapter: parseCursor,
   },
+  {
+    name: 'vscode',
+    // VS Code Copilot Chat stores sessions per workspace under globalStorage
+    root: path.join(HOME, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'),
+    filter: (filename) => filename.endsWith('.jsonl'),
+    // Only descend into chatSessions subdirs, ignore everything else
+    dirFilter: (dirName) => dirName === 'chatSessions',
+    adapter: parseVSCode,
+  },
 ];
 
 // ─── Unified Session Entry Format ───────────────────────────────────────────────
@@ -365,6 +374,72 @@ export function parseCursor(filePath) {
   return entries;
 }
 
+/**
+ * VS Code Copilot Chat adapter.
+ * Stores sessions as JSONL under:
+ *   ~/Library/Application Support/Code/User/workspaceStorage/<id>/chatSessions/<session>.jsonl
+ *
+ * Each file is a sequence of delta records:
+ *   kind:0 — session header (initialises the session object)
+ *   kind:1 — patch (key/value updates to session state)
+ *   kind:2 — requests array update (the actual chat turns)
+ */
+export function parseVSCode(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const lines = raw.split('\n').filter(Boolean);
+  const entries = [];
+  let sessionTitle = '';
+  let prevId = null;
+
+  // Reconstruct the full requests list by replaying kind:2 patches
+  const requests = [];
+  for (const line of lines) {
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+
+    if (rec.kind === 1 && Array.isArray(rec.k) && rec.k.includes('customTitle')) {
+      sessionTitle = rec.v || '';
+    }
+    if (rec.kind === 2 && Array.isArray(rec.k) && rec.k.includes('requests')) {
+      // Merge into requests array
+      const incoming = Array.isArray(rec.v) ? rec.v : [];
+      for (const req of incoming) {
+        if (!requests.find((r) => r.requestId === req.requestId)) {
+          requests.push(req);
+        }
+      }
+    }
+  }
+
+  for (const req of requests) {
+    const ts = req.timestamp ? new Date(req.timestamp).toISOString() : new Date().toISOString();
+
+    // User turn
+    const userText = typeof req.message?.text === 'string' ? req.message.text : '';
+    if (userText) {
+      const id = crypto.randomBytes(4).toString('hex');
+      entries.push(createSessionEntry({
+        id, parentId: prevId, type: 'task', ts,
+        content: userText.slice(0, 5000), role: 'user', source: 'vscode',
+      }));
+      prevId = id;
+    }
+
+    // Assistant response(s)
+    const responseText = req.response?.response?.value || req.response?.value || '';
+    if (responseText) {
+      const id = crypto.randomBytes(4).toString('hex');
+      entries.push(createSessionEntry({
+        id, parentId: prevId, type: 'observation', ts,
+        content: responseText.slice(0, 5000), role: 'assistant', source: 'vscode',
+      }));
+      prevId = id;
+    }
+  }
+
+  return entries;
+}
+
 // ─── Session Writer ─────────────────────────────────────────────────────────────
 
 // ─── Content-Hash Deduplication ─────────────────────────────────────────────────
@@ -467,7 +542,7 @@ export function writeSession(entries, sessionsDir, sourceFile) {
  * Recursively find files matching a filter under a root directory.
  * Limits depth to 5 levels to avoid runaway scans.
  */
-function findFiles(root, filter, maxDepth = 5) {
+function findFiles(root, filter, maxDepth = 5, dirFilter = null) {
   const results = [];
   if (!fs.existsSync(root)) return results;
 
@@ -482,7 +557,10 @@ function findFiles(root, filter, maxDepth = 5) {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        walk(fullPath, depth + 1);
+        // If a dirFilter is set, only recurse into matching dirs (or any dir at depth 0)
+        if (!dirFilter || depth === 0 || dirFilter(entry.name)) {
+          walk(fullPath, depth + 1);
+        }
       } else if (entry.isFile() && filter(entry.name)) {
         results.push(fullPath);
       }
@@ -517,7 +595,7 @@ export function scanAndIngest(sessionsDir, opts = {}) {
       continue;
     }
 
-    const files = findFiles(source.root, source.filter);
+    const files = findFiles(source.root, source.filter, 5, source.dirFilter || null);
     let ingested = 0;
 
     for (const file of files) {
