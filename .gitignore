@@ -25,13 +25,38 @@ node_modules/
 .agent/memory/episodes/
 .agent/memory/daily-logs/
 .agent/memory-pipeline-errors.log
+.agent/sessions/
+.agent/interrupts/
 
 # Daemon / checker runtime state
 .remember/
 .last-successful-ts.txt
+.last-successful-lint.txt
 *.checker.log
+.typescript-checker.status
 .agent/skills/code-quality/scripts/*.log
 .agent/skills/mcp-expert/.watch-state.json
+lint-status.txt
+typescript-fullrepo-errors.txt
+frontend/.eslintcache
+
+# Dev skills (Greg's personal workflow tools — not part of the product)
+.agent/dev-skills/
+
+# Personal workspace projections at repo root
+# These are IDE shims compiled for Greg's local setup — not product files.
+# The canonical versions live in .agent/ and ship via the files whitelist.
+INSTRUCTIONS.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+HANDOFF.md
+.clauderules
+.cursorrules
+claude_help.txt
+
+# Claude Code slash commands (personal, IDE-generated)
+.claude/commands/
 
 # Build artifacts
 dist/
