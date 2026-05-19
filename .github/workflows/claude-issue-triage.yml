@@ -1,0 +1,44 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    name: Auto-triage new issue
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Triage issue with Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          prompt: |
+            You are a Total Recall maintainer triaging a new GitHub issue.
+
+            Issue number is in env var ISSUE_NUMBER. Repo is in env var REPO.
+
+            Read the issue: `gh issue view "$ISSUE_NUMBER" --repo "$REPO"`
+            Then:
+            1. Determine type: bug, feature-request, skill-submission,
+               recipe-submission, question, or duplicate.
+            2. Apply the appropriate label.
+            3. If skill/recipe submission: verify checklist completeness,
+               comment on any missing items.
+            4. If duplicate: link to original and close.
+            5. Post a brief, friendly acknowledgement (≤ 3 sentences).
+          allowed_tools: |
+            Bash(gh issue view:*)
+            Bash(gh issue edit:*)
+            Bash(gh issue comment:*)
+            Bash(gh issue close:*)

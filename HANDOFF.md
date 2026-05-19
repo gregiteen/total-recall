@@ -1,4 +1,4 @@
-# Total Recall — Session Handoff 2026-05-19
+# Total Recall — Session Handoff 2026-05-19 (updated)
 
 **Branch:** `main` — all work committed and pushed to `gregiteen/total-recall`  
 **Vast.ai instance:** ssh6.vast.ai:14194, instance 37044195, RTX 3060 12GB, $0.066/hr  
@@ -6,7 +6,33 @@
 
 ---
 
-## ✅ COMPLETED THIS SESSION: Setup Wizard (`src/cli/deploy-ui.mjs`)
+## ✅ COMPLETED LAST SESSION (continuation): Additional features
+
+### `src/server/api.mjs` — Self-aware API reference in system prompt
+The AI now receives its own brain URL and a full REST API cheat sheet in its system prompt on every request. Uses `baseUrl(req)` so it works whether hosted locally or remotely.
+
+### `src/cli/connect.mjs` — Slash commands written on `connect claude-code`
+Running `npx total-recall connect claude-code --brain <url> --token <PAT>` now also writes 4 slash command stubs to `~/.claude/commands/`:
+- `/memory` — search/manage memory nodes
+- `/brain` — health check and status
+- `/vault` — compile and inspect vault
+- `/recall` — send a message to the brain
+
+### `src/core/session-watcher.mjs` + `src/cli/relay.mjs` — Local relay daemon
+Background daemon on user's Mac watches all 5 IDE session dirs (Claude Code, Codex, Antigravity, VS Code, Cursor) and ships new sessions to brain via `POST /api/sessions/ingest`. Install with `npx total-recall relay install`.
+
+### `src/server/rest.mjs` — Sessions ingest endpoint
+Accepts both raw file format (relay) and pre-parsed format. sha256 dedup to avoid re-ingesting unchanged sessions.
+
+### `.remember/` plugin path bug fix
+`save-session.sh` and `run-consolidation.sh` fixed to use `CLAUDE_PROJECT_DIR` env var instead of broken relative path derivation.
+
+### `.claude/commands/` — Dev skill slash commands
+All `.agent/skills/` are now accessible as slash commands: `/docs`, `/refactor`, `/code-quality`, `/push`, `/ssss`, `/test`, `/repo-expert`, `/skill`, etc.
+
+---
+
+## ✅ COMPLETED EARLIER: Setup Wizard (`src/cli/deploy-ui.mjs`)
 
 The wizard is fully implemented as a 7-phase single-file HTML wizard (vanilla JS, no framework). `deploy.mjs --ui` now blocks on `waitForInstallOptions()` until the user clicks Install in Phase 1.
 
@@ -177,10 +203,16 @@ ssh -p 14194 root@ssh6.vast.ai "tail -50 /workspace/logs/server.log"
 
 ---
 
+
 ## Project Tracker
 `docs/projects/in-progress/sovereign-os-release-readiness/SOVEREIGN_OS_RELEASE_READINESS_PROJECT_TRACKER.md`
 
-Phase 12 added. Only remaining unchecked items:
-- [ ] Rewrite deploy-ui.mjs as full wizard (the #1 task)
-- [ ] Wire deploy.mjs --ui to await wizard config
-- [ ] Test wizard end-to-end
+Phase 12 **COMPLETE**. All wizard items verified via browser E2E test 2026-05-19:
+- [x] Rewrite deploy-ui.mjs as full wizard (all 7 phases implemented)
+- [x] Wire deploy.mjs --ui to await wizard config
+- [x] Test wizard end-to-end — all 7 phases pass, Copy buttons work, PAT generation works (placeholder when brain offline)
+
+**Next priorities (Phase 13 pending):**
+- [ ] Test full uninstall → reinstall end-to-end (all IDEs + UltraChat + Vast.ai)
+- [ ] Delete GitHub fork and re-test fork creation workflow in `setup.mjs`
+- [ ] UltraChat workspace generator not functional yet; SSSS data in Supabase (not local files) so relay has no local source to watch

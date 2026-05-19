@@ -292,4 +292,34 @@ file-native — no database, no vector store. New UI gated behind a
   - Phase 5 API Docs: full endpoint reference table, curl examples, auth header
   - Phase 6 Done: live URLs with open links, health check button
 - [x] Wire `deploy.mjs --ui` to await wizard config before starting install (`waitForInstallOptions()`).
-- [ ] Test wizard flow end-to-end.
+- [x] Test wizard flow end-to-end. Evidence: browser E2E test 2026-05-19 — all 7 phases
+  validated: Phase 0 Welcome (arch diagram), Phase 1 Configure (local/skip
+  options), Phase 2 Installing (SSE progress stream), Phase 3 Auth (PAT generated:
+  `tr_*` placeholder token when brain offline), Phase 4 Integrations (all 6
+  tabs + Copy buttons work), Phase 5 API Reference (endpoint tables + curl
+  example), Phase 6 Done (URL grid, health check). Zero JS console errors.
+  Copy button transitions to "Copied!" correctly.
+
+## ⏳ Phase 13: IDE Session Relay + Brain Self-Awareness
+
+### Local Relay Daemon
+- [x] Build `src/cli/relay.mjs` — background daemon watching all 5 IDE session dirs (Claude Code, Codex, Antigravity, VS Code, Cursor) and shipping new/changed files to `POST /api/sessions/ingest`.
+- [x] Add `npx total-recall relay start/stop/status/once/install/uninstall` CLI.
+- [x] `relay install` creates launchd plist (macOS) / systemd --user unit (Linux).
+- [x] Add VS Code Copilot Chat adapter to `src/core/session-watcher.mjs` (kind:0/1/2 delta JSONL format).
+- [x] Update `POST /api/sessions/ingest` in `src/server/rest.mjs` to accept raw file content (relay format) with sha256 dedup.
+
+### Brain Self-Awareness
+- [x] Inject self-aware REST API reference into system prompt in `src/server/api.mjs` — AI receives its own brain URL + full endpoint cheat sheet on every request.
+
+### `connect claude-code` Slash Commands
+- [x] `npx total-recall connect claude-code --brain <url> --token <PAT>` now writes 4 slash command stubs to `~/.claude/commands/`: `/memory`, `/brain`, `/vault`, `/recall`.
+
+### Fixes
+- [x] Fix `/remember` plugin `save-session.sh` and `run-consolidation.sh` broken path derivation — use `CLAUDE_PROJECT_DIR` env var instead of broken relative `../../..`.
+- [x] Add all `.agent/skills/` as dev slash command stubs in `.claude/commands/`.
+
+### Pending
+- [ ] Test full uninstall → reinstall end-to-end (all IDEs + UltraChat + Vast.ai).
+- [ ] Delete GitHub fork and re-test fork creation workflow in `setup.mjs`.
+- [ ] UltraChat: workspace generator not functional yet; SSSS data in Supabase (not local files) so relay has no local source to watch.

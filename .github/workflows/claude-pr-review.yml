@@ -1,0 +1,55 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'src/**'
+      - 'bin/**'
+      - 'frontend/src/**'
+      - '.agent/skills/**'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  review:
+    name: Claude code review
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Review PR with Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: claude-sonnet-4-6
+          prompt: |
+            You are a Total Recall code reviewer.
+            PR number is in env var PR_NUMBER. Repo is in env var REPO.
+
+            Read the diff: `gh pr diff "$PR_NUMBER" --repo "$REPO"`
+            Review for:
+            1. Correctness — logic errors, edge cases
+            2. Security — injection, auth bypass, unsafe file ops
+            3. Sovereign-thesis — no database/vector-store imports;
+               new derived indexes must be plain files in memory-derived/
+            4. Test coverage — new code should have tests; flag gaps
+            5. Style — follows existing patterns
+
+            Use gh pr review for comments. Only flag real issues (> 80%
+            confidence). Skip style nits. Do NOT approve — human decision.
+          allowed_tools: |
+            Bash(gh pr diff:*)
+            Bash(gh pr view:*)
+            Bash(gh pr review:*)
+            Read
+            Glob
+            Grep

@@ -1,0 +1,40 @@
+name: Bug Report
+description: Report a bug in Total Recall
+labels: ["bug"]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: Command that failed
+      placeholder: npx total-recall deploy --domain ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Linux (systemd), macOS (launchd), macOS (manual), Other]
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Total Recall version (`npx total-recall --version`)
+    validations:
+      required: true

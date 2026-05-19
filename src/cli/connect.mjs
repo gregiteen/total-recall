@@ -26,7 +26,8 @@ const CLIENTS = {
   'claude-code': {
     label: 'Claude Code',
     mode: 'symlink',
-    target: 'CLAUDE.md'
+    target: 'CLAUDE.md',
+    writeSlashCommands: true
   },
   codex: {
     label: 'Codex',
@@ -306,6 +307,95 @@ function printApiSnippet(client, details) {
   console.log('    model:   total-recall/gemma4');
 }
 
+function writeClaudeCodeSlashCommands(opts) {
+  const commandsDir = path.join(os.homedir(), '.claude', 'commands');
+  fs.mkdirSync(commandsDir, { recursive: true });
+
+  const base = (opts.brain || 'http://127.0.0.1:3000').replace(/\/$/, '');
+  const authHeader = opts.token ? `Authorization: Bearer ${opts.token}` : 'Authorization: Bearer <your-PAT>';
+
+  const commands = [
+    {
+      file: 'memory.md',
+      description: 'Search or manage Total Recall memory',
+      body: `Search or manage your Total Recall memory via the REST API.
+
+Brain URL: ${base}
+Auth header: ${authHeader}
+
+Usage examples (pass as arguments):
+  search <query>     — semantic search across all memory nodes
+  list               — list all nodes
+  add <title> <body> — create a new memory node
+
+Call \`${base}/api/memory/search\` with body \`{"query":"$ARGUMENTS"}\` to search.
+Call \`${base}/api/memory\` with POST to add nodes.
+Always include the Authorization header above.
+
+$ARGUMENTS`
+    },
+    {
+      file: 'brain.md',
+      description: 'Show Total Recall brain status and health',
+      body: `Check your Total Recall brain status.
+
+Brain URL: ${base}
+Auth header: ${authHeader}
+
+Fetch \`${base}/health\` and \`${base}/api/health\` to check server health.
+Fetch \`${base}/.well-known/total-recall.json\` for the full capability manifest.
+Report: server status, model loaded, vault node count, connected clients.
+
+$ARGUMENTS`
+    },
+    {
+      file: 'vault.md',
+      description: 'Compile or inspect Total Recall memory vault',
+      body: `Compile or inspect the Total Recall SSSS memory vault.
+
+Brain URL: ${base}
+Auth header: ${authHeader}
+
+Commands (pass as argument):
+  compile            — POST ${base}/api/vault/compile  to rebuild INSTRUCTIONS.md
+  nodes              — GET  ${base}/api/vault/nodes    to list all SSSS nodes
+  surface            — GET  ${base}/api/vault/surface  to read compiled surface
+
+$ARGUMENTS`
+    },
+    {
+      file: 'recall.md',
+      description: 'Ask Total Recall brain a question or run a task',
+      body: `Send a message to your Total Recall brain.
+
+Brain URL: ${base}
+Auth header: ${authHeader}
+
+POST to \`${base}/v1/chat/completions\` with:
+  model: "total-recall"
+  messages: [{"role":"user","content":"$ARGUMENTS"}]
+
+Include the Authorization header. Stream the response if possible.
+
+$ARGUMENTS`
+    }
+  ];
+
+  const written = [];
+  for (const cmd of commands) {
+    const filePath = path.join(commandsDir, cmd.file);
+    const content = `---\ndescription: "${cmd.description}"\n---\n${cmd.body}\n`;
+    const existed = fs.existsSync(filePath);
+    if (!existed || opts.force) {
+      fs.writeFileSync(filePath, content, 'utf8');
+      written.push({ file: cmd.file, action: existed ? 'updated' : 'created' });
+    } else {
+      written.push({ file: cmd.file, action: 'exists' });
+    }
+  }
+  return written;
+}
+
 export default async function connect(args) {
   const opts = parseArgs(args);
   if (opts.help || !opts.client) {
@@ -357,6 +447,17 @@ export default async function connect(args) {
   }
 
   if (preset.after) result.notes.push(preset.after);
+
+  // Write Claude Code slash commands for REST API access
+  if (preset.writeSlashCommands) {
+    const slashResults = writeClaudeCodeSlashCommands(opts);
+    result.slash_commands = slashResults;
+    const created = slashResults.filter(r => r.action !== 'exists');
+    if (created.length > 0) {
+      result.notes.push(`  Slash commands written to ~/.claude/commands/:\n` +
+        created.map(r => `    /${r.file.replace('.md', '')} (${r.action})`).join('\n'));
+    }
+  }
 
   // Record this client in the registry so `status` can report freshness
   registerClient(agentDir, opts.client, preset, result.projection?.targetPath || null);

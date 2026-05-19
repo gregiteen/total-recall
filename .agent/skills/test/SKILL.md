@@ -42,3 +42,9 @@ You are strictly prohibited from pushing code if it breaks the Vitest suite. Eve
 
 ## Test Maintenance
 If an API boundary or SSSS schema changes, you must immediately update the corresponding tests in the `test/` directory of the Total Recall project. Do not leave broken tests.
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T19:02:22.609Z -->
+
+<!-- END INJECTED MEMORY -->

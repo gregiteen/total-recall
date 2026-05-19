@@ -6,6 +6,29 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 # SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T19:02:22.609Z -->
+
+- **no-ultrachat-memory-path-drift** (confidence 1, importance 5):
+  Do not store UltraChat memory in ad hoc memory/assistants paths
+
+- **cognitive-memory-layers** (confidence 1, importance 5):
+  Total Recall memory uses conscious, System 2, and research layers
+
+- **no-ultrachat-memory-database-framing** (confidence 1, importance 5):
+  Do not frame UltraChat memory as database-backed
+
+- **auto-resolve-conflicts-over-human-quarantine** (confidence 0.95, importance 5):
+  Auto-resolve memory conflicts by default instead of quarantining for human review
+
+- **operating-instructions** (confidence undefined, importance 5):
+  Total Recall Core Operating Protocol
+
+- **ultrachat-memory-native-not-model-endpoint** (confidence 1, importance 5):
+  UltraChat memory is native, not dependent on selecting Total Recall as the model
+
+- **no-local-ultrachat-restart-guidance** (confidence 1, importance 5):
+  Do not tell users to restart UltraChat as a local service
+
 <!-- END INJECTED MEMORY -->
 
 > **This file describes how Total Recall implements SSSS.** For the canonical,
@@ -15,6 +38,11 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 >
 > The spec is authoritative. This file is a conformant consumer of it. If this
 > file and the spec ever disagree, the spec wins and this file MUST be corrected.
+>
+> For *how to write* conformant SSSS — authoring principles, import/export, and
+> semantic conversion — read
+> [`references/authoring-principles.md`](references/authoring-principles.md)
+> (vendored byte-for-byte alongside the spec).
 
 Total Recall is the **open-source reference kernel** for SSSS — the canonical
 implementation of the spec, the local sovereign brain, and the conformance suite.
@@ -96,6 +124,7 @@ on crash or concurrent access.
 | `preferences/` | User or project style preferences | `prefer-kebab-case-slugs` |
 | `decisions/` | One-time architectural decisions | `chose-sqlite-over-postgres` |
 | `concepts/` | Domain knowledge and definitions | `what-is-bm25-scoring` |
+| `facts/` | Evidence-backed knowledge acquired from research or observation | `stripe-connect-api-version` |
 
 #### Required Fields (schema_version: 2)
 
@@ -130,26 +159,31 @@ immutable: true         # surface.mjs refuses to overwrite without --force
 ### 2.2 Conflict Record (`type: conflict`)
 
 Written by the conflict detector when two nodes contradict each other. Lives in
-`.agent/memory-inbox/conflicts/<conflict-id>.md`. Blocks promotion of the new node
-until a human resolves the conflict.
+`.agent/memory-inbox/conflicts/<conflict-id>.md`.
+
+Most conflicts are **auto-resolved** using a tiered heuristic engine based on
+provenance (user vs machine), protection status (invariants), and recency. Only
+truly ambiguous cases (e.g., two absolute invariants clashing) are quarantined
+for human review.
 
 ```markdown
 ---
 type: conflict
 conflict_id: conflict-2026-05-10-001
-status: pending
+status: auto-resolved
 new_slug: use-html-email
 existing_slug: use-plaintext-email
 similarity: 0.847
 polarity_flip: true
 detected_at: 2026-05-10T18:30:00Z
 reason: "Polarity flip on target 'email-format' with similarity 0.847 ≥ 0.78"
-resolution: null
-resolved_at: null
+resolution: "supersede: use-html-email"
+resolution_reason: "User-created node supersedes machine-generated node."
+resolved_at: 2026-05-10T18:30:01Z
 ---
 ```
 
-**Resolution commands:**
+**Manual resolution (for quarantined conflicts only):**
 ```bash
 # Keep the existing rule, deprecate the new one
 total-recall resolve --keep use-plaintext-email
@@ -259,6 +293,7 @@ Research Stripe Connect API for marketplace payouts.
 | Category | Purpose |
 |----------|---------|
 | `memory-maintenance` | Dream Cycle hygiene: compression, dedup, decay |
+| `system2-deliberation` | Slow reasoning, synthesis, validation, and planning over memory |
 | `skill-engineering` | Building, testing, and improving skill files |
 | `proactive-research` | Web search, knowledge refresh, trend monitoring |
 | `self-evaluation` | Testing own capabilities, benchmarking accuracy |
@@ -298,7 +333,38 @@ Not all memories are relevant to every prompt.
 
 ---
 
-## 4. Derived Artifacts (Disposable — Fully Rebuildable)
+## 4. Cognitive Memory Layers
+
+Total Recall also assigns each memory node to an implementation-specific cognitive
+layer. This is orthogonal to the three surfacing tiers above:
+
+| Layer | Frontmatter | Purpose | Writer | Promotion path |
+|-------|-------------|---------|--------|----------------|
+| **Conscious** | `x_memory_layer: conscious` | Immediate working awareness: current user directives, absolute invariants, active preferences, and task-local context. | User turns, steering, surface compiler | Surfaces into Tier 1 or Tier 2 when active and important. |
+| **System 2** | `x_memory_layer: system2` | Deliberate reasoning: plans, decisions, conflict resolutions, synthesis, and eval-backed conclusions. | Dream Cycle, optimizer, `system2-deliberation` tasks | Converts research drafts into decisions, concepts, or proposals after validation. |
+| **Research** | `x_memory_layer: research` | Knowledge acquisition: web-backed facts, stale-knowledge refreshes, citations, and externally observed evidence. | `proactive-research` tasks and research tools | Starts as draft/pending evidence, then moves through System 2 before broad surfacing. |
+
+`x_memory_layer` is host-specific and intentionally uses the `x_` prefix required
+for implementation fields. If omitted, Total Recall infers the layer from the
+node category, tags, source type, and `priority`.
+
+The cooperation contract is:
+
+1. Conscious memory notices an uncertainty, repeated need, or active user goal.
+2. System 2 creates or consumes a `system2-deliberation` task to reason over the
+   current vault state and decide whether more evidence is needed.
+3. Research creates cited draft facts with `x_memory_layer: research`.
+4. System 2 validates, deduplicates, and resolves conflicts before promoting the
+   result into active facts, concepts, decisions, or proposals.
+5. The surface compiler writes `memory-layers.jsonl`, skill routes, and Tier 1
+   instructions so the Conscious layer sees only the validated working set.
+
+For the full Total Recall contract, read
+[`references/cognitive-memory-layers.md`](references/cognitive-memory-layers.md).
+
+---
+
+## 5. Derived Artifacts (Disposable — Fully Rebuildable)
 
 These files live in `.agent/memory-derived/` and are **never** source-of-truth.
 Delete the entire directory at any time; `total-recall reindex` regenerates everything.
@@ -306,6 +372,7 @@ Delete the entire directory at any time; `total-recall reindex` regenerates ever
 | File | Format | Description |
 |------|--------|-------------|
 | `graph-index.jsonl` | JSONL | One flat JSON object per node — used by routing and search |
+| `memory-layers.jsonl` | JSONL | One flat JSON object per node with its inferred cognitive layer |
 | `skill-routes.jsonl` | JSONL | Routing decision log (slug → skill mappings + scores) |
 | `conflict-index.jsonl` | JSONL | All detected conflicts across all sessions |
 | `dream-report.jsonl` | JSONL | Dream Cycle execution log |
@@ -321,6 +388,7 @@ Delete the entire directory at any time; `total-recall reindex` regenerates ever
   "category": "patterns",
   "status": "active",
   "confidence": 0.92,
+  "memory_layer": "conscious",
   "importance": 4,
   "tags": ["filesystem", "reliability"],
   "routes_to_skills": ["deploy"],
@@ -336,7 +404,7 @@ Delete the entire directory at any time; `total-recall reindex` regenerates ever
 
 ---
 
-## 5. Staging Area
+## 6. Staging Area
 
 `.agent/memory-inbox/` is the staging area for new nodes before conflict resolution.
 
@@ -350,12 +418,13 @@ Workflow:
 1. New node arrives (from agent observation or `tr-steer` CLI)
 2. `steering.mjs` runs O(1) ontology check + fuzzy similarity
 3. No conflict → node moves to `memory-vault/` with `status: active`
-4. Conflict found → node stays `status: draft`, conflict record written to `conflicts/`
-5. Human resolves via `total-recall resolve`
+4. Conflict found → `detectAndResolve()` attempts auto-resolution via tiered heuristics
+5. Auto-resolved → loser marked `superseded`, winner updated, conflict record logged
+6. Cannot auto-resolve → conflict quarantined in `conflicts/`, human resolves via `total-recall resolve`
 
 ---
 
-## 6. Vault Directory Layout
+## 7. Vault Directory Layout
 
 ```
 .agent/
@@ -365,7 +434,8 @@ Workflow:
 │   ├── anti-patterns/         # "Never do X" rules
 │   ├── preferences/           # Style and workflow preferences
 │   ├── decisions/             # One-time architectural decisions
-│   └── concepts/              # Domain knowledge
+│   ├── concepts/              # Domain knowledge
+│   └── facts/                 # Evidence-backed research outputs
 ├── memory-derived/            # Disposable indexes (rebuildable)
 ├── memory-inbox/
 │   ├── pending/               # Awaiting conflict check
@@ -378,7 +448,7 @@ Workflow:
 
 ---
 
-## 7. Interoperability
+## 8. Interoperability
 
 `total-recall` is designed to work alongside **any** AI agent, IDE plugin, or CLI tool
 that can read files.
@@ -396,7 +466,7 @@ The only hard dependency is `totalrecall.config.mjs` in the repo root, which tel
 
 ---
 
-## 8. Naming Conventions
+## 9. Naming Conventions
 
 | Thing | Convention | Example |
 |-------|-----------|---------|

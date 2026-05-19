@@ -371,6 +371,40 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
       const prioritiesPath = path.join(AGENT_DIR, 'memory-vault', 'preferences', 'user-priorities.md');
       const interviewTaskPath = path.join(AGENT_DIR, 'scheduler', 'queue', 'onboarding-interview.md');
 
+      // Self-aware API reference — inject brain URL so the AI can call its own endpoints
+      const selfBase = baseUrl(req);
+      baseSystemPrompt += `\n\n=== YOUR OWN REST API (call these directly via execute_code or HTTP tools) ===
+Base URL: ${selfBase}
+
+MEMORY:
+  GET    ${selfBase}/api/memory              — list all nodes (optional ?type=&tag=)
+  GET    ${selfBase}/api/memory/:id          — get one node
+  POST   ${selfBase}/api/memory              — create node  body: {type,title,body,tags,metadata}
+  PUT    ${selfBase}/api/memory/:id          — update node
+  DELETE ${selfBase}/api/memory/:id          — delete node
+  POST   ${selfBase}/api/memory/search       — semantic/keyword search  body: {query,type,limit}
+
+VAULT:
+  POST   ${selfBase}/api/vault/compile       — recompile INSTRUCTIONS.md from vault
+  GET    ${selfBase}/api/vault/nodes         — list all SSSS nodes with frontmatter
+  GET    ${selfBase}/api/vault/surface       — get compiled surface text
+
+SESSIONS:
+  GET    ${selfBase}/api/sessions            — list ingested sessions
+  POST   ${selfBase}/api/sessions/ingest     — ingest a session  body: {source,messages:[{role,content}]}
+
+CHAT (OpenAI-compatible):
+  POST   ${selfBase}/v1/chat/completions     — send a chat message to yourself
+  GET    ${selfBase}/v1/models               — list available models
+
+OTHER:
+  GET    ${selfBase}/health                  — health check
+  GET    ${selfBase}/.well-known/total-recall.json — discovery manifest
+  GET    ${selfBase}/api/keys                — list API keys (admin)
+
+Authentication: include  Authorization: Bearer <token>  on all requests (already set for your current session).
+Use execute_code to call these endpoints with node's built-in fetch() — you are your own memory system.`;
+
       if (fs.existsSync(profilePath)) {
         const profile = fs.readFileSync(profilePath, 'utf8');
         baseSystemPrompt += `\n\n=== USER PROFILE ===\n${profile}`;
