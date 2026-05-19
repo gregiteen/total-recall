@@ -62,6 +62,36 @@ const TOOL_DEFS = [
 
 const sessions = new Set();
 
+// ─── SSE Push Channel ────────────────────────────────────────────────────────────
+// Connected IDE clients that have opened GET /mcp/events.
+// When the daemon has new conclusions, it calls broadcastMcpNotification()
+// which pushes a notifications/message event to all of them simultaneously.
+const sseClients = new Set();
+
+/**
+ * Push a notification to all connected MCP clients via SSE.
+ * Called by the daemon when System 2 conclusions or fast-path research manifests.
+ *
+ * @param {string} level  'info' | 'warning' | 'error'
+ * @param {string} message  Human-readable summary
+ * @param {object} [data]   Optional structured payload
+ */
+export function broadcastMcpNotification(level = 'info', message, data = {}) {
+  if (sseClients.size === 0) return;
+  const event = JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'notifications/message',
+    params: { level, message, data },
+  });
+  for (const res of sseClients) {
+    try {
+      res.write(`data: ${event}\n\n`);
+    } catch {
+      sseClients.delete(res);
+    }
+  }
+}
+
 function agentDir() {
   return process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 }
@@ -300,6 +330,21 @@ async function handleMcpPost(req, res) {
 }
 
 export function mountMcp(app) {
+  // SSE push channel — IDEs connect here to receive server-initiated notifications
+  app.get('/mcp/events', (req, res) => {
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    // Send initial ping so the client knows the channel is live
+    res.write(`data: ${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', message: 'Total Recall SSE channel connected' } })}\n\n`);
+    sseClients.add(res);
+    req.on('close', () => sseClients.delete(res));
+  });
+
   app.post('/mcp', handleMcpPost);
   return app;
 }
