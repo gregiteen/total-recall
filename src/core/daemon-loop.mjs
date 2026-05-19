@@ -131,31 +131,43 @@ async function runConsciousTask(task, runtimeConfig) {
 const INTERRUPTS_FILE = path.join(AGENT_DIR, 'interrupts', 'pending.md');
 
 /**
- * Write a System 2 conclusion to the interrupts file so connected IDEs
- * pick it up on their next turn, and fire a macOS notification.
+ * Push a System 2 conclusion to all channels simultaneously:
+ *   1. MCP SSE — immediate push to all connected IDE MCP clients
+ *   2. Interrupt file — picked up by IDE agents on their next turn
+ *   3. macOS notification — alerts user regardless of active IDE
  */
-function pushConclusion(conclusions = []) {
+async function pushConclusion(conclusions = []) {
   if (!conclusions.length) return;
 
+  const summary = (conclusions[0] || 'New System 2 conclusion ready').slice(0, 120);
+
+  // 1. MCP SSE — broadcast to all connected IDEs immediately
+  try {
+    const { broadcastMcpNotification } = await import('../server/mcp.mjs');
+    broadcastMcpNotification('info', `\ud83e\udde0 Total Recall: ${summary}`, {
+      conclusions,
+      vault_query: 'search_memory to get full context',
+    });
+  } catch { /* server may not be running — non-fatal */ }
+
+  // 2. Interrupt file — agents pick this up on next turn via INSTRUCTIONS.md rule
   const lines = [
     `\n\n---`,
     `<!-- total-recall interrupt: ${new Date().toISOString()} -->`,
-    `## 🧠 New Insight Available`,
+    `## \ud83e\udde0 New Insight Available`,
     ...conclusions.map(c => `- ${c}`),
     ``,
     `*Query \`search_memory\` or check vault for full context.*`,
   ];
-
   const dir = path.dirname(INTERRUPTS_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(INTERRUPTS_FILE, lines.join('\n'));
 
-  // macOS notification — works regardless of which IDE is open
-  const title = 'Total Recall';
-  const msg = conclusions[0]?.slice(0, 100) || 'New System 2 conclusion ready';
+  // 3. macOS notification
+  const msg = summary.replace(/"/g, "'");
   try {
-    execSync(`osascript -e 'display notification "${msg.replace(/"/g, "'")}" with title "${title}"'`, { timeout: 3000 });
-  } catch { /* non-macOS or osascript unavailable — silent */ }
+    execSync(`osascript -e 'display notification "${msg}" with title "Total Recall"'`, { timeout: 3000 });
+  } catch { /* non-macOS — silent */ }
 }
 
 async function runSystem2Task(task, runtimeConfig) {
