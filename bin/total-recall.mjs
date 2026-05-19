@@ -8,6 +8,7 @@
  *
  * Usage:
  *   npx total-recall init            Bootstrap Total Recall into an existing project
+ *   npx total-recall setup           Interactive setup wizard (provider → deploy → connect IDEs)
  *   npx total-recall deploy          Provision a target machine
  *   npx total-recall compile         Rebuild indexes + INSTRUCTIONS.md (alias: rebuild)
  *   npx total-recall dream           Trigger a dream cycle
@@ -37,6 +38,7 @@ const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 
 const COMMANDS = {
   init:     'init.mjs',
+  setup:    'setup.mjs',
   deploy:   'deploy.mjs',
   backup:   'backup.mjs',
   dream:    'dream.mjs',
@@ -66,6 +68,7 @@ function printHelp() {
 
   Commands:
     init                Bootstrap Total Recall into an existing project repo
+    setup               Interactive wizard: provider → API key → provision → connect IDEs
     deploy              Provision a target machine (Ollama, models, VFS, Caddy, systemd, cron)
     dream               Manually trigger a dream cycle (Light → REM → Deep)
     lint                Validate all vault nodes against SSSS schema v2
