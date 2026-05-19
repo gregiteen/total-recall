@@ -292,13 +292,9 @@ file-native — no database, no vector store. New UI gated behind a
   - Phase 5 API Docs: full endpoint reference table, curl examples, auth header
   - Phase 6 Done: live URLs with open links, health check button
 - [x] Wire `deploy.mjs --ui` to await wizard config before starting install (`waitForInstallOptions()`).
-- [x] Test wizard flow end-to-end. Evidence: browser E2E test 2026-05-19 — all 7 phases
-  validated: Phase 0 Welcome (arch diagram), Phase 1 Configure (local/skip
-  options), Phase 2 Installing (SSE progress stream), Phase 3 Auth (PAT generated:
-  `tr_*` placeholder token when brain offline), Phase 4 Integrations (all 6
-  tabs + Copy buttons work), Phase 5 API Reference (endpoint tables + curl
-  example), Phase 6 Done (URL grid, health check). Zero JS console errors.
-  Copy button transitions to "Copied!" correctly.
+- [ ] Test wizard flow end-to-end (REAL deploy via `deploy --ui` on Vast.ai,
+  not isolated HTML click-through). Acceptance: Phase 6 health check returns
+  green, brain responds at the deployed URL, Ollama model loaded.
 
 ## ⏳ Phase 13: IDE Session Relay + Brain Self-Awareness
 
