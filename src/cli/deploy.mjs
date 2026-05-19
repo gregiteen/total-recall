@@ -35,6 +35,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import yaml from 'yaml';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -86,6 +87,31 @@ function hasSystemd() {
   return commandExists('systemctl');
 }
 
+function hasLaunchd() {
+  return detectPlatform() === 'macos';
+}
+
+function launchAgentsDir() {
+  return path.join(os.homedir(), 'Library', 'LaunchAgents');
+}
+
+function installPlist(templateName, dryRun) {
+  const src = path.join(ROOT, 'templates', templateName);
+  const dest = path.join(launchAgentsDir(), templateName);
+  let content = fs.readFileSync(src, 'utf8');
+  content = content.replace(/__ROOT__/g, ROOT);
+  content = content.replace(/__NODE__/g, process.execPath);
+  content = content.replace(/__HOME__/g, os.homedir());
+  if (dryRun) {
+    log(`  Would install ${templateName} → ${dest}`);
+  } else {
+    fs.mkdirSync(launchAgentsDir(), { recursive: true });
+    fs.writeFileSync(dest, content, 'utf8');
+    logOk(`Installed ${dest}`);
+  }
+  return dest;
+}
+
 function parseArgs(args) {
   const opts = {
     skipOllama: false,
@@ -97,8 +123,11 @@ function parseArgs(args) {
     domain: 'localhost',
     duckdnsToken: null,
     brainRepo: null,
+    backupRepo: null,
+    backupObsidian: null,
     cloudflareToken: null,
     cloudflareQuick: false,
+    allowInsecureHttp: false,
     dryRun: false,
     help: false,
   };
@@ -113,8 +142,11 @@ function parseArgs(args) {
       case '--domain': opts.domain = args[++i]; break;
       case '--duckdns-token': opts.duckdnsToken = args[++i]; break;
       case '--brain-repo': opts.brainRepo = args[++i]; break;
+      case '--backup-repo': opts.backupRepo = args[++i]; break;
+      case '--backup-obsidian': opts.backupObsidian = args[++i]; break;
       case '--cloudflare-token': opts.cloudflareToken = args[++i]; break;
       case '--cloudflare-quick': opts.cloudflareQuick = true; break;
+      case '--allow-insecure-http': opts.allowInsecureHttp = true; break;
       case '--dry-run': opts.dryRun = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -140,6 +172,18 @@ function printHelp() {
     --brain-repo <url>  Git repo URL to clone as the brain vault into ~/.agent/
                         e.g. https://github.com/you/my-brain.git
                         If the vault is inside the project repo (default), omit this.
+    --backup-repo <url> Git remote for automatic daily vault backups
+                        e.g. git@github.com:you/brain-backup.git
+                        Installs a cron job (Linux) or launchd job (macOS) that
+                        runs "total-recall backup --push-git <url>" at 2:00 AM.
+    --backup-obsidian <path>
+                        Obsidian vault path for daily rsync backup.
+                        e.g. ~/Documents/Obsidian Vault
+                        Installs a daily job (cron/launchd) that rsyncs the
+                        memory vault into "<vault>/Total Recall/". Pair with
+                        Obsidian Sync or iCloud for off-host backup.
+    --allow-insecure-http
+                        Permit a local/test deploy without public HTTPS.
     --dry-run           Print plan without executing
     --help, -h          Show this help
 
@@ -253,6 +297,47 @@ function copyDefaultConfig(dryRun) {
   }
 }
 
+function isIpAddress(value) {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(value || '') || /^\[[0-9a-f:]+\]$/i.test(value || '') || /^[0-9a-f:]{3,}$/i.test(value || '');
+}
+
+function hardenSecurityConfig(dryRun) {
+  logStep('7.5/12', 'Hardening security defaults');
+  const securityPath = path.join(AGENT_DIR, 'config', 'security.yml');
+  if (dryRun) {
+    log(`  Would enforce HTTPS, localhost bind, hashed PATs, and private health checks in ${securityPath}`);
+    return;
+  }
+
+  let config = {};
+  if (fs.existsSync(securityPath)) {
+    config = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
+  }
+
+  config.api = {
+    ...(config.api || {}),
+    allow_static_pats: config.api?.allow_static_pats === true,
+    pats: (config.api?.allow_static_pats === true)
+      ? (config.api?.pats || []).filter((pat) => pat && pat !== 'local')
+      : []
+  };
+  config.bind = {
+    ...(config.bind || {}),
+    host: '127.0.0.1',
+    port: config.bind?.port || 3000,
+    allow_public_bind: false
+  };
+  config.network = {
+    ...(config.network || {}),
+    require_https: true,
+    public_health: false,
+    allowed_origins: config.network?.allowed_origins || []
+  };
+
+  fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+  logOk('Security config hardened: HTTPS required, Express bound to localhost, no public health, no legacy local PAT');
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
 export default async function deploy(args) {
@@ -278,6 +363,15 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 `);
 
   if (opts.dryRun) logWarn('DRY RUN — no changes will be made\n');
+
+  if (!opts.allowInsecureHttp && !opts.cloudflareToken && !opts.cloudflareQuick) {
+    if (opts.skipCaddy) {
+      throw new Error('Refusing insecure deploy: Caddy/Cloudflare is required unless --allow-insecure-http is set.');
+    }
+    if (opts.domain === 'localhost' || isIpAddress(opts.domain)) {
+      throw new Error('Refusing insecure deploy: provide a real DNS domain for HTTPS, use Cloudflare tunnel, or pass --allow-insecure-http for local testing.');
+    }
+  }
 
   // ── Step 1: Detect architecture ──
   logStep('1/12', `Architecture detected: ${arch} (${platform})`);
@@ -372,6 +466,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
   // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
+  hardenSecurityConfig(opts.dryRun);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──
   if (opts.cloudflareToken || opts.cloudflareQuick) {
@@ -471,20 +566,17 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
     }
   }
 
-  // ── Step 8.5: DuckDNS IP-update cron job ──
+  // ── Step 8.5: DuckDNS IP-update job ──
   if (opts.duckdnsToken && opts.domain.endsWith('.duckdns.org')) {
-    logStep('9.5/12', 'Installing DuckDNS IP-update cron job');
+    logStep('9.5/12', 'Installing DuckDNS IP-update job');
     const subdomain = opts.domain.replace('.duckdns.org', '');
-    const cronLine = `*/5 * * * * root curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o /var/log/duckdns.log`;
-    const cronFile = '/etc/cron.d/total-recall-duckdns';
-    if (opts.dryRun) {
-      log(`  Would write cron job to ${cronFile}`);
-      log(`  Cron: ${cronLine}`);
-    } else if (platform === 'linux') {
-      // Immediately update DNS record
+
+    // Immediately update DNS record on both platforms
+    if (!opts.dryRun) {
       try {
-        run(`curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o /tmp/duckdns-update.log`);
-        const result = fs.readFileSync('/tmp/duckdns-update.log', 'utf8').trim();
+        const tmpLog = path.join(os.tmpdir(), 'duckdns-update.log');
+        run(`curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o "${tmpLog}"`);
+        const result = fs.readFileSync(tmpLog, 'utf8').trim();
         if (result === 'OK') {
           logOk(`DuckDNS record updated for ${opts.domain}`);
         } else {
@@ -493,25 +585,159 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       } catch (e) {
         logWarn(`DuckDNS update failed: ${e.message}`);
       }
-      // Install cron job for ongoing updates
-      fs.writeFileSync('/tmp/total-recall-duckdns', cronLine + '\n');
-      run('sudo cp /tmp/total-recall-duckdns ' + cronFile);
-      run('sudo chmod 644 ' + cronFile);
-      logOk(`DuckDNS cron installed at ${cronFile} (updates every 5 minutes)`);
-    } else {
-      logWarn('DuckDNS cron install only supported on Linux — run curl manually or use a launchd plist on macOS');
+    }
+
+    if (platform === 'linux') {
+      const cronLine = `*/5 * * * * root curl -s "https://www.duckdns.org/update?domains=${subdomain}&token=${opts.duckdnsToken}&ip=" -o /var/log/duckdns.log`;
+      const cronFile = '/etc/cron.d/total-recall-duckdns';
+      if (opts.dryRun) {
+        log(`  Would write cron job to ${cronFile}`);
+      } else {
+        fs.writeFileSync('/tmp/total-recall-duckdns', cronLine + '\n');
+        run('sudo cp /tmp/total-recall-duckdns ' + cronFile);
+        run('sudo chmod 644 ' + cronFile);
+        logOk(`DuckDNS cron installed at ${cronFile} (updates every 5 minutes)`);
+      }
+    } else if (platform === 'macos') {
+      const plistName = 'com.totalrecall.duckdns.plist';
+      const src = path.join(ROOT, 'templates', plistName);
+      const dest = path.join(launchAgentsDir(), plistName);
+      if (opts.dryRun) {
+        log(`  Would install launchd interval job → ${dest}`);
+      } else {
+        let content = fs.readFileSync(src, 'utf8');
+        content = content.replace(/__SUBDOMAIN__/g, subdomain);
+        content = content.replace(/__TOKEN__/g, opts.duckdnsToken);
+        content = content.replace(/__HOME__/g, os.homedir());
+        fs.mkdirSync(launchAgentsDir(), { recursive: true });
+        fs.writeFileSync(dest, content, 'utf8');
+        run(`launchctl load -w "${dest}"`, { ignoreErrors: true });
+        logOk(`DuckDNS launchd job installed at ${dest} (updates every 5 minutes)`);
+      }
     }
   }
 
-  logStep('10/12', 'Installing systemd units');
-  if (opts.skipSystemd || !hasSystemd()) {
-    if (!hasSystemd() && !opts.skipSystemd) {
-      logWarn(`systemd not available on ${platform} — skipping`);
-      log('  Use "total-recall daemon start" for process management instead');
+  // ── Step 9.6: Automatic backup job ──
+  if (opts.backupRepo) {
+    logStep('9.6/12', `Installing automatic daily backup → ${opts.backupRepo}`);
+
+    if (platform === 'linux') {
+      const cronLine = `0 2 * * * root ${process.execPath} ${path.join(ROOT, 'bin', 'total-recall.mjs')} backup --push-git ${opts.backupRepo}`;
+      const cronFile = '/etc/cron.d/total-recall-backup';
+      if (opts.dryRun) {
+        log(`  Would write daily backup cron to ${cronFile}`);
+      } else {
+        fs.writeFileSync('/tmp/total-recall-backup', cronLine + '\n');
+        run('sudo cp /tmp/total-recall-backup ' + cronFile);
+        run('sudo chmod 644 ' + cronFile);
+        logOk(`Backup cron installed at ${cronFile} (runs daily at 2:00 AM)`);
+        log(`  Remote: ${opts.backupRepo}`);
+        log(`  Restore: npx total-recall deploy --brain-repo ${opts.backupRepo}`);
+      }
+    } else if (platform === 'macos') {
+      const plistName = 'com.totalrecall.backup.plist';
+      const src = path.join(ROOT, 'templates', plistName);
+      const dest = path.join(launchAgentsDir(), plistName);
+      if (opts.dryRun) {
+        log(`  Would install launchd daily backup job → ${dest}`);
+      } else {
+        let content = fs.readFileSync(src, 'utf8');
+        content = content.replace(/__ROOT__/g, ROOT);
+        content = content.replace(/__NODE__/g, process.execPath);
+        content = content.replace(/__HOME__/g, os.homedir());
+        content = content.replace(/__BACKUP_REPO__/g, opts.backupRepo);
+        fs.mkdirSync(launchAgentsDir(), { recursive: true });
+        fs.writeFileSync(dest, content, 'utf8');
+        run(`launchctl load -w "${dest}"`, { ignoreErrors: true });
+        logOk(`Backup launchd job installed at ${dest} (runs daily at 2:00 AM)`);
+        log(`  Remote: ${opts.backupRepo}`);
+        log(`  Restore: npx total-recall deploy --brain-repo ${opts.backupRepo}`);
+      }
     } else {
-      logSkip('Skipped (--skip-systemd)');
+      logWarn(`Auto-backup scheduling not supported on ${platform} — run manually:`);
+      log(`  npx total-recall backup --push-git ${opts.backupRepo}`);
     }
-  } else {
+  }
+
+  // ── Step 9.7: Obsidian backup job ──
+  if (opts.backupObsidian) {
+    const obsidianPath = opts.backupObsidian.startsWith('~')
+      ? path.join(os.homedir(), opts.backupObsidian.slice(1))
+      : opts.backupObsidian;
+    logStep('9.7/12', `Installing daily Obsidian rsync backup → ${obsidianPath}`);
+
+    const backupCmd = `${process.execPath} ${path.join(ROOT, 'bin', 'total-recall.mjs')} backup --obsidian "${obsidianPath}"`;
+
+    if (platform === 'linux') {
+      const cronLine = `0 3 * * * root ${backupCmd}`;
+      const cronFile = '/etc/cron.d/total-recall-obsidian-backup';
+      if (opts.dryRun) {
+        log(`  Would write Obsidian backup cron to ${cronFile}`);
+      } else {
+        fs.writeFileSync('/tmp/total-recall-obsidian-backup', cronLine + '\n');
+        run('sudo cp /tmp/total-recall-obsidian-backup ' + cronFile);
+        run('sudo chmod 644 ' + cronFile);
+        logOk(`Obsidian backup cron installed at ${cronFile} (runs daily at 3:00 AM)`);
+      }
+    } else if (platform === 'macos') {
+      // Inline plist for Obsidian rsync — no separate template needed
+      const plistName = 'com.totalrecall.obsidian-backup.plist';
+      const dest = path.join(launchAgentsDir(), plistName);
+      if (opts.dryRun) {
+        log(`  Would install launchd Obsidian backup job → ${dest}`);
+      } else {
+        const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.totalrecall.obsidian-backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${process.execPath}</string>
+    <string>${path.join(ROOT, 'bin', 'total-recall.mjs')}</string>
+    <string>backup</string>
+    <string>--obsidian</string>
+    <string>${obsidianPath}</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>${os.homedir()}</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>${os.homedir()}/.agent/logs/obsidian-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>${os.homedir()}/.agent/logs/obsidian-backup.log</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>`;
+        fs.mkdirSync(launchAgentsDir(), { recursive: true });
+        fs.writeFileSync(dest, plistContent, 'utf8');
+        run(`launchctl load -w "${dest}"`, { ignoreErrors: true });
+        logOk(`Obsidian backup launchd job installed at ${dest} (runs daily at 3:00 AM)`);
+        log(`  Vault: ${obsidianPath}/Total Recall/`);
+      }
+    } else {
+      logWarn(`Obsidian backup scheduling not supported on ${platform} — run manually:`);
+      log(`  npx total-recall backup --obsidian "${obsidianPath}"`);
+    }
+  }
+
+  logStep('10/12', `Installing service units (${platform})`);
+  if (opts.skipSystemd) {
+    logSkip('Skipped (--skip-systemd)');
+  } else if (hasSystemd()) {
     const user = os.userInfo().username;
     const units = ['total-recall-server.service', 'total-recall-daemon.service'];
 
@@ -538,6 +764,14 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       run('sudo systemctl daemon-reload');
       logOk('systemd daemon reloaded');
     }
+  } else if (hasLaunchd()) {
+    const plists = ['com.totalrecall.server.plist', 'com.totalrecall.daemon.plist'];
+    for (const plist of plists) {
+      installPlist(plist, opts.dryRun);
+    }
+  } else {
+    logWarn(`No systemd or launchd on ${platform} — skipping service install`);
+    log('  Use "total-recall daemon start" for manual process management');
   }
 
   // ── Step 10: Start services ──
@@ -553,8 +787,17 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       }
       logOk('Services started');
     }
+  } else if (hasLaunchd() && !opts.skipSystemd) {
+    if (opts.dryRun) {
+      log('  Would launchctl load com.totalrecall.server + com.totalrecall.daemon');
+    } else {
+      const agentsDir = launchAgentsDir();
+      run(`launchctl load -w "${path.join(agentsDir, 'com.totalrecall.server.plist')}"`, { ignoreErrors: true });
+      run(`launchctl load -w "${path.join(agentsDir, 'com.totalrecall.daemon.plist')}"`, { ignoreErrors: true });
+      logOk('LaunchAgent services loaded (auto-start on login)');
+    }
   } else {
-    logWarn('No systemd — services not auto-started');
+    logWarn('Services not auto-started');
     log('  Start manually:');
     log('    node src/server/index.mjs         # HTTP server');
     log('    total-recall daemon start          # Background daemon');
@@ -604,10 +847,11 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   │                                                  │
   │  VFS:        ~/.agent/                           │
   │  Config:     ~/.agent/config/                    │
-  │  API:        http://${opts.domain}:3000/v1/chat/completions │
-  │  Memory:     http://${opts.domain}:3000/api/memory         │
-  │  Dashboard:  http://${opts.domain}/              │
+  │  API:        https://${opts.domain}/v1/chat/completions │
+  │  Memory:     https://${opts.domain}/api/memory         │
+  │  Dashboard:  https://${opts.domain}/              │
   │  Cron:       Every 5 min — agent processes queue │
+  │  Backup:     Daily 2 AM — git push to backup repo│
   │                                                  │
   │  Next steps:                                     │
   │    npx total-recall daemon status                │

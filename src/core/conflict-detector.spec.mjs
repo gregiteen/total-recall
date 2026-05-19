@@ -11,6 +11,9 @@ import {
   computeFileHash,
   writeConflicts,
   resolveConflict,
+  autoResolveConflict,
+  applyAutoResolution,
+  detectAndResolve,
 } from './conflict-detector.mjs';
 
 function tmpDir() {
@@ -214,5 +217,258 @@ describe('Conflict Persistence', () => {
     const { data } = matter(raw);
     expect(data.status).toBe('resolved');
     expect(data.resolution).toContain('keep');
+  });
+});
+
+// ─── Auto-Resolution Tests ──────────────────────────────────────────────────
+
+describe('Auto-Resolution Engine', () => {
+  function makeConflict(newOverrides = {}, existingOverrides = {}) {
+    const newNode = makeNode('new-node', {
+      created: '2026-05-17T10:00:00Z',
+      updated: '2026-05-17T10:00:00Z',
+      source: { type: 'chat', session_id: 's2', evidence_count: 1 },
+      ...newOverrides,
+    });
+    const existingNode = makeNode('existing-node', {
+      created: '2026-05-15T10:00:00Z',
+      updated: '2026-05-15T10:00:00Z',
+      source: { type: 'chat', session_id: 's1', evidence_count: 1 },
+      sentiment_polarity: 'directive_must_not',
+      modality: 'must_not',
+      ...existingOverrides,
+    });
+    return {
+      type: 'conflict',
+      conflict_id: 'conflict-test-001',
+      status: 'pending',
+      new_slug: newNode.slug,
+      existing_slug: existingNode.slug,
+      similarity: 0.85,
+      polarity_flip: true,
+      detected_at: new Date().toISOString(),
+      reason: 'test conflict',
+      resolution: null,
+      resolved_at: null,
+      _new_node: newNode,
+      _existing_node: existingNode,
+    };
+  }
+
+  it('Tier 1: quarantines when both nodes are protected invariants', () => {
+    const conflict = makeConflict(
+      { priority: 'absolute', immutable: true },
+      { priority: 'absolute', immutable: true },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(false);
+    expect(result.action).toBe('quarantine');
+    expect(result.reason).toContain('protected invariants');
+  });
+
+  it('Tier 2: existing protected invariant wins over non-protected new node', () => {
+    const conflict = makeConflict(
+      { /* not protected */ },
+      { priority: 'absolute', immutable: true },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(true);
+    expect(result.action).toBe('keep');
+    expect(result.winner).toBe('existing-node');
+  });
+
+  it('Tier 2: new protected invariant supersedes non-protected existing node', () => {
+    const conflict = makeConflict(
+      { priority: 'absolute', immutable: true },
+      { /* not protected */ },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(true);
+    expect(result.action).toBe('supersede');
+    expect(result.winner).toBe('new-node');
+  });
+
+  it('Tier 3: user-created node supersedes machine-generated node', () => {
+    const conflict = makeConflict(
+      { source: { type: 'chat', session_id: 's2', evidence_count: 1 } },
+      { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 } },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(true);
+    expect(result.action).toBe('supersede');
+    expect(result.reason).toContain('User-created');
+  });
+
+  it('Tier 3: machine-generated node rejected in favor of user-created node', () => {
+    const conflict = makeConflict(
+      { source: { type: 'optimizer', session_id: 's2', evidence_count: 1 } },
+      { source: { type: 'user', session_id: 's1', evidence_count: 1 } },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(true);
+    expect(result.action).toBe('keep');
+    expect(result.reason).toContain('Machine-generated');
+  });
+
+  it('Tier 4: newer node wins when both have same source authority', () => {
+    const conflict = makeConflict(
+      { source: { type: 'chat', session_id: 's2', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
+      { source: { type: 'chat', session_id: 's1', evidence_count: 1 }, updated: '2026-05-15T12:00:00Z' },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(true);
+    expect(result.action).toBe('supersede');
+    expect(result.reason).toContain('recency');
+  });
+
+  it('Tier 4: existing node wins when it is more recent', () => {
+    const conflict = makeConflict(
+      { source: { type: 'chat', session_id: 's2', evidence_count: 1 }, updated: '2026-05-10T12:00:00Z' },
+      { source: { type: 'chat', session_id: 's1', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(true);
+    expect(result.action).toBe('keep');
+    expect(result.reason).toContain('more recent');
+  });
+
+  it('Tier 5: quarantines when provenance and timestamps are identical', () => {
+    const ts = '2026-05-16T12:00:00Z';
+    const conflict = makeConflict(
+      { source: { type: 'test', session_id: 's', evidence_count: 1 }, created: ts, updated: ts },
+      { source: { type: 'test', session_id: 's', evidence_count: 1 }, created: ts, updated: ts },
+    );
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(false);
+    expect(result.action).toBe('quarantine');
+  });
+
+  it('returns quarantine when provenance metadata is missing', () => {
+    const conflict = { conflict_id: 'x', status: 'pending' };
+    const result = autoResolveConflict(conflict);
+    expect(result.resolved).toBe(false);
+    expect(result.reason).toContain('Missing');
+  });
+});
+
+describe('applyAutoResolution', () => {
+  let vaultRoot;
+
+  beforeEach(() => {
+    vaultRoot = tmpDir();
+    const dir = path.join(vaultRoot, 'patterns');
+    fs.mkdirSync(dir, { recursive: true });
+  });
+  afterEach(() => { fs.rmSync(vaultRoot, { recursive: true, force: true }); });
+
+  it('marks the loser as superseded and updates the winner', () => {
+    const newNode = makeNode('html-email', {
+      source: { type: 'chat', session_id: 's2', evidence_count: 1 },
+      updated: '2026-05-17T10:00:00Z',
+    });
+    const existingNode = makeNode('plaintext-email', {
+      source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 },
+      sentiment_polarity: 'directive_must_not',
+      modality: 'must_not',
+      updated: '2026-05-15T10:00:00Z',
+    });
+
+    // Write both to the vault first
+    fs.writeFileSync(
+      path.join(vaultRoot, 'patterns', 'html-email.md'),
+      matter.stringify('', newNode),
+    );
+    fs.writeFileSync(
+      path.join(vaultRoot, 'patterns', 'plaintext-email.md'),
+      matter.stringify('', existingNode),
+    );
+
+    const conflict = {
+      conflict_id: 'test-apply', status: 'pending',
+      new_slug: 'html-email', existing_slug: 'plaintext-email',
+      _new_node: newNode, _existing_node: existingNode,
+      reason: 'test', similarity: 0.85, polarity_flip: true,
+    };
+    const resolution = {
+      resolved: true, action: 'supersede',
+      winner: 'html-email', loser: 'plaintext-email',
+      reason: 'User supersedes machine.',
+    };
+
+    const updated = applyAutoResolution(conflict, resolution, vaultRoot);
+
+    expect(updated.status).toBe('auto-resolved');
+    expect(updated.resolution).toContain('html-email');
+
+    // Verify the loser file was updated on disk
+    const loserRaw = fs.readFileSync(
+      path.join(vaultRoot, 'patterns', 'plaintext-email.md'), 'utf8',
+    );
+    const loserData = matter(loserRaw).data;
+    expect(loserData.status).toBe('superseded');
+    expect(loserData.superseded_by).toBe('html-email');
+
+    // Verify the winner file was updated
+    const winnerRaw = fs.readFileSync(
+      path.join(vaultRoot, 'patterns', 'html-email.md'), 'utf8',
+    );
+    const winnerData = matter(winnerRaw).data;
+    expect(winnerData.supersedes).toContain('plaintext-email');
+  });
+});
+
+describe('detectAndResolve', () => {
+  it('auto-resolves user vs machine conflict without quarantine', () => {
+    const candidate = makeNode('use-html-email', {
+      title: 'Use HTML email format',
+      sentiment_polarity: 'directive_must',
+      modality: 'must',
+      tags: ['email', 'format', 'html'],
+      source: { type: 'chat', session_id: 's2', evidence_count: 1 },
+      updated: '2026-05-17T10:00:00Z',
+    });
+    const existing = [
+      makeNode('use-plaintext-email', {
+        title: 'Use plaintext email format',
+        sentiment_polarity: 'directive_must_not',
+        modality: 'must_not',
+        tags: ['email', 'format', 'plaintext'],
+        source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 },
+        updated: '2026-05-15T10:00:00Z',
+      }),
+    ];
+
+    const { autoResolved, quarantined } = detectAndResolve(
+      candidate, existing, { thresholds: { conflictThreshold: 0.70 } },
+    );
+    expect(autoResolved.length).toBe(1);
+    expect(quarantined.length).toBe(0);
+    expect(autoResolved[0].status).toBe('auto-resolved');
+  });
+
+  it('quarantines conflicts between two absolute invariants', () => {
+    const candidate = makeNode('use-html-email', {
+      title: 'Use HTML email format',
+      sentiment_polarity: 'directive_must',
+      modality: 'must',
+      tags: ['email', 'format', 'html'],
+      priority: 'absolute', immutable: true,
+    });
+    const existing = [
+      makeNode('use-plaintext-email', {
+        title: 'Use plaintext email format',
+        sentiment_polarity: 'directive_must_not',
+        modality: 'must_not',
+        tags: ['email', 'format', 'plaintext'],
+        priority: 'absolute', immutable: true,
+      }),
+    ];
+
+    const { autoResolved, quarantined } = detectAndResolve(
+      candidate, existing, { thresholds: { conflictThreshold: 0.70 } },
+    );
+    expect(autoResolved.length).toBe(0);
+    expect(quarantined.length).toBe(1);
+    expect(quarantined[0].status).toBe('pending');
   });
 });

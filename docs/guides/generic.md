@@ -14,42 +14,24 @@ This guide covers setting up Total Recall with any IDE or CLI agent not specific
 ### 1. Install into your project
 ```bash
 cd ~/my-project
-total-recall install
+npx total-recall init
 ```
 
-### 2. Configure the generic watcher
-You need to tell Total Recall where your IDE stores conversation data:
+### 2. Connect the client surface
+For generic clients, emit the OpenAI-compatible and MCP connection details:
 
-```javascript
-// totalrecall.config.mjs
-export default {
-  watchers: [{
-    type: 'generic',
-    logPath: '/path/to/your/ide/conversation/logs',
-    format: 'text',  // 'text', 'json', or 'jsonl'
-  }],
-};
-```
-
-### 3. Configure system prompt injection
-Set the system prompt file your IDE reads:
-
-```javascript
-export default {
-  systemPromptFile: 'YOUR_RULES_FILE.md',
-};
-```
-
-Make sure your rules file has a `## DISTILLED MEMORY (SUBJECT STATES)` section header where Total Recall can inject the behavioral surface.
-
-### 4. Start the co-processor
 ```bash
-tr-coprocessor start
+npx total-recall connect generic --brain https://your-brain.example.com
 ```
 
-### 5. Sync prompts
+### 3. Ingest supported local session logs
 ```bash
-total-recall sync-prompts
+npx total-recall ingest --watch
+```
+
+### 4. Pull from a remote brain
+```bash
+npx total-recall sync --brain https://your-brain.example.com --token <PAT>
 ```
 
 ## Manual Surface Injection
@@ -57,14 +39,11 @@ total-recall sync-prompts
 If your IDE doesn't support automatic rule files, you can manually include the surface:
 
 ```bash
-# Compile surface and print to stdout
-total-recall compile-surface --preview
-
-# Copy to clipboard (macOS)
-total-recall compile-surface --preview | pbcopy
+npx total-recall compile
 ```
 
-Then paste it into your IDE's system prompt configuration.
+Then point the IDE at `INSTRUCTIONS.md` or a client-specific file created by
+`npx total-recall connect <client>`.
 
 ## Supported Log Formats
 

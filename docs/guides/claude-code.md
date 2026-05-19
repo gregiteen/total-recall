@@ -12,39 +12,26 @@
 ### 1. Install into your project
 ```bash
 cd ~/my-project
-total-recall install
+npx total-recall init
 ```
 
-### 2. Configure the watcher
-Claude Code stores conversation data in `~/.claude/projects/<project-hash>/`. Add to your `totalrecall.config.mjs`:
+### 2. Connect Claude Code
 
-```javascript
-export default {
-  watchers: ['claude-code'],
-};
-```
-
-### 3. Configure the system prompt
-Claude Code reads `CLAUDE.md` in the repo root. Two options:
-
-**Option A: Symlink (recommended for shared rules)**
 ```bash
-ln -sf INSTRUCTIONS.md CLAUDE.md
+npx total-recall connect claude-code
 ```
-This shares all rules between Antigravity and Claude Code.
 
-**Option B: Separate file with section injection**
-Create a standalone `CLAUDE.md` with a `## DISTILLED MEMORY (SUBJECT STATES)` section. Total Recall will inject the surface there.
+Claude Code reads `CLAUDE.md` in the repo root. The connect command creates a
+safe projection to `INSTRUCTIONS.md` when possible.
 
-### 4. Sync prompts
+### 3. Ingest Claude Code sessions
 ```bash
-total-recall sync-prompts
+npx total-recall ingest --sources claude-code --watch
 ```
-If `CLAUDE.md` is a symlink, it's automatically detected — no separate injection needed.
 
-### 5. Start the co-processor
+### 4. Run the background daemon
 ```bash
-tr-coprocessor start
+npx total-recall daemon start
 ```
 
 ## Agent Pipeline

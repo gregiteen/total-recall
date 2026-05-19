@@ -11,6 +11,8 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=AGENT_DIR=%h/.agent
 StandardOutput=append:/var/log/total-recall/server.log
 StandardError=append:/var/log/total-recall/server.log
 

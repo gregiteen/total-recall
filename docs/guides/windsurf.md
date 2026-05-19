@@ -12,29 +12,20 @@
 ### 1. Install into your project
 ```bash
 cd ~/my-project
-total-recall install
+npx total-recall init
 ```
 
-### 2. Sync prompts
+### 2. Connect Windsurf
 ```bash
-total-recall sync-prompts
+npx total-recall connect windsurf
 ```
 
 This creates `.windsurf/rules/total-recall.md` — a rule file that Windsurf loads automatically.
 
-### 3. Configure the watcher
-Add to your `totalrecall.config.mjs`:
-
-```javascript
-export default {
-  watchers: ['windsurf'],
-};
-```
-
-### 4. Verify
+### 3. Verify
 Check that Windsurf recognizes the rule:
 1. Open Windsurf
 2. The behavioral surface should appear in the AI's context
 
 ## Re-syncing
-Run `total-recall sync-prompts` after each `/switch` session or manual `total-recall steer` command.
+Run `npx total-recall connect windsurf --force` or `npx total-recall sync` to refresh the behavioral surface.

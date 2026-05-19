@@ -57,6 +57,19 @@ Memory is stratified to balance context constraints with deep knowledge retrieva
 2. **Tier 2 (Progressive Disclosure):** Curated knowledge surfaced based on semantic relevance via hybrid BM25 + TF-IDF scoring. Injected into `SKILL.md` files or queried via JSONL indexes.
 3. **Tier 3 (Permanent Vault):** The full knowledge graph located in `.agent/memory-vault/`. Contains historical logs, superseded memories, and raw data.
 
+These tiers describe *how memory is surfaced*. Total Recall also tracks *what
+cognitive job a memory is doing* with `x_memory_layer`:
+
+- **Conscious (`conscious`)**: immediate working awareness, including absolute invariants, current task context, and active preferences.
+- **System 2 (`system2`)**: deliberate reasoning, planning, synthesis, conflict resolution, and eval-backed conclusions.
+- **Knowledge Acquisition / Research (`research`)**: externally sourced facts, stale-knowledge refreshes, citations, and draft evidence.
+
+The cooperation loop is Conscious → System 2 → Research → System 2 → Conscious:
+active uncertainty opens a deliberation task; deliberation requests evidence when
+needed; research writes draft facts; System 2 validates and promotes; the surface
+compiler writes `memory-layers.jsonl`, `skill-routes.jsonl`, and Tier 1
+instructions from the validated working set.
+
 ## Zero-Parser Kernel & Context
 
 The core engine is a locally hosted **Gemma 4 26B-A4B** (released April 2, 2026 by Google DeepMind), running via Ollama. It uses a Mixture-of-Experts (MoE) architecture, with 26 billion total parameters but only ~3.8 billion active during inference, making it highly efficient. It is quantized to Q4_K_M format.

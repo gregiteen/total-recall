@@ -22,6 +22,7 @@ import crypto from 'node:crypto';
 const AGENT_DIR = path.join(os.homedir(), '.agent');
 const BRAIN_CONFIG = path.join(AGENT_DIR, 'config', 'brain.json');
 const SYNC_STATE = path.join(AGENT_DIR, 'config', 'sync-state.json');
+const CLIENTS_REGISTRY = path.join(AGENT_DIR, 'config', 'clients.json');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
 function parseArgs(args) {
@@ -63,6 +64,25 @@ function loadSyncState() {
   catch { return {}; }
 }
 
+function loadClientsRegistry() {
+  if (!fs.existsSync(CLIENTS_REGISTRY)) return {};
+  try { return JSON.parse(fs.readFileSync(CLIENTS_REGISTRY, 'utf8'))?.clients || {}; }
+  catch { return {}; }
+}
+
+function projectionsStatus(clients, instructionsMtime) {
+  return Object.entries(clients).map(([name, info]) => {
+    let fresh = null;
+    if (info.projectionPath && instructionsMtime) {
+      try {
+        const projMtime = fs.statSync(info.projectionPath).mtimeMs;
+        fresh = projMtime >= instructionsMtime;
+      } catch { fresh = false; }
+    }
+    return { name, label: info.label, mode: info.mode, connectedAt: info.connectedAt, projectionPath: info.projectionPath, fresh };
+  });
+}
+
 function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
@@ -94,6 +114,7 @@ export default async function statusCmd(args) {
 
   const brainConfig = loadBrainConfig();
   const syncState = loadSyncState();
+  const clientsRegistry = loadClientsRegistry();
   const brainUrl = opts.brain || brainConfig?.url || null;
   const token = opts.token || brainConfig?.token || process.env.TOTAL_RECALL_TOKEN || null;
 
@@ -117,6 +138,11 @@ export default async function statusCmd(args) {
   const inSync = !!(localInstructions && remote?.instructions_sha256 &&
     remote.instructions_sha256 === localInstructions.sha256);
 
+  const instructionsMtime = localInstructions
+    ? fs.statSync(INSTRUCTIONS_FILE).mtimeMs
+    : null;
+  const clientProjections = projectionsStatus(clientsRegistry, instructionsMtime);
+
   const report = {
     brain: {
       url: brainUrl,
@@ -134,7 +160,8 @@ export default async function statusCmd(args) {
       in_sync: inSync
     },
     last_sync: syncState.last_sync || null,
-    targets: syncState.targets ? Object.keys(syncState.targets) : []
+    targets: syncState.targets ? Object.keys(syncState.targets) : [],
+    clients: clientProjections
   };
 
   if (opts.json) {
@@ -152,5 +179,18 @@ export default async function statusCmd(args) {
   console.log(`  In sync:          ${inSync ? 'yes' : 'no'}`);
   console.log(`  Last sync:        ${report.last_sync || 'never'}`);
   console.log(`  Sync targets:     ${report.targets.length ? report.targets.join(', ') : '(none)'}`);
+
+  if (clientProjections.length) {
+    console.log('\n  Connected clients:');
+    for (const c of clientProjections) {
+      let freshnessTag = '';
+      if (c.mode === 'file' || c.mode === 'symlink') {
+        freshnessTag = c.fresh === null ? '  (no projection)' : c.fresh ? '  ✅ fresh' : '  ⚠️  stale — run: total-recall connect ' + c.name;
+      }
+      console.log(`    ${c.label.padEnd(18)} [${c.mode}]${freshnessTag}`);
+    }
+  } else {
+    console.log('  Connected clients: (none — run total-recall connect <client>)');
+  }
   console.log();
 }

@@ -4,9 +4,12 @@ import type { ApiKey, IssuedApiKey } from '../api'
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([])
+  const [availableScopes, setAvailableScopes] = useState<string[]>(['*'])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newKeyName, setNewKeyName] = useState('')
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['*'])
+  const [expiresAt, setExpiresAt] = useState('')
   const [issuing, setIssuing] = useState(false)
   const [newlyIssued, setNewlyIssued] = useState<IssuedApiKey | null>(null)
   const [copied, setCopied] = useState(false)
@@ -15,7 +18,9 @@ export default function ApiKeysPage() {
     if (showLoading) setLoading(true)
     setError(null)
     try {
-      setKeys(await listApiKeys())
+      const result = await listApiKeys()
+      setKeys(result.keys)
+      setAvailableScopes(result.available_scopes)
     } catch (e: unknown) {
       setError((e as Error).message)
     } finally {
@@ -23,6 +28,7 @@ export default function ApiKeysPage() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate one-time data fetch on mount
   useEffect(() => { void load(false) }, [load])
 
   const handleIssue = async () => {
@@ -30,9 +36,11 @@ export default function ApiKeysPage() {
     setIssuing(true)
     setError(null)
     try {
-      const key = await issueApiKey(newKeyName.trim())
+      const key = await issueApiKey(newKeyName.trim(), selectedScopes, expiresAt || null)
       setNewlyIssued(key)
       setNewKeyName('')
+      setSelectedScopes(['*'])
+      setExpiresAt('')
       await load(true)
     } catch (e: unknown) {
       setError((e as Error).message)
@@ -60,6 +68,22 @@ export default function ApiKeysPage() {
 
   const activeKeys = keys.filter(k => !k.revoked)
   const revokedKeys = keys.filter(k => k.revoked)
+
+  const toggleScope = (scope: string) => {
+    setSelectedScopes(current => {
+      if (scope === '*') return ['*']
+      const withoutAll = current.filter(s => s !== '*')
+      const next = withoutAll.includes(scope)
+        ? withoutAll.filter(s => s !== scope)
+        : [...withoutAll, scope]
+      return next.length ? next : ['*']
+    })
+  }
+
+  const formatScopes = (scopes: string[]) => {
+    if (!scopes || scopes.length === 0 || scopes.includes('*')) return 'Full access'
+    return scopes.join(', ')
+  }
 
   return (
     <div className="page">
@@ -94,6 +118,7 @@ export default function ApiKeysPage() {
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
             Usage: <code>Authorization: Bearer {newlyIssued.token.slice(0, 12)}…</code>
+            <span style={{ marginLeft: 12 }}>Scopes: {formatScopes(newlyIssued.scopes)}</span>
           </div>
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={() => setNewlyIssued(null)}>
             Dismiss
@@ -107,7 +132,7 @@ export default function ApiKeysPage() {
         border: '1px solid var(--border)', padding: '20px 24px', marginBottom: 24,
       }}>
         <h3 style={{ margin: '0 0 14px' }}>Issue New Key</h3>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
           <input
             id="new-api-key-name"
             type="text"
@@ -129,6 +154,45 @@ export default function ApiKeysPage() {
           >
             {issuing ? 'Issuing…' : '+ Issue Key'}
           </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 240px) 1fr', gap: 16, alignItems: 'start' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+            Expires
+            <input
+              type="date"
+              value={expiresAt}
+              onChange={e => setExpiresAt(e.target.value)}
+              style={{
+                padding: '8px 10px', borderRadius: 8, fontSize: 13,
+                background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                border: '1px solid var(--border)', outline: 'none',
+              }}
+            />
+          </label>
+          <div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Scopes</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {availableScopes.map(scope => (
+                <label
+                  key={scope}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 9px', borderRadius: 8, border: '1px solid var(--border)',
+                    background: selectedScopes.includes(scope) ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-primary)',
+                    color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedScopes.includes(scope)}
+                    onChange={() => toggleScope(scope)}
+                    style={{ margin: 0 }}
+                  />
+                  <span>{scope === '*' ? 'Full access' : scope}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -153,8 +217,10 @@ export default function ApiKeysPage() {
                 <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', textAlign: 'left' }}>
                   <th style={{ padding: '8px 12px' }}>Name</th>
                   <th style={{ padding: '8px 12px' }}>Token</th>
+                  <th style={{ padding: '8px 12px' }}>Scopes</th>
                   <th style={{ padding: '8px 12px' }}>Requests</th>
                   <th style={{ padding: '8px 12px' }}>Last Used</th>
+                  <th style={{ padding: '8px 12px' }}>Expires</th>
                   <th style={{ padding: '8px 12px' }}>Created</th>
                   <th style={{ padding: '8px 12px' }}></th>
                 </tr>
@@ -164,11 +230,19 @@ export default function ApiKeysPage() {
                   <tr key={k.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 500 }}>{k.name}</td>
                     <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{k.token_preview}</td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', maxWidth: 220 }}>
+                      <span title={formatScopes(k.scopes)} style={{ display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                        {formatScopes(k.scopes)}
+                      </span>
+                    </td>
                     <td style={{ padding: '10px 12px' }}>
                       <span className="badge badge-accent">{k.hit_count.toLocaleString()}</span>
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
                       {k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '—'}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
+                      {k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never'}
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>
                       {new Date(k.created_at).toLocaleDateString()}
@@ -203,6 +277,7 @@ export default function ApiKeysPage() {
             }}>
               <span style={{ flex: 1, textDecoration: 'line-through' }}>{k.name}</span>
               <span style={{ fontFamily: 'monospace' }}>{k.token_preview}</span>
+              <span>{formatScopes(k.scopes)}</span>
               <span>{k.hit_count} requests</span>
             </div>
           ))}

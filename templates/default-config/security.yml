@@ -23,10 +23,13 @@ dashboard:
 
 # API authentication
 api:
-  # Personal Access Tokens for /v1/chat/completions
-  # Generate with: npx total-recall generate-pat
-  pats:
-    - "local"
+  # Personal Access Tokens are stored as hashes in ~/.agent/config/keys.jsonl.
+  # Generate one with: npx total-recall generate-pat --name "codex"
+  #
+  # Static PATs in this YAML file are disabled by default because they are
+  # plaintext secrets. Use keys.jsonl unless you are doing a temporary migration.
+  allow_static_pats: false
+  pats: []
 
 # Rate limiting
 rate_limits:
@@ -35,6 +38,17 @@ rate_limits:
 
 # Network binding
 bind:
-  # Use 127.0.0.1 for local-only access, 0.0.0.0 for public
-  host: "0.0.0.0"
+  # Express should stay private behind Caddy/Cloudflare. Do not expose :3000.
+  host: "127.0.0.1"
   port: 3000
+  allow_public_bind: false
+
+network:
+  # Production requests must arrive through HTTPS at Caddy/Cloudflare.
+  require_https: true
+
+  # Keep public health checks closed; localhost and authenticated requests work.
+  public_health: false
+
+  # Browser cross-origin callers. Same-origin dashboard traffic does not need CORS.
+  allowed_origins: []

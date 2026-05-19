@@ -224,6 +224,8 @@ export interface ApiKey {
   id: string
   name: string
   token_preview: string
+  scopes: string[]
+  expires_at: string | null
   created_at: string
   last_used_at: string | null
   hit_count: number
@@ -234,17 +236,23 @@ export interface IssuedApiKey extends ApiKey {
   token: string // full token — only returned on creation
 }
 
-export async function listApiKeys(): Promise<ApiKey[]> {
-  const res = await apiFetch(`${API_BASE}/api/keys`)
-  if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
-  return res.json()
+export interface ApiKeyListResponse {
+  keys: ApiKey[]
+  available_scopes: string[]
 }
 
-export async function issueApiKey(name: string): Promise<IssuedApiKey> {
+export async function listApiKeys(): Promise<ApiKeyListResponse> {
+  const res = await apiFetch(`${API_BASE}/api/keys`)
+  if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
+  const data = await res.json()
+  return Array.isArray(data) ? { keys: data, available_scopes: ['*'] } : data
+}
+
+export async function issueApiKey(name: string, scopes?: string[], expiresAt?: string | null): Promise<IssuedApiKey> {
   const res = await apiFetch(`${API_BASE}/api/keys`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, scopes, expires_at: expiresAt || null }),
   })
   if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
   return res.json()

@@ -58,7 +58,6 @@ SSSS is built for sovereign AI.
 ### 4. Advanced Extensibility
 - **Omnichannel Dashboard**: A sleek, dark-mode unified dashboard for managing your memory vault, tasks, and files.
 - **Proactive Telegram Integration**: Provide your Telegram Bot token during the onboarding interview, and Total Recall will message you on your phone with updates, research, and questions.
-- **Custom Weights (QLoRA)**: Built-in dataset compiler (`npx total-recall finetune`) to scrape your SSSS vault and generate instruction-tuning sets.
 
 ---
 
@@ -107,10 +106,11 @@ Total Recall is fully manageable via the CLI, ensuring 100% parity with the web 
 | `npx total-recall lint`   | Validate all vault nodes against the current SSSS schema |
 | `npx total-recall daemon` | Manage the background daemon (start/stop/status) |
 | `npx total-recall restore`| Restore from an encrypted backup |
-| `npx total-recall finetune`| Generate a QLoRA JSONL dataset from the SSSS vault |
+| `npx total-recall connect`| Configure an IDE or external system (Cursor, Claude Code, Codex, UltraChat, MCP, …) |
+| `npx total-recall sync`   | Pull compiled instructions from a remote brain |
 | `npx total-recall friction`| Analyze watchdog logs for workflow bottlenecks |
 
-*(Note: Legacy commands like `compile`, `backup`, `sync`, and `reindex` have been removed. The Cloud Agent now handles these autonomously via SSSS task nodes in the scheduler queue.)*
+*(Note: `compile`, `backup`, and `sync` remain available as manual CLI commands; the Cloud Agent also runs them autonomously via SSSS task nodes in the scheduler queue. The legacy `reindex` command has been removed — use `compile` (alias `rebuild`) to regenerate derived indexes.)*
 
 ---
 

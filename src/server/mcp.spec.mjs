@@ -1,6 +1,32 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import app from './mcp.mjs';
+
+let tempAgentDir;
+let oldAgentDir;
+
+beforeEach(() => {
+  oldAgentDir = process.env.AGENT_DIR;
+  tempAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'total-recall-mcp-'));
+  process.env.AGENT_DIR = tempAgentDir;
+
+  fs.mkdirSync(path.join(tempAgentDir, 'skills', 'ssss', 'references'), { recursive: true });
+  fs.mkdirSync(path.join(tempAgentDir, 'memory-derived'), { recursive: true });
+  fs.writeFileSync(path.join(tempAgentDir, 'INSTRUCTIONS.md'), '# Instructions\n\nMCP_INSTRUCTIONS_FIXTURE\n');
+  fs.writeFileSync(path.join(tempAgentDir, 'skills', 'ssss', 'SKILL.md'), '# SSSS Skill\n\nMCP_SKILL_FIXTURE\n');
+  fs.writeFileSync(path.join(tempAgentDir, 'skills', 'ssss', 'references', 'ssss-spec.md'), '# SSSS Spec\n\nMCP_SPEC_FIXTURE\n');
+  fs.writeFileSync(path.join(tempAgentDir, 'memory-derived', 'graph-index.jsonl'), '{"slug":"example"}\n');
+  fs.writeFileSync(path.join(tempAgentDir, 'memory-derived', 'memory-layers.jsonl'), '{"slug":"example","memory_layer":"conscious"}\n');
+});
+
+afterEach(() => {
+  if (oldAgentDir === undefined) delete process.env.AGENT_DIR;
+  else process.env.AGENT_DIR = oldAgentDir;
+  fs.rmSync(tempAgentDir, { recursive: true, force: true });
+});
 
 describe('MCP Gateway', () => {
   it('rejects POST /mcp without session ID for non-initialize', async () => {
@@ -85,5 +111,44 @@ describe('MCP Gateway', () => {
     // The tool returns a JSON-serialized array; either empty or populated, but valid JSON.
     expect(() => JSON.parse(text)).not.toThrow();
     expect(Array.isArray(JSON.parse(text))).toBe(true);
+  });
+
+  it('resource calls (sync-rpc): resources/list exposes SSSS and derived resources', async () => {
+    const res = await request(app)
+      .post('/mcp')
+      .set('x-sync-rpc', 'true')
+      .send({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'resources/list',
+        params: {}
+      });
+
+    expect(res.status).toBe(200);
+    const uris = res.body.result.resources.map(resource => resource.uri);
+    expect(uris).toEqual(expect.arrayContaining([
+      'total-recall://instructions',
+      'total-recall://ssss/skill',
+      'total-recall://ssss/spec',
+      'total-recall://memory/index',
+      'total-recall://memory/layers'
+    ]));
+  });
+
+  it('resource calls (sync-rpc): resources/read returns resource contents', async () => {
+    const res = await request(app)
+      .post('/mcp')
+      .set('x-sync-rpc', 'true')
+      .send({
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'resources/read',
+        params: { uri: 'total-recall://ssss/spec' }
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.result.contents[0].uri).toBe('total-recall://ssss/spec');
+    expect(res.body.result.contents[0].mimeType).toBe('text/markdown');
+    expect(res.body.result.contents[0].text).toContain('MCP_SPEC_FIXTURE');
   });
 });

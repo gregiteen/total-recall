@@ -44,7 +44,8 @@ describe('Schema Validations', () => {
           half_life_days: 30,
           access_count: 5
         },
-        schema_version: 2
+        schema_version: 2,
+        x_memory_layer: 'conscious'
       };
       
       const result = MemoryNodeSchema.safeParse(node);
@@ -57,6 +58,47 @@ describe('Schema Validations', () => {
         slug: 'test-node',
         // missing required fields
       };
+      const result = MemoryNodeSchema.safeParse(node);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an unknown memory layer', () => {
+      const node = {
+        type: 'memory',
+        slug: 'test-node',
+        category: 'test',
+        title: 'Test Node',
+        status: 'active',
+        confidence: 0.9,
+        importance: 3,
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        last_accessed: new Date().toISOString(),
+        source: {
+          type: 'user',
+          session_id: '123',
+          evidence_count: 1
+        },
+        supersedes: [],
+        superseded_by: null,
+        contradicts: [],
+        tags: ['test'],
+        related: [],
+        routes_to_skills: [],
+        sentiment_polarity: 'descriptive',
+        sentiment_target: 'system',
+        modality: 'should',
+        subject: 'agent',
+        predicate: 'tests',
+        object: 'code',
+        decay: {
+          half_life_days: 30,
+          access_count: 5
+        },
+        schema_version: 2,
+        x_memory_layer: 'unknown-layer'
+      };
+
       const result = MemoryNodeSchema.safeParse(node);
       expect(result.success).toBe(false);
     });
@@ -100,6 +142,19 @@ describe('Schema Validations', () => {
         reason: 'cleanup',
         status: 'pending',
         progress: 0
+      };
+      const result = TaskSchema.safeParse(task);
+      expect(result.success).toBe(true);
+    });
+
+    it('validates a System 2 deliberation task', () => {
+      const task = {
+        type: 'task',
+        priority: 2,
+        category: 'system2-deliberation',
+        target: 'memory-layer-synthesis',
+        status: 'pending',
+        x_memory_layer: 'system2',
       };
       const result = TaskSchema.safeParse(task);
       expect(result.success).toBe(true);

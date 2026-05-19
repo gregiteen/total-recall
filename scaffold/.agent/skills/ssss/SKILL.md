@@ -84,6 +84,7 @@ on crash or concurrent access.
 | `preferences/` | User or project style preferences | `prefer-kebab-case-slugs` |
 | `decisions/` | One-time architectural decisions | `chose-sqlite-over-postgres` |
 | `concepts/` | Domain knowledge and definitions | `what-is-bm25-scoring` |
+| `facts/` | Evidence-backed knowledge acquired from research or observation | `stripe-connect-api-version` |
 
 #### Required Fields (schema_version: 2)
 
@@ -247,6 +248,7 @@ Research Stripe Connect API for marketplace payouts.
 | Category | Purpose |
 |----------|---------|
 | `memory-maintenance` | Dream Cycle hygiene: compression, dedup, decay |
+| `system2-deliberation` | Slow reasoning, synthesis, validation, and planning over memory |
 | `skill-engineering` | Building, testing, and improving skill files |
 | `proactive-research` | Web search, knowledge refresh, trend monitoring |
 | `self-evaluation` | Testing own capabilities, benchmarking accuracy |
@@ -286,7 +288,35 @@ Not all memories are relevant to every prompt.
 
 ---
 
-## 4. Derived Artifacts (Disposable — Fully Rebuildable)
+## 4. Cognitive Memory Layers
+
+Total Recall also assigns each memory node to an implementation-specific cognitive
+layer. This is orthogonal to the three surfacing tiers above:
+
+| Layer | Frontmatter | Purpose | Writer | Promotion path |
+|-------|-------------|---------|--------|----------------|
+| **Conscious** | `x_memory_layer: conscious` | Immediate working awareness: current user directives, absolute invariants, active preferences, and task-local context. | User turns, steering, surface compiler | Surfaces into Tier 1 or Tier 2 when active and important. |
+| **System 2** | `x_memory_layer: system2` | Deliberate reasoning: plans, decisions, conflict resolutions, synthesis, and eval-backed conclusions. | Dream Cycle, optimizer, `system2-deliberation` tasks | Converts research drafts into decisions, concepts, or proposals after validation. |
+| **Research** | `x_memory_layer: research` | Knowledge acquisition: web-backed facts, stale-knowledge refreshes, citations, and externally observed evidence. | `proactive-research` tasks and research tools | Starts as draft/pending evidence, then moves through System 2 before broad surfacing. |
+
+`x_memory_layer` is host-specific and intentionally uses the `x_` prefix required
+for implementation fields. If omitted, Total Recall infers the layer from the
+node category, tags, source type, and `priority`.
+
+The cooperation contract is:
+
+1. Conscious memory notices an uncertainty, repeated need, or active user goal.
+2. System 2 creates or consumes a `system2-deliberation` task to reason over the
+   current vault state and decide whether more evidence is needed.
+3. Research creates cited draft facts with `x_memory_layer: research`.
+4. System 2 validates, deduplicates, and resolves conflicts before promoting the
+   result into active facts, concepts, decisions, or proposals.
+5. The surface compiler writes `memory-layers.jsonl`, skill routes, and Tier 1
+   instructions so the Conscious layer sees only the validated working set.
+
+---
+
+## 5. Derived Artifacts (Disposable — Fully Rebuildable)
 
 These files live in `.agent/memory-derived/` and are **never** source-of-truth.
 Delete the entire directory at any time; `total-recall reindex` regenerates everything.
@@ -294,6 +324,7 @@ Delete the entire directory at any time; `total-recall reindex` regenerates ever
 | File | Format | Description |
 |------|--------|-------------|
 | `graph-index.jsonl` | JSONL | One flat JSON object per node — used by routing and search |
+| `memory-layers.jsonl` | JSONL | One flat JSON object per node with its inferred cognitive layer |
 | `skill-routes.jsonl` | JSONL | Routing decision log (slug → skill mappings + scores) |
 | `conflict-index.jsonl` | JSONL | All detected conflicts across all sessions |
 | `dream-report.jsonl` | JSONL | Dream Cycle execution log |
@@ -309,6 +340,7 @@ Delete the entire directory at any time; `total-recall reindex` regenerates ever
   "category": "patterns",
   "status": "active",
   "confidence": 0.92,
+  "memory_layer": "conscious",
   "importance": 4,
   "tags": ["filesystem", "reliability"],
   "routes_to_skills": ["deploy"],
@@ -324,7 +356,7 @@ Delete the entire directory at any time; `total-recall reindex` regenerates ever
 
 ---
 
-## 5. Staging Area
+## 6. Staging Area
 
 `.agent/memory-inbox/` is the staging area for new nodes before conflict resolution.
 
@@ -343,7 +375,7 @@ Workflow:
 
 ---
 
-## 6. Vault Directory Layout
+## 7. Vault Directory Layout
 
 ```
 .agent/
@@ -353,7 +385,8 @@ Workflow:
 │   ├── anti-patterns/         # "Never do X" rules
 │   ├── preferences/           # Style and workflow preferences
 │   ├── decisions/             # One-time architectural decisions
-│   └── concepts/              # Domain knowledge
+│   ├── concepts/              # Domain knowledge
+│   └── facts/                 # Evidence-backed research outputs
 ├── memory-derived/            # Disposable indexes (rebuildable)
 ├── memory-inbox/
 │   ├── pending/               # Awaiting conflict check
@@ -366,7 +399,7 @@ Workflow:
 
 ---
 
-## 7. Interoperability
+## 8. Interoperability
 
 `total-recall` is designed to work alongside **any** AI agent, IDE plugin, or CLI tool
 that can read files.
@@ -384,7 +417,7 @@ The only hard dependency is `totalrecall.config.mjs` in the repo root, which tel
 
 ---
 
-## 8. Naming Conventions
+## 9. Naming Conventions
 
 | Thing | Convention | Example |
 |-------|-----------|---------|

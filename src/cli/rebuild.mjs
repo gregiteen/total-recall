@@ -59,7 +59,7 @@ export async function runRebuild(options = {}) {
     const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
-    console.log(`✅ Rebuilt graph-index.jsonl and skill-routes.jsonl.`);
+    console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);
     
     // Verify
     const drift = detectIndexDrift(vaultDir, derivedDir);

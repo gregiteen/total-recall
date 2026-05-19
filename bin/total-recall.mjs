@@ -9,15 +9,22 @@
  * Usage:
  *   npx total-recall init            Bootstrap Total Recall into an existing project
  *   npx total-recall deploy          Provision a target machine
- *   npx total-recall compile         Rebuild indexes + INSTRUCTIONS.md
+ *   npx total-recall compile         Rebuild indexes + INSTRUCTIONS.md (alias: rebuild)
  *   npx total-recall dream           Trigger a dream cycle
- *   npx total-recall reindex         Delete + regenerate derived indexes
+ *   npx total-recall ingest          Ingest IDE conversation logs
+ *   npx total-recall connect         Configure an IDE or external system
+ *   npx total-recall sync            Pull remote brain instructions into workspace
  *   npx total-recall lint            Validate vault nodes against schema v2
  *   npx total-recall daemon <cmd>    start | stop | status
+ *   npx total-recall status          Show brain connection and sync state
+ *   npx total-recall generate-pat    Issue a hashed Personal Access Token
+ *   npx total-recall hash-password   Generate a dashboard password hash
  *   npx total-recall backup          Create encrypted VFS tarball
  *   npx total-recall restore <path>  Restore from backup
- *   npx total-recall export          Portable VFS export
- *   npx total-recall import <path>   Import VFS on new host
+ *   npx total-recall snapshot        Manage point-in-time VFS snapshots
+ *   npx total-recall migrate         Run SSSS schema migrations
+ *   npx total-recall chat            Interactive terminal chat
+ *   npx total-recall friction        Analyze logs for workflow bottlenecks
  *   npx total-recall upgrade         Swap kernel model
  *   npx total-recall --help          Show this help
  */
@@ -31,18 +38,24 @@ const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 const COMMANDS = {
   init:     'init.mjs',
   deploy:   'deploy.mjs',
+  backup:   'backup.mjs',
   dream:    'dream.mjs',
   lint:     'lint.mjs',
   daemon:   'daemon.mjs',
   restore:  'restore.mjs',
   upgrade:  'upgrade.mjs',
-  finetune: 'finetune.mjs',
   friction: 'friction.mjs',
   chat:     'chat.mjs',
   status:   'status.mjs',
+  'generate-pat': 'generate-pat.mjs',
+  'hash-password': 'hash-password.mjs',
+  compile:  'rebuild.mjs',
   rebuild:  'rebuild.mjs',
   snapshot: 'snapshot.mjs',
   migrate:  'migrate.mjs',
+  ingest:   'ingest.mjs',
+  connect:  'connect.mjs',
+  sync:     'sync.mjs',
 };
 
 function printHelp() {
@@ -59,13 +72,18 @@ function printHelp() {
     daemon <start|stop|status>  Manage the background daemon
     restore <path>      Restore from an encrypted backup
     upgrade --model <n> Swap the kernel model (e.g., gemma5-32b)
-    finetune            Run QLoRA pipeline to generate custom weights
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
     status              Show brain connection and sync state
+    generate-pat        Issue a PAT; stores only a hash in keys.jsonl
+    hash-password       Generate a bcrypt dashboard password hash
+    compile             Alias for rebuild: deterministically rebuild projections
     rebuild [--check]   Detect index drift and deterministically rebuild projections
     snapshot            Manage fast point-in-time VFS snapshots and rollbacks
     migrate             Run backwards-incompatible SSSS schema migrations
+    ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
+    connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, MCP, etc.
+    sync [--watch]      Pull remote brain instructions into the current workspace
 
   Autonomous operations (sync, compile, backup) are now handled by the
   Cloud Agent via SSSS task nodes in .agent/scheduler/queue/.

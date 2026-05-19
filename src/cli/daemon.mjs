@@ -12,7 +12,7 @@
  *   npx total-recall daemon --help  Show this help
  */
 
-import { execSync, spawn } from 'node:child_process';
+import { execSync, spawnSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,19 +35,34 @@ function hasSystemd() {
   return os.platform() === 'linux' && commandExists('systemctl');
 }
 
+function launchAgentPlist(name) {
+  return path.join(os.homedir(), 'Library', 'LaunchAgents', `${name}.plist`);
+}
+
+function hasLaunchd() {
+  return os.platform() === 'darwin' && fs.existsSync(launchAgentPlist('com.totalrecall.daemon'));
+}
+
 function printHelp() {
   console.log(`
-  total-recall daemon — Manage the background dream cycle daemon
+  total-recall daemon — Manage the Active Intelligence Daemon
 
   Usage: total-recall daemon <command>
 
   Commands:
-    start     Start the background daemon
+    start     Start the background Active Intelligence Daemon
     stop      Stop the background daemon
-    status    Show daemon status
+    status    Show daemon status + recent log entries
+
+  The daemon runs a continuous scheduler loop that:
+    • Ingests IDE conversation logs (Claude Code, Codex, Gemini, etc.)
+    • Dispatches tasks to cognitive layer engines (Conscious/System2/Research)
+    • Runs a full dream cycle every 20 tasks (surface recompile + conflict resolution)
+    • Keeps the local Gemma 4 LLM busy at all times (queue is never empty)
 
   On Linux with systemd, delegates to systemctl.
-  On macOS, manages a detached Node.js process with a PID file.
+  On macOS with launchd (after deploy), delegates to launchctl.
+  Otherwise, manages a detached Node.js process with a PID file.
 
   Options:
     --help, -h    Show this help
@@ -93,6 +108,61 @@ function systemdStatus() {
   } catch { /* systemctl exits non-zero for inactive services */ }
 }
 
+// ─── launchd-backed commands (macOS) ────────────────────────────────────────────
+
+function runLaunchctl(...args) {
+  return spawnSync('launchctl', args, { stdio: 'inherit' });
+}
+
+function launchctlStart() {
+  const plist = launchAgentPlist('com.totalrecall.daemon');
+  console.error('  Starting com.totalrecall.daemon via launchctl...');
+  const loadResult = spawnSync('launchctl', ['load', '-w', plist], { stdio: 'pipe' });
+  if (loadResult.status === 0) {
+    console.error('  ✅ Daemon started');
+    return;
+  }
+  // Already loaded — kick it
+  const startResult = runLaunchctl('start', 'com.totalrecall.daemon');
+  if (startResult.status === 0) {
+    console.error('  ✅ Daemon started');
+  } else {
+    console.error('  ⚠️  launchctl start failed');
+  }
+}
+
+function launchctlStop() {
+  console.error('  Stopping com.totalrecall.daemon via launchctl...');
+  const result = runLaunchctl('stop', 'com.totalrecall.daemon');
+  if (result.status === 0) {
+    console.error('  ✅ Daemon stopped');
+  } else {
+    console.error('  ⚠️  launchctl stop failed');
+  }
+}
+
+function launchctlStatus() {
+  const result = spawnSync('launchctl', ['list', 'com.totalrecall.daemon'], { encoding: 'utf8' });
+  const running = result.status === 0 && !String(result.stdout || '').includes('Could not find service');
+  if (running) {
+    console.error(`  🟢 Daemon is managed by launchd`);
+    const lines = String(result.stdout || '').trim().split('\n');
+    for (const line of lines) console.error(`    ${line}`);
+  } else {
+    console.error('  🔴 Daemon is not loaded in launchd');
+  }
+
+  const logFile = path.join(os.homedir(), '.agent', 'logs', 'daemon.log');
+  try {
+    const log = fs.readFileSync(logFile, 'utf8');
+    const lines = log.trim().split('\n').slice(-5);
+    if (lines.length) {
+      console.error('\n  Recent log entries:');
+      for (const line of lines) console.error(`    ${line}`);
+    }
+  } catch { /* no log file yet */ }
+}
+
 // ─── Direct process management ──────────────────────────────────────────────────
 
 function directStart() {
@@ -102,10 +172,16 @@ function directStart() {
     return;
   }
 
-  const dreamScript = path.join(ROOT, 'src', 'core', 'dream.mjs');
+  const dreamScript = path.join(ROOT, 'src', 'core', 'daemon-loop.mjs');
   if (!fs.existsSync(dreamScript)) {
-    console.error(`  ❌ Dream script not found: ${dreamScript}`);
-    process.exit(1);
+    // Fallback to dream.mjs for backward compatibility
+    const fallback = path.join(ROOT, 'src', 'core', 'dream.mjs');
+    if (fs.existsSync(fallback)) {
+      console.error('  ⚠️  daemon-loop.mjs not found, falling back to dream.mjs');
+    } else {
+      console.error(`  ❌ Daemon script not found: ${dreamScript}`);
+      process.exit(1);
+    }
   }
 
   const logsDir = path.dirname(LOG_FILE);
@@ -174,16 +250,23 @@ export default async function daemon(args) {
   }
 
   const useSystemd = hasSystemd();
+  const useLaunchd = !useSystemd && hasLaunchd();
 
   switch (subcommand) {
     case 'start':
-      useSystemd ? systemdStart() : directStart();
+      if (useSystemd) systemdStart();
+      else if (useLaunchd) launchctlStart();
+      else directStart();
       break;
     case 'stop':
-      useSystemd ? systemdStop() : directStop();
+      if (useSystemd) systemdStop();
+      else if (useLaunchd) launchctlStop();
+      else directStop();
       break;
     case 'status':
-      useSystemd ? systemdStatus() : directStatus();
+      if (useSystemd) systemdStatus();
+      else if (useLaunchd) launchctlStatus();
+      else directStatus();
       break;
     default:
       console.error(`  Unknown daemon command: ${subcommand}`);

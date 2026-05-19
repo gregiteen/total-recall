@@ -2,11 +2,121 @@ import fs from 'fs';
 import path from 'path';
 import natural from 'natural';
 import { loadNodes, loadSkills, atomicWrite } from './vault.mjs';
+import {
+  buildMemoryLayerIndex,
+  inferMemoryLayer,
+  memoryLayerRoutingWeight
+} from './memory-layers.mjs';
+
+/**
+ * Extract [[slug]] wikilink references from body text.
+ * Native TR link resolution; Obsidian renders them as graph edges.
+ */
+export function extractWikilinks(body) {
+  if (!body) return [];
+  const matches = body.match(/\[\[([^\]]+)\]\]/g) || [];
+  return [...new Set(matches.map(m => m.slice(2, -2).split('|')[0].trim()))];
+}
+
+/**
+ * Resolve [[slug]] → [label](slug) for compiled surfaces (INSTRUCTIONS.md).
+ * Vault files keep [[slug]] intact so Obsidian renders wiki links natively.
+ */
+function resolveWikilinks(body, nodesBySlug) {
+  if (!body) return body;
+  return body.replace(/\[\[([^\]]+)\]\]/g, (_, inner) => {
+    const [slugPart, aliasPart] = inner.split('|');
+    const slug = slugPart.trim();
+    const label = aliasPart?.trim() || nodesBySlug.get(slug)?.title || slug;
+    return `[${label}](${slug})`;
+  });
+}
+
+/**
+ * Generate an Obsidian Canvas JSON file from active vault nodes.
+ * Written to memory-vault/graph.canvas; also readable by /api/graph.
+ */
+function generateCanvas(nodes, vaultDir) {
+  const active = nodes.filter(n => n.status === 'active');
+  if (active.length === 0) return;
+
+  const CARD_W = 240, CARD_H = 60, GAP_X = 60, GAP_Y = 30;
+  const cols = Math.max(1, Math.ceil(Math.sqrt(active.length)));
+
+  const canvasNodes = active.map((n, i) => ({
+    id: n.slug,
+    x: (i % cols) * (CARD_W + GAP_X),
+    y: Math.floor(i / cols) * (CARD_H + GAP_Y),
+    width: CARD_W,
+    height: CARD_H,
+    type: 'text',
+    text: `**${n.title}**\n_${n.category}_`
+  }));
+
+  const slugSet = new Set(canvasNodes.map(n => n.id));
+  const seen = new Set();
+  const canvasEdges = [];
+
+  for (const n of active) {
+    const targets = [...(n.related || []), ...extractWikilinks(n.body || '')];
+    for (const target of targets) {
+      if (!slugSet.has(target) || target === n.slug) continue;
+      const key = `${n.slug}→${target}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      canvasEdges.push({
+        id: `e${canvasEdges.length}`,
+        fromNode: n.slug,
+        toNode: target,
+        fromSide: 'right',
+        toSide: 'left'
+      });
+    }
+  }
+
+  const canvasPath = path.join(vaultDir, 'graph.canvas');
+  atomicWrite(canvasPath, JSON.stringify({ nodes: canvasNodes, edges: canvasEdges }, null, 2));
+}
 
 const ROUTING_THRESHOLD = 0.5;
 const ROUTING_TOP_K = 3;
 const INJECTION_BEGIN = '<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->';
 const INJECTION_END = '<!-- END INJECTED MEMORY -->';
+
+export function replaceFirstManagedInjectionBlock(raw, injectionBlock) {
+  const chunks = raw.match(/[^\n]*(?:\n|$)/g) || [];
+  let inFence = false;
+  let offset = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (chunk === '') continue;
+    const line = chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk;
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      inFence = !inFence;
+      offset += chunk.length;
+      continue;
+    }
+
+    if (!inFence && line === INJECTION_BEGIN) {
+      let endOffset = offset + chunk.length;
+      for (let j = i + 1; j < chunks.length; j++) {
+        endOffset += chunks[j].length;
+        const endLine = chunks[j].endsWith('\n') ? chunks[j].slice(0, -1) : chunks[j];
+        if (endLine === INJECTION_END) {
+          return `${raw.slice(0, offset)}${injectionBlock}\n${raw.slice(endOffset)}`;
+        }
+      }
+      return null;
+    }
+
+    offset += chunk.length;
+  }
+
+  return null;
+}
 
 /**
  * Tokenize text for TF-IDF.
@@ -62,11 +172,15 @@ export function routeNodesToSkills(nodes, skills) {
 
     const zTfidf = zNormalize(tfidfScores);
 
+    const layer = inferMemoryLayer(node);
+    const layerWeight = memoryLayerRoutingWeight(layer);
+
     const qualified = skills
       .map(s => ({
         slug: node.slug,
         skill: s.name,
-        score: zTfidf.get(s.name) || 0
+        score: (zTfidf.get(s.name) || 0) * layerWeight,
+        layer
       }))
       .filter(r => r.score >= ROUTING_THRESHOLD)
       .sort((a, b) => b.score - a.score)
@@ -109,11 +223,11 @@ export function injectSkills(skills, allNodes, routes) {
 
     // Replace the block in the skill body
     const raw = fs.readFileSync(skill.filepath, 'utf8');
-    const regex = new RegExp(`${INJECTION_BEGIN}[\\s\\S]*?${INJECTION_END}`, 'g');
-    
+    const replaced = replaceFirstManagedInjectionBlock(raw, injectedLines.join('\n'));
+
     let newRaw;
-    if (regex.test(raw)) {
-      newRaw = raw.replace(regex, injectedLines.join('\n'));
+    if (replaced !== null) {
+      newRaw = replaced;
     } else {
       // Append if missing
       newRaw = raw + '\n\n' + injectedLines.join('\n') + '\n';
@@ -124,10 +238,30 @@ export function injectSkills(skills, allNodes, routes) {
 }
 
 /**
+ * Map a node's modality to an assertive prefix for stronger enforcement.
+ */
+function assertivePrefix(node) {
+  switch (node.modality) {
+    case 'must':
+      return '⚠️ MANDATORY';
+    case 'must_not':
+      return '🚫 NEVER';
+    case 'should':
+      return '💡 RECOMMENDED';
+    case 'should_not':
+      return '⚠️ AVOID';
+    default:
+      return '';
+  }
+}
+
+/**
  * Build the Total Recall injection block content from absolute nodes.
+ * Adds assertive prefixes based on node modality for stronger enforcement.
  */
 function buildInjectionBlock(nodes) {
   const absolutes = nodes.filter(n => n.priority === 'absolute' && n.status === 'active');
+  const nodesBySlug = new Map(nodes.map(n => [n.slug, n]));
   const generatedAt = new Date().toISOString();
 
   const lines = [
@@ -137,8 +271,11 @@ function buildInjectionBlock(nodes) {
   ];
 
   for (const node of absolutes) {
-    lines.push(`## ${node.title}`);
-    lines.push(node.body);
+    const prefix = assertivePrefix(node);
+    const titleLine = prefix ? `## ${prefix}: ${node.title}` : `## ${node.title}`;
+    lines.push(titleLine);
+    // Resolve [[wikilinks]] to plain markdown in compiled output
+    lines.push(resolveWikilinks(node.body, nodesBySlug));
     lines.push('');
   }
 
@@ -152,14 +289,11 @@ function buildInjectionBlock(nodes) {
  */
 function injectIntoExisting(filePath, injectionBlock) {
   const raw = fs.readFileSync(filePath, 'utf8');
-  const escapedBegin = INJECTION_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedEnd = INJECTION_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`${escapedBegin}[\\s\\S]*?${escapedEnd}`, 'g');
+  const replaced = replaceFirstManagedInjectionBlock(raw, injectionBlock);
 
   let newRaw;
-  if (regex.test(raw)) {
-    // Update existing block
-    newRaw = raw.replace(regex, injectionBlock);
+  if (replaced !== null) {
+    newRaw = replaced;
   } else {
     // Append new block at the bottom
     newRaw = raw.trimEnd() + '\n\n' + injectionBlock + '\n';
@@ -168,11 +302,63 @@ function injectIntoExisting(filePath, injectionBlock) {
 }
 
 /**
+ * Build the skill routing table for the preamble.
+ * Maps common topics/tags to skill file paths.
+ */
+function buildSkillRoutingTable(skillsDir) {
+  try {
+    const skills = loadSkills(skillsDir);
+    if (skills.length === 0) return '';
+
+    const rows = skills.map(s => {
+      const relPath = `.agent/skills/${s.name}/SKILL.md`;
+      return `| ${s.name} | ${relPath} |`;
+    });
+
+    return [
+      '',
+      '## 📋 Topic → Skill Routing',
+      'If your task involves any of these topics, you MUST read the matching SKILL.md BEFORE responding:',
+      '',
+      '| Topic | Skill File |',
+      '|-------|-----------|',
+      ...rows,
+      '',
+    ].join('\n');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Build the enforcement preamble that goes at the top of INSTRUCTIONS.md.
+ */
+function buildPreamble() {
+  return [
+    '## ⚡ Before You Respond',
+    '',
+    '1. You **MUST** have read every rule below. Violations are tracked and rules that are violated repeatedly are automatically escalated.',
+    '2. If your task involves a specific domain, **READ the matching SKILL.md first** (see routing table below).',
+    '3. **Search `.agent/memory-vault/`** for relevant past decisions before proposing new approaches.',
+    '4. When you learn a new pattern or receive a correction, **write it to the memory vault** and run `npx total-recall compile`.',
+    '',
+  ].join('\n');
+}
+
+/**
  * Compile absolute priority rules into Tier 1 (INSTRUCTIONS.md)
  * and inject into all existing IDE instruction files non-destructively.
+ *
+ * Adds:
+ * - Enforcement preamble ("Before You Respond")
+ * - Assertive prefixes (⚠️ MANDATORY / 🚫 NEVER) based on modality
+ * - Topic → Skill routing table
  */
 export function compileTier1(nodes, instructionsFile) {
   const injectionBlock = buildInjectionBlock(nodes);
+  const skillsDir = path.join(path.dirname(instructionsFile), 'skills');
+  const routingTable = buildSkillRoutingTable(skillsDir);
+  const preamble = buildPreamble();
 
   // Always write the canonical INSTRUCTIONS.md fresh
   const header = [
@@ -180,7 +366,7 @@ export function compileTier1(nodes, instructionsFile) {
     '> This file is compiled automatically. Do not edit directly.',
     ''
   ].join('\n');
-  atomicWrite(instructionsFile, header + injectionBlock + '\n');
+  atomicWrite(instructionsFile, header + preamble + routingTable + injectionBlock + '\n');
 
   // For each IDE shim: inject into existing files, or create a symlink if missing
   const shims = ['.cursorrules', 'CLAUDE.md', '.clauderules', 'AGENTS.md', 'GEMINI.md'];
@@ -215,7 +401,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   const skills = loadSkills(skillsDir);
 
   const routes = routeNodesToSkills(nodes, skills);
-  
+
   injectSkills(skills, nodes, routes);
   compileTier1(nodes, instructionsFile);
 
@@ -229,11 +415,33 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     title: n.title,
     category: n.category,
     status: n.status,
-    confidence: n.confidence
+    confidence: n.confidence,
+    memory_layer: inferMemoryLayer(n)
   }));
   atomicWrite(path.join(derivedDir, 'graph-index.jsonl'), graphIndex.map(n => JSON.stringify(n)).join('\n'));
-  
+  atomicWrite(
+    path.join(derivedDir, 'memory-layers.jsonl'),
+    buildMemoryLayerIndex(nodes).map(n => JSON.stringify(n)).join('\n')
+  );
+
   atomicWrite(path.join(derivedDir, 'skill-routes.jsonl'), routes.map(r => JSON.stringify(r)).join('\n'));
 
-  return { nodesProcessed: nodes.length, skillsInjected: skills.length };
+  // Build semantic embeddings index if Ollama is available (fire-and-forget; skips silently if not)
+  let semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true };
+  try {
+    const { buildSemanticIndex } = await import('./semantic-index.mjs');
+    semanticResult = await buildSemanticIndex(nodes, derivedDir);
+  } catch { /* semantic index is optional — never block compile */ }
+
+  // Generate Obsidian Canvas (fire-and-forget; native graph artifact)
+  try {
+    generateCanvas(nodes, vaultDir);
+  } catch { /* non-fatal */ }
+
+  return {
+    nodesProcessed: nodes.length,
+    skillsInjected: skills.length,
+    semanticIndexed: semanticResult.indexed,
+    semanticUnavailable: semanticResult.unavailable
+  };
 }
