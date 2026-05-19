@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Total Recall — One-Command Installer
+# Assumes nothing. Installs everything. Opens the wizard.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash
+#
+set -e
+
+REPO_URL="https://github.com/gregiteen/total-recall.git"
+INSTALL_DIR="$HOME/total-recall"
+WIZARD_PORT=3001
+
+# ── Colors ──────────────────────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; BOLD='\033[1m'; RESET='\033[0m'
+
+log()  { echo -e "${BLUE}▶${RESET} $*"; }
+ok()   { echo -e "${GREEN}✓${RESET} $*"; }
+warn() { echo -e "${YELLOW}⚠${RESET}  $*"; }
+die()  { echo -e "${RED}✗ ERROR:${RESET} $*" >&2; exit 1; }
+
+echo -e ""
+echo -e "${BOLD}  ⚡ Total Recall — Setup${RESET}"
+echo -e "  Your private AI brain. Installing now...\n"
+
+# ── 1. Detect OS ────────────────────────────────────────────────────────────────
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+log "Detected: $OS / $ARCH"
+
+# ── 2. Install system dependencies ──────────────────────────────────────────────
+
+install_node() {
+  log "Installing Node.js via nvm..."
+  export NVM_DIR="$HOME/.nvm"
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+  # shellcheck disable=SC1090
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+  nvm install --lts
+  nvm use --lts
+  ok "Node.js $(node --version) installed"
+}
+
+install_git_linux() {
+  log "Installing git..."
+  if command -v apt-get &>/dev/null; then
+    apt-get update -qq && apt-get install -y -qq git curl
+  elif command -v yum &>/dev/null; then
+    yum install -y -q git curl
+  elif command -v dnf &>/dev/null; then
+    dnf install -y -q git curl
+  else
+    die "Cannot install git — please install it manually then re-run this script."
+  fi
+  ok "git installed"
+}
+
+# Git
+if ! command -v git &>/dev/null; then
+  if [ "$OS" = "Darwin" ]; then
+    warn "git not found. Triggering Xcode Command Line Tools install..."
+    xcode-select --install 2>/dev/null || true
+    echo ""
+    echo -e "${YELLOW}  Please install Xcode Command Line Tools in the dialog that appeared,"
+    echo -e "  then run this installer again.${RESET}"
+    exit 0
+  else
+    install_git_linux
+  fi
+else
+  ok "git $(git --version | awk '{print $3}')"
+fi
+
+# Node.js
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+
+if ! command -v node &>/dev/null; then
+  install_node
+elif node -e "process.exit(parseInt(process.version.slice(1)) < 18 ? 1 : 0)" 2>/dev/null; then
+  ok "Node.js $(node --version)"
+else
+  warn "Node.js $(node --version) is too old (need v18+). Upgrading..."
+  install_node
+fi
+
+# ── 3. Install Ollama ────────────────────────────────────────────────────────────
+if ! command -v ollama &>/dev/null; then
+  log "Installing Ollama (local AI runtime)..."
+  curl -fsSL https://ollama.com/install.sh | sh
+  ok "Ollama installed"
+else
+  ok "Ollama $(ollama --version 2>/dev/null | head -1)"
+fi
+
+# Start Ollama in background if not running
+if ! curl -s http://localhost:11434 &>/dev/null; then
+  log "Starting Ollama..."
+  nohup ollama serve > /tmp/ollama.log 2>&1 &
+  sleep 3
+fi
+
+# ── 4. Clone or update Total Recall ──────────────────────────────────────────────
+if [ -d "$INSTALL_DIR/.git" ]; then
+  log "Updating Total Recall in $INSTALL_DIR..."
+  cd "$INSTALL_DIR" && git pull --ff-only
+else
+  log "Cloning Total Recall to $INSTALL_DIR..."
+  git clone "$REPO_URL" "$INSTALL_DIR"
+  cd "$INSTALL_DIR"
+fi
+
+# ── 5. Install Node dependencies ─────────────────────────────────────────────────
+log "Installing dependencies..."
+cd "$INSTALL_DIR"
+npm install --quiet
+ok "Dependencies installed"
+
+# ── 6. Launch the Setup Wizard ───────────────────────────────────────────────────
+echo ""
+echo -e "${GREEN}${BOLD}  Everything is ready. Opening the setup wizard...${RESET}"
+echo -e "  ${BOLD}→ http://localhost:${WIZARD_PORT}${RESET}\n"
+echo -e "  The wizard will guide you through:"
+echo -e "  • Choosing a model (or using one you already have)"
+echo -e "  • Setting up your domain and HTTPS (optional)"
+echo -e "  • Connecting Claude Code, Cursor, Obsidian, and more"
+echo ""
+
+# Open browser
+open_browser() {
+  local url="$1"
+  if [ "$OS" = "Darwin" ]; then
+    open "$url" &
+  elif command -v xdg-open &>/dev/null; then
+    xdg-open "$url" &
+  elif command -v google-chrome &>/dev/null; then
+    google-chrome "$url" &
+  fi
+}
+
+# Give the wizard a moment then open browser
+(sleep 3 && open_browser "http://localhost:${WIZARD_PORT}") &
+
+# Run the wizard (blocks until install complete)
+node "$INSTALL_DIR/bin/total-recall.mjs" deploy --ui --ui-port "$WIZARD_PORT" --allow-insecure-http

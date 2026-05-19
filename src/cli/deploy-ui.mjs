@@ -450,7 +450,7 @@ const HTML = `<!DOCTYPE html>
     </div>
     <ul class="step-nav" id="step-nav">
       <li class="active" data-phase="0"><span class="step-badge">1</span>Welcome</li>
-      <li data-phase="1"><span class="step-badge">2</span>Configure</li>
+      <li data-phase="1"><span class="step-badge">2</span>Where to Run</li>
       <li data-phase="2"><span class="step-badge">3</span>Installing</li>
       <li data-phase="3"><span class="step-badge">4</span>Auth &amp; Keys</li>
       <li data-phase="4"><span class="step-badge">5</span>Integrations</li>
@@ -466,163 +466,145 @@ const HTML = `<!DOCTYPE html>
     <section class="phase active" id="phase-0">
       <div class="phase-header">
         <h1>Welcome to Total Recall</h1>
-        <p>Your private, self-hosted AI brain. Let's get it set up in a few minutes.</p>
+        <p>Your own private AI that remembers everything — across every tool you use. Takes about 10 minutes to set up.</p>
       </div>
 
       <div class="card">
-        <h3>What is Total Recall?</h3>
-        <p style="margin-bottom:12px">Total Recall is a <strong style="color:var(--text)">Sovereign AI OS</strong> — a private, file-based memory engine that connects all your AI tools (Claude Code, Cursor, UltraChat, Obsidian) to a single, persistent brain you control.</p>
+        <h3>What does it do?</h3>
+        <p style="margin-bottom:14px">Total Recall gives your AI tools a <strong style="color:var(--text)">persistent memory</strong> — so Claude, Cursor, and any other AI always know who you are, what you're working on, and how you like things done. No cloud. No subscription. Yours.</p>
         <ul>
-          <li>🧠 <strong>Memory</strong> <span>— Markdown files in <code>~/.agent/memory-vault/</code> — no database, no cloud lock-in</span></li>
-          <li>🔗 <strong>Universal adapter</strong> <span>— OpenAI-compatible API so any AI app can connect</span></li>
-          <li>🔒 <strong>Fully private</strong> <span>— runs on your hardware, model is local Ollama</span></li>
-          <li>🛠 <strong>MCP server</strong> <span>— tools for reading, writing, and searching your memory in any MCP-aware IDE</span></li>
+          <li>🧠 <strong>Remembers across sessions</strong> <span>— your preferences, projects, and decisions survive every new chat</span></li>
+          <li>🔗 <strong>Works with every AI tool</strong> <span>— Claude Code, Cursor, Windsurf, Obsidian, any OpenAI-compatible app</span></li>
+          <li>🔒 <strong>100% private</strong> <span>— runs on your hardware, never sent to any server you don't control</span></li>
+          <li>⚡ <strong>Powered by gemma4</strong> <span>— Google's latest open-source model, free to run</span></li>
         </ul>
       </div>
 
       <div class="card">
         <h3>How it works</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Your memory lives in plain text files on your machine. The AI reads them automatically at the start of every conversation.</p>
         <div class="arch-row">
-          <span class="arch-box">~/.agent/ VFS</span>
+          <span class="arch-box">📁 Your memory files</span>
           <span class="arch-arrow">→</span>
-          <span class="arch-box">compile → INSTRUCTIONS.md</span>
+          <span class="arch-box">🧠 AI reads them</span>
           <span class="arch-arrow">→</span>
-          <span class="arch-box">injected into every chat</span>
+          <span class="arch-box">💬 Every chat is personalized</span>
         </div>
-        <div class="arch-row">
-          <span class="arch-box">Ollama (local LLM)</span>
-          <span class="arch-arrow">+</span>
-          <span class="arch-box">brain server (node)</span>
+        <div class="arch-row" style="margin-top:10px">
+          <span class="arch-box">Claude / Cursor / Obsidian</span>
           <span class="arch-arrow">→</span>
-          <span class="arch-box">/v1/chat/completions</span>
-        </div>
-        <div class="arch-row">
-          <span class="arch-box">Claude Code / Cursor / UltraChat</span>
-          <span class="arch-arrow">→</span>
-          <span class="arch-box">point base URL at brain</span>
+          <span class="arch-box">All connect to the same brain</span>
         </div>
       </div>
 
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="goPhase(1)">Start Setup →</button>
+        <button class="btn btn-primary" onclick="goPhase(1)">Let's Set It Up →</button>
       </div>
     </section>
 
-    <!-- ═══════════════════════════════ PHASE 1 — Configure ════════════════════ -->
+    <!-- ═══════════════════════════════ PHASE 1 — Where to Run ══════════════════ -->
     <section class="phase" id="phase-1">
       <div class="phase-header">
-        <h1>Configure Your Install</h1>
-        <p>Tell us about your server so we can set up HTTPS and choose the right model.</p>
+        <h1>Where do you want to run your brain?</h1>
+        <p>Pick the option that fits you. All three use the same model (gemma4) and have the same features.</p>
       </div>
 
-      <div class="card">
-        <h3>Domain &amp; HTTPS</h3>
+      <div class="radio-group" id="deploy-target" style="margin-bottom:20px">
 
-        <div class="form-group">
-          <label>Domain Name</label>
-          <input type="text" id="cfg-domain" placeholder="yourname.duckdns.org" autocomplete="off" spellcheck="false">
-          <div class="hint">Your server's public hostname. Free subdomain: <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a></div>
-        </div>
-
-        <div class="form-group">
-          <label>HTTPS Method</label>
-          <div class="radio-group" id="https-method">
-            <label class="radio-item selected">
-              <input type="radio" name="https-method" value="duckdns" checked>
-              <div>
-                <div class="ri-label">DuckDNS + Caddy (recommended)</div>
-                <div class="ri-desc">Free subdomain + auto Let's Encrypt TLS. Requires port 80 open.</div>
+        <label class="radio-item" id="target-local-label">
+          <input type="radio" name="deploy-target" value="local" id="target-local">
+          <div style="flex:1">
+            <div class="ri-label">🖥&nbsp; On this computer <span style="color:var(--green);font-size:11px;font-weight:400">(simplest)</span></div>
+            <div class="ri-desc">Runs entirely on your Mac or PC. Free. Needs ~16 GB of RAM free.</div>
+            <div id="local-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;This installer will: check your RAM, install Ollama (the AI runtime), download the gemma4 model (~10 GB), and start your brain — all automatically. Just click Install.</div>
+              <div class="form-group" style="margin-top:14px;margin-bottom:0">
+                <label>Public access (optional)</label>
+                <div class="radio-group" id="local-access">
+                  <label class="radio-item selected">
+                    <input type="radio" name="local-access" value="local" checked>
+                    <div><div class="ri-label">Local only</div><div class="ri-desc">Access from this computer only. Easiest.</div></div>
+                  </label>
+                  <label class="radio-item">
+                    <input type="radio" name="local-access" value="cloudflare-quick">
+                    <div><div class="ri-label">Share over internet (Cloudflare Quick Tunnel)</div><div class="ri-desc">Generates a public URL so you can reach your brain from your phone or other devices. Free, no account needed.</div></div>
+                  </label>
+                </div>
               </div>
-            </label>
-            <label class="radio-item">
-              <input type="radio" name="https-method" value="cloudflare-tunnel">
-              <div>
-                <div class="ri-label">Cloudflare Tunnel</div>
-                <div class="ri-desc">No port forwarding needed. Free Cloudflare account required.</div>
-              </div>
-            </label>
-            <label class="radio-item">
-              <input type="radio" name="https-method" value="cloudflare-quick">
-              <div>
-                <div class="ri-label">Cloudflare Quick Tunnel (temporary)</div>
-                <div class="ri-desc">Zero config — generates a random trycloudflare.com URL. Great for testing.</div>
-              </div>
-            </label>
-            <label class="radio-item">
-              <input type="radio" name="https-method" value="local">
-              <div>
-                <div class="ri-label">Local only (no HTTPS)</div>
-                <div class="ri-desc">Access via localhost only. Not accessible from other devices.</div>
-              </div>
-            </label>
+            </div>
           </div>
-        </div>
+        </label>
 
-        <div class="sub-field" id="duckdns-token-field">
-          <div class="form-group">
-            <label>DuckDNS Token</label>
-            <input type="password" id="cfg-duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
-            <div class="hint">Found on your <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> account page.</div>
+        <label class="radio-item" id="target-vastai-label">
+          <input type="radio" name="deploy-target" value="vastai" id="target-vastai">
+          <div style="flex:1">
+            <div class="ri-label">☁️&nbsp; Rent a GPU in the cloud (Vast.ai) <span style="color:var(--muted);font-size:11px;font-weight:400">~$5/mo</span></div>
+            <div class="ri-desc">Runs on a rented GPU server. Good if your computer doesn't have enough RAM. About $0.07/hour — turn it off when not using it.</div>
+            <div id="vastai-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;You need a <a href="https://vast.ai" target="_blank" rel="noopener" style="color:var(--blue)">Vast.ai account</a> (free to create). Add $10 credit — that's about 6 weeks of usage.</div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label>Step 1 — Create your instance</label>
+                <p style="color:var(--muted);font-size:12px;margin-bottom:8px">Go to <a href="https://vast.ai/create" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai/create</a>, search for <strong>RTX 3060 12GB</strong>, and rent one with Ubuntu 22.04. Note the SSH command it gives you.</p>
+              </div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label>Step 2 — SSH into your instance and run</label>
+                <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>Step 3 — Come back here</label>
+                <p style="color:var(--muted);font-size:12px">The installer will open this wizard on your server. Come back here after the model finishes downloading and click Continue.</p>
+              </div>
+            </div>
           </div>
-        </div>
+        </label>
 
-        <div class="sub-field" id="cloudflare-token-field" style="display:none">
-          <div class="form-group">
-            <label>Cloudflare Tunnel Token</label>
-            <input type="password" id="cfg-cloudflare-token" placeholder="eyJhIjoiX..." autocomplete="off">
-            <div class="hint">Create at <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener">Cloudflare Zero Trust</a> → Access → Tunnels.</div>
+        <label class="radio-item" id="target-vps-label">
+          <input type="radio" name="deploy-target" value="vps" id="target-vps">
+          <div style="flex:1">
+            <div class="ri-label">🌐&nbsp; Your own server or VPS <span style="color:var(--muted);font-size:11px;font-weight:400">(advanced)</span></div>
+            <div class="ri-desc">Any Linux server you already have — Hetzner, DigitalOcean, a home machine, etc. Needs Ubuntu 22.04+ and ~16 GB RAM.</div>
+            <div id="vps-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <div class="form-group" style="margin-bottom:10px">
+                <label>SSH into your server and run this one command</label>
+                <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash</div>
+              </div>
+              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer handles everything: Node.js, Ollama, the gemma4 model, HTTPS, and the brain server. It will re-open this wizard on your server when ready.</div>
+            </div>
           </div>
-        </div>
+        </label>
+
       </div>
 
-      <div class="card">
-        <h3>Model</h3>
-        <div class="radio-group" id="model-choice">
-          <label class="radio-item selected">
-            <input type="radio" name="model" value="gemma4:26b" checked>
-            <div>
-              <div class="ri-label">gemma4:26b — 16GB VRAM <span style="color:var(--green)">(recommended)</span></div>
-              <div class="ri-desc">Best quality. Needs RTX 3060 12GB or better. ~10GB VRAM + ~7GB RAM via Ollama split.</div>
+      <!-- Domain field — shown for vastai/vps paths only -->
+      <div id="domain-section" style="display:none">
+        <div class="card">
+          <h3>Domain &amp; HTTPS <span style="font-weight:400;font-size:12px;color:var(--muted)">(optional — you can skip this and use a temporary URL)</span></h3>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Your domain name</label>
+            <input type="text" id="cfg-domain" placeholder="mybrain.duckdns.org" autocomplete="off" spellcheck="false">
+            <div class="hint">Leave blank to use a free temporary Cloudflare URL instead. <a href="https://www.duckdns.org" target="_blank" rel="noopener">Get a free domain at duckdns.org →</a></div>
+          </div>
+          <div id="duckdns-token-field" style="display:none">
+            <div class="form-group" style="margin-bottom:0">
+              <label>DuckDNS Token</label>
+              <input type="password" id="cfg-duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
+              <div class="hint">Found on your <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> account page.</div>
             </div>
-          </label>
-          <label class="radio-item">
-            <input type="radio" name="model" value="gemma4:12b">
-            <div>
-              <div class="ri-label">gemma4:12b — 8GB VRAM</div>
-              <div class="ri-desc">Good quality. Fits on most gaming GPUs (RTX 3060/4060).</div>
+          </div>
+          <div id="cloudflare-token-field" style="display:none">
+            <div class="form-group" style="margin-bottom:0">
+              <label>Cloudflare Tunnel Token</label>
+              <input type="password" id="cfg-cloudflare-token" placeholder="eyJhIjoiX..." autocomplete="off">
+              <div class="hint">Create at <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener">Cloudflare Zero Trust</a> → Access → Tunnels.</div>
             </div>
-          </label>
-          <label class="radio-item">
-            <input type="radio" name="model" value="skip">
-            <div>
-              <div class="ri-label">Skip model pull</div>
-              <div class="ri-desc">Already have a model pulled, or want to pull manually later.</div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Skip optional components</h3>
-        <div class="checkbox-group">
-          <label class="checkbox-item">
-            <input type="checkbox" id="skip-searxng">
-            <span>Skip SearXNG (web search support)</span>
-          </label>
-          <label class="checkbox-item">
-            <input type="checkbox" id="skip-caddy">
-            <span>Skip Caddy (already have a reverse proxy)</span>
-          </label>
-          <label class="checkbox-item">
-            <input type="checkbox" id="skip-compile">
-            <span>Skip initial vault compile</span>
-          </label>
+          </div>
         </div>
       </div>
 
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goPhase(0)">← Back</button>
-        <button class="btn btn-primary" onclick="startInstall()">Install Now →</button>
+        <button class="btn btn-primary" id="phase1-next-btn" onclick="startInstall()" style="display:none">Install on this computer →</button>
+        <button class="btn btn-blue" id="phase1-continue-btn" onclick="goPhase(2)" style="display:none">Continue — My server is ready →</button>
       </div>
     </section>
 
@@ -982,20 +964,40 @@ const HTML = `<!DOCTYPE html>
     window.scrollTo({ top: 0 });
   };
 
-  // ── Phase 1: HTTPS method toggles ──
-  document.querySelectorAll('#https-method input[type=radio]').forEach(function (r) {
+  // ── Phase 1: Deploy target selection ──
+  document.querySelectorAll('#deploy-target input[type=radio]').forEach(function (r) {
     r.addEventListener('change', function () {
-      document.querySelectorAll('#https-method .radio-item').forEach(function (el) { el.classList.remove('selected'); });
+      // Update selected styling
+      document.querySelectorAll('#deploy-target .radio-item').forEach(function (el) { el.classList.remove('selected'); });
       r.closest('.radio-item').classList.add('selected');
+
       var val = r.value;
-      document.getElementById('duckdns-token-field').style.display = val === 'duckdns' ? '' : 'none';
-      document.getElementById('cloudflare-token-field').style.display = val === 'cloudflare-tunnel' ? '' : 'none';
+      // Show/hide path-specific detail panels
+      document.getElementById('local-details').style.display  = val === 'local'  ? '' : 'none';
+      document.getElementById('vastai-details').style.display = val === 'vastai' ? '' : 'none';
+      document.getElementById('vps-details').style.display    = val === 'vps'    ? '' : 'none';
+      // Domain section only relevant for remote installs
+      document.getElementById('domain-section').style.display = (val === 'vastai' || val === 'vps') ? '' : 'none';
+      // Show appropriate action button
+      document.getElementById('phase1-next-btn').style.display     = val === 'local'  ? '' : 'none';
+      document.getElementById('phase1-continue-btn').style.display = (val === 'vastai' || val === 'vps') ? '' : 'none';
+      W.deployTarget = val;
     });
   });
 
-  document.querySelectorAll('#model-choice input[type=radio]').forEach(function (r) {
+  // Domain field: show DuckDNS token when domain ends in .duckdns.org
+  var cfgDomain = document.getElementById('cfg-domain');
+  if (cfgDomain) {
+    cfgDomain.addEventListener('input', function () {
+      var v = cfgDomain.value.trim();
+      document.getElementById('duckdns-token-field').style.display = v.endsWith('.duckdns.org') ? '' : 'none';
+    });
+  }
+
+  // Local access sub-radios
+  document.querySelectorAll('#local-access input[type=radio]').forEach(function (r) {
     r.addEventListener('change', function () {
-      document.querySelectorAll('#model-choice .radio-item').forEach(function (el) { el.classList.remove('selected'); });
+      document.querySelectorAll('#local-access .radio-item').forEach(function (el) { el.classList.remove('selected'); });
       r.closest('.radio-item').classList.add('selected');
     });
   });
@@ -1009,27 +1011,41 @@ const HTML = `<!DOCTYPE html>
 
   // ── Phase 1: Start Install ──
   window.startInstall = function () {
-    var domain = document.getElementById('cfg-domain').value.trim() || 'localhost';
-    var httpsMethod = document.querySelector('#https-method input[type=radio]:checked').value;
-    var model = document.querySelector('#model-choice input[type=radio]:checked').value;
-    var duckdnsToken = document.getElementById('cfg-duckdns-token').value.trim();
-    var cloudflareToken = document.getElementById('cfg-cloudflare-token').value.trim();
-    var skipSearxng = document.getElementById('skip-searxng').checked;
-    var skipCaddy = document.getElementById('skip-caddy').checked;
-    var skipCompile = document.getElementById('skip-compile').checked;
+    var deployTarget = W.deployTarget || 'local';
+    var domain = 'localhost';
+    var httpsMethod = 'local';
+    var duckdnsToken = null;
+    var cloudflareToken = null;
+
+    if (deployTarget === 'local') {
+      var localAccess = document.querySelector('#local-access input[type=radio]:checked');
+      if (localAccess && localAccess.value === 'cloudflare-quick') {
+        httpsMethod = 'cloudflare-quick';
+      }
+    } else {
+      // Remote path: read domain field
+      var domainVal = (document.getElementById('cfg-domain') || {}).value;
+      if (domainVal) domain = domainVal.trim() || 'localhost';
+      duckdnsToken = ((document.getElementById('cfg-duckdns-token') || {}).value || '').trim() || null;
+      cloudflareToken = ((document.getElementById('cfg-cloudflare-token') || {}).value || '').trim() || null;
+      if (domain.endsWith('.duckdns.org') && duckdnsToken) { httpsMethod = 'duckdns'; }
+      else if (cloudflareToken) { httpsMethod = 'cloudflare-tunnel'; }
+      else { httpsMethod = 'cloudflare-quick'; } // fallback: temp URL
+    }
 
     W.domain = domain;
 
     var payload = {
       domain: domain,
       httpsMethod: httpsMethod,
-      model: model,
-      duckdnsToken: duckdnsToken || null,
-      cloudflareToken: cloudflareToken || null,
-      skipSearxng: skipSearxng,
-      skipCaddy: skipCaddy,
-      skipCompile: skipCompile,
-      skipModels: model === 'skip',
+      model: 'gemma4:26b',           // always — one model
+      duckdnsToken: duckdnsToken,
+      cloudflareToken: cloudflareToken,
+      skipSearxng: true,             // SearXNG optional, skip by default for speed
+      skipCaddy: (httpsMethod === 'local' || httpsMethod === 'cloudflare-quick'),
+      skipCompile: false,
+      skipModels: false,
+      deployTarget: deployTarget,
     };
 
     goPhase(2);
