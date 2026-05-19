@@ -414,23 +414,60 @@ router.get('/api/sessions/:id', requireAuth, requireScope('memory:read'), (req, 
 
 /**
  * POST /api/sessions/ingest
- * Body: { id, source, messages: [{role, content}] }
+ *
+ * Accepts two formats:
+ *   A) Raw file relay (from `npx total-recall relay`):
+ *      { source, path, content, sha256 }
+ *      — content is the raw file text; server parses it based on source type
+ *
+ *   B) Pre-parsed messages:
+ *      { id, source, messages: [{role, content}] }
  */
 router.post('/api/sessions/ingest', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const { id, source = 'api', messages } = req.body || {};
-    if (!messages || !Array.isArray(messages)) {
-      return badRequest(res, 'messages must be an array of {role, content}');
+    const body = req.body || {};
+    const source = body.source || 'api';
+
+    let messages;
+
+    if (body.content && typeof body.content === 'string') {
+      // Format A: raw file content from the relay — extract human/assistant turns
+      messages = parseRawSessionContent(body.content, source);
+    } else if (Array.isArray(body.messages)) {
+      // Format B: pre-parsed messages array
+      messages = body.messages;
+    } else {
+      return badRequest(res, 'Provide either {content} (raw file) or {messages:[{role,content}]}');
     }
-    const sessionId = id || `api-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+
+    if (messages.length === 0) {
+      return res.status(200).json({ ingested: false, reason: 'no extractable messages' });
+    }
+
+    // Deduplicate by sha256 of the raw content (relay always sends sha256)
+    if (body.sha256) {
+      const hashIndex = path.join(AGENT_DIR, 'memory-derived', 'relay-hashes.jsonl');
+      fs.mkdirSync(path.dirname(hashIndex), { recursive: true });
+      const seen = new Set(
+        fs.existsSync(hashIndex)
+          ? fs.readFileSync(hashIndex, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l).sha256; } catch { return ''; } })
+          : []
+      );
+      if (seen.has(body.sha256)) {
+        return res.status(200).json({ ingested: false, reason: 'duplicate' });
+      }
+      fs.appendFileSync(hashIndex, JSON.stringify({ sha256: body.sha256, ts: new Date().toISOString(), source }) + '\n');
+    }
+
+    const sessionId = body.id || `relay-${source}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     const filename  = `${sessionId}.jsonl`;
     const dir = sessionsDir();
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, filename);
 
     const lines = messages.map(m => JSON.stringify({
-      role:      m.role,
-      content:   m.content,
+      role:       m.role,
+      content:    m.content,
       source,
       session_id: sessionId,
       timestamp:  new Date().toISOString(),
@@ -441,6 +478,50 @@ router.post('/api/sessions/ingest', requireAuth, requireScope('memory:write'), (
     serverError(res, err);
   }
 });
+
+/**
+ * Extract human/assistant turns from raw IDE session file content.
+ * Handles JSONL (Claude Code, Codex, Cursor, VS Code) and plaintext (Antigravity overview).
+ */
+function parseRawSessionContent(content, source) {
+  const messages = [];
+  const lines = content.split('\n').filter(Boolean);
+
+  // Try JSONL first (most IDE formats)
+  let jsonlParsed = 0;
+  for (const line of lines) {
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    jsonlParsed++;
+
+    // Claude Code / Codex / Cursor format
+    if (rec.role && (rec.content || rec.message)) {
+      const text = typeof rec.content === 'string' ? rec.content
+        : Array.isArray(rec.content) ? rec.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+        : typeof rec.message?.text === 'string' ? rec.message.text
+        : '';
+      if (text.trim()) messages.push({ role: rec.role, content: text.slice(0, 8000) });
+      continue;
+    }
+
+    // VS Code kind:2 requests array
+    if (rec.kind === 2 && Array.isArray(rec.v)) {
+      for (const req of rec.v) {
+        const user = req.message?.text || '';
+        const asst = req.response?.response?.value || req.response?.value || '';
+        if (user) messages.push({ role: 'user',      content: user.slice(0, 8000) });
+        if (asst) messages.push({ role: 'assistant', content: asst.slice(0, 8000) });
+      }
+    }
+  }
+
+  // If JSONL parsing got nothing meaningful, treat as plaintext (Antigravity overview.txt)
+  if (messages.length === 0 && content.trim()) {
+    messages.push({ role: 'assistant', content: content.slice(0, 20000) });
+  }
+
+  return messages;
+}
 
 /**
  * DELETE /api/sessions/:id
