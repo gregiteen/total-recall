@@ -261,3 +261,34 @@ file-native — no database, no vector store. New UI gated behind a
   # Restore on a new machine
   npx total-recall deploy --brain-repo git@github.com:you/brain-backup.git ...
   ```
+
+## ⏳ Phase 12: API Surface + Tools + Setup Wizard
+
+### REST API
+- [x] Build `src/server/rest.mjs` — full REST API: memory CRUD, vault compile,
+  keys CRUD, sessions CRUD, sandbox, config, `/v1/models`, `/.well-known/total-recall.json`,
+  `GET /api` reference. Evidence: file created, mounted in `index.mjs`.
+
+### Brain Tools (Vast.ai deployment)
+- [x] Add browser automation tools to `src/server/tools.mjs`: `browser_navigate`,
+  `browser_click`, `browser_type`, `browser_screenshot`, `browser_eval`,
+  `browser_get_content`, `search_web` (SearXNG→DDG fallback).
+- [x] Add computer use tools to `src/server/tools.mjs`: `computer_screenshot`,
+  `computer_left_click`, `computer_double_click`, `computer_right_click`,
+  `computer_mouse_move`, `computer_type`, `computer_key`, `computer_scroll`
+  via xdotool + scrot + Xvfb.
+- [x] Fix SearXNG in `deploy.mjs` — replace Docker with native Python pip install.
+- [x] Add Playwright + xdotool + scrot + xvfb install step to `deploy.mjs`.
+- [x] Fork-as-backup: `sync --push` + GitHub fork step in `setup.mjs`.
+- [x] Skill routing aliases (`push/backup/sync/fork/github` → push SKILL.md).
+
+### Setup Wizard UI
+- [ ] Rewrite `src/cli/deploy-ui.mjs` as a full multi-phase setup wizard:
+  - Phase 0 Welcome: overview of how Total Recall works, architecture diagram
+  - Phase 1 Configure: domain, HTTPS method (DuckDNS/Cloudflare/local), model choice, skip options — POSTs back to trigger deploy
+  - Phase 2 Installing: live SSE progress bar + step log
+  - Phase 3 Auth: generate first PAT, copy token, show scopes
+  - Phase 4 Integrations (tabbed): Claude Code, Cursor/Windsurf, UltraChat/OpenWebUI, MCP config, Obsidian
+  - Phase 5 API Docs: full endpoint reference, curl examples, auth header
+- [ ] Wire `deploy.mjs --ui` to await wizard config before starting install.
+- [ ] Test wizard flow end-to-end.
