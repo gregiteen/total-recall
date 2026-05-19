@@ -538,21 +538,22 @@ const HTML = `<!DOCTYPE html>
         <label class="radio-item" id="target-vastai-label">
           <input type="radio" name="deploy-target" value="vastai" id="target-vastai">
           <div style="flex:1">
-            <div class="ri-label">☁️&nbsp; Rent a GPU in the cloud (Vast.ai) <span style="color:var(--muted);font-size:11px;font-weight:400">~$5/mo</span></div>
-            <div class="ri-desc">Runs on a rented GPU server. Good if your computer doesn't have enough RAM. About $0.07/hour — turn it off when not using it.</div>
+            <div class="ri-label">☁️&nbsp; Rent a GPU in the cloud <span style="color:var(--muted);font-size:11px;font-weight:400">~$5/mo — best for older computers</span></div>
+            <div class="ri-desc">We rent you a GPU server automatically. You just need a Vast.ai account (free) and $10 credit (~6 weeks of usage).</div>
             <div id="vastai-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;You need a <a href="https://vast.ai" target="_blank" rel="noopener" style="color:var(--blue)">Vast.ai account</a> (free to create). Add $10 credit — that's about 6 weeks of usage.</div>
+              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;<strong>What is Vast.ai?</strong> It's a marketplace where you rent GPU computers by the hour. We handle everything else — you just paste your API key below.</div>
               <div class="form-group" style="margin-bottom:10px">
-                <label>Step 1 — Create your instance</label>
-                <p style="color:var(--muted);font-size:12px;margin-bottom:8px">Go to <a href="https://vast.ai/create" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai/create</a>, search for <strong>RTX 3060 12GB</strong>, and rent one with Ubuntu 22.04. Note the SSH command it gives you.</p>
+                <label>Step 1 — Create a free Vast.ai account</label>
+                <p style="color:var(--muted);font-size:12px;margin-bottom:8px">Go to <a href="https://vast.ai" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai</a>, sign up free, then add $10 credit (enough for ~6 weeks).</p>
               </div>
               <div class="form-group" style="margin-bottom:10px">
-                <label>Step 2 — SSH into your instance and run</label>
-                <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash</div>
+                <label>Step 2 — Get your API key</label>
+                <p style="color:var(--muted);font-size:12px;margin-bottom:6px">Go to <a href="https://vast.ai/console/account" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai/console/account</a> → scroll down to <strong>API Key</strong> → copy it.</p>
+                <input type="password" id="cfg-vastai-key" placeholder="Paste your Vast.ai API key here" autocomplete="off">
               </div>
               <div class="form-group" style="margin-bottom:0">
-                <label>Step 3 — Come back here</label>
-                <p style="color:var(--muted);font-size:12px">The installer will open this wizard on your server. Come back here after the model finishes downloading and click Continue.</p>
+                <label>Step 3 — We do the rest</label>
+                <p style="color:var(--muted);font-size:12px">Click "Provision &amp; Install" and we'll rent a GPU, install everything, and pull the AI model automatically. Takes about 10 minutes.</p>
               </div>
             </div>
           </div>
@@ -604,7 +605,8 @@ const HTML = `<!DOCTYPE html>
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goPhase(0)">← Back</button>
         <button class="btn btn-primary" id="phase1-next-btn" onclick="startInstall()" style="display:none">Install on this computer →</button>
-        <button class="btn btn-blue" id="phase1-continue-btn" onclick="goPhase(2)" style="display:none">Continue — My server is ready →</button>
+        <button class="btn btn-primary" id="phase1-vastai-btn" onclick="provisionVastAI()" style="display:none">☁️ Provision &amp; Install →</button>
+        <button class="btn btn-blue" id="phase1-continue-btn" onclick="goPhase(2)" style="display:none">My VPS is ready — Continue →</button>
       </div>
     </section>
 
@@ -976,11 +978,12 @@ const HTML = `<!DOCTYPE html>
       document.getElementById('local-details').style.display  = val === 'local'  ? '' : 'none';
       document.getElementById('vastai-details').style.display = val === 'vastai' ? '' : 'none';
       document.getElementById('vps-details').style.display    = val === 'vps'    ? '' : 'none';
-      // Domain section only relevant for remote installs
-      document.getElementById('domain-section').style.display = (val === 'vastai' || val === 'vps') ? '' : 'none';
+      // Domain section only relevant for VPS (Vast.ai handles it automatically)
+      document.getElementById('domain-section').style.display = val === 'vps' ? '' : 'none';
       // Show appropriate action button
-      document.getElementById('phase1-next-btn').style.display     = val === 'local'  ? '' : 'none';
-      document.getElementById('phase1-continue-btn').style.display = (val === 'vastai' || val === 'vps') ? '' : 'none';
+      document.getElementById('phase1-next-btn').style.display    = val === 'local'  ? '' : 'none';
+      document.getElementById('phase1-vastai-btn').style.display  = val === 'vastai' ? '' : 'none';
+      document.getElementById('phase1-continue-btn').style.display = val === 'vps'   ? '' : 'none';
       W.deployTarget = val;
     });
   });
@@ -1002,12 +1005,24 @@ const HTML = `<!DOCTYPE html>
     });
   });
 
-  document.querySelectorAll('#key-scope input[type=radio]').forEach(function (r) {
-    r.addEventListener('change', function () {
-      document.querySelectorAll('#key-scope .radio-item').forEach(function (el) { el.classList.remove('selected'); });
-      r.closest('.radio-item').classList.add('selected');
+  // ── Phase 1: Vast.ai provision (client-side) ──
+  window.provisionVastAI = function () {
+    var key = (document.getElementById('cfg-vastai-key') || {}).value;
+    if (!key || !key.trim()) {
+      alert('Please paste your Vast.ai API key first (Step 2 above).');
+      return;
+    }
+    // Move to Phase 2 (install log) so user sees progress
+    goPhase(2);
+    startSSE();
+    fetch('/api/provision-vastai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vastaiKey: key.trim() }),
+    }).catch(function (err) {
+      console.error('provision-vastai error', err);
     });
-  });
+  };
 
   // ── Phase 1: Start Install ──
   window.startInstall = function () {
@@ -1374,6 +1389,31 @@ export function startDeployUI(port = 3001) {
         return;
       }
 
+      // ── Vast.ai auto-provisioner ──
+      if (req.method === 'POST' && url === '/api/provision-vastai') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          let opts;
+          try { opts = JSON.parse(body); } catch { opts = {}; }
+          const apiKey = (opts.vastaiKey || '').trim();
+          if (!apiKey) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'vast_api_key required' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+
+          // Run provisioning in background, stream via SSE
+          provisionVastAI(apiKey).catch(err => {
+            emitProgress('error', 'Vast.ai provisioning failed: ' + err.message);
+          });
+
+          res.end(JSON.stringify({ ok: true, message: 'Provisioning started — watch the progress log' }));
+        });
+        return;
+      }
+
       // ── Serve wizard HTML for everything else ──
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(HTML);
@@ -1383,6 +1423,104 @@ export function startDeployUI(port = 3001) {
       resolve(`http://localhost:${port}`);
     });
   });
+}
+
+// ── Vast.ai auto-provisioner ────────────────────────────────────────────────────────
+
+async function vastAPI(key, method, path, body) {
+  const { default: https } = await import('node:https');
+  return new Promise((resolve, reject) => {
+    const data = body ? JSON.stringify(body) : null;
+    const opts = {
+      hostname: 'console.vast.ai',
+      path: `/api/v0${path}`,
+      method,
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}),
+      },
+    };
+    const req = https.request(opts, (r) => {
+      let buf = '';
+      r.on('data', c => { buf += c; });
+      r.on('end', () => {
+        try { resolve(JSON.parse(buf)); }
+        catch { resolve(buf); }
+      });
+    });
+    req.on('error', reject);
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function provisionVastAI(apiKey) {
+  emitProgress('log', '🔍 Searching for available GPU instances on Vast.ai...');
+
+  // Search for cheapest RTX 3060 12GB+ with Ubuntu, enough disk
+  const offers = await vastAPI(apiKey, 'GET',
+    '/bundles/?q={"gpu_name":{"in":["RTX 3060","RTX 3060 Ti","RTX 3070","RTX 3080"]},"disk_space":{"gte":40},"reliability2":{"gte":0.9},"rentable":{"eq":true},"order":[["dph_total","asc"]],"limit":5}'
+  );
+
+  const offerList = (offers.offers || []).filter(o => o.rentable);
+  if (!offerList.length) {
+    emitProgress('error', '❌ No suitable GPU instances available right now. Try again in a few minutes.');
+    return;
+  }
+
+  const best = offerList[0];
+  emitProgress('log', `✅ Found: ${best.gpu_name} — $${(best.dph_total * 24 * 30).toFixed(2)}/mo at ${best.location?.country || 'unknown location'}`);
+  emitProgress('log', '🚀 Creating your instance...');
+
+  // Create the instance
+  const created = await vastAPI(apiKey, 'PUT', `/asks/${best.id}/`, {
+    client_id: 'me',
+    image: 'pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime',
+    disk: 40,
+    onstart: 'curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash',
+    env: {},
+    runtype: 'ssh',
+    image_login: null,
+  });
+
+  if (!created.success) {
+    emitProgress('error', `❌ Failed to create instance: ${JSON.stringify(created)}`);
+    return;
+  }
+
+  const instanceId = created.new_contract;
+  emitProgress('log', `✅ Instance created (ID: ${instanceId}). Waiting for it to boot...`);
+
+  // Poll until running
+  let instance = null;
+  for (let i = 0; i < 40; i++) {
+    await sleep(15000);
+    const status = await vastAPI(apiKey, 'GET', `/instances/${instanceId}/`);
+    instance = (status.instances || [])[0] || status;
+    const state = instance.actual_status || instance.status || 'loading';
+    emitProgress('log', `⏳ Instance status: ${state}...`);
+    if (state === 'running') break;
+  }
+
+  if (!instance || (instance.actual_status !== 'running' && instance.status !== 'running')) {
+    emitProgress('error', '❌ Instance did not start within 10 minutes. Check your Vast.ai dashboard.');
+    return;
+  }
+
+  emitProgress('log', '✅ Instance is running! Total Recall is installing...');
+  emitProgress('log', `📍 SSH: ssh -p ${instance.ssh_port} root@${instance.ssh_host}`);
+  emitProgress('log', '⏳ The installer is pulling the gemma4 model (~10 GB). This takes 5-10 minutes...');
+  emitProgress('log', '💡 You can close this window and come back — the install runs in the background.');
+
+  // Store instance info for later phases
+  _installOptions = _installOptions || {};
+  _installOptions.vastInstanceId = instanceId;
+  _installOptions.vastSshHost = instance.ssh_host;
+  _installOptions.vastSshPort = instance.ssh_port;
+  _installOptions.domain = `${instance.ssh_host}`;
 }
 
 // ─── SSE helpers ──────────────────────────────────────────────────────────────
