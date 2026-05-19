@@ -236,8 +236,12 @@ async function callTool(name, args = {}) {
 
     case 'recompile_surface': {
       const { runRebuild } = await import('../cli/rebuild.mjs');
-      const code = await runRebuild();
-      return toolContent({ rebuilt: code === 0, exit_code: code });
+      try {
+        const code = await runRebuild();
+        return toolContent({ rebuilt: code === 0, exit_code: code });
+      } catch (err) {
+        return toolContent({ rebuilt: false, exit_code: 1, error: { code: err.code, repair: err.repair, message: err.message, context: err.context ?? {} } });
+      }
     }
 
     default:
