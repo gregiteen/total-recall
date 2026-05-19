@@ -514,10 +514,10 @@ const HTML = `<!DOCTYPE html>
         <label class="radio-item" id="target-local-label">
           <input type="radio" name="deploy-target" value="local" id="target-local">
           <div style="flex:1">
-            <div class="ri-label">🖥&nbsp; On this computer <span style="color:var(--green);font-size:11px;font-weight:400">(simplest)</span></div>
-            <div class="ri-desc">Runs entirely on your Mac or PC. Free. Needs ~16 GB of RAM free.</div>
+            <div class="ri-label">🖥&nbsp; On this computer <span style="color:var(--green);font-size:11px;font-weight:400">(simplest — if this machine has 16 GB+ RAM)</span></div>
+            <div class="ri-desc">Install right here. Works on Mac or PC, with or without a GPU. Ollama doesn't need to be pre-installed.</div>
             <div id="local-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;This installer will: check your RAM, install Ollama (the AI runtime), download the gemma4 model (~10 GB), and start your brain — all automatically. Just click Install.</div>
+              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer will check your RAM, install Ollama if needed, download the gemma4 model (~10 GB), and start your brain — all automatically.</div>
               <div class="form-group" style="margin-top:14px;margin-bottom:0">
                 <label>Public access (optional)</label>
                 <div class="radio-group" id="local-access">
@@ -527,9 +527,30 @@ const HTML = `<!DOCTYPE html>
                   </label>
                   <label class="radio-item">
                     <input type="radio" name="local-access" value="cloudflare-quick">
-                    <div><div class="ri-label">Share over internet (Cloudflare Quick Tunnel)</div><div class="ri-desc">Generates a public URL so you can reach your brain from your phone or other devices. Free, no account needed.</div></div>
+                    <div><div class="ri-label">Share over internet (free Cloudflare URL)</div><div class="ri-desc">Reach your brain from your phone or other devices. Zero config, no account needed.</div></div>
                   </label>
                 </div>
+              </div>
+            </div>
+          </div>
+        </label>
+
+        <label class="radio-item" id="target-localnet-label">
+          <input type="radio" name="deploy-target" value="localnet" id="target-localnet">
+          <div style="flex:1">
+            <div class="ri-label">🏠&nbsp; Another computer on my network <span style="color:var(--blue);font-size:11px;font-weight:400">(recommended for most users)</span></div>
+            <div class="ri-desc">Mac Mini, iMac, gaming PC, or any always-on desktop on your home or office network. The brain runs there — you connect from anywhere.</div>
+            <div id="localnet-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;The wizard will connect to that computer and install everything automatically. You just need its IP address and username.</div>
+              <div class="form-group" style="margin-bottom:10px">
+                <label>IP address or hostname of that computer</label>
+                <input type="text" id="cfg-localnet-host" placeholder="192.168.1.100  or  mac-mini.local" autocomplete="off" spellcheck="false">
+                <div class="hint">On a Mac: Apple menu → System Settings → General → Sharing → look for the local hostname. On Windows: open Command Prompt, type <code>ipconfig</code>.</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label>Username on that computer</label>
+                <input type="text" id="cfg-localnet-user" placeholder="greg" autocomplete="off" spellcheck="false">
+                <div class="hint">The username you log in with. <strong>SSH must be enabled</strong> — on Mac: System Settings → General → Sharing → Remote Login → On.</div>
               </div>
             </div>
           </div>
@@ -538,22 +559,22 @@ const HTML = `<!DOCTYPE html>
         <label class="radio-item" id="target-vastai-label">
           <input type="radio" name="deploy-target" value="vastai" id="target-vastai">
           <div style="flex:1">
-            <div class="ri-label">☁️&nbsp; Rent a GPU in the cloud <span style="color:var(--muted);font-size:11px;font-weight:400">~$5/mo — best for older computers</span></div>
-            <div class="ri-desc">We rent you a GPU server automatically. You just need a Vast.ai account (free) and $10 credit (~6 weeks of usage).</div>
+            <div class="ri-label">☁️&nbsp; Rent a GPU in the cloud <span style="color:var(--muted);font-size:11px;font-weight:400">~$5/mo — no hardware needed</span></div>
+            <div class="ri-desc">We rent a GPU server for you automatically. Good if you don't have a suitable computer at home. About $0.07/hour — pause it when not in use.</div>
             <div id="vastai-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;<strong>What is Vast.ai?</strong> It's a marketplace where you rent GPU computers by the hour. We handle everything else — you just paste your API key below.</div>
+              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;<strong>What is Vast.ai?</strong> A marketplace where you rent GPU computers by the hour. We handle everything — you just paste your API key below.</div>
               <div class="form-group" style="margin-bottom:10px">
                 <label>Step 1 — Create a free Vast.ai account</label>
                 <p style="color:var(--muted);font-size:12px;margin-bottom:8px">Go to <a href="https://vast.ai" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai</a>, sign up free, then add $10 credit (enough for ~6 weeks).</p>
               </div>
               <div class="form-group" style="margin-bottom:10px">
                 <label>Step 2 — Get your API key</label>
-                <p style="color:var(--muted);font-size:12px;margin-bottom:6px">Go to <a href="https://vast.ai/console/account" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai/console/account</a> → scroll down to <strong>API Key</strong> → copy it.</p>
+                <p style="color:var(--muted);font-size:12px;margin-bottom:6px">Go to <a href="https://vast.ai/console/account" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai/console/account</a> → scroll to <strong>API Key</strong> → copy it.</p>
                 <input type="password" id="cfg-vastai-key" placeholder="Paste your Vast.ai API key here" autocomplete="off">
               </div>
               <div class="form-group" style="margin-bottom:0">
                 <label>Step 3 — We do the rest</label>
-                <p style="color:var(--muted);font-size:12px">Click "Provision &amp; Install" and we'll rent a GPU, install everything, and pull the AI model automatically. Takes about 10 minutes.</p>
+                <p style="color:var(--muted);font-size:12px">Click "Provision &amp; Install" — we'll rent a GPU, run the installer, and pull the AI model. Takes about 10 minutes total.</p>
               </div>
             </div>
           </div>
@@ -562,41 +583,34 @@ const HTML = `<!DOCTYPE html>
         <label class="radio-item" id="target-vps-label">
           <input type="radio" name="deploy-target" value="vps" id="target-vps">
           <div style="flex:1">
-            <div class="ri-label">🌐&nbsp; Your own server or VPS <span style="color:var(--muted);font-size:11px;font-weight:400">(advanced)</span></div>
-            <div class="ri-desc">Any Linux server you already have — Hetzner, DigitalOcean, a home machine, etc. Needs Ubuntu 22.04+ and ~16 GB RAM.</div>
+            <div class="ri-label">🌐&nbsp; Your own VPS or cloud server <span style="color:var(--muted);font-size:11px;font-weight:400">(advanced)</span></div>
+            <div class="ri-desc">Hetzner, DigitalOcean, RunPod, or any Linux server you already have. Needs Ubuntu 22.04+ and ~16 GB RAM.</div>
             <div id="vps-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
               <div class="form-group" style="margin-bottom:10px">
                 <label>SSH into your server and run this one command</label>
                 <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash</div>
               </div>
-              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer handles everything: Node.js, Ollama, the gemma4 model, HTTPS, and the brain server. It will re-open this wizard on your server when ready.</div>
+              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer handles Node.js, Ollama, the gemma4 model, HTTPS, and the brain server — everything from scratch.</div>
             </div>
           </div>
         </label>
 
       </div>
 
-      <!-- Domain field — shown for vastai/vps paths only -->
+      <!-- Domain field — shown for VPS path only -->
       <div id="domain-section" style="display:none">
         <div class="card">
-          <h3>Domain &amp; HTTPS <span style="font-weight:400;font-size:12px;color:var(--muted)">(optional — you can skip this and use a temporary URL)</span></h3>
+          <h3>Domain &amp; HTTPS <span style="font-weight:400;font-size:12px;color:var(--muted)">(optional — skip to get a free temporary URL)</span></h3>
           <div class="form-group" style="margin-bottom:12px">
             <label>Your domain name</label>
             <input type="text" id="cfg-domain" placeholder="mybrain.duckdns.org" autocomplete="off" spellcheck="false">
-            <div class="hint">Leave blank to use a free temporary Cloudflare URL instead. <a href="https://www.duckdns.org" target="_blank" rel="noopener">Get a free domain at duckdns.org →</a></div>
+            <div class="hint">Leave blank for a free temporary Cloudflare URL. <a href="https://www.duckdns.org" target="_blank" rel="noopener">Get a free domain at duckdns.org →</a></div>
           </div>
           <div id="duckdns-token-field" style="display:none">
             <div class="form-group" style="margin-bottom:0">
               <label>DuckDNS Token</label>
               <input type="password" id="cfg-duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
               <div class="hint">Found on your <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> account page.</div>
-            </div>
-          </div>
-          <div id="cloudflare-token-field" style="display:none">
-            <div class="form-group" style="margin-bottom:0">
-              <label>Cloudflare Tunnel Token</label>
-              <input type="password" id="cfg-cloudflare-token" placeholder="eyJhIjoiX..." autocomplete="off">
-              <div class="hint">Create at <a href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener">Cloudflare Zero Trust</a> → Access → Tunnels.</div>
             </div>
           </div>
         </div>
@@ -948,6 +962,7 @@ const HTML = `<!DOCTYPE html>
     apiUrl: '',
     dashUrl: '',
     healthUrl: '',
+    deployTarget: '',
   };
 
   // ── Phase navigation ──
@@ -969,26 +984,26 @@ const HTML = `<!DOCTYPE html>
   // ── Phase 1: Deploy target selection ──
   document.querySelectorAll('#deploy-target input[type=radio]').forEach(function (r) {
     r.addEventListener('change', function () {
-      // Update selected styling
       document.querySelectorAll('#deploy-target .radio-item').forEach(function (el) { el.classList.remove('selected'); });
       r.closest('.radio-item').classList.add('selected');
 
       var val = r.value;
       // Show/hide path-specific detail panels
-      document.getElementById('local-details').style.display  = val === 'local'  ? '' : 'none';
-      document.getElementById('vastai-details').style.display = val === 'vastai' ? '' : 'none';
-      document.getElementById('vps-details').style.display    = val === 'vps'    ? '' : 'none';
-      // Domain section only relevant for VPS (Vast.ai handles it automatically)
-      document.getElementById('domain-section').style.display = val === 'vps' ? '' : 'none';
-      // Show appropriate action button
-      document.getElementById('phase1-next-btn').style.display    = val === 'local'  ? '' : 'none';
-      document.getElementById('phase1-vastai-btn').style.display  = val === 'vastai' ? '' : 'none';
-      document.getElementById('phase1-continue-btn').style.display = val === 'vps'   ? '' : 'none';
+      document.getElementById('local-details').style.display    = val === 'local'    ? '' : 'none';
+      document.getElementById('localnet-details').style.display  = val === 'localnet' ? '' : 'none';
+      document.getElementById('vastai-details').style.display   = val === 'vastai'   ? '' : 'none';
+      document.getElementById('vps-details').style.display      = val === 'vps'      ? '' : 'none';
+      // Domain section only for VPS
+      document.getElementById('domain-section').style.display   = val === 'vps'      ? '' : 'none';
+      // Show the right action button
+      document.getElementById('phase1-next-btn').style.display      = val === 'local'    ? '' : 'none';
+      document.getElementById('phase1-localnet-btn').style.display  = val === 'localnet' ? '' : 'none';
+      document.getElementById('phase1-vastai-btn').style.display    = val === 'vastai'   ? '' : 'none';
+      document.getElementById('phase1-continue-btn').style.display  = val === 'vps'      ? '' : 'none';
       W.deployTarget = val;
     });
   });
 
-  // Domain field: show DuckDNS token when domain ends in .duckdns.org
   var cfgDomain = document.getElementById('cfg-domain');
   if (cfgDomain) {
     cfgDomain.addEventListener('input', function () {
@@ -1005,6 +1020,31 @@ const HTML = `<!DOCTYPE html>
     });
   });
 
+  // ── Phase 1: Install on another computer on the network ──
+  window.installOnNetwork = function () {
+    var host = (document.getElementById('cfg-localnet-host') || {}).value;
+    var user = (document.getElementById('cfg-localnet-user') || {}).value;
+    if (!host || !host.trim()) { alert('Please enter the IP address or hostname of that computer.'); return; }
+    if (!user || !user.trim()) { alert('Please enter the username on that computer.'); return; }
+    goPhase(2);
+    startSSE();
+    fetch('/api/start-install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deployTarget: 'localnet',
+        localnetHost: host.trim(),
+        localnetUser: user.trim(),
+        model: 'gemma4:26b',
+        httpsMethod: 'local',
+        skipSearxng: true,
+        skipCaddy: true,
+        skipCompile: false,
+        skipModels: false,
+      }),
+    }).catch(function (e) { console.error(e); });
+  };
+
   // ── Phase 1: Vast.ai provision (client-side) ──
   window.provisionVastAI = function () {
     var key = (document.getElementById('cfg-vastai-key') || {}).value;
@@ -1012,16 +1052,13 @@ const HTML = `<!DOCTYPE html>
       alert('Please paste your Vast.ai API key first (Step 2 above).');
       return;
     }
-    // Move to Phase 2 (install log) so user sees progress
     goPhase(2);
     startSSE();
     fetch('/api/provision-vastai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vastaiKey: key.trim() }),
-    }).catch(function (err) {
-      console.error('provision-vastai error', err);
-    });
+    }).catch(function (err) { console.error('provision-vastai error', err); });
   };
 
   // ── Phase 1: Start Install ──
