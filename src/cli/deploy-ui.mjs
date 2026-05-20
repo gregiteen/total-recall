@@ -481,6 +481,7 @@ const HTML = `<!DOCTYPE html>
       <li data-phase="4"><span class="step-badge">5</span>Integrations</li>
       <li data-phase="5"><span class="step-badge">6</span>API Reference</li>
       <li data-phase="6"><span class="step-badge">7</span>Done</li>
+      <li data-phase="7" style="margin-top:auto;border-top:1px solid var(--border);padding-top:12px"><span class="step-badge">⚙</span>Settings</li>
     </ul>
   </aside>
 
@@ -1052,6 +1053,104 @@ const HTML = `<!DOCTYPE html>
       </div>
     </section>
 
+    <!-- ═══════════════════════════ PHASE 7 — Settings ══════════════════════════ -->
+    <section class="phase" id="phase-7">
+      <div class="phase-header">
+        <h1>⚙️ Settings</h1>
+        <p>Manage your search providers, usage limits, and other preferences.</p>
+      </div>
+
+      <!-- Search Providers -->
+      <div class="card">
+        <h3>🔍 Web Search Providers</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:6px">
+          The background research engine tries these in order — Tavily → Brave → Exa → Serper — and falls back to DuckDuckGo (free) when none are set or the daily limit is reached.
+        </p>
+
+        <div id="settings-usage-bar" style="background:rgba(255,255,255,0.05);border-radius:6px;padding:10px 12px;font-size:12px;margin-bottom:18px">
+          <span style="color:var(--muted)">Today's paid searches: </span>
+          <strong id="settings-usage-count" style="color:var(--text)">—</strong>
+          <span style="color:var(--muted)"> / </span>
+          <strong id="settings-usage-limit" style="color:var(--text)">—</strong>
+          <span style="color:var(--muted)"> &nbsp;(<span id="settings-usage-remaining">—</span> remaining today)</span>
+        </div>
+
+        <div style="display:grid;gap:14px;margin-bottom:20px">
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <strong>Tavily</strong>
+              <span style="font-size:11px;background:var(--green);color:#000;padding:2px 7px;border-radius:10px">Best for AI agents</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Returns full page text, not just links. 1,000 free searches/month. <a href="https://tavily.com" target="_blank" style="color:var(--blue)">tavily.com</a></p>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="password" id="s-tavily-key" placeholder="tvly-… (leave blank to remove)" autocomplete="off" style="font-family:monospace;flex:1">
+              <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('s-tavily-key')">Show</button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <strong>Brave Search</strong>
+              <span style="font-size:11px;color:var(--muted)">~1,000 free/month</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Independent web index. <a href="https://brave.com/search/api/" target="_blank" style="color:var(--blue)">brave.com/search/api</a></p>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="password" id="s-brave-key" placeholder="BSA… (leave blank to remove)" autocomplete="off" style="font-family:monospace;flex:1">
+              <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('s-brave-key')">Show</button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <strong>Exa</strong>
+              <span style="font-size:11px;color:var(--muted)">~1,000 free/month</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Neural/semantic search — finds by meaning. <a href="https://exa.ai" target="_blank" style="color:var(--blue)">exa.ai</a></p>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="password" id="s-exa-key" placeholder="… (leave blank to remove)" autocomplete="off" style="font-family:monospace;flex:1">
+              <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('s-exa-key')">Show</button>
+            </div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <strong>Serper</strong>
+              <span style="font-size:11px;color:var(--muted)">2,500 one-time free credits</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Google Search results. <a href="https://serper.dev" target="_blank" style="color:var(--blue)">serper.dev</a></p>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="password" id="s-serper-key" placeholder="… (leave blank to remove)" autocomplete="off" style="font-family:monospace;flex:1">
+              <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('s-serper-key')">Show</button>
+            </div>
+          </div>
+
+        </div>
+
+        <div style="margin-bottom:20px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">
+            Daily search limit
+            <span style="font-weight:400;color:var(--muted);margin-left:6px">paid API calls per day — resets at midnight</span>
+          </label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <input type="number" id="s-daily-limit" min="0" max="5000" value="50"
+              style="width:90px;font-size:14px;text-align:center">
+            <span style="font-size:12px;color:var(--muted)">
+              Set to <strong>0</strong> to disable the limit entirely (if you're on a paid plan).
+              Default <strong>50/day ≈ 1,500/month</strong> stays within most free tiers.
+            </span>
+          </div>
+        </div>
+
+        <div id="settings-save-result" class="notice" style="display:none;margin-bottom:14px"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        </div>
+      </div>
+
+    </section>
+
   </main>
 </div>
 
@@ -1489,6 +1588,82 @@ const HTML = `<!DOCTYPE html>
       });
   };
 
+  // ── Phase 7: Settings ──
+  function populateSettings() {
+    // Load current key values (masked) and usage stats
+    fetch('/api/get-search-config')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        // Show placeholder if key exists, empty if not — never show actual key
+        if (data.hasTavily)  document.getElementById('s-tavily-key').placeholder  = 'tvly-\u2026\u2026 (key set — enter new value to change)';
+        if (data.hasBrave)   document.getElementById('s-brave-key').placeholder   = 'BSA\u2026\u2026 (key set — enter new value to change)';
+        if (data.hasExa)     document.getElementById('s-exa-key').placeholder     = '\u2026\u2026 (key set — enter new value to change)';
+        if (data.hasSerper)  document.getElementById('s-serper-key').placeholder  = '\u2026\u2026 (key set — enter new value to change)';
+        document.getElementById('s-daily-limit').value = data.dailyLimit ?? 50;
+      })
+      .catch(function() { /* config not saved yet — defaults stay */ });
+
+    fetch('/api/get-search-usage')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        document.getElementById('settings-usage-count').textContent     = data.today;
+        document.getElementById('settings-usage-limit').textContent     = data.limit === 'unlimited' ? '\u221e' : data.limit;
+        document.getElementById('settings-usage-remaining').textContent = data.remaining === 'unlimited' ? 'unlimited' : data.remaining;
+      })
+      .catch(function() {});
+  }
+
+  window.saveSettings = function() {
+    var tavilyKey  = (document.getElementById('s-tavily-key').value  || '').trim();
+    var braveKey   = (document.getElementById('s-brave-key').value   || '').trim();
+    var exaKey     = (document.getElementById('s-exa-key').value     || '').trim();
+    var serperKey  = (document.getElementById('s-serper-key').value  || '').trim();
+    var dailyLimit = parseInt(document.getElementById('s-daily-limit').value, 10) || 0;
+    var resultEl   = document.getElementById('settings-save-result');
+
+    resultEl.style.display = '';
+    resultEl.className = 'notice';
+    resultEl.textContent = 'Saving\u2026';
+
+    fetch('/api/save-search-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tavilyKey: tavilyKey, braveKey: braveKey, exaKey: exaKey, serperKey: serperKey, dailyLimit: dailyLimit, mergeExisting: true })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        resultEl.className = 'notice success';
+        var src = data.primarySource;
+        resultEl.textContent = '\u2705 Saved. ' + (src === 'DuckDuckGo + Wikipedia (free)' ? 'No paid key set \u2014 using DuckDuckGo + Wikipedia.' : 'Primary source: ' + src + '.');
+        // Clear fields and re-load placeholders
+        ['s-tavily-key','s-brave-key','s-exa-key','s-serper-key'].forEach(function(id) {
+          document.getElementById(id).value = '';
+        });
+        populateSettings();
+      } else {
+        resultEl.className = 'notice warn';
+        resultEl.textContent = '\u26a0\ufe0f ' + (data.error || 'Could not save.');
+      }
+    })
+    .catch(function() {
+      resultEl.className = 'notice warn';
+      resultEl.textContent = '\u26a0\ufe0f Could not reach server.';
+    });
+  };
+
+  window.toggleShow = function(id) {
+    var el = document.getElementById(id);
+    var btn = el.nextElementSibling;
+    if (el.type === 'password') {
+      el.type = 'text';
+      btn.textContent = 'Hide';
+    } else {
+      el.type = 'password';
+      btn.textContent = 'Show';
+    }
+  };
+
   // ── Tabs ──
   window.openTab = function (id) {
     document.querySelectorAll('.tab-pane').forEach(function (p) { p.classList.remove('active'); });
@@ -1569,7 +1744,6 @@ export function startDeployUI(port = 3001) {
         });
         return;
       }
-
       // ── POST /api/generate-pat — proxy to brain server ──
       if (url === '/api/generate-pat' && req.method === 'POST') {
         let body = '';
@@ -1599,48 +1773,47 @@ export function startDeployUI(port = 3001) {
         return;
       }
 
-      // ── Vast.ai auto-provisioner ──
-      if (req.method === 'POST' && url === '/api/provision-vastai') {
-        let body = '';
-        req.on('data', d => { body += d; });
-        req.on('end', async () => {
-          let opts;
-          try { opts = JSON.parse(body); } catch { opts = {}; }
-          const apiKey = (opts.vastaiKey || '').trim();
-          if (!apiKey) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'vast_api_key required' }));
-            return;
-          }
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-
-          // Run provisioning in background, stream via SSE
-          provisionVastAI(apiKey).catch(err => {
-            emitProgress('error', 'Vast.ai provisioning failed: ' + err.message);
-          });
-
-          res.end(JSON.stringify({ ok: true, message: 'Provisioning started — watch the progress log' }));
-        });
-        return;
-      }
-
       // ── POST /api/save-search-config — write research.yml ──
       if (url === '/api/save-search-config' && req.method === 'POST') {
         let body = '';
         req.on('data', (c) => { body += c; });
         req.on('end', () => {
           try {
-            const { braveKey, tavilyKey, exaKey, serperKey } = JSON.parse(body);
+            const { braveKey, tavilyKey, exaKey, serperKey, dailyLimit, mergeExisting } = JSON.parse(body);
             const configDir = path2.default.join(os2.default.homedir(), '.agent', 'config');
+            const configFile = path2.default.join(configDir, 'research.yml');
             fs2.default.mkdirSync(configDir, { recursive: true });
+
+            // If mergeExisting=true (Settings page), blank fields keep existing values
+            let existing = {};
+            if (mergeExisting && fs2.default.existsSync(configFile)) {
+              try {
+                const raw = fs2.default.readFileSync(configFile, 'utf8');
+                // Simple key extraction without yaml parser dependency in this context
+                const extract = (key) => { const m = raw.match(new RegExp(`${key}:\\s*"([^"]+)"`)); return m ? m[1] : ''; };
+                existing = {
+                  tavily: extract('tavily_api_key'),
+                  brave:  extract('brave_api_key'),
+                  exa:    extract('exa_api_key'),
+                  serper: extract('serper_api_key'),
+                };
+              } catch { /* ignore */ }
+            }
+
+            const resolvedTavily  = tavilyKey  || existing.tavily  || '';
+            const resolvedBrave   = braveKey   || existing.brave   || '';
+            const resolvedExa     = exaKey     || existing.exa     || '';
+            const resolvedSerper  = serperKey  || existing.serper  || '';
+            const resolvedLimit   = (dailyLimit != null) ? Number(dailyLimit) : 50;
+
             const lines = [
               '# Total Recall Research Source Configuration',
-              '# Generated by setup wizard — edit freely',
-              '# Fallback order: Brave → Tavily → Exa → Serper → DuckDuckGo (free)',
+              '# Generated by setup wizard / settings — edit freely',
+              '# Fallback order: Tavily → Brave → Exa → Serper → DuckDuckGo (free)',
               '',
               '# Tavily: best for AI agents — returns clean extracted text, not just links.',
               '# 1,000 free queries/month. https://tavily.com',
-              `tavily_api_key: ${tavilyKey ? `"${tavilyKey}"` : '""'}`,
+              `tavily_api_key: "${resolvedTavily}"`,
               '',
               '# Brave Search: independent web index, not Google. ~1,000 free/month. https://brave.com/search/api/',
               `brave_api_key: ${braveKey ? `"${braveKey}"` : '""'}`,
@@ -1668,6 +1841,60 @@ export function startDeployUI(port = 3001) {
             res.end(JSON.stringify({ ok: false, error: err.message }));
           }
         });
+        return;
+      }
+
+      // ── GET /api/get-search-config — which keys are set + current daily limit ──
+      // Returns booleans only — never exposes actual key values
+      if (url === '/api/get-search-config' && req.method === 'GET') {
+        try {
+          const configFile = path2.default.join(os2.default.homedir(), '.agent', 'config', 'research.yml');
+          let hasTavily = false, hasBrave = false, hasExa = false, hasSerper = false, dailyLimitVal = 50;
+          if (fs2.default.existsSync(configFile)) {
+            const raw = fs2.default.readFileSync(configFile, 'utf8');
+            const extract = (key) => { const m = raw.match(new RegExp(`${key}:\\s*"([^"]+)"`)); return m ? m[1] : ''; };
+            const limitMatch = raw.match(/daily_web_search_limit:\s*(\d+)/);
+            hasTavily  = !!extract('tavily_api_key');
+            hasBrave   = !!extract('brave_api_key');
+            hasExa     = !!extract('exa_api_key');
+            hasSerper  = !!extract('serper_api_key');
+            dailyLimitVal = limitMatch ? parseInt(limitMatch[1], 10) : 50;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ hasTavily, hasBrave, hasExa, hasSerper, dailyLimit: dailyLimitVal }));
+        } catch {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ hasTavily: false, hasBrave: false, hasExa: false, hasSerper: false, dailyLimit: 50 }));
+        }
+        return;
+      }
+
+      // ── GET /api/get-search-usage — today's search count vs limit ──
+      if (url === '/api/get-search-usage' && req.method === 'GET') {
+        try {
+          const usageFile  = path2.default.join(os2.default.homedir(), '.agent', 'config', 'search-usage.json');
+          const configFile = path2.default.join(os2.default.homedir(), '.agent', 'config', 'research.yml');
+          const today = new Date().toISOString().slice(0, 10);
+          let todayCount = 0, dailyLimitVal = 50;
+          if (fs2.default.existsSync(usageFile)) {
+            const usage = JSON.parse(fs2.default.readFileSync(usageFile, 'utf8'));
+            todayCount = usage[today] || 0;
+          }
+          if (fs2.default.existsSync(configFile)) {
+            const m = fs2.default.readFileSync(configFile, 'utf8').match(/daily_web_search_limit:\s*(\d+)/);
+            if (m) dailyLimitVal = parseInt(m[1], 10);
+          }
+          const unlimited = dailyLimitVal === 0;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            today: todayCount,
+            limit: unlimited ? 'unlimited' : dailyLimitVal,
+            remaining: unlimited ? 'unlimited' : Math.max(0, dailyLimitVal - todayCount),
+          }));
+        } catch {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ today: 0, limit: 50, remaining: 50 }));
+        }
         return;
       }
 

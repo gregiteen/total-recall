@@ -319,3 +319,10 @@ file-native — no database, no vector store. New UI gated behind a
 - [ ] Test full uninstall → reinstall end-to-end (all IDEs + UltraChat + Vast.ai).
 - [ ] Delete GitHub fork and re-test fork creation workflow in `setup.mjs`.
 - [ ] UltraChat: workspace generator not functional yet; SSSS data in Supabase (not local files) so relay has no local source to watch.
+
+## Discovered Features — User Knowledge Chat Interface
+- [ ] **`src/server/api.mjs`** — Add `/v1/chat` (or mode param on existing endpoint) with a chat-oriented system prompt: "You are [user]'s personal knowledge assistant. Answer from memory first, then say what you don't know." Distinct from the IDE-facing `/v1/chat/completions` endpoint which is Gemma 4 task-dispatch.
+- [ ] **`src/cli/deploy-ui.mjs`** — Add a Chat tab/page to the wizard dashboard (Phase 8 or top-nav tab) with a standard chat UI (message thread, input box, send button) that hits the knowledge chat endpoint.
+- [ ] **Chat modes** — Route to different system prompts based on mode: `knowledge` (query vault), `journal` (private, not indexed), `reflect` (weekly digest). Mode selector in the chat UI.
+- [ ] **Journal privacy** — Journal mode messages should be stored encrypted (or separately) and never surfaced to IDE agents via `INSTRUCTIONS.md` or the interrupt file.
+- [ ] **`src/core/surface.mjs`** — Chat-mode system prompt constant: references user's name, current vault summary, today's date, and omits developer rules (those are IDE-only).
