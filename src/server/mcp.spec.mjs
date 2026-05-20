@@ -3,7 +3,12 @@ import request from 'supertest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import app from './mcp.mjs';
+import express from 'express';
+import { mountMcp } from './mcp.mjs';
+
+const app = express();
+app.use(express.json());
+mountMcp(app);
 
 let tempAgentDir;
 let oldAgentDir;
@@ -74,6 +79,8 @@ describe('MCP Gateway', () => {
   it('tool call (sync-rpc): tools/list returns the registered Total Recall tools', async () => {
     const res = await request(app)
       .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
       .set('x-sync-rpc', 'true')
       .send({
         jsonrpc: '2.0',
@@ -96,6 +103,8 @@ describe('MCP Gateway', () => {
   it('tool call (sync-rpc): list_memory executes and returns a JSON content payload', async () => {
     const res = await request(app)
       .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
       .set('x-sync-rpc', 'true')
       .send({
         jsonrpc: '2.0',
@@ -116,6 +125,8 @@ describe('MCP Gateway', () => {
   it('resource calls (sync-rpc): resources/list exposes SSSS and derived resources', async () => {
     const res = await request(app)
       .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
       .set('x-sync-rpc', 'true')
       .send({
         jsonrpc: '2.0',
@@ -138,6 +149,8 @@ describe('MCP Gateway', () => {
   it('resource calls (sync-rpc): resources/read returns resource contents', async () => {
     const res = await request(app)
       .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .set('Content-Type', 'application/json')
       .set('x-sync-rpc', 'true')
       .send({
         jsonrpc: '2.0',

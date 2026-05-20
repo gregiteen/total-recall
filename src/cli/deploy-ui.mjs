@@ -13,7 +13,7 @@
 
 import http from 'node:http';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import fs, { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
@@ -88,6 +88,34 @@ export function startDeployUI(port = 3001) {
         });
         return;
       }
+
+      // ── POST /api/provision-vastai — provision remote Vast.ai GPU ──
+      if (url === '/api/provision-vastai' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          try {
+            const { vastaiKey } = JSON.parse(body || '{}');
+            if (!vastaiKey) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing vastaiKey parameter' }));
+              return;
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+
+            // Start provision asynchronously
+            provisionVastAI(vastaiKey).catch(err => {
+              emitProgress('error', `❌ Provisioning failed: ${err.message}`);
+            });
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
       // ── POST /api/generate-pat — proxy to brain server ──
       if (url === '/api/generate-pat' && req.method === 'POST') {
         let body = '';
@@ -124,15 +152,15 @@ export function startDeployUI(port = 3001) {
         req.on('end', () => {
           try {
             const { braveKey, tavilyKey, exaKey, serperKey, dailyLimit, mergeExisting } = JSON.parse(body);
-            const configDir = path2.default.join(os2.default.homedir(), '.agent', 'config');
-            const configFile = path2.default.join(configDir, 'research.yml');
-            fs2.default.mkdirSync(configDir, { recursive: true });
+            const configDir = path.join(os.homedir(), '.agent', 'config');
+            const configFile = path.join(configDir, 'research.yml');
+            fs.mkdirSync(configDir, { recursive: true });
 
             // If mergeExisting=true (Settings page), blank fields keep existing values
             let existing = {};
-            if (mergeExisting && fs2.default.existsSync(configFile)) {
+            if (mergeExisting && fs.existsSync(configFile)) {
               try {
-                const raw = fs2.default.readFileSync(configFile, 'utf8');
+                const raw = fs.readFileSync(configFile, 'utf8');
                 // Simple key extraction without yaml parser dependency in this context
                 const extract = (key) => { const m = raw.match(new RegExp(`${key}:\\s*"([^"]+)"`)); return m ? m[1] : ''; };
                 existing = {
@@ -172,7 +200,7 @@ export function startDeployUI(port = 3001) {
               '# Set to 0 to disable the cap (for paid plans with high volume).',
               'daily_web_search_limit: 50',
             ].join('\n');
-            fs2.default.writeFileSync(path2.default.join(configDir, 'research.yml'), lines);
+            fs.writeFileSync(path.join(configDir, 'research.yml'), lines);
             const primarySource =
               braveKey  ? 'Brave Search' :
               tavilyKey ? 'Tavily' :
@@ -192,10 +220,10 @@ export function startDeployUI(port = 3001) {
       // Returns booleans only — never exposes actual key values
       if (url === '/api/get-search-config' && req.method === 'GET') {
         try {
-          const configFile = path2.default.join(os2.default.homedir(), '.agent', 'config', 'research.yml');
+          const configFile = path.join(os.homedir(), '.agent', 'config', 'research.yml');
           let hasTavily = false, hasBrave = false, hasExa = false, hasSerper = false, dailyLimitVal = 50;
-          if (fs2.default.existsSync(configFile)) {
-            const raw = fs2.default.readFileSync(configFile, 'utf8');
+          if (fs.existsSync(configFile)) {
+            const raw = fs.readFileSync(configFile, 'utf8');
             const extract = (key) => { const m = raw.match(new RegExp(`${key}:\\s*"([^"]+)"`)); return m ? m[1] : ''; };
             const limitMatch = raw.match(/daily_web_search_limit:\s*(\d+)/);
             hasTavily  = !!extract('tavily_api_key');
@@ -216,16 +244,16 @@ export function startDeployUI(port = 3001) {
       // ── GET /api/get-search-usage — today's search count vs limit ──
       if (url === '/api/get-search-usage' && req.method === 'GET') {
         try {
-          const usageFile  = path2.default.join(os2.default.homedir(), '.agent', 'config', 'search-usage.json');
-          const configFile = path2.default.join(os2.default.homedir(), '.agent', 'config', 'research.yml');
+          const usageFile  = path.join(os.homedir(), '.agent', 'config', 'search-usage.json');
+          const configFile = path.join(os.homedir(), '.agent', 'config', 'research.yml');
           const today = new Date().toISOString().slice(0, 10);
           let todayCount = 0, dailyLimitVal = 50;
-          if (fs2.default.existsSync(usageFile)) {
-            const usage = JSON.parse(fs2.default.readFileSync(usageFile, 'utf8'));
+          if (fs.existsSync(usageFile)) {
+            const usage = JSON.parse(fs.readFileSync(usageFile, 'utf8'));
             todayCount = usage[today] || 0;
           }
-          if (fs2.default.existsSync(configFile)) {
-            const m = fs2.default.readFileSync(configFile, 'utf8').match(/daily_web_search_limit:\s*(\d+)/);
+          if (fs.existsSync(configFile)) {
+            const m = fs.readFileSync(configFile, 'utf8').match(/daily_web_search_limit:\s*(\d+)/);
             if (m) dailyLimitVal = parseInt(m[1], 10);
           }
           const unlimited = dailyLimitVal === 0;
@@ -259,7 +287,7 @@ export function startDeployUI(port = 3001) {
           'obsidian':    [HOME + '/Library/Application Support/obsidian', HOME + '/.config/obsidian'],
         };
         for (const [ide, paths] of Object.entries(checks)) {
-          if (paths.some(p => { try { return fs2.default.existsSync(p); } catch { return false; } })) {
+          if (paths.some(p => { try { return fs.existsSync(p); } catch { return false; } })) {
             detected.push(ide);
           }
         }
@@ -327,14 +355,12 @@ export function startDeployUI(port = 3001) {
               if (brainUrl) {
                 // Write brain config so relay knows where to ship
                 const { resolveAgentDir } = await import('./agent-dir.mjs');
-                const fs2 = await import('node:fs');
-                const path2 = await import('node:path');
                 const agentDir = resolveAgentDir();
-                const configDir = path2.default.join(agentDir, 'config');
-                fs2.default.mkdirSync(configDir, { recursive: true });
+                const configDir = path.join(agentDir, 'config');
+                fs.mkdirSync(configDir, { recursive: true });
                 const config = { url: brainUrl };
                 if (token) config.token = token;
-                fs2.default.writeFileSync(path2.default.join(configDir, 'brain.json'), JSON.stringify(config, null, 2));
+                fs.writeFileSync(path.join(configDir, 'brain.json'), JSON.stringify(config, null, 2));
               }
               const rr = sp(nodeBin, relayArgs, { encoding: 'utf8', timeout: 30000 });
               relayResult = { ok: rr.status === 0, message: rr.status === 0 ? 'Installed as system service (starts on boot)' : (rr.stderr || rr.stdout || '').trim().split('\n').pop() };
@@ -470,6 +496,21 @@ async function provisionVastAI(apiKey) {
   _installOptions.vastSshHost = instance.ssh_host;
   _installOptions.vastSshPort = instance.ssh_port;
   _installOptions.domain = `${instance.ssh_host}`;
+  _installOptions.deployTarget = 'vastai';
+  _installOptions.skipLocalInstall = true;
+
+  _installOptionsReceived = true;
+  if (_resolveInstallOptions) {
+    _resolveInstallOptions(_installOptions);
+    _resolveInstallOptions = null;
+  }
+
+  // Finish visual installation screen
+  finishDeployUI({
+    apiUrl: `http://${instance.ssh_host}:${instance.ssh_port}`,
+    dashUrl: `http://${instance.ssh_host}:${instance.ssh_port}/dashboard`,
+    healthUrl: `http://${instance.ssh_host}:${instance.ssh_port}/health`
+  });
 }
 
 // ─── SSE helpers ──────────────────────────────────────────────────────────────

@@ -602,15 +602,23 @@ function writeMcpConfigFor(ideKey, opts) {
       return [configPath];
     }
 
-    // ── Antigravity: .mcp.json at cwd (same format as Claude Code project scope)
+    // ── Antigravity: ~/.gemini/antigravity/mcp_config.json (global) + project .mcp.json ──────────
     case 'antigravity': {
-      configPath = path.join(process.cwd(), '.mcp.json');
+      // Global configuration
+      configPath = path.join(home, '.gemini', 'antigravity', 'mcp_config.json');
       mergeJson(configPath, cfg => {
         cfg.mcpServers ??= {};
         cfg.mcpServers['total-recall'] = serverEntry;
         return cfg;
       });
-      return [configPath];
+      // Project-level configuration
+      const projectMcp = path.join(process.cwd(), '.mcp.json');
+      mergeJson(projectMcp, cfg => {
+        cfg.mcpServers ??= {};
+        cfg.mcpServers['total-recall'] = serverEntry;
+        return cfg;
+      });
+      return [configPath, projectMcp];
     }
 
     // ── Generic: print JSON snippet only, no file written ────────────────────

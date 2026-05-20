@@ -183,6 +183,41 @@ Interactive terminal REPL connected to the brain.
 
 ---
 
+### `relay`
+
+Manage the background session sync relay daemon.
+
+- **What it does**: Runs on the user's local machine, watching active IDE session storage directories (Claude Code, Codex, Antigravity, VS Code Copilot, Cursor). Whenever new chat sessions or history changes are detected, they are automatically shipped to the remote brain API to be compiled and digested into SSSS memory nodes.
+- **Commands**:
+  - `start`: Start the local relay daemon in the background.
+  - `stop`: Stop the local relay daemon.
+  - `status`: Show relay status, process ID, and last sync timestamps.
+  - `once`: Execute a single one-shot scan and sync pass (useful for testing or CI pipelines).
+  - `install`: Register and load the relay service to start automatically (macOS LaunchAgent or Linux systemd --user service).
+  - `uninstall`: Unload and remove the auto-start service registration.
+- **Usage**:
+  ```bash
+  npx total-recall relay status
+  npx total-recall relay start
+  ```
+
+---
+
+### `uninstall`
+
+Completely stop, disable, and clean up Total Recall services and active directories from the system.
+
+- **What it does**:
+  1. Stops all running background Node.js processes (`daemon`, `relay`, etc.).
+  2. Unloads and deletes background startup agents from the operating system (macOS launchd plists and Linux systemd services).
+  3. Cleanly purges local IDE configuration rules, symlinks, and shims (`.clauderules`, `CLAUDE.md`, `.cursorrules`, `GEMINI.md`, `INSTRUCTIONS.md`) without affecting non-Total Recall settings.
+  4. Purges transient cache, sessions, and log subfolders in local workspaces.
+  5. Purges the global configuration directory (`~/.agent/`).
+  6. **Safe for Dev Workspaces**: Preserves version-controlled `.agent/skills/` and `.agent/memory-vault/` files within active git project repositories to prevent any data loss of your custom instructions and memories.
+- **Usage**: `npx total-recall uninstall`
+
+---
+
 ## Removed Commands
 
 These commands appeared in earlier documentation but have been removed:

@@ -20,6 +20,7 @@ const PROTOCOL_PATHS = [
 const PROTOCOL_PATH_PREFIXES = ['fixtures/'];
 const idempotencyCache = new Map();
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+const warmedVaults = new Set();
 
 function cacheKey(wid, key) { return `${wid}:${key}`; }
 
@@ -27,6 +28,48 @@ function pruneExpired() {
   const now = Date.now();
   for (const [k, v] of idempotencyCache) {
     if (now - v.ts > IDEMPOTENCY_TTL_MS) idempotencyCache.delete(k);
+  }
+}
+
+export function warmIdempotencyCache(vaultRoot, eventLogDir) {
+  const vaultKey = path.resolve(vaultRoot);
+  if (warmedVaults.has(vaultKey)) return;
+  warmedVaults.add(vaultKey);
+
+  const auditDir = eventLogDir || path.join(vaultRoot, '.events');
+  const auditFile = path.join(auditDir, 'audit.jsonl');
+  if (!fs.existsSync(auditFile)) return;
+
+  try {
+    const lines = fs.readFileSync(auditFile, 'utf8').split('\n');
+    const now = Date.now();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const record = JSON.parse(line);
+        if (record.event_type !== 'audit' || !record.payload) continue;
+        const ts = Date.parse(record.ts);
+        if (isNaN(ts) || now - ts > IDEMPOTENCY_TTL_MS) continue;
+
+        const ck = cacheKey(record.payload.workspace_id, record.payload.idempotency_key);
+        const response = {
+          success: true,
+          type: record.payload.envelope_type,
+          operation_id: record.correlation_id,
+          path: record.subject,
+          committed_at: record.ts,
+          validation: {
+            valid: true,
+            type: record.payload.resolved_type,
+            errors: [],
+            warnings: []
+          }
+        };
+        idempotencyCache.set(ck, { response, ts });
+      } catch { /* skip corrupt lines */ }
+    }
+  } catch (err) {
+    logger.error('operation-validator', `Failed to warm idempotency cache: ${err.message}`);
   }
 }
 
@@ -70,6 +113,9 @@ export function processOperation(envelope, vaultRoot, options = {}) {
   if (!envSchema) return makeErrorResponse(envelope.type || 'unknown', operationId, envelope.path || '', [`Unknown envelope type: ${envelope.type}`]);
   const envResult = envSchema.safeParse(envelope);
   if (!envResult.success) return { ...makeErrorResponse(envelope.type, operationId, envelope.path || '', envResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`)), repair: buildRepair(envResult.error) };
+
+  // Warm idempotency cache from audit logs if not already done
+  warmIdempotencyCache(vaultRoot, eventLogDir);
 
   // Stage 2: Idempotency
   pruneExpired();
@@ -149,11 +195,28 @@ export function processOperation(envelope, vaultRoot, options = {}) {
     const absPath = resolveVfsPath(vaultRoot, envelope.path);
     const dir = path.dirname(absPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (envelope.type === 'operation') { atomicWrite(absPath, envelope.content); }
+    if (envelope.type === 'operation') {
+      let contentToWrite = envelope.content;
+      try {
+        const parsed = matter(contentToWrite);
+        if (parsed.data && parsed.data.type === 'memory') {
+          parsed.data.updated = committedAt;
+          parsed.data.last_accessed = committedAt;
+          contentToWrite = matter.stringify(parsed.content, parsed.data);
+        }
+      } catch {
+        // Fallback to raw content if parsing fails
+      }
+      atomicWrite(absPath, contentToWrite);
+    }
     else if (envelope.type === 'patch') {
       const { data, content: body } = matter(fs.readFileSync(absPath, 'utf8'));
       const merged = { ...data };
       for (const [k, v] of Object.entries(envelope.patches)) { if (k !== '__body__') merged[k] = v; }
+      if (merged.type === 'memory') {
+        merged.updated = committedAt;
+        merged.last_accessed = committedAt;
+      }
       const newBody = envelope.patches.__body__ !== undefined ? (APPEND_TYPES.has(data.type) ? body + '\n' + envelope.patches.__body__ : envelope.patches.__body__) : body;
       atomicWrite(absPath, matter.stringify(newBody, merged));
     } else if (envelope.type === 'event') {

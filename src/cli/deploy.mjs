@@ -395,6 +395,69 @@ export default async function deploy(args) {
       if (wizardOpts.skipModels)  opts.skipModels   = true;
 
       console.error(`  ✅ Wizard config received — domain: ${opts.domain}`);
+
+      if (wizardOpts.deployTarget === 'vastai' || wizardOpts.skipLocalInstall) {
+        console.error(`\n  ✅ Vast.ai remote instance provisioned. Remote installation runs in background.`);
+        console.error(`  📍 SSH access: ssh -p ${wizardOpts.vastSshPort} root@${wizardOpts.vastSshHost}\n`);
+        return;
+      }
+
+      if (wizardOpts.deployTarget === 'localnet') {
+        const ip = wizardOpts.localnetHost;
+        const user = wizardOpts.localnetUser || 'root';
+        logStep('1/3', `Connecting to remote host ${user}@${ip}...`);
+
+        const check = spawnSync('ssh', [
+          '-o', 'StrictHostKeyChecking=no',
+          '-o', 'ConnectTimeout=5',
+          `${user}@${ip}`,
+          'echo "OK"'
+        ], { encoding: 'utf8' });
+
+        if (check.status !== 0) {
+          logWarn(`Failed to connect to ${user}@${ip} via SSH.`);
+          throw new Error(`Failed to connect to ${user}@${ip} via SSH. Please ensure Remote Login is enabled on that computer and your SSH key is authorized.`);
+        }
+        logOk(`Connected to ${user}@${ip}`);
+
+        logStep('2/3', 'Installing Node.js and dependencies on remote host...');
+        spawnSync('ssh', [
+          '-o', 'StrictHostKeyChecking=no',
+          `${user}@${ip}`,
+          'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && ' +
+          'source ~/.bashrc && nvm install 20 2>/dev/null || ' +
+          '(curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs)'
+        ], { stdio: 'inherit' });
+
+        logStep('3/3', 'Deploying Total Recall remotely...');
+        const deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
+        spawnSync('ssh', [
+          '-o', 'StrictHostKeyChecking=no',
+          `${user}@${ip}`,
+          `export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && ${deployCmd}`
+        ], { stdio: 'inherit' });
+
+        logStep('Done', 'Generating access token...');
+        const pat = spawnSync('ssh', [
+          '-o', 'StrictHostKeyChecking=no',
+          `${user}@${ip}`,
+          'export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && npx total-recall generate-pat --quiet'
+        ], { encoding: 'utf8' }).stdout?.toString().trim();
+
+        logOk(`Remote setup complete! Brain is running on http://${ip}:3000`);
+        if (pat) {
+          logOk(`Access token generated successfully.`);
+        }
+
+        const { finishDeployUI: finishUI } = await import('./deploy-ui.mjs');
+        finishUI({
+          apiUrl: `http://${ip}:3000`,
+          dashUrl: `http://${ip}:3000/dashboard`,
+          healthUrl: `http://${ip}:3000/health`
+        });
+
+        return;
+      }
     } catch (e) {
       console.error(`  ⚠️  Could not start deploy UI: ${e.message}`);
     }

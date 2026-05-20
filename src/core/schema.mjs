@@ -44,8 +44,8 @@ export const MemoryNodeSchema = z.object({
   sentiment_polarity: z.enum(['directive_must', 'directive_must_not', 'descriptive', 'preference']),
   sentiment_target: z.string(),
   modality: z.enum(['must', 'must_not', 'should', 'should_not']),
-  subject: z.string(),
-  predicate: z.string(),
+  subject: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/),
+  predicate: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/),
   object: z.string(),
   decay: z.object({
     half_life_days: z.number(),

@@ -36,10 +36,11 @@ vi.mock('../core/runtime.mjs', () => ({
   }))
 }));
 
-// Bypass auth — we're testing the prompt-injection logic, not the gate.
 vi.mock('./auth.mjs', () => ({
   requireAuth: (req, _res, next) => next(),
   requireScope: () => (req, _res, next) => next(),
+  requireAuthOrLocal: (req, _res, next) => next(),
+  loadSecurityConfig: () => ({}),
   loginHandler: (_req, res) => res.json({}),
   logoutHandler: (_req, res) => res.json({}),
   changePasswordHandler: (_req, res) => res.json({}),
@@ -52,6 +53,7 @@ vi.mock('./tools.mjs', () => ({
 }));
 
 const { apiRouter } = await import('./api.mjs');
+const { restRouter } = await import('./rest.mjs');
 
 const AGENT_DIR = TEST_AGENT_DIR;
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
@@ -65,6 +67,7 @@ function buildApp() {
   app.use(express.json());
   app.use(cookieParser());
   app.use(apiRouter);
+  app.use(restRouter);
   return app;
 }
 
@@ -108,11 +111,11 @@ describe('API Proxy', () => {
         .get('/.well-known/total-recall.json');
 
       expect(res.status).toBe(200);
-      expect(res.body.name).toBe('total-recall');
-      expect(res.body.endpoints.chat_completions).toContain('/v1/chat/completions');
-      expect(res.body.endpoints.models).toContain('/v1/models');
-      expect(res.body.resources.ssss_spec).toContain('/api/ssss/spec');
-      expect(res.body.auth.type).toBe('bearer_pat');
+      expect(res.body.name).toBe('Total Recall');
+      expect(res.body.version).toBe('3.0.0');
+      expect(res.body.api).toContain('/v1');
+      expect(res.body.mcp).toContain('/mcp');
+      expect(res.body.auth.type).toBe('bearer');
     });
 
     it('lists Total Recall catalog models through /v1/models', async () => {

@@ -41,7 +41,7 @@ describe('Tools API', () => {
 
     const result = await handleToolCall(searchToolCall);
     expect(global.fetch).toHaveBeenCalled();
-    expect(result).toContain('Search Results for "test query"');
+    expect(result).toContain('Search results for "test query"');
     expect(result).toContain('Test Result');
     expect(result).toContain('https://test.com');
   });

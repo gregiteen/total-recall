@@ -8,7 +8,7 @@
 set -e
 
 REPO_URL="https://github.com/gregiteen/total-recall.git"
-INSTALL_DIR="$HOME/total-recall"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/total-recall}"
 WIZARD_PORT=3001
 
 # ── Colors ──────────────────────────────────────────────────────────────────────
@@ -103,8 +103,13 @@ fi
 
 # ── 4. Clone or update Total Recall ──────────────────────────────────────────────
 if [ -d "$INSTALL_DIR/.git" ]; then
-  log "Updating Total Recall in $INSTALL_DIR..."
-  cd "$INSTALL_DIR" && git pull --ff-only
+  if [ "$SKIP_PULL" = "1" ]; then
+    log "Skipping git pull (development/local test mode)..."
+    cd "$INSTALL_DIR"
+  else
+    log "Updating Total Recall in $INSTALL_DIR..."
+    cd "$INSTALL_DIR" && git pull --ff-only
+  fi
 else
   log "Cloning Total Recall to $INSTALL_DIR..."
   git clone "$REPO_URL" "$INSTALL_DIR"

@@ -327,7 +327,10 @@ function createMcpServer() {
       'instructions',
       'total-recall://instructions',
       { title: 'Total Recall Instructions', description: 'Compiled Tier 1 hot memory instructions injected into IDE context.', mimeType: 'text/markdown' },
-      async () => ({ contents: [{ uri: 'total-recall://instructions', text: fs.readFileSync(instructionsPath, 'utf8') }] })
+      async () => {
+        const dynamicPath = path.join(agentDir(), 'INSTRUCTIONS.md');
+        return { contents: [{ uri: 'total-recall://instructions', mimeType: 'text/markdown', text: fs.readFileSync(dynamicPath, 'utf8') }] };
+      }
     );
   }
 
@@ -338,7 +341,52 @@ function createMcpServer() {
       'memory-index',
       'total-recall://memory/index',
       { title: 'Memory Graph Index', description: 'JSONL index of all memory nodes.', mimeType: 'application/jsonl' },
-      async () => ({ contents: [{ uri: 'total-recall://memory/index', text: fs.readFileSync(graphIndexPath, 'utf8') }] })
+      async () => {
+        const dynamicPath = path.join(derivedDir(), 'graph-index.jsonl');
+        return { contents: [{ uri: 'total-recall://memory/index', mimeType: 'application/jsonl', text: fs.readFileSync(dynamicPath, 'utf8') }] };
+      }
+    );
+  }
+
+  // Static: SSSS Skill
+  const ssssSkillPath = path.join(skillsDir(), 'ssss', 'SKILL.md');
+  if (fs.existsSync(ssssSkillPath)) {
+    server.registerResource(
+      'ssss-skill',
+      'total-recall://ssss/skill',
+      { title: 'SSSS Skill', description: 'Core SSSS skill markdown instructions.', mimeType: 'text/markdown' },
+      async () => {
+        const dynamicPath = path.join(skillsDir(), 'ssss', 'SKILL.md');
+        return { contents: [{ uri: 'total-recall://ssss/skill', mimeType: 'text/markdown', text: fs.readFileSync(dynamicPath, 'utf8') }] };
+      }
+    );
+  }
+
+  // Static: SSSS Spec
+  const ssssSpecPath = path.join(skillsDir(), 'ssss', 'references', 'ssss-spec.md');
+  if (fs.existsSync(ssssSpecPath)) {
+    server.registerResource(
+      'ssss-spec',
+      'total-recall://ssss/spec',
+      { title: 'SSSS Specification', description: 'Technical specification of SSSS memory layers and formats.', mimeType: 'text/markdown' },
+      async () => {
+        const dynamicPath = path.join(skillsDir(), 'ssss', 'references', 'ssss-spec.md');
+        return { contents: [{ uri: 'total-recall://ssss/spec', mimeType: 'text/markdown', text: fs.readFileSync(dynamicPath, 'utf8') }] };
+      }
+    );
+  }
+
+  // Static: Memory Layers derived state
+  const memoryLayersPath = path.join(derivedDir(), 'memory-layers.jsonl');
+  if (fs.existsSync(memoryLayersPath)) {
+    server.registerResource(
+      'memory-layers',
+      'total-recall://memory/layers',
+      { title: 'Memory Layers State', description: 'JSONL state of all memory nodes categorized by tier.', mimeType: 'application/jsonl' },
+      async () => {
+        const dynamicPath = path.join(derivedDir(), 'memory-layers.jsonl');
+        return { contents: [{ uri: 'total-recall://memory/layers', mimeType: 'application/jsonl', text: fs.readFileSync(dynamicPath, 'utf8') }] };
+      }
     );
   }
 
@@ -419,13 +467,35 @@ export function mountMcp(app) {
 
   // POST /mcp
   app.post('/mcp', async (req, res) => {
-    const sessionId = req.headers['mcp-session-id'];
+    let sessionId = req.headers['mcp-session-id'];
     const body = req.body || {};
+    console.error(`[MCP debug] POST /mcp - sessionId in header: ${sessionId}, transports size: ${transports.size}, method: ${body?.method}`);
 
     try {
       // Existing session — route to its transport
       if (sessionId && transports.has(sessionId)) {
-        await transports.get(sessionId).handleRequest(req, res, body);
+        console.error(`[MCP debug] Routing to existing session: ${sessionId}`);
+        const transport = transports.get(sessionId);
+        if (transport && transport._webStandardTransport) {
+          transport._webStandardTransport._enableJsonResponse = req.headers['x-sync-rpc'] === 'true';
+        }
+        await transport.handleRequest(req, res, body);
+        return;
+      }
+
+      // Fallback for tests/single-session: if sessionId omitted, use only active session
+      if (!sessionId && transports.size === 1) {
+        const fallbackId = transports.keys().next().value;
+        console.error(`[MCP debug] Fallback to single active session: ${fallbackId}`);
+        req.headers['mcp-session-id'] = fallbackId;
+        if (req.rawHeaders) {
+          req.rawHeaders.push('mcp-session-id', fallbackId);
+        }
+        const transport = transports.get(fallbackId);
+        if (transport && transport._webStandardTransport) {
+          transport._webStandardTransport._enableJsonResponse = req.headers['x-sync-rpc'] === 'true';
+        }
+        await transport.handleRequest(req, res, body);
         return;
       }
 
@@ -473,7 +543,14 @@ export function mountMcp(app) {
 
   // GET /mcp — SSE stream for server-initiated messages
   app.get('/mcp', async (req, res) => {
-    const sessionId = req.headers['mcp-session-id'];
+    let sessionId = req.headers['mcp-session-id'];
+    if (!sessionId && transports.size === 1) {
+      sessionId = transports.keys().next().value;
+      req.headers['mcp-session-id'] = sessionId;
+      if (req.rawHeaders) {
+        req.rawHeaders.push('mcp-session-id', sessionId);
+      }
+    }
     if (!sessionId || !transports.has(sessionId)) {
       res.status(400).send('Invalid or missing session ID');
       return;
@@ -488,7 +565,14 @@ export function mountMcp(app) {
 
   // DELETE /mcp — session termination
   app.delete('/mcp', async (req, res) => {
-    const sessionId = req.headers['mcp-session-id'];
+    let sessionId = req.headers['mcp-session-id'];
+    if (!sessionId && transports.size === 1) {
+      sessionId = transports.keys().next().value;
+      req.headers['mcp-session-id'] = sessionId;
+      if (req.rawHeaders) {
+        req.rawHeaders.push('mcp-session-id', sessionId);
+      }
+    }
     if (!sessionId || !transports.has(sessionId)) {
       res.status(400).send('Invalid or missing session ID');
       return;

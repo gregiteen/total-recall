@@ -1,7 +1,7 @@
 # Sovereign OS Release Readiness Development Plan
 
 - **Plane**: Projects
-- **Status**: In progress
+- **Status**: Completed
 - **Created**: 2026-05-18
 
 This plan sequences the consolidated release-readiness epic. Phases are
@@ -147,4 +147,46 @@ The mandatory closing testing phase for the enhancement work.
 - Sovereign-thesis audit: confirm no database or vector-store dependency was
   introduced — embeddings and indexes remain plain files.
 
-Exit: the full epic is eligible to move to `completed/`.
+Exit: The core intelligence and enhancement stack is validated.
+
+## Phase 11 — Automatic Backup System
+
+Implement fully automated daily backup tasks supporting git sync integration.
+
+- Develop `--push-git <remote>` flag inside `src/cli/backup.mjs` to auto-initialize, stage, commit, and securely push VFS vaults with identity fallback handlers.
+- Create daily 2 AM schedules (`com.totalrecall.backup.plist` on macOS and Linux `/etc/cron.d/total-recall-backup` units) populated via CLI arguments at deploy time.
+- Verify git-push backup execution via isolated integration specs.
+
+Exit: Scheduled daily vault backups are encrypted and pushed to git remotes securely.
+
+## Phase 12 — API Surface, Tools, & Setup Wizard UI
+
+Provide a full dashboard management utility and remote automation integration layer.
+
+- Implement a secure REST API in `src/server/rest.mjs` exposing CRUD access to memory, keys, compiled outputs, ingested sessions, and sandbox runs.
+- Integrate browser/computer automation tool hooks in `src/server/tools.mjs` (navigation, mouse clicks, key triggers, web searches).
+- Rewrite `src/cli/deploy-ui.mjs` to serve a multi-phase wizard dashboard (Welcome, configure providers/ports/SSL, live installation logs SSE pipeline, PAT key creation, client connection sheets, human chat REPL playground).
+
+Exit: Setup Wizard UI dashboard fully manages installations and user-facing sessions.
+
+## Phase 13 — IDE Session Relay Daemon & Self-Awareness
+
+Build a lightweight watcher bridging local IDE activity directly with remote servers.
+
+- Implement the `relay` CLI (`start`/`stop`/`status`/`once`/`install`/`uninstall`) in `src/cli/relay.mjs` scanning Claude Code, Codex, Antigravity, VS Code, and Cursor directories.
+- Construct the Sync Ingest pipeline to handle delta events and payload deduplications.
+- Inject the API endpoint references as live self-aware system prompt segments.
+
+Exit: IDE sessions stream directly and autonomously into memory vault synthesizers.
+
+## Phase 14 — OS Service Uninstallation Subsystem
+
+Provide a robust uninstallation utility supporting developmental safety boundaries.
+
+- Author the complete teardown subcommand `uninstall` inside `src/cli/uninstall.mjs`.
+- Stop background Node daemons and relays safely.
+- Unload and delete OS startup agents (macOS LaunchAgents and Linux systemd services).
+- Purge local symlinks, compiled instructions, shims, VFS folders, and global VFS configurations.
+- **Safety Boundary**: Isolate and preserve `.agent/skills/` and `.agent/memory-vault/` in workspace git repos to prevent developer data loss.
+
+Exit: `npx total-recall uninstall` completely clears the environment safely, and the epic is moved to `completed/`.
