@@ -49,7 +49,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 
-import { loadNodes, writeNode, createNodeFromMcpPayload, walkMd } from '../core/vault.mjs';
+import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload, walkMd } from '../core/vault.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { issueKey, revokeKey, loadKeys } from './keys.mjs';
@@ -59,6 +59,7 @@ import {
   requireAuthOrLocal,
   loadSecurityConfig,
 } from './auth.mjs';
+import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex } from '../core/embeddings.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 const VAULT_DIR    = path.join(AGENT_DIR, 'memory-vault');
@@ -254,6 +255,49 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
 });
 
 // ─── Vault ────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/memory/search/semantic
+ * Body: { query: string, top_k?: number }
+ * Returns top-k vault nodes ranked by vector similarity to the query.
+ * Requires Ollama with nomic-embed-text running.
+ */
+router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { query, top_k } = req.body || {};
+    if (!query) return badRequest(res, 'query is required');
+
+    const index = loadEmbeddingsIndex(DERIVED_DIR);
+    const entries = Object.entries(index);
+    if (entries.length === 0) {
+      return res.status(503).json({
+        error: 'Embeddings index is empty. Run POST /api/vault/compile to build it, or write a node first.',
+      });
+    }
+
+    const queryEmbedding = await getEmbedding(String(query));
+    const k = Math.min(Number(top_k) || 5, 20);
+
+    const scored = entries
+      .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, k);
+
+    const list = nodes();
+    const results = scored.map(({ slug, score }) => {
+      const node = list.find(n => n.slug === slug);
+      if (!node) return null;
+      return { ...sanitizeNode(node), score: Math.round(score * 1000) / 1000 };
+    }).filter(Boolean);
+
+    res.json({ query, top_k: k, results });
+  } catch (err) {
+    if (err.message?.includes('Ollama')) {
+      return res.status(503).json({ error: err.message });
+    }
+    serverError(res, err);
+  }
+});
 
 /**
  * POST /api/vault/compile
@@ -698,13 +742,14 @@ router.get('/api', (req, res) => {
     },
     endpoints: {
       memory: {
-        'GET /api/memory':                  'List nodes (q, category, tag, limit, offset)',
-        'GET /api/memory/stats':            'Node counts by category',
-        'GET /api/memory/:slug':            'Get node by slug',
-        'POST /api/memory':                 'Create node (slug, title, category, content)',
-        'PUT /api/memory/:slug':            'Replace node',
-        'PATCH /api/memory/:slug':          'Partial update',
-        'DELETE /api/memory/:slug':         'Delete node',
+        'GET /api/memory':                        'List nodes (q, category, tag, limit, offset)',
+        'GET /api/memory/stats':                  'Node counts by category',
+        'GET /api/memory/:slug':                  'Get node by slug',
+        'POST /api/memory':                       'Create node (slug, title, category, content)',
+        'POST /api/memory/search/semantic':       'Semantic search by meaning (query, top_k) — requires Ollama',
+        'PUT /api/memory/:slug':                  'Replace node',
+        'PATCH /api/memory/:slug':                'Partial update',
+        'DELETE /api/memory/:slug':               'Delete node',
       },
       vault: {
         'POST /api/vault/compile':          'Recompile SSSS surface (INSTRUCTIONS.md)',
@@ -754,7 +799,7 @@ router.get('/api', (req, res) => {
       endpoint:   `${base}/mcp`,
       protocol:   'JSON-RPC 2.0',
       initialize: { method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'your-app', version: '1.0' }, capabilities: {} } },
-      tools:      ['read_memory', 'write_memory', 'search_memory', 'list_memory', 'run_sandbox', 'recompile_surface'],
+      tools:      ['list_memory', 'read_memory', 'search_memory', 'semantic_search', 'write_memory', 'delete_memory', 'recompile_surface', 'run_sandbox', 'read_file', 'list_directory', 'search_files'],
       resources:  ['total-recall://instructions', 'total-recall://memory/index', 'total-recall://ssss/skill'],
     },
   });
