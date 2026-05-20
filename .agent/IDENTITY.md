@@ -1,3 +1,0 @@
-# Identity
-
-> Agent persona definition.

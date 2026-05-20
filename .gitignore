@@ -43,6 +43,11 @@ frontend/.eslintcache
 # Dev skills (Greg's personal workflow tools — not part of the product)
 .agent/dev-skills/
 
+# Personal .agent/ identity and user data — generated at runtime, never ship
+.agent/USER.md
+.agent/SOUL.md
+.agent/IDENTITY.md
+
 # Personal workspace projections at repo root
 # These are IDE shims compiled for Greg's local setup — not product files.
 # The canonical versions live in .agent/ and ship via the files whitelist.
