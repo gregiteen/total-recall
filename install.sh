@@ -7,6 +7,9 @@
 #
 set -e
 
+# Ensure standard binary directories are in PATH (important for non-interactive shells)
+export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 REPO_URL="https://github.com/gregiteen/total-recall.git"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/total-recall}"
 WIZARD_PORT=3001
