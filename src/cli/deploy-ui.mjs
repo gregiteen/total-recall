@@ -623,21 +623,56 @@ const HTML = `<!DOCTYPE html>
 
       </div>
 
-      <!-- Domain field — shown for VPS path only -->
+      <!-- HTTPS section — shown for VPS/local with public access -->
       <div id="domain-section" style="display:none">
         <div class="card">
-          <h3>Domain &amp; HTTPS <span style="font-weight:400;font-size:12px;color:var(--muted)">(optional — skip to get a free temporary URL)</span></h3>
-          <div class="form-group" style="margin-bottom:12px">
-            <label>Your domain name</label>
-            <input type="text" id="cfg-domain" placeholder="mybrain.duckdns.org" autocomplete="off" spellcheck="false">
-            <div class="hint">Leave blank for a free temporary Cloudflare URL. <a href="https://www.duckdns.org" target="_blank" rel="noopener">Get a free domain at duckdns.org →</a></div>
+          <h3>🔒 HTTPS &amp; Public Access</h3>
+          <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+            All traffic to your brain is encrypted. Choose how you want to expose it:
+          </p>
+
+          <div style="display:grid;gap:10px;margin-bottom:16px">
+
+            <label class="radio-item selected" id="cf-quick-option">
+              <input type="radio" name="https-method" value="cloudflare-quick" checked>
+              <div style="flex:1">
+                <div class="ri-label">⚡ Cloudflare Quick Tunnel <span style="color:var(--green);font-size:11px;font-weight:400">recommended — free, zero config</span></div>
+                <div class="ri-desc">
+                  Cloudflare assigns you a free <code>*.trycloudflare.com</code> URL automatically — no account, no sign-up needed. 
+                  Your brain is accessible from your phone or any device instantly, over HTTPS. 
+                  <strong style="color:var(--text)">Nothing leaves your machine unencrypted.</strong>
+                </div>
+              </div>
+            </label>
+
+            <label class="radio-item" id="cf-tunnel-option">
+              <input type="radio" name="https-method" value="cloudflare-tunnel">
+              <div style="flex:1">
+                <div class="ri-label">🌐 Cloudflare Zero Trust Tunnel <span style="color:var(--muted);font-size:11px;font-weight:400">permanent custom URL</span></div>
+                <div class="ri-desc">Use your own domain (e.g. <code>brain.yourdomain.com</code>) with a permanent Cloudflare tunnel. Free Cloudflare account required.</div>
+                <div id="cf-tunnel-fields" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+                  <div class="form-group" style="margin-bottom:10px">
+                    <label>Your domain <span style="font-weight:400;color:var(--muted)">(must be on Cloudflare DNS)</span></label>
+                    <input type="text" id="cfg-domain" placeholder="brain.yourdomain.com" autocomplete="off" spellcheck="false">
+                    <div class="hint">Add your domain to Cloudflare for free at <a href="https://dash.cloudflare.com" target="_blank" rel="noopener" style="color:var(--blue)">dash.cloudflare.com</a> — then come back here.</div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label>Cloudflare Tunnel Token</label>
+                    <input type="password" id="cfg-cloudflare-token" placeholder="eyJh…" autocomplete="off">
+                    <div class="hint">
+                      In Cloudflare Zero Trust → Networks → Tunnels → Create tunnel → copy the token from the install command.
+                      <a href="https://one.dash.cloudflare.com" target="_blank" rel="noopener" style="color:var(--blue)">one.dash.cloudflare.com →</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </label>
+
           </div>
-          <div id="duckdns-token-field" style="display:none">
-            <div class="form-group" style="margin-bottom:0">
-              <label>DuckDNS Token</label>
-              <input type="password" id="cfg-duckdns-token" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off">
-              <div class="hint">Found on your <a href="https://www.duckdns.org" target="_blank" rel="noopener">duckdns.org</a> account page.</div>
-            </div>
+
+          <div style="font-size:11px;color:var(--muted)">
+            Both options use Cloudflare's global network as an encrypted proxy — your brain never exposes a raw port to the internet.
+            For VPS/advanced users: you can also use Caddy + Let's Encrypt with any domain (including <a href="https://www.duckdns.org" target="_blank" rel="noopener" style="color:var(--muted)">duckdns.org</a>) by passing <code>--domain yourname.duckdns.org</code> to the CLI installer.
           </div>
         </div>
       </div>
@@ -1197,8 +1232,9 @@ const HTML = `<!DOCTYPE html>
       document.getElementById('localnet-details').style.display  = val === 'localnet' ? '' : 'none';
       document.getElementById('vastai-details').style.display   = val === 'vastai'   ? '' : 'none';
       document.getElementById('vps-details').style.display      = val === 'vps'      ? '' : 'none';
-      // Domain section only for VPS
-      document.getElementById('domain-section').style.display   = val === 'vps'      ? '' : 'none';
+      // Domain/HTTPS section: VPS always shows it; local shows it when public access wanted
+      var showDomainSection = (val === 'vps') || (val === 'local');
+      document.getElementById('domain-section').style.display = showDomainSection ? '' : 'none';
       // Show the right action button
       document.getElementById('phase1-next-btn').style.display      = val === 'local'    ? '' : 'none';
       document.getElementById('phase1-localnet-btn').style.display  = val === 'localnet' ? '' : 'none';
@@ -1208,13 +1244,15 @@ const HTML = `<!DOCTYPE html>
     });
   });
 
-  var cfgDomain = document.getElementById('cfg-domain');
-  if (cfgDomain) {
-    cfgDomain.addEventListener('input', function () {
-      var v = cfgDomain.value.trim();
-      document.getElementById('duckdns-token-field').style.display = v.endsWith('.duckdns.org') ? '' : 'none';
+  // Show/hide Zero Trust token fields when https-method radio changes
+  document.querySelectorAll('input[name="https-method"]').forEach(function(r) {
+    r.addEventListener('change', function() {
+      document.querySelectorAll('#domain-section .radio-item').forEach(function(el) { el.classList.remove('selected'); });
+      r.closest('.radio-item').classList.add('selected');
+      var tunnelFields = document.getElementById('cf-tunnel-fields');
+      if (tunnelFields) tunnelFields.style.display = (r.value === 'cloudflare-tunnel') ? '' : 'none';
     });
-  }
+  });
 
   // Local access sub-radios
   document.querySelectorAll('#local-access input[type=radio]').forEach(function (r) {
@@ -1279,14 +1317,18 @@ const HTML = `<!DOCTYPE html>
         httpsMethod = 'cloudflare-quick';
       }
     } else {
-      // Remote path: read domain field
+      // Remote path: read Cloudflare https-method radio
+      var httpsRadio = document.querySelector('input[name="https-method"]:checked');
+      var selectedMethod = httpsRadio ? httpsRadio.value : 'cloudflare-quick';
+      cloudflareToken = ((document.getElementById('cfg-cloudflare-token') || {}).value || '').trim() || null;
       var domainVal = (document.getElementById('cfg-domain') || {}).value;
       if (domainVal) domain = domainVal.trim() || 'localhost';
-      duckdnsToken = ((document.getElementById('cfg-duckdns-token') || {}).value || '').trim() || null;
-      cloudflareToken = ((document.getElementById('cfg-cloudflare-token') || {}).value || '').trim() || null;
-      if (domain.endsWith('.duckdns.org') && duckdnsToken) { httpsMethod = 'duckdns'; }
-      else if (cloudflareToken) { httpsMethod = 'cloudflare-tunnel'; }
-      else { httpsMethod = 'cloudflare-quick'; } // fallback: temp URL
+
+      if (selectedMethod === 'cloudflare-tunnel' && cloudflareToken) {
+        httpsMethod = 'cloudflare-tunnel';
+      } else {
+        httpsMethod = 'cloudflare-quick'; // Quick Tunnel: zero config, temp URL
+      }
     }
 
     W.domain = domain;
