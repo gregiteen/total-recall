@@ -162,35 +162,60 @@ function createMcpServer() {
     'semantic_search',
     {
       title: 'Semantic Search',
-      description: 'Search vault nodes by meaning using vector similarity. Finds conceptually related nodes even without exact keyword matches. Requires Ollama with nomic-embed-text (ollama pull nomic-embed-text).',
+      description: 'Search across ALL vault nodes AND session history by meaning using vector similarity. Returns results from both, merged and ranked by score. Each result has a type field: "vault" (memory node) or "session" (raw conversation chunk). Requires Ollama with nomic-embed-text.',
       inputSchema: {
-        query: z.string().describe('Natural language query — a question, concept, or description'),
-        top_k: z.number().optional().describe('Number of results to return (default 5, max 20)')
+        query:            z.string().describe('Natural language query — a question, concept, or description'),
+        top_k:            z.number().optional().describe('Number of results to return (default 5, max 20)'),
+        include_sessions: z.boolean().optional().describe('Include raw session history in results (default: true)')
       },
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
-    async ({ query, top_k }) => {
+    async ({ query, top_k, include_sessions = true }) => {
       try {
-        const { getEmbedding, cosineSimilarity, loadEmbeddingsIndex } = await import('../core/embeddings.mjs');
-        const index = loadEmbeddingsIndex(derivedDir());
-        const entries = Object.entries(index);
-        if (entries.length === 0) {
-          return { content: [{ type: 'text', text: 'Embeddings index is empty. Call recompile_surface to build it, or write_memory to add nodes.' }], isError: true };
-        }
-        const queryEmbedding = await getEmbedding(String(query));
+        const { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex } = await import('../core/embeddings.mjs');
         const k = Math.min(Number(top_k) || 5, 20);
-        const scored = entries
-          .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, k);
-        const nodes = loadNodes(vaultDir());
-        const results = scored.map(({ slug, score }) => {
-          const node = nodes.find(n => n.slug === slug);
-          if (!node) return null;
-          const { body, ...meta } = node;
-          return { ...meta, score: Math.round(score * 1000) / 1000 };
-        }).filter(Boolean);
-        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+        const queryEmbedding = await getEmbedding(String(query));
+        const results = [];
+
+        // Vault nodes
+        const vaultIndex = loadEmbeddingsIndex(derivedDir());
+        const vaultEntries = Object.entries(vaultIndex);
+        if (vaultEntries.length > 0) {
+          const vaultNodes = loadNodes(vaultDir());
+          const scored = vaultEntries
+            .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, k);
+          for (const { slug, score } of scored) {
+            const node = vaultNodes.find(n => n.slug === slug);
+            if (node) {
+              const { body, ...meta } = node;
+              results.push({ type: 'vault', ...meta, score: Math.round(score * 1000) / 1000 });
+            }
+          }
+        }
+
+        // Sessions
+        if (include_sessions) {
+          const sessionIndex = loadSessionEmbeddingsIndex(derivedDir());
+          const sessionEntries = Object.entries(sessionIndex);
+          if (sessionEntries.length > 0) {
+            const scored = sessionEntries
+              .map(([key, entry]) => ({ key, session_id: entry.session_id || key, score: cosineSimilarity(queryEmbedding, entry.embedding), snippet: entry.snippet, chunk: entry.chunk, total_chunks: entry.total_chunks }))
+              .sort((a, b) => b.score - a.score)
+              .slice(0, k);
+            for (const { key, session_id, score, snippet, chunk, total_chunks } of scored) {
+              results.push({ type: 'session', key, session_id, snippet, chunk, total_chunks, score: Math.round(score * 1000) / 1000 });
+            }
+          }
+        }
+
+        if (results.length === 0) {
+          return { content: [{ type: 'text', text: 'No embeddings found. Call recompile_surface to build the index.' }], isError: true };
+        }
+
+        results.sort((a, b) => b.score - a.score);
+        return { content: [{ type: 'text', text: JSON.stringify(results.slice(0, k), null, 2) }] };
       } catch (err) {
         return {
           content: [{ type: 'text', text: `Semantic search failed: ${err.message}\n\nMake sure Ollama is running and nomic-embed-text is installed:\n  ollama pull nomic-embed-text` }],
