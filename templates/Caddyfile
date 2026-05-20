@@ -2,11 +2,15 @@
 #
 # Deployed to /etc/caddy/Caddyfile during `npx total-recall deploy --domain <your-domain>`
 #
-# HTTPS Setup (DuckDNS — free):
-#   1. Go to https://www.duckdns.org — sign in, claim a subdomain, point it at your server IP
-#   2. Deploy with: npx total-recall deploy --domain yourname.duckdns.org
-#   3. Caddy auto-provisions a Let's Encrypt TLS cert via HTTP-01 challenge (port 80 must be open)
-#   4. Your dashboard will be at https://yourname.duckdns.org
+# Recommended: Use Cloudflare Tunnel instead of Caddy for HTTPS — zero port-forwarding required.
+#   Run: npx total-recall deploy --cloudflare-quick   (free temp URL, no account)
+#   Or:  npx total-recall deploy --cloudflare-token <token>  (permanent custom domain)
+#
+# If you prefer Caddy + Let's Encrypt (VPS with open port 80):
+#   1. Point a domain at your server IP (any registrar — duckdns.org is free)
+#   2. Deploy with: npx total-recall deploy --domain yourdomain.com
+#   3. Caddy auto-provisions a TLS cert via HTTP-01 challenge (port 80 must be open)
+#   4. Your dashboard will be at https://yourdomain.com
 #
 # Caddy replaces YOUR_DOMAIN below with your --domain value at deploy time.
 
