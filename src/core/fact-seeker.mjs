@@ -152,13 +152,15 @@ function registerSource(sourceResult, factSlug) {
 
 // ─── Topic Inference ─────────────────────────────────────────────────────────────
 
-const TOPIC_INFERENCE_SYSTEM = `You are a Research Agenda Analyst. Given a conversation transcript, identify topics the user is actively working on or curious about that would benefit from deeper external research.
+function TOPIC_INFERENCE_SYSTEM() {
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  return `You are a Research Agenda Analyst. Today's date is ${today}. Given a conversation transcript, identify topics the user is actively working on or curious about that would benefit from deeper external research — especially topics that may have changed since your training cutoff or where your training data has gaps.
 
 Output valid JSON:
 {
   "topics": [
     {
-      "topic": "string (specific, searchable — e.g. 'Ollama REST API endpoints 2024' not just 'AI')",
+      "topic": "string (specific, searchable — e.g. 'Ollama REST API endpoints 2025' not just 'AI')",
       "priority": 1-100,
       "rationale": "why this needs research",
       "tags": ["tag1", "tag2"],
@@ -171,8 +173,9 @@ Rules:
 - Maximum 5 topics per session.
 - Topics must be SPECIFIC and SEARCHABLE — not vague categories.
 - Include version numbers, tool names, library names when relevant.
-- Prioritize topics where the agent seemed uncertain or where facts were cited without verification.
+- Prioritize topics where the agent seemed uncertain, where facts may be outdated relative to today's date, or where facts were cited without verification.
 - Output ONLY valid JSON.`;
+}
 
 /**
  * Infer research topics from a session transcript via the local LLM.
@@ -183,7 +186,7 @@ export async function inferTopicsFromSession(transcript, runtimeConfig) {
   const prompt = `Analyze this conversation and identify the most important research topics:\n\n${transcript.slice(0, 8000)}`;
 
   try {
-    const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM, runtimeConfig);
+    const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM(), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return [];
     const result = JSON.parse(match[0]);
@@ -196,7 +199,9 @@ export async function inferTopicsFromSession(transcript, runtimeConfig) {
 
 // ─── Multi-Source Research Execution ────────────────────────────────────────────
 
-const SYNTHESIS_SYSTEM = `You are a Knowledge Synthesis Analyst. Given raw search results from multiple sources, extract verified facts and synthesize them into a coherent knowledge node.
+function SYNTHESIS_SYSTEM() {
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  return `You are a Knowledge Synthesis Analyst. Today's date is ${today}. Given raw search results from multiple sources, extract verified facts and synthesize them into a coherent knowledge node. Prioritize recency — sources from closer to today's date are more authoritative for fast-moving topics.
 
 Output valid JSON:
 {
@@ -204,7 +209,7 @@ Output valid JSON:
   "summary": "string (3-5 paragraphs synthesizing all sources)",
   "key_facts": ["string (specific, verifiable fact with inline citation [Source: URL])"],
   "confidence": 0.0-1.0,
-  "temporal_context": "string (when this information is current as of)",
+  "temporal_context": "string (when this information is current as of, relative to today ${today})",
   "contradictions": ["string (any sources that disagreed)"],
   "further_research_needed": ["string (gaps that remain)"],
   "recommended_apis": ["string (specific APIs/endpoints worth integrating for this topic)"]
@@ -213,8 +218,9 @@ Output valid JSON:
 Rules:
 - Every key fact MUST have an inline citation [Source: URL]
 - Confidence reflects cross-source agreement (single source = max 0.6, 3+ agreeing sources = up to 0.95)
-- Be temporally specific — note dates and versions
+- Be temporally specific — note dates, versions, and how current the information is relative to today
 - Output ONLY valid JSON`;
+}
 
 /**
  * Execute research on a single topic across multiple sources.
@@ -332,7 +338,7 @@ async function synthesizeFacts(topic, results, runtimeConfig) {
   const prompt = `Research Topic: "${topic}"\n\nSources Gathered:\n${sourceText.slice(0, 10000)}\n\nSynthesize these into a verified knowledge node.`;
 
   try {
-    const raw = await callLocalRuntime(prompt, SYNTHESIS_SYSTEM, runtimeConfig);
+    const raw = await callLocalRuntime(prompt, SYNTHESIS_SYSTEM(), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in synthesis response');
     return JSON.parse(match[0]);
