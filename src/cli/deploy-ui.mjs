@@ -275,7 +275,9 @@ export function startDeployUI(port = 3001) {
         req.on('end', async () => {
           let opts;
           try { opts = JSON.parse(body || '{}'); } catch { opts = {}; }
-          const { ides = [], installRelay = true, brainUrl, token } = opts;
+          const { ides = [], mcpFor, installRelay = true, brainUrl, token } = opts;
+          // mcpFor defaults to all selected IDEs (backward compat)
+          const mcpEnabled = new Set(Array.isArray(mcpFor) ? mcpFor : ides);
           const results = [];
 
           // IDE-to-connect-client mapping
@@ -301,12 +303,13 @@ export function startDeployUI(port = 3001) {
             if (!mapping) { results.push({ label: ide, ok: false, message: 'Unknown IDE' }); continue; }
             const args = ['connect', mapping.client];
             if (brainUrl) args.push('--brain', brainUrl);
-            if (token) args.push('--token', token);
+            if (token && mcpEnabled.has(ide)) args.push('--token', token);
+            if (!mcpEnabled.has(ide)) args.push('--no-mcp');
             args.push('--force');
             try {
               const r = sp(nodeBin, [scriptPath, ...args], { encoding: 'utf8', timeout: 30000 });
               if (r.status === 0) {
-                results.push({ label: mapping.label, ok: true, message: 'Connected' });
+                results.push({ label: mapping.label, ok: true, message: 'Connected' + (mcpEnabled.has(ide) ? ' + MCP' : '') });
               } else {
                 const err = (r.stderr || r.stdout || '').trim().split('\n').pop() || 'failed';
                 results.push({ label: mapping.label, ok: false, skipped: err.includes('exists'), message: err });
@@ -315,6 +318,7 @@ export function startDeployUI(port = 3001) {
               results.push({ label: mapping.label, ok: false, message: e.message });
             }
           }
+
 
           // Install relay as system service
           let relayResult = null;

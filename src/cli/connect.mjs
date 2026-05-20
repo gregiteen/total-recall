@@ -139,6 +139,7 @@ function parseArgs(args) {
       case '--token': opts.token = args[++i]; break;
       case '--vault': opts.vault = args[++i]; break;
       case '--force': opts.force = true; break;
+      case '--no-mcp': opts.noMcp = true; break;
       case '--json': opts.json = true; break;
       case '--help':
       case '-h':
@@ -733,8 +734,8 @@ export default async function connect(args) {
     }
   }
 
-  // Write MCP config for this IDE
-  if (preset.writeMcpConfig) {
+  // Write MCP config for this IDE (unless --no-mcp was passed)
+  if (preset.writeMcpConfig && !opts.noMcp) {
     try {
       const written = writeMcpConfigFor(preset.writeMcpConfig, opts);
       result.mcp_configs = written;
