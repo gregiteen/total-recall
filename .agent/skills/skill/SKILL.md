@@ -248,6 +248,27 @@ The enforcement script (`scripts/enforce-skill-optimization.mjs`) validates all 
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+<!-- @route: tfidf, generated_at: 2026-05-20T03:58:33.392Z -->
+
+- **no-action-on-hypotheticals** (confidence 1, importance 5):
+  Never Take Action on Hypothetical Questions
+
+- **fix-or-add-to-tracker** (confidence 0.99, importance 4):
+  When you see something wrong, either fix it inline or add it to the master project tracker
+
+- **answer-before-editing** (confidence 1, importance 5):
+  Always answer questions before editing files
+
+- **edit-source-not-deployments** (confidence 1, importance 5):
+  Always edit source files — never deployment artifacts
+
+- **premature-phase-completion-pattern** (confidence 0.99, importance 5):
+  Multiple project phases were marked complete in the tracker without actual implementation
+
+- **non-developer-brain-backup** (confidence 1, importance 5):
+  Brain backup must work for non-developers — no git required
+
+- **operating-instructions** (confidence undefined, importance 5):
+  Total Recall Core Operating Protocol
 
 <!-- END INJECTED MEMORY -->

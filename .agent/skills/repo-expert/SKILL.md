@@ -231,6 +231,18 @@ Consumes the `api-map.json` index to autonomously scaffold Model Context Protoco
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+<!-- @route: tfidf, generated_at: 2026-05-20T03:58:33.392Z -->
+
+- **gemma4-no-native-audio** (confidence 0.98, importance 4):
+  Gemma 4 26B-A4B does NOT support native audio input — only E2B/E4B edge models do
+
+- **voice-memory-capture-architecture** (confidence 0.92, importance 5):
+  Voice Memory Bank: whisper.cpp (tiny) for STT, Kokoro for TTS, mobile shortcuts for capture
+
+- **sync-fabric-architecture** (confidence 0.9, importance 5):
+  Sync Fabric: bi-directional knowledge distribution to workspaces, Google Drive, S3, git repos, webhooks
+
+- **unified-surface-model** (confidence 0.95, importance 5):
+  Total Recall supports three deployment tiers: Standalone Local, Central Cloud, and Hybrid
 
 <!-- END INJECTED MEMORY -->

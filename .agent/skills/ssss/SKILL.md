@@ -6,7 +6,7 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 # SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+<!-- @route: tfidf, generated_at: 2026-05-20T03:58:33.392Z -->
 
 - **self-improving-loop-architecture** (confidence 1, importance 5):
   Total Recall self-improving loop — the improver improves the improver
@@ -14,20 +14,20 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 - **no-ultrachat-memory-path-drift** (confidence 1, importance 5):
   Do not store UltraChat memory in ad hoc memory/assistants paths
 
-- **cognitive-memory-layers** (confidence 1, importance 5):
-  Total Recall memory uses conscious, System 2, and research layers
-
 - **no-ultrachat-memory-database-framing** (confidence 1, importance 5):
   Do not frame UltraChat memory as database-backed
-
-- **auto-resolve-conflicts-over-human-quarantine** (confidence 0.95, importance 5):
-  Auto-resolve memory conflicts by default instead of quarantining for human review
 
 - **operating-instructions** (confidence undefined, importance 5):
   Total Recall Core Operating Protocol
 
-- **ultrachat-memory-native-not-model-endpoint** (confidence 1, importance 5):
-  UltraChat memory is native, not dependent on selecting Total Recall as the model
+- **no-local-ultrachat-restart-guidance** (confidence 1, importance 5):
+  Do not tell users to restart UltraChat as a local service
+
+- **no-local-total-recall-runtime-assumption** (confidence 1, importance 5):
+  Do not assume Total Recall runs on the local Mac
+
+- **never-ignore-questions** (confidence 1, importance 5):
+  Never ignore direct questions from the user
 
 <!-- END INJECTED MEMORY -->
 
