@@ -353,6 +353,141 @@ function buildPreamble(agentDir) {
 }
 
 /**
+ * Build the Total Recall system documentation section.
+ * Always compiled into INSTRUCTIONS.md so every IDE agent knows how to use the system.
+ * Covers: MCP tools, REST API, memory model, semantic search, research queue.
+ */
+function buildSystemDocs(agentDir) {
+  let brainUrl = 'http://localhost:4000';
+  try {
+    const cfgPath = agentDir ? path.join(agentDir, 'config', 'brain.json') : null;
+    if (cfgPath && fs.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      if (cfg.url) brainUrl = cfg.url.replace(/\/$/, '');
+    }
+  } catch { /* use default */ }
+
+  return `
+---
+
+## 🧠 Total Recall — Sovereign AI OS
+
+You are operating inside **Total Recall**, a persistent memory and knowledge system.
+Your memory lives in \`.agent/memory-vault/\` as SSSS-format Markdown nodes.
+Every fact, decision, correction, or preference MUST be written to the vault.
+
+**Brain URL:** \`${brainUrl}\`
+**Vault:** \`~/.agent/memory-vault/\`
+**Sessions:** \`~/.agent/sessions/\`
+
+---
+
+### 🔧 MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| \`write_memory\` | Write a new memory node (facts, decisions, corrections, preferences, patterns) |
+| \`read_memory\` | Read a vault node by slug |
+| \`list_memory\` | List nodes — filter by type, category, tag, status |
+| \`delete_memory\` | Delete a node by slug |
+| \`search_memory\` | Keyword search across vault nodes |
+| \`semantic_search\` | Search vault nodes AND session history by meaning. Returns type: "vault" or "session". Requires Ollama + nomic-embed-text |
+| \`recompile_surface\` | Rebuild INSTRUCTIONS.md + all derived indexes + embeddings. Run after writing nodes |
+| \`web_search\` | Search the web for real-world facts, post-cutoff info, knowledge gap research |
+| \`execute_code\` | Run Node.js in sandbox — use to call REST endpoints or process data |
+| \`read_file\` | Read any file (home dir sandboxed) |
+| \`write_file\` | Write any file (home dir sandboxed) |
+| \`list_directory\` | List directory contents |
+| \`list_research_queue\` | List all research projects: pending, in_progress, done, failed |
+| \`queue_research\` | Add a topic to the research queue (post-cutoff facts, training gaps) |
+
+**Rules:** Write to vault immediately when the user corrects you or shares a preference. Run \`semantic_search\` before answering non-trivial questions. Use \`queue_research\` + \`web_search\` for anything post-cutoff.
+
+---
+
+### 🌐 REST API
+
+Base URL: \`${brainUrl}\` — all requests: \`Authorization: Bearer <token>\`
+
+**Memory:**
+- \`GET  /api/memory\` — list all nodes (?type= &tag= &status=)
+- \`GET  /api/memory/:slug\` — get one node
+- \`POST /api/memory\` — create node { type, title, body, tags, category, priority, modality }
+- \`PUT  /api/memory/:slug\` — update node
+- \`DELETE /api/memory/:slug\` — delete node
+- \`POST /api/memory/search\` — keyword search { query, type, limit }
+- \`POST /api/memory/search/semantic\` — semantic search { query, top_k, include_sessions }
+
+**Research Queue:**
+- \`GET  /api/research\` — list all projects (?status=pending|done|in_progress|failed)
+- \`POST /api/research\` — queue topic { topic, priority, notes }
+- \`PATCH /api/research/:id\` — update { status, notes, node_slug }
+- \`DELETE /api/research/:id\` — remove
+
+**Vault:**
+- \`POST /api/vault/compile\` — recompile surface + rebuild all embeddings
+- \`GET  /api/vault/nodes\` — all nodes with frontmatter
+- \`GET  /api/vault/surface\` — compiled surface text
+- \`GET  /api/vault/status\` — node count, embedding sizes, Ollama status
+
+**Sessions:**
+- \`GET  /api/sessions\` — list sessions
+- \`GET  /api/sessions/:id\` — get session messages
+- \`POST /api/sessions/ingest\` — ingest { source, messages: [{role, content}] }
+- \`DELETE /api/sessions/:id\` — delete
+
+**Import / Export:**
+- \`GET  /api/import/rules\` — detect existing rule files (AGENTS.md, .cursorrules, etc.)
+- \`POST /api/import/rules\` — import detected files into vault
+- \`GET  /api/brain/export\` — download full brain .tar.gz
+
+**System:**
+- \`GET  /health\` — vault stats, embedding counts, Ollama reachability
+- \`GET  /.well-known/total-recall.json\` — discovery manifest
+
+---
+
+### 📝 Memory Model (SSSS v2)
+
+Key frontmatter fields:
+- **category:** \`facts\` | \`patterns\` | \`preferences\` | \`instructions\` | \`corrections\` | \`concepts\` | \`rules\`
+- **priority:** \`absolute\` (injected into INSTRUCTIONS.md on compile) | \`high\` | \`medium\` | \`low\`
+- **modality:** \`must\` | \`must_not\` | \`should\` | \`should_not\` | \`neutral\`
+- **confidence:** 0.0–1.0  **importance:** 1–10  **status:** \`active\` | \`archived\`
+
+After writing nodes: call \`recompile_surface\` or \`POST /api/vault/compile\`.
+
+---
+
+### 🔍 Semantic Search Example
+
+\`\`\`js
+// MCP
+semantic_search({ query: "how we handle auth", top_k: 5 })
+// Results: [{ type: "vault", slug, title, score }, { type: "session", session_id, snippet, score }]
+
+// REST (via execute_code)
+const r = await fetch('${brainUrl}/api/memory/search/semantic', {
+  method: 'POST', headers: { Authorization: 'Bearer <token>', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ query: "how we handle auth", top_k: 5, include_sessions: true })
+});
+\`\`\`
+
+---
+
+### 🔬 Research Loop
+
+When you encounter something post-cutoff or uncertain:
+1. \`queue_research({ topic, priority: "high", notes: "reason" })\`
+2. \`web_search({ query })\` — gather verified facts
+3. \`write_memory({ ... })\` — save the correction node
+4. \`PATCH /api/research/:id\` with \`{ status: "done", node_slug: "..." }\`
+
+---
+`;
+}
+
+/**
  * Compile absolute priority rules into Tier 1 (INSTRUCTIONS.md)
  * and inject into all existing IDE instruction files non-destructively.
  *
@@ -366,6 +501,7 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
   const skillsDir = path.join(path.dirname(instructionsFile), 'skills');
   const routingTable = buildSkillRoutingTable(skillsDir);
   const preamble = buildPreamble(agentDir);
+  const systemDocs = buildSystemDocs(agentDir);
 
   // Always write the canonical INSTRUCTIONS.md fresh
   const header = [
@@ -373,7 +509,7 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
     '> This file is compiled automatically. Do not edit directly.',
     ''
   ].join('\n');
-  atomicWrite(instructionsFile, header + preamble + routingTable + injectionBlock + '\n');
+  atomicWrite(instructionsFile, header + preamble + systemDocs + routingTable + injectionBlock + '\n');
 
   // For each IDE shim: inject into existing files, or create a symlink if missing
   const shims = ['.cursorrules', 'CLAUDE.md', '.clauderules', 'AGENTS.md', 'GEMINI.md'];
