@@ -735,6 +735,47 @@ const HTML = `<!DOCTYPE html>
         </div>
       </div>
 
+      <div style="height:24px"></div>
+
+      <div class="card">
+        <h3>🔍 Web Search for Automatic Research <span style="font-weight:400;font-size:13px;color:var(--muted);margin-left:8px">optional</span></h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:8px">
+          Total Recall runs in the background and automatically looks things up on the web — finding relevant articles, documentation, and facts related to what you're working on, and saving them to your memory.
+        </p>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+          <strong style="color:var(--text)">You don't need a key to get started.</strong> Without one, it uses DuckDuckGo and Wikipedia (both free, no sign-up). Adding a Brave Search key gives it access to full web search results, which means better coverage and more useful memories over time.
+        </p>
+
+        <div class="form-group">
+          <label>
+            Brave Search API Key
+            <span style="font-size:11px;color:var(--muted);margin-left:8px">Primary — 2,000 free queries/month</span>
+          </label>
+          <input type="password" id="brave-key" placeholder="BSA…" autocomplete="off" style="font-family:monospace">
+          <div style="margin-top:6px;font-size:12px;color:var(--muted)">
+            Get one free at <a href="https://brave.com/search/api/" target="_blank" style="color:var(--blue)">brave.com/search/api</a>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top:16px">
+          <label>
+            Serper API Key
+            <span style="font-size:11px;color:var(--muted);margin-left:8px">Fallback — Google Search results</span>
+          </label>
+          <input type="password" id="serper-key" placeholder="…" autocomplete="off" style="font-family:monospace">
+          <div style="margin-top:6px;font-size:12px;color:var(--muted)">
+            Get one at <a href="https://serper.dev" target="_blank" style="color:var(--blue)">serper.dev</a> — used only if Brave key is absent.
+          </div>
+        </div>
+
+        <div id="search-save-result" class="notice" style="display:none;margin-top:14px"></div>
+
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn btn-secondary" onclick="saveSearchKeys()">Save Search Keys</button>
+          <span style="font-size:12px;color:var(--muted);align-self:center">Saved to ~/.agent/config/research.yml</span>
+        </div>
+      </div>
+
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goPhase(2)">← Back</button>
         <button class="btn btn-primary" onclick="goPhase(4)">Next: Integrations →</button>
@@ -1265,6 +1306,44 @@ const HTML = `<!DOCTYPE html>
     }
   };
 
+  // Save Brave/Serper search API keys
+  window.saveSearchKeys = function() {
+    var braveKey = (document.getElementById('brave-key').value || '').trim();
+    var serperKey = (document.getElementById('serper-key').value || '').trim();
+    var resultEl = document.getElementById('search-save-result');
+
+    if (!braveKey && !serperKey) {
+      resultEl.style.display = '';
+      resultEl.className = 'notice warn';
+      resultEl.textContent = 'Enter at least one key, or skip this step — the engine will use DuckDuckGo and Wikipedia for free.';
+      return;
+    }
+
+    resultEl.style.display = '';
+    resultEl.className = 'notice';
+    resultEl.textContent = 'Saving…';
+
+    fetch('/api/save-search-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ braveKey: braveKey, serperKey: serperKey })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        resultEl.className = 'notice success';
+        resultEl.textContent = '✅ Saved. The background engine will use ' + data.primarySource + ' for web search.';
+      } else {
+        resultEl.className = 'notice warn';
+        resultEl.textContent = '⚠️ ' + (data.error || 'Could not save keys.');
+      }
+    })
+    .catch(function() {
+      resultEl.className = 'notice warn';
+      resultEl.textContent = '⚠️ Could not reach the setup server. The wizard may have stopped.';
+    });
+  };
+
   // Auto-detect installed IDEs on page load
   function autoDetectIDEs() {
     fetch('/api/detect-ides')
@@ -1513,6 +1592,40 @@ export function startDeployUI(port = 3001) {
           });
 
           res.end(JSON.stringify({ ok: true, message: 'Provisioning started — watch the progress log' }));
+        });
+        return;
+      }
+
+      // ── POST /api/save-search-config — write research.yml with Brave/Serper keys ──
+      if (url === '/api/save-search-config' && req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => { body += c; });
+        req.on('end', () => {
+          try {
+            const { braveKey, serperKey } = JSON.parse(body);
+            const configDir = path2.default.join(os2.default.homedir(), '.agent', 'config');
+            fs2.default.mkdirSync(configDir, { recursive: true });
+            const lines = [
+              '# Total Recall Research Source Configuration',
+              '# Generated by setup wizard — edit freely',
+              '',
+              '# Brave Search: primary web search source.',
+              '# Free tier: 2,000 queries/month. Get a key at https://brave.com/search/api/',
+              `brave_api_key: ${braveKey ? `"${braveKey}"` : '""'}`,
+              '',
+              '# Serper: fallback if Brave key is absent. Get a key at https://serper.dev',
+              `serper_api_key: ${serperKey ? `"${serperKey}"` : '""'}`,
+              '',
+              '# If both are empty, the engine uses DuckDuckGo + Wikipedia (always free).',
+            ].join('\n');
+            fs2.default.writeFileSync(path2.default.join(configDir, 'research.yml'), lines);
+            const primarySource = braveKey ? 'Brave Search' : (serperKey ? 'Serper (Google)' : 'DuckDuckGo + Wikipedia (free)');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, primarySource }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: err.message }));
+          }
         });
         return;
       }
