@@ -408,7 +408,7 @@ async function vastAPI(key, method, path, body) {
     const data = body ? JSON.stringify(body) : null;
     const opts = {
       hostname: 'console.vast.ai',
-      path: `/api/v0${path}`,
+      path: encodeURI(`/api/v0${path}`),
       method,
       headers: {
         'Authorization': `Bearer ${key}`,
