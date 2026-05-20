@@ -152,9 +152,10 @@ function registerSource(sourceResult, factSlug) {
 
 // ─── Topic Inference ─────────────────────────────────────────────────────────────
 
-function TOPIC_INFERENCE_SYSTEM() {
+function TOPIC_INFERENCE_SYSTEM(runtimeConfig) {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  return `You are a Research Agenda Analyst. Today's date is ${today}. Given a conversation transcript, identify topics the user is actively working on or curious about that would benefit from deeper external research — especially topics that may have changed since your training cutoff or where your training data has gaps.
+  const cutoff = runtimeConfig?.training_cutoff || 'January 2025';
+  return `You are a Research Agenda Analyst. Today's date is ${today}. The model's training data cutoff is ${cutoff} — anything after that date may be outdated or unknown. Given a conversation transcript, identify topics that would benefit from real-world verification, especially anything that may have changed since the training cutoff.
 
 Output valid JSON:
 {
@@ -173,7 +174,7 @@ Rules:
 - Maximum 5 topics per session.
 - Topics must be SPECIFIC and SEARCHABLE — not vague categories.
 - Include version numbers, tool names, library names when relevant.
-- Prioritize topics where the agent seemed uncertain, where facts may be outdated relative to today's date, or where facts were cited without verification.
+- Prioritize topics post-${cutoff} or where the agent showed uncertainty.
 - Output ONLY valid JSON.`;
 }
 
@@ -186,7 +187,7 @@ export async function inferTopicsFromSession(transcript, runtimeConfig) {
   const prompt = `Analyze this conversation and identify the most important research topics:\n\n${transcript.slice(0, 8000)}`;
 
   try {
-    const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM(), runtimeConfig);
+    const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM(runtimeConfig), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return [];
     const result = JSON.parse(match[0]);
@@ -199,9 +200,10 @@ export async function inferTopicsFromSession(transcript, runtimeConfig) {
 
 // ─── Multi-Source Research Execution ────────────────────────────────────────────
 
-function SYNTHESIS_SYSTEM() {
+function SYNTHESIS_SYSTEM(runtimeConfig) {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  return `You are a Knowledge Synthesis Analyst. Today's date is ${today}. Given raw search results from multiple sources, extract verified facts and synthesize them into a coherent knowledge node. Prioritize recency — sources from closer to today's date are more authoritative for fast-moving topics.
+  const cutoff = runtimeConfig?.training_cutoff || 'January 2025';
+  return `You are a Knowledge Synthesis Analyst. Today's date is ${today}. The model's training data cutoff is ${cutoff}. Given raw search results, extract verified facts and synthesize them into a coherent knowledge node. Prioritize sources published after ${cutoff} — they contain information the model cannot know from training alone.
 
 Output valid JSON:
 {
@@ -211,14 +213,15 @@ Output valid JSON:
   "confidence": 0.0-1.0,
   "temporal_context": "string (when this information is current as of, relative to today ${today})",
   "contradictions": ["string (any sources that disagreed)"],
-  "further_research_needed": ["string (gaps that remain)"],
+  "further_research_needed": ["string (gaps that remain)]",
   "recommended_apis": ["string (specific APIs/endpoints worth integrating for this topic)"]
 }
 
 Rules:
 - Every key fact MUST have an inline citation [Source: URL]
-- Confidence reflects cross-source agreement (single source = max 0.6, 3+ agreeing sources = up to 0.95)
-- Be temporally specific — note dates, versions, and how current the information is relative to today
+- Confidence: single source = max 0.6, 3+ agreeing post-cutoff sources = up to 0.95
+- Flag any fact that relies solely on pre-${cutoff} training data as potentially stale
+- Be temporally specific — note publication dates relative to today and the cutoff
 - Output ONLY valid JSON`;
 }
 
@@ -338,7 +341,7 @@ async function synthesizeFacts(topic, results, runtimeConfig) {
   const prompt = `Research Topic: "${topic}"\n\nSources Gathered:\n${sourceText.slice(0, 10000)}\n\nSynthesize these into a verified knowledge node.`;
 
   try {
-    const raw = await callLocalRuntime(prompt, SYNTHESIS_SYSTEM(), runtimeConfig);
+    const raw = await callLocalRuntime(prompt, SYNTHESIS_SYSTEM(runtimeConfig), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in synthesis response');
     return JSON.parse(match[0]);
