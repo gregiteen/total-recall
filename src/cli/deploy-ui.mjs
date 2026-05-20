@@ -1901,7 +1901,6 @@ export function startDeployUI(port = 3001) {
       // ── GET /api/detect-ides — probe filesystem for installed IDEs ──
       if (url === '/api/detect-ides' && req.method === 'GET') {
         const HOME = os.homedir();
-        const fs2 = await import('node:fs');
         const detected = [];
         const checks = {
           'claude-code': [HOME + '/.claude/projects', HOME + '/.claude/CLAUDE.md'],

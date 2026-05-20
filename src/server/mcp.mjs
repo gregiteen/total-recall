@@ -57,6 +57,43 @@ const TOOL_DEFS = [
     name: 'recompile_surface',
     description: 'Rebuild SSSS derived indexes and injected surfaces.',
     inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'read_file',
+    description: 'Read a file from the user\'s local filesystem. Returns the file contents as text. Paths must be within the user\'s home directory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute or ~ path to the file' },
+        max_bytes: { type: 'number', description: 'Maximum bytes to read (default 50000)' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'list_directory',
+    description: 'List files and subdirectories in a local directory. Returns names, types, and sizes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute or ~ directory path' },
+        recursive: { type: 'boolean', description: 'Include subdirectories (default false)' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'search_files',
+    description: 'Find files on the local filesystem matching a name pattern. Searches within a given directory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string', description: 'Root directory to search from' },
+        pattern: { type: 'string', description: 'Filename pattern to match (e.g. "*.md", "README*")' },
+        max_results: { type: 'number', description: 'Max files to return (default 50)' }
+      },
+      required: ['directory', 'pattern']
+    }
   }
 ];
 
@@ -268,6 +305,62 @@ async function callTool(name, args = {}) {
       const { runRebuild } = await import('../cli/rebuild.mjs');
       const code = await runRebuild();
       return toolContent({ rebuilt: code === 0, exit_code: code });
+    }
+
+    case 'read_file': {
+      const filePath = String(args.path || '').replace(/^~/, os.homedir());
+      const home = os.homedir();
+      if (!filePath.startsWith(home)) throw new Error('Access denied: path must be within home directory');
+      if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`);
+      const maxBytes = Number(args.max_bytes) || 50000;
+      const content = fs.readFileSync(filePath, 'utf8').slice(0, maxBytes);
+      return toolContent({ path: filePath, size: stat.size, content, truncated: stat.size > maxBytes });
+    }
+
+    case 'list_directory': {
+      const dirPath = String(args.path || '').replace(/^~/, os.homedir());
+      const home = os.homedir();
+      if (!dirPath.startsWith(home)) throw new Error('Access denied: path must be within home directory');
+      if (!fs.existsSync(dirPath)) throw new Error(`Directory not found: ${dirPath}`);
+      const recursive = Boolean(args.recursive);
+      const entries = [];
+      function walk(dir, depth = 0) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const fullPath = path.join(dir, entry.name);
+          const rel = path.relative(dirPath, fullPath);
+          const item = { name: entry.name, path: rel, type: entry.isDirectory() ? 'dir' : 'file' };
+          if (!entry.isDirectory()) item.size = fs.statSync(fullPath).size;
+          entries.push(item);
+          if (recursive && entry.isDirectory() && depth < 3) walk(fullPath, depth + 1);
+        }
+      }
+      walk(dirPath);
+      return toolContent({ path: dirPath, entries });
+    }
+
+    case 'search_files': {
+      const rootDir = String(args.directory || '').replace(/^~/, os.homedir());
+      const home = os.homedir();
+      if (!rootDir.startsWith(home)) throw new Error('Access denied: path must be within home directory');
+      const pattern = String(args.pattern || '*');
+      const maxResults = Number(args.max_results) || 50;
+      const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
+      const results = [];
+      function findFiles(dir, depth = 0) {
+        if (results.length >= maxResults || depth > 5) return;
+        try {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.name.startsWith('.') && depth > 0) continue; // skip hidden dirs
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) { findFiles(fullPath, depth + 1); }
+            else if (regex.test(entry.name)) results.push(fullPath);
+          }
+        } catch { /* permission denied — skip */ }
+      }
+      findFiles(rootDir);
+      return toolContent({ pattern, results: results.slice(0, maxResults), count: results.length });
     }
 
     default:
