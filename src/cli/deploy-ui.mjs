@@ -742,30 +742,56 @@ const HTML = `<!DOCTYPE html>
         <p style="color:var(--muted);font-size:13px;margin-bottom:8px">
           Total Recall runs in the background and automatically looks things up on the web — finding relevant articles, documentation, and facts related to what you're working on, and saving them to your memory.
         </p>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-          <strong style="color:var(--text)">You don't need a key to get started.</strong> Without one, it uses DuckDuckGo and Wikipedia (both free, no sign-up). Adding a Brave Search key gives it access to full web search results, which means better coverage and more useful memories over time.
+        <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
+          <strong style="color:var(--text)">You don't need a key to get started.</strong> Without one, it uses DuckDuckGo and Wikipedia (both free, no sign-up). Adding any one of the providers below gives it full web search results. Pick whichever you prefer — they're all roughly equivalent in quality.
         </p>
 
-        <div class="form-group">
-          <label>
-            Brave Search API Key
-            <span style="font-size:11px;color:var(--muted);margin-left:8px">Primary — 2,000 free queries/month</span>
-          </label>
-          <input type="password" id="brave-key" placeholder="BSA…" autocomplete="off" style="font-family:monospace">
-          <div style="margin-top:6px;font-size:12px;color:var(--muted)">
-            Get one free at <a href="https://brave.com/search/api/" target="_blank" style="color:var(--blue)">brave.com/search/api</a>
+        <div style="display:grid;gap:14px">
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <strong>Tavily</strong>
+              <span style="font-size:11px;background:var(--green);color:#000;padding:2px 7px;border-radius:10px">Best for AI agents</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Designed specifically for AI research — returns clean, readable text from each page instead of just a link and a short description. Saves time. 1,000 free searches/month.</p>
+            <input type="password" id="tavily-key" placeholder="tvly-…" autocomplete="off" style="font-family:monospace;width:100%">
+            <div style="margin-top:5px;font-size:11px;color:var(--muted)">Get a free key at <a href="https://tavily.com" target="_blank" style="color:var(--blue)">tavily.com</a></div>
           </div>
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <strong>Brave Search</strong>
+              <span style="font-size:11px;color:var(--muted)">~1,000 free queries/month</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Independent web search (not Google). Returns a list of URLs and short descriptions for each result. Solid general-purpose choice.</p>
+            <input type="password" id="brave-key" placeholder="BSA…" autocomplete="off" style="font-family:monospace;width:100%">
+            <div style="margin-top:5px;font-size:11px;color:var(--muted)">Get a free key at <a href="https://brave.com/search/api/" target="_blank" style="color:var(--blue)">brave.com/search/api</a></div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <strong>Exa</strong>
+              <span style="font-size:11px;color:var(--muted)">~1,000 free queries/month</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Finds pages by meaning rather than exact keywords — good at surfacing recent articles and blog posts that are thematically relevant, not just keyword matches.</p>
+            <input type="password" id="exa-key" placeholder="…" autocomplete="off" style="font-family:monospace;width:100%">
+            <div style="margin-top:5px;font-size:11px;color:var(--muted)">Get a free key at <a href="https://exa.ai" target="_blank" style="color:var(--blue)">exa.ai</a></div>
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <strong>Serper</strong>
+              <span style="font-size:11px;color:var(--muted)">2,500 free credits (one-time)</span>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Returns Google Search results. The free credits are a one-time trial rather than a monthly allowance, so it's best used as a last fallback or for occasional use.</p>
+            <input type="password" id="serper-key" placeholder="…" autocomplete="off" style="font-family:monospace;width:100%">
+            <div style="margin-top:5px;font-size:11px;color:var(--muted)">Get a free key at <a href="https://serper.dev" target="_blank" style="color:var(--blue)">serper.dev</a></div>
+          </div>
+
         </div>
 
-        <div class="form-group" style="margin-top:16px">
-          <label>
-            Serper API Key
-            <span style="font-size:11px;color:var(--muted);margin-left:8px">Fallback — Google Search results</span>
-          </label>
-          <input type="password" id="serper-key" placeholder="…" autocomplete="off" style="font-family:monospace">
-          <div style="margin-top:6px;font-size:12px;color:var(--muted)">
-            Get one at <a href="https://serper.dev" target="_blank" style="color:var(--blue)">serper.dev</a> — used only if Brave key is absent.
-          </div>
+        <div style="margin-top:14px;padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:6px;font-size:12px;color:var(--muted)">
+          ⏱ <strong style="color:var(--text)">Daily limit:</strong> To stay within free tiers, the engine makes at most <strong style="color:var(--text)">50 paid searches per day</strong> by default (~1,500/month). When that's used up it switches back to DuckDuckGo for the rest of the day. You can change this limit anytime in <code>~/.agent/config/research.yml</code>.
         </div>
 
         <div id="search-save-result" class="notice" style="display:none;margin-top:14px"></div>
@@ -1306,16 +1332,18 @@ const HTML = `<!DOCTYPE html>
     }
   };
 
-  // Save Brave/Serper search API keys
+  // Save search API keys (Brave / Tavily / Exa / Serper)
   window.saveSearchKeys = function() {
-    var braveKey = (document.getElementById('brave-key').value || '').trim();
+    var tavilyKey = (document.getElementById('tavily-key').value || '').trim();
+    var braveKey  = (document.getElementById('brave-key').value  || '').trim();
+    var exaKey    = (document.getElementById('exa-key').value    || '').trim();
     var serperKey = (document.getElementById('serper-key').value || '').trim();
-    var resultEl = document.getElementById('search-save-result');
+    var resultEl  = document.getElementById('search-save-result');
 
-    if (!braveKey && !serperKey) {
+    if (!braveKey && !tavilyKey && !exaKey && !serperKey) {
       resultEl.style.display = '';
       resultEl.className = 'notice warn';
-      resultEl.textContent = 'Enter at least one key, or skip this step — the engine will use DuckDuckGo and Wikipedia for free.';
+      resultEl.textContent = 'No keys entered — that\'s fine. The engine will use DuckDuckGo and Wikipedia for free.';
       return;
     }
 
@@ -1326,13 +1354,13 @@ const HTML = `<!DOCTYPE html>
     fetch('/api/save-search-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ braveKey: braveKey, serperKey: serperKey })
+      body: JSON.stringify({ braveKey, tavilyKey, exaKey, serperKey })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.ok) {
         resultEl.className = 'notice success';
-        resultEl.textContent = '✅ Saved. The background engine will use ' + data.primarySource + ' for web search.';
+        resultEl.textContent = '✅ Saved. Primary search source: ' + data.primarySource + '.';
       } else {
         resultEl.className = 'notice warn';
         resultEl.textContent = '⚠️ ' + (data.error || 'Could not save keys.');
@@ -1340,7 +1368,7 @@ const HTML = `<!DOCTYPE html>
     })
     .catch(function() {
       resultEl.className = 'notice warn';
-      resultEl.textContent = '⚠️ Could not reach the setup server. The wizard may have stopped.';
+      resultEl.textContent = '⚠️ Could not reach the setup server.';
     });
   };
 
@@ -1596,30 +1624,43 @@ export function startDeployUI(port = 3001) {
         return;
       }
 
-      // ── POST /api/save-search-config — write research.yml with Brave/Serper keys ──
+      // ── POST /api/save-search-config — write research.yml ──
       if (url === '/api/save-search-config' && req.method === 'POST') {
         let body = '';
         req.on('data', (c) => { body += c; });
         req.on('end', () => {
           try {
-            const { braveKey, serperKey } = JSON.parse(body);
+            const { braveKey, tavilyKey, exaKey, serperKey } = JSON.parse(body);
             const configDir = path2.default.join(os2.default.homedir(), '.agent', 'config');
             fs2.default.mkdirSync(configDir, { recursive: true });
             const lines = [
               '# Total Recall Research Source Configuration',
               '# Generated by setup wizard — edit freely',
+              '# Fallback order: Brave → Tavily → Exa → Serper → DuckDuckGo (free)',
               '',
-              '# Brave Search: primary web search source.',
-              '# Free tier: 2,000 queries/month. Get a key at https://brave.com/search/api/',
+              '# Tavily: best for AI agents — returns clean extracted text, not just links.',
+              '# 1,000 free queries/month. https://tavily.com',
+              `tavily_api_key: ${tavilyKey ? `"${tavilyKey}"` : '""'}`,
+              '',
+              '# Brave Search: independent web index, not Google. ~1,000 free/month. https://brave.com/search/api/',
               `brave_api_key: ${braveKey ? `"${braveKey}"` : '""'}`,
               '',
-              '# Serper: fallback if Brave key is absent. Get a key at https://serper.dev',
+              '# Exa: neural/semantic search, finds pages by meaning. ~1,000 free/month. https://exa.ai',
+              `exa_api_key: ${exaKey ? `"${exaKey}"` : '""'}`,
+              '',
+              '# Serper: Google Search results. 2,500 one-time free credits. https://serper.dev',
               `serper_api_key: ${serperKey ? `"${serperKey}"` : '""'}`,
               '',
-              '# If both are empty, the engine uses DuckDuckGo + Wikipedia (always free).',
+              '# Daily search limit (paid queries/day). Default 50 ≈ 1,500/month.',
+              '# Set to 0 to disable the cap (for paid plans with high volume).',
+              'daily_web_search_limit: 50',
             ].join('\n');
             fs2.default.writeFileSync(path2.default.join(configDir, 'research.yml'), lines);
-            const primarySource = braveKey ? 'Brave Search' : (serperKey ? 'Serper (Google)' : 'DuckDuckGo + Wikipedia (free)');
+            const primarySource =
+              braveKey  ? 'Brave Search' :
+              tavilyKey ? 'Tavily' :
+              exaKey    ? 'Exa' :
+              serperKey ? 'Serper (Google)' : 'DuckDuckGo + Wikipedia (free)';
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: true, primarySource }));
           } catch (err) {

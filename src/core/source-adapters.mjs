@@ -12,12 +12,14 @@ import os from 'os';
  *   GITHUB_TOKEN          — GitHub REST API (higher rate limits)
  *
  * Always-free sources (no auth required):
- *   arXiv, npm registry, Wikipedia REST API, DuckDuckGo Instant Answers, web fetch
- */
-
-// ─── Config Loading ─────────────────────────────────────────────────────────────
+ *   arXiv, npm registry, Wikipedia REST API, DuckDuckGo Instant Answers, web f// ─── Config Loading ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.agent', 'config', 'research.yml');
+const USAGE_FILE = path.join(os.homedir(), '.agent', 'config', 'search-usage.json');
+
+// Default: 50 paid searches/day ≈ 1,500/month — just under Brave's ~1,000 free credit
+// (credit rounds up, so we stay safe). Users on paid plans can raise this.
+const DEFAULT_DAILY_LIMIT = 50;
 
 export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
   let fileConfig = {};
@@ -28,17 +30,80 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
   }
 
   return {
-    // Brave Search: env var matches UltraChat convention (BRAVE_SEARCH_API_KEY)
-    braveApiKey: process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || fileConfig.brave_api_key || null,
-    // Serper: fallback web search if Brave not available
-    serperApiKey: process.env.SERPER_API_KEY || fileConfig.serper_api_key || null,
-    // GitHub: personal access token for higher rate limits
+    // ── Paid search providers (fallback chain: Brave → Tavily → Exa → Serper) ──
+    braveApiKey:  process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || fileConfig.brave_api_key  || null,
+    tavilyApiKey: process.env.TAVILY_API_KEY                                    || fileConfig.tavily_api_key || null,
+    exaApiKey:    process.env.EXA_API_KEY                                       || fileConfig.exa_api_key    || null,
+    serperApiKey: process.env.SERPER_API_KEY                                    || fileConfig.serper_api_key || null,
+    // GitHub: personal access token for higher rate limits (60→5000 req/hr)
     githubToken: process.env.GITHUB_TOKEN || fileConfig.github_token || null,
     fetchTimeoutMs: fileConfig.fetch_timeout_ms || 10000,
     maxResultsPerSource: fileConfig.max_results_per_source || 5,
     userAgent: fileConfig.user_agent || 'TotalRecall/1.0 (knowledge-acquisition; +https://github.com/gregiteen/total-recall)',
+    // Daily cap: protects free-tier users from unexpected overage charges.
+    // Default 50/day ≈ 1,500/month — within Brave/Tavily/Exa free tiers (~1,000/month each).
+    // Set to 0 to disable (paid plans with high volume).
+    dailyWebSearchLimit: Number(fileConfig.daily_web_search_limit ?? process.env.TR_DAILY_SEARCH_LIMIT ?? DEFAULT_DAILY_LIMIT),
   };
 }
+
+// ─── Daily Search Budget Tracker ──────────────────────────────────────────────────────
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10); // "2026-05-19"
+}
+
+function readUsage() {
+  try {
+    if (fs.existsSync(USAGE_FILE)) {
+      return JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8'));
+    }
+  } catch { /* corrupt file — reset */ }
+  return {};
+}
+
+function writeUsage(usage) {
+  try {
+    const dir = path.dirname(USAGE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 2));
+  } catch { /* non-fatal */ }
+}
+
+/**
+ * Check if the daily paid-search budget has been reached.
+ * If not, increments the counter and returns false (search is allowed).
+ * If yes, returns true (caller should use free fallback instead).
+ */
+export function isDailyCapReached(config) {
+  if (!config.dailyWebSearchLimit) return false; // 0 = unlimited
+  const today = todayKey();
+  const usage = readUsage();
+  const todayCount = usage[today] || 0;
+  if (todayCount >= config.dailyWebSearchLimit) return true;
+  usage[today] = todayCount + 1;
+  // Prune old days (keep last 7)
+  const days = Object.keys(usage).sort();
+  if (days.length > 7) { for (const d of days.slice(0, days.length - 7)) delete usage[d]; }
+  writeUsage(usage);
+  return false;
+}
+
+/**
+ * Get today's usage stats for display in UI/logs.
+ */
+export function getSearchUsageStats(config) {
+  const today = todayKey();
+  const usage = readUsage();
+  return {
+    today: usage[today] || 0,
+    limit: config.dailyWebSearchLimit || 'unlimited',
+    remaining: config.dailyWebSearchLimit
+      ? Math.max(0, config.dailyWebSearchLimit - (usage[today] || 0))
+      : 'unlimited',
+  };
+}
+
 
 // ─── Helper: Safe Fetch ─────────────────────────────────────────────────────────
 
@@ -162,18 +227,106 @@ export async function serperSearch(query, config, count = 5) {
   }));
 }
 
+// ─── Tavily Search API ──────────────────────────────────────────────────────────
+
 /**
- * Web search with automatic fallback: Brave → Serper → error.
- * Use this instead of calling braveSearch/serperSearch directly.
+ * Search using Tavily — purpose-built for AI agents.
+ * Returns clean extracted page text (not just snippets), saving a Playwright follow-up.
+ * Free tier: ~1,000 queries/month. https://tavily.com
+ */
+export async function tavilySearch(query, config, count = 5) {
+  if (!config.tavilyApiKey) throw new Error('TAVILY_API_KEY not set');
+
+  const response = await safeFetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: config.tavilyApiKey,
+      query,
+      max_results: Math.min(count, 10),
+      search_depth: 'basic',
+      include_raw_content: false,
+    }),
+  }, config.fetchTimeoutMs);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Tavily API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  return (data.results || []).map(r => ({
+    source: 'tavily',
+    type: 'web',
+    title: r.title || '',
+    url: r.url || '',
+    snippet: r.content || r.snippet || '',
+    published: r.published_date || null,
+    relevance: r.score || 0.8,
+  }));
+}
+
+// ─── Exa Search API ─────────────────────────────────────────────────────────────
+
+/**
+ * Search using Exa (formerly Metaphor) — neural/semantic search.
+ * Finds content by meaning rather than keywords; excellent for recent articles.
+ * Free tier: ~1,000 queries/month. https://exa.ai
+ */
+export async function exaSearch(query, config, count = 5) {
+  if (!config.exaApiKey) throw new Error('EXA_API_KEY not set');
+
+  const response = await safeFetch('https://api.exa.ai/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': config.exaApiKey,
+    },
+    body: JSON.stringify({
+      query,
+      numResults: Math.min(count, 10),
+      useAutoprompt: true,
+      type: 'neural',
+    }),
+  }, config.fetchTimeoutMs);
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Exa API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  return (data.results || []).map(r => ({
+    source: 'exa',
+    type: 'web',
+    title: r.title || '',
+    url: r.url || '',
+    snippet: r.text?.slice(0, 500) || r.highlight || '',
+    published: r.publishedDate || null,
+    relevance: r.score || 0.8,
+  }));
+}
+
+/**
+ * Web search with automatic fallback chain:
+ *   Brave → Tavily → Exa → Serper → DuckDuckGo (free, always on)
+ *
+ * Respects the daily paid-search cap (default 50/day ≈ 1,500/month).
+ * When the cap is hit, falls back to free DuckDuckGo — research never stops.
  */
 export async function webSearch(query, config, count = 5) {
-  if (config.braveApiKey) {
-    return braveSearch(query, config, count);
+  const capReached = isDailyCapReached(config);
+
+  if (!capReached) {
+    if (config.braveApiKey)  return braveSearch(query, config, count);
+    if (config.tavilyApiKey) return tavilySearch(query, config, count);
+    if (config.exaApiKey)    return exaSearch(query, config, count);
+    if (config.serperApiKey) return serperSearch(query, config, count);
   }
-  if (config.serperApiKey) {
-    return serperSearch(query, config, count);
-  }
-  throw new Error('No web search API configured. Set BRAVE_SEARCH_API_KEY or SERPER_API_KEY in environment.');
+
+  // No paid key or daily cap reached — free fallback, always available
+  const ddg = await duckduckgoInstant(query, config).catch(() => null);
+  return ddg ? [ddg] : [];
 }
 
 // ─── arXiv API ─────────────────────────────────────────────────────────────────
