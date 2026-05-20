@@ -308,7 +308,7 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
 /**
  * GET /api/vault/status
  */
-router.get('/api/vault/status', requireAuth, requireScope('memory:read'), (req, res) => {
+router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
     const nodeCount   = fs.existsSync(VAULT_DIR)  ? walkMd(VAULT_DIR).length  : 0;
     const skillCount  = fs.existsSync(SKILLS_DIR)  ? fs.readdirSync(SKILLS_DIR).filter(d =>
