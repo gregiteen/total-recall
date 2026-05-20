@@ -931,15 +931,6 @@
             <span class="ide-check">✓</span>
             <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
-          <label class="ide-card" id="ide-obsidian">
-            <input type="checkbox" value="obsidian" onchange="toggleIde(this)">
-            <span class="ide-icon">🔮</span>
-            <div>
-              <div class="ide-name">Obsidian</div>
-              <div class="ide-desc">Vault sync — browse memory in graph view</div>
-            </div>
-            <span class="ide-check">✓</span>
-          </label>
         </div>
       </div>
 
@@ -950,6 +941,19 @@
           <input type="checkbox" id="install-relay" checked style="width:16px;height:16px;accent-color:var(--green)">
           <span>Install relay as system service (starts on boot, runs forever)</span>
         </label>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:10px">💾 Backup &amp; Sync</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Browse your memory graph visually or download a full backup of your brain.</p>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:12px">
+          <input type="checkbox" id="install-obsidian" checked style="width:16px;height:16px;accent-color:var(--green)">
+          <span>🔮 <strong>Obsidian vault sync</strong> — browse your memory in graph view (connects vault directory)</span>
+        </label>
+        <div style="margin-top:8px">
+          <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="downloadBrain()">⬇️ Download Brain (.tar.gz)</button>
+          <span id="brain-dl-status" style="margin-left:10px;font-size:12px;color:var(--muted)"></span>
+        </div>
       </div>
 
       <div class="card" id="connect-results" style="display:none">
@@ -1529,6 +1533,40 @@
   window.toggleIdeMcp = function(el) {
     var isOff = el.classList.toggle('mcp-off');
     el.textContent = isOff ? '📡 MCP off' : '📡 MCP on';
+  };
+
+  // Download full brain as .tar.gz
+  window.downloadBrain = function() {
+    var status = document.getElementById('brain-dl-status');
+    var brainUrl = W.apiUrl || '';
+    var pat = W.pat || '';
+    if (!brainUrl || !pat) {
+      if (status) status.textContent = '⚠️ Connect your brain first (need URL + PAT)';
+      return;
+    }
+    if (status) status.textContent = 'Preparing download...';
+    // Fetch with auth then trigger blob download
+    fetch(brainUrl.replace(/\/$/, '') + '/api/brain/export', {
+      headers: { 'Authorization': 'Bearer ' + pat }
+    })
+    .then(function(r) {
+      if (!r.ok) throw new Error('Export failed: ' + r.status);
+      return r.blob();
+    })
+    .then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = 'total-recall-brain-' + date + '.tar.gz';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      if (status) status.textContent = '✅ Downloaded!';
+    })
+    .catch(function(e) {
+      if (status) status.textContent = '❌ ' + e.message;
+    });
   };
 
   // Connect all selected IDEs

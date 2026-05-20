@@ -48,6 +48,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 
 import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload, walkMd } from '../core/vault.mjs';
 import { compileSurface } from '../core/surface.mjs';
@@ -803,6 +804,150 @@ router.get('/api', (req, res) => {
       resources:  ['total-recall://instructions', 'total-recall://memory/index', 'total-recall://ssss/skill'],
     },
   });
+});
+
+// ─── Research Queue ───────────────────────────────────────────────────────────
+// Tracks all research projects: pending, in_progress, done, failed.
+// Storage: .agent/research-queue.jsonl
+
+const RESEARCH_QUEUE_PATH = path.join(AGENT_DIR, 'research-queue.jsonl');
+
+function loadResearchQueue() {
+  if (!fs.existsSync(RESEARCH_QUEUE_PATH)) return [];
+  return fs.readFileSync(RESEARCH_QUEUE_PATH, 'utf8')
+    .split('\n').filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+}
+
+function saveResearchQueue(items) {
+  fs.mkdirSync(path.dirname(RESEARCH_QUEUE_PATH), { recursive: true });
+  fs.writeFileSync(RESEARCH_QUEUE_PATH, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
+}
+
+/**
+ * GET /api/research
+ * Query: ?status=pending|in_progress|done|failed  (omit for all)
+ *        ?limit=100  ?offset=0
+ */
+router.get('/api/research', requireAuth, requireScope('memory:read'), (req, res) => {
+  try {
+    let items = loadResearchQueue();
+    const { status, limit = '100', offset = '0' } = req.query;
+    if (status) items = items.filter(i => i.status === status);
+    const statusRank = { pending: 0, in_progress: 1, done: 2, failed: 3 };
+    items.sort((a, b) => {
+      const ra = statusRank[a.status] ?? 4, rb = statusRank[b.status] ?? 4;
+      if (ra !== rb) return ra - rb;
+      return (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at);
+    });
+    const off = parseInt(offset, 10) || 0;
+    const lim = Math.min(500, parseInt(limit, 10) || 100);
+    const all = loadResearchQueue();
+    const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
+    all.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
+    res.json({ total: items.length, offset: off, limit: lim, counts, items: items.slice(off, off + lim) });
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * POST /api/research
+ * Body: { topic, priority?: 'high'|'medium'|'low', notes? }
+ */
+router.post('/api/research', requireAuth, requireScope('memory:write'), (req, res) => {
+  try {
+    const { topic, priority = 'medium', notes } = req.body || {};
+    if (!topic) return badRequest(res, 'topic is required');
+    const item = {
+      id: crypto.randomUUID(),
+      topic: String(topic),
+      status: 'pending',
+      priority,
+      notes: notes || null,
+      node_slug: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+    };
+    const items = loadResearchQueue();
+    items.unshift(item);
+    saveResearchQueue(items);
+    res.status(201).json(item);
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * PATCH /api/research/:id
+ * Body: { status?, notes?, node_slug?, priority? }
+ * Mark done, link to vault node, update notes, etc.
+ */
+router.patch('/api/research/:id', requireAuth, requireScope('memory:write'), (req, res) => {
+  try {
+    const items = loadResearchQueue();
+    const idx = items.findIndex(i => i.id === req.params.id);
+    if (idx === -1) return notFound(res, `Research project not found: ${req.params.id}`);
+    const { status, notes, node_slug, priority } = req.body || {};
+    const item = { ...items[idx] };
+    if (status) item.status = status;
+    if (notes !== undefined) item.notes = notes;
+    if (node_slug !== undefined) item.node_slug = node_slug;
+    if (priority) item.priority = priority;
+    item.updated_at = new Date().toISOString();
+    if ((status === 'done' || status === 'failed') && !item.completed_at) {
+      item.completed_at = new Date().toISOString();
+    }
+    items[idx] = item;
+    saveResearchQueue(items);
+    res.json(item);
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * DELETE /api/research/:id
+ */
+router.delete('/api/research/:id', requireAuth, requireScope('memory:write'), (req, res) => {
+  try {
+    const items = loadResearchQueue();
+    const idx = items.findIndex(i => i.id === req.params.id);
+    if (idx === -1) return notFound(res, `Research project not found: ${req.params.id}`);
+    const [removed] = items.splice(idx, 1);
+    saveResearchQueue(items);
+    res.json({ deleted: true, id: removed.id, topic: removed.topic });
+  } catch (err) { serverError(res, err); }
+});
+
+// ─── Brain Export ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/brain/export
+ * Streams entire brain as .tar.gz: vault, derived, sessions, config, skills.
+ * Query: ?include=vault,derived,sessions,config,skills  (default: all)
+ */
+router.get('/api/brain/export', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const ALL_PARTS = {
+      vault:    VAULT_DIR,
+      derived:  DERIVED_DIR,
+      sessions: SESSIONS_DIR,
+      config:   path.join(AGENT_DIR, 'config'),
+      skills:   SKILLS_DIR,
+    };
+    const requested = req.query.include
+      ? String(req.query.include).split(',').map(s => s.trim())
+      : Object.keys(ALL_PARTS);
+    const dirs = requested.filter(k => ALL_PARTS[k] && fs.existsSync(ALL_PARTS[k]));
+    if (dirs.length === 0) return res.status(404).json({ error: 'No brain data found to export.' });
+
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="total-recall-brain-${date}.tar.gz"`);
+
+    const relativeDirs = dirs.map(k => path.relative(AGENT_DIR, ALL_PARTS[k]));
+    const tar = spawn('tar', ['czf', '-', '-C', AGENT_DIR, ...relativeDirs], { stdio: ['ignore', 'pipe', 'ignore'] });
+    tar.stdout.pipe(res);
+    tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
+    tar.on('close', code => { if (code !== 0 && !res.writableEnded) res.end(); });
+  } catch (err) { serverError(res, err); }
 });
 
 export { router as restRouter };

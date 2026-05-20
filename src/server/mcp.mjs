@@ -371,6 +371,69 @@ function createMcpServer() {
     }
   );
 
+  // Research queue tools
+
+  const RESEARCH_QUEUE_PATH = path.join(agentDir(), 'research-queue.jsonl');
+  function loadRQ() {
+    if (!fs.existsSync(RESEARCH_QUEUE_PATH)) return [];
+    return fs.readFileSync(RESEARCH_QUEUE_PATH, 'utf8')
+      .split('\n').filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean);
+  }
+
+  server.registerTool(
+    'list_research_queue',
+    {
+      title: 'List Research Projects',
+      description: 'List all research projects (past and upcoming): pending, in_progress, done, failed. Filter by status. Past completed projects show their vault node slug.',
+      inputSchema: {
+        status: z.string().optional().describe('Filter: "pending", "in_progress", "done", "failed", or omit for all')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ status }) => {
+      const items = loadRQ();
+      const filtered = status && status !== 'all' ? items.filter(i => i.status === status) : items;
+      const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
+      items.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
+      return { content: [{ type: 'text', text: JSON.stringify({ counts, total: filtered.length, items: filtered }, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    'queue_research',
+    {
+      title: 'Queue Research Topic',
+      description: 'Add a topic to the research queue for real-world verification. Primary use cases: (1) events or developments after the model\'s training cutoff, (2) known gaps in training data (niche domains, fast-moving fields), (3) anything the model knows may be stale. Use web_search + write_memory to execute queued topics.',
+      inputSchema: {
+        topic:    z.string().describe('Topic or question to research — ideally something post-cutoff or a known training gap'),
+        priority: z.string().optional().describe('"high" (time-sensitive), "medium" (default), or "low"'),
+        notes:    z.string().optional().describe('Why this needs research — e.g. "post-2024 API changes", "model has low confidence here"')
+      },
+      annotations: { readOnlyHint: false, openWorldHint: false }
+    },
+    async ({ topic, priority, notes }) => {
+      const { randomUUID } = await import('node:crypto');
+      const item = {
+        id: randomUUID(),
+        topic: String(topic),
+        status: 'pending',
+        priority: priority || 'medium',
+        notes: notes || null,
+        node_slug: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        completed_at: null,
+      };
+      const items = loadRQ();
+      items.unshift(item);
+      fs.mkdirSync(path.dirname(RESEARCH_QUEUE_PATH), { recursive: true });
+      fs.writeFileSync(RESEARCH_QUEUE_PATH, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
+      return { content: [{ type: 'text', text: JSON.stringify({ queued: true, id: item.id, topic: item.topic }) }] };
+    }
+  );
+
   return server;
 }
 
