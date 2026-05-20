@@ -956,6 +956,17 @@
         </div>
       </div>
 
+      <div class="card">
+        <h3 style="margin-bottom:6px">📥 Import Existing Rules</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Already have AGENTS.md, .cursorrules, CLAUDE.md, or other rule files? Import them into your vault so Total Recall includes them in every session.</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+          <input type="text" id="import-dir" placeholder="Directory to scan (default: current project)" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px">
+          <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;white-space:nowrap" onclick="scanRuleFiles()">🔍 Scan</button>
+        </div>
+        <div id="import-rules-list" style="display:none;margin-bottom:10px"></div>
+        <div id="import-rules-result" style="font-size:12px;font-family:monospace;color:var(--muted)"></div>
+      </div>
+
       <div class="card" id="connect-results" style="display:none">
         <h3 style="margin-bottom:10px">Connection Results</h3>
         <div id="connect-log" style="font-family:monospace;font-size:12px;line-height:1.8"></div>
@@ -1567,6 +1578,66 @@
     .catch(function(e) {
       if (status) status.textContent = '❌ ' + e.message;
     });
+  };
+
+  // Scan for existing rule files (AGENTS.md, .cursorrules, etc.)
+  window.scanRuleFiles = function() {
+    var brainUrl = (W.apiUrl || '').replace(/\/$/, '');
+    var pat = W.pat || '';
+    var dir = (document.getElementById('import-dir').value || '').trim();
+    var resultEl = document.getElementById('import-rules-result');
+    var listEl = document.getElementById('import-rules-list');
+    if (!brainUrl || !pat) { resultEl.textContent = '⚠️ Connect your brain first (need URL + PAT)'; return; }
+    resultEl.textContent = 'Scanning...';
+    listEl.style.display = 'none';
+    var url = brainUrl + '/api/import/rules' + (dir ? '?dir=' + encodeURIComponent(dir) : '');
+    fetch(url, { headers: { 'Authorization': 'Bearer ' + pat } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var detected = data.detected || [];
+      if (detected.length === 0) { resultEl.textContent = 'No rule files found in that directory.'; return; }
+      resultEl.textContent = '';
+      listEl.style.display = '';
+      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Select files to import:</div>' +
+        detected.map(function(f) {
+          var badge = f.alreadyImported ? ' <span style="color:var(--muted);font-size:11px">(already imported)</span>' : '';
+          return '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;cursor:pointer">' +
+            '<input type="checkbox" class="import-rule-file" data-path="' + f.absolutePath + '"' + (f.alreadyImported ? '' : ' checked') + ' style="margin-top:2px;accent-color:var(--green)">' +
+            '<div><div style="font-size:13px;font-weight:500">' + f.filename + badge + '</div>' +
+            '<div style="font-size:11px;color:var(--muted)">' + f.label + ' · ' + (f.size / 1024).toFixed(1) + 'KB</div>' +
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">' + f.preview.slice(0, 100).replace(/</g, '&lt;') + '…</div></div></label>';
+        }).join('') +
+        '<button class="btn btn-primary" style="font-size:12px;padding:6px 14px;margin-top:6px" onclick="importSelectedRules()">📥 Import Selected</button>';
+    })
+    .catch(function(e) { resultEl.textContent = '❌ ' + e.message; });
+  };
+
+  // Import selected rule files into the vault
+  window.importSelectedRules = function() {
+    var brainUrl = (W.apiUrl || '').replace(/\/$/, '');
+    var pat = W.pat || '';
+    var resultEl = document.getElementById('import-rules-result');
+    var selected = [];
+    document.querySelectorAll('.import-rule-file:checked').forEach(function(cb) { selected.push(cb.dataset.path); });
+    if (!selected.length) { resultEl.textContent = 'No files selected.'; return; }
+    resultEl.textContent = 'Importing ' + selected.length + ' file(s)...';
+    fetch(brainUrl + '/api/import/rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + pat },
+      body: JSON.stringify({ files: selected })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var lines = [];
+      (data.imported || []).forEach(function(f) { lines.push('✅ Imported: ' + f.title); });
+      (data.skipped  || []).forEach(function(f) { lines.push('⚪ Skipped: ' + (f.filename || f.slug) + ' (' + (f.reason || '') + ')'); });
+      (data.failed   || []).forEach(function(f) { lines.push('❌ Failed: '  + (f.filename || f.slug) + ' — ' + (f.error || '')); });
+      resultEl.innerHTML = lines.join('<br>');
+      if ((data.imported || []).length > 0) {
+        resultEl.innerHTML += '<br><span style="color:var(--muted)">💡 Run <strong>Recompile Surface</strong> or call POST /api/vault/compile to update INSTRUCTIONS.md.</span>';
+      }
+    })
+    .catch(function(e) { resultEl.textContent = '❌ ' + e.message; });
   };
 
   // Connect all selected IDEs

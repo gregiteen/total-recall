@@ -63,6 +63,7 @@ import {
 import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex, parseSessionFile, sessionToEmbedChunks, saveSessionEmbeddingToIndex, removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
 import { semanticSearch } from '../core/search.mjs';
 import { listQueue, addToQueue, updateQueueItem, removeFromQueue } from '../core/research-queue.mjs';
+import { detectRuleFiles, importRuleFiles } from '../core/import-rules.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 const VAULT_DIR    = path.join(AGENT_DIR, 'memory-vault');
@@ -860,6 +861,40 @@ router.delete('/api/research/:id', requireAuth, requireScope('memory:write'), (r
     if (err.status === 404) return notFound(res, err.message);
     serverError(res, err);
   }
+});
+
+// ─── Rule File Import ─────────────────────────────────────────────────────────
+// Thin wrappers over src/core/import-rules.mjs
+
+/**
+ * GET /api/import/rules
+ * Detect existing rule files in given dirs.
+ * Query: ?dir=/path  (repeatable, default: process.cwd())
+ */
+router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, res) => {
+  try {
+    const dirs = req.query.dir ? (Array.isArray(req.query.dir) ? req.query.dir : [req.query.dir]) : [process.cwd()];
+    const detected = detectRuleFiles(dirs);
+    res.json({ dirs, detected });
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * POST /api/import/rules
+ * Import rule files into the vault.
+ * Body: { dirs?: string[], files?: string[], force?: boolean, dryRun?: boolean }
+ */
+router.post('/api/import/rules', requireAuth, requireScope('memory:write'), (req, res) => {
+  try {
+    const { dirs, force = false, dryRun = false } = req.body || {};
+    const detected = detectRuleFiles(dirs?.length ? dirs : [process.cwd()]);
+    const toImport = req.body?.files?.length
+      ? detected.filter(f => req.body.files.includes(f.absolutePath))
+      : detected.filter(f => !f.alreadyImported || force);
+    if (dryRun) return res.json({ dryRun: true, detected, toImport, imported: [], skipped: [], failed: [] });
+    const result = importRuleFiles(toImport, { force, vaultDir: VAULT_DIR });
+    res.json({ detected, ...result });
+  } catch (err) { serverError(res, err); }
 });
 
 // ─── Brain Export ─────────────────────────────────────────────────────────────

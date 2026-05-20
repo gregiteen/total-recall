@@ -10,6 +10,7 @@
  *   npx total-recall init            Bootstrap Total Recall into an existing project
  *   npx total-recall setup           Interactive setup wizard (provider → deploy → connect IDEs)
  *   npx total-recall deploy          Provision a target machine
+ *   npx total-recall import          Import existing rule files into the vault
  *   npx total-recall compile         Rebuild indexes + INSTRUCTIONS.md (alias: rebuild)
  *   npx total-recall dream           Trigger a dream cycle
  *   npx total-recall ingest          Ingest IDE conversation logs
@@ -57,6 +58,7 @@ const COMMANDS = {
   snapshot: 'snapshot.mjs',
   migrate:  'migrate.mjs',
   ingest:   'ingest.mjs',
+  import:   'import-rules.mjs',
   connect:  'connect.mjs',
   sync:     'sync.mjs',
   relay:    'relay.mjs',
@@ -87,6 +89,8 @@ function printHelp() {
     rebuild [--check]   Detect index drift and deterministically rebuild projections
     snapshot            Manage fast point-in-time VFS snapshots and rollbacks
     migrate             Run backwards-incompatible SSSS schema migrations
+    import [--dir <path>] [--force]   Import existing AGENTS.md, .cursorrules, CLAUDE.md, etc.
+                                     into the vault (run before compile on first install)
     ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
     connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, MCP, etc.
     sync [--watch]      Pull remote brain instructions into the current workspace
@@ -134,7 +138,9 @@ async function main() {
 
   try {
     const handler = await import(handlerPath);
-    await handler.default(args.slice(1));
+    // import-rules uses run() not default()
+    const fn = handler.run || handler.default;
+    await fn(process.argv);
   } catch (err) {
     if (err.code === 'ERR_MODULE_NOT_FOUND') {
       console.error(`Command '${command}' is not yet implemented.`);
