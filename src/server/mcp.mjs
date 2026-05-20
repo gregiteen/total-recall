@@ -213,14 +213,14 @@ function createMcpServer() {
     async () => {
       const { runRebuild } = await import('../cli/rebuild.mjs');
       const exitCode = await runRebuild();
-      // Incrementally build any missing embeddings (skips already-indexed slugs)
-      let embeddingStats = null;
+      let vaultEmbedStats = null, sessionEmbedStats = null;
       try {
-        const { buildEmbeddingsIndex } = await import('../core/embeddings.mjs');
+        const { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } = await import('../core/embeddings.mjs');
         const nodes = loadNodes(vaultDir());
-        embeddingStats = await buildEmbeddingsIndex(nodes, derivedDir());
+        vaultEmbedStats   = await buildEmbeddingsIndex(nodes, derivedDir());
+        sessionEmbedStats = await buildSessionEmbeddingsIndex(sessionsDir(), derivedDir());
       } catch { /* Ollama may not be running — non-fatal */ }
-      return { content: [{ type: 'text', text: JSON.stringify({ rebuilt: exitCode === 0, exit_code: exitCode, embeddings: embeddingStats }) }] };
+      return { content: [{ type: 'text', text: JSON.stringify({ rebuilt: exitCode === 0, exit_code: exitCode, vault_embeddings: vaultEmbedStats, session_embeddings: sessionEmbedStats }) }] };
     }
   );
 
