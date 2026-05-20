@@ -102,6 +102,63 @@ describe('Schema Validations', () => {
       const result = MemoryNodeSchema.safeParse(node);
       expect(result.success).toBe(false);
     });
+
+    it('validates strict symbolic subject and predicate and rejects non-conforming prose', () => {
+      const baseNode = {
+        type: 'memory',
+        slug: 'test-node',
+        category: 'test',
+        title: 'Test Node',
+        status: 'active',
+        confidence: 0.9,
+        importance: 3,
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        last_accessed: new Date().toISOString(),
+        source: {
+          type: 'user',
+          session_id: '123',
+          evidence_count: 1
+        },
+        supersedes: [],
+        superseded_by: null,
+        contradicts: [],
+        tags: ['test'],
+        related: [],
+        routes_to_skills: [],
+        sentiment_polarity: 'descriptive',
+        sentiment_target: 'system',
+        modality: 'should',
+        subject: 'agent',
+        predicate: 'tests',
+        object: 'code',
+        decay: {
+          half_life_days: 30,
+          access_count: 5
+        },
+        schema_version: 2
+      };
+
+      const validCases = [
+        { subject: 'agent-1', predicate: 'do_thing' },
+        { subject: 'user.profile', predicate: 'has memory' },
+        { subject: 'AI_Core', predicate: 'is-active' }
+      ];
+      for (const tc of validCases) {
+        const result = MemoryNodeSchema.safeParse({ ...baseNode, ...tc });
+        expect(result.success).toBe(true);
+      }
+
+      const invalidCases = [
+        { subject: 'agent@home', predicate: 'do_thing' },
+        { subject: 'agent', predicate: 'do_thing!' },
+        { subject: 'user (with parenthetical text)', predicate: 'reads' }
+      ];
+      for (const tc of invalidCases) {
+        const result = MemoryNodeSchema.safeParse({ ...baseNode, ...tc });
+        expect(result.success).toBe(false);
+      }
+    });
   });
 
   describe('ConflictRecordSchema', () => {

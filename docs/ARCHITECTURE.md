@@ -68,15 +68,24 @@ Config lives at `~/.agent/config/brain.json`:
 
 ### Component 2: The Brain (runs on YOUR server)
 
-**Files:** `daemon-loop.mjs`, `dream.mjs`, `surface.mjs`, `session-watcher.mjs`, `scheduler.mjs`
+**Files:** `daemon-loop.mjs`, `dream.mjs`, `surface.mjs`, `session-watcher.mjs`, `scheduler.mjs`, `semantic-index.mjs`, `backup.mjs`
 
 The brain is a Node.js server + autonomous AI daemon that:
-1. Receives session files from the relay via REST API
-2. Runs Gemma 4 locally (via Ollama) to process them
-3. Extracts patterns, facts, decisions, skill gaps into the memory vault
-4. Compiles everything into `INSTRUCTIONS.md`
+1. **Deduplicates Session Ingestion:** Collapses duplicate chat transcripts using a content-hash SHA-256 fingerprinting pipeline.
+2. **Local Semantic Search:** Runs cosine-similarity search against incremental vector embeddings computed locally via Ollama (`embeddings.jsonl` in `memory-derived/`) without any database dependency.
+3. **Dream Cycle Consolidation:** Runs Gemma 4 locally (via Ollama) to distill ingested logs into structured SSSS markdown memory nodes.
+4. **Surface Compilation:** Resolves wikilinks, weights, and compiles memory nodes into a single standard system instruction shim (`INSTRUCTIONS.md`).
+5. **Encrypted & Git-Pushed Backups:** Creates scheduled daily backups (macOS LaunchAgent or Linux cron) that are AES-256 encrypted and automatically pushed to a private git remote (`npx total-recall backup --push-git`).
 
-The brain NEVER sends data to any cloud service. Gemma 4 runs entirely on your server hardware.
+The brain NEVER sends unencrypted data to any cloud service. Gemma 4 runs entirely on your server hardware.
+
+### Component 3: Setup & Teardown Fabric
+
+**Files:** `setup.mjs`, `deploy-ui.mjs`, `uninstall.mjs`
+
+To make Total Recall exceptionally user-friendly and production-safe, a control layer governs installations, dashboards, and system cleanup:
+1. **Interactive Setup Wizard UI:** Running `npx total-recall deploy --ui` serves a multi-phase dashboard on port `3001` (by default) with SSE installation streaming, an API key builder, playground chat interfaces (in knowledge, journal, and reflect modes), and integration step-charts.
+2. **First-Class OS Service Uninstaller:** Running `npx total-recall uninstall` completely halts detached background processes, unregisters macOS launchd plists/Linux systemd units, removes workspace shims/rules, and cleans the global VFS, while explicitly preserving version-controlled developer vault folders.
 
 ---
 

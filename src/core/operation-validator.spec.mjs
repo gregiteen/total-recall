@@ -170,6 +170,67 @@ describe('Operation Validator', () => {
     const entry = JSON.parse(lines[0]);
     expect(entry.event_type).toBe('audit');
   });
+
+  it('warms the idempotency cache from past audit logs', () => {
+    const auditDir = path.join(vaultRoot, '.events');
+    fs.mkdirSync(auditDir, { recursive: true });
+    const operationId = 'test-warmed-op-id';
+    const committedAt = new Date().toISOString();
+    const workspaceId = 'test-ws';
+    const idempotencyKey = 'test-warmed-key';
+    const filePath = 'patterns/warmed.md';
+
+    const auditEntry = {
+      event_id: 'audit-event-1',
+      event_type: 'audit',
+      correlation_id: operationId,
+      ts: committedAt,
+      subject: filePath,
+      payload: {
+        envelope_type: 'operation',
+        idempotency_key: idempotencyKey,
+        workspace_id: workspaceId,
+        agent_role: 'admin',
+        resolved_type: 'memory'
+      }
+    };
+    fs.writeFileSync(path.join(auditDir, 'audit.jsonl'), JSON.stringify(auditEntry) + '\n');
+
+    const env = makeOpEnvelope('', filePath, {
+      idempotency_key: idempotencyKey,
+      workspace_id: workspaceId
+    });
+    const result = processOperation(env, vaultRoot);
+    expect(result.success).toBe(true);
+    expect(result.replay).toBeDefined();
+    expect(result.operation_id).toBe(operationId);
+  });
+
+  it('automatically updates updated and last_accessed timestamps for memory nodes', () => {
+    const oldTime = '2020-01-01T00:00:00.000Z';
+    const content = matter.stringify('Body text.', {
+      type: 'memory', slug: 'test-ts-node', category: 'patterns', title: 'Test',
+      status: 'active', confidence: 0.9, importance: 3,
+      created: oldTime, updated: oldTime,
+      last_accessed: oldTime,
+      source: { type: 'test', session_id: 's1', evidence_count: 1 },
+      supersedes: [], superseded_by: null, contradicts: [],
+      tags: [], related: [], routes_to_skills: [],
+      sentiment_polarity: 'descriptive', sentiment_target: 'x',
+      modality: 'should', subject: 'a', predicate: 'b', object: 'c',
+      decay: { half_life_days: 30, access_count: 1 }, schema_version: 2,
+    });
+    const result = processOperation(makeOpEnvelope(content, 'patterns/ts.md'), vaultRoot);
+    expect(result.success).toBe(true);
+
+    const written = fs.readFileSync(path.join(vaultRoot, 'patterns', 'ts.md'), 'utf8');
+    const parsed = matter(written);
+    expect(parsed.data.created).toBe(oldTime);
+    expect(parsed.data.updated).not.toBe(oldTime);
+    expect(parsed.data.last_accessed).not.toBe(oldTime);
+    expect(parsed.data.updated).toBe(result.committed_at);
+    expect(parsed.data.last_accessed).toBe(result.committed_at);
+  });
 });
 
 describe('Lease Management', () => {

@@ -35,6 +35,8 @@ vi.mock('../core/runtime.mjs', () => ({
 vi.mock('./auth.mjs', () => ({
   requireAuth: (_req, _res, next) => next(),
   requireScope: () => (_req, _res, next) => next(),
+  requireAuthOrLocal: (_req, _res, next) => next(),
+  loadSecurityConfig: () => ({}),
   loginHandler: (_req, res) => res.json({}),
   logoutHandler: (_req, res) => res.json({}),
   changePasswordHandler: (_req, res) => res.json({}),
@@ -43,12 +45,14 @@ vi.mock('./auth.mjs', () => ({
 vi.mock('./tools.mjs', () => ({ AVAILABLE_TOOLS: [], handleToolCall: vi.fn() }));
 
 const { apiRouter } = await import('./api.mjs');
+const { restRouter } = await import('./rest.mjs');
 
 function buildApp() {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
   app.use(apiRouter);
+  app.use(restRouter);
   return app;
 }
 
@@ -164,5 +168,38 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
     // id must be sanitised — no path separators
     expect(res.body.id).not.toContain('/');
     expect(res.body.id).not.toContain('..');
+  });
+
+  it('ingests raw plaintext Antigravity overview logs and parses line-by-line', async () => {
+    const payload = {
+      id: 'ag-2026-test',
+      source: 'antigravity',
+      content: [
+        'USER: Hello world',
+        'Model thinking...',
+        'TOOL: run_command something',
+        'Done.'
+      ].join('\n')
+    };
+
+    const res = await request(buildApp())
+      .post('/api/sessions/ingest')
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.id).toBe('ag-2026-test');
+
+    const file = path.join(SESSIONS_DIR, 'ag-2026-test.jsonl');
+    expect(fs.existsSync(file)).toBe(true);
+    const written = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+    expect(written.source).toBe('antigravity');
+    expect(written.messages).toHaveLength(4);
+    expect(written.messages[0].role).toBe('user');
+    expect(written.messages[0].content).toBe('USER: Hello world');
+    expect(written.messages[1].role).toBe('assistant');
+    expect(written.messages[2].role).toBe('tool');
+    expect(written.messages[2].content).toBe('TOOL: run_command something');
+    expect(written.messages[3].role).toBe('assistant');
   });
 });

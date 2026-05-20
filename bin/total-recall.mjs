@@ -42,6 +42,7 @@ const COMMANDS = {
   setup:    'setup.mjs',
   start:    'start.mjs',
   deploy:   'deploy.mjs',
+  doctor:   'doctor.mjs',
   backup:   'backup.mjs',
   dream:    'dream.mjs',
   lint:     'lint.mjs',
@@ -62,6 +63,7 @@ const COMMANDS = {
   connect:  'connect.mjs',
   sync:     'sync.mjs',
   relay:    'relay.mjs',
+  uninstall: 'uninstall.mjs',
 };
 
 function printHelp() {
@@ -75,6 +77,7 @@ function printHelp() {
     setup               Interactive wizard: provider → API key → provision → connect IDEs
     start [--port N]    Start the brain server in the foreground (alias for running the server directly)
     deploy              Provision a target machine (Ollama, models, VFS, Cloudflare/Caddy, systemd, cron)
+    doctor              Run environment diagnostics and verify dependency health
     dream               Manually trigger a dream cycle (Light → REM → Deep)
     lint                Validate all vault nodes against SSSS schema v2
     daemon <start|stop|status>  Manage the background daemon
@@ -96,6 +99,8 @@ function printHelp() {
     sync [--watch]      Pull remote brain instructions into the current workspace
     relay <cmd>         Local background relay: ship IDE sessions to remote brain
                         Commands: start | stop | status | once | install | uninstall
+    uninstall           Completely uninstall all services, launchd agents, VFS, and shims
+
 
   Autonomous operations (sync, compile, backup) are now handled by the
   Cloud Agent via SSSS task nodes in .agent/scheduler/queue/.
@@ -138,9 +143,11 @@ async function main() {
 
   try {
     const handler = await import(handlerPath);
-    // import-rules uses run() not default()
-    const fn = handler.run || handler.default;
-    await fn(process.argv);
+    if (handler.run) {
+      await handler.run(process.argv);
+    } else {
+      await handler.default(process.argv.slice(3));
+    }
   } catch (err) {
     if (err.code === 'ERR_MODULE_NOT_FOUND') {
       console.error(`Command '${command}' is not yet implemented.`);

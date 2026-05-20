@@ -11,8 +11,17 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     // Uses --experimental-vm-modules for ESM isolation if needed,
     // but typically a simple spawn with restricted permissions is enough for prototype.
+    const safeEnv = {};
+    const whitelist = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'TERM', 'USER', 'SHELL', 'AGENT_DIR'];
+    for (const key of whitelist) {
+      if (process.env[key]) {
+        safeEnv[key] = process.env[key];
+      }
+    }
+    safeEnv.NODE_OPTIONS = '--experimental-vm-modules';
+
     const proc = spawn('node', ['--no-warnings', scriptPath], {
-      env: { ...process.env, NODE_OPTIONS: '--experimental-vm-modules' },
+      env: safeEnv,
       timeout: timeoutMs
     });
 

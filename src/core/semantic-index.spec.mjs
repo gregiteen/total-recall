@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   cosineSimilarity,
   generateEmbedding,
@@ -79,9 +80,11 @@ describe('buildSemanticIndex', () => {
 
   it('skips all nodes when index is already complete', async () => {
     // Pre-populate the index so there is nothing new to embed
+    const text = ['Test', 'hello'].filter(Boolean).join('\n').slice(0, 4096);
+    const hash = crypto.createHash('sha256').update(text).digest('hex');
     fs.writeFileSync(
       path.join(tmpDir, 'embeddings.jsonl'),
-      JSON.stringify({ slug: 'n1', embedding: [1, 0] }) + '\n'
+      JSON.stringify({ slug: 'n1', embedding: [1, 0], content_sha256: hash }) + '\n'
     );
     const nodes = [{ slug: 'n1', title: 'Test', content: 'hello' }];
     const result = await buildSemanticIndex(nodes, tmpDir, { endpoint: 'http://127.0.0.1:19999' });
@@ -89,6 +92,52 @@ describe('buildSemanticIndex', () => {
     expect(result.indexed).toBe(0);
     expect(result.skipped).toBe(1);
     expect(result.unavailable).toBe(false);
+  });
+
+  it('re-embeds a node if its body content is modified (hash drift)', async () => {
+    // 1. Initial build
+    const origFetch = global.fetch;
+    let callCount = 0;
+    global.fetch = vi.fn().mockImplementation(async () => {
+      callCount++;
+      return {
+        ok: true,
+        json: async () => ({ embedding: [callCount, 0] })
+      };
+    });
+
+    const nodes = [{ slug: 'n1', title: 'Test', body: 'original content' }];
+    const result1 = await buildSemanticIndex(nodes, tmpDir);
+    expect(result1.indexed).toBe(1);
+    expect(result1.skipped).toBe(0);
+    expect(callCount).toBe(1);
+
+    // Read index to verify content_sha256 was written
+    const index1 = loadEmbeddingsIndex(tmpDir);
+    const cached1 = index1.get('n1');
+    expect(cached1.content_sha256).toBeDefined();
+    expect(cached1.content_sha256.length).toBe(64);
+
+    // 2. Second build with UNCHANGED content
+    const result2 = await buildSemanticIndex(nodes, tmpDir);
+    expect(result2.indexed).toBe(0);
+    expect(result2.skipped).toBe(1);
+    expect(callCount).toBe(1);
+
+    // 3. Third build with MODIFIED content
+    const modifiedNodes = [{ slug: 'n1', title: 'Test', body: 'modified content' }];
+    const result3 = await buildSemanticIndex(modifiedNodes, tmpDir);
+    expect(result3.indexed).toBe(1);
+    expect(result3.skipped).toBe(0);
+    expect(callCount).toBe(2);
+
+    // Verify new hash and embedding is written
+    const index3 = loadEmbeddingsIndex(tmpDir);
+    const cached3 = index3.get('n1');
+    expect(cached3.embedding).toEqual([2, 0]);
+    expect(cached3.content_sha256).not.toEqual(cached1.content_sha256);
+
+    global.fetch = origFetch;
   });
 });
 

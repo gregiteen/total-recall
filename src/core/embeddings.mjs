@@ -274,9 +274,13 @@ export function sessionToEmbedChunks(messages) {
 export function parseSessionFile(filePath) {
   try {
     const raw = fs.readFileSync(filePath, 'utf8').trim();
-    return raw.split('\n').filter(Boolean)
+    const lines = raw.split('\n').filter(Boolean)
       .map(l => { try { return JSON.parse(l); } catch { return null; } })
       .filter(Boolean);
+    if (lines.length === 1 && lines[0] && Array.isArray(lines[0].messages)) {
+      return lines[0].messages;
+    }
+    return lines;
   } catch { return []; }
 }
 

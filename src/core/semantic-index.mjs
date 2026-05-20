@@ -13,6 +13,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 const EMBEDDINGS_FILE = 'embeddings.jsonl';
 const DEFAULT_MODEL = 'nomic-embed-text';
@@ -66,7 +67,7 @@ export function cosineSimilarity(a, b) {
 
 /**
  * Load the embeddings index from disk.
- * Returns Map<slug, number[]>.
+ * Returns Map<slug, number[] & { content_sha256: string }>.
  */
 export function loadEmbeddingsIndex(derivedDir) {
   const file = path.join(derivedDir, EMBEDDINGS_FILE);
@@ -75,8 +76,38 @@ export function loadEmbeddingsIndex(derivedDir) {
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     try {
-      const { slug, embedding } = JSON.parse(line);
-      if (slug && Array.isArray(embedding)) index.set(slug, embedding);
+      const parsed = JSON.parse(line);
+      const { slug, embedding, content_sha256 } = parsed;
+      if (slug && Array.isArray(embedding)) {
+        const vec = embedding;
+        Object.defineProperty(vec, 'embedding', {
+          get() { return this; },
+          enumerable: false,
+          configurable: true
+        });
+        Object.defineProperty(vec, 'content_sha256', {
+          value: content_sha256 || '',
+          writable: true,
+          enumerable: false,
+          configurable: true
+        });
+        index.set(slug, vec);
+      } else if (slug && parsed.embedding === undefined && Array.isArray(parsed)) {
+        // Fallback for very old formats if any
+        const vec = parsed;
+        Object.defineProperty(vec, 'embedding', {
+          get() { return this; },
+          enumerable: false,
+          configurable: true
+        });
+        Object.defineProperty(vec, 'content_sha256', {
+          value: '',
+          writable: true,
+          enumerable: false,
+          configurable: true
+        });
+        index.set(slug, vec);
+      }
     } catch { /* skip corrupt lines */ }
   }
   return index;
@@ -85,8 +116,12 @@ export function loadEmbeddingsIndex(derivedDir) {
 function writeEmbeddingsIndex(derivedDir, index) {
   if (!fs.existsSync(derivedDir)) fs.mkdirSync(derivedDir, { recursive: true });
   const lines = [];
-  for (const [slug, embedding] of index) {
-    lines.push(JSON.stringify({ slug, embedding }));
+  for (const [slug, val] of index) {
+    if (val && Array.isArray(val.embedding)) {
+      lines.push(JSON.stringify({ slug, embedding: val.embedding, content_sha256: val.content_sha256 || '' }));
+    } else if (Array.isArray(val)) {
+      lines.push(JSON.stringify({ slug, embedding: val, content_sha256: val.content_sha256 || '' }));
+    }
   }
   fs.writeFileSync(path.join(derivedDir, EMBEDDINGS_FILE), lines.join('\n') + '\n', 'utf8');
 }
@@ -95,10 +130,10 @@ function writeEmbeddingsIndex(derivedDir, index) {
 
 /**
  * Build (or incrementally update) the embeddings index from SSSS nodes.
- * Only re-embeds nodes whose slug is not already in the index.
+ * Re-embeds nodes if they are missing from the index OR if their content hash has changed.
  * Skips silently if Ollama is unreachable.
  *
- * @param {object[]} nodes        SSSS nodes with slug, title, content fields
+ * @param {object[]} nodes        SSSS nodes with slug, title, body/content fields
  * @param {string}   derivedDir
  * @param {object}   [opts]
  * @param {string}   [opts.endpoint]
@@ -107,24 +142,63 @@ function writeEmbeddingsIndex(derivedDir, index) {
  */
 export async function buildSemanticIndex(nodes, derivedDir, opts = {}) {
   const existing = loadEmbeddingsIndex(derivedDir);
-  const toEmbed = nodes.filter(n => !existing.has(n.slug));
+  
+  const toEmbed = nodes.filter(n => {
+    const cached = existing.get(n.slug);
+    if (!cached) return true;
+    
+    const cachedHash = cached.content_sha256 || '';
+    const text = [n.title, n.body || n.content].filter(Boolean).join('\n').slice(0, 4096);
+    const hash = crypto.createHash('sha256').update(text).digest('hex');
+    return !cachedHash || cachedHash !== hash;
+  });
 
   if (toEmbed.length === 0) {
     return { indexed: 0, skipped: nodes.length, unavailable: false };
   }
 
-  // Probe Ollama availability with the first node
-  const probe = await generateEmbedding(toEmbed[0].title || toEmbed[0].slug, opts);
+  // Probe Ollama availability with the first node's full text
+  const firstText = [toEmbed[0].title, toEmbed[0].body || toEmbed[0].content].filter(Boolean).join('\n').slice(0, 4096);
+  const probe = await generateEmbedding(firstText, opts);
   if (!probe) {
     return { indexed: 0, skipped: nodes.length, unavailable: true };
   }
-  existing.set(toEmbed[0].slug, probe);
+  
+  const firstHash = crypto.createHash('sha256').update(firstText).digest('hex');
+  const firstVec = probe;
+  Object.defineProperty(firstVec, 'embedding', {
+    get() { return this; },
+    enumerable: false,
+    configurable: true
+  });
+  Object.defineProperty(firstVec, 'content_sha256', {
+    value: firstHash,
+    writable: true,
+    enumerable: false,
+    configurable: true
+  });
+  existing.set(toEmbed[0].slug, firstVec);
 
   // Embed the remaining nodes
   for (const node of toEmbed.slice(1)) {
-    const text = [node.title, node.content].filter(Boolean).join('\n').slice(0, 4096);
+    const text = [node.title, node.body || node.content].filter(Boolean).join('\n').slice(0, 4096);
     const vec = await generateEmbedding(text, opts);
-    if (vec) existing.set(node.slug, vec);
+    if (vec) {
+      const hash = crypto.createHash('sha256').update(text).digest('hex');
+      const vecWithHash = vec;
+      Object.defineProperty(vecWithHash, 'embedding', {
+        get() { return this; },
+        enumerable: false,
+        configurable: true
+      });
+      Object.defineProperty(vecWithHash, 'content_sha256', {
+        value: hash,
+        writable: true,
+        enumerable: false,
+        configurable: true
+      });
+      existing.set(node.slug, vecWithHash);
+    }
   }
 
   writeEmbeddingsIndex(derivedDir, existing);
@@ -157,8 +231,10 @@ export async function semanticSearch(query, derivedDir, opts = {}) {
   if (!queryVec) return [];
 
   const scored = [];
-  for (const [slug, embedding] of index) {
-    const score = cosineSimilarity(queryVec, embedding);
+  for (const [slug, val] of index) {
+    const vec = val && Array.isArray(val.embedding) ? val.embedding : (Array.isArray(val) ? val : null);
+    if (!vec) continue;
+    const score = cosineSimilarity(queryVec, vec);
     if (score >= threshold) scored.push({ slug, score });
   }
 

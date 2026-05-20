@@ -12,7 +12,10 @@ import os from 'os';
  *   GITHUB_TOKEN          — GitHub REST API (higher rate limits)
  *
  * Always-free sources (no auth required):
- *   arXiv, npm registry, Wikipedia REST API, DuckDuckGo Instant Answers, web f// ─── Config Loading ────────────────────────────────────────────────────────────
+ *   arXiv, npm registry, Wikipedia REST API, DuckDuckGo Instant Answers, web fetch.
+ */
+
+// ─── Config Loading ────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.agent', 'config', 'research.yml');
 const USAGE_FILE = path.join(os.homedir(), '.agent', 'config', 'search-usage.json');
@@ -26,7 +29,7 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
   if (fs.existsSync(configPath)) {
     try {
       fileConfig = yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
-    } catch { /* ignore parse errors */ }
+    } catch (err) { /* ignore parse errors */ }
   }
 
   return {
@@ -58,7 +61,7 @@ function readUsage() {
     if (fs.existsSync(USAGE_FILE)) {
       return JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8'));
     }
-  } catch { /* corrupt file — reset */ }
+  } catch (err) { /* corrupt file — reset */ }
   return {};
 }
 
@@ -67,7 +70,7 @@ function writeUsage(usage) {
     const dir = path.dirname(USAGE_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(USAGE_FILE, JSON.stringify(usage, null, 2));
-  } catch { /* non-fatal */ }
+  } catch (err) { /* non-fatal */ }
 }
 
 /**
@@ -769,7 +772,7 @@ async function getPlaywright() {
   try {
     const pw = await import('playwright');
     return pw.chromium || pw.default?.chromium || null;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -914,7 +917,7 @@ export async function smartFetch(url, config) {
   if (usePlaywright) {
     try {
       return await playwrightScrape(url, config, { waitMs: 1500 });
-    } catch {
+    } catch (err) {
       // Fall through to plain fetch
     }
   }

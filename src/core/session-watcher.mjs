@@ -63,7 +63,15 @@ const SOURCES = [
   {
     name: 'vscode',
     // VS Code Copilot Chat stores sessions per workspace under globalStorage
-    root: path.join(HOME, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'),
+    root: (() => {
+      if (process.platform === 'darwin') {
+        return path.join(HOME, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage');
+      } else if (process.platform === 'win32') {
+        return path.join(HOME, 'AppData', 'Roaming', 'Code', 'User', 'workspaceStorage');
+      } else {
+        return path.join(HOME, '.config', 'Code', 'User', 'workspaceStorage');
+      }
+    })(),
     filter: (filename) => filename.endsWith('.jsonl'),
     // Only descend into chatSessions subdirs, ignore everything else
     dirFilter: (dirName) => dirName === 'chatSessions',
@@ -139,7 +147,10 @@ export function parseClaudeCode(filePath) {
 
     // ── Resolve parent ──────────────────────────────────────────────────────
     const parentUuid = parsed.parentUuid || null;
-    const parentId = parentUuid ? (uuidToId.get(parentUuid) ?? null) : null;
+    let parentId = parentUuid ? (uuidToId.get(parentUuid) ?? null) : null;
+    if (!parentId && entries.length > 0) {
+      parentId = entries[entries.length - 1].id;
+    }
     if (parsed.uuid) uuidToId.set(parsed.uuid, id);
 
     // ── Extract role & content ───────────────────────────────────────────────
@@ -168,11 +179,44 @@ export function parseClaudeCode(filePath) {
         .join('\n');
     }
 
+    // Inspect tool_use or tool_calls payloads
+    const toolUse = msgObj.tool_use || parsed.tool_use || null;
+    const toolCalls = msgObj.tool_calls || parsed.tool_calls || null;
+
+    if (toolUse && toolUse.name) {
+      const toolSig = `[tool: ${toolUse.name}]`;
+      if (!content.includes(toolSig)) {
+        content = content ? `${toolSig} ${content}` : toolSig;
+      }
+    }
+
+    if (Array.isArray(toolCalls)) {
+      for (const tc of toolCalls) {
+        const name = tc.function?.name || tc.name;
+        if (name) {
+          const toolSig = `[tool: ${name}]`;
+          if (!content.includes(toolSig)) {
+            content = content ? `${toolSig} ${content}` : toolSig;
+          }
+        }
+      }
+    } else if (toolCalls && typeof toolCalls === 'object') {
+      const name = toolCalls.function?.name || toolCalls.name;
+      if (name) {
+        const toolSig = `[tool: ${name}]`;
+        if (!content.includes(toolSig)) {
+          content = content ? `${toolSig} ${content}` : toolSig;
+        }
+      }
+    }
+
     // ── Map role → SSSS entry type ───────────────────────────────────────────
     let type = 'observation';
-    if (role === 'user') type = 'task';
-    else if (role === 'assistant' && content.includes('[tool_use:')) type = 'tool_call';
-    else if (role === 'tool') type = 'tool_call';
+    if (role === 'user') {
+      type = 'task';
+    } else if (role === 'tool' || role === 'tool_result' || toolUse || toolCalls || (role === 'assistant' && (content.includes('[tool_use:') || content.includes('[tool:')))) {
+      type = 'tool_call';
+    }
 
     if (!content.trim()) continue; // skip empty lines (sidechain warmups, etc.)
 
@@ -675,7 +719,13 @@ export function startWatching(sessionsDir, opts = {}) {
     if (!fs.existsSync(source.root)) continue;
 
     try {
-      const watcher = fs.watch(source.root, { recursive: true }, (eventType, filename) => {
+      let watchOpts = {};
+      if (process.platform === 'darwin' || process.platform === 'win32') {
+        watchOpts.recursive = true;
+      }
+
+      let watcher;
+      const callback = (eventType, filename) => {
         if (!filename || !source.filter(path.basename(filename))) return;
 
         const fullPath = path.join(source.root, filename);
@@ -695,7 +745,17 @@ export function startWatching(sessionsDir, opts = {}) {
             });
           }
         }, 500);
-      });
+      };
+
+      try {
+        watcher = fs.watch(source.root, watchOpts, callback);
+      } catch (watchErr) {
+        logger.info({
+          subsystem: 'session-watcher',
+          message: `Recursive watch fallback on ${process.platform}: ${watchErr.message}`,
+        });
+        watcher = fs.watch(source.root, {}, callback);
+      }
 
       watchers.push(watcher);
       logger.info({

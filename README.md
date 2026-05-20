@@ -134,6 +134,8 @@ Total Recall uses [Ollama](https://ollama.com) for local inference. Default mode
 | `npx total-recall status` | Show brain health, connected clients, last dream |
 | `npx total-recall generate-pat` | Create a Bearer token for API/IDE auth |
 | `npx total-recall daemon` | Manage the background daemon (start/stop/status) |
+| `npx total-recall relay` | Manage background local session-sync relay (start/stop/install/uninstall) |
+| `npx total-recall uninstall` | Completely stop services and purge Total Recall VFS & config |
 | `npx total-recall friction` | Analyze watchdog logs for bottlenecks |
 
 ---
@@ -184,6 +186,26 @@ src/
 - **[Architecture](docs/ARCHITECTURE.md)** — deep dive into the runtime layers
 - **[How-To Guides](docs/how-to/)** — deploy to cloud, set up Obsidian, integrate UltraChat
 - **[CLI Reference](docs/reference/cli-reference.md)** — full flag documentation
+- **[REST API & Gateway Reference](docs/reference/api-reference.md)** — full REST endpoints, PATs, scopes, and MCP tools
+
+---
+
+## 🧹 Uninstalling
+
+Total Recall includes a dedicated teardown system that cleanly disables background services, removes startup launchd plists/systemd units, and purges global runtime configs, while fully protecting version-controlled instructions in active developer workspaces.
+
+To completely uninstall:
+```bash
+npx total-recall uninstall
+```
+
+What the uninstaller does:
+1. Stops background dream and sync relay daemons.
+2. Unregisters and deletes all macOS LaunchAgents (`com.totalrecall.*.plist`) or Linux systemd user units.
+3. Removes generated symlinks and injection shims (like `CLAUDE.md`, `GEMINI.md`, or `AGENTS.md`) in active IDE workspaces.
+4. Purges transient logs, session records, and derived caches.
+5. Purges the global `~/.agent/` folder.
+6. **Safety First**: Preserves local workspace `.agent/skills/` and `.agent/memory-vault/` directories that are part of your git-tracked repositories.
 
 ---
 

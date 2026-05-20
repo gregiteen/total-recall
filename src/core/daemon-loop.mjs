@@ -262,6 +262,35 @@ async function runResearchTask(task, runtimeConfig) {
 // ─── Maintenance Layer Engine ───────────────────────────────────────────────────
 
 async function runMaintenanceTask(task, runtimeConfig) {
+  // Stage 8: Advisory Lease Vacuuming
+  try {
+    const leasesDir = path.join(AGENT_DIR, 'leases');
+    if (fs.existsSync(leasesDir)) {
+      const workspaces = fs.readdirSync(leasesDir);
+      for (const ws of workspaces) {
+        const wsDir = path.join(leasesDir, ws);
+        if (!fs.statSync(wsDir).isDirectory()) continue;
+        const files = fs.readdirSync(wsDir);
+        for (const file of files) {
+          if (!file.endsWith('.lease.json')) continue;
+          const fp = path.join(wsDir, file);
+          try {
+            const lease = JSON.parse(fs.readFileSync(fp, 'utf8'));
+            if (new Date(lease.expires_at) < new Date()) {
+              fs.unlinkSync(fp);
+              logger.info({ subsystem: 'daemon-loop', message: `Vacuumed expired lease file: ${fp}` });
+            }
+          } catch {
+            // Delete corrupt lease files
+            try { fs.unlinkSync(fp); } catch {}
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Lease vacuuming failed: ${err.message}` });
+  }
+
   if (task.slug.includes('clarity-review') && task.target) {
     const { runClarityReview } = await import('./clarity-rewriter.mjs');
     const result = await runClarityReview(task.target, {
