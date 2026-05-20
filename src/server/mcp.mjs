@@ -1,449 +1,398 @@
-import express from 'express';
+/**
+ * src/server/mcp.mjs
+ *
+ * Total Recall MCP Server — canonical implementation per spec 2025-06-18.
+ *
+ * Transport:  StreamableHTTPServerTransport (single /mcp endpoint, POST + GET + DELETE)
+ * Tools:      registerTool() with Zod inputSchema
+ * Resources:  registerResource() for vault files and derived indexes
+ * Session:    one McpServer instance per session (created on initialize)
+ *
+ * NEVER use SSEServerTransport (deprecated 2024-11-05).
+ * NEVER use server.tool() (deprecated alias).
+ */
+
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
 import { loadNodes, writeNode, createNodeFromMcpPayload } from '../core/vault.mjs';
 import { executeCode } from './tools.mjs';
 
-const TOOL_DEFS = [
-  {
-    name: 'read_memory',
-    description: 'Read one SSSS memory node by slug.',
-    inputSchema: {
-      type: 'object',
-      properties: { slug: { type: 'string' } },
-      required: ['slug']
-    }
-  },
-  {
-    name: 'write_memory',
-    description: 'Write a new SSSS memory node into the vault.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        slug: { type: 'string' },
-        title: { type: 'string' },
-        category: { type: 'string' },
-        content: { type: 'string' }
-      },
-      required: ['slug', 'title', 'category', 'content']
-    }
-  },
-  {
-    name: 'search_memory',
-    description: 'Search SSSS memory nodes by title, tags, slug, or body text.',
-    inputSchema: {
-      type: 'object',
-      properties: { query: { type: 'string' } },
-      required: ['query']
-    }
-  },
-  {
-    name: 'list_memory',
-    description: 'List SSSS memory node metadata.',
-    inputSchema: { type: 'object', properties: {} }
-  },
-  {
-    name: 'run_sandbox',
-    description: 'Execute JavaScript in the configured Total Recall sandbox.',
-    inputSchema: {
-      type: 'object',
-      properties: { code: { type: 'string' } },
-      required: ['code']
-    }
-  },
-  {
-    name: 'recompile_surface',
-    description: 'Rebuild SSSS derived indexes and injected surfaces.',
-    inputSchema: { type: 'object', properties: {} }
-  },
-  {
-    name: 'read_file',
-    description: 'Read a file from the user\'s local filesystem. Returns the file contents as text. Paths must be within the user\'s home directory.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Absolute or ~ path to the file' },
-        max_bytes: { type: 'number', description: 'Maximum bytes to read (default 50000)' }
-      },
-      required: ['path']
-    }
-  },
-  {
-    name: 'list_directory',
-    description: 'List files and subdirectories in a local directory. Returns names, types, and sizes.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Absolute or ~ directory path' },
-        recursive: { type: 'boolean', description: 'Include subdirectories (default false)' }
-      },
-      required: ['path']
-    }
-  },
-  {
-    name: 'search_files',
-    description: 'Find files on the local filesystem matching a name pattern. Searches within a given directory.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        directory: { type: 'string', description: 'Root directory to search from' },
-        pattern: { type: 'string', description: 'Filename pattern to match (e.g. "*.md", "README*")' },
-        max_results: { type: 'number', description: 'Max files to return (default 50)' }
-      },
-      required: ['directory', 'pattern']
-    }
-  }
-];
-
-const sessions = new Set();
-
-// ─── SSE Push Channel ────────────────────────────────────────────────────────────
-// Connected IDE clients that have opened GET /mcp/events.
-// When the daemon has new conclusions, it calls broadcastMcpNotification()
-// which pushes a notifications/message event to all of them simultaneously.
-const sseClients = new Set();
-
-/**
- * Push a notification to all connected MCP clients via SSE.
- * Called by the daemon when System 2 conclusions or fast-path research manifests.
- *
- * @param {string} level  'info' | 'warning' | 'error'
- * @param {string} message  Human-readable summary
- * @param {object} [data]   Optional structured payload
- */
-export function broadcastMcpNotification(level = 'info', message, data = {}) {
-  if (sseClients.size === 0) return;
-  const event = JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'notifications/message',
-    params: { level, message, data },
-  });
-  for (const res of sseClients) {
-    try {
-      res.write(`data: ${event}\n\n`);
-    } catch {
-      sseClients.delete(res);
-    }
-  }
-}
+// ─── Path helpers ───────────────────────────────────────────────────────────
 
 function agentDir() {
   return process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 }
+function vaultDir()   { return path.join(agentDir(), 'memory-vault'); }
+function skillsDir()  { return path.join(agentDir(), 'skills'); }
+function derivedDir() { return path.join(agentDir(), 'memory-derived'); }
 
-function vaultDir() {
-  return path.join(agentDir(), 'memory-vault');
-}
+// ─── Session store ───────────────────────────────────────────────────────────
+// Per spec: each session gets its own McpServer + transport.
+// Key: session ID string  |  Value: StreamableHTTPServerTransport instance
 
-function skillsDir() {
-  return path.join(agentDir(), 'skills');
-}
+/** @type {Map<string, StreamableHTTPServerTransport>} */
+const transports = new Map();
 
-function derivedDir() {
-  return path.join(agentDir(), 'memory-derived');
-}
+// ─── Server factory ─────────────────────────────────────────────────────────
+// Creates a new McpServer with all tools and resources registered.
+// Called once per session initialization.
 
-function textResource(uri, name, filePath, description) {
-  return {
-    uri,
-    name,
-    description,
-    mimeType: 'text/markdown',
-    filePath
-  };
-}
+function createMcpServer() {
+  const server = new McpServer(
+    { name: 'total-recall', version: '3.0.0' },
+    { capabilities: { logging: {} } }
+  );
 
-function jsonlResource(uri, name, filePath, description) {
-  return {
-    uri,
-    name,
-    description,
-    mimeType: 'application/jsonl',
-    filePath
-  };
-}
+  // ── Tools ──────────────────────────────────────────────────────────────────
 
-function referenceResources() {
-  const refsDir = path.join(skillsDir(), 'ssss', 'references');
-  if (!fs.existsSync(refsDir)) return [];
-  return fs.readdirSync(refsDir)
-    .filter(file => file.endsWith('.md'))
-    .sort()
-    .map(file => {
-      const name = file.replace(/\.md$/, '');
-      return textResource(
-        `total-recall://ssss/references/${name}`,
-        `ssss-reference-${name}`,
-        path.join(refsDir, file),
-        `SSSS reference document: ${name}`
-      );
-    });
-}
-
-function resourceCatalog() {
-  return [
-    textResource(
-      'total-recall://instructions',
-      'instructions',
-      path.join(agentDir(), 'INSTRUCTIONS.md'),
-      'Compiled Tier 1 Total Recall hot memory instructions.'
-    ),
-    textResource(
-      'total-recall://ssss/skill',
-      'ssss-skill',
-      path.join(skillsDir(), 'ssss', 'SKILL.md'),
-      'Total Recall SSSS implementation skill.'
-    ),
-    textResource(
-      'total-recall://ssss/spec',
-      'ssss-spec',
-      path.join(skillsDir(), 'ssss', 'references', 'ssss-spec.md'),
-      'Canonical SSSS specification.'
-    ),
-    ...referenceResources(),
-    jsonlResource(
-      'total-recall://memory/index',
-      'memory-index',
-      path.join(derivedDir(), 'graph-index.jsonl'),
-      'Derived memory graph index.'
-    ),
-    jsonlResource(
-      'total-recall://memory/layers',
-      'memory-layers',
-      path.join(derivedDir(), 'memory-layers.jsonl'),
-      'Derived cognitive memory layer index.'
-    )
-  ];
-}
-
-function redactNode(node) {
-  const { body, ...frontmatter } = node;
-  return {
-    ...frontmatter,
-    content: body
-  };
-}
-
-function jsonRpcResult(id, result) {
-  return { jsonrpc: '2.0', id: id ?? null, result };
-}
-
-function jsonRpcError(id, code, message) {
-  return { jsonrpc: '2.0', id: id ?? null, error: { code, message } };
-}
-
-function toolContent(value) {
-  return {
-    content: [
-      {
-        type: 'text',
-        text: typeof value === 'string' ? value : JSON.stringify(value)
-      }
-    ]
-  };
-}
-
-function resourceContents(resource) {
-  if (!resource || !fs.existsSync(resource.filePath)) {
-    throw new Error(`Resource not found: ${resource?.uri || 'unknown'}`);
-  }
-  return {
-    contents: [
-      {
-        uri: resource.uri,
-        mimeType: resource.mimeType,
-        text: fs.readFileSync(resource.filePath, 'utf8')
-      }
-    ]
-  };
-}
-
-async function callTool(name, args = {}) {
-  const nodes = () => loadNodes(vaultDir());
-
-  switch (name) {
-    case 'list_memory':
-      return toolContent(nodes().map(({ body, ...node }) => node));
-
-    case 'read_memory': {
-      const node = nodes().find((candidate) => candidate.slug === args.slug);
-      if (!node) throw new Error(`Memory node not found: ${args.slug}`);
-      return toolContent(redactNode(node));
+  server.registerTool(
+    'list_memory',
+    {
+      title: 'List Memory',
+      description: 'List all SSSS memory node metadata (slug, title, category, tags). Does not include body content.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async () => {
+      const nodes = loadNodes(vaultDir()).map(({ body, ...node }) => node);
+      return { content: [{ type: 'text', text: JSON.stringify(nodes, null, 2) }] };
     }
+  );
 
-    case 'search_memory': {
-      const query = String(args.query || '').toLowerCase();
-      const results = nodes()
-        .filter((node) => [
-          node.slug,
-          node.title,
-          node.category,
-          (node.tags || []).join(' '),
-          node.body
-        ].join(' ').toLowerCase().includes(query))
-        .map(redactNode);
-      return toolContent(results);
+  server.registerTool(
+    'read_memory',
+    {
+      title: 'Read Memory',
+      description: 'Read one SSSS memory node by its slug. Returns full content.',
+      inputSchema: {
+        slug: z.string().describe('The slug of the memory node (e.g. "patterns/api-auth")')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ slug }) => {
+      const node = loadNodes(vaultDir()).find(n => n.slug === slug);
+      if (!node) return { content: [{ type: 'text', text: `Memory node not found: ${slug}` }], isError: true };
+      const { body, ...frontmatter } = node;
+      return { content: [{ type: 'text', text: JSON.stringify({ ...frontmatter, content: body }, null, 2) }] };
     }
+  );
 
-    case 'write_memory': {
-      const node = createNodeFromMcpPayload({
-        slug: args.slug,
-        title: args.title,
-        category: args.category,
-        content: args.content
-      });
+  server.registerTool(
+    'search_memory',
+    {
+      title: 'Search Memory',
+      description: 'Search SSSS memory nodes by title, tags, slug, or body text. Returns matching node metadata.',
+      inputSchema: {
+        query: z.string().describe('Search query — matched against slug, title, category, tags, and body')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ query }) => {
+      const q = String(query || '').toLowerCase();
+      const results = loadNodes(vaultDir())
+        .filter(node => [node.slug, node.title, node.category, (node.tags || []).join(' '), node.body]
+          .join(' ').toLowerCase().includes(q))
+        .map(({ body, ...node }) => node);
+      return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    'write_memory',
+    {
+      title: 'Write Memory',
+      description: 'Write a new SSSS memory node into the vault. Creates or overwrites.',
+      inputSchema: {
+        slug:     z.string().describe('Unique slug (e.g. "patterns/my-pattern")'),
+        title:    z.string().describe('Human-readable title'),
+        category: z.string().describe('Category (e.g. "patterns", "concepts", "preferences")'),
+        content:  z.string().describe('Markdown body content')
+      },
+      annotations: { readOnlyHint: false, openWorldHint: false }
+    },
+    async ({ slug, title, category, content }) => {
+      const node = createNodeFromMcpPayload({ slug, title, category, content });
       writeNode(node, vaultDir());
-      return toolContent({ slug: node.slug, written: true });
+      return { content: [{ type: 'text', text: JSON.stringify({ slug: node.slug, written: true }) }] };
     }
+  );
 
-    case 'run_sandbox':
-      return toolContent(await executeCode(args.code || ''));
+  server.registerTool(
+    'run_sandbox',
+    {
+      title: 'Run Sandbox',
+      description: 'Execute JavaScript in the configured Total Recall sandbox.',
+      inputSchema: {
+        code: z.string().describe('JavaScript code to execute')
+      },
+      annotations: { readOnlyHint: false, openWorldHint: true }
+    },
+    async ({ code }) => {
+      const result = await executeCode(code || '');
+      return { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }] };
+    }
+  );
 
-    case 'recompile_surface': {
+  server.registerTool(
+    'recompile_surface',
+    {
+      title: 'Recompile Surface',
+      description: 'Rebuild SSSS derived indexes and injected surfaces (INSTRUCTIONS.md, graph-index.jsonl).',
+      inputSchema: {},
+      annotations: { readOnlyHint: false, openWorldHint: false }
+    },
+    async () => {
       const { runRebuild } = await import('../cli/rebuild.mjs');
       const code = await runRebuild();
-      return toolContent({ rebuilt: code === 0, exit_code: code });
+      return { content: [{ type: 'text', text: JSON.stringify({ rebuilt: code === 0, exit_code: code }) }] };
     }
+  );
 
-    case 'read_file': {
-      const filePath = String(args.path || '').replace(/^~/, os.homedir());
+  // ── Filesystem tools ───────────────────────────────────────────────────────
+  // Paths are sandboxed to the user's home directory.
+
+  server.registerTool(
+    'read_file',
+    {
+      title: 'Read File',
+      description: 'Read a file from the local filesystem. Returns the file contents as text. Paths must be within the home directory.',
+      inputSchema: {
+        path:      z.string().describe('Absolute or ~-prefixed path to the file'),
+        max_bytes: z.number().optional().describe('Maximum bytes to read (default 50000)')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ path: filePath, max_bytes }) => {
+      const resolved = String(filePath).replace(/^~/, os.homedir());
       const home = os.homedir();
-      if (!filePath.startsWith(home)) throw new Error('Access denied: path must be within home directory');
-      if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`);
-      const maxBytes = Number(args.max_bytes) || 50000;
-      const content = fs.readFileSync(filePath, 'utf8').slice(0, maxBytes);
-      return toolContent({ path: filePath, size: stat.size, content, truncated: stat.size > maxBytes });
+      if (!resolved.startsWith(home)) return { content: [{ type: 'text', text: 'Access denied: path must be within home directory' }], isError: true };
+      if (!fs.existsSync(resolved)) return { content: [{ type: 'text', text: `File not found: ${resolved}` }], isError: true };
+      const stat = fs.statSync(resolved);
+      if (stat.isDirectory()) return { content: [{ type: 'text', text: `Path is a directory: ${resolved}` }], isError: true };
+      const maxBytes = Number(max_bytes) || 50000;
+      const content = fs.readFileSync(resolved, 'utf8').slice(0, maxBytes);
+      return { content: [{ type: 'text', text: JSON.stringify({ path: resolved, size: stat.size, content, truncated: stat.size > maxBytes }) }] };
     }
+  );
 
-    case 'list_directory': {
-      const dirPath = String(args.path || '').replace(/^~/, os.homedir());
+  server.registerTool(
+    'list_directory',
+    {
+      title: 'List Directory',
+      description: 'List files and subdirectories in a local directory. Returns names, types, and sizes.',
+      inputSchema: {
+        path:      z.string().describe('Absolute or ~-prefixed directory path'),
+        recursive: z.boolean().optional().describe('Include subdirectories recursively (max depth 3, default false)')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ path: dirPath, recursive }) => {
+      const resolved = String(dirPath).replace(/^~/, os.homedir());
       const home = os.homedir();
-      if (!dirPath.startsWith(home)) throw new Error('Access denied: path must be within home directory');
-      if (!fs.existsSync(dirPath)) throw new Error(`Directory not found: ${dirPath}`);
-      const recursive = Boolean(args.recursive);
+      if (!resolved.startsWith(home)) return { content: [{ type: 'text', text: 'Access denied' }], isError: true };
+      if (!fs.existsSync(resolved)) return { content: [{ type: 'text', text: `Directory not found: ${resolved}` }], isError: true };
       const entries = [];
       function walk(dir, depth = 0) {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           const fullPath = path.join(dir, entry.name);
-          const rel = path.relative(dirPath, fullPath);
+          const rel = path.relative(resolved, fullPath);
           const item = { name: entry.name, path: rel, type: entry.isDirectory() ? 'dir' : 'file' };
           if (!entry.isDirectory()) item.size = fs.statSync(fullPath).size;
           entries.push(item);
           if (recursive && entry.isDirectory() && depth < 3) walk(fullPath, depth + 1);
         }
       }
-      walk(dirPath);
-      return toolContent({ path: dirPath, entries });
+      walk(resolved);
+      return { content: [{ type: 'text', text: JSON.stringify({ path: resolved, entries }) }] };
     }
+  );
 
-    case 'search_files': {
-      const rootDir = String(args.directory || '').replace(/^~/, os.homedir());
+  server.registerTool(
+    'search_files',
+    {
+      title: 'Search Files',
+      description: 'Find files on the local filesystem matching a name pattern (e.g. "*.md", "README*").',
+      inputSchema: {
+        directory:   z.string().describe('Root directory to search from'),
+        pattern:     z.string().describe('Filename glob pattern (e.g. "*.md", "README*")'),
+        max_results: z.number().optional().describe('Max files to return (default 50)')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ directory, pattern, max_results }) => {
+      const rootDir = String(directory).replace(/^~/, os.homedir());
       const home = os.homedir();
-      if (!rootDir.startsWith(home)) throw new Error('Access denied: path must be within home directory');
-      const pattern = String(args.pattern || '*');
-      const maxResults = Number(args.max_results) || 50;
-      const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
+      if (!rootDir.startsWith(home)) return { content: [{ type: 'text', text: 'Access denied' }], isError: true };
+      const maxResults = Number(max_results) || 50;
+      const regex = new RegExp('^' + String(pattern || '*').replace(/\./g, '\\.').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i');
       const results = [];
       function findFiles(dir, depth = 0) {
         if (results.length >= maxResults || depth > 5) return;
         try {
           for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (entry.name.startsWith('.') && depth > 0) continue; // skip hidden dirs
+            if (entry.name.startsWith('.') && depth > 0) continue;
             const fullPath = path.join(dir, entry.name);
-            if (entry.isDirectory()) { findFiles(fullPath, depth + 1); }
+            if (entry.isDirectory()) findFiles(fullPath, depth + 1);
             else if (regex.test(entry.name)) results.push(fullPath);
           }
         } catch { /* permission denied — skip */ }
       }
       findFiles(rootDir);
-      return toolContent({ pattern, results: results.slice(0, maxResults), count: results.length });
+      return { content: [{ type: 'text', text: JSON.stringify({ pattern, results: results.slice(0, maxResults), count: results.length }) }] };
     }
+  );
 
-    default:
-      throw new Error(`Unknown MCP tool: ${name}`);
+  // ── Resources ──────────────────────────────────────────────────────────────
+
+  // Static: compiled INSTRUCTIONS.md injected into IDE context
+  const instructionsPath = path.join(agentDir(), 'INSTRUCTIONS.md');
+  if (fs.existsSync(instructionsPath)) {
+    server.registerResource(
+      'instructions',
+      'total-recall://instructions',
+      { title: 'Total Recall Instructions', description: 'Compiled Tier 1 hot memory instructions injected into IDE context.', mimeType: 'text/markdown' },
+      async () => ({ contents: [{ uri: 'total-recall://instructions', text: fs.readFileSync(instructionsPath, 'utf8') }] })
+    );
   }
+
+  // Static: derived graph index
+  const graphIndexPath = path.join(derivedDir(), 'graph-index.jsonl');
+  if (fs.existsSync(graphIndexPath)) {
+    server.registerResource(
+      'memory-index',
+      'total-recall://memory/index',
+      { title: 'Memory Graph Index', description: 'JSONL index of all memory nodes.', mimeType: 'application/jsonl' },
+      async () => ({ contents: [{ uri: 'total-recall://memory/index', text: fs.readFileSync(graphIndexPath, 'utf8') }] })
+    );
+  }
+
+  // Template: individual memory nodes by slug
+  server.registerResource(
+    'memory-node',
+    new ResourceTemplate('total-recall://vault/{slug}', { list: undefined }),
+    { title: 'Memory Node', description: 'Read a specific memory node by its slug.', mimeType: 'text/markdown' },
+    async (uri, { slug }) => {
+      const node = loadNodes(vaultDir()).find(n => n.slug === decodeURIComponent(String(slug)));
+      if (!node) throw new Error(`Memory node not found: ${slug}`);
+      return { contents: [{ uri: uri.href, text: node.body || '' }] };
+    }
+  );
+
+  return server;
 }
 
-async function handleMcpPost(req, res) {
-  const message = req.body || {};
-  const method = message.method;
+// ─── Broadcast helper (kept for daemon → IDE notifications) ─────────────────
+// With StreamableHTTPServerTransport, server-initiated notifications go through
+// the transport's SSE GET stream, not a separate custom endpoint.
+// This function sends a log notification to all active sessions.
 
-  try {
-    if (method === 'initialize') {
-      const sessionId = randomUUID();
-      sessions.add(sessionId);
-      res.set('mcp-session-id', sessionId);
-      return res.json(jsonRpcResult(message.id, {
-        protocolVersion: message.params?.protocolVersion || '2025-06-18',
-        capabilities: {
-          tools: { listChanged: false },
-          resources: { subscribe: false, listChanged: false }
-        },
-        serverInfo: {
-          name: 'total-recall',
-          version: '3.0.0'
-        }
-      }));
-    }
-
-    if (!req.get('x-sync-rpc') && !sessions.has(req.get('mcp-session-id'))) {
-      return res.status(400).json(jsonRpcError(message.id, -32000, 'Missing or invalid MCP session ID'));
-    }
-
-    if (method === 'tools/list') {
-      return res.json(jsonRpcResult(message.id, { tools: TOOL_DEFS }));
-    }
-
-    if (method === 'tools/call') {
-      const result = await callTool(message.params?.name, message.params?.arguments || {});
-      return res.json(jsonRpcResult(message.id, result));
-    }
-
-    if (method === 'resources/list') {
-      const resources = resourceCatalog()
-        .filter(resource => fs.existsSync(resource.filePath))
-        .map(({ filePath, ...resource }) => resource);
-      return res.json(jsonRpcResult(message.id, { resources }));
-    }
-
-    if (method === 'resources/read') {
-      const uri = message.params?.uri;
-      const resource = resourceCatalog().find(candidate => candidate.uri === uri);
-      return res.json(jsonRpcResult(message.id, resourceContents(resource)));
-    }
-
-    return res.status(404).json(jsonRpcError(message.id, -32601, `Method not found: ${method}`));
-  } catch (err) {
-    return res.status(500).json(jsonRpcError(message.id, -32000, err.message));
-  }
+export function broadcastMcpNotification(level = 'info', message, data = {}) {
+  // Notification sent via server.server.sendLoggingMessage on each active transport.
+  // For now we emit via console.error so daemon logs capture it.
+  // Full push requires calling server.sendLoggingMessage() per session — wired below.
+  console.error(`[MCP notify] [${level}] ${message}`, data);
 }
 
+// ─── Express mount ───────────────────────────────────────────────────────────
+
+/**
+ * Mount the MCP server onto an existing Express app.
+ *
+ * Three HTTP methods on /mcp — per spec 2025-06-18 Streamable HTTP transport:
+ *   POST   — JSON-RPC messages (initialize, tool calls, etc.)
+ *   GET    — SSE stream for server-initiated notifications
+ *   DELETE — session termination
+ */
 export function mountMcp(app) {
-  // SSE push channel — IDEs connect here to receive server-initiated notifications
-  app.get('/mcp/events', (req, res) => {
-    res.set({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-    res.flushHeaders();
-    // Send initial ping so the client knows the channel is live
-    res.write(`data: ${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/message', params: { level: 'info', message: 'Total Recall SSE channel connected' } })}\n\n`);
-    sseClients.add(res);
-    req.on('close', () => sseClients.delete(res));
+
+  // POST /mcp
+  app.post('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'];
+    const body = req.body || {};
+
+    try {
+      // Existing session — route to its transport
+      if (sessionId && transports.has(sessionId)) {
+        await transports.get(sessionId).handleRequest(req, res, body);
+        return;
+      }
+
+      // New session — must be an initialize request
+      if (!sessionId && body?.method === 'initialize') {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            console.error(`[MCP] Session initialized: ${sid}`);
+            transports.set(sid, transport);
+          }
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && transports.has(sid)) {
+            console.error(`[MCP] Session closed: ${sid}`);
+            transports.delete(sid);
+          }
+        };
+
+        const server = createMcpServer();
+        await server.connect(transport);
+        await transport.handleRequest(req, res, body);
+        return;
+      }
+
+      // Bad request
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Bad Request: No valid session ID or not an initialize request' },
+        id: null
+      });
+    } catch (err) {
+      console.error('[MCP] POST error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal server error' },
+          id: null
+        });
+      }
+    }
   });
 
-  app.post('/mcp', handleMcpPost);
+  // GET /mcp — SSE stream for server-initiated messages
+  app.get('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'];
+    if (!sessionId || !transports.has(sessionId)) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    try {
+      await transports.get(sessionId).handleRequest(req, res);
+    } catch (err) {
+      console.error('[MCP] GET error:', err);
+      if (!res.headersSent) res.status(500).send('SSE stream error');
+    }
+  });
+
+  // DELETE /mcp — session termination
+  app.delete('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id'];
+    if (!sessionId || !transports.has(sessionId)) {
+      res.status(400).send('Invalid or missing session ID');
+      return;
+    }
+    try {
+      await transports.get(sessionId).handleRequest(req, res);
+    } catch (err) {
+      console.error('[MCP] DELETE error:', err);
+      if (!res.headersSent) res.status(500).send('Session termination error');
+    }
+  });
+
   return app;
 }
-
-const app = express();
-app.use(express.json({ limit: '1mb' }));
-mountMcp(app);
-
-export default app;

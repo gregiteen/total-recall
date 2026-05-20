@@ -6,6 +6,33 @@
   "bin": {
     "total-recall": "./bin/total-recall.mjs"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/",
+    "docs/ARCHITECTURE.md",
+    "docs/IDE_INTEGRATION.md",
+    ".agent/INSTRUCTIONS.md",
+    ".agent/AGENTS.md",
+    ".agent/CLAUDE.md",
+    ".agent/GEMINI.md",
+    ".agent/SOUL.md",
+    ".agent/USER.md",
+    ".agent/IDENTITY.md",
+    ".agent/.clauderules",
+    ".agent/.cursorrules",
+    ".agent/skills/ssss/",
+    ".agent/skills/code-quality/",
+    ".agent/skills/code-mode/",
+    ".agent/skills/mcp-expert/",
+    ".agent/skills/instruction-keeper/",
+    ".agent/skills/skill/",
+    ".agent/skills/repo-expert/",
+    ".agent/skills/test/",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
   "exports": {
     ".": "./src/server/index.mjs",
     "./fixtures/*": "./fixtures/*",
@@ -35,6 +62,7 @@
   },
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "argon2": "^0.44.0",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
