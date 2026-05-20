@@ -440,6 +440,11 @@ async function provisionVastAI(apiKey) {
     '/bundles/?q={"gpu_name":{"in":["RTX 3060","RTX 3060 Ti","RTX 3070","RTX 3080"]},"disk_space":{"gte":40},"reliability2":{"gte":0.9},"rentable":{"eq":true},"order":[["dph_total","asc"]],"limit":5}'
   );
 
+  if (offers.success === false) {
+    emitProgress('error', `❌ Vast.ai API Error: ${offers.msg || offers.error || 'Unknown error'}`);
+    return;
+  }
+
   const offerList = (offers.offers || []).filter(o => o.rentable);
   if (!offerList.length) {
     emitProgress('error', '❌ No suitable GPU instances available right now. Try again in a few minutes.');
