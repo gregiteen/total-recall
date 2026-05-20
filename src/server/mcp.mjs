@@ -19,8 +19,9 @@ import { randomUUID } from 'node:crypto';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { loadNodes, writeNode, createNodeFromMcpPayload } from '../core/vault.mjs';
+import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload } from '../core/vault.mjs';
 import { executeCode } from './tools.mjs';
+import { webSearch, loadResearchConfig } from '../core/source-adapters.mjs';
 
 // ─── Path helpers ───────────────────────────────────────────────────────────
 
@@ -37,6 +38,13 @@ function derivedDir() { return path.join(agentDir(), 'memory-derived'); }
 
 /** @type {Map<string, StreamableHTTPServerTransport>} */
 const transports = new Map();
+
+// ─── Scope guards ─────────────────────────────────────────────────────────────
+// Set TR_MCP_ALLOW_FS=0 or TR_MCP_ALLOW_SANDBOX=0 to disable on cloud brains.
+// Both default to enabled (1) for local installs.
+const ALLOW_FS      = process.env.TR_MCP_ALLOW_FS      !== '0';
+const ALLOW_SANDBOX = process.env.TR_MCP_ALLOW_SANDBOX !== '0';
+
 
 // ─── Server factory ─────────────────────────────────────────────────────────
 // Creates a new McpServer with all tools and resources registered.
@@ -106,7 +114,7 @@ function createMcpServer() {
     'write_memory',
     {
       title: 'Write Memory',
-      description: 'Write a new SSSS memory node into the vault. Creates or overwrites.',
+      description: 'Write a new SSSS memory node into the vault. Creates or overwrites. Also updates the semantic search index.',
       inputSchema: {
         slug:     z.string().describe('Unique slug (e.g. "patterns/my-pattern")'),
         title:    z.string().describe('Human-readable title'),
@@ -118,7 +126,77 @@ function createMcpServer() {
     async ({ slug, title, category, content }) => {
       const node = createNodeFromMcpPayload({ slug, title, category, content });
       writeNode(node, vaultDir());
+      // Best-effort: update embeddings index so semantic_search stays current
+      try {
+        const { getEmbedding, saveEmbeddingToIndex, nodeToEmbedText } = await import('../core/embeddings.mjs');
+        const embedding = await getEmbedding(nodeToEmbedText(node));
+        saveEmbeddingToIndex(derivedDir(), node.slug, embedding);
+      } catch { /* Ollama may not be running — non-fatal */ }
       return { content: [{ type: 'text', text: JSON.stringify({ slug: node.slug, written: true }) }] };
+    }
+  );
+
+  server.registerTool(
+    'delete_memory',
+    {
+      title: 'Delete Memory',
+      description: 'Permanently delete an SSSS memory node from the vault by slug. Also removes it from the semantic search index.',
+      inputSchema: {
+        slug: z.string().describe('Slug of the node to delete (e.g. "patterns/old-pattern")')
+      },
+      annotations: { readOnlyHint: false, openWorldHint: false }
+    },
+    async ({ slug }) => {
+      const deleted = deleteNode(slug, vaultDir());
+      if (!deleted) return { content: [{ type: 'text', text: `Node not found: ${slug}` }], isError: true };
+      // Remove from embeddings index too
+      try {
+        const { removeEmbeddingFromIndex } = await import('../core/embeddings.mjs');
+        removeEmbeddingFromIndex(derivedDir(), slug);
+      } catch { /* non-fatal */ }
+      return { content: [{ type: 'text', text: JSON.stringify({ slug, deleted: true }) }] };
+    }
+  );
+
+  server.registerTool(
+    'semantic_search',
+    {
+      title: 'Semantic Search',
+      description: 'Search vault nodes by meaning using vector similarity. Finds conceptually related nodes even without exact keyword matches. Requires Ollama with nomic-embed-text (ollama pull nomic-embed-text).',
+      inputSchema: {
+        query: z.string().describe('Natural language query — a question, concept, or description'),
+        top_k: z.number().optional().describe('Number of results to return (default 5, max 20)')
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async ({ query, top_k }) => {
+      try {
+        const { getEmbedding, cosineSimilarity, loadEmbeddingsIndex } = await import('../core/embeddings.mjs');
+        const index = loadEmbeddingsIndex(derivedDir());
+        const entries = Object.entries(index);
+        if (entries.length === 0) {
+          return { content: [{ type: 'text', text: 'Embeddings index is empty. Call recompile_surface to build it, or write_memory to add nodes.' }], isError: true };
+        }
+        const queryEmbedding = await getEmbedding(String(query));
+        const k = Math.min(Number(top_k) || 5, 20);
+        const scored = entries
+          .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, k);
+        const nodes = loadNodes(vaultDir());
+        const results = scored.map(({ slug, score }) => {
+          const node = nodes.find(n => n.slug === slug);
+          if (!node) return null;
+          const { body, ...meta } = node;
+          return { ...meta, score: Math.round(score * 1000) / 1000 };
+        }).filter(Boolean);
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Semantic search failed: ${err.message}\n\nMake sure Ollama is running and nomic-embed-text is installed:\n  ollama pull nomic-embed-text` }],
+          isError: true
+        };
+      }
     }
   );
 
@@ -126,13 +204,16 @@ function createMcpServer() {
     'run_sandbox',
     {
       title: 'Run Sandbox',
-      description: 'Execute JavaScript in the configured Total Recall sandbox.',
+      description: ALLOW_SANDBOX
+        ? 'Execute JavaScript in the configured Total Recall sandbox.'
+        : '(Disabled on this brain — set TR_MCP_ALLOW_SANDBOX=1 to enable)',
       inputSchema: {
         code: z.string().describe('JavaScript code to execute')
       },
       annotations: { readOnlyHint: false, openWorldHint: true }
     },
     async ({ code }) => {
+      if (!ALLOW_SANDBOX) return { content: [{ type: 'text', text: 'Sandbox disabled (TR_MCP_ALLOW_SANDBOX=0).' }], isError: true };
       const result = await executeCode(code || '');
       return { content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }] };
     }
@@ -142,14 +223,21 @@ function createMcpServer() {
     'recompile_surface',
     {
       title: 'Recompile Surface',
-      description: 'Rebuild SSSS derived indexes and injected surfaces (INSTRUCTIONS.md, graph-index.jsonl).',
+      description: 'Rebuild SSSS derived indexes (INSTRUCTIONS.md, graph-index.jsonl) and update the semantic search embeddings index.',
       inputSchema: {},
       annotations: { readOnlyHint: false, openWorldHint: false }
     },
     async () => {
       const { runRebuild } = await import('../cli/rebuild.mjs');
-      const code = await runRebuild();
-      return { content: [{ type: 'text', text: JSON.stringify({ rebuilt: code === 0, exit_code: code }) }] };
+      const exitCode = await runRebuild();
+      // Incrementally build any missing embeddings (skips already-indexed slugs)
+      let embeddingStats = null;
+      try {
+        const { buildEmbeddingsIndex } = await import('../core/embeddings.mjs');
+        const nodes = loadNodes(vaultDir());
+        embeddingStats = await buildEmbeddingsIndex(nodes, derivedDir());
+      } catch { /* Ollama may not be running — non-fatal */ }
+      return { content: [{ type: 'text', text: JSON.stringify({ rebuilt: exitCode === 0, exit_code: exitCode, embeddings: embeddingStats }) }] };
     }
   );
 
