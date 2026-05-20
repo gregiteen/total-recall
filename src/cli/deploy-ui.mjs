@@ -453,7 +453,7 @@ async function provisionVastAI(apiKey) {
   // Create the instance
   const created = await vastAPI(apiKey, 'PUT', `/asks/${best.id}/`, {
     client_id: 'me',
-    image: 'pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime',
+    image: 'nvidia/cuda:12.1.1-runtime-ubuntu22.04',
     disk: 40,
     onstart: 'curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash',
     env: {},
@@ -471,7 +471,7 @@ async function provisionVastAI(apiKey) {
 
   // Poll until running
   let instance = null;
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 120; i++) {
     await sleep(15000);
     const status = await vastAPI(apiKey, 'GET', `/instances/${instanceId}/`);
     instance = (status.instances || [])[0] || status;
