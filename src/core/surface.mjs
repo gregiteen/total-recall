@@ -353,138 +353,129 @@ function buildPreamble(agentDir) {
 }
 
 /**
- * Build the Total Recall system documentation section.
- * Always compiled into INSTRUCTIONS.md so every IDE agent knows how to use the system.
- * Covers: MCP tools, REST API, memory model, semantic search, research queue.
+ * Build the Total Recall System documentation section.
+ * Written into every compiled INSTRUCTIONS.md so IDE agents have immediate
+ * access to tool lists, REST API references, and research protocols.
  */
 function buildSystemDocs(agentDir) {
-  let brainUrl = 'http://localhost:4000';
+  // Read Brain URL from config if available
+  let brainUrl = 'http://localhost:3000';
   try {
-    const cfgPath = agentDir ? path.join(agentDir, 'config', 'brain.json') : null;
-    if (cfgPath && fs.existsSync(cfgPath)) {
-      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-      if (cfg.url) brainUrl = cfg.url.replace(/\/$/, '');
+    const configPath = path.join(agentDir, 'config', 'brain.json');
+    if (fs.existsSync(configPath)) {
+      const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (cfg.url) brainUrl = cfg.url;
     }
   } catch { /* use default */ }
 
-  return `
----
-
-## 🧠 Total Recall — Sovereign AI OS
-
-You are operating inside **Total Recall**, a persistent memory and knowledge system.
-Your memory lives in \`.agent/memory-vault/\` as SSSS-format Markdown nodes.
-Every fact, decision, correction, or preference MUST be written to the vault.
-
-**Brain URL:** \`${brainUrl}\`
-**Vault:** \`~/.agent/memory-vault/\`
-**Sessions:** \`~/.agent/sessions/\`
-
----
-
-### 🔧 MCP Tools
-
-| Tool | Purpose |
-|------|---------|
-| \`write_memory\` | Write a new memory node (facts, decisions, corrections, preferences, patterns) |
-| \`read_memory\` | Read a vault node by slug |
-| \`list_memory\` | List nodes — filter by type, category, tag, status |
-| \`delete_memory\` | Delete a node by slug |
-| \`search_memory\` | Keyword search across vault nodes |
-| \`semantic_search\` | Search vault nodes AND session history by meaning. Returns type: "vault" or "session". Requires Ollama + nomic-embed-text |
-| \`recompile_surface\` | Rebuild INSTRUCTIONS.md + all derived indexes + embeddings. Run after writing nodes |
-| \`web_search\` | Search the web for real-world facts, post-cutoff info, knowledge gap research |
-| \`execute_code\` | Run Node.js in sandbox — use to call REST endpoints or process data |
-| \`read_file\` | Read any file (home dir sandboxed) |
-| \`write_file\` | Write any file (home dir sandboxed) |
-| \`list_directory\` | List directory contents |
-| \`list_research_queue\` | List all research projects: pending, in_progress, done, failed |
-| \`queue_research\` | Add a topic to the research queue (post-cutoff facts, training gaps) |
-
-**Rules:** Write to vault immediately when the user corrects you or shares a preference. Run \`semantic_search\` before answering non-trivial questions. Use \`queue_research\` + \`web_search\` for anything post-cutoff.
-
----
-
-### 🌐 REST API
-
-Base URL: \`${brainUrl}\` — all requests: \`Authorization: Bearer <token>\`
-
-**Memory:**
-- \`GET  /api/memory\` — list all nodes (?type= &tag= &status=)
-- \`GET  /api/memory/:slug\` — get one node
-- \`POST /api/memory\` — create node { type, title, body, tags, category, priority, modality }
-- \`PUT  /api/memory/:slug\` — update node
-- \`DELETE /api/memory/:slug\` — delete node
-- \`POST /api/memory/search\` — keyword search { query, type, limit }
-- \`POST /api/memory/search/semantic\` — semantic search { query, top_k, include_sessions }
-
-**Research Queue:**
-- \`GET  /api/research\` — list all projects (?status=pending|done|in_progress|failed)
-- \`POST /api/research\` — queue topic { topic, priority, notes }
-- \`PATCH /api/research/:id\` — update { status, notes, node_slug }
-- \`DELETE /api/research/:id\` — remove
-
-**Vault:**
-- \`POST /api/vault/compile\` — recompile surface + rebuild all embeddings
-- \`GET  /api/vault/nodes\` — all nodes with frontmatter
-- \`GET  /api/vault/surface\` — compiled surface text
-- \`GET  /api/vault/status\` — node count, embedding sizes, Ollama status
-
-**Sessions:**
-- \`GET  /api/sessions\` — list sessions
-- \`GET  /api/sessions/:id\` — get session messages
-- \`POST /api/sessions/ingest\` — ingest { source, messages: [{role, content}] }
-- \`DELETE /api/sessions/:id\` — delete
-
-**Import / Export:**
-- \`GET  /api/import/rules\` — detect existing rule files (AGENTS.md, .cursorrules, etc.)
-- \`POST /api/import/rules\` — import detected files into vault
-- \`GET  /api/brain/export\` — download full brain .tar.gz
-
-**System:**
-- \`GET  /health\` — vault stats, embedding counts, Ollama reachability
-- \`GET  /.well-known/total-recall.json\` — discovery manifest
-
----
-
-### 📝 Memory Model (SSSS v2)
-
-Key frontmatter fields:
-- **category:** \`facts\` | \`patterns\` | \`preferences\` | \`instructions\` | \`corrections\` | \`concepts\` | \`rules\`
-- **priority:** \`absolute\` (injected into INSTRUCTIONS.md on compile) | \`high\` | \`medium\` | \`low\`
-- **modality:** \`must\` | \`must_not\` | \`should\` | \`should_not\` | \`neutral\`
-- **confidence:** 0.0–1.0  **importance:** 1–10  **status:** \`active\` | \`archived\`
-
-After writing nodes: call \`recompile_surface\` or \`POST /api/vault/compile\`.
-
----
-
-### 🔍 Semantic Search Example
-
-\`\`\`js
-// MCP
-semantic_search({ query: "how we handle auth", top_k: 5 })
-// Results: [{ type: "vault", slug, title, score }, { type: "session", session_id, snippet, score }]
-
-// REST (via execute_code)
-const r = await fetch('${brainUrl}/api/memory/search/semantic', {
-  method: 'POST', headers: { Authorization: 'Bearer <token>', 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: "how we handle auth", top_k: 5, include_sessions: true })
-});
-\`\`\`
-
----
-
-### 🔬 Research Loop
-
-When you encounter something post-cutoff or uncertain:
-1. \`queue_research({ topic, priority: "high", notes: "reason" })\`
-2. \`web_search({ query })\` — gather verified facts
-3. \`write_memory({ ... })\` — save the correction node
-4. \`PATCH /api/research/:id\` with \`{ status: "done", node_slug: "..." }\`
-
----
-`;
+  return [
+    '',
+    '## 🧠 Total Recall System',
+    '',
+    `**What it is:** Total Recall is a Sovereign AI OS — a local, filesystem-native memory and reasoning kernel that runs alongside your IDE. It maintains a structured semantic memory vault (SSSS v2 nodes), compiles rules into IDE instruction files, and runs background research and embedding daemons.`,
+    '',
+    `**Brain URL:** \`${brainUrl}\`  (REST API base; also the MCP server endpoint)`,
+    '',
+    '### 🔧 MCP Tools (13 total)',
+    '',
+    '| Tool | Purpose |',
+    '|------|---------|',
+    '| `semantic_search` | Vector search across vault nodes and session history |',
+    '| `recall_node` | Fetch a single memory node by slug |',
+    '| `list_nodes` | List vault nodes filtered by category/status/priority |',
+    '| `write_node` | Create or update a memory node (SSSS v2) |',
+    '| `delete_node` | Archive a memory node (sets status → archived) |',
+    '| `queue_research` | Add a topic to the autonomous research agenda |',
+    '| `list_research_queue` | Check status of queued topics + read daemon findings |',
+    '| `recompile_surface` | Rebuild INSTRUCTIONS.md + skill routes + embeddings |',
+    '| `get_health` | Vault stats, Ollama reachability, embedding counts |',
+    '| `list_skills` | Enumerate available agent skills and their descriptions |',
+    '| `read_skill` | Read the full SKILL.md for a specific skill |',
+    '| `list_inbox` | List pending inbox items (draft research, conflicts) |',
+    '| `resolve_inbox` | Promote, reject, or modify an inbox item |',
+    '',
+    '### 🌐 REST API Reference',
+    '',
+    '| Method | Endpoint | Description |',
+    '|--------|----------|-------------|',
+    `| GET | \`${brainUrl}/health\` | System health (vault count, embeddings, Ollama status) |`,
+    `| GET | \`${brainUrl}/api/vault/status\` | Vault stats summary |`,
+    `| GET | \`${brainUrl}/api/nodes\` | List all nodes (query: category, status, priority) |`,
+    `| GET | \`${brainUrl}/api/nodes/:slug\` | Fetch a single node by slug |`,
+    `| POST | \`${brainUrl}/api/nodes\` | Create or upsert a memory node |`,
+    `| DELETE | \`${brainUrl}/api/nodes/:slug\` | Archive a node |`,
+    `| POST | \`${brainUrl}/api/search\` | Semantic search (body: { query, top_k }) |`,
+    `| GET | \`${brainUrl}/api/research/queue\` | List research agenda |`,
+    `| POST | \`${brainUrl}/api/research/queue\` | Queue a research topic |`,
+    `| POST | \`${brainUrl}/api/compile\` | Trigger surface recompile |`,
+    `| GET | \`${brainUrl}/api/import/rules\` | Detect importable rule files in repo |`,
+    `| POST | \`${brainUrl}/api/import/rules\` | Import detected rule files into vault |`,
+    '',
+    '### 📦 SSSS v2 Memory Node Fields',
+    '',
+    '| Field | Type | Description |',
+    '|-------|------|-------------|',
+    '| `slug` | string | Unique ID, kebab-case |',
+    '| `title` | string | Human-readable title |',
+    '| `category` | string | `facts` / `patterns` / `concepts` / `preferences` / `corrections` |',
+    '| `status` | string | `active` / `draft` / `archived` |',
+    '| `priority` | string | `absolute` / `high` / `normal` / `low` |',
+    '| `modality` | string | `must` / `must_not` / `should` / `should_not` / `neutral` |',
+    '| `confidence` | number | 0.0–1.0 (daemon-managed for research nodes) |',
+    '| `importance` | string | `critical` / `high` / `normal` / `low` |',
+    '| `tags` | string[] | Freeform tags for routing and search |',
+    '| `body` | string | Full markdown content; supports `[[wikilinks]]` |',
+    '| `related` | string[] | Slugs of related nodes (graph edges) |',
+    '| `sources` | object[] | Citations: `{ url, title, retrieved_at }` |',
+    '',
+    '### 🔍 Semantic Search Examples',
+    '',
+    '**Via MCP:**',
+    '```json',
+    '{ "tool": "semantic_search", "arguments": { "query": "how to handle rate limiting", "top_k": 5 } }',
+    '```',
+    '',
+    `**Via REST:** \`POST ${brainUrl}/api/search\``,
+    '```json',
+    '{ "query": "authentication patterns", "top_k": 3 }',
+    '```',
+    '',
+    '### 🔬 Research System (Autonomous Background Daemon)',
+    '',
+    'The research system runs as a **background daemon** — not something you trigger manually.',
+    'Your job as an agent is to **queue topics** and **read results**. The daemon does everything else.',
+    '',
+    '**How it works:**',
+    '1. Topics sit on a prioritized Research Agenda (`~/.agent/research-agenda.jsonl`).',
+    '   Topics are added by: session inference (daemon reads sessions post-mortem), direct agent queuing, self-diagnosis, or as follow-up gaps from prior research.',
+    '2. Each daemon cycle pulls the highest-priority `pending` or `partially-covered` topic.',
+    '3. It gathers from **all available real sources in parallel:**',
+    '   - Web search (Brave → Serper fallback)',
+    '   - DuckDuckGo Instant Answers',
+    '   - Wikipedia',
+    '   - arXiv (for academic/ML topics)',
+    '   - npm registry (for JS/Node topics)',
+    '   - GitHub repositories (for code/library topics)',
+    '   - Deep page crawl of the top result (Playwright or plain fetch)',
+    '4. A local LLM synthesizes all results into: summary, key facts with inline citations, confidence score, temporal context, contradictions found, and **further research gaps**.',
+    '5. **Confidence routing:**',
+    '   - ≥0.7 → written directly to vault as `active` node + INSTRUCTIONS.md recompiled immediately',
+    '   - <0.7 → written as `draft` to inbox for validation before promotion',
+    '6. **Self-multiplication:** gaps identified during synthesis are automatically added back to the agenda as follow-up topics with slightly lower priority.',
+    '7. **Topic status** is never binary done/not-done: `pending` → `partially-covered` → `well-covered`. Well-covered topics have a 60-day decay half-life and are automatically re-queued as knowledge goes stale.',
+    '8. When the agenda is empty, the daemon runs **self-diagnosis** — audits vault coverage, ages, and source diversity, then auto-queues new topics for weak areas.',
+    '',
+    '**What you as an agent should do:**',
+    '- `queue_research({ topic, priority, notes })` — add a topic (post-cutoff fact, uncertain claim, knowledge gap)',
+    '- `list_research_queue()` — check status of queued topics and read completed findings',
+    '- `semantic_search({ query })` — search vault for facts already researched by the daemon',
+    '',
+    '**What you should NOT do:**',
+    '- Do not manually run web searches and call that "research done"',
+    '- Do not mark research complete — the daemon manages status based on coverage scores across multiple sources',
+    '- Do not write speculative facts to the vault — that\'s what the inbox validation path is for',
+    '',
+  ].join('\n');
 }
 
 /**
@@ -576,6 +567,8 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     const { buildSemanticIndex } = await import('./semantic-index.mjs');
     semanticResult = await buildSemanticIndex(nodes, derivedDir);
   } catch { /* semantic index is optional — never block compile */ }
+
+
 
   // Generate Obsidian Canvas (fire-and-forget; native graph artifact)
   try {
