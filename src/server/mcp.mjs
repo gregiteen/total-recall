@@ -22,6 +22,8 @@ import { z } from 'zod';
 import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload } from '../core/vault.mjs';
 import { executeCode } from './tools.mjs';
 import { webSearch, loadResearchConfig } from '../core/source-adapters.mjs';
+import { semanticSearch } from '../core/search.mjs';
+import { listQueue, addToQueue } from '../core/research-queue.mjs';
 
 // ─── Path helpers ───────────────────────────────────────────────────────────
 
@@ -162,7 +164,7 @@ function createMcpServer() {
     'semantic_search',
     {
       title: 'Semantic Search',
-      description: 'Search across ALL vault nodes AND session history by meaning using vector similarity. Returns results from both, merged and ranked by score. Each result has a type field: "vault" (memory node) or "session" (raw conversation chunk). Requires Ollama with nomic-embed-text.',
+      description: 'Search across ALL vault nodes AND session history by meaning via vector similarity. Results merged and ranked by score. Each result has type: "vault" or "session". Requires Ollama with nomic-embed-text.',
       inputSchema: {
         query:            z.string().describe('Natural language query — a question, concept, or description'),
         top_k:            z.number().optional().describe('Number of results to return (default 5, max 20)'),
@@ -172,55 +174,11 @@ function createMcpServer() {
     },
     async ({ query, top_k, include_sessions = true }) => {
       try {
-        const { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex } = await import('../core/embeddings.mjs');
-        const k = Math.min(Number(top_k) || 5, 20);
-        const queryEmbedding = await getEmbedding(String(query));
-        const results = [];
-
-        // Vault nodes
-        const vaultIndex = loadEmbeddingsIndex(derivedDir());
-        const vaultEntries = Object.entries(vaultIndex);
-        if (vaultEntries.length > 0) {
-          const vaultNodes = loadNodes(vaultDir());
-          const scored = vaultEntries
-            .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, k);
-          for (const { slug, score } of scored) {
-            const node = vaultNodes.find(n => n.slug === slug);
-            if (node) {
-              const { body, ...meta } = node;
-              results.push({ type: 'vault', ...meta, score: Math.round(score * 1000) / 1000 });
-            }
-          }
-        }
-
-        // Sessions
-        if (include_sessions) {
-          const sessionIndex = loadSessionEmbeddingsIndex(derivedDir());
-          const sessionEntries = Object.entries(sessionIndex);
-          if (sessionEntries.length > 0) {
-            const scored = sessionEntries
-              .map(([key, entry]) => ({ key, session_id: entry.session_id || key, score: cosineSimilarity(queryEmbedding, entry.embedding), snippet: entry.snippet, chunk: entry.chunk, total_chunks: entry.total_chunks }))
-              .sort((a, b) => b.score - a.score)
-              .slice(0, k);
-            for (const { key, session_id, score, snippet, chunk, total_chunks } of scored) {
-              results.push({ type: 'session', key, session_id, snippet, chunk, total_chunks, score: Math.round(score * 1000) / 1000 });
-            }
-          }
-        }
-
-        if (results.length === 0) {
-          return { content: [{ type: 'text', text: 'No embeddings found. Call recompile_surface to build the index.' }], isError: true };
-        }
-
-        results.sort((a, b) => b.score - a.score);
-        return { content: [{ type: 'text', text: JSON.stringify(results.slice(0, k), null, 2) }] };
+        const results = await semanticSearch(query, { vaultDir: vaultDir(), derivedDir: derivedDir(), top_k, includeSessions: include_sessions });
+        if (results.length === 0) return { content: [{ type: 'text', text: 'No embeddings found. Call recompile_surface first.' }], isError: true };
+        return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Semantic search failed: ${err.message}\n\nMake sure Ollama is running and nomic-embed-text is installed:\n  ollama pull nomic-embed-text` }],
-          isError: true
-        };
+        return { content: [{ type: 'text', text: `Semantic search failed: ${err.message}\n\nMake sure Ollama is running: ollama pull nomic-embed-text` }], isError: true };
       }
     }
   );
@@ -396,16 +354,7 @@ function createMcpServer() {
     }
   );
 
-  // Research queue tools
-
-  const RESEARCH_QUEUE_PATH = path.join(agentDir(), 'research-queue.jsonl');
-  function loadRQ() {
-    if (!fs.existsSync(RESEARCH_QUEUE_PATH)) return [];
-    return fs.readFileSync(RESEARCH_QUEUE_PATH, 'utf8')
-      .split('\n').filter(Boolean)
-      .map(l => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean);
-  }
+  // Research queue tools — thin wrappers over src/core/research-queue.mjs
 
   server.registerTool(
     'list_research_queue',
@@ -418,11 +367,8 @@ function createMcpServer() {
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
     async ({ status }) => {
-      const items = loadRQ();
-      const filtered = status && status !== 'all' ? items.filter(i => i.status === status) : items;
-      const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
-      items.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
-      return { content: [{ type: 'text', text: JSON.stringify({ counts, total: filtered.length, items: filtered }, null, 2) }] };
+      const result = listQueue({ status });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
   );
 
@@ -439,22 +385,7 @@ function createMcpServer() {
       annotations: { readOnlyHint: false, openWorldHint: false }
     },
     async ({ topic, priority, notes }) => {
-      const { randomUUID } = await import('node:crypto');
-      const item = {
-        id: randomUUID(),
-        topic: String(topic),
-        status: 'pending',
-        priority: priority || 'medium',
-        notes: notes || null,
-        node_slug: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        completed_at: null,
-      };
-      const items = loadRQ();
-      items.unshift(item);
-      fs.mkdirSync(path.dirname(RESEARCH_QUEUE_PATH), { recursive: true });
-      fs.writeFileSync(RESEARCH_QUEUE_PATH, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
+      const item = addToQueue({ topic, priority, notes });
       return { content: [{ type: 'text', text: JSON.stringify({ queued: true, id: item.id, topic: item.topic }) }] };
     }
   );

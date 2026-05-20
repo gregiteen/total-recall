@@ -61,6 +61,8 @@ import {
   loadSecurityConfig,
 } from './auth.mjs';
 import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex, parseSessionFile, sessionToEmbedChunks, saveSessionEmbeddingToIndex, removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
+import { semanticSearch } from '../core/search.mjs';
+import { listQueue, addToQueue, updateQueueItem, removeFromQueue } from '../core/research-queue.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 const VAULT_DIR    = path.join(AGENT_DIR, 'memory-vault');
@@ -267,54 +269,11 @@ router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:rea
   try {
     const { query, top_k, include_sessions = true } = req.body || {};
     if (!query) return badRequest(res, 'query is required');
-
-    const k = Math.min(Number(top_k) || 5, 20);
-    const queryEmbedding = await getEmbedding(String(query));
-    const results = [];
-
-    // Search vault nodes
-    const vaultIndex = loadEmbeddingsIndex(DERIVED_DIR);
-    const vaultEntries = Object.entries(vaultIndex);
-    if (vaultEntries.length > 0) {
-      const list = nodes();
-      const scored = vaultEntries
-        .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding), type: 'vault' }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, k);
-      for (const { slug, score, type } of scored) {
-        const node = list.find(n => n.slug === slug);
-        if (node) results.push({ ...sanitizeNode(node), score: Math.round(score * 1000) / 1000, type });
-      }
-    }
-
-    // Search sessions
-    if (include_sessions) {
-      const sessionIndex = loadSessionEmbeddingsIndex(DERIVED_DIR);
-      const sessionEntries = Object.entries(sessionIndex);
-      if (sessionEntries.length > 0) {
-        const scored = sessionEntries
-          .map(([key, entry]) => ({ key, session_id: entry.session_id || key, score: cosineSimilarity(queryEmbedding, entry.embedding), snippet: entry.snippet, chunk: entry.chunk, total_chunks: entry.total_chunks }))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, k);
-        for (const { key, session_id, score, snippet, chunk, total_chunks } of scored) {
-          results.push({ type: 'session', key, session_id, snippet, chunk, total_chunks, score: Math.round(score * 1000) / 1000 });
-        }
-      }
-    }
-
-    // Merge and re-sort by score, return top k overall
-    results.sort((a, b) => b.score - a.score);
-    const topResults = results.slice(0, k);
-
-    if (topResults.length === 0) {
-      return res.status(503).json({ error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.' });
-    }
-
-    res.json({ query, top_k: k, results: topResults });
+    const results = await semanticSearch(query, { vaultDir: VAULT_DIR, derivedDir: DERIVED_DIR, top_k, includeSessions: include_sessions });
+    if (results.length === 0) return res.status(503).json({ error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.' });
+    res.json({ query, top_k: Math.min(Number(top_k) || 5, 20), results });
   } catch (err) {
-    if (err.message?.includes('Ollama')) {
-      return res.status(503).json({ error: err.message });
-    }
+    if (err.message?.includes('Ollama')) return res.status(503).json({ error: err.message });
     serverError(res, err);
   }
 });
@@ -851,113 +810,41 @@ router.get('/api', (req, res) => {
 });
 
 // ─── Research Queue ───────────────────────────────────────────────────────────
-// Tracks all research projects: pending, in_progress, done, failed.
-// Storage: .agent/research-queue.jsonl
+// Thin REST wrappers over src/core/research-queue.mjs
 
 const RESEARCH_QUEUE_PATH = path.join(AGENT_DIR, 'research-queue.jsonl');
 
-function loadResearchQueue() {
-  if (!fs.existsSync(RESEARCH_QUEUE_PATH)) return [];
-  return fs.readFileSync(RESEARCH_QUEUE_PATH, 'utf8')
-    .split('\n').filter(Boolean)
-    .map(l => { try { return JSON.parse(l); } catch { return null; } })
-    .filter(Boolean);
-}
-
-function saveResearchQueue(items) {
-  fs.mkdirSync(path.dirname(RESEARCH_QUEUE_PATH), { recursive: true });
-  fs.writeFileSync(RESEARCH_QUEUE_PATH, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
-}
-
-/**
- * GET /api/research
- * Query: ?status=pending|in_progress|done|failed  (omit for all)
- *        ?limit=100  ?offset=0
- */
 router.get('/api/research', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    let items = loadResearchQueue();
-    const { status, limit = '100', offset = '0' } = req.query;
-    if (status) items = items.filter(i => i.status === status);
-    const statusRank = { pending: 0, in_progress: 1, done: 2, failed: 3 };
-    items.sort((a, b) => {
-      const ra = statusRank[a.status] ?? 4, rb = statusRank[b.status] ?? 4;
-      if (ra !== rb) return ra - rb;
-      return (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at);
-    });
-    const off = parseInt(offset, 10) || 0;
-    const lim = Math.min(500, parseInt(limit, 10) || 100);
-    const all = loadResearchQueue();
-    const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
-    all.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
-    res.json({ total: items.length, offset: off, limit: lim, counts, items: items.slice(off, off + lim) });
+    const { status, limit, offset } = req.query;
+    res.json(listQueue({ status, limit, offset }));
   } catch (err) { serverError(res, err); }
 });
 
-/**
- * POST /api/research
- * Body: { topic, priority?: 'high'|'medium'|'low', notes? }
- */
 router.post('/api/research', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const { topic, priority = 'medium', notes } = req.body || {};
+    const { topic, priority, notes } = req.body || {};
     if (!topic) return badRequest(res, 'topic is required');
-    const item = {
-      id: crypto.randomUUID(),
-      topic: String(topic),
-      status: 'pending',
-      priority,
-      notes: notes || null,
-      node_slug: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      completed_at: null,
-    };
-    const items = loadResearchQueue();
-    items.unshift(item);
-    saveResearchQueue(items);
-    res.status(201).json(item);
+    res.status(201).json(addToQueue({ topic, priority, notes }));
   } catch (err) { serverError(res, err); }
 });
 
-/**
- * PATCH /api/research/:id
- * Body: { status?, notes?, node_slug?, priority? }
- * Mark done, link to vault node, update notes, etc.
- */
 router.patch('/api/research/:id', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const items = loadResearchQueue();
-    const idx = items.findIndex(i => i.id === req.params.id);
-    if (idx === -1) return notFound(res, `Research project not found: ${req.params.id}`);
-    const { status, notes, node_slug, priority } = req.body || {};
-    const item = { ...items[idx] };
-    if (status) item.status = status;
-    if (notes !== undefined) item.notes = notes;
-    if (node_slug !== undefined) item.node_slug = node_slug;
-    if (priority) item.priority = priority;
-    item.updated_at = new Date().toISOString();
-    if ((status === 'done' || status === 'failed') && !item.completed_at) {
-      item.completed_at = new Date().toISOString();
-    }
-    items[idx] = item;
-    saveResearchQueue(items);
-    res.json(item);
-  } catch (err) { serverError(res, err); }
+    res.json(updateQueueItem(req.params.id, req.body || {}));
+  } catch (err) {
+    if (err.status === 404) return notFound(res, err.message);
+    serverError(res, err);
+  }
 });
 
-/**
- * DELETE /api/research/:id
- */
 router.delete('/api/research/:id', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const items = loadResearchQueue();
-    const idx = items.findIndex(i => i.id === req.params.id);
-    if (idx === -1) return notFound(res, `Research project not found: ${req.params.id}`);
-    const [removed] = items.splice(idx, 1);
-    saveResearchQueue(items);
-    res.json({ deleted: true, id: removed.id, topic: removed.topic });
-  } catch (err) { serverError(res, err); }
+    res.json(removeFromQueue(req.params.id));
+  } catch (err) {
+    if (err.status === 404) return notFound(res, err.message);
+    serverError(res, err);
+  }
 });
 
 // ─── Brain Export ─────────────────────────────────────────────────────────────
