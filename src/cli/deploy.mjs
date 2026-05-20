@@ -454,10 +454,14 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   } else {
     if (opts.dryRun) {
       log('  Would run: ollama pull gemma4:26b');
+      log('  Would run: ollama pull nomic-embed-text');
     } else {
       log('  Running: ollama pull gemma4:26b (this will take a while...)');
       run('ollama pull gemma4:26b', { timeout: 3600_000 }); // 1hr timeout
       logOk('Gemma 4 model pulled');
+      log('  Running: ollama pull nomic-embed-text (274MB, used for semantic vault search)');
+      run('ollama pull nomic-embed-text', { timeout: 300_000 }); // 5min timeout
+      logOk('nomic-embed-text embedding model pulled');
     }
   }
 

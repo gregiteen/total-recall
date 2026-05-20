@@ -68,6 +68,28 @@ export function writeNode(node, vaultDir) {
 }
 
 /**
+ * Delete a memory node by slug.
+ * Finds the node via loadNodes, then removes its .md file.
+ * Returns true if deleted, false if the node was not found.
+ *
+ * @param {string} slug
+ * @param {string} vaultDir
+ * @returns {boolean}
+ */
+export function deleteNode(slug, vaultDir) {
+  const nodes = loadNodes(vaultDir);
+  const node = nodes.find(n => n.slug === slug);
+  if (!node) return false;
+  const filePath = path.join(vaultDir, node.category, `${node.slug}.md`);
+  if (fs.existsSync(filePath)) {
+    fs.rmSync(filePath);
+    return true;
+  }
+  return false;
+}
+
+
+/**
  * Creates a fully populated memory node from an MCP payload.
  */
 export function createNodeFromMcpPayload({ slug, title, category, content }) {
