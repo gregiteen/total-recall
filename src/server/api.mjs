@@ -377,30 +377,44 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
 Base URL: ${selfBase}
 
 MEMORY:
-  GET    ${selfBase}/api/memory              — list all nodes (optional ?type=&tag=)
-  GET    ${selfBase}/api/memory/:id          — get one node
-  POST   ${selfBase}/api/memory              — create node  body: {type,title,body,tags,metadata}
-  PUT    ${selfBase}/api/memory/:id          — update node
-  DELETE ${selfBase}/api/memory/:id          — delete node
-  POST   ${selfBase}/api/memory/search       — semantic/keyword search  body: {query,type,limit}
+  GET    ${selfBase}/api/memory                    — list all nodes (optional ?type=&tag=)
+  GET    ${selfBase}/api/memory/:id                — get one node
+  POST   ${selfBase}/api/memory                    — create node  body: {type,title,body,tags,metadata}
+  PUT    ${selfBase}/api/memory/:id                — update node
+  DELETE ${selfBase}/api/memory/:id                — delete node
+  POST   ${selfBase}/api/memory/search             — keyword search  body: {query,type,limit}
+  POST   ${selfBase}/api/memory/search/semantic    — semantic (meaning-based) search  body: {query,top_k,include_sessions}
+                                                     Returns vault nodes AND session chunks ranked by similarity
+
+RESEARCH QUEUE:
+  GET    ${selfBase}/api/research                  — list all research projects (past + pending)  ?status=pending|done|...
+  POST   ${selfBase}/api/research                  — queue a new research topic  body: {topic,priority,notes}
+  PATCH  ${selfBase}/api/research/:id              — update status/notes/node_slug
+  DELETE ${selfBase}/api/research/:id              — remove from queue
 
 VAULT:
-  POST   ${selfBase}/api/vault/compile       — recompile INSTRUCTIONS.md from vault
-  GET    ${selfBase}/api/vault/nodes         — list all SSSS nodes with frontmatter
-  GET    ${selfBase}/api/vault/surface       — get compiled surface text
+  POST   ${selfBase}/api/vault/compile             — recompile INSTRUCTIONS.md + rebuild all embeddings
+  GET    ${selfBase}/api/vault/nodes               — list all SSSS nodes with frontmatter
+  GET    ${selfBase}/api/vault/surface             — get compiled surface text
+  GET    ${selfBase}/api/vault/status              — node count, last compile time
 
 SESSIONS:
-  GET    ${selfBase}/api/sessions            — list ingested sessions
-  POST   ${selfBase}/api/sessions/ingest     — ingest a session  body: {source,messages:[{role,content}]}
+  GET    ${selfBase}/api/sessions                  — list ingested sessions
+  GET    ${selfBase}/api/sessions/:id              — get session messages
+  POST   ${selfBase}/api/sessions/ingest           — ingest a session  body: {source,messages:[{role,content}]}
+  DELETE ${selfBase}/api/sessions/:id              — delete session
+
+BRAIN:
+  GET    ${selfBase}/api/brain/export              — download full brain as .tar.gz  ?include=vault,derived,sessions,config,skills
 
 CHAT (OpenAI-compatible):
-  POST   ${selfBase}/v1/chat/completions     — send a chat message to yourself
-  GET    ${selfBase}/v1/models               — list available models
+  POST   ${selfBase}/v1/chat/completions           — send a chat message to yourself
+  GET    ${selfBase}/v1/models                     — list available models
 
 OTHER:
-  GET    ${selfBase}/health                  — health check
+  GET    ${selfBase}/health                        — health check (vault stats, embedding index sizes, ollama status)
   GET    ${selfBase}/.well-known/total-recall.json — discovery manifest
-  GET    ${selfBase}/api/keys                — list API keys (admin)
+  GET    ${selfBase}/api/keys                      — list API keys (admin)
 
 Authentication: include  Authorization: Bearer <token>  on all requests (already set for your current session).
 Use execute_code to call these endpoints with node's built-in fetch() — you are your own memory system.`;

@@ -319,6 +319,18 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), (req, 
     const derivedFiles = fs.existsSync(DERIVED_DIR)
       ? fs.readdirSync(DERIVED_DIR).length : 0;
 
+    const vaultEmbedCount   = fs.existsSync(path.join(DERIVED_DIR, 'embeddings.json'))
+      ? Object.keys(JSON.parse(fs.readFileSync(path.join(DERIVED_DIR, 'embeddings.json'), 'utf8') || '{}')).length : 0;
+    const sessionEmbedCount = fs.existsSync(path.join(DERIVED_DIR, 'session-embeddings.json'))
+      ? Object.keys(JSON.parse(fs.readFileSync(path.join(DERIVED_DIR, 'session-embeddings.json'), 'utf8') || '{}')).length : 0;
+
+    // Ollama reachability (best-effort)
+    let ollamaOk = false;
+    try {
+      const r = await fetch(`${process.env.OLLAMA_URL || 'http://127.0.0.1:11434'}/api/tags`, { signal: AbortSignal.timeout(2000) });
+      ollamaOk = r.ok;
+    } catch { /* offline */ }
+
     res.json({
       vault_dir:     VAULT_DIR,
       node_count:    nodeCount,
@@ -326,6 +338,11 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), (req, 
       derived_files: derivedFiles,
       last_compile:  lastCompile,
       instructions_exists: fs.existsSync(INSTRUCTIONS),
+      embeddings: {
+        vault_nodes:    vaultEmbedCount,
+        session_chunks: sessionEmbedCount,
+      },
+      ollama: { ok: ollamaOk, url: process.env.OLLAMA_URL || 'http://127.0.0.1:11434' },
     });
   } catch (err) {
     serverError(res, err);
@@ -811,8 +828,6 @@ router.get('/api', (req, res) => {
 
 // ─── Research Queue ───────────────────────────────────────────────────────────
 // Thin REST wrappers over src/core/research-queue.mjs
-
-const RESEARCH_QUEUE_PATH = path.join(AGENT_DIR, 'research-queue.jsonl');
 
 router.get('/api/research', requireAuth, requireScope('memory:read'), (req, res) => {
   try {

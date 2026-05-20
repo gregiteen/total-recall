@@ -1581,12 +1581,16 @@
       var toggle = card && card.querySelector('.ide-mcp-toggle');
       return !toggle || !toggle.classList.contains('mcp-off');
     });
-    var installRelay = document.getElementById('install-relay').checked;
+    var installRelay    = document.getElementById('install-relay').checked;
+    var installObsidian = document.getElementById('install-obsidian') && document.getElementById('install-obsidian').checked;
 
     var resultsCard = document.getElementById('connect-results');
     var logEl = document.getElementById('connect-log');
     resultsCard.style.display = '';
-    logEl.innerHTML = '<div class="connect-result-line info">Connecting ' + (selected.length || 'no') + ' tools' + (installRelay ? ' + relay' : '') + ' (' + mcpFor.length + ' with MCP)...</div>';
+    var extras = [];
+    if (installRelay) extras.push('relay');
+    if (installObsidian) extras.push('Obsidian sync');
+    logEl.innerHTML = '<div class="connect-result-line info">Connecting ' + (selected.length || 'no') + ' tools' + (extras.length ? ' + ' + extras.join(' + ') : '') + ' (' + mcpFor.length + ' with MCP)...</div>';
 
     document.getElementById('btn-connect-ides').disabled = true;
     document.getElementById('btn-connect-ides').textContent = 'Connecting...';
@@ -1594,7 +1598,7 @@
     fetch('/api/connect-ides', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ides: selected, mcpFor: mcpFor, installRelay: installRelay, brainUrl: W.apiUrl, token: W.pat })
+      body: JSON.stringify({ ides: selected, mcpFor: mcpFor, installRelay: installRelay, installObsidian: installObsidian, brainUrl: W.apiUrl, token: W.pat })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -1604,6 +1608,10 @@
         var icon = r.ok ? '✅' : (r.skipped ? '⚪' : '❌');
         logEl.innerHTML += '<div class="connect-result-line ' + cls + '">' + icon + ' ' + r.label + ': ' + r.message + '</div>';
       });
+      if (data.obsidianResult) {
+        var oc = data.obsidianResult.ok ? 'ok' : 'err';
+        logEl.innerHTML += '<div class="connect-result-line ' + oc + '">' + (data.obsidianResult.ok ? '✅' : '❌') + ' Obsidian: ' + data.obsidianResult.message + '</div>';
+      }
       if (data.relayResult) {
         var rc = data.relayResult.ok ? 'ok' : 'err';
         logEl.innerHTML += '<div class="connect-result-line ' + rc + '">' + (data.relayResult.ok ? '✅' : '❌') + ' Relay: ' + data.relayResult.message + '</div>';

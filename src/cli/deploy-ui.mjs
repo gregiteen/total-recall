@@ -275,12 +275,12 @@ export function startDeployUI(port = 3001) {
         req.on('end', async () => {
           let opts;
           try { opts = JSON.parse(body || '{}'); } catch { opts = {}; }
-          const { ides = [], mcpFor, installRelay = true, brainUrl, token } = opts;
+          const { ides = [], mcpFor, installRelay = true, installObsidian = false, brainUrl, token } = opts;
           // mcpFor defaults to all selected IDEs (backward compat)
           const mcpEnabled = new Set(Array.isArray(mcpFor) ? mcpFor : ides);
           const results = [];
 
-          // IDE-to-connect-client mapping
+          // IDE-to-connect-client mapping (coding agents only — Obsidian handled separately)
           const IDE_CLIENTS = {
             'claude-code': { client: 'claude-code', label: 'Claude Code' },
             'codex':       { client: 'codex',       label: 'Codex' },
@@ -291,7 +291,6 @@ export function startDeployUI(port = 3001) {
             'pi':          { client: 'pi',           label: 'Pi Coding Agent' },
             'hermes':      { client: 'hermes',       label: 'Hermes Agent' },
             'openclaw':    { client: 'openclaw',     label: 'OpenClaw' },
-            'obsidian':    { client: 'obsidian',     label: 'Obsidian' },
           };
 
           const { spawnSync: sp } = await import('node:child_process');
@@ -344,8 +343,22 @@ export function startDeployUI(port = 3001) {
             }
           }
 
+          // Connect Obsidian vault sync (Backup & Sync section, not an MCP IDE)
+          let obsidianResult = null;
+          if (installObsidian) {
+            try {
+              const obsArgs = [scriptPath, 'connect', 'obsidian'];
+              if (brainUrl) obsArgs.push('--brain', brainUrl);
+              obsArgs.push('--no-mcp', '--force');
+              const or = sp(nodeBin, obsArgs, { encoding: 'utf8', timeout: 30000 });
+              obsidianResult = { ok: or.status === 0, message: or.status === 0 ? 'Vault sync configured' : (or.stderr || or.stdout || '').trim().split('\n').pop() };
+            } catch (e) {
+              obsidianResult = { ok: false, message: e.message };
+            }
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, results, relayResult }));
+          res.end(JSON.stringify({ ok: true, results, relayResult, obsidianResult }));
         });
         return;
       }
