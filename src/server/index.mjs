@@ -355,7 +355,12 @@ app.get('/chat', (req, res) => {
 <div class="token-prompt" id="token-prompt" style="display:none">
   <div class="token-card">
     <h2>🔑 Access Token</h2>
-    <p>Enter your Total Recall Personal Access Token to start chatting.</p>
+    <p>Enter your Personal Access Token to start chatting.</p>
+    <p style="font-size:12px;color:#8b949e;margin-top:6px">
+      Don't have one? Run this in your terminal:<br>
+      <code style="display:block;margin-top:6px;padding:6px 10px;background:#010409;border-radius:4px;font-size:11px;color:#58a6ff">npx total-recall generate-pat</code>
+      Then paste the token starting with <code>tr-</code> below.
+    </p>
     <input type="password" id="token-input" placeholder="tr-…" autocomplete="off">
     <button onclick="saveToken()">Connect →</button>
   </div>

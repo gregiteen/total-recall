@@ -377,11 +377,18 @@ export default async function deploy(args) {
       const wizardOpts = await waitForInstallOptions();
 
       // Merge wizard config into opts
-      if (wizardOpts.domain)         opts.domain         = wizardOpts.domain;
-      if (wizardOpts.duckdnsToken)   opts.duckdnsToken   = wizardOpts.duckdnsToken;
-      if (wizardOpts.cloudflareToken) opts.cloudflareToken = wizardOpts.cloudflareToken;
-      if (wizardOpts.httpsMethod === 'cloudflare-quick') opts.cloudflareQuick   = true;
-      if (wizardOpts.httpsMethod === 'local')            opts.allowInsecureHttp = true;
+      if (wizardOpts.domain)          opts.domain          = wizardOpts.domain;
+      if (wizardOpts.duckdnsToken)    opts.duckdnsToken    = wizardOpts.duckdnsToken;
+      // Cloudflare: both Zero Trust tunnel token and quick-tunnel flag
+      if (wizardOpts.httpsMethod === 'cloudflare-tunnel') {
+        opts.cloudflareToken = wizardOpts.cloudflareToken;
+      } else if (wizardOpts.httpsMethod === 'cloudflare-quick') {
+        opts.cloudflareQuick = true;
+      } else if (wizardOpts.cloudflareToken) {
+        // Token present even without explicit method — treat as Zero Trust
+        opts.cloudflareToken = wizardOpts.cloudflareToken;
+      }
+      if (wizardOpts.httpsMethod === 'local') opts.allowInsecureHttp = true;
       if (wizardOpts.skipSearxng) opts.skipSearxng = true;
       if (wizardOpts.skipCaddy)   opts.skipCaddy   = true;
       if (wizardOpts.skipCompile) opts.skipCompile  = true;
@@ -454,24 +461,9 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
     }
   }
 
-  // ── Step 4: Pull Kokoro voice model ──
-  logStep('4/12', 'Pulling Kokoro-82M voice model');
-  if (opts.skipModels) {
-    logSkip('Skipped (--skip-models)');
-  } else if (!commandExists('ollama')) {
-    logWarn('Ollama not found — cannot pull models');
-  } else {
-    if (opts.dryRun) {
-      log('  Would run: ollama pull kokoro:82m');
-    } else {
-      try {
-        run('ollama pull kokoro:82m', { timeout: 600_000, ignoreErrors: true }); // 10min timeout
-        logOk('Kokoro-82M model pulled (or skipped if unavailable)');
-      } catch (e) {
-        logWarn('Failed to pull Kokoro-82M model (may not be in registry)');
-      }
-    }
-  }
+  // ── Step 4: Kokoro voice model (skipped by default — model name unverified on Ollama Hub) ──
+  logStep('4/12', 'Kokoro-82M voice model');
+  logSkip('Skipped by default (voice not yet in scope). To enable: ollama pull hf.co/hexgrad/Kokoro-82M and wire TTS in src/server/)');
 
   // ── Step 4.5: Install SearXNG (native Python, no Docker required) ──
   logStep('5/12', 'Deploying SearXNG');

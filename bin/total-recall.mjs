@@ -39,6 +39,7 @@ const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 const COMMANDS = {
   init:     'init.mjs',
   setup:    'setup.mjs',
+  start:    'start.mjs',
   deploy:   'deploy.mjs',
   backup:   'backup.mjs',
   dream:    'dream.mjs',
@@ -70,7 +71,8 @@ function printHelp() {
   Commands:
     init                Bootstrap Total Recall into an existing project repo
     setup               Interactive wizard: provider → API key → provision → connect IDEs
-    deploy              Provision a target machine (Ollama, models, VFS, Caddy, systemd, cron)
+    start [--port N]    Start the brain server in the foreground (alias for running the server directly)
+    deploy              Provision a target machine (Ollama, models, VFS, Cloudflare/Caddy, systemd, cron)
     dream               Manually trigger a dream cycle (Light → REM → Deep)
     lint                Validate all vault nodes against SSSS schema v2
     daemon <start|stop|status>  Manage the background daemon
