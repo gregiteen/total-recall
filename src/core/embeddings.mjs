@@ -201,3 +201,148 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
   fs.writeFileSync(indexPath(derivedDir), JSON.stringify(index), 'utf8');
   return { built, skipped, failed };
 }
+// ─── Session index ───────────────────────────────────────────────────────────
+// Separate index file for raw session content.
+// Keyed as "<sessionId>" or "<sessionId>:chunk-N" for long sessions.
+// File: .agent/memory-derived/session-embeddings.json
+
+const SESSION_INDEX_FILE = 'session-embeddings.json';
+
+function sessionIndexPath(derivedDir) {
+  return path.join(derivedDir, SESSION_INDEX_FILE);
+}
+
+export function loadSessionEmbeddingsIndex(derivedDir) {
+  const p = sessionIndexPath(derivedDir);
+  if (!fs.existsSync(p)) return {};
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+  catch { return {}; }
+}
+
+function saveSessionIndex(derivedDir, index) {
+  fs.mkdirSync(derivedDir, { recursive: true });
+  fs.writeFileSync(sessionIndexPath(derivedDir), JSON.stringify(index), 'utf8');
+}
+
+export function saveSessionEmbeddingToIndex(derivedDir, key, snippet, embedding, model = DEFAULT_EMBED_MODEL) {
+  const index = loadSessionEmbeddingsIndex(derivedDir);
+  index[key] = { embedding, snippet: snippet.slice(0, 300), model, generated_at: new Date().toISOString() };
+  saveSessionIndex(derivedDir, index);
+}
+
+export function removeSessionEmbeddingFromIndex(derivedDir, sessionId) {
+  const index = loadSessionEmbeddingsIndex(derivedDir);
+  // Remove all chunks for this session
+  for (const key of Object.keys(index)) {
+    if (key === sessionId || key.startsWith(`${sessionId}:chunk-`)) {
+      delete index[key];
+    }
+  }
+  saveSessionIndex(derivedDir, index);
+}
+
+/**
+ * Build a readable text representation of a session for embedding.
+ * Concatenates role:content pairs. Returns array of chunks (each ≤ 6000 chars).
+ *
+ * @param {object[]} messages  — array of { role, content } objects
+ * @returns {string[]}         — array of chunk strings
+ */
+export function sessionToEmbedChunks(messages) {
+  const CHUNK_SIZE = 6000;
+  const full = messages
+    .filter(m => m && m.content)
+    .map(m => `${(m.role || 'unknown').toUpperCase()}: ${String(m.content).slice(0, 2000)}`)
+    .join('\n');
+
+  if (full.length === 0) return [];
+
+  // Split into chunks of CHUNK_SIZE characters
+  const chunks = [];
+  for (let i = 0; i < full.length; i += CHUNK_SIZE) {
+    chunks.push(full.slice(i, i + CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+/**
+ * Parse a session JSONL file into an array of message objects.
+ *
+ * @param {string} filePath
+ * @returns {object[]}
+ */
+export function parseSessionFile(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8').trim();
+    return raw.split('\n').filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean);
+  } catch { return []; }
+}
+
+/**
+ * Embed all sessions in sessionsDir that are not yet in the index.
+ * Each session gets one vector per chunk (long sessions get multiple vectors).
+ * Skips already-indexed sessions unless force=true.
+ *
+ * @param {string} sessionsDir
+ * @param {string} derivedDir
+ * @param {{ force?: boolean, ollamaUrl?: string, model?: string, onProgress?: Function }} [opts]
+ * @returns {Promise<{ indexed: number, skipped: number, failed: number, chunks: number }>}
+ */
+export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts = {}) {
+  const {
+    force = false,
+    ollamaUrl = DEFAULT_OLLAMA_URL,
+    model = DEFAULT_EMBED_MODEL,
+    onProgress,
+  } = opts;
+
+  if (!fs.existsSync(sessionsDir)) return { indexed: 0, skipped: 0, failed: 0, chunks: 0 };
+
+  const files = fs.readdirSync(sessionsDir)
+    .filter(f => f.endsWith('.jsonl') || f.endsWith('.json'));
+
+  const existing = force ? {} : loadSessionEmbeddingsIndex(derivedDir);
+  const index = { ...existing };
+  let indexed = 0, skipped = 0, failed = 0, totalChunks = 0;
+
+  for (const file of files) {
+    const sessionId = file.replace(/\.(jsonl|json)$/, '');
+    // Skip if already indexed (check for the base key or chunk-0)
+    if (!force && (existing[sessionId] || existing[`${sessionId}:chunk-0`])) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const messages = parseSessionFile(path.join(sessionsDir, file));
+      const chunks = sessionToEmbedChunks(messages);
+      if (chunks.length === 0) { skipped++; continue; }
+
+      for (let i = 0; i < chunks.length; i++) {
+        const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
+        const embedding = await getEmbedding(chunks[i], ollamaUrl, model);
+        index[key] = {
+          embedding,
+          snippet: chunks[i].slice(0, 300),
+          model,
+          session_id: sessionId,
+          chunk: i,
+          total_chunks: chunks.length,
+          generated_at: new Date().toISOString(),
+        };
+        totalChunks++;
+      }
+
+      indexed++;
+      onProgress?.({ sessionId, indexed, skipped, failed, chunks: totalChunks });
+    } catch (err) {
+      failed++;
+      onProgress?.({ sessionId, error: err.message, indexed, skipped, failed });
+    }
+  }
+
+  saveSessionIndex(derivedDir, index);
+  return { indexed, skipped, failed, chunks: totalChunks };
+}

@@ -60,7 +60,7 @@ import {
   requireAuthOrLocal,
   loadSecurityConfig,
 } from './auth.mjs';
-import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex } from '../core/embeddings.mjs';
+import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex, parseSessionFile, sessionToEmbedChunks, saveSessionEmbeddingToIndex, removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 const VAULT_DIR    = path.join(AGENT_DIR, 'memory-vault');
@@ -265,33 +265,52 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
  */
 router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
-    const { query, top_k } = req.body || {};
+    const { query, top_k, include_sessions = true } = req.body || {};
     if (!query) return badRequest(res, 'query is required');
 
-    const index = loadEmbeddingsIndex(DERIVED_DIR);
-    const entries = Object.entries(index);
-    if (entries.length === 0) {
-      return res.status(503).json({
-        error: 'Embeddings index is empty. Run POST /api/vault/compile to build it, or write a node first.',
-      });
+    const k = Math.min(Number(top_k) || 5, 20);
+    const queryEmbedding = await getEmbedding(String(query));
+    const results = [];
+
+    // Search vault nodes
+    const vaultIndex = loadEmbeddingsIndex(DERIVED_DIR);
+    const vaultEntries = Object.entries(vaultIndex);
+    if (vaultEntries.length > 0) {
+      const list = nodes();
+      const scored = vaultEntries
+        .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding), type: 'vault' }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, k);
+      for (const { slug, score, type } of scored) {
+        const node = list.find(n => n.slug === slug);
+        if (node) results.push({ ...sanitizeNode(node), score: Math.round(score * 1000) / 1000, type });
+      }
     }
 
-    const queryEmbedding = await getEmbedding(String(query));
-    const k = Math.min(Number(top_k) || 5, 20);
+    // Search sessions
+    if (include_sessions) {
+      const sessionIndex = loadSessionEmbeddingsIndex(DERIVED_DIR);
+      const sessionEntries = Object.entries(sessionIndex);
+      if (sessionEntries.length > 0) {
+        const scored = sessionEntries
+          .map(([key, entry]) => ({ key, session_id: entry.session_id || key, score: cosineSimilarity(queryEmbedding, entry.embedding), snippet: entry.snippet, chunk: entry.chunk, total_chunks: entry.total_chunks }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, k);
+        for (const { key, session_id, score, snippet, chunk, total_chunks } of scored) {
+          results.push({ type: 'session', key, session_id, snippet, chunk, total_chunks, score: Math.round(score * 1000) / 1000 });
+        }
+      }
+    }
 
-    const scored = entries
-      .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, k);
+    // Merge and re-sort by score, return top k overall
+    results.sort((a, b) => b.score - a.score);
+    const topResults = results.slice(0, k);
 
-    const list = nodes();
-    const results = scored.map(({ slug, score }) => {
-      const node = list.find(n => n.slug === slug);
-      if (!node) return null;
-      return { ...sanitizeNode(node), score: Math.round(score * 1000) / 1000 };
-    }).filter(Boolean);
+    if (topResults.length === 0) {
+      return res.status(503).json({ error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.' });
+    }
 
-    res.json({ query, top_k: k, results });
+    res.json({ query, top_k: k, results: topResults });
   } catch (err) {
     if (err.message?.includes('Ollama')) {
       return res.status(503).json({ error: err.message });
@@ -312,7 +331,16 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
       derivedDir:      DERIVED_DIR,
       instructionsFile: INSTRUCTIONS,
     });
-    res.json({ compiled: true, elapsed_ms: Date.now() - start });
+    // Incrementally embed any new vault nodes and sessions
+    let vaultEmbed = null, sessionEmbed = null;
+    try {
+      const { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } = await import('../core/embeddings.mjs');
+      const { loadNodes } = await import('../core/vault.mjs');
+      const vaultNodes = loadNodes(VAULT_DIR);
+      vaultEmbed = await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
+      sessionEmbed = await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
+    } catch { /* Ollama may not be running — non-fatal */ }
+    res.json({ compiled: true, elapsed_ms: Date.now() - start, vault_embeddings: vaultEmbed, session_embeddings: sessionEmbed });
   } catch (err) {
     serverError(res, err);
   }
@@ -518,6 +546,20 @@ router.post('/api/sessions/ingest', requireAuth, requireScope('memory:write'), (
       timestamp:  new Date().toISOString(),
     }));
     fs.writeFileSync(filePath, lines.join('\n') + '\n', 'utf8');
+
+    // Best-effort: embed session immediately so it's searchable right away
+    setImmediate(async () => {
+      try {
+        const msgs = parseSessionFile(filePath);
+        const chunks = sessionToEmbedChunks(msgs);
+        for (let i = 0; i < chunks.length; i++) {
+          const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
+          const embedding = await getEmbedding(chunks[i]);
+          saveSessionEmbeddingToIndex(DERIVED_DIR, key, chunks[i], embedding);
+        }
+      } catch { /* Ollama may not be running — non-fatal */ }
+    });
+
     res.status(201).json({ ingested: true, id: sessionId, count: messages.length });
   } catch (err) {
     serverError(res, err);
@@ -577,6 +619,8 @@ router.delete('/api/sessions/:id', requireAuth, requireScope('memory:write'), (r
     const match = files.find(f => f.startsWith(req.params.id));
     if (!match) return notFound(res, `Session not found: ${req.params.id}`);
     fs.unlinkSync(path.join(sessionsDir(), match));
+    // Remove from session embeddings index too
+    try { removeSessionEmbeddingFromIndex(DERIVED_DIR, req.params.id); } catch { /* non-fatal */ }
     res.json({ deleted: true, id: req.params.id });
   } catch (err) {
     serverError(res, err);
