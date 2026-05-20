@@ -228,3 +228,9 @@ Scans `src/server/api.mjs` using regular expressions to dynamically extract all 
 ### 9.2 MCP Tool Scaffolding (`create-mcp-tools.mjs`)
 Consumes the `api-map.json` index to autonomously scaffold Model Context Protocol (MCP) tool registrations. This allows agents to seamlessly map any newly created REST endpoints directly to the MCP gateway in `src/server/mcp.mjs`.
 - **Usage:** `node .agent/skills/repo-expert/scripts/create-mcp-tools.mjs`
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+<!-- END INJECTED MEMORY -->

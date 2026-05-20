@@ -119,3 +119,12 @@ This usually drops the total faster than camping on one stale file view.
 For recurring fixes and subagent behavior, read:
 
 - [references/patterns.md](./references/patterns.md)
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+- **never-run-raw-tsc** (confidence 0.99, importance 4):
+  Never run raw tsc/eslint/npm-build — use the /code-quality skill scripts
+
+<!-- END INJECTED MEMORY -->

@@ -245,3 +245,9 @@ The enforcement script (`scripts/enforce-skill-optimization.mjs`) validates all 
 
 ### v1.0.0 (2026-05-10)
 - Initial version. Mixed universal skill format with Total Recall memory compiler internals, causing agent confusion.
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+<!-- END INJECTED MEMORY -->

@@ -34,3 +34,9 @@ Code Mode acts as the execution layer for the Kernel Tool Suite.
 
 ## 4. Progressive Validation
 If a script fails in Code Mode (e.g. throws an exception, exceeds 60s timeout, or breaches the 512MB RAM cap), the sandbox captures the stdout/stderr and feeds it back into the Gemma 4 kernel. The kernel then attempts to self-correct the logic up to the `[Retry: N]` bound defined in the `type: workflow` memory node.
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+<!-- END INJECTED MEMORY -->

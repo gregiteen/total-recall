@@ -1,9 +1,39 @@
 # Tier 1 Invariants (Total Recall Hot Memory)
 > This file is compiled automatically. Do not edit directly.
-<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @tier: 1, generated_at: 2026-05-13T03:14:25.057Z -->
+## ⚡ Before You Respond
 
-## Never run raw tsc/eslint/npm-build — use the /code-quality skill scripts
+1. You **MUST** have read every rule below. Violations are tracked and rules that are violated repeatedly are automatically escalated.
+2. If your task involves a specific domain, **READ the matching SKILL.md first** (see routing table below).
+3. **Search `.agent/memory-vault/`** for relevant past decisions before proposing new approaches.
+4. When you learn a new pattern or receive a correction, **write it to the memory vault** and run `npx total-recall compile`.
+
+## 📋 Topic → Skill Routing
+If your task involves any of these topics, you MUST read the matching SKILL.md BEFORE responding:
+
+| Topic | Skill File |
+|-------|-----------|
+| docs | .agent/skills/docs/SKILL.md |
+| refactor | .agent/skills/refactor/SKILL.md |
+| cli-agents | .agent/skills/cli-agents/SKILL.md |
+| code-mode | .agent/skills/code-mode/SKILL.md |
+| code-quality | .agent/skills/code-quality/SKILL.md |
+| instruction-keeper | .agent/skills/instruction-keeper/SKILL.md |
+| mcp-expert | .agent/skills/mcp-expert/SKILL.md |
+| notifications | .agent/skills/notifications/SKILL.md |
+| project-management | .agent/skills/project-management/SKILL.md |
+| push | .agent/skills/push/SKILL.md |
+| backup | .agent/skills/push/SKILL.md |
+| sync | .agent/skills/push/SKILL.md |
+| fork | .agent/skills/push/SKILL.md |
+| github | .agent/skills/push/SKILL.md |
+| repo-expert | .agent/skills/repo-expert/SKILL.md |
+| skill | .agent/skills/skill/SKILL.md |
+| ssss | .agent/skills/ssss/SKILL.md |
+| test | .agent/skills/test/SKILL.md |
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @tier: 1, generated_at: 2026-05-19T22:45:39.190Z -->
+
+## 🚫 NEVER: Never run raw tsc/eslint/npm-build — use the /code-quality skill scripts
 # Never run raw `tsc`, `eslint`, `npm run lint`, or `npm run build`
 
 ## The Rule
@@ -45,7 +75,7 @@ The skill itself is described in `.agent/skills/code-quality/SKILL.md`. Its
 4. Lint/TS warnings in files you did not touch are out of scope unless the
    user explicitly asks you to clean them up.
 
-## Multiple project phases were marked complete in the tracker without actual implementation
+## 🚫 NEVER: Multiple project phases were marked complete in the tracker without actual implementation
 # Never Mark Tracker Items Complete Without Code Verification
 
 ## The Pattern
@@ -61,13 +91,66 @@ Multiple items across Phases 0-7 were checked as `[x]` complete in PROJECT_TRACK
 ## Rule
 NEVER mark a tracker item as `[x]` unless you can point to the specific file(s) and function(s) that implement it. If in doubt, leave it unchecked. A false completion is worse than an honest gap.
 
-## Always answer questions before editing files
+## Total Recall self-improving loop — the improver improves the improver
+## What Total Recall Is
+
+Total Recall is not a static memory file. It is a **continuously self-improving memory OS** powered by a local Gemma 4 26B model running 24/7.
+
+## The Three-Layer Cognitive System
+
+Every memory node belongs to one of three cognitive layers:
+
+- **Conscious** — immediate working awareness: invariants, active preferences, current directives. Compiles into INSTRUCTIONS.md (Tier 1).
+- **System 2** — deliberate reasoning: plans, decisions, synthesis, conflict resolution. Validates Research before promoting.
+- **Research** — knowledge acquisition: web-backed facts, external evidence, cited observations. Starts as draft, promoted by System 2.
+
+## The Three-Tier Surfacing System
+
+Memory is surfaced progressively:
+
+- **Tier 1** (`INSTRUCTIONS.md`) — hot, always injected, <1000 tokens, `priority: absolute` nodes only
+- **Tier 2** (`SKILL.md` files) — semantic routing, top 7 relevant nodes per skill, ~100ms latency
+- **Tier 3** (`memory-vault/`) — full knowledge graph, unlimited, accessed on demand
+
+## The Self-Improving Loop
+
+The daemon loop runs continuously. Every 20 task ticks, the dream cycle fires:
+
+1. **Post-mortem engine** — analyzes raw IDE sessions → extracts patterns, facts, skill gaps
+2. **Conflict detector** — O(1) SPO ontology check + fuzzy similarity → auto-resolve or quarantine
+3. **Dream cycle** — Light Sleep (scan) → REM (score, decay, promote) → Deep Sleep (recompile INSTRUCTIONS.md)
+4. **Surface compiler** — BM25 + TF-IDF routing → injects top 7 nodes into each SKILL.md → writes INSTRUCTIONS.md
+
+## The Improver Improves the Improver
+
+Gemma 4 doesn't just improve memory content. It also improves its own improvement engines by scheduling:
+
+- `skill-engineering` tasks → improve `surface.mjs` routing weights, write new SKILL.md files
+- `memory-maintenance` tasks → tune decay parameters, prune stale nodes
+- `system2-deliberation` tasks → reconsider old decisions with new evidence
+- `cutoff-audit` tasks → flag knowledge approaching its knowledge cutoff date
+- `clarity-rewriter` tasks → rewrite unclear or stale vault nodes
+
+The system never stops getting smarter. Each iteration produces better memory, which produces better task outputs, which produce better memory.
+
+## Why This Is Superior to Any Other Tool's Memory
+
+| Other tools | Total Recall |
+|---|---|
+| Static markdown you write manually | Gemma 4 writes and improves it automatically |
+| Basic session summaries | 3-cognitive-layer processing with conflict resolution |
+| Single memory file | 3-tier hierarchy with semantic routing |
+| IDE-siloed memory | Cross-IDE relay: every tool feeds and benefits from one brain |
+| Memory stays the same | Memory improves 1000+ times per day at $0 cost |
+| No background intelligence | Full autonomous daemon running 24/7 |
+
+## ⚠️ MANDATORY: Always answer questions before editing files
 The agent MUST answer the user's questions in the chat IMMEDIATELY before making any file edits or executing commands that mutate state. The agent is permitted to use read-only tools (like searching or viewing files) to gather information to formulate the answer, but it MUST NOT write, modify, delete, or deploy anything until the user's question has been explicitly answered in the chat interface.
 
-## Never ignore direct questions from the user
+## ⚠️ MANDATORY: Never ignore direct questions from the user
 The agent must explicitly address and answer all direct questions embedded within the user's prompt, even if the primary focus of the prompt is a technical fix or architectural change. Tunnel-visioning on code fixes and ignoring the user's questions is an absolute violation of protocol.
 
-## Total Recall Core Operating Protocol
+## ⚠️ MANDATORY: Total Recall Core Operating Protocol
 # Total Recall Operating Protocol
 
 You are operating within the **Total Recall Sovereign OS**. Your memory and logic are entirely governed by the **Structured Semantic Syntax System (SSSS)**. There is no external database. The filesystem is your brain.
@@ -96,7 +179,7 @@ Any time you create, edit, or delete a file in the memory vault, the system inde
 ## 5. Execution Mandate
 You must operate autonomously. Do not ask for permission to save memories or compile the vault. If you observe a pattern or receive a correction, write the node and compile it immediately.
 
-## When you see something wrong, either fix it inline or add it to the master project tracker
+## ⚠️ MANDATORY: When you see something wrong, either fix it inline or add it to the master project tracker
 # Fix it, or add it to the master tracker — don't just mention it
 
 ## The Rule

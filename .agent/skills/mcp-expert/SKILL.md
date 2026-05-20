@@ -527,3 +527,9 @@ This skill includes an automated watcher (`scripts/watch.mjs`) that runs daily v
 
 ### v1.0.0 (2026-05-10)
 - Initial skill created by previous agent. Used incorrect frontmatter format (`type`/`slug`/`category` instead of `name`/`description`), preventing IDE discovery. Contained deprecated `server.tool()` API and incomplete transport guidance.
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+<!-- END INJECTED MEMORY -->

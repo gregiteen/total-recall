@@ -6,7 +6,10 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 # SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-19T19:02:22.609Z -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+- **self-improving-loop-architecture** (confidence 1, importance 5):
+  Total Recall self-improving loop — the improver improves the improver
 
 - **no-ultrachat-memory-path-drift** (confidence 1, importance 5):
   Do not store UltraChat memory in ad hoc memory/assistants paths
@@ -25,9 +28,6 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 
 - **ultrachat-memory-native-not-model-endpoint** (confidence 1, importance 5):
   UltraChat memory is native, not dependent on selecting Total Recall as the model
-
-- **no-local-ultrachat-restart-guidance** (confidence 1, importance 5):
-  Do not tell users to restart UltraChat as a local service
 
 <!-- END INJECTED MEMORY -->
 

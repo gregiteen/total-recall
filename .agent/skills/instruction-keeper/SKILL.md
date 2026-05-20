@@ -7,3 +7,9 @@ metadata:
 ---
 
 Follow the protocol defined in the local repository skill: [.agent/skills/instruction-keeper/SKILL.md](file:///Users/greg/Github/total-recall/.agent/skills/instruction-keeper/SKILL.md)
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-19T22:45:39.176Z -->
+
+<!-- END INJECTED MEMORY -->
