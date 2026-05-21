@@ -1,5 +1,5 @@
 import React from 'react'
-import { Task } from '../types'
+import type { Task } from '../types'
 
 interface TaskQueueTabProps {
   tasks: Task[]

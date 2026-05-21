@@ -478,19 +478,54 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
       });
     }
 
-    const researchItems = loadQueue().filter((i) => i.status === 'pending');
-    for (const item of researchItems) {
+    const researchItems = loadQueue()
+      .filter((i) => i.status === 'pending')
+      .sort((a, b) => new Date(a.updated_at || a.created_at || 0).getTime() - new Date(b.updated_at || b.created_at || 0).getTime());
+
+    for (let idx = 0; idx < researchItems.length; idx++) {
+      const item = researchItems[idx];
+      const dynamicPriority = 85 + (researchItems.length - idx);
+      const phase = item.research_phase || 'acquisition';
+
+      let category = 'proactive-research';
+      let slug = `research-acquisition-${item.id}`;
+      let reason = `Queued research project (Phase 1/5: Acquisition): ${item.topic}`;
+      let body = `Run knowledge acquisition cycle for queued topic: ${item.topic}.\nNotes: ${item.notes || 'None'}`;
+
+      if (phase === 'deliberation') {
+        category = 'system2-deliberation';
+        slug = `research-deliberation-${item.id}`;
+        reason = `Queued research project (Phase 2/5: Deliberation): ${item.topic}`;
+        body = `Run deep System 2 cognitive deliberation for topic: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
+      } else if (phase === 'improvement') {
+        category = 'memory-maintenance';
+        slug = `research-improvement-${item.id}`;
+        reason = `Queued research project (Phase 3/5: Improvement): ${item.topic}`;
+        body = `Run document improvement and formatting refinement for topic: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
+      } else if (phase === 'monitoring') {
+        category = 'proactive-research';
+        slug = `research-monitoring-${item.id}`;
+        reason = `Queued research project (Phase 4/5: Monitoring): ${item.topic}`;
+        body = `Identify reliable sources of ongoing information, news, feeds or release notes for: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
+      } else if (phase === 'expansion') {
+        category = 'exploration';
+        slug = `research-expansion-${item.id}`;
+        reason = `Queued research project (Phase 5/5: Expansion): ${item.topic}`;
+        body = `Discover adjacent research domains, brainstorm tangents, and auto-spawn follow-up tasks for: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
+      }
+
       queue.enqueue({
         type: 'task',
-        slug: `research-queue-${item.id}`,
-        priority: 85, // Enforced high priority
-        category: 'proactive-research',
+        slug,
+        priority: dynamicPriority,
+        category,
         target: item.topic,
         status: 'pending',
         created_by: 'research-queue',
-        reason: `Queued research project: ${item.topic}`,
-        body: `Run knowledge acquisition cycle for queued topic: ${item.topic}.\nNotes: ${item.notes || 'None'}`,
+        reason,
+        body,
         _research_id: item.id,
+        _research_phase: phase,
       });
     }
     if (researchItems.length > 0) {

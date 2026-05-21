@@ -14,7 +14,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+function getAgentDir() {
+  return process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+}
 
 function commandExists(cmd) {
   const r = spawnSync('which', [cmd], { stdio: 'pipe' });
@@ -93,6 +95,7 @@ function printHelp() {
 }
 
 async function pushGitBackup(remote) {
+  const AGENT_DIR = getAgentDir();
   if (!commandExists('git')) {
     console.error('  ❌ git not found — cannot push backup');
     process.exit(1);
@@ -160,6 +163,7 @@ async function pushGitBackup(remote) {
 }
 
 function obsidianBackup(vaultPath) {
+  const AGENT_DIR = getAgentDir();
   if (!commandExists('rsync')) {
     console.error('  ❌ rsync not found — install it or use --push-git instead');
     process.exit(1);
@@ -199,6 +203,7 @@ function obsidianBackup(vaultPath) {
 }
 
 export default async function backup(args) {
+  const AGENT_DIR = getAgentDir();
   const opts = parseArgs(args);
   if (opts.help) {
     printHelp();

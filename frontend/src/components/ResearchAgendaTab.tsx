@@ -1,5 +1,6 @@
 import React, { Fragment } from 'react'
 import { renderMarkdown, extractSources } from './MarkdownUtils'
+import type { MemoryNode } from '../types'
 
 export interface ResearchItem {
   id: string
@@ -8,6 +9,7 @@ export interface ResearchItem {
   priority: 'low' | 'medium' | 'high' | 'critical'
   notes: string | null
   node_slug?: string | null
+  research_phase?: string
   created_at: string
   updated_at: string
 }
@@ -27,7 +29,7 @@ interface ResearchAgendaTabProps {
   handleCreateResearch: (e: React.FormEvent) => void
   expandedResearchId: string | null
   handleToggleExpand: (item: ResearchItem) => void
-  loadedDiscoveries: Record<string, any>
+  loadedDiscoveries: Record<string, MemoryNode | null>
   loadingNodeSlugs: Record<string, boolean>
 }
 
@@ -99,7 +101,7 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
               Agenda Priority
               <select 
                 value={researchPriority} 
-                onChange={e => setResearchPriority(e.target.value as any)}
+                onChange={e => setResearchPriority(e.target.value as 'low' | 'medium' | 'high' | 'critical')}
                 style={{
                   padding: '8px 10px',
                   borderRadius: 8,
@@ -215,12 +217,12 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <span className={`badge ${
-                          item.status === 'done' ? 'badge-success' : 
+                          (item.node_slug && (item.status === 'pending' || item.status === 'in_progress')) || item.status === 'done' ? 'badge-success' : 
                           item.status === 'in_progress' ? 'badge-accent' :
                           item.status === 'failed' ? 'badge-error' :
                           'badge-warning'
                         }`} style={{ textTransform: 'capitalize', fontSize: 11 }}>
-                          {item.status.replace('_', ' ')}
+                          {item.node_slug && (item.status === 'pending' || item.status === 'in_progress') ? 'Researched' : item.status.replace('_', ' ')}
                         </span>
                       </td>
                       <td style={{ padding: '14px 16px', color: 'var(--text-tertiary)', fontSize: 12 }}>
@@ -237,41 +239,165 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                             padding: 20,
                             boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 20px rgba(0, 0, 0, 0.3)',
                           }}>
-                            {item.status === 'pending' && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--warning)', fontWeight: 600, fontSize: 14 }}>
-                                  <span>⏳</span> Queued for Ingestion
-                                </div>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
-                                  This research topic is enqueued in the Cognitive Scheduler. The background fact-seeker daemon will systematically synthesize findings and catalog discoveries when processing background gaps.
-                                </p>
-                              </div>
-                            )}
-                            
-                            {item.status === 'in_progress' && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', fontWeight: 600, fontSize: 14 }}>
-                                  <span className="pulse" style={{ background: 'var(--accent)' }} />
-                                  Synthesizing Deep Discoveries...
-                                </div>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
-                                  Fact-seeker agents are actively searching vector indexes, crawling target APIs, and structuring new domain schemas. Results will be verified by the System 2 consensus writer.
-                                </p>
-                              </div>
-                            )}
+                            <style dangerouslySetInnerHTML={{__html: `
+                              @keyframes pulse {
+                                0% { transform: scale(0.95); opacity: 0.5; }
+                                50% { transform: scale(1.05); opacity: 1; }
+                                100% { transform: scale(0.95); opacity: 0.5; }
+                              }
+                            `}} />
 
-                            {item.status === 'failed' && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
-                                  <span>⚠️</span> Ingestion Boundary Encountered
-                                </div>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
-                                  The research pipeline failed to produce high-confidence consensus conclusions or hit an instruction boundary. Check live cognitive console logs for execution specifics.
-                                </p>
+                            {/* Cognitive Stepper */}
+                            <div style={{ marginBottom: 20 }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, marginBottom: 12 }}>
+                                Cognitive Research Engine Progress
                               </div>
-                            )}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                                {[
+                                  {
+                                    title: 'Data Acquisition',
+                                    phase: 'acquisition',
+                                    icon: '🔍',
+                                    desc: 'Deep multi-source crawling & LLM synthesis'
+                                  },
+                                  {
+                                    title: 'Cognitive Deliberation',
+                                    phase: 'deliberation',
+                                    icon: '🧠',
+                                    desc: 'System 2 context evaluation & insights'
+                                  },
+                                  {
+                                    title: 'Clarity Auditing',
+                                    phase: 'improvement',
+                                    icon: '✨',
+                                    desc: 'Markdown polish & premium layout restructuring'
+                                  },
+                                  {
+                                    title: 'Source Monitoring',
+                                    phase: 'monitoring',
+                                    icon: '📡',
+                                    desc: 'Ongoing newsletter, RSS & release tracking'
+                                  },
+                                  {
+                                    title: 'Tangent Spawning',
+                                    phase: 'expansion',
+                                    icon: '🚀',
+                                    desc: 'Autonomously brainstorming & enqueuing tangents'
+                                  }
+                                ].map((step, idx) => {
+                                  const phases = ['acquisition', 'deliberation', 'improvement', 'monitoring', 'expansion']
+                                  const activePhase = item.research_phase || 'acquisition'
+                                  const activeIndex = phases.indexOf(activePhase)
 
-                            {item.status === 'done' && (
+                                  let state: 'completed' | 'active' | 'waiting' | 'failed' | 'upcoming' = 'upcoming'
+                                  if (idx < activeIndex) {
+                                    state = 'completed'
+                                  } else if (idx === activeIndex) {
+                                    if (item.status === 'in_progress') state = 'active'
+                                    else if (item.status === 'pending') state = 'waiting'
+                                    else if (item.status === 'failed') state = 'failed'
+                                    else state = 'waiting'
+                                  }
+
+                                  let borderColor = 'rgba(255, 255, 255, 0.04)'
+                                  let bgColor = 'rgba(255, 255, 255, 0.01)'
+                                  let titleColor = 'var(--text-secondary)'
+                                  let badgeBg = 'rgba(255, 255, 255, 0.02)'
+                                  let statusText = 'Locked'
+                                  let statusColor = 'var(--text-tertiary)'
+                                  let isPulse = false
+
+                                  if (state === 'completed') {
+                                    borderColor = 'rgba(46, 204, 113, 0.25)'
+                                    bgColor = 'rgba(46, 204, 113, 0.02)'
+                                    titleColor = '#fff'
+                                    badgeBg = 'rgba(46, 204, 113, 0.12)'
+                                    statusText = '✓ Completed'
+                                    statusColor = '#2ecc71'
+                                  } else if (state === 'active') {
+                                    borderColor = 'rgba(108, 92, 231, 0.45)'
+                                    bgColor = 'rgba(108, 92, 231, 0.05)'
+                                    titleColor = '#fff'
+                                    badgeBg = 'rgba(108, 92, 231, 0.18)'
+                                    statusText = '⚡ Running'
+                                    statusColor = 'var(--accent)'
+                                    isPulse = true
+                                  } else if (state === 'waiting') {
+                                    borderColor = 'rgba(241, 196, 15, 0.25)'
+                                    bgColor = 'rgba(241, 196, 15, 0.02)'
+                                    titleColor = 'var(--text-primary)'
+                                    badgeBg = 'rgba(241, 196, 15, 0.1)'
+                                    statusText = '⏳ Queued'
+                                    statusColor = '#f1c40f'
+                                  } else if (state === 'failed') {
+                                    borderColor = 'rgba(231, 76, 60, 0.25)'
+                                    bgColor = 'rgba(231, 76, 60, 0.02)'
+                                    titleColor = 'var(--text-primary)'
+                                    badgeBg = 'rgba(231, 76, 60, 0.1)'
+                                    statusText = '⚠️ Failed'
+                                    statusColor = '#e74c3c'
+                                  }
+
+                                  return (
+                                    <div key={idx} style={{
+                                      border: `1px solid ${borderColor}`,
+                                      background: bgColor,
+                                      borderRadius: 10,
+                                      padding: 12,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 6,
+                                      transition: 'all 0.3s ease',
+                                      position: 'relative'
+                                    }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          width: 24,
+                                          height: 24,
+                                          borderRadius: '50%',
+                                          background: badgeBg,
+                                          fontSize: 12
+                                        }}>
+                                          {step.icon}
+                                        </span>
+                                        <span style={{
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          color: statusColor,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 4
+                                        }}>
+                                          {isPulse && (
+                                            <span style={{
+                                              width: 6,
+                                              height: 6,
+                                              borderRadius: '50%',
+                                              background: 'var(--accent)',
+                                              animation: 'pulse 1.5s infinite ease-in-out'
+                                            }} />
+                                          )}
+                                          {statusText}
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: 12, fontWeight: 600, color: titleColor }}>
+                                        {idx + 1}. {step.title}
+                                      </div>
+                                      <div style={{ fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.3 }}>
+                                        {step.desc}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            <hr style={{ border: 'none', borderTop: '1px solid rgba(255, 255, 255, 0.06)', margin: '20px 0' }} />
+
+                            {item.node_slug ? (
                               <>
                                 {isNodeLoading ? (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)' }}>
@@ -282,6 +408,40 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                                   </div>
                                 ) : node ? (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                    {item.status === 'in_progress' && (
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        background: 'rgba(108, 92, 231, 0.1)',
+                                        border: '1px solid rgba(108, 92, 231, 0.2)',
+                                        borderRadius: 8,
+                                        padding: '8px 12px',
+                                        fontSize: 12,
+                                        color: 'var(--accent)',
+                                        marginBottom: 4
+                                      }}>
+                                        <span className="pulse" style={{ background: 'var(--accent)', width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }} />
+                                        <span>Fact-seeker agents are currently updating this topic in the background. Previous discoveries are displayed below.</span>
+                                      </div>
+                                    )}
+                                    {item.status === 'pending' && (
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        background: 'rgba(241, 196, 15, 0.1)',
+                                        border: '1px solid rgba(241, 196, 15, 0.2)',
+                                        borderRadius: 8,
+                                        padding: '8px 12px',
+                                        fontSize: 12,
+                                        color: 'var(--warning)',
+                                        marginBottom: 4
+                                      }}>
+                                        <span>⏳</span>
+                                        <span>Scheduled for automatic refresh. Previous discoveries are displayed below.</span>
+                                      </div>
+                                    )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, borderBottom: '1px solid rgba(255, 255, 255, 0.06)', paddingBottom: 12 }}>
                                       <div>
                                         <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#fff' }}>{node.title}</h4>
@@ -366,6 +526,42 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                                 ) : (
                                   <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
                                     No memory synthesis node found for slug: <code>{item.node_slug}</code>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {item.status === 'pending' && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--warning)', fontWeight: 600, fontSize: 14 }}>
+                                      <span>⏳</span> Queued for Ingestion
+                                    </div>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
+                                      This research topic is enqueued in the Cognitive Scheduler. The background fact-seeker daemon will systematically synthesize findings and catalog discoveries when processing background gaps.
+                                    </p>
+                                  </div>
+                                )}
+                                
+                                {item.status === 'in_progress' && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', fontWeight: 600, fontSize: 14 }}>
+                                      <span className="pulse" style={{ background: 'var(--accent)' }} />
+                                      Synthesizing Deep Discoveries...
+                                    </div>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
+                                      Fact-seeker agents are actively searching vector indexes, crawling target APIs, and structuring new domain schemas. Results will be verified by the System 2 consensus writer.
+                                    </p>
+                                  </div>
+                                )}
+
+                                {item.status === 'failed' && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--error)', fontWeight: 600, fontSize: 14 }}>
+                                      <span>⚠️</span> Ingestion Boundary Encountered
+                                    </div>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>
+                                      The research pipeline failed to produce high-confidence consensus conclusions or hit an instruction boundary. Check live cognitive console logs for execution specifics.
+                                    </p>
                                   </div>
                                 )}
                               </>

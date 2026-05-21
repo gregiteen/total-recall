@@ -8,7 +8,7 @@ import {
   triggerRecompile,
   readMemory
 } from '../api'
-import type { Task } from '../types'
+import type { Task, MemoryNode } from '../types'
 import TaskQueueTab from '../components/TaskQueueTab'
 import ResearchAgendaTab from '../components/ResearchAgendaTab'
 import type { ResearchItem } from '../components/ResearchAgendaTab'
@@ -28,7 +28,7 @@ export default function TasksPage() {
 
   // Expanded research and lazy-loaded nodes
   const [expandedResearchId, setExpandedResearchId] = useState<string | null>(null)
-  const [loadedDiscoveries, setLoadedDiscoveries] = useState<Record<string, any>>({})
+  const [loadedDiscoveries, setLoadedDiscoveries] = useState<Record<string, MemoryNode | null>>({})
   const [loadingNodeSlugs, setLoadingNodeSlugs] = useState<Record<string, boolean>>({})
 
   const handleToggleExpand = async (item: ResearchItem) => {

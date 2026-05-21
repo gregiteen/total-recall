@@ -15,6 +15,7 @@ export interface MemoryNode {
   category: string
   status?: string
   importance?: number
+  confidence?: number
   modality?: string
   tags?: string[]
   body?: string

@@ -98,13 +98,7 @@ function hasSystemd() {
   if (detectPlatform() !== 'linux') return false;
   if (!commandExists('systemctl')) return false;
   try {
-    const res = spawnSync('systemctl', ['is-system-running'], { timeout: 1000 });
-    const err = res.stderr?.toString() || '';
-    const out = res.stdout?.toString() || '';
-    if (err.includes('Failed to connect to bus') || err.includes('not been booted with systemd') || out.includes('Failed to connect to bus')) {
-      return false;
-    }
-    return true;
+    return fs.existsSync('/run/systemd/system');
   } catch {
     return false;
   }
