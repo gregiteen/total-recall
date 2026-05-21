@@ -6,7 +6,10 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 # SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
+<!-- @route: tfidf, generated_at: 2026-05-21T22:41:36.409Z -->
+
+- **inviolable-ide-instruction-16c6f427** (confidence 1, importance 5):
+  Inviolable IDE Instruction: 5. **CHECK INTERRUPTS FIRST:** Read `/root/.agent/
 
 <!-- END INJECTED MEMORY -->
 

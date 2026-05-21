@@ -237,6 +237,12 @@ To avoid digging through source code or executing blind searches, use these auth
 ---
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
+<!-- @route: tfidf, generated_at: 2026-05-21T22:41:36.409Z -->
+
+- **inviolable-ide-instruction-16c6f427** (confidence 1, importance 5):
+  Inviolable IDE Instruction: 5. **CHECK INTERRUPTS FIRST:** Read `/root/.agent/
+
+- **auto-pull-self-healing-deployment** (confidence 1, importance 5):
+  Use auto-pull self-healing cron script on cloud VPS in place of GitHub Actions
 
 <!-- END INJECTED MEMORY -->

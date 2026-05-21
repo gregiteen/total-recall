@@ -338,6 +338,6 @@ console.log(`Found ${results.total} matching research tasks.`);
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
+<!-- @route: tfidf, generated_at: 2026-05-21T22:41:36.409Z -->
 
 <!-- END INJECTED MEMORY -->

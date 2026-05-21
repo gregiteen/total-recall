@@ -78,3 +78,9 @@ Because the Cloudflare quick tunnel is dynamically restarted, it generates a fre
 *   **Stale Daemon PID / Circuit Breaker alert**
     *   *Cause*: Daemon was manually started without updating `daemon.pid`.
     *   *Fix*: Use `node bin/total-recall.mjs daemon start` or make sure to let the CLI spawn it.
+
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-21T22:41:36.409Z -->
+
+<!-- END INJECTED MEMORY -->

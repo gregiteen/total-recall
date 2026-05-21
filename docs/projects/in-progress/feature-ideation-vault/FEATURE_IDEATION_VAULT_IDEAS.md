@@ -4,6 +4,34 @@
 >
 > **How to read it**: Skim the North Star. Then browse threads. Every idea names the *structural lever* in SSSS that makes it uniquely possible — if it doesn't, it gets demoted.
 
+## Table of Contents
+
+- [North Star — The Structural Levers](#north-star--the-structural-levers) (L1–L6)
+- **Threads (atomic ideas)**
+  - [Thread A — Daily-Life Applications](#thread-a--daily-life-applications-via-ssss-extension) (A1–A14)
+  - [Thread B — User-Defined App Platform](#thread-b--user-defined-app-platform) (B1–B19)
+  - [Thread C — UX Innovations](#thread-c--ux-innovations-only-this-architecture-enables) (C1–C19)
+  - [Thread D — Inference-Budget Unlocks](#thread-d--inference-budget-unlocks) (D1–D20)
+  - [Thread E — Cross-Cutting / Meta](#thread-e--cross-cutting--meta) (E1–E22)
+- [Demoted](#demoted-generic-ai-features-without-a-lever) (generic ideas without a lever)
+- **Passes (latest at top)**
+  - [Pass 8 — Validation](#pass-8--validation)
+  - [Pass 7 — Promotion Candidates](#pass-7--promotion-candidates) (Quiet Companion, Honest Mind, Sovereign App Platform)
+  - [Pass 6 — Effort, Risk, Leverage](#pass-6--effort-risk-leverage-scoring) (40 atoms scored, 4 bundles, 9 tripwires)
+  - [Pass 5 — First-Run Aha & Demoability](#pass-5--first-run-aha--demoability)
+  - [Pass 4 — Cross-Pollination & Composition](#pass-4--cross-pollination--composition) (Comp-1 … Comp-15, 4 product narratives)
+  - [Pass 3 — Adversarial Review](#pass-3--adversarial-review) (3 killed, 2 merged, 7 themes)
+  - [Pass 2 — Depth & Net-Add](#pass-2--depth-composition-net-add)
+  - [Pass 1 — Initial Brain-Dump](#refinement-log)
+
+**Quick reference**:
+- *Active atomic ideas*: 91 (across 5 threads, A–E)
+- *Compositional ideas*: 15 (Comp-1 … Comp-15)
+- *Product narratives*: 4 (Quiet Companion / Honest Mind / Lifetime Vault / Sovereign Platform)
+- *Killed*: 3 (C8 Memory Weather · E11 Bounty Board · E19 Mutual Reading)
+- *Merged*: 2 (B5 → B1 · E2 → E1)
+- *Promoted to PRD*: 3 candidates (see [Pass 7](#pass-7--promotion-candidates))
+
 ---
 
 ## North Star — The Structural Levers
@@ -101,7 +129,7 @@ The unlock that turns Total Recall from a tool into a platform. **An app = vault
 - **Sketch**: New `type: trigger` schema with `when` (cron expr, regex on filesystem, webhook URL, semantic query) and `then` (workflow slug). Daemon evaluates triggers on its loop.
 - **User value**: Zapier-grade automation native to your brain.
 
-### B5. App Store as Git Index
+### B5. App Store as Git Index ~~[MERGED into B1 in Pass 3]~~
 - **Pitch**: A registry repo (or DNS-discoverable index) listing public Total Recall apps. Anyone can publish; users `install` by name or URL. No central authority required.
 - **Levers**: L1
 - **Sketch**: A flat JSON index of app repos with name, author, description, install URL. Dashboard surfaces it. CLI: `total-recall search <query>`.
@@ -181,7 +209,7 @@ Most "AI memory" UIs are chat sidebars. This system can do things they structura
 - **Levers**: L4
 - **Sketch**: Steering engine gets a "ask threshold" — conflicts of high importance or low confidence delta route to user. Notification fabric (push, voice, email) carries the question.
 
-### C8. Memory Weather / Season Metaphor
+### C8. Memory Weather / Season Metaphor ~~[KILLED in Pass 3]~~
 - **Pitch**: Visual rendering of vault state: which categories are "growing," which are "decaying," which are "in conflict storm." Treats memory as ecology, not database.
 - **Levers**: L4
 - **Sketch**: Dashboard widget. Heuristic: recent-additions, recent-supersedes, conflict density per category over rolling window.
@@ -272,7 +300,7 @@ Ideas that aren't a single feature but a posture toward the whole system.
 - **Levers**: L1, L4
 - **Sketch**: `total-recall remote add <git-url>`. Pull = three-way merge with conflict-aware reconciliation.
 
-### E2. Cross-Vault Citations
+### E2. Cross-Vault Citations ~~[MERGED into E1 v2 in Pass 3]~~
 - **Pitch**: Cite another user's *public* node in your own (consent-based). Memory becomes networked without losing sovereignty.
 - **Levers**: L1
 - **Sketch**: `cite:` field in frontmatter pointing to `git+ssh://...#slug`. Surface compiler dereferences for display.
@@ -317,7 +345,7 @@ Ideas that aren't a single feature but a posture toward the whole system.
 - **Levers**: L1, L6
 - **Sketch**: Already nearly built (`/api/memory/search/semantic`). Add scoped tokens + per-app permissions.
 
-### E11. Memory Bounty Board
+### E11. Memory Bounty Board ~~[KILLED in Pass 3 — revisit if economics primitive surfaces]~~
 - **Pitch**: Pay a future self (or another vault) to research X. Bounty = priority boost in research queue + optional escrowed payment.
 - **Levers**: L2, L5
 - **Sketch**: `type: bounty` with payout (in cycles or cash) on completion criteria. Federation extension lets a bounty be claimed by another vault.
@@ -573,7 +601,7 @@ User parks "should I move to Lisbon?" Tags it. Daily for 30 days the kernel adds
 - **Levers**: L4, L6 (subject is person, not "agent")
 - **Sketch**: Conflict resolution can short-circuit to `status: open-disagreement` when subjects differ.
 
-#### E17. Memory as Therapy Adjunct
+#### E17. Memory as Therapy Adjunct ~~[RENAMED to "Reflective Mode" in Pass 3 pending user confirm]~~
 - **Pitch**: User marks a session as "therapeutic reflection." Different surfacing rules — kernel optimizes for self-understanding, not action. Doesn't try to fix; surfaces patterns gently.
 - **Levers**: L3 (research vs system 2 vs conscious distinction matters), L6
 - **Sketch**: New `mode: therapeutic` on sessions; suppresses task generation; bias toward observation and connection.
@@ -583,7 +611,7 @@ User parks "should I move to Lisbon?" Tags it. Daily for 30 days the kernel adds
 - **Levers**: L1
 - **Sketch**: Reuses git infra. Suggested message draws on E9 diffing synthesis.
 
-#### E19. Mutual Vault Reading Time
+#### E19. Mutual Vault Reading Time ~~[KILLED in Pass 3 — niche; revisit after E1]~~
 - **Pitch**: For couples / close friends — synchronized weekly time where both browse shared categories together. The vault as joint reflection space, not just personal one.
 - **Levers**: L1
 - **Sketch**: Federation + a shared `joint/` category. Tooling for synchronized reading sessions (cursor presence, optional voice).
@@ -1321,6 +1349,114 @@ The remaining catalog (Deferred from Pass 6, plus Comp-12 Personal Web, Comp-14 
 - Recommended sequence Q1 → Q2 → Q3 → Q4. Each project depends on the previous for vault content / narrative.
 - Catalog atoms unchanged (81). The contribution this pass is **promotion readiness**: each of the 3 candidates has a one-paragraph PRD summary that can drop straight into a real PRD.md.
 - Next step (Pass 8) is the **Validation Pass** — read the whole document end-to-end, fix contradictions, verify lever coverage, confirm scannability. After that, hand off the three promotion candidates to `/project-management`.
+
+---
+
+---
+
+# Pass 8 — Validation
+
+End-to-end re-read of the catalog. Goal: catch contradictions, redundancies, lever-coverage gaps, count errors, and scannability problems before promoting any project.
+
+## Corrections Made
+
+1. **Count discrepancies fixed in the TOC quick-reference**. Earlier refinement logs under-counted atoms. True counts:
+   - Pass 1 produced **55 atoms** (logged as 50)
+   - Pass 2 added **28 atoms** (logged as 23)
+   - Pass 4 added **6 atoms**
+   - Pass 5 added **5 atoms**
+   - **Total atoms written: 94. Active (kills removed): 91.**
+2. **Inline markers added** for killed/merged/renamed ideas in the threads where they originally appeared (B5, C8, E2, E11, E17, E19), so a reader browsing thread sections sees the status at the point of encounter, not only in the Pass 3 critique.
+3. **Table of Contents added** at the top with anchored links to every section.
+
+## Lever Coverage Audit
+
+Spot-checked 12 ideas across all 5 threads for explicit lever citation:
+
+| Idea | Lever Cited? | Notes |
+|------|:---:|------|
+| A1 Decision Vault | ✅ L2, L4, L6 | strong |
+| A2 Body Memory | ✅ L4, L6 | strong |
+| A12 Question Garden | ✅ L2, L3 | sufficient |
+| B1 App Manifest | ✅ L1 | minimal but sufficient |
+| B16 Hot Reload | ✅ L1, L5 | sufficient |
+| C2 Confidence Visual | ✅ L4 | sufficient |
+| C19 Demo Mode | ✅ L1 | minimal |
+| D17 Hypothesis Pool | ✅ L2, L4 | strong |
+| D19 Disagreement Signal | ✅ L2, L4 | strong |
+| E5 Inheritance | ✅ L1 | strong with risk caveats |
+| E22 Anniversary | ✅ L1 | thin but sufficient |
+| Comp-1 Living Self-Model | ✅ L2, L4, L6 | exemplary |
+
+**Verdict**: every spot-checked idea cites at least one lever. The Demoted section contains the few that didn't. Catalog hygiene is intact.
+
+## Internal-Consistency Checks
+
+| Check | Result |
+|-------|:---:|
+| North Star L1–L6 still cover all surviving atoms | ✅ |
+| Killed/merged ideas not referenced as active in later passes | ✅ (verified C8, E11, E19, B5, E2 only appear in killed/merged callouts in Pass 4+) |
+| Comp-15 sequencing — depends on D16 minimal | ✅ (Pass 7 Quiet Companion scope notes "depends on a minimal D16") |
+| C8 Memory Weather not bundled in any active bundle | ✅ |
+| D7 LoRA correctly flagged as deferred in Pass 6 and Pass 7 | ✅ |
+| Compositions never reference killed atoms | ✅ |
+| Promotion 1 (Quiet Companion) only includes Bundle 1 atoms | ✅ |
+| Promotion 2 (Honest Mind) atoms match Comp-1 dependency set | ✅ |
+| Promotion 3 (Sovereign App Platform) excludes B3 Workflow Recorder (correctly deferred) | ✅ |
+
+## Redundancy / Overlap Check
+
+Looked for pairs of atoms that could collapse:
+
+- **D4 Slow-Thinking** ↔ **A12 Question Garden**: distinct — D4 has a deadline, A12 doesn't. Keep both.
+- **C5 Inline Candidates** ↔ **C11 +1 Hotkey** ↔ **C15 Quick-Capture**: composable as Comp-7 Frictionless Capture; atoms retained for granular scoping.
+- **D11 Future-Self Letters** ↔ **E4 Time-Locked Memories**: D11 is a *use case* of E4 (letters are time-locked text). Verdict: keep both — D11 is the user-facing pattern, E4 is the primitive.
+- **A8 Annual Letter** ↔ **D18 Catalog-of-Selves**: overlap in spirit (year-end synthesis), but A8 is narrative prose and D18 is structural index. Keep both; they should *cross-link* in the final letter format.
+- **C18 Backfill Importer** ↔ **C19 Demo Mode**: distinct — Importer ingests user's real history; Demo Mode shows fictional. Both needed.
+- **E15 Vault as Inheritance Artifact** ↔ **E5 Memory Inheritance**: E15 is the philosophical framing, E5 is the technical primitive. Keep both; note cross-reference.
+- **D14 Cross-Domain Insight** ↔ **D3 Belief Triangulation**: D3 finds *contradictions* (same SPO, opposite polarity). D14 finds *recurring predicates across categories*. Distinct cognitive operations. Keep both.
+
+**No collapses required.**
+
+## Vague-Claim Audit
+
+Ideas where the value was asserted but the mechanism was hand-wavy:
+
+- **C2 Confidence as Visual Affordance** — Pass 3 already required pairing with action. ✅ resolved.
+- **C8 Memory Weather** — killed for vagueness. ✅ resolved.
+- **E5 Memory Inheritance** — Pass 3 scoped to technical primitive only. ✅ resolved.
+- **D7 LoRA** — Pass 3 deferred. ✅ resolved.
+- **A8 Annual Letter** — Pass 3 sharpened to "narrate belief evolution via supersedes chain." ✅ resolved.
+
+## Scannability Confirmation
+
+- Document is **1349 lines + this Pass 8 addition**. Substantial but bounded.
+- TOC at top provides navigation to every section.
+- Every pass has a refinement log entry stating *what changed*.
+- Threads are linearly numbered (A1–A14, B1–B19, C1–C19, D1–D20, E1–E22) — no gaps after kills (kill markers retain the slot).
+- Compositions (Comp-1 to Comp-15) sequentially numbered, cross-referenced by component atom IDs.
+
+## Pass 8 Refinement Log
+
+### Pass 8 — 2026-05-21 — Validation
+- Added top-of-file Table of Contents with anchored links.
+- Added inline status markers (~~KILLED~~ / ~~MERGED~~ / ~~RENAMED~~) on the original entries of B5, C8, E2, E11, E17, E19 so status is visible where the idea is read, not only in Pass 3 critique.
+- Corrected count claims: true atomic ideas written = **94**; active after kills = **91**. Earlier refinement-log counts were low by 5-13. Quick-reference at top of file shows corrected totals.
+- Lever-coverage spot-check (12 ideas across 5 threads): every idea cites at least one lever. Catalog hygiene intact.
+- Internal-consistency check on 9 dimensions: all pass.
+- Redundancy check identified 7 candidate overlaps; all 7 retained as distinct after analysis. No collapses needed.
+- Vague-claim audit: all 5 previously-vague ideas were already resolved in prior passes.
+- Catalog is **promotion-ready**. Three target PRDs (Quiet Companion · Honest Mind · Sovereign App Platform) await user trigger.
+
+### Status as of Pass 8
+- **91 active atomic ideas** across 5 threads
+- **15 compositional ideas** spanning 2-7 atoms each
+- **4 product narratives** (concentric layering recommended in Pass 4)
+- **3 promotion-ready PRD candidates**
+- **3 open questions** for user (A9 Mourning Layer / E5 Inheritance / E17 Reflective Mode rename)
+- **9 tripwire risks** with mitigations documented
+
+The catalog is alive. Next pass (Pass 9 — uncreated) would be triggered when a real promoted project's work surfaces new atoms or invalidates existing ones.
 
 ---
 

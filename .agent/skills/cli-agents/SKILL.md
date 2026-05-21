@@ -423,6 +423,9 @@ Each CLI agent stores usage data natively. The monitor reads these for real stat
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
+<!-- @route: tfidf, generated_at: 2026-05-21T22:41:36.409Z -->
+
+- **auto-pull-self-healing-deployment** (confidence 1, importance 5):
+  Use auto-pull self-healing cron script on cloud VPS in place of GitHub Actions
 
 <!-- END INJECTED MEMORY -->

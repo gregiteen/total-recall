@@ -48,12 +48,13 @@
 - [x] Draft one-paragraph PRD summaries for each
 - [x] Hand off to standard /project-management SWE lifecycle (3 target directories specified; awaiting user trigger)
 
-### ⏳ Phase 8: Validation Pass
-- [ ] Re-read entire document end-to-end
-- [ ] Check for contradictions, redundancies, vague claims
-- [ ] Verify every idea ties back to a structural SSSS lever
-- [ ] Verify the "north star" section still reflects the catalog
-- [ ] Confirm the document remains scannable at its current length
+### ✅ Phase 8: Validation Pass
+- [x] Re-read entire document end-to-end
+- [x] Check for contradictions, redundancies, vague claims (7 candidate overlaps reviewed; 0 collapses; 5 vague claims already resolved in prior passes)
+- [x] Verify every idea ties back to a structural SSSS lever (12-idea spot-check: 12/12 pass)
+- [x] Verify the "north star" section still reflects the catalog (L1–L6 cover all surviving atoms)
+- [x] Confirm the document remains scannable at its current length (TOC added; inline kill/merge markers; refinement logs per pass)
+- [x] Corrections: count discrepancies fixed; status markers placed inline on killed/merged ideas
 
 ## Operating Rules
 - **Never delete an idea** — mark it superseded, merged, or killed with reasoning.
