@@ -44,7 +44,10 @@ vi.mock('./auth.mjs', () => ({
   loginHandler: (_req, res) => res.json({}),
   logoutHandler: (_req, res) => res.json({}),
   changePasswordHandler: (_req, res) => res.json({}),
-  apiRateLimiter: () => (req, _res, next) => next()
+  apiRateLimiter: () => (req, _res, next) => next(),
+  sandboxRateLimiter: () => (req, _res, next) => next(),
+  ingestRateLimiter: () => (req, _res, next) => next(),
+  requireSandboxEnabled: (_req, _res, next) => next()
 }));
 
 vi.mock('./tools.mjs', () => ({
@@ -114,7 +117,6 @@ describe('API Proxy', () => {
       expect(res.body.name).toBe('Total Recall');
       expect(res.body.version).toBe('3.0.0');
       expect(res.body.api).toContain('/v1');
-      expect(res.body.mcp).toContain('/mcp');
       expect(res.body.auth.type).toBe('bearer');
     });
 

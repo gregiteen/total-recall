@@ -93,7 +93,7 @@ export async function sendNotification(title, message, options = {}) {
             '-title',       displayTitle,
             '-message',     message,
             '-subtitle',    subtitle,
-            '-open',        `file://${NOTIFY_LOG}`,
+            '-open',        options.open || `file://${NOTIFY_LOG}`,
             '-sound',       sev.sound,
             '-group',       group,
             '-actions',     'View Log',

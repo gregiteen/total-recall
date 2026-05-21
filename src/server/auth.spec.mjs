@@ -110,4 +110,32 @@ describe('server auth request locality', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(response.statusCode).toBe(200);
   });
+
+  it('rejects sandbox run when sandbox is disabled by default', () => {
+    const request = req();
+    const response = res();
+    const next = vi.fn();
+
+    auth.requireSandboxEnabled(request, response, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(403);
+    expect(response.body.error).toContain('Sandbox is disabled');
+  });
+
+  it('allows sandbox run when sandbox.enabled is true in security.yml', () => {
+    fs.mkdirSync(path.join(tempAgentDir, 'config'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempAgentDir, 'config', 'security.yml'),
+      'sandbox:\n  enabled: true\n'
+    );
+
+    const request = req();
+    const response = res();
+    const next = vi.fn();
+
+    auth.requireSandboxEnabled(request, response, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
 });

@@ -18,7 +18,7 @@ import {
   smartFetch,
   checkSourceAvailability,
 } from './source-adapters.mjs';
-import { addToAgenda, runKnowledgeAcquisitionCycle } from './fact-seeker.mjs';
+import { addToAgenda, runKnowledgeAcquisitionCycle, getLocalizedDateTime } from './fact-seeker.mjs';
 
 /**
  * Total Recall Deep Research Engine
@@ -111,10 +111,14 @@ export async function handleProactiveResearch(task, context = {}) {
 // ─── Planning ───────────────────────────────────────────────────────────────────
 
 async function planResearchQueries(task, context) {
-  const planSystem = `You are a Research Planner. Decompose the research objective into 3 distinct, specific search queries.
+  const today = getLocalizedDateTime();
+  const cutoff = context.runtimeConfig?.training_cutoff || 'January 2025';
+
+  const planSystem = `You are a Research Planner. Today's date and time is ${today}. The model's training data cutoff is ${cutoff}.
+Decompose the research objective into 3 distinct, specific search queries. Prioritize queries targeting fresh, timely information that has arisen or been updated since the training cutoff.
 Output ONLY valid JSON: { "queries": ["query 1", "query 2", "query 3"], "source_hints": { "query 1": ["brave-search", "arxiv"] } }`;
 
-  const planPrompt = `Research Objective: ${task.target}\nDetails: ${task.body || ''}\nGenerate 3 targeted search queries.`;
+  const planPrompt = `Research Objective: ${task.target}\nDetails: ${task.body || ''}\nGenerate 3 targeted search queries targeting active, timely information post-${cutoff}.`;
 
   try {
     // Try frontier first
@@ -126,8 +130,8 @@ Output ONLY valid JSON: { "queries": ["query 1", "query 2", "query 3"], "source_
       const plan = JSON.parse(match[0]);
       if (Array.isArray(plan.queries) && plan.queries.length > 0) return plan.queries;
     }
-  } catch {
-    // Fall through to local LLM
+  } catch (err) {
+    logger.debug('research: callFrontier failed, falling back to local runtime', { err: err.message });
   }
 
   if (context.runtimeConfig) {
@@ -139,7 +143,9 @@ Output ONLY valid JSON: { "queries": ["query 1", "query 2", "query 3"], "source_
         const plan = JSON.parse(match[0]);
         if (Array.isArray(plan.queries) && plan.queries.length > 0) return plan.queries;
       }
-    } catch { /* fall through */ }
+    } catch (err) {
+      logger.debug('research: callLocalRuntime failed during plan generation', { err: err.message });
+    }
   }
 
   // Final fallback: use the target itself as the query
@@ -201,7 +207,9 @@ async function gatherForQuery(query, researchConfig, availability) {
         topWebResult.source = 'playwright'; // Upgrade source label
         topWebResult.type = 'webpage-rendered';
       }
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      logger.debug('research: smartFetch failed during topWebResult crawl', { err: err.message });
+    }
   }
 
   return results;
@@ -213,7 +221,41 @@ function writeDraftBatch(query, results, inboxDir, parentTopic) {
   const slug = `research-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
   const now = new Date().toISOString();
 
+  let latestPublished = null;
+  const citations = results.map(r => {
+    const published = r.published || now;
+    if (r.published) {
+      if (!latestPublished || new Date(r.published) > new Date(latestPublished)) {
+        latestPublished = r.published;
+      }
+    }
+    return {
+      source: r.source || 'web',
+      title: r.title || 'Untitled Source',
+      url: r.url || '',
+      published,
+      relevance: 1.0,
+      accessed: now
+    };
+  });
+  const temporalContext = latestPublished || now;
+
+  const formatFriendly = (isoString) => {
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    } catch {
+      return isoString;
+    }
+  };
+
+  const temporalFriendly = formatFriendly(temporalContext);
+  const temporalCallout = `> [!NOTE]\n> **Temporal Context**: Information published/current as of ${temporalFriendly}.`;
+
   const bodyLines = [
+    temporalCallout,
+    '',
     `Research query: "${query}"`,
     '',
     '## Sources',
@@ -254,6 +296,8 @@ function writeDraftBatch(query, results, inboxDir, parentTopic) {
     schema_version: 2,
     x_memory_layer: 'research',
     x_query: query,
+    x_temporal_context: temporalContext,
+    x_citations: citations,
     x_sources: results.map(r => ({ source: r.source, url: r.url, published: r.published })),
   };
 
@@ -265,14 +309,18 @@ function writeDraftBatch(query, results, inboxDir, parentTopic) {
 // ─── Synthesis ───────────────────────────────────────────────────────────────────
 
 async function synthesizeWithFrontier(task, draftPaths, frontierConfig) {
+  const today = getLocalizedDateTime();
+  const cutoff = frontierConfig?.training_cutoff || 'January 2025';
+
   const draftedFacts = draftPaths.map(draftPath => {
     const raw = fs.readFileSync(draftPath, 'utf8');
     const { data, content } = matter(raw);
     return `[Fact: ${data.slug}]\nSources: ${(data.x_sources || []).map(s => s.url).join(', ')}\n${content}`;
   }).join('\n\n');
 
-  const synthSystem = `You are a Deep Research Synthesizer. Synthesize the gathered facts into a comprehensive, cited Markdown report. Every claim MUST have an inline citation [Source: URL]. Identify knowledge gaps and contradictions explicitly.`;
-  const synthPrompt = `Research Objective: ${task.target}\n\nGathered Facts:\n${draftedFacts.slice(0, 12000)}\n\nProduce a final synthesized report.`;
+  const synthSystem = `You are a Deep Research Synthesizer. Today's date and time is ${today}. The model's training data cutoff is ${cutoff}.
+Synthesize the gathered facts into a comprehensive, cited Markdown report. Every claim MUST have an inline citation [Source: URL]. Prioritize fresh, timely information published after the cutoff. Identify knowledge gaps and contradictions explicitly.`;
+  const synthPrompt = `Research Objective: ${task.target}\n\nGathered Facts:\n${draftedFacts.slice(0, 12000)}\n\nProduce a final synthesized report prioritizing timely, verified information.`;
 
   return callFrontier(synthPrompt, synthSystem, frontierConfig);
 }
@@ -281,16 +329,21 @@ async function synthesizeLocally(task, results, runtimeConfig) {
   if (!runtimeConfig) return null;
   const { callLocalRuntime } = await import('./runtime.mjs');
 
+  const today = getLocalizedDateTime();
+  const cutoff = runtimeConfig?.training_cutoff || 'January 2025';
+
   const sourceSummary = results
     .map(r => `[${r.source}] ${r.title}: ${r.snippet?.slice(0, 300)}`)
     .join('\n');
 
-  const system = `Synthesize research results into a concise report. Cite sources inline [Source: URL].`;
+  const system = `You are a Deep Research Synthesizer. Today's date and time is ${today}. The model's training data cutoff is ${cutoff}.
+Synthesize research results into a concise report. Cite sources inline [Source: URL]. Prioritize fresh, timely information published after the cutoff.`;
   const prompt = `Topic: "${task.target}"\n\nResults:\n${sourceSummary.slice(0, 6000)}`;
 
   try {
     return callLocalRuntime(prompt, system, runtimeConfig);
-  } catch {
+  } catch (err) {
+    logger.debug('research: callLocalRuntime failed during synthesis', { err: err.message });
     return null;
   }
 }

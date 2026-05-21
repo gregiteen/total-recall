@@ -445,26 +445,6 @@
   .ide-card .ide-check { position: absolute; top: 10px; right: 10px; color: var(--green); font-size: 16px; display: none; }
   .ide-card.selected { border-color: var(--green); background: rgba(63,185,80,.06); }
   .ide-card.selected .ide-check { display: block; }
-  /* MCP toggle pill — only visible on selected cards */
-  .ide-mcp-toggle {
-    display: none;
-    position: absolute;
-    bottom: 8px;
-    left: 14px;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 4px;
-    background: rgba(88,166,255,.18);
-    color: var(--blue);
-    cursor: pointer;
-    user-select: none;
-    align-items: center;
-    gap: 4px;
-    transition: background .12s, color .12s;
-  }
-  .ide-card.selected .ide-mcp-toggle { display: flex; }
-  .ide-mcp-toggle.mcp-off { background: rgba(255,255,255,.06); color: var(--muted); }
 
   .connect-result-line { padding: 2px 0; }
   .connect-result-line.ok  { color: var(--green); }
@@ -1135,7 +1115,6 @@
               <div class="ide-desc">Anthropic's coding agent — CLAUDE.md + auto memory</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-codex">
             <input type="checkbox" value="codex" onchange="toggleIde(this)">
@@ -1145,7 +1124,6 @@
               <div class="ide-desc">OpenAI's CLI agent — AGENTS.md + memories</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-cursor">
             <input type="checkbox" value="cursor" onchange="toggleIde(this)">
@@ -1155,7 +1133,6 @@
               <div class="ide-desc">.cursor/rules/ — modular scoped rules</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-antigravity">
             <input type="checkbox" value="antigravity" onchange="toggleIde(this)">
@@ -1165,7 +1142,6 @@
               <div class="ide-desc">Google DeepMind — AGENTS.md + Knowledge Items</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-vscode">
             <input type="checkbox" value="vscode" onchange="toggleIde(this)">
@@ -1175,7 +1151,6 @@
               <div class="ide-desc">.github/copilot-instructions.md + native memory</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-gemini">
             <input type="checkbox" value="gemini" onchange="toggleIde(this)">
@@ -1185,7 +1160,6 @@
               <div class="ide-desc">GEMINI.md + session context</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-pi">
             <input type="checkbox" value="pi" onchange="toggleIde(this)">
@@ -1195,7 +1169,6 @@
               <div class="ide-desc">~/.pi/agent/AGENTS.md + JSONL session trees</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-hermes">
             <input type="checkbox" value="hermes" onchange="toggleIde(this)">
@@ -1205,7 +1178,6 @@
               <div class="ide-desc">Nous Research — MEMORY.md + USER.md injection</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
           <label class="ide-card" id="ide-openclaw">
             <input type="checkbox" value="openclaw" onchange="toggleIde(this)">
@@ -1215,7 +1187,6 @@
               <div class="ide-desc">MEMORY.md + SOUL.md + daily logs + SQLite index</div>
             </div>
             <span class="ide-check">✓</span>
-            <span class="ide-mcp-toggle" onclick="event.stopPropagation();event.preventDefault();toggleIdeMcp(this)" title="Install MCP config for this IDE">📡 MCP on</span>
           </label>
         </div>
       </div>
@@ -1316,7 +1287,6 @@
           <tr><td><span class="method-badge method-get">GET</span></td><td>/health</td><td>Health check (no auth)</td></tr>
           <tr><td><span class="method-badge method-get">GET</span></td><td>/api</td><td>Full API reference JSON</td></tr>
           <tr><td><span class="method-badge method-get">GET</span></td><td>/.well-known/total-recall.json</td><td>Discovery manifest</td></tr>
-          <tr><td><span class="method-badge method-get">GET</span></td><td>/mcp</td><td>MCP server endpoint</td></tr>
         </table>
       </div>
 
@@ -2602,11 +2572,7 @@
     autoDetectIDEs();
   }
 
-  // Toggle the MCP config badge on an IDE card
-  window.toggleIdeMcp = function(el) {
-    var isOff = el.classList.toggle('mcp-off');
-    el.textContent = isOff ? '📡 MCP off' : '📡 MCP on';
-  };
+
 
   // Download full brain as .tar.gz
   window.downloadBrain = function() {
@@ -2829,12 +2795,6 @@
     document.querySelectorAll('#ide-grid input[type=checkbox]:checked').forEach(function(cb) {
       selected.push(cb.value);
     });
-    // mcpFor: subset of selected IDEs where the MCP toggle is NOT off
-    var mcpFor = selected.filter(function(ide) {
-      var card = document.getElementById('ide-' + ide);
-      var toggle = card && card.querySelector('.ide-mcp-toggle');
-      return !toggle || !toggle.classList.contains('mcp-off');
-    });
     var installRelay    = document.getElementById('install-relay').checked;
     var installObsidian = document.getElementById('install-obsidian') && document.getElementById('install-obsidian').checked;
 
@@ -2844,7 +2804,7 @@
     var extras = [];
     if (installRelay) extras.push('relay');
     if (installObsidian) extras.push('Obsidian sync');
-    logEl.innerHTML = '<div class="connect-result-line info">Connecting ' + (selected.length || 'no') + ' tools' + (extras.length ? ' + ' + extras.join(' + ') : '') + ' (' + mcpFor.length + ' with MCP)...</div>';
+    logEl.innerHTML = '<div class="connect-result-line info">Connecting ' + (selected.length || 'no') + ' tools' + (extras.length ? ' + ' + extras.join(' + ') : '') + '...</div>';
 
     document.getElementById('btn-connect-ides').disabled = true;
     document.getElementById('btn-connect-ides').textContent = 'Connecting...';
@@ -2852,7 +2812,7 @@
     fetch('/api/connect-ides', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ides: selected, mcpFor: mcpFor, installRelay: installRelay, installObsidian: installObsidian, brainUrl: W.apiUrl, token: W.pat })
+      body: JSON.stringify({ ides: selected, installRelay: installRelay, installObsidian: installObsidian, brainUrl: W.apiUrl, token: W.pat })
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {

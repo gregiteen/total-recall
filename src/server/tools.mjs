@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execSync, execFileSync } from 'node:child_process';
+import { searxngBaseUrl, display } from '../core/config.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
+import { logger } from '../core/logger.mjs';
 
 // ─── Browser Session (persistent across tool calls in a process) ──────────────
 
@@ -11,18 +13,22 @@ let _page    = null;
 
 async function getBrowserPage() {
   if (!_browser) {
-    const { chromium } = await import('playwright');
-    _browser = await chromium.launch({
-      headless: true,
-      args: [
-        '--disable-dev-shm-usage',
-        // Only disable Chromium sandbox when running as root (where it's required)
-        ...(process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
-      ],
-    });
-    _page = await _browser.newPage();
-    await _page.setViewportSize({ width: 1280, height: 900 });
-    await _page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36' });
+    try {
+      const { chromium } = await import('playwright');
+      _browser = await chromium.launch({
+        headless: true,
+        args: [
+          '--disable-dev-shm-usage',
+          // Only disable Chromium sandbox when running as root (where it's required)
+          ...(process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
+        ],
+      });
+      _page = await _browser.newPage();
+      await _page.setViewportSize({ width: 1280, height: 900 });
+      await _page.setExtraHTTPHeaders({ 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36' });
+    } catch (err) {
+      throw new Error(`Failed to load or spawn Playwright browser. Please ensure playwright is installed and your environment supports browser execution. (Detail: ${err.message})`);
+    }
   }
   return _page;
 }
@@ -150,8 +156,8 @@ export async function browserEval(js) {
 // ─── SearXNG Web Search ───────────────────────────────────────────────────────
 
 export async function executeWebSearch(query) {
-  const searxngUrl = process.env.SEARXNG_BASE_URL || 'http://127.0.0.1:8888';
-  console.error(`[Search] Query: "${query}" via ${searxngUrl}`);
+  const searxngUrl = searxngBaseUrl || 'http://127.0.0.1:8888';
+  logger.info('search', `Query: "${query}" via ${searxngUrl}`);
   try {
     const url = new URL(`${searxngUrl}/search`);
     url.searchParams.append('q', query);
@@ -168,7 +174,7 @@ export async function executeWebSearch(query) {
       `[${i+1}] ${r.title}\n${r.url}\n${r.content || r.snippet || ''}`
     ).join('\n\n');
   } catch (err) {
-    console.error(`[Search] SearXNG failed (${err.message}), falling back to browser search`);
+    logger.warn('search', 'SearXNG failed, falling back to browser search', { err: err.message });
     return browserSearch(query);
   }
 }
@@ -181,7 +187,7 @@ export async function executeCode(code) {
     fs.mkdirSync(tmpDir, { recursive: true });
     const scriptPath = path.join(tmpDir, `script-${Date.now()}.mjs`);
     fs.writeFileSync(scriptPath, code);
-    console.error(`[Sandbox] Executing code at ${scriptPath}`);
+    logger.info('sandbox', `Executing code at ${scriptPath}`);
     const result = await runInSandbox(scriptPath, 15000);
     try { fs.unlinkSync(scriptPath); } catch {}
     return result.success
@@ -211,8 +217,8 @@ let _xDisplay = null;
 
 async function ensureDisplay() {
   if (_xDisplay) return _xDisplay;
-  if (process.env.DISPLAY) {
-    _xDisplay = process.env.DISPLAY;
+  if (display) {
+    _xDisplay = display;
     return _xDisplay;
   }
   // No DISPLAY — try to start Xvfb on :99
@@ -606,7 +612,7 @@ export async function handleToolCall(toolCall) {
       default:                      return `Unknown tool: ${name}`;
     }
   } catch (err) {
-    console.error(`[Tools] Error in ${name}:`, err);
+    logger.error('tools', `Error in ${name}`, { err: err.message });
     return `Tool execution failed: ${err.message}`;
   }
 }

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Write a daily dream-cycle summary to memory-vault/daily/YYYY-MM-DD.md.
@@ -135,44 +136,44 @@ export async function runDreamCycle({
   const agentDir = path.dirname(vaultDir);
   const sessionsDir = path.join(agentDir, 'sessions');
 
-  console.log('\n👁️  PHASE 0 — Session Ingestion (IDE Conversation Logs)');
+  logger.info('dream', 'PHASE 0 — Session Ingestion (IDE Conversation Logs)');
   try {
     const { scanAndIngest } = await import('./session-watcher.mjs');
     const ingestResult = scanAndIngest(sessionsDir);
-    console.log(`   Ingested: ${ingestResult.ingested} new sessions`);
+    logger.info('dream', `Ingested: ${ingestResult.ingested} new sessions`);
   } catch (err) {
-    console.log(`   ⚠️  Session ingestion skipped: ${err.message}`);
+    logger.warn('dream', `Session ingestion skipped: ${err.message}`);
   }
 
-  console.log('\n🌙 PHASE 1 — Light Sleep (Scan)');
+  logger.info('dream', 'PHASE 1 — Light Sleep (Scan)');
   const modified = scanModifiedVault(vaultDir);
-  console.log(`   Modified vault files: ${modified.length}`);
+  logger.info('dream', `Modified vault files: ${modified.length}`);
 
   // In a real system, we'd extract candidates from sessions. For now, we simulate.
   const candidates = []; 
 
-  console.log('\n💫 PHASE 2 — REM (Pattern Recognition)');
+  logger.info('dream', 'PHASE 2 — REM (Pattern Recognition)');
   const existingNodes = loadNodes(vaultDir);
   
   if (candidates.length > 0) {
     const { promoted, conflicted } = evaluateCandidates(candidates, existingNodes, conflictsDir);
-    console.log(`   Promoted: ${promoted.length} | Conflicts: ${conflicted.length}`);
+    logger.info('dream', `Promoted: ${promoted.length} | Conflicts: ${conflicted.length}`);
     for (const node of promoted) {
       writeNode(node, vaultDir);
     }
   } else {
-    console.log('   No new candidates to evaluate.');
+    logger.info('dream', 'No new candidates to evaluate.');
   }
 
-  console.log('\n🌊 PHASE 3 — Deep Sleep (Recompile Surface)');
+  logger.info('dream', 'PHASE 3 — Deep Sleep (Recompile Surface)');
   try {
     await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
-    console.log('   ✅ Surface recompiled successfully');
+    logger.info('dream', 'Surface recompiled successfully');
   } catch (err) {
-    console.error(`   ❌ Deep Sleep compile failed: ${err.message}`);
+    logger.error('dream', `Deep Sleep compile failed: ${err.message}`);
   }
 
-  console.log('\n🧠 PHASE 4 — Lucid Dreaming (Optimizer Proposals)');
+  logger.info('dream', 'PHASE 4 — Lucid Dreaming (Optimizer Proposals)');
   let proposalCount = 0;
   try {
     const proposalsDir = path.join(vaultDir, 'proposals');
@@ -183,18 +184,18 @@ export async function runDreamCycle({
     const allProposals = [...cleanupProposals, ...staleProposals];
 
     if (allProposals.length > 0) {
-      console.log(`   Generated ${allProposals.length} optimization proposals.`);
+      logger.info('dream', `Generated ${allProposals.length} optimization proposals.`);
       for (const p of allProposals) {
         const passed = await evaluateProposalGate(p, null);
-        console.log(`   - Proposal [${p.category}]: ${p.summary} -> ${passed ? 'ACCEPTED' : 'REJECTED'}`);
+        logger.info('dream', `Proposal [${p.category}]: ${p.summary} -> ${passed ? 'ACCEPTED' : 'REJECTED'}`);
         writeNode(p, proposalsDir);
         if (passed) proposalCount++;
       }
     } else {
-      console.log('   No new proposals generated.');
+      logger.info('dream', 'No new proposals generated.');
     }
   } catch (err) {
-    console.error(`   ❌ Optimizer failed: ${err.message}`);
+    logger.error('dream', `Optimizer failed: ${err.message}`);
   }
 
   // Write daily note summary (native SSSS node; Obsidian Daily Notes reads it directly)
@@ -206,7 +207,7 @@ export async function runDreamCycle({
       `Proposals accepted: ${proposalCount}`,
     ]);
   } catch (err) {
-    console.error(`   ⚠️  Daily note write failed: ${err.message}`);
+    logger.error('dream', `Daily note write failed: ${err.message}`);
   }
 
   return { status: 'success' };
@@ -225,7 +226,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const conflictsDir = path.join(AGENT_DIR, 'memory-inbox', 'conflicts');
   const instructionsFile = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
-  console.log('🤖 Total Recall Dream Cycle Daemon Started');
+  logger.info('dream', 'Total Recall Dream Cycle Daemon Started');
 
   async function daemonLoop() {
     while (true) {
@@ -234,7 +235,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile
         });
       } catch (err) {
-        console.error('Dream cycle iteration failed:', err.message);
+        logger.error('dream', 'Dream cycle iteration failed', { err: err.message });
       }
       // Sleep for 60 seconds before next cycle
       await new Promise(resolve => setTimeout(resolve, 60000));

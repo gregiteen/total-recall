@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
+import { logger } from './logger.mjs';
 
 /**
  * Atomic file write using write-then-rename to prevent partial corruption.
@@ -36,6 +37,22 @@ function stripUndefined(obj) {
  * @returns {string}        The serialized markdown with frontmatter
  */
 export function safeStringify(content, data) {
+  if (data && data.type === 'memory') {
+    const now = new Date().toISOString();
+    if (!data.x_temporal_context) {
+      data.x_temporal_context = data.updated || data.created || now;
+    }
+    if (!data.x_citations) {
+      data.x_citations = [{
+        source: data.source?.type || 'unknown',
+        title: data.title || 'Untitled Memory',
+        url: data.source?.session_id ? `session://${data.source.session_id}` : 'unknown',
+        published: data.x_temporal_context,
+        relevance: 1.0,
+        accessed: now
+      }];
+    }
+  }
   return matter.stringify(content ?? '', stripUndefined(data ?? {}));
 }
 
@@ -73,7 +90,7 @@ export function loadNodes(vaultDir) {
         nodes.push({ ...data, body: content.trim() });
       }
     } catch (err) {
-      console.warn(`Failed to parse ${file}: ${err.message}`);
+      logger.warn('vault', `Failed to parse ${file}`, { err: err.message });
     }
   }
   return nodes;
@@ -96,6 +113,23 @@ export function writeNode(node, vaultDir) {
   }
   
   const { body, ...frontmatter } = node;
+  
+  if (frontmatter.type === 'memory') {
+    const now = new Date().toISOString();
+    if (!frontmatter.x_temporal_context) {
+      frontmatter.x_temporal_context = frontmatter.updated || frontmatter.created || now;
+    }
+    if (!frontmatter.x_citations) {
+      frontmatter.x_citations = [{
+        source: frontmatter.source?.type || 'unknown',
+        title: frontmatter.title || 'Untitled Memory',
+        url: frontmatter.source?.session_id ? `session://${frontmatter.source.session_id}` : 'unknown',
+        published: frontmatter.x_temporal_context,
+        relevance: 1.0,
+        accessed: now
+      }];
+    }
+  }
   
   const raw = safeStringify(body || '', frontmatter);
   atomicWrite(filePath, raw);
@@ -124,9 +158,10 @@ export function deleteNode(slug, vaultDir) {
 
 
 /**
- * Creates a fully populated memory node from an MCP payload.
+ * Creates a fully populated memory node from an API payload.
  */
-export function createNodeFromMcpPayload({ slug, title, category, content }) {
+export function createMemoryNode({ slug, title, category, content }) {
+  const now = new Date().toISOString();
   return {
     type: 'memory',
     slug,
@@ -136,12 +171,12 @@ export function createNodeFromMcpPayload({ slug, title, category, content }) {
     status: 'active',
     confidence: 1.0,
     importance: 3,
-    created: new Date().toISOString(),
-    updated: new Date().toISOString(),
-    last_accessed: new Date().toISOString(),
+    created: now,
+    updated: now,
+    last_accessed: now,
     source: {
-      type: 'mcp-client',
-      session_id: 'mcp-external',
+      type: 'api-client',
+      session_id: 'api-external',
       evidence_count: 1
     },
     supersedes: [],
@@ -151,16 +186,25 @@ export function createNodeFromMcpPayload({ slug, title, category, content }) {
     related: [],
     routes_to_skills: [],
     sentiment_polarity: 'descriptive',
-    sentiment_target: 'mcp-external',
+    sentiment_target: 'api-external',
     modality: 'should',
-    subject: 'mcp-external',
+    subject: 'api-external',
     predicate: 'provided_information',
-    object: 'mcp-external',
+    object: 'api-external',
     decay: {
       half_life_days: 30,
       access_count: 1
     },
-    schema_version: 2
+    schema_version: 2,
+    x_temporal_context: now,
+    x_citations: [{
+      source: 'api-client',
+      title: title || 'External API Ingest',
+      url: 'api://external',
+      published: now,
+      relevance: 1.0,
+      accessed: now
+    }]
   };
 }
 
@@ -188,7 +232,7 @@ export function loadSkills(skillsDir) {
           });
         }
       } catch (err) {
-        console.warn(`Failed to parse ${skillPath}: ${err.message}`);
+        logger.warn('vault', `Failed to parse ${skillPath}`, { err: err.message });
       }
     }
   }

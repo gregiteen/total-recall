@@ -17,11 +17,11 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { execFileSync } from 'node:child_process';
+import { agentDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+const AGENT_DIR = agentDir;
 const ALERTS_DIR = path.join(AGENT_DIR, 'alerts');
 const EMERGENCY_FILE = path.join(ALERTS_DIR, 'emergency.md');
 

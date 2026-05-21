@@ -16,7 +16,9 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import {
+  apiRateLimiter,
   corsOptions,
   loadSecurityConfig,
   requireAuth,
@@ -24,6 +26,10 @@ import {
   requireHttps,
   requireScope
 } from './auth.mjs';
+import { logger } from '../core/logger.mjs';
+import { drainActiveEmbeddings } from './routes/sessions.mjs';
+import { agentDir as configAgentDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -39,6 +45,44 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 'loopback');
 app.use(requireHttps);
+
+// Zero-dependency dynamic Gzip compression middleware for large API payloads
+app.use((req, res, next) => {
+  const acceptEncoding = req.headers['accept-encoding'] || '';
+  if (!acceptEncoding.includes('gzip')) {
+    return next();
+  }
+
+  const oldSend = res.send;
+  res.send = function (body) {
+    if (!body || res.getHeader('Content-Encoding')) {
+      return oldSend.call(this, body);
+    }
+
+    let chunk = body;
+    if (typeof chunk === 'object' && !(chunk instanceof Buffer)) {
+      chunk = JSON.stringify(chunk);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    }
+
+    const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+    if (buffer.length < 1024) {
+      return oldSend.call(this, buffer);
+    }
+
+    zlib.gzip(buffer, (err, compressed) => {
+      if (err) {
+        return oldSend.call(this, buffer);
+      }
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Content-Length', compressed.length);
+      oldSend.call(this, compressed);
+    });
+  };
+
+  next();
+});
+
 app.use(cors(corsOptions()));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -85,8 +129,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     ollamaStatus = 'offline';
   }
 
-  const import_os = await import('node:os');
-  const agentDir = process.env.AGENT_DIR || path.join(import_os.default.homedir(), '.agent');
+  const agentDir = configAgentDir;
   const vaultExists = fs.existsSync(path.join(agentDir, 'memory-vault'));
 
   // Check emergency alerts
@@ -200,10 +243,14 @@ app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res
 
 try {
   const { restRouter } = await import('./rest.mjs');
+  // Throttle every authenticated /api/* route with the same limiter that
+  // already guards /v1/*. Resource-specific limiters (sandbox, ingest) sit
+  // inline on those handlers and stack on top of this one.
+  app.use('/api', apiRateLimiter());
   app.use(restRouter);
-  console.error('[Server] REST API mounted (/api/*, /v1/models, /.well-known/total-recall.json)');
+  logger.info('server', 'REST API mounted (/api/*, /v1/models, /.well-known/total-recall.json)');
 } catch (err) {
-  console.error('[Server] REST API failed to load:', err.message);
+  logger.error('server', `REST API failed to load: ${err.message}`);
 }
 
 // ─── API Routes (/v1/chat/completions) ──────────────────────────────────────────
@@ -212,11 +259,11 @@ try {
   const { apiRouter } = await import('./api.mjs');
   if (apiRouter) {
     app.use(apiRouter);
-    console.error('[Server] API routes mounted at /v1/chat/completions');
+    logger.info('server', 'API routes mounted at /v1/chat/completions');
   }
 } catch (err) {
   // api.mjs may still be in standalone mode — mount it directly
-  console.error('[Server] API router not exported as middleware, loading standalone routes...');
+  logger.warn('server', 'API router not exported as middleware, loading standalone routes...');
   const { callFrontier, loadFrontierConfig } = await import('../core/frontier.mjs');
   const os = await import('node:os');
 
@@ -256,7 +303,7 @@ try {
         }]
       });
     } catch (error) {
-      console.error('[API Error]', error);
+      logger.error('api', 'API Error', { error: error.message });
       res.status(500).json({ error: error.message });
     }
   });
@@ -276,7 +323,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 
 app.get('/chat', (req, res) => {
-  const agentDir = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+  const agentDir = configAgentDir;
   const instructionsPath = path.join(agentDir, 'INSTRUCTIONS.md');
   const hasInstructions = fs.existsSync(instructionsPath);
   const nodeCount = (() => {
@@ -594,23 +641,67 @@ app.get(/^(.*)$/, (req, res) => {
 // ─── Start ──────────────────────────────────────────────────────────────────────
 
 const serverSecurityConfig = loadSecurityConfig();
-const PORT = process.env.PORT || serverSecurityConfig.bind?.port || 3000;
-const configuredHost = process.env.HOST || serverSecurityConfig.bind?.host || '127.0.0.1';
+const PORT = configPort || serverSecurityConfig.bind?.port || 3000;
+const configuredHost = configHost || serverSecurityConfig.bind?.host || '127.0.0.1';
 const publicBindRequested = configuredHost === '0.0.0.0' || configuredHost === '::';
-const HOST = process.env.NODE_ENV === 'production' && publicBindRequested && serverSecurityConfig.bind?.allow_public_bind !== true
+const HOST = nodeEnv === 'production' && publicBindRequested && serverSecurityConfig.bind?.allow_public_bind !== true
   ? '127.0.0.1'
   : configuredHost;
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   if (HOST !== configuredHost) {
-    console.error(`[Server] Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
+    logger.error('server', `Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
   }
-  console.error(`\n  ┌─────────────────────────────────────────────┐`);
-  console.error(`  │  Total Recall Brain v3.0.0                  │`);
-  console.error(`  │                                             │`);
-  console.error(`  │  API:       http://${HOST}:${PORT}/v1/chat/completions │`);
-  console.error(`  │  Memory:    http://${HOST}:${PORT}/api/memory           │`);
-  console.error(`  │  Health:    http://${HOST}:${PORT}/health               │`);
-  console.error(`  │  Dashboard: http://${HOST}:${PORT}/                     │`);
-  console.error(`  └─────────────────────────────────────────────┘\n`);
+  logger.info('server', `Total Recall Brain v3.0.0 is listening on http://${HOST}:${PORT}`);
+
+  logger.info('server', '┌─────────────────────────────────────────────┐');
+  logger.info('server', '│  Total Recall Brain v3.0.0                  │');
+  logger.info('server', '│                                             │');
+  logger.info('server', `│  API:       http://${HOST}:${PORT}/v1/chat/completions │`);
+  logger.info('server', `│  Memory:    http://${HOST}:${PORT}/api/memory           │`);
+  logger.info('server', `│  Health:    http://${HOST}:${PORT}/health               │`);
+  logger.info('server', `│  Dashboard: http://${HOST}:${PORT}/                     │`);
+  logger.info('server', '└─────────────────────────────────────────────┘');
 });
+
+let shutdownInProgress = false;
+
+async function handleShutdown(signal) {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+  process.isShuttingDown = true;
+
+  logger.info('server', `Received ${signal}. Starting graceful shutdown...`);
+
+  // 10s fallback hard-exit
+  const forceExitTimeout = setTimeout(() => {
+    logger.error('server', 'Graceful shutdown timed out. Forcefully exiting.');
+    process.exit(1);
+  }, 10000);
+  forceExitTimeout.unref();
+
+  // Close HTTP server to stop accepting new connections
+  server.close(async (err) => {
+    if (err) {
+      logger.error('server', 'Error closing HTTP server', { error: err.message });
+    } else {
+      logger.info('server', 'HTTP server closed.');
+    }
+
+    try {
+      logger.info('server', 'Draining active background operations...');
+      await drainActiveEmbeddings();
+      logger.info('server', 'All active background operations drained.');
+    } catch (e) {
+      logger.error('server', 'Error draining active background operations', { error: e.message });
+    }
+
+    clearTimeout(forceExitTimeout);
+    logger.info('server', 'Graceful shutdown complete. Exiting.');
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+

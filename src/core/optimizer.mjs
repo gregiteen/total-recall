@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import matter from 'gray-matter';
 import { loadNodes, writeNode } from './vault.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Total Recall Optimizer
@@ -110,7 +111,9 @@ export async function generateSkillImprovementProposals(vaultDir) {
         ));
       }
     }
-  } catch { /* ignore fs errors */ }
+  } catch (err) {
+    logger.debug('optimizer: generateSkillImprovementProposals failed to read skillsDir', { err: err.message });
+  }
 
   return proposals;
 }
@@ -146,7 +149,9 @@ export async function generateWorkflowRepairProposals(vaultDir) {
         `Task has been in-progress for ${Math.floor((now - updatedAt) / 60000)} minutes. May need retry or cancellation.`,
       ));
     }
-  } catch { /* ignore fs errors */ }
+  } catch (err) {
+    logger.debug('optimizer: generateWorkflowRepairProposals failed to read queueDir', { err: err.message });
+  }
 
   return proposals;
 }

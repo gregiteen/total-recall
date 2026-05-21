@@ -108,7 +108,11 @@ export default function TasksPage() {
 
   // Polling loop
   useEffect(() => {
-    void refreshAll()
+    const init = async () => {
+      await Promise.all([fetchTasks(), fetchResearch(), fetchDaemonLogs()])
+      setLoading(false)
+    }
+    void init()
 
     const interval = setInterval(() => {
       void fetchTasks()
@@ -117,7 +121,7 @@ export default function TasksPage() {
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [refreshAll, fetchTasks, fetchResearch, fetchDaemonLogs])
+  }, [fetchTasks, fetchResearch, fetchDaemonLogs])
 
   // Trigger Brain Recompilation
   const handleRecompile = async () => {

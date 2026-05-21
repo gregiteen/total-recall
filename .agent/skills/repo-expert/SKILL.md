@@ -229,6 +229,25 @@ Scans `src/server/api.mjs` using regular expressions to dynamically extract all 
 Consumes the `api-map.json` index to autonomously scaffold Model Context Protocol (MCP) tool registrations. This allows agents to seamlessly map any newly created REST endpoints directly to the MCP gateway in `src/server/mcp.mjs`.
 - **Usage:** `node .agent/skills/repo-expert/scripts/create-mcp-tools.mjs`
 
+## 10. Perpetual 5-Phase Research Engine & Temporal Awareness
+
+The background research daemon and memory vault are powered by an advanced circular learning model and deep temporal tracking to achieve scalable cognitive breakthroughs.
+
+### 10.1 5-Phase Circular Learning Flywheel
+Instead of terminating research projects at a traditional "done" status, all enqueued topics undergo infinite circular refinement. The daemon transitions each project sequentially modulo-style:
+`'acquisition' ➔ 'deliberation' ➔ 'improvement' ➔ 'monitoring' ➔ 'expansion' ➔ 'acquisition'`
+
+- **Phase 1: Acquisition (`runKnowledgeAcquisitionCycle`):** Ingests new articles, research papers, and documents from multi-source search engines, compiling them into a new draft fact node.
+- **Phase 2: Deliberation (`runResearchDeliberationCycle`):** Performs System 2 cross-analysis against the existing active vault nodes. Finds insights, maps connections, and handles **supersedes/obsoletion bidirectional auditing** using standard YAML frontmatter array tags (`supersedes: []`, `superseded_by: null`).
+- **Phase 3: Improvement (`runResearchImprovementCycle`):** Enhances readability, markdown layout hierarchy, list formatting, and premium callouts while strictly preserving original URLs, citations, and evidence.
+- **Phase 4: Monitoring (`runResearchMonitoringCycle`):** Explores external feeds, release notes, and authoritative links relative to the topic to keep the research fresh.
+- **Phase 5: Expansion (`runResearchExpansionCycle`):** Brainstorms adjacent technical domains and adds them back to the active queue (`addToQueue`), continuously fanning out the system's expertise.
+
+### 10.2 Dynamic Temporal Invariant Layer
+- **Date Normalizer (`normalizePublishedDate`):** Resolves human relative dates ("yesterday", "3 days ago") and partial dates ("April 2026", "2026") into absolute UTC ISO 8601 timestamps inside search adapters.
+- **Timezone-Aware System Clock Injection:** Provides dynamic current local system date/time context (e.g. `2026-05-21 13:40:12 MDT`) inside prompt systems, enabling LLM-driven chronological validity audits and decay calculations.
+- **Premium Obsidian Temporal Callouts:** Standardizes premium temporal callout cards (`> [!NOTE]\n> **Temporal Context**`) at the top of master and supporting note bodies to immediately inform any agent or human of data currency.
+
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
 <!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->

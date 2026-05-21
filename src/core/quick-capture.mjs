@@ -65,7 +65,16 @@ function buildInboxNode({ text, author, channel, source, ts }) {
     decay: { half_life_days: 30, access_count: 0 },
     schema_version: 2,
     x_memory_layer: 'system1',
-    raw_content: text
+    raw_content: text,
+    x_temporal_context: now,
+    x_citations: [{
+      source: source || 'chat',
+      title: `Captured message from channel ${channel || 'direct'}`,
+      url: `chat://${source}/${channel || 'direct'}`,
+      published: now,
+      relevance: 1.0,
+      accessed: now
+    }]
   };
 }
 

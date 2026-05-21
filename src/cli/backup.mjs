@@ -14,8 +14,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { agentDir } from '../core/config.mjs';
+
 function getAgentDir() {
-  return process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+  return agentDir;
 }
 
 function commandExists(cmd) {

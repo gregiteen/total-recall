@@ -16,7 +16,7 @@ No vector DB. No cloud lock-in. Your thoughts, your machine.
 
 ### 🖥 IDE Memory Only (2 minutes)
 
-Add persistent memory to Claude Code, Cursor, Codex, Windsurf, or any IDE agent — in your existing project:
+Add persistent memory to Claude Code, Cursor, Codex, or any IDE agent — in your existing project:
 
 ```bash
 cd ~/my-project
@@ -33,7 +33,6 @@ Supported IDEs:
 | `npx total-recall connect antigravity` | Symlinks `AGENTS.md` → compiled memory |
 | `npx total-recall connect gemini` | Symlinks `GEMINI.md` → compiled memory |
 | `npx total-recall connect cursor` | Writes `.cursor/rules/total-recall.mdc` |
-| `npx total-recall connect windsurf` | Writes `.windsurf/rules/total-recall.md` |
 | `npx total-recall connect aider` | Writes `.aider.rules.md` |
 
 > Your existing IDE config is **never overwritten**. Total Recall only manages its own clearly-marked `<!-- BEGIN INJECTED MEMORY -->` section.
@@ -42,7 +41,7 @@ Supported IDEs:
 
 ### 🧠 Full Brain + Local Model (30 minutes)
 
-Deploy the full autonomous stack — OpenAI-compatible API, React dashboard, MCP gateway, Dream Cycle daemon — on a cloud VM or your own machine.
+Deploy the full autonomous stack — OpenAI-compatible API, React dashboard, Dream Cycle daemon — on a cloud VM or your own machine.
 
 **What you need:**
 - A Linux server (see [Cloud Provider Guide](docs/reference/cloud-providers.md) for pricing)
@@ -163,7 +162,7 @@ src/
     dream.mjs         ← Dream Cycle daemon
     watchdog.mjs      ← friction monitor
   server/
-    index.mjs         ← Express: OpenAI-compat API + MCP gateway + React SPA
+    index.mjs         ← Express: OpenAI-compat API + React SPA
   cli/
     index.mjs         ← CLI entry point
     connect.mjs       ← IDE connector
@@ -186,7 +185,7 @@ src/
 - **[Architecture](docs/ARCHITECTURE.md)** — deep dive into the runtime layers
 - **[How-To Guides](docs/how-to/)** — deploy to cloud, set up Obsidian, integrate UltraChat
 - **[CLI Reference](docs/reference/cli-reference.md)** — full flag documentation
-- **[REST API & Gateway Reference](docs/reference/api-reference.md)** — full REST endpoints, PATs, scopes, and MCP tools
+- **[REST API Reference](docs/reference/api-reference.md)** — full REST endpoints, PATs, and scopes
 
 ---
 
@@ -212,8 +211,8 @@ What the uninstaller does:
 ## Security
 
 - Provider API keys: AES-256-GCM encrypted in `~/.agent/config/secrets.enc` — masked input during setup, never logged
-- Bearer PAT authentication for all API and MCP endpoints
-- Argon2id for password hashing
+- Bearer PAT authentication for all API endpoints
+- OWASP-aligned scrypt for password hashing
 - All agent-generated code runs in a hardened `sandbox.mjs` environment
 
 ---

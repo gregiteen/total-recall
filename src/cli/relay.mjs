@@ -31,6 +31,7 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
+import { agentDir as configAgentDir } from '../core/config.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -405,7 +406,7 @@ export default async function relay(args) {
   const opts = parseArgs(args);
   if (opts.help || !opts.command) { printHelp(); return; }
 
-  const agentDir = process.env.AGENT_DIR || resolveAgentDir();
+  const agentDir = configAgentDir;
   fs.mkdirSync(path.join(agentDir, 'logs'), { recursive: true });
 
   switch (opts.command) {

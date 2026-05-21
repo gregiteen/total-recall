@@ -16,9 +16,50 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
 
-const DEFAULT_OLLAMA_URL = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
-const DEFAULT_EMBED_MODEL = process.env.TR_EMBED_MODEL || 'nomic-embed-text';
+import { ollamaUrl, embedModel, agentDir } from './config.mjs';
+import { logger } from './logger.mjs';
+
+const DEFAULT_OLLAMA_URL = ollamaUrl;
+const DEFAULT_EMBED_MODEL = embedModel;
+
+const AGENT_DIR = agentDir;
+const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
+const CACHE_PATH = path.join(DERIVED_DIR, 'embeddings-cache.json');
+
+// ─── Query Embedding Cache Helpers ──────────────────────────────────────────
+
+let embeddingCache = null;
+
+function sha256(text) {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function loadCache() {
+  if (embeddingCache) return embeddingCache;
+  try {
+    if (fs.existsSync(CACHE_PATH)) {
+      embeddingCache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
+    } else {
+      embeddingCache = {};
+    }
+  } catch (err) {
+    embeddingCache = {};
+  }
+  return embeddingCache;
+}
+
+function saveCache() {
+  if (!embeddingCache) return;
+  try {
+    fs.mkdirSync(DERIVED_DIR, { recursive: true });
+    fs.writeFileSync(CACHE_PATH, JSON.stringify(embeddingCache), 'utf8');
+  } catch (err) {
+    // Ignore cache persistence errors gracefully
+  }
+}
 
 // ─── Embedding generation ────────────────────────────────────────────────────
 
@@ -34,6 +75,14 @@ const DEFAULT_EMBED_MODEL = process.env.TR_EMBED_MODEL || 'nomic-embed-text';
 export async function getEmbedding(text, ollamaUrl = DEFAULT_OLLAMA_URL, model = DEFAULT_EMBED_MODEL) {
   const input = String(text).slice(0, 8000); // cap at 8k chars — safe for all embed models
 
+  const cache = loadCache();
+  const cacheKey = `${model}:${sha256(input)}`;
+  if (cache[cacheKey]) {
+    return cache[cacheKey];
+  }
+
+  let embedding;
+
   // Try new API: POST /api/embed { model, input } → { embeddings: [[...]] }
   try {
     const res = await fetch(`${ollamaUrl}/api/embed`, {
@@ -44,28 +93,40 @@ export async function getEmbedding(text, ollamaUrl = DEFAULT_OLLAMA_URL, model =
     });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data.embeddings?.[0])) return data.embeddings[0];
+      if (Array.isArray(data.embeddings?.[0])) {
+        embedding = data.embeddings[0];
+      }
     }
-  } catch { /* fall through to old API */ }
-
-  // Fall back to old API: POST /api/embeddings { model, prompt } → { embedding: [...] }
-  const res = await fetch(`${ollamaUrl}/api/embeddings`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt: input }),
-    signal: AbortSignal.timeout(30000),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Ollama embedding API error ${res.status}: ${body || 'no response body'}`);
+  } catch (err) {
+    logger.debug('embeddings: new embed API failed, falling back to legacy API', { err: err.message });
   }
 
-  const data = await res.json();
-  if (!Array.isArray(data.embedding)) {
-    throw new Error(`Ollama returned no embedding. Is '${model}' installed? Run: ollama pull ${model}`);
+  if (!embedding) {
+    // Fall back to old API: POST /api/embeddings { model, prompt } → { embedding: [...] }
+    const res = await fetch(`${ollamaUrl}/api/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: input }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Ollama embedding API error ${res.status}: ${body || 'no response body'}`);
+    }
+
+    const data = await res.json();
+    if (!Array.isArray(data.embedding)) {
+      throw new Error(`Ollama returned no embedding. Is '${model}' installed? Run: ollama pull ${model}`);
+    }
+    embedding = data.embedding;
   }
-  return data.embedding;
+
+  // Save to cache
+  cache[cacheKey] = embedding;
+  saveCache();
+
+  return embedding;
 }
 
 // ─── Cosine similarity ───────────────────────────────────────────────────────

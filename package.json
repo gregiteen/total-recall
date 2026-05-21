@@ -9,6 +9,8 @@
   "files": [
     "bin/",
     "src/",
+    "!src/**/*.spec.mjs",
+    "!src/**/*.test.mjs",
     "templates/",
     "scaffold/",
     "docs/ARCHITECTURE.md",
@@ -52,7 +54,6 @@
   "keywords": [
     "ai",
     "sovereign",
-    "mcp",
     "ssss",
     "memory",
     "local-llm"
@@ -64,9 +65,8 @@
   },
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "argon2": "^0.44.0",
     "bcrypt": "^6.0.0",
+
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "express": "^5.2.1",

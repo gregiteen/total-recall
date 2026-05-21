@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { atomicWrite } from './vault.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Blackboard State Tracker
@@ -17,7 +18,7 @@ export function loadBlackboard(boardId, blackboardDir) {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (err) {
-    console.warn(`[Blackboard] Failed to parse ${boardId}: ${err.message}`);
+    logger.warn('blackboard', `Failed to parse ${boardId}`, { err: err.message });
     return { id: boardId, state: {}, step: 0, history: [] };
   }
 }

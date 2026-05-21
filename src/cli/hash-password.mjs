@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { BCRYPT_COST } from '../server/auth.mjs';
 
 export default async function hashPassword(args) {
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
@@ -16,5 +17,6 @@ export default async function hashPassword(args) {
     process.exit(1);
   }
 
-  console.log(await bcrypt.hash(password, 12));
+  console.log(await bcrypt.hash(password, BCRYPT_COST));
 }
+

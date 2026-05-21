@@ -193,13 +193,23 @@ To ensure absolute clarity without needing to dig into source code, here is the 
 
 ### 2. The Autonomous Research Pipeline (Cloud Queue $\rightarrow$ Inbox Drafts)
 *   **Trigger**: A topic is enqueued via `POST /api/research` or the `/research` command.
-*   **Processing Agenda**:
-    *   The background research daemon pulls pending topics and begins autonomous crawling and information synthesis.
-    *   It queries search engines and fetches documentation matching the topic.
+*   **Processing Agenda (Perpetual 5-Phase Cognitive Research Engine)**:
+    *   The background research daemon pulls pending topics and moves them sequentially through a circular loop of **5 Cognitive Phases**:
+        `'acquisition' ➔ 'deliberation' ➔ 'improvement' ➔ 'monitoring' ➔ 'expansion' ➔ 'acquisition'`
+        This circular progression completely removes the terminal `'done'` status, creating a perpetual learning flywheel.
+    *   **Phase 1: Data Acquisition**: Executes deep multi-source web/paper crawling (Serper, arXiv, GitHub, Brave, Wikipedia) and performs initial LLM synthesis to stage a new draft fact node in the memory vault.
+    *   **Phase 2: Cognitive Deliberation (System 2)**: Runs a deliberation cycle comparing the target node with other active facts in the vault. Automatically identifies hidden connections, discrepancies, and performs **bidirectional obsoletion/supersedes auditing** (using frontmatter `supersedes` arrays and `superseded_by` pointers).
+    *   **Phase 3: Clarity Auditing**: Restructures and polishes the node's markdown layout for premium layout hierarchy, clean typography, tables, and lists while preserving original sources and URLs.
+    *   **Phase 4: Source Monitoring**: Discovers high-quality, long-term authority feeds (release logs, blogs, newsletters, RSS feeds) relative to the topic and appends them to the node.
+    *   **Phase 5: Tangent Spawning**: Brainstorms adjacent domain topics required to achieve domain-expert status and autonomously queues them back into the active agenda.
+*   **Deep Temporal Awareness**:
+    *   **Relative Date Normalization**: Every search adapter wraps raw publication dates in `normalizePublishedDate()`, resolving expressions like "3 hours ago", "yesterday", "5 days ago", "April 2026" to absolute UTC ISO 8601 timestamps.
+    *   **Timezone-Aware Clock Injection**: Injects timezone-aware local date/time strings (e.g. `2026-05-21 13:40:12 MDT`) into prompts so the LLM has deep chronological context for decay and obsoletion auditing.
+    *   **Obsidian Temporal Callouts**: Automatically prepends premium Obsidian Callout boxes (`> [!NOTE]\n> **Temporal Context**: ...`) to master and supporting note bodies.
+*   **Scheduling Prioritization**:
+    *   Research queue tasks are sorted oldest-first based on their `updated_at` timestamps to prevent starvation and ensure equal cognitive attention.
 *   **Inbox Staging (Draft Layer Isolation)**:
-    *   To prevent speculative, unverified, or high-density research findings from flooding Tier 1 instructions or Tier 2 skills, all newly acquired research points are written to `.agent/memory-inbox/pending/` with:
-        *   `status: draft`
-        *   `x_memory_layer: research`
+    *   To prevent speculative, unverified, or high-density research findings from flooding Tier 1 instructions or Tier 2 skills, all newly acquired research points are written to `.agent/memory-inbox/pending/` (or staging directories) with `status: draft` and `x_memory_layer: research`.
     *   This ensures the information is **fully indexed and semantically searchable** (via the Vector Search pipeline) but **physically isolated** from active prompts.
 *   **The System 2 Validation Gate**:
     *   The conclusion writer (`conclusion-writer.mjs`) reads these staged inbox drafts.

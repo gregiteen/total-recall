@@ -1,28 +1,30 @@
 import crypto from 'crypto';
+import { promisify } from 'node:util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import argon2 from 'argon2';
+
+import { agentDir } from './config.mjs';
 
 const ALGORITHM = 'aes-256-gcm';
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+const AGENT_DIR = agentDir;
 const SECRETS_FILE = path.join(AGENT_DIR, 'config', 'secrets.enc');
 
+const scryptAsync = promisify(crypto.scrypt);
+
 /**
- * Derives a 32-byte encryption key from a master password using Argon2id.
+ * Derives a 32-byte encryption key from a master password using scrypt
+ * (Node built-in — no native dependency required).
+ *
+ * Parameters chosen for ~64 MB of memory, matching OWASP scrypt guidance.
  */
 export async function deriveKey(password, salt) {
-  // Hash raw bytes for key using argon2
-  const hash = await argon2.hash(password, {
-    type: argon2.argon2id,
-    salt,
-    raw: true, // raw buffer for AES key
-    hashLength: 32, // 256 bits
-    timeCost: 3,
-    memoryCost: 65536,
-    parallelism: 1
+  return scryptAsync(password, salt, 32, {
+    N: 2 ** 16, // CPU/memory cost: 65536
+    r: 8,
+    p: 1,
+    maxmem: 128 * 1024 * 1024
   });
-  return hash;
 }
 
 /**
@@ -62,7 +64,7 @@ export async function decryptSecrets(encryptedBuffer, password) {
 export async function writeSecrets(secretsObj, password) {
   const buf = await encryptSecrets(secretsObj, password);
   fs.mkdirSync(path.dirname(SECRETS_FILE), { recursive: true });
-  fs.writeFileSync(SECRETS_FILE, buf);
+  fs.writeFileSync(SECRETS_FILE, buf, { mode: 0o600 });
 }
 
 export async function readSecrets(password) {

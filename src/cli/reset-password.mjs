@@ -3,6 +3,8 @@ import path from 'path';
 import os from 'os';
 import bcrypt from 'bcrypt';
 import yaml from 'yaml';
+import { BCRYPT_COST } from '../server/auth.mjs';
+import { agentDir } from '../core/config.mjs';
 
 export default async function resetPassword(args) {
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
@@ -21,7 +23,7 @@ export default async function resetPassword(args) {
     process.exit(1);
   }
 
-  const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+  const AGENT_DIR = agentDir;
   const configDir = path.join(AGENT_DIR, 'config');
   const securityPath = path.join(configDir, 'security.yml');
 
@@ -54,7 +56,8 @@ export default async function resetPassword(args) {
   }
 
   console.log('Hashing password...');
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, BCRYPT_COST);
+
 
   config.dashboard.password_hash = hash;
   const isDefault = password === 'totalrecall';

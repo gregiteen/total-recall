@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
+import { getEnvVar } from './config.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Frontier Intelligence Router
@@ -19,7 +21,7 @@ export function loadFrontierConfig(configPath) {
 export async function callFrontierRaw(messages, config, tools = undefined) {
   const { endpoint, model, api_key_env, api_key, temperature = 0.2 } = config;
   
-  const apiKey = api_key || (api_key_env ? process.env[api_key_env] : null);
+  const apiKey = api_key || (api_key_env ? getEnvVar(api_key_env) : null);
   if (!apiKey && !endpoint.includes('127.0.0.1') && !endpoint.includes('localhost')) {
     throw new Error(`Missing API key in config or environment for endpoint ${endpoint}`);
   }
@@ -63,7 +65,7 @@ export async function callFrontier(prompt, system, config) {
 export async function escalateToFrontier(task, failureContext, configPath) {
   const config = loadFrontierConfig(configPath);
   
-  console.log(`[Frontier] Escalating task '${task.slug}' to ${config.model}...`);
+  logger.info('frontier', `Escalating task '${task.slug}' to ${config.model}...`);
   
   const system = `You are the Total Recall Frontier Judge. A local agent kernel has repeatedly failed a task. 
 Review the failure context, determine the root cause, and provide a direct solution or corrected code block.`;

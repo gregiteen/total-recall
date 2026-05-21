@@ -2,32 +2,32 @@
  * Total Recall — Full REST API Router
  *
  * Mounted at /api/* and /v1/* (OpenAI-compat extensions).
+ * Delegates to resource sub-routers in src/server/routes/*.mjs.
  *
- * Endpoints:
+ * Route Inventory:
  *
- *   Memory
+ *   Memory (routes/memory.mjs)
  *     GET    /api/memory              list nodes (supports ?q= search, ?category=, ?tag=)
  *     POST   /api/memory              create node
  *     GET    /api/memory/:slug        get node by slug
  *     PUT    /api/memory/:slug        update node (full replace)
  *     PATCH  /api/memory/:slug        partial update (body or tags)
  *     DELETE /api/memory/:slug        delete node
- *     POST   /api/memory/compile      recompile vault surface
  *     GET    /api/memory/stats        counts by category
  *
- *   Keys (Personal Access Tokens)
- *     GET    /api/keys                list keys (no raw tokens)
- *     POST   /api/keys                issue a new key (returns raw token once)
+ *   Keys (routes/keys.mjs)
+ *     GET    /api/keys                list personal access tokens (no raw tokens)
+ *     POST   /api/keys                issue a new personal access token (returns raw token once)
  *     DELETE /api/keys/:id            revoke key
  *
- *   Sessions
- *     GET    /api/sessions            list ingested sessions
- *     GET    /api/sessions/:id        get session by id
- *     POST   /api/sessions/ingest     ingest a session (from any source)
- *     DELETE /api/sessions/:id        delete session
+ *   Sessions (routes/sessions.mjs)
+ *     GET    /api/sessions            list ingested session logs
+ *     GET    /api/sessions/:id        get session details by id
+ *     POST   /api/sessions/ingest     ingest a session log (Claude Code, Cursor, Cursor CLI, raw)
+ *     DELETE /api/sessions/:id        delete session log
  *
  *   Sandbox
- *     POST   /api/sandbox             execute Node.js code, return stdout/stderr
+ *     POST   /api/sandbox             execute Node.js code securely in sandbox, returns stdout/stderr
  *
  *   Config
  *     GET    /api/config              get sanitized runtime + security config
@@ -36,12 +36,13 @@
  *     GET    /v1/models               list available Ollama models
  *
  *   Vault (admin operations)
- *     POST   /api/vault/compile       trigger full surface recompile
+ *     POST   /api/vault/compile       trigger full surface compile (re-generates compile.json)
  *     GET    /api/vault/status        vault file counts + last compile time
  *
  *   Discovery
  *     GET    /.well-known/total-recall.json   client auto-config manifest
  */
+
 
 import express from 'express';
 import fs from 'node:fs';
@@ -54,10 +55,11 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../core/runtime.mjs';
 
 
-import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload, walkMd, safeStringify } from '../core/vault.mjs';
+import { loadNodes, writeNode, deleteNode, walkMd, safeStringify } from '../core/vault.mjs';
+import { getNodes, invalidate } from '../core/vault-cache.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
-import { issueKey, revokeKey, loadKeys } from './keys.mjs';
+import { issueKey } from './keys.mjs';
 import connect from '../cli/connect.mjs';
 import {
   requireAuth,
@@ -67,23 +69,30 @@ import {
   loginHandler,
   logoutHandler,
   changePasswordHandler,
+  sandboxRateLimiter,
+  requireSandboxEnabled,
 } from './auth.mjs';
-import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex, parseSessionFile, sessionToEmbedChunks, saveSessionEmbeddingToIndex, removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
+import { getEmbedding, cosineSimilarity, loadEmbeddingsIndex, loadSessionEmbeddingsIndex } from '../core/embeddings.mjs';
 import { semanticSearch } from '../core/search.mjs';
 import { listQueue, addToQueue, updateQueueItem, removeFromQueue } from '../core/research-queue.mjs';
 import { detectRuleFiles, importRuleFiles } from '../core/import-rules.mjs';
 import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
 import { logger } from '../core/logger.mjs';
-
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
-const VAULT_DIR    = path.join(AGENT_DIR, 'memory-vault');
-const SKILLS_DIR   = path.join(AGENT_DIR, 'skills');
-const DERIVED_DIR  = path.join(AGENT_DIR, 'memory-derived');
-const SESSIONS_DIR = path.join(AGENT_DIR, 'sessions');
-const INSTRUCTIONS = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
-const FILES_DIR    = path.join(AGENT_DIR, 'files');
-const TASKS_DIR    = path.join(AGENT_DIR, 'scheduler', 'queue');
-const CONFIG_DIR   = path.join(AGENT_DIR, 'config');
+import { memoryRouter }   from './routes/memory.mjs';
+import { keysRouter }     from './routes/keys.mjs';
+import { sessionsRouter } from './routes/sessions.mjs';
+import { ollamaUrl } from '../core/config.mjs';
+import {
+  AGENT_DIR,
+  VAULT_DIR,
+  SKILLS_DIR,
+  DERIVED_DIR,
+  SESSIONS_DIR,
+  INSTRUCTIONS,
+  FILES_DIR,
+  TASKS_DIR,
+  CONFIG_DIR
+} from './routes/_shared.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
@@ -141,6 +150,12 @@ function loadCatalogModels(runtimeConfig = {}) {
 
 const router = express.Router();
 
+// Per-resource sub-routers (see ./routes/*.mjs). Mounted before the inline
+// handlers below so URL precedence stays identical to the pre-refactor file.
+router.use(memoryRouter);
+router.use(keysRouter);
+router.use(sessionsRouter);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function notFound(res, msg) {
@@ -152,212 +167,19 @@ function badRequest(res, msg) {
 }
 
 function serverError(res, err) {
-  console.error('[REST]', err);
+  logger.error('rest', 'Internal server error', { error: err.message, stack: err.stack });
   return res.status(500).json({ error: 'Internal server error' });
 }
 
 function nodes() {
-  return loadNodes(VAULT_DIR);
+  return getNodes(VAULT_DIR);
 }
 
 function sanitizeNode({ body, ...rest }) {
   return { ...rest, content: body };
 }
 
-// ─── Memory ───────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/memory
- * Query params: q, category, tag, limit, offset
- */
-router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
-  try {
-    let list = nodes();
-
-    const { q, category, tag, limit = '200', offset = '0' } = req.query;
-
-    if (q) {
-      const query = String(q).toLowerCase();
-      list = list.filter(n =>
-        [n.slug, n.title, n.category, (n.tags || []).join(' '), n.body]
-          .join(' ').toLowerCase().includes(query)
-      );
-    }
-    if (category) {
-      list = list.filter(n => n.category === category);
-    }
-    if (tag) {
-      list = list.filter(n => (n.tags || []).includes(tag));
-    }
-
-    const total = list.length;
-    const off   = Math.max(0, parseInt(offset, 10) || 0);
-    const lim   = Math.min(500, Math.max(1, parseInt(limit, 10) || 200));
-    const page  = list.slice(off, off + lim).map(sanitizeNode);
-
-    res.json({ total, offset: off, limit: lim, nodes: page });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * GET /api/memory/stats
- */
-router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, res) => {
-  try {
-    const list = nodes();
-    const byCategory = {};
-    for (const n of list) {
-      byCategory[n.category] = (byCategory[n.category] || 0) + 1;
-    }
-    res.json({ total: list.length, by_category: byCategory });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * GET /api/memory/:slug
- */
-router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, res) => {
-  try {
-    const node = nodes().find(n => n.slug === req.params.slug);
-    if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
-    res.json(sanitizeNode(node));
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * POST /api/memory
- * Body: { slug, title, category, content, tags? }
- */
-router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res) => {
-  try {
-    const { slug, title, category, content, body, tags } = req.body || {};
-    const actualContent = content || body;
-    if (!slug || !title || !category || !actualContent) {
-      return badRequest(res, 'Required fields: slug, title, category, content (or body)');
-    }
-    const existing = nodes().find(n => n.slug === slug);
-    if (existing) {
-      return res.status(409).json({ error: `Node already exists: ${slug}. Use PUT to update.` });
-    }
-    const node = createNodeFromMcpPayload({ slug, title, category, content: actualContent });
-    if (tags && Array.isArray(tags)) node.tags = tags;
-    
-    // Copy any custom SSSS v2 frontmatter fields if specified in req.body
-    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
-      if (req.body[key] !== undefined) {
-        node[key] = req.body[key];
-      }
-    }
-
-    writeNode(node, VAULT_DIR);
-    res.status(201).json(sanitizeNode(node));
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * PUT /api/memory/:slug  — full replace
- */
-router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
-  try {
-    const { title, category, content, body, tags } = req.body || {};
-    const actualContent = content || body;
-    if (!title || !category || !actualContent) {
-      return badRequest(res, 'Required fields: title, category, content (or body)');
-    }
-    const node = createNodeFromMcpPayload({ slug: req.params.slug, title, category, content: actualContent });
-    if (tags && Array.isArray(tags)) node.tags = tags;
-
-    // Copy any custom SSSS v2 frontmatter fields if specified in req.body
-    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
-      if (req.body[key] !== undefined) {
-        node[key] = req.body[key];
-      }
-    }
-
-    writeNode(node, VAULT_DIR);
-    res.json(sanitizeNode(node));
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * PATCH /api/memory/:slug  — partial update
- */
-router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
-  try {
-    const existing = nodes().find(n => n.slug === req.params.slug);
-    if (!existing) return notFound(res, `Memory node not found: ${req.params.slug}`);
-
-    const { title, category, content, body, tags } = req.body || {};
-    const actualContent = content || body || existing.body;
-    const updated = createNodeFromMcpPayload({
-      slug:     existing.slug,
-      title:    title    ?? existing.title,
-      category: category ?? existing.category,
-      content:  actualContent,
-    });
-    updated.tags = tags ?? existing.tags ?? [];
-    updated.created_at = existing.created_at;
-
-    // Merge existing non-destructured fields
-    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
-      if (existing[key] !== undefined) {
-        updated[key] = existing[key];
-      }
-    }
-
-    // Copy any custom SSSS v2 frontmatter fields if specified in req.body
-    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
-      if (req.body[key] !== undefined) {
-        updated[key] = req.body[key];
-      }
-    }
-
-    writeNode(updated, VAULT_DIR);
-    res.json(sanitizeNode(updated));
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * DELETE /api/memory/:slug
- */
-router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
-  try {
-    const list = nodes();
-    const node = list.find(n => n.slug === req.params.slug);
-    if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
-
-    // Find and delete the file
-    if (node._filePath && fs.existsSync(node._filePath)) {
-      fs.unlinkSync(node._filePath);
-    } else {
-      // Walk and find it
-      const files = walkMd(VAULT_DIR);
-      for (const file of files) {
-        const raw = fs.readFileSync(file, 'utf8');
-        if (raw.includes(`slug: ${req.params.slug}`)) {
-          fs.unlinkSync(file);
-          break;
-        }
-      }
-    }
-    res.json({ deleted: true, slug: req.params.slug });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
+// ─── Memory CRUD ───  (moved to ./routes/memory.mjs)
 // ─── Vault ────────────────────────────────────────────────────────────────────
 
 /**
@@ -395,8 +217,8 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
     let vaultEmbed = null, sessionEmbed = null;
     try {
       const { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } = await import('../core/embeddings.mjs');
-      const { loadNodes } = await import('../core/vault.mjs');
-      const vaultNodes = loadNodes(VAULT_DIR);
+      invalidate();
+      const vaultNodes = getNodes(VAULT_DIR);
       vaultEmbed = await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
       sessionEmbed = await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
     } catch { /* Ollama may not be running — non-fatal */ }
@@ -428,7 +250,7 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
     // Ollama reachability (best-effort)
     let ollamaOk = false;
     try {
-      const r = await fetch(`${process.env.OLLAMA_URL || 'http://127.0.0.1:11434'}/api/tags`, { signal: AbortSignal.timeout(2000) });
+      const r = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(2000) });
       ollamaOk = r.ok;
     } catch { /* offline */ }
 
@@ -443,337 +265,25 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
         vault_nodes:    vaultEmbedCount,
         session_chunks: sessionEmbedCount,
       },
-      ollama: { ok: ollamaOk, url: process.env.OLLAMA_URL || 'http://127.0.0.1:11434' },
+      ollama: { ok: ollamaOk, url: ollamaUrl },
     });
   } catch (err) {
     serverError(res, err);
   }
 });
 
-// ─── Keys ─────────────────────────────────────────────────────────────────────
-
-/**
- * GET /api/keys
- */
-router.get('/api/keys', requireAuth, requireScope('keys:read'), (req, res) => {
-  try {
-    const keys = loadKeys().map(({ token_hash, ...k }) => k);
-    res.json({ keys });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * POST /api/keys
- * Body: { name, scopes?, expires_at? }
- * Returns raw token once — store it immediately.
- */
-router.post('/api/keys', requireAuth, requireScope('keys:write'), (req, res) => {
-  try {
-    const { name, scopes, expires_at } = req.body || {};
-    if (!name) return badRequest(res, 'name is required');
-    const key = issueKey(name, { scopes, expires_at });
-    res.status(201).json({
-      id:         key.id,
-      name:       key.name,
-      token:      key.token,  // only time it's returned in plaintext
-      token_prefix: key.token_prefix,
-      scopes:     key.scopes,
-      expires_at: key.expires_at,
-      created_at: key.created_at,
-      _warning:   'Save this token — it will not be shown again.',
-    });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * DELETE /api/keys/:id
- */
-router.delete('/api/keys/:id', requireAuth, requireScope('keys:write'), (req, res) => {
-  try {
-    const key = revokeKey(req.params.id);
-    if (!key) return notFound(res, `Key not found: ${req.params.id}`);
-    res.json({ revoked: true, id: key.id, name: key.name });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-// ─── Sessions ─────────────────────────────────────────────────────────────────
-
-function sessionsDir() {
-  return SESSIONS_DIR;
-}
-
-function listSessionFiles() {
-  const dir = sessionsDir();
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.jsonl') || f.endsWith('.json'))
-    .sort()
-    .reverse(); // newest first
-}
-
-function readSessionFile(filename) {
-  const filePath = path.join(sessionsDir(), filename);
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, 'utf8').trim();
-  const lines = raw.split('\n').filter(Boolean);
-  const entries = lines.map(l => {
-    try { return JSON.parse(l); } catch { return null; }
-  }).filter(Boolean);
-
-  const id = filename.replace(/\.(jsonl|json)$/, '');
-  let exchanges = entries;
-  if (entries.length === 1 && entries[0] && Array.isArray(entries[0].messages)) {
-    exchanges = entries[0].messages.map(m => ({
-      ...m,
-      session_id: m.session_id || entries[0].id || entries[0].session_id || id
-    }));
-  } else {
-    exchanges = entries.map(m => ({
-      ...m,
-      session_id: m.session_id || id
-    }));
-  }
-
-  return {
-    id,
-    filename,
-    entries,
-    exchanges,
-    count: exchanges.length
-  };
-}
-
-/**
- * GET /api/sessions
- */
-router.get('/api/sessions', requireAuth, requireScope('memory:read'), (req, res) => {
-  try {
-    const files = listSessionFiles();
-    const { limit = '50', offset = '0' } = req.query;
-    const off = parseInt(offset, 10) || 0;
-    const lim = Math.min(200, parseInt(limit, 10) || 50);
-    const page = files.slice(off, off + lim).map(f => {
-      const data = readSessionFile(f);
-      const stat = fs.statSync(path.join(sessionsDir(), f));
-      return {
-        id: data?.id,
-        filename: f,
-        count: data?.count || 0,
-        modified: stat.mtime.toISOString(),
-        size: stat.size
-      };
-    });
-    res.json({ total: files.length, offset: off, limit: lim, sessions: page });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * GET /api/sessions/:id
- */
-router.get('/api/sessions/:id', requireAuth, requireScope('memory:read'), (req, res) => {
-  try {
-    const files = listSessionFiles();
-    const match = files.find(f => f.startsWith(req.params.id));
-    if (!match) return notFound(res, `Session not found: ${req.params.id}`);
-    const data = readSessionFile(match);
-    res.json(data);
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * POST /api/sessions/ingest
- *
- * Accepts two formats:
- *   A) Raw file relay (from `npx total-recall relay`):
- *      { source, path, content, sha256 }
- *      — content is the raw file text; server parses it based on source type
- *
- *   B) Pre-parsed messages:
- *      { id, source, messages: [{role, content}] }
- */
-router.post('/api/sessions/ingest', requireAuth, requireScope('memory:write'), (req, res) => {
-  try {
-    const body = req.body || {};
-    const source = body.source || 'api';
-
-    let messages;
-
-    if (body.content && typeof body.content === 'string') {
-      // Format A: raw file content from the relay — extract human/assistant turns
-      messages = parseRawSessionContent(body.content, source);
-    } else if (Array.isArray(body.messages)) {
-      // Format B: pre-parsed messages array
-      messages = body.messages;
-    } else {
-      return badRequest(res, 'Provide either {content} (raw file) or {messages:[{role,content}]}');
-    }
-
-    if (messages.length === 0) {
-      return res.status(200).json({ ingested: false, reason: 'no extractable messages' });
-    }
-
-    // Deduplicate by sha256 of the raw content (relay always sends sha256)
-    if (body.sha256) {
-      const hashIndex = path.join(AGENT_DIR, 'memory-derived', 'relay-hashes.jsonl');
-      fs.mkdirSync(path.dirname(hashIndex), { recursive: true });
-      const seen = new Set(
-        fs.existsSync(hashIndex)
-          ? fs.readFileSync(hashIndex, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l).sha256; } catch { return ''; } })
-          : []
-      );
-      if (seen.has(body.sha256)) {
-        return res.status(200).json({ ingested: false, reason: 'duplicate' });
-      }
-      fs.appendFileSync(hashIndex, JSON.stringify({ sha256: body.sha256, ts: new Date().toISOString(), source }) + '\n');
-    }
-
-    let rawSessionId = body.id || `relay-${source}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-    const sessionId = rawSessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename  = `${sessionId}.jsonl`;
-    const dir = sessionsDir();
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, filename);
-
-    const sessionObj = {
-      id: sessionId,
-      source,
-      messages: messages.map(m => ({
-        role:       m.role,
-        content:    m.content,
-        source,
-        session_id: sessionId,
-        timestamp:  m.timestamp || new Date().toISOString(),
-      }))
-    };
-    fs.writeFileSync(filePath, JSON.stringify(sessionObj) + '\n', 'utf8');
-
-    // Best-effort: embed session immediately so it's searchable right away
-    setImmediate(async () => {
-      try {
-        const msgs = parseSessionFile(filePath);
-        const chunks = sessionToEmbedChunks(msgs);
-        for (let i = 0; i < chunks.length; i++) {
-          const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
-          const embedding = await getEmbedding(chunks[i]);
-          saveSessionEmbeddingToIndex(DERIVED_DIR, key, chunks[i], embedding);
-        }
-      } catch { /* Ollama may not be running — non-fatal */ }
-    });
-
-    res.status(200).json({ ok: true, ingested: true, id: sessionId, count: messages.length });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * Extract human/assistant turns from raw IDE session file content.
- * Handles JSONL (Claude Code, Codex, Cursor, VS Code) and plaintext (Antigravity overview).
- */
-function parseRawSessionContent(content, source) {
-  const messages = [];
-  const lines = content.split('\n').filter(Boolean);
-
-  // Try JSONL first (most IDE formats)
-  let jsonlParsed = 0;
-  for (const line of lines) {
-    let rec;
-    try { rec = JSON.parse(line); } catch { continue; }
-    jsonlParsed++;
-
-    // Antigravity transcript.jsonl format
-    if (source === 'antigravity' && (rec.type === 'USER_INPUT' || (rec.source === 'MODEL' && (rec.type === 'PLANNER_RESPONSE' || rec.type === 'RESPONSE' || rec.type === 'model_response')))) {
-      let role = rec.type === 'USER_INPUT' ? 'user' : 'assistant';
-      let text = rec.content || '';
-      if (role === 'user' && text.includes('<USER_REQUEST>')) {
-        const match = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
-        if (match) text = match[1].trim();
-      }
-      if (text.trim()) {
-        messages.push({ role, content: text.slice(0, 8000) });
-      }
-      continue;
-    }
-
-    // Claude Code / Codex / Cursor format
-    if (rec.role && (rec.content || rec.message)) {
-      const text = typeof rec.content === 'string' ? rec.content
-        : Array.isArray(rec.content) ? rec.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
-        : typeof rec.message?.text === 'string' ? rec.message.text
-        : '';
-      if (text.trim()) messages.push({ role: rec.role, content: text.slice(0, 8000) });
-      continue;
-    }
-
-    // VS Code kind:2 requests array
-    if (rec.kind === 2 && Array.isArray(rec.v)) {
-      for (const req of rec.v) {
-        const user = req.message?.text || '';
-        const asst = req.response?.response?.value || req.response?.value || '';
-        if (user) messages.push({ role: 'user',      content: user.slice(0, 8000) });
-        if (asst) messages.push({ role: 'assistant', content: asst.slice(0, 8000) });
-      }
-    }
-  }
-
-  // If JSONL parsing got nothing meaningful, treat as plaintext (Antigravity overview.txt)
-  if (messages.length === 0 && content.trim()) {
-    if (source === 'antigravity') {
-      const lineArray = content.split('\n').filter(Boolean);
-      for (const line of lineArray) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-
-        let role = 'assistant';
-        if (trimmed.startsWith('USER:') || trimmed.startsWith('User:') || trimmed.startsWith('[user]')) {
-          role = 'user';
-        } else if (trimmed.startsWith('TOOL:') || trimmed.startsWith('[tool]') || trimmed.includes('tool_call')) {
-          role = 'tool';
-        }
-        messages.push({ role, content: trimmed.slice(0, 8000) });
-      }
-    } else {
-      messages.push({ role: 'assistant', content: content.slice(0, 20000) });
-    }
-  }
-
-  return messages;
-}
-
-/**
- * DELETE /api/sessions/:id
- */
-router.delete('/api/sessions/:id', requireAuth, requireScope('memory:write'), (req, res) => {
-  try {
-    const files = listSessionFiles();
-    const match = files.find(f => f.startsWith(req.params.id));
-    if (!match) return notFound(res, `Session not found: ${req.params.id}`);
-    fs.unlinkSync(path.join(sessionsDir(), match));
-    // Remove from session embeddings index too
-    try { removeSessionEmbeddingFromIndex(DERIVED_DIR, req.params.id); } catch { /* non-fatal */ }
-    res.json({ deleted: true, id: req.params.id });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
+// ─── Keys ─────────── (moved to ./routes/keys.mjs)
+// ─── Sessions ─────── (moved to ./routes/sessions.mjs)
 // ─── Sandbox ──────────────────────────────────────────────────────────────────
 
 /**
  * POST /api/sandbox
  * Body: { code }
  */
-router.post('/api/sandbox', requireAuth, requireScope('sandbox:run'), async (req, res) => {
+// Sandbox is rate-limited *before* requireAuth on purpose — limiter keys on
+// the authenticated principal when present, so it's IP-bucketed for
+// pre-auth misuse and key-bucketed once a PAT is attached.
+router.post('/api/sandbox', sandboxRateLimiter(), requireAuth, requireScope('sandbox:run'), requireSandboxEnabled, async (req, res) => {
   try {
     const { code } = req.body || {};
     if (!code) return badRequest(res, 'code is required');
@@ -886,18 +396,16 @@ router.get('/.well-known/total-recall.json', (req, res) => {
       version:       '3.0.0',
       base_url:      base,
       api:           `${base}/v1`,
-      mcp:           `${base}/mcp`,
       health:        `${base}/health`,
       models:        `${base}/v1/models`,
       auth: {
         type:        'bearer',
         token_prefix: 'tr_',
-        scopes: ['chat:read', 'chat:write', 'memory:read', 'memory:write', 'mcp:use'],
+        scopes: ['chat:read', 'chat:write', 'memory:read', 'memory:write'],
       },
-      capabilities:  ['chat', 'memory', 'mcp', 'sandbox', 'sessions'],
+      capabilities:  ['chat', 'memory', 'sandbox', 'sessions'],
       rate_limits: {
         api: sec.rate_limits?.api_requests_per_minute || 60,
-        mcp: sec.rate_limits?.mcp_requests_per_minute || 120,
       },
     });
   } catch (err) {
@@ -977,15 +485,7 @@ router.get('/api', (req, res) => {
       'keys:write':     'Issue/revoke API keys',
       'sandbox:run':    'Execute code in sandbox',
       'config:read':    'Read sanitized config',
-      'mcp:use':        'Use MCP JSON-RPC gateway',
       'health:read':    'Read health endpoints',
-    },
-    mcp: {
-      endpoint:   `${base}/mcp`,
-      protocol:   'JSON-RPC 2.0',
-      initialize: { method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'your-app', version: '1.0' }, capabilities: {} } },
-      tools:      ['list_memory', 'read_memory', 'search_memory', 'semantic_search', 'write_memory', 'delete_memory', 'recompile_surface', 'run_sandbox', 'read_file', 'list_directory', 'search_files'],
-      resources:  ['total-recall://instructions', 'total-recall://memory/index', 'total-recall://ssss/skill'],
     },
   });
 });
@@ -1090,8 +590,8 @@ router.post('/api/integrations/connect', requireAuth, (req, res) => {
 
     const validClients = [
       'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'claude-code',
-      'codex', 'gemini', 'windsurf', 'aider', 'ultrachat', 'obsidian',
-      'mcp', 'generic', 'antigravity'
+      'codex', 'gemini', 'aider', 'ultrachat', 'obsidian',
+      'generic', 'antigravity'
     ];
 
     if (!validClients.includes(client)) {
@@ -1099,7 +599,7 @@ router.post('/api/integrations/connect', requireAuth, (req, res) => {
     }
 
     // Generate a fresh key for this client
-    const scopes = ['ssss:read', 'memory:read', 'mcp:use'];
+    const scopes = ['ssss:read', 'memory:read'];
     const keyName = `${client.charAt(0).toUpperCase() + client.slice(1)} Link`;
     const newKey = issueKey(keyName, { scopes });
     const token = newKey.token;

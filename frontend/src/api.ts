@@ -1,6 +1,6 @@
 // ─── API helpers for Total Recall backend ────────────────────────────────────────
 
-import type { HealthData, MemoryNode, SandboxResult } from './types'
+import type { HealthData, MemoryNode, SandboxResult, ResearchItem } from './types'
 
 let API_BASE = localStorage.getItem('TOTAL_RECALL_API_BASE') || ''
 
@@ -289,7 +289,7 @@ export async function fetchActiveIntegrations(): Promise<{ success: boolean; act
 export interface ResearchQueueResponse {
   counts: { pending: number; in_progress: number; done: number; failed: number }
   total: number
-  items: any[]
+  items: ResearchItem[]
 }
 
 export async function listResearch(status?: string): Promise<ResearchQueueResponse> {
@@ -300,7 +300,7 @@ export async function listResearch(status?: string): Promise<ResearchQueueRespon
   return res.json()
 }
 
-export async function createResearch(topic: string, priority?: string, notes?: string): Promise<any> {
+export async function createResearch(topic: string, priority?: string, notes?: string): Promise<ResearchItem> {
   const res = await apiFetch(`${API_BASE}/api/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

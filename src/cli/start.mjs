@@ -12,6 +12,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(__dirname, '..', 'server', 'index.mjs');
@@ -19,11 +20,11 @@ const SERVER = path.join(__dirname, '..', 'server', 'index.mjs');
 export default function start(args) {
   const port = (() => {
     const i = args.indexOf('--port');
-    return i !== -1 ? args[i + 1] : process.env.PORT || '3000';
+    return i !== -1 ? args[i + 1] : String(configPort);
   })();
   const host = (() => {
     const i = args.indexOf('--host');
-    return i !== -1 ? args[i + 1] : process.env.HOST || '127.0.0.1';
+    return i !== -1 ? args[i + 1] : configHost;
   })();
 
   if (args.includes('--help') || args.includes('-h')) {
@@ -52,7 +53,7 @@ export default function start(args) {
       ...process.env,
       PORT: port,
       HOST: host,
-      NODE_ENV: process.env.NODE_ENV || 'production',
+      NODE_ENV: nodeEnv,
     },
   });
 

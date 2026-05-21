@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Pattern Detection Module
@@ -107,6 +108,6 @@ export function writeTasksToQueue(tasks, queueDir) {
     const { body, slug, ...frontmatter } = task;
     const raw = safeStringify(body, frontmatter);
     atomicWrite(filePath, raw);
-    console.log(`[Pattern Detector] Created Task: ${slug}`);
+    logger.info('pattern-detector', `Created Task: ${slug}`);
   }
 }

@@ -63,7 +63,9 @@ export function formatBeautifulDate(isoString) {
  *   7. Accepts direct research instructions from users
  */
 
-const getAgentDir = () => process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
+import { agentDir } from './config.mjs';
+
+const getAgentDir = () => agentDir;
 const getAgendaFile = () => path.join(getAgentDir(), 'research-agenda.jsonl');
 const getSourcesRegistry = () => path.join(getAgentDir(), 'memory-derived', 'source-registry.jsonl');
 
@@ -350,7 +352,9 @@ async function gatherFromSources(topicEntry, researchConfig) {
             topResult.type = 'webpage-rendered';
           }
         }
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        logger.debug('fact-seeker: smartFetch failed during topResult crawl', { err: err.message });
+      }
     }
   }
 
@@ -502,7 +506,29 @@ export function buildMultiNoteGraph(topic, synthesis, parsedSupportingNotes, sta
     node.frontmatter.related = [masterSlug];
   });
 
-  const masterTemporalFriendly = synthesis.temporal_context || formatBeautifulDate(now);
+  let masterTemporal = now;
+  if (synthesis.temporal_context && !isNaN(Date.parse(synthesis.temporal_context))) {
+    masterTemporal = new Date(synthesis.temporal_context).toISOString();
+  } else {
+    let latestPub = null;
+    for (const { result } of parsedSupportingNotes) {
+      if (result?.published) {
+        const parsed = Date.parse(result.published);
+        if (!isNaN(parsed)) {
+          if (!latestPub || parsed > latestPub) {
+            latestPub = parsed;
+          }
+        }
+      }
+    }
+    if (latestPub) {
+      masterTemporal = new Date(latestPub).toISOString();
+    } else if (synthesis.temporal_context) {
+      masterTemporal = synthesis.temporal_context;
+    }
+  }
+
+  const masterTemporalFriendly = formatBeautifulDate(masterTemporal);
   const masterTemporalCallout = `> [!NOTE]\n> **Temporal Context**: Information current as of ${masterTemporalFriendly}.`;
 
   const bodyLines = [
@@ -580,7 +606,7 @@ export function buildMultiNoteGraph(topic, synthesis, parsedSupportingNotes, sta
     schema_version: 2,
     x_memory_layer: 'research',
     x_topic: topic,
-    x_temporal_context: now,
+    x_temporal_context: masterTemporal,
     x_sources_count: allCitations.length,
     x_citations: allCitations,
   };
@@ -615,7 +641,7 @@ async function writeAndSurfaceImmediately(topic, synthesis, sourceResults, {
   writeNode({ ...masterNode.frontmatter, body: masterNode.body }, vaultDir);
 
   for (const sr of sourceResults) {
-    try { registerSource(sr, masterNode.slug); } catch { /* non-fatal */ }
+    try { registerSource(sr, masterNode.slug); } catch (err) { logger.debug('fact-seeker: registerSource fast-path failed', { err: err.message }); }
   }
 
   logger.info({
@@ -666,7 +692,7 @@ async function writeDraftToInbox(topic, synthesis, sourceResults, inboxDir, runt
   );
 
   for (const sr of sourceResults) {
-    try { registerSource(sr, masterNode.slug); } catch { /* non-fatal */ }
+    try { registerSource(sr, masterNode.slug); } catch (err) { logger.debug('fact-seeker: registerSource inbox failed', { err: err.message }); }
   }
 
   return masterNode.slug;
@@ -909,23 +935,11 @@ export async function ingestSessionTopics(sessionTranscript, runtimeConfig) {
 // ─── Specialized Cognitive Research Phase Engines ────────────────────────────────
 
 /**
- * Push a deliberation conclusion to interrupts, broadcast via MCP, and issue system notification.
+ * Push a deliberation conclusion to interrupts and issue system notification.
  */
 async function pushDeliberationConclusion(conclusions = []) {
   if (!conclusions.length) return;
   const summary = (conclusions[0] || 'New deliberation conclusion').slice(0, 120);
-  
-  // 1. MCP SSE - attempt import and broadcast
-  try {
-    const serverMcpPath = path.join(path.dirname(import.meta.url.replace('file://', '')), '../server/mcp.mjs');
-    if (fs.existsSync(serverMcpPath)) {
-      const { broadcastMcpNotification } = await import(serverMcpPath);
-      broadcastMcpNotification('info', `🧠 System 2 Deliberation: ${summary}`, {
-        conclusions,
-        vault_query: 'search_memory to get full context'
-      });
-    }
-  } catch { /* ignore server import errors */ }
   
   // 2. Interrupt file
   const lines = [
@@ -948,7 +962,9 @@ async function pushDeliberationConclusion(conclusions = []) {
     execFileSync('osascript', [
       '-e', `display notification "${msg}" with title "Total Recall Deliberation"`
     ], { timeout: 3000 });
-  } catch { /* ignore child_process or non-mac errors */ }
+  } catch (err) {
+    logger.debug('fact-seeker: osascript notification failed or unsupported', { err: err.message });
+  }
 }
 
 /**
@@ -1147,7 +1163,7 @@ Output ONLY valid JSON.`;
     }
 
     // Process synthesized instructions
-    const agentDir = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+    const agentDir = getAgentDir();
     const now = new Date().toISOString();
     let rulesSynthesized = false;
     
@@ -1187,6 +1203,15 @@ Output ONLY valid JSON.`;
           decay: { half_life_days: 120, access_count: 1 },
           schema_version: 2,
           x_memory_layer: 'conscious',
+          x_temporal_context: targetNode.x_temporal_context || now,
+          x_citations: [{
+            source: 'deliberation-synthesis',
+            title: `Synthesized from target node: ${targetNode.title || nodeSlug}`,
+            url: `file://${path.join(vaultDir, targetNode.category, targetNode.slug + '.md')}`,
+            published: targetNode.updated || now,
+            relevance: 1.0,
+            accessed: now
+          }],
           body: inst.body || ''
         };
         
@@ -1485,7 +1510,7 @@ Output ONLY valid JSON.`;
       return { success: true, output: `Expansion complete: no new tangents brainstormed for "${topic}".`, factSlug: nodeSlug };
     }
     
-    const agentDir = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+    const agentDir = getAgentDir();
     const queueDir = path.join(agentDir, 'scheduler', 'queue');
     const { persistTaskToDisk } = await import('./scheduler.mjs');
     

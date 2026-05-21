@@ -53,6 +53,17 @@ export const MemoryNodeSchema = z.object({
   }),
   schema_version: z.literal(2),
   x_memory_layer: z.enum(MEMORY_LAYERS).optional(),
+  x_temporal_context: z.string().optional(),
+  x_citations: z.array(
+    z.object({
+      source: z.string().optional(),
+      title: z.string().optional(),
+      url: z.string().optional(),
+      published: z.string().optional(),
+      relevance: z.number().optional(),
+      accessed: z.string().optional(),
+    })
+  ).optional(),
   // Absolute Invariant Extensions
   priority: z.literal('absolute').optional(),
   immutable: z.boolean().optional()

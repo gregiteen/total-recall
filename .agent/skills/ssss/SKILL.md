@@ -140,6 +140,10 @@ on crash or concurrent access.
 | `object` | `string` | What target the action applies to |
 | `sentiment_polarity` | enum | `directive_must \| directive_must_not \| descriptive \| preference` |
 | `decay.half_life_days` | `number` | Days until confidence halves from disuse |
+| `supersedes` | `array of strings` | Slugs of older memories superseded or rendered obsolete by this node |
+| `superseded_by` | `string \| null` | Slug of the newer memory that rendered this node obsolete |
+| `x_temporal_context` | `string` | ISO 8601 absolute timestamp representing when the node's information was published/current |
+| `x_citations` | `array of objects` | Citations list containing structured metadata (source, title, URL, published timestamp, relevance, accessed timestamp) |
 | `schema_version` | `2` | Must be `2` for v2 nodes |
 
 #### Absolute Invariant Extensions
