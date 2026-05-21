@@ -20,14 +20,33 @@ export const logEvents = new EventEmitter();
 logEvents.setMaxListeners(50);
 
 export const logger = {
-  log: (subsystem, level, message, meta = {}) => {
-    const entry = {
-      timestamp: new Date().toISOString(),
-      level,
-      subsystem,
-      message,
-      ...meta
-    };
+  log: (subsystemOrEntry, level, message, meta = {}) => {
+    let entry;
+    if (typeof subsystemOrEntry === 'object' && subsystemOrEntry !== null) {
+      entry = {
+        timestamp: new Date().toISOString(),
+        level: level || subsystemOrEntry.level || 'info',
+        subsystem: subsystemOrEntry.subsystem || 'unknown',
+        message: subsystemOrEntry.message || '',
+        ...subsystemOrEntry
+      };
+    } else if (typeof subsystemOrEntry === 'string' && message === undefined) {
+      entry = {
+        timestamp: new Date().toISOString(),
+        level: level || 'info',
+        subsystem: 'system',
+        message: subsystemOrEntry,
+        ...meta
+      };
+    } else {
+      entry = {
+        timestamp: new Date().toISOString(),
+        level: level || 'info',
+        subsystem: subsystemOrEntry || 'unknown',
+        message: message || '',
+        ...meta
+      };
+    }
 
     const line = JSON.stringify(entry) + '\n';
 
@@ -49,7 +68,8 @@ export const logger = {
   },
   info: (subsystem, message, meta) => logger.log(subsystem, 'info', message, meta),
   warn: (subsystem, message, meta) => logger.log(subsystem, 'warn', message, meta),
-  error: (subsystem, message, meta) => logger.log(subsystem, 'error', message, meta)
+  error: (subsystem, message, meta) => logger.log(subsystem, 'error', message, meta),
+  debug: (subsystem, message, meta) => logger.log(subsystem, 'debug', message, meta)
 };
 
 export { LOG_DIR, getLogFile };

@@ -580,7 +580,7 @@ export default async function connect(args) {
 
 
   const cwd = process.cwd();
-  const agentDir = configAgentDir;
+  const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || configAgentDir;
 
   // Auto-resolve brain URL and token if not explicitly provided
   if (!opts.brain) {

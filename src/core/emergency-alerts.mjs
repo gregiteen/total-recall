@@ -20,6 +20,7 @@ import path from 'path';
 import { execFileSync } from 'node:child_process';
 import { agentDir } from './config.mjs';
 import { logger } from './logger.mjs';
+import { sendSystemNotification } from './notifications.mjs';
 
 const AGENT_DIR = agentDir;
 const ALERTS_DIR = path.join(AGENT_DIR, 'alerts');
@@ -63,12 +64,14 @@ export function writeEmergencyAlert(message) {
   });
 
   // Fire macOS notification — this is the loudest channel
-  const sanitized = message.replace(/[^ -~]/g, '').replace(/["'`$\\]/g, '').slice(0, 200);
-  try {
-    execFileSync('osascript', [
-      '-e', `display notification "${sanitized}" with title "🚨 TOTAL RECALL EMERGENCY" sound name "Sosumi"`,
-    ], { timeout: 3000 });
-  } catch { /* non-macOS or notification failure — non-fatal */ }
+  sendSystemNotification('🚨 TOTAL RECALL EMERGENCY', message, {
+    open: EMERGENCY_FILE,
+    sound: 'Sosumi',
+    subtitle: 'Critical Failure Detected',
+    group: 'total-recall-emergency'
+  }).catch((err) => {
+    logger.debug('emergency-alerts: notification failed', { err: err.message });
+  });
 }
 
 /**

@@ -17,7 +17,7 @@ import path from 'node:path';
 import { agentDir } from '../core/config.mjs';
 
 function getAgentDir() {
-  return agentDir;
+  return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
 }
 
 function commandExists(cmd) {

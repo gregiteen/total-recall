@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { callFrontier, callFrontierRaw, loadFrontierConfig } from '../core/frontier.mjs';
 import { callLocalRuntimeRaw, loadRuntimeConfig, checkRuntimeHealth } from '../core/runtime.mjs';
 import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
