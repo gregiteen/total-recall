@@ -138,3 +138,28 @@ export async function callLocalRuntime(prompt, system, config) {
   const message = await callLocalRuntimeRaw(messages, config);
   return message.content;
 }
+
+/**
+ * Safely clean and parse JSON produced by LLMs, which might contain
+ * trailing commas, standalone placeholder lines (like '_'), or other formatting quirks.
+ */
+export function cleanAndParseJSON(jsonStr) {
+  // 1. Process line by line to remove standalone placeholders or bad lines
+  const lines = jsonStr.split('\n');
+  const cleanedLines = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Skip placeholder lines outside of actual string content
+    if (trimmed === '_' || trimmed === '_,' || trimmed === ',_' || trimmed === '...' || trimmed === '...,') {
+      continue;
+    }
+    cleanedLines.push(line);
+  }
+  let cleaned = cleanedLines.join('\n');
+
+  // 2. Remove trailing commas before matching closing brackets/braces
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+
+  return JSON.parse(cleaned);
+}
+
