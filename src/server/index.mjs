@@ -40,7 +40,8 @@ app.disable('x-powered-by');
 app.set('trust proxy', 'loopback');
 app.use(requireHttps);
 app.use(cors(corsOptions()));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
 import fs from 'node:fs';
@@ -88,14 +89,47 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   const agentDir = process.env.AGENT_DIR || path.join(import_os.default.homedir(), '.agent');
   const vaultExists = fs.existsSync(path.join(agentDir, 'memory-vault'));
 
+  // Check emergency alerts
+  let emergencyAlerts = '';
+  try {
+    const alertsPath = path.join(agentDir, 'alerts', 'emergency.md');
+    if (fs.existsSync(alertsPath)) {
+      emergencyAlerts = fs.readFileSync(alertsPath, 'utf8');
+    }
+  } catch { /* non-fatal */ }
+
+  // Check daemon status from PID file
+  let daemonStatus = 'unknown';
+  try {
+    const pidPath = path.join(agentDir, 'logs', 'daemon.pid');
+    if (fs.existsSync(pidPath)) {
+      const pid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
+      if (pid > 0) {
+        try {
+          process.kill(pid, 0); // signal 0 = check if process exists
+          daemonStatus = 'running';
+        } catch {
+          daemonStatus = 'dead';
+        }
+      }
+    } else {
+      daemonStatus = 'not_started';
+    }
+  } catch { /* non-fatal */ }
+
+  // Determine overall status
+  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || ollamaStatus === 'offline' || ollamaModels.length === 0;
+
   res.json({
-    status: 'healthy',
+    status: hasCriticalIssue ? 'degraded' : 'healthy',
     version: '3.0.0',
     uptime_seconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     disk,
     ollama: ollamaStatus,
     ollama_models: ollamaModels,
+    daemon: daemonStatus,
+    emergency_alerts: emergencyAlerts || null,
     vfs: {
       exists: vaultExists,
       path: agentDir,
@@ -228,19 +262,7 @@ try {
   });
 }
 
-// ─── MCP Gateway (/mcp) ────────────────────────────────────────────────────────
 
-try {
-  const { mountMcp } = await import('./mcp.mjs');
-  const { mcpRateLimiter } = await import('./auth.mjs');
-  if (mountMcp) {
-    app.use('/mcp', mcpRateLimiter(), requireAuth, requireScope('mcp:use'));
-    mountMcp(app);
-    console.error('[Server] MCP gateway mounted at /mcp');
-  }
-} catch (err) {
-  console.error('[Server] MCP gateway not available:', err.message);
-}
 
 // ─── Static Frontend (SPA catch-all) ────────────────────────────────────────────
 

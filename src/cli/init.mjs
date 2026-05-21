@@ -151,34 +151,40 @@ export default async function init(args) {
   }
   logOk(`Directory structure ready (${created} created, ${dirs.length - created} already existed)`);
 
-  // ── Step 2: Seed the SSSS skill ──
-  logStep('2/4', 'Installing SSSS skill into .agent/skills/ssss/');
+  // ── Step 2: Seed core skills ──
+  logStep('2/4', 'Installing core skills into .agent/skills/');
 
-  // Prefer the shipped scaffold copy (always present in npm tarball); fall back
-  // to the dev-repo .agent copy if the scaffold one is missing.
-  const ssssScaffold = path.join(ROOT, 'scaffold', '.agent', 'skills', 'ssss');
-  const ssssDev = path.join(ROOT, '.agent', 'skills', 'ssss');
-  const ssssSrc = fs.existsSync(ssssScaffold) ? ssssScaffold : ssssDev;
-  const ssssDest = path.join(agentDir, 'skills', 'ssss');
-
-  if (!fs.existsSync(ssssSrc)) {
-    logWarn('SSSS skill source not found — skipping. This may affect schema validation.');
-  } else {
-    copyDirMerge(ssssSrc, ssssDest, opts.dryRun);
-    logOk('SSSS skill installed');
+  const scaffoldSkillsDir = path.join(ROOT, 'scaffold', '.agent', 'skills');
+  let skillsToSeed = ['total-recall'];
+  if (fs.existsSync(scaffoldSkillsDir)) {
+    try {
+      skillsToSeed = fs.readdirSync(scaffoldSkillsDir).filter(f => fs.statSync(path.join(scaffoldSkillsDir, f)).isDirectory());
+    } catch { /* fallback to default */ }
   }
 
-  // ── Step 3: Copy default invariant memory nodes ──
-  logStep('3/4', 'Seeding default memory vault invariants');
+  for (const skill of skillsToSeed) {
+    const skillSrc = path.join(scaffoldSkillsDir, skill);
+    const skillDest = path.join(agentDir, 'skills', skill);
 
-  const scaffoldInvariantsSrc = path.join(ROOT, 'scaffold', '.agent', 'memory-vault', 'invariants');
-  const localInvariantsDest = path.join(agentDir, 'memory-vault', 'invariants');
+    if (!fs.existsSync(skillSrc)) {
+      logWarn(`${skill} skill source not found — skipping.`);
+    } else {
+      copyDirMerge(skillSrc, skillDest, opts.dryRun);
+      logOk(`${skill} skill installed`);
+    }
+  }
 
-  if (!fs.existsSync(scaffoldInvariantsSrc)) {
-    logWarn('Scaffold invariants not found — skipping.');
+  // ── Step 3: Copy default memory vault nodes ──
+  logStep('3/4', 'Seeding default memory vault nodes');
+
+  const scaffoldVaultSrc = path.join(ROOT, 'scaffold', '.agent', 'memory-vault');
+  const localVaultDest = path.join(agentDir, 'memory-vault');
+
+  if (!fs.existsSync(scaffoldVaultSrc)) {
+    logWarn('Scaffold memory vault not found — skipping.');
   } else {
-    copyDirMerge(scaffoldInvariantsSrc, localInvariantsDest, opts.dryRun);
-    logOk('Default invariants seeded');
+    copyDirMerge(scaffoldVaultSrc, localVaultDest, opts.dryRun);
+    logOk('Default memory vault seeded');
   }
 
   // ── Step 3.5: Seed the onboarding interview task ──

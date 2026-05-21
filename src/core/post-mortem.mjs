@@ -3,7 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';
-import { atomicWrite, loadNodes } from './vault.mjs';
+import { atomicWrite, loadNodes, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -254,7 +254,7 @@ function writeDraftNode(inboxDir, { title, body, category, layer, tags, sourceSe
     x_memory_layer: layer,
   };
 
-  const raw = matter.stringify(body, frontmatter);
+  const raw = safeStringify(body, frontmatter);
   atomicWrite(path.join(inboxDir, `${slug}.md`), raw);
 }
 
@@ -273,7 +273,7 @@ function writeSkillGapTask(queueDir, { topic, description, sourceSession }) {
 
   const body = `## Objective\nThe agent encountered a skill gap for "${topic}".\n\n${description}\n\n## Steps\n1. Research the topic.\n2. Check if an existing skill covers it.\n3. If not, draft a new SKILL.md.`;
 
-  atomicWrite(path.join(queueDir, `${slug}.md`), matter.stringify(body, data));
+  atomicWrite(path.join(queueDir, `${slug}.md`), safeStringify(body, data));
 }
 
 // ─── Rule Compliance Auditor ────────────────────────────────────────────────────
@@ -395,7 +395,7 @@ async function escalateViolatedRules(violations, nodes, vaultDir) {
       }
 
       data.updated = new Date().toISOString();
-      atomicWrite(node._filepath, matter.stringify(content, data));
+      atomicWrite(node._filepath, safeStringify(content, data));
     } catch {
       // Skip if we can't update
     }

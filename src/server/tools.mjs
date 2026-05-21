@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { runInSandbox } from '../core/sandbox.mjs';
 
 // ─── Browser Session (persistent across tool calls in a process) ──────────────
@@ -14,7 +14,11 @@ async function getBrowserPage() {
     const { chromium } = await import('playwright');
     _browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--disable-dev-shm-usage',
+        // Only disable Chromium sandbox when running as root (where it's required)
+        ...(process.getuid?.() === 0 ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
+      ],
     });
     _page = await _browser.newPage();
     await _page.setViewportSize({ width: 1280, height: 900 });
@@ -227,11 +231,20 @@ function xrun(cmd) {
   return execSync(cmd, { timeout: 8000, encoding: 'utf8' }).trim();
 }
 
+// Safe version for xdotool commands — uses execFileSync with argument arrays
+function xrunSafe(args, envOverrides = {}) {
+  return execFileSync(args[0], args.slice(1), {
+    timeout: 8000,
+    encoding: 'utf8',
+    env: { ...process.env, ...envOverrides },
+  }).trim();
+}
+
 export async function computerScreenshot() {
   try {
     const display = await ensureDisplay();
     const tmpFile = path.join(os.tmpdir(), `cu-shot-${Date.now()}.png`);
-    xrun(`DISPLAY=${display} scrot -z "${tmpFile}"`);
+    xrunSafe(['scrot', '-z', tmpFile], { DISPLAY: display });
     const buf  = fs.readFileSync(tmpFile);
     const b64  = buf.toString('base64');
     try { fs.unlinkSync(tmpFile); } catch {}
@@ -244,7 +257,9 @@ export async function computerScreenshot() {
 export async function computerMouseMove(x, y) {
   try {
     const display = await ensureDisplay();
-    xrun(`DISPLAY=${display} xdotool mousemove ${x} ${y}`);
+    const nx = parseInt(x, 10), ny = parseInt(y, 10);
+    if (isNaN(nx) || isNaN(ny)) throw new Error('Invalid coordinates');
+    xrunSafe(['xdotool', 'mousemove', String(nx), String(ny)], { DISPLAY: display });
     return `Mouse moved to (${x}, ${y})`;
   } catch (err) {
     return `Mouse move failed: ${err.message}`;
@@ -254,7 +269,9 @@ export async function computerMouseMove(x, y) {
 export async function computerLeftClick(x, y) {
   try {
     const display = await ensureDisplay();
-    xrun(`DISPLAY=${display} xdotool mousemove ${x} ${y} click 1`);
+    const nx = parseInt(x, 10), ny = parseInt(y, 10);
+    if (isNaN(nx) || isNaN(ny)) throw new Error('Invalid coordinates');
+    xrunSafe(['xdotool', 'mousemove', String(nx), String(ny), 'click', '1'], { DISPLAY: display });
     return `Left-clicked at (${x}, ${y})`;
   } catch (err) {
     return `Click failed: ${err.message}`;
@@ -264,7 +281,9 @@ export async function computerLeftClick(x, y) {
 export async function computerDoubleClick(x, y) {
   try {
     const display = await ensureDisplay();
-    xrun(`DISPLAY=${display} xdotool mousemove ${x} ${y} click --repeat 2 --delay 100 1`);
+    const nx = parseInt(x, 10), ny = parseInt(y, 10);
+    if (isNaN(nx) || isNaN(ny)) throw new Error('Invalid coordinates');
+    xrunSafe(['xdotool', 'mousemove', String(nx), String(ny), 'click', '--repeat', '2', '--delay', '100', '1'], { DISPLAY: display });
     return `Double-clicked at (${x}, ${y})`;
   } catch (err) {
     return `Double-click failed: ${err.message}`;
@@ -274,7 +293,9 @@ export async function computerDoubleClick(x, y) {
 export async function computerRightClick(x, y) {
   try {
     const display = await ensureDisplay();
-    xrun(`DISPLAY=${display} xdotool mousemove ${x} ${y} click 3`);
+    const nx = parseInt(x, 10), ny = parseInt(y, 10);
+    if (isNaN(nx) || isNaN(ny)) throw new Error('Invalid coordinates');
+    xrunSafe(['xdotool', 'mousemove', String(nx), String(ny), 'click', '3'], { DISPLAY: display });
     return `Right-clicked at (${x}, ${y})`;
   } catch (err) {
     return `Right-click failed: ${err.message}`;
@@ -287,7 +308,7 @@ export async function computerType(text) {
     // Write text via temp file to avoid shell-quoting issues
     const tmpFile = path.join(os.tmpdir(), `cu-type-${Date.now()}.txt`);
     fs.writeFileSync(tmpFile, text);
-    xrun(`DISPLAY=${display} xdotool type --clearmodifiers --file "${tmpFile}"`);
+    xrunSafe(['xdotool', 'type', '--clearmodifiers', '--file', tmpFile], { DISPLAY: display });
     try { fs.unlinkSync(tmpFile); } catch {}
     return `Typed: ${text.slice(0, 80)}${text.length > 80 ? '…' : ''}`;
   } catch (err) {
@@ -298,7 +319,9 @@ export async function computerType(text) {
 export async function computerKey(key) {
   try {
     const display = await ensureDisplay();
-    xrun(`DISPLAY=${display} xdotool key ${key}`);
+    // Validate key against safe xdotool key name pattern
+    if (!/^[a-zA-Z0-9_+ ]+$/.test(key)) throw new Error('Invalid key name');
+    xrunSafe(['xdotool', 'key', key], { DISPLAY: display });
     return `Key pressed: ${key}`;
   } catch (err) {
     return `Key press failed: ${err.message}`;
@@ -309,8 +332,12 @@ export async function computerScroll(x, y, direction, amount = 3) {
   try {
     const display = await ensureDisplay();
     const button = direction === 'up' ? 4 : 5;
-    const clicks = Array(amount).fill(`click ${button}`).join(' ');
-    xrun(`DISPLAY=${display} xdotool mousemove ${x} ${y} ${clicks}`);
+    const nx = parseInt(x, 10), ny = parseInt(y, 10);
+    const amt = parseInt(amount, 10) || 3;
+    if (isNaN(nx) || isNaN(ny)) throw new Error('Invalid coordinates');
+    const clickArgs = [];
+    for (let i = 0; i < amt; i++) clickArgs.push('click', String(button));
+    xrunSafe(['xdotool', 'mousemove', String(nx), String(ny), ...clickArgs], { DISPLAY: display });
     return `Scrolled ${direction} ${amount}× at (${x}, ${y})`;
   } catch (err) {
     return `Scroll failed: ${err.message}`;

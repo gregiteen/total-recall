@@ -3,7 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime } from './runtime.mjs';
-import { loadNodes, atomicWrite } from './vault.mjs';
+import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -184,7 +184,7 @@ function writeConclusionNode(inboxDir, conclusion, sourceSlugList) {
   };
 
   const body = conclusion.body || '';
-  atomicWrite(path.join(inboxDir, `${slug}.md`), matter.stringify(body, frontmatter));
+  atomicWrite(path.join(inboxDir, `${slug}.md`), safeStringify(body, frontmatter));
 }
 
 function writeContradictionRecord(conflictsDir, contradiction) {
@@ -208,7 +208,7 @@ function writeContradictionRecord(conflictsDir, contradiction) {
 
   atomicWrite(
     path.join(conflictsDir, `${slug}.md`),
-    matter.stringify('', data),
+    safeStringify('', data),
   );
 }
 
@@ -234,7 +234,7 @@ function writeMergeProposal(proposalsDir, candidate) {
 
   atomicWrite(
     path.join(proposalsDir, `${slug}.md`),
-    matter.stringify('', data),
+    safeStringify('', data),
   );
 }
 

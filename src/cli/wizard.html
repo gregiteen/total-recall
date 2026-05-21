@@ -19,20 +19,24 @@
     --purple: #bc8cff;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
+  html, body {
+    height: 100vh;
+    overflow: hidden;
+    scroll-behavior: smooth;
+  }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     line-height: 1.6;
-    min-height: 100vh;
   }
 
   /* ── Layout ── */
   .wizard-shell {
     display: flex;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
   }
   .sidebar {
     width: 220px;
@@ -69,9 +73,13 @@
     padding: 9px 20px;
     font-size: 13px;
     color: var(--muted);
-    cursor: default;
-    transition: background 0.15s;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
     position: relative;
+  }
+  .step-nav li:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
   }
   .step-nav li.active {
     color: var(--text);
@@ -99,8 +107,23 @@
 
   .main-content {
     flex: 1;
+    height: 100vh;
+    overflow-y: auto;
     padding: 40px 48px;
     max-width: 820px;
+  }
+  .main-content::-webkit-scrollbar {
+    width: 8px;
+  }
+  .main-content::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .main-content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+  .main-content::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
   }
 
   /* ── Phases ── */
@@ -300,9 +323,10 @@
     color: var(--muted);
     cursor: pointer;
     font-family: inherit;
-    transition: color 0.15s;
+    transition: all 0.2s ease-in-out;
   }
-  .code-block .copy-btn:hover { color: var(--text); }
+  .code-block .copy-btn:hover { color: var(--text); background: var(--border); }
+  .code-block .copy-btn.copied { color: #34d399; border-color: #34d399; background: rgba(52, 211, 153, 0.1); }
 
   /* ── API table ── */
   .api-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -446,6 +470,123 @@
   .connect-result-line.ok  { color: var(--green); }
   .connect-result-line.err { color: var(--red); }
   .connect-result-line.info { color: var(--muted); }
+
+  /* Collapsible Groups for Rules & Skills */
+  details.group-details summary::-webkit-details-marker { display: none; }
+  details.group-details summary { list-style: none; }
+  details.group-details[open] .details-arrow { transform: rotate(0deg); }
+  details.group-details:not([open]) .details-arrow { transform: rotate(-90deg); }
+  
+  /* Skills specific accent styling */
+  details.group-details.skill-group {
+    border-color: rgba(188, 140, 255, 0.25) !important;
+  }
+  details.group-details.skill-group summary {
+    background: rgba(188, 140, 255, 0.03) !important;
+  }
+  details.group-details.skill-group summary:hover {
+    background: rgba(188, 140, 255, 0.06) !important;
+  }
+
+  /* ── Floating Persistent Install Status Bar ── */
+  .persistent-install-bar {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 380px;
+    background: rgba(22, 27, 34, 0.85);
+    backdrop-filter: blur(16px) saturate(120%);
+    -webkit-backdrop-filter: blur(16px) saturate(120%);
+    border: 1px solid rgba(48, 54, 61, 0.85);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    padding: 16px;
+    z-index: 10000;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    display: none; /* hidden by default */
+  }
+  .persistent-install-bar.visible {
+    display: block;
+    animation: slideInBar 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideInBar {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .pbar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .pbar-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pbar-spinner {
+    width: 8px;
+    height: 8px;
+    background-color: var(--blue);
+    border-radius: 50%;
+    animation: pbar-pulse 1.4s infinite ease-in-out;
+  }
+  @keyframes pbar-pulse {
+    0%, 100% { transform: scale(0.6); opacity: 0.4; }
+    50% { transform: scale(1.2); opacity: 1; }
+  }
+  .pbar-details-link {
+    font-size: 11px;
+    color: var(--blue);
+    text-decoration: none;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .pbar-details-link:hover {
+    text-decoration: underline;
+  }
+  .pbar-track {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .pbar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--green), var(--accent));
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+  .pbar-status-text {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .pbar-latest-log {
+    font-size: 10px;
+    font-family: 'SF Mono', monospace;
+    color: var(--blue);
+    background: rgba(88, 166, 255, 0.05);
+    border-radius: 4px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 </style>
 </head>
 <body>
@@ -581,7 +722,19 @@
               <div class="form-group" style="margin-bottom:10px">
                 <label>Step 2 — Get your API key</label>
                 <p style="color:var(--muted);font-size:12px;margin-bottom:6px">Go to <a href="https://cloud.vast.ai/manage-keys/" target="_blank" rel="noopener" style="color:var(--blue)">cloud.vast.ai/manage-keys</a> → copy it.</p>
-                <input type="password" id="cfg-vastai-key" placeholder="Paste your Vast.ai API key here" autocomplete="off">
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                  <input type="password" id="cfg-vastai-key" placeholder="Paste your Vast.ai API key here" autocomplete="off" style="font-family:monospace;flex:1">
+                  <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-vastai-key')">Show</button>
+                  <button class="btn btn-blue" id="vastai-scan-btn" style="padding:5px 10px;font-size:12px" onclick="scanVastAIInstances(event)">🔍 Scan Account</button>
+                </div>
+              </div>
+              <div id="vastai-existing-container" style="display:none;margin-bottom:15px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--panel2)">
+                <div id="vastai-cleanup-banner" class="notice warn" style="display:none;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:6px;font-size:11px">
+                  <span>⚠️ We detected failed/broken instances billing your account.</span>
+                  <button class="btn btn-secondary" id="vastai-cleanup-btn" style="color:var(--red);border-color:var(--red);padding:3px 8px;font-size:10px" onclick="cleanupOnboardingFailedInstances(event)">🧹 Clean Up All Failed</button>
+                </div>
+                <h4 style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--blue)">📋 Found Existing Instances on your Account:</h4>
+                <div id="vastai-existing-list" style="display:flex;flex-direction:column;gap:8px"></div>
               </div>
               <div class="form-group" style="margin-bottom:0">
                 <label>Step 3 — We do the rest</label>
@@ -599,7 +752,7 @@
             <div id="vps-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
               <div class="form-group" style="margin-bottom:10px">
                 <label>SSH into your server and run this one command</label>
-                <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash</div>
+                <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh -o /tmp/install.sh && bash /tmp/install.sh && rm /tmp/install.sh</div>
               </div>
               <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer handles Node.js, Ollama, the gemma4 model, HTTPS, and the brain server — everything from scratch.</div>
             </div>
@@ -643,7 +796,10 @@
                   </div>
                   <div class="form-group" style="margin-bottom:0">
                     <label>Cloudflare Tunnel Token</label>
-                    <input type="password" id="cfg-cloudflare-token" placeholder="eyJh…" autocomplete="off">
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <input type="password" id="cfg-cloudflare-token" placeholder="eyJh…" autocomplete="off" style="font-family:monospace;flex:1">
+                      <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-cloudflare-token')">Show</button>
+                    </div>
                     <div class="hint">
                       In Cloudflare Zero Trust → Networks → Tunnels → Create tunnel → copy the token from the install command.
                       <a href="https://one.dash.cloudflare.com" target="_blank" rel="noopener" style="color:var(--blue)">one.dash.cloudflare.com →</a>
@@ -658,6 +814,24 @@
           <div style="font-size:11px;color:var(--muted)">
             Both options use Cloudflare's global network as an encrypted proxy — your brain never exposes a raw port to the internet.
             For VPS/advanced users: you can also use Caddy + Let's Encrypt with any domain (including <a href="https://www.duckdns.org" target="_blank" rel="noopener" style="color:var(--muted)">duckdns.org</a>) by passing <code>--domain yourname.duckdns.org</code> to the CLI installer.
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard security password -->
+      <div class="card" id="security-section" style="margin-top:20px">
+        <h3>🔑 Dashboard Admin Password</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+          Set the password you will use to log into your remote settings dashboard (<code>/dashboard</code>).
+        </p>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Admin Password <span style="font-weight:400;color:var(--muted)">(minimum 8 characters)</span></label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="cfg-dashboard-password" value="totalrecall" placeholder="Enter initial password" autocomplete="off" style="font-family:monospace;flex:1">
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-dashboard-password')">Hide</button>
+          </div>
+          <div class="hint">
+            <strong>Default: <code>totalrecall</code></strong>. For security, the dashboard will force you to reset this password upon your first login. Click Hide to mask it.
           </div>
         </div>
       </div>
@@ -682,6 +856,16 @@
         <div id="progress-track"><div id="progress-bar"></div></div>
         <div id="progress-label">Waiting for install to begin...</div>
         <div id="log"></div>
+      </div>
+
+      <!-- shown after error event -->
+      <div id="install-error-notice" style="display:none">
+        <div class="notice warn">
+          ⚠️ &nbsp;Provisioning/Installation failed. Check the error above, go back to edit your options/API key, and try again.
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goPhase(1)">← Go Back &amp; Edit Options</button>
+        </div>
       </div>
 
       <!-- shown after done event -->
@@ -749,10 +933,11 @@
         </div>
 
         <div id="key-result" style="display:none; margin-top:20px">
-          <div class="notice success">✅ &nbsp;API key generated. <strong>Save this — it's shown only once.</strong></div>
-          <div class="token-box">
-            <code id="key-value">…</code>
-            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="copyToken()">Copy</button>
+          <div class="notice success" id="key-success-notice">✅ &nbsp;API key active and saved securely in your local configuration. You can copy it at any time (even when hidden) or find it in the Settings tab later. No need to write it down or worry about losing it!</div>
+          <div class="token-box" style="display:flex; gap:8px; align-items:center">
+            <input type="password" id="pat-key-display" readonly style="font-family:monospace; flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:7px 10px; font-size:13px" />
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('pat-key-display')">Show</button>
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="copyToken('pat-key-display')">Copy</button>
           </div>
         </div>
       </div>
@@ -958,8 +1143,8 @@
       </div>
 
       <div class="card">
-        <h3 style="margin-bottom:6px">📥 Import Existing Rules</h3>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Already have AGENTS.md, .cursorrules, CLAUDE.md, or other rule files? Import them into your vault so Total Recall includes them in every session.</p>
+        <h3 style="margin-bottom:6px">📥 Import Existing Rules &amp; Skills</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Already have <code>AGENTS.md</code>, <code>.cursorrules</code>, <code>CLAUDE.md</code>, or modular <strong>Skills</strong> (under <code>.agent/skills</code>)? Scan and import them so Total Recall compiles them into every session.</p>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
           <input type="text" id="import-dir" placeholder="Directory to scan (default: current project)" style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px">
           <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px;white-space:nowrap" onclick="scanRuleFiles()">🔍 Scan</button>
@@ -1053,6 +1238,57 @@
         <p>Total Recall is installed and ready. Here are your URLs.</p>
       </div>
 
+      <!-- SSH Fallback Warning Card -->
+      <div id="ssh-fallback-warning" class="card" style="display:none; border: 1px solid var(--yellow); background: rgba(210, 153, 34, 0.05);">
+        <h3 style="color:var(--yellow); display:flex; align-items:center; gap:8px; margin-bottom:8px">
+          ⚠️ Secure Tunnel Fallback (SSH Connection)
+        </h3>
+        <p style="color:var(--text); font-size:13px; line-height:1.5; margin-bottom:12px">
+          We detected that your brain URLs are pointing directly to the VM's SSH host (<strong><span id="warning-ssh-host">ssh1.vast.ai</span></strong>). 
+          Chrome and other modern browsers <strong>cannot make HTTP requests to an SSH port</strong> (doing so triggers a <code>net::ERR_INVALID_HTTP_RESPONSE</code> error).
+        </p>
+        <p style="color:var(--muted); font-size:12px; line-height:1.5; margin-bottom:12px">
+          This usually happens when the Cloudflare quick tunnel failed to provision on the remote GPU instance in time, or timed out. 
+          The background installer is likely still running on your VM, or you can paste your custom Cloudflare tunnel URL below.
+        </p>
+        <div style="border-top:1px solid rgba(210, 153, 34, 0.15); padding-top:10px; display:flex; flex-direction:column; gap:6px">
+          <div style="font-size:12px; color:var(--text)">
+            <strong>What to do next:</strong>
+          </div>
+          <ul style="padding-left:16px; font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:4px">
+            <li style="color:var(--muted)">1. Keep an eye on the <strong>persistent status bar</strong> at the bottom right — it will update as the background VM installer continues running.</li>
+            <li style="color:var(--muted)">2. Once the installer finishes successfully, it may output your public tunnel URL (e.g. <code>https://xyz.trycloudflare.com</code>).</li>
+            <li style="color:var(--muted)">3. Alternatively, if you set up your own tunnel or want to manually connect, scroll down to the <strong>Manual Endpoint Override</strong> panel below and paste your secure URL.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Dashboard Password Credentials Card -->
+      <div class="card" style="margin-top: 20px; border-left: 4px solid var(--accent);">
+        <h3 style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+          🔑 Dashboard Sign In Credentials
+        </h3>
+        <p style="color:var(--text); font-size:13px; margin-bottom:12px">
+          Use the credentials below to log into your settings dashboard (<code>/dashboard</code>). For security, you will be forced to change this temporary password upon your first access.
+        </p>
+        <div style="display:flex; gap:16px; flex-wrap:wrap">
+          <div style="flex:1; min-width:200px">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px">Username</div>
+            <div style="background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-family:monospace; font-size:13px; color:var(--text)">
+              admin
+            </div>
+          </div>
+          <div style="flex:1; min-width:200px">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px">Temporary Password</div>
+            <div style="display:flex; gap:8px; align-items:center">
+              <input type="password" id="done-dashboard-password" readonly style="background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-family:monospace; font-size:13px; color:var(--text); flex:1">
+              <button class="btn btn-secondary" style="padding:7px 12px; font-size:12px" onclick="toggleShow('done-dashboard-password')">Show</button>
+              <button class="btn btn-secondary" style="padding:7px 12px; font-size:12px" onclick="copyToken('done-dashboard-password')">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="url-grid">
           <div class="url-item">
@@ -1095,6 +1331,39 @@
           <li>🔄 <strong>Keep it synced</strong> — set up <code>npx total-recall sync --watch</code> for continuous ingest</li>
           <li>📚 <strong>Docs</strong> — <a href="https://github.com/gregiteen/total-recall" target="_blank" rel="noopener" style="color:var(--blue)">github.com/gregiteen/total-recall</a></li>
         </ul>
+      </div>
+
+      <!-- Manual Override Card -->
+      <div class="card" style="margin-top:24px">
+        <h3>🔧 Manual Endpoint Override</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          If your secure tunnel URL or host endpoint is stale (e.g. <code>http://ssh1.vast.ai:10120</code>), or you have a custom Cloudflare tunnel URL, you can manually override your brain server endpoints below.
+        </p>
+        
+        <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:rgba(255,255,255,0.02)">
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Brain Base URL or Host</label>
+            <input type="text" id="override-base-url" placeholder="e.g. https://xyz.trycloudflare.com  or  http://localhost:3000" autocomplete="off" spellcheck="false">
+            <div class="hint">The base domain/URL where your brain server is running.</div>
+          </div>
+          
+          <div class="form-group" style="margin-bottom:14px">
+            <label>Authentication Token (PAT)</label>
+            <input type="password" id="override-pat-key" placeholder="Bearer Token (PAT)" autocomplete="off">
+            <div class="hint">If you generated a PAT in Phase 3, paste it here. Defaults to your generated PAT.</div>
+          </div>
+          
+          <div id="override-save-result" class="notice" style="display:none;margin-bottom:12px"></div>
+          
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-blue" style="font-size:12px;padding:6px 14px" onclick="saveManualOverride()">Save Override &amp; Re-check</button>
+            <button class="btn btn-secondary" style="font-size:12px;padding:6px 14px" onclick="toggleShow('override-pat-key')">Show Token</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:24px">
+        <button class="btn btn-secondary" onclick="goPhase(5)">← Go Back &amp; Edit Options</button>
       </div>
     </section>
 
@@ -1194,6 +1463,83 @@
         </div>
       </div>
 
+      <!-- Total Recall API Key -->
+      <div class="card" style="margin-top: 24px;">
+        <h3>🔑 Total Recall API Key</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          This is the primary Personal Access Token (PAT) used by extensions and IDEs to securely connect to your memory vault.
+        </p>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:rgba(255,255,255,0.02)">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="password" id="settings-pat-key" readonly placeholder="No API key active" style="font-family:monospace;flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px">
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('settings-pat-key')">Show</button>
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="copyToken('settings-pat-key')">Copy</button>
+          </div>
+          <p style="font-size:11px;color:var(--muted);margin-top:6px;margin-bottom:0">
+            🔒 Saved securely in your local configuration. You can copy it directly at any time (even when hidden) or click <strong>Show</strong> to reveal it. If you need a new key, you can regenerate one at <a href="#" onclick="goPhase(3); return false;" style="color:var(--blue);text-decoration:underline">Phase 3 (API Key)</a>.
+          </p>
+        </div>
+      </div>
+
+      <!-- Cloud Instances Management (Vast.ai) -->
+      <div class="card" style="margin-top: 24px;">
+        <h3>☁️ Cloud GPU Instance Management</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          Monitor, adopt, or destroy cloud GPU instances rented on your Vast.ai account at any time.
+        </p>
+
+        <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:rgba(255,255,255,0.02)">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Vast.ai API Key</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+            <input type="password" id="settings-vastai-key" placeholder="Paste your Vast.ai API Key..." autocomplete="off" style="font-family:monospace;flex:1">
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('settings-vastai-key')">Show</button>
+            <button class="btn btn-primary" id="settings-vastai-scan-btn" onclick="scanSettingsVastAI()" style="padding:5px 14px;font-size:12px">🔍 Scan &amp; Manage</button>
+          </div>
+
+          <div id="settings-vastai-container" style="display:none;margin-top:14px">
+            <div id="settings-cleanup-banner" class="notice warn" style="display:none;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:6px;font-size:12px">
+              <span>⚠️ We detected failed/broken instances that are still billing your account.</span>
+              <button class="btn btn-secondary" id="settings-cleanup-btn" style="color:var(--red);border-color:var(--red);padding:3px 8px;font-size:11px" onclick="cleanupSettingsFailedInstances()">🧹 Clean Up All Failed</button>
+            </div>
+            <h4 style="margin-bottom:8px;font-size:13px;color:var(--text)">Your Vast.ai Instances:</h4>
+            <div id="settings-vastai-list" style="display:grid;gap:10px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Remote Dashboard Password Settings -->
+      <div class="card" style="margin-top: 24px;">
+        <h3>🔑 Remote Dashboard Password</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+          Reset or change the administrator password of your active local or remote brain instance.
+        </p>
+        <div id="settings-password-result" class="notice" style="display:none;margin-bottom:14px"></div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>New Admin Password <span style="font-weight:400;color:var(--muted)">(minimum 8 characters)</span></label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="settings-new-password" placeholder="Enter new dashboard password..." autocomplete="off" style="font-family:monospace;flex:1">
+            <button class="btn btn-primary" onclick="resetRemotePassword()">Update Remote Password</button>
+          </div>
+          <div class="hint">
+            This will update the configuration on your active brain (locally or over SSH on your Vast.ai VM) and force a password reset on next dashboard login.
+          </div>
+        </div>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="card" style="margin-top: 24px; border-color: var(--red); background: rgba(248,81,73,0.02)">
+        <h3 style="color:var(--red)">⚠️ Danger Zone</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          Reset all configurations to start fresh. This will clear the wizard's memory from this browser and the server.
+        </p>
+        <div style="border:1px solid rgba(248,81,73,0.2);border-radius:8px;padding:14px;background:rgba(248,81,73,0.03)">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+            This clears both local storage and the server-side configuration file (`~/.agent/config/wizard-config.json`). The remote VM will not be automatically destroyed, so make sure to destroy it using the GPU Instance Management panel above if needed to avoid ongoing charges.
+          </p>
+          <button class="btn" style="background:var(--red);color:#fff;font-size:12px;padding:8px 16px" onclick="resetWizardSetup()">Reset Wizard Setup</button>
+        </div>
+      </div>
+
     </section>
 
   </main>
@@ -1202,6 +1548,90 @@
 <script>
 (function () {
   'use strict';
+
+  // ── Intercept fetch to rewrite relative paths to absolute wizard server when opened via file:// ──
+  (function() {
+    var originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+      if (typeof url === 'string' && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('//')) {
+        var base = '';
+        if (window.location.protocol === 'file:') {
+          base = 'http://localhost:3001';
+        } else {
+          base = window.location.origin;
+        }
+        var cleanPath = url.startsWith('/') ? url : '/' + url;
+        url = base + cleanPath;
+      }
+      return originalFetch(url, options);
+    };
+  })();
+
+  // ── Safe LocalStorage wrapper with sessionStorage fallback ──
+  var safeStorage = {
+    getItem: function (key) {
+      try {
+        return localStorage.getItem(key) || sessionStorage.getItem(key);
+      } catch (e) {
+        try {
+          return sessionStorage.getItem(key);
+        } catch (e2) {
+          return null;
+        }
+      }
+    },
+    setItem: function (key, value) {
+      try {
+        localStorage.setItem(key, value);
+        sessionStorage.setItem(key, value);
+        return true;
+      } catch (e) {
+        try {
+          sessionStorage.setItem(key, value);
+          return true;
+        } catch (e2) {
+          return false;
+        }
+      }
+    }
+  };
+
+  window.saveAllToLocalStorage = function () {
+    var textInputs = [
+      'cfg-domain',
+      'cfg-cloudflare-token',
+      'cfg-localnet-host',
+      'cfg-localnet-user',
+      'cfg-vastai-key',
+      'cfg-dashboard-password'
+    ];
+    var payload = {};
+    textInputs.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        safeStorage.setItem('tr_wizard_' + id, el.value);
+        payload[id] = el.value;
+      }
+    });
+
+    var targetRadio = document.querySelector('#deploy-target input[type=radio]:checked');
+    if (targetRadio) {
+      safeStorage.setItem('tr_wizard_deploy_target', targetRadio.value);
+      payload['deployTarget'] = targetRadio.value;
+    }
+
+    var httpsRadio = document.querySelector('input[name="https-method"]:checked');
+    if (httpsRadio) {
+      safeStorage.setItem('tr_wizard_https_method', httpsRadio.value);
+      payload['httpsMethod'] = httpsRadio.value;
+    }
+
+    fetch('/api/save-wizard-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(function (e) { console.error('Error saving wizard config on saveAll:', e); });
+  };
 
   // ── Wizard state ──
   var W = {
@@ -1213,6 +1643,47 @@
     healthUrl: '',
     deployTarget: '',
   };
+  var activeEs = null;
+
+  function getBaseUrl() {
+    if (W.dashUrl) {
+      return W.dashUrl.replace(/\/$/, '');
+    }
+    if (W.apiUrl) {
+      return W.apiUrl.replace(/\/v1\/chat\/completions\/?$/, '').replace(/\/$/, '');
+    }
+    return '';
+  }
+
+  function saveWizardState(updates) {
+    if (!updates) return;
+    for (var k in updates) {
+      if (updates.hasOwnProperty(k)) {
+        W[k] = updates[k];
+        // Save to browser safeStorage
+        safeStorage.setItem('tr_wizard_state_' + k, updates[k]);
+      }
+    }
+    // Also save to server config disk
+    fetch('/api/save-wizard-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    }).catch(function (e) {
+      console.error('Error auto-persisting wizard state:', e);
+    });
+  }
+
+  function syncUIFromWizardState() {
+    if (W.pat) {
+      var patInput = document.getElementById('pat-key-display');
+      if (patInput) patInput.value = W.pat;
+      var settingsPatInput = document.getElementById('settings-pat-key');
+      if (settingsPatInput) settingsPatInput.value = W.pat;
+      var patResEl = document.getElementById('key-result');
+      if (patResEl) patResEl.style.display = '';
+    }
+  }
 
   // ── Phase navigation ──
   window.goPhase = function (n) {
@@ -1224,9 +1695,16 @@
       if (i === n) li.classList.add('active');
     });
     W.phase = n;
+    saveWizardState({ phase: n });
+    syncPersistentBarVisibility();
+
+    if (n === 2) {
+      startSSE();
+    }
     if (n === 4) populateIntegrations();
     if (n === 5) populateApiRef();
     if (n === 6) populateDone();
+    if (n === 7) populateSettings();
     window.scrollTo({ top: 0 });
   };
 
@@ -1274,10 +1752,18 @@
 
   // ── Phase 1: Install on another computer on the network ──
   window.installOnNetwork = function () {
+    var pass = ((document.getElementById('cfg-dashboard-password') || {}).value || '').trim();
+    if (!pass || pass.length < 8) {
+      alert('Dashboard Admin Password must be at least 8 characters long.');
+      return;
+    }
+    window.saveAllToLocalStorage();
     var host = (document.getElementById('cfg-localnet-host') || {}).value;
     var user = (document.getElementById('cfg-localnet-user') || {}).value;
     if (!host || !host.trim()) { alert('Please enter the IP address or hostname of that computer.'); return; }
     if (!user || !user.trim()) { alert('Please enter the username on that computer.'); return; }
+    
+    W.dashboardPassword = pass;
     goPhase(2);
     startSSE();
     fetch('/api/start-install', {
@@ -1293,28 +1779,244 @@
         skipCaddy: true,
         skipCompile: false,
         skipModels: false,
+        dashboardPassword: pass
       }),
     }).catch(function (e) { console.error(e); });
   };
 
   // ── Phase 1: Vast.ai provision (client-side) ──
-  window.provisionVastAI = function () {
+  window.provisionVastAI = function (instanceId) {
+    var pass = ((document.getElementById('cfg-dashboard-password') || {}).value || '').trim();
+    if (!pass || pass.length < 8) {
+      alert('Dashboard Admin Password must be at least 8 characters long.');
+      return;
+    }
+    window.saveAllToLocalStorage();
     var key = (document.getElementById('cfg-vastai-key') || {}).value;
     if (!key || !key.trim()) {
       alert('Please paste your Vast.ai API key first (Step 2 above).');
       return;
     }
+    
+    W.dashboardPassword = pass;
     goPhase(2);
     startSSE();
+    var payload = {
+      vastaiKey: key.trim(),
+      dashboardPassword: pass
+    };
+    if (instanceId) {
+      payload.instanceId = instanceId;
+    }
     fetch('/api/provision-vastai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vastaiKey: key.trim() }),
+      body: JSON.stringify(payload),
     }).catch(function (err) { console.error('provision-vastai error', err); });
+  };
+
+  // ── Phase 1: Scan Vast.ai account for existing instances ──
+  window.scanVastAIInstances = function (e) {
+    if (e) e.preventDefault();
+    var key = (document.getElementById('cfg-vastai-key') || {}).value;
+    if (!key || !key.trim()) {
+      alert('Please paste your Vast.ai API key first to scan your account.');
+      return;
+    }
+    var scanBtn = document.getElementById('vastai-scan-btn');
+    var container = document.getElementById('vastai-existing-container');
+    var list = document.getElementById('vastai-existing-list');
+    
+    if (scanBtn) {
+      scanBtn.disabled = true;
+      scanBtn.textContent = 'Scanning...';
+    }
+    
+    fetch('/api/vastai-instances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vastaiKey: key.trim() })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (scanBtn) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = '🔍 Scan Account';
+      }
+      if (!data.ok || !data.instances || !data.instances.length) {
+        if (container) container.style.display = 'none';
+        return;
+      }
+      
+      var failedIds = [];
+
+      if (list) {
+        list.innerHTML = '';
+        data.instances.forEach(function (inst) {
+          var gpu = inst.gpu_name || 'GPU';
+          var price = inst.dph_total ? ('$' + (inst.dph_total * 24 * 30).toFixed(2) + '/mo') : 'unknown price';
+          var status = inst.actual_status || inst.status || 'loading';
+          
+          var isFailed = status === 'broken' || status === 'offline' || status === 'exited' || status === 'stopped';
+          if (isFailed) {
+            failedIds.push(inst.id);
+          }
+
+          var div = document.createElement('div');
+          div.style.display = 'flex';
+          div.style.alignItems = 'center';
+          div.style.justifyContent = 'space-between';
+          div.style.padding = '8px 12px';
+          div.style.border = '1px solid var(--border)';
+          div.style.borderRadius = '6px';
+          div.style.background = 'var(--panel)';
+          div.style.fontSize = '12px';
+          
+          var createdStr = '';
+          if (inst.start_date) {
+            try {
+              var d = new Date(inst.start_date * 1000);
+              createdStr = ' | Created: ' + d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } catch (e) {}
+          }
+
+          var detailsDiv = document.createElement('div');
+          detailsDiv.innerHTML = '<strong style="color:var(--text)">' + gpu + ' (ID: ' + inst.id + ')</strong><br>' +
+                                 '<span style="color:var(--muted)">Status: ' + status + ' | ' + price + createdStr + '</span>';
+          
+          var actionsDiv = document.createElement('div');
+          actionsDiv.style.display = 'flex';
+          actionsDiv.style.gap = '8px';
+
+          var adoptBtn = document.createElement('button');
+          adoptBtn.className = 'btn btn-primary';
+          adoptBtn.style.padding = '4px 10px';
+          adoptBtn.style.fontSize = '11px';
+          adoptBtn.textContent = 'Adopt & Connect';
+          adoptBtn.onclick = function (event) {
+            if (event) event.preventDefault();
+            if (confirm('Are you sure you want to adopt instance ' + inst.id + ' (' + gpu + ')? Total Recall will connect and finish installation there.')) {
+              window.provisionVastAI(inst.id);
+            }
+          };
+          
+          var destroyBtn = document.createElement('button');
+          destroyBtn.className = 'btn btn-secondary';
+          destroyBtn.style.padding = '4px 10px';
+          destroyBtn.style.fontSize = '11px';
+          destroyBtn.style.color = 'var(--red)';
+          destroyBtn.style.borderColor = 'var(--red)';
+          destroyBtn.textContent = '🗑️ Destroy';
+          destroyBtn.onclick = function (event) {
+            if (event) event.preventDefault();
+            if (confirm('⚠️ WARNING: This will permanently delete/destroy instance ' + inst.id + ' (' + gpu + '). Any data on it will be lost and billing will stop immediately. Proceed?')) {
+              destroyBtn.disabled = true;
+              destroyBtn.textContent = 'Destroying...';
+              fetch('/api/destroy-vastai-instance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ vastaiKey: key.trim(), instanceId: inst.id })
+              })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                if (data.ok) {
+                  window.scanVastAIInstances();
+                } else {
+                  destroyBtn.disabled = false;
+                  destroyBtn.textContent = '🗑️ Destroy';
+                  alert('Failed to destroy instance: ' + (data.error || 'Unknown error'));
+                }
+              })
+              .catch(function (err) {
+                destroyBtn.disabled = false;
+                destroyBtn.textContent = '🗑️ Destroy';
+                alert('Error: ' + err.message);
+              });
+            }
+          };
+          
+          actionsDiv.appendChild(adoptBtn);
+          actionsDiv.appendChild(destroyBtn);
+          
+          div.appendChild(detailsDiv);
+          div.appendChild(actionsDiv);
+          list.appendChild(div);
+        });
+      }
+      
+      // Update failed cleanup banner
+      var cleanupBanner = document.getElementById('vastai-cleanup-banner');
+      if (cleanupBanner) {
+        if (failedIds.length > 0) {
+          cleanupBanner.style.display = 'flex';
+          window._onboardingFailedInstanceIds = failedIds;
+        } else {
+          cleanupBanner.style.display = 'none';
+          window._onboardingFailedInstanceIds = [];
+        }
+      }
+
+      if (container) {
+        container.style.display = 'block';
+      }
+    })
+    .catch(function (err) {
+      if (scanBtn) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = '🔍 Scan Account';
+      }
+      alert('Network error scanning Vast.ai instances: ' + err.message);
+    });
+  };
+
+  // ── Phase 1: Clean Up Failed Onboarding Instances ──
+  window.cleanupOnboardingFailedInstances = function (e) {
+    if (e) e.preventDefault();
+    var key = (document.getElementById('cfg-vastai-key') || {}).value;
+    var failedIds = window._onboardingFailedInstanceIds || [];
+    if (!failedIds.length) return;
+    
+    if (confirm('⚠️ WARNING: This will permanently delete/destroy ALL ' + failedIds.length + ' failed/broken instances from your Vast.ai account. Billing will stop immediately. Proceed?')) {
+      var cleanupBtn = document.getElementById('vastai-cleanup-btn');
+      if (cleanupBtn) {
+        cleanupBtn.disabled = true;
+        cleanupBtn.textContent = 'Cleaning up...';
+      }
+      
+      var currentIdx = 0;
+      function destroyNext() {
+        if (currentIdx >= failedIds.length) {
+          alert('Successfully cleaned up all failed instances!');
+          window.scanVastAIInstances();
+          return;
+        }
+        var id = failedIds[currentIdx];
+        fetch('/api/destroy-vastai-instance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vastaiKey: key.trim(), instanceId: id })
+        })
+        .then(function () {
+          currentIdx++;
+          destroyNext();
+        })
+        .catch(function () {
+          currentIdx++;
+          destroyNext();
+        });
+      }
+      destroyNext();
+    }
   };
 
   // ── Phase 1: Start Install ──
   window.startInstall = function () {
+    var pass = ((document.getElementById('cfg-dashboard-password') || {}).value || '').trim();
+    if (!pass || pass.length < 8) {
+      alert('Dashboard Admin Password must be at least 8 characters long.');
+      return;
+    }
+    window.saveAllToLocalStorage();
     var deployTarget = W.deployTarget || 'local';
     var domain = 'localhost';
     var httpsMethod = 'local';
@@ -1342,6 +2044,8 @@
     }
 
     W.domain = domain;
+    W.dashboardPassword = pass;
+    saveWizardState({ domain: domain });
 
     var payload = {
       domain: domain,
@@ -1354,6 +2058,7 @@
       skipCompile: false,
       skipModels: false,
       deployTarget: deployTarget,
+      dashboardPassword: pass
     };
 
     goPhase(2);
@@ -1370,15 +2075,125 @@
   var _stepCount = 0;
   var TOTAL_STEPS = 12;
 
+  // ── Persistent Bar Update Helpers ──
+  function syncPersistentBarVisibility() {
+    var pbar = document.getElementById('persistent-install-bar');
+    if (!pbar) return;
+    
+    // Do not show the persistent bar on Phase 2 (full logs)
+    if (W.phase === 2) {
+      pbar.classList.remove('visible');
+      return;
+    }
+    
+    var isActive = (safeStorage.getItem('tr_wizard_install_active') === 'true') || activeEs;
+    var statusType = safeStorage.getItem('tr_wizard_install_status_type');
+    var isDoneOrError = (statusType === 'done' || statusType === 'error');
+    
+    // On Phase 6 (Done URLs page), only show the persistent bar if the installation is still active or has errored out
+    if (W.phase === 6) {
+      if (isActive || statusType === 'error') {
+        pbar.classList.add('visible');
+      } else {
+        pbar.classList.remove('visible');
+      }
+      return;
+    }
+    
+    if (isActive || isDoneOrError) {
+      pbar.classList.add('visible');
+    } else {
+      pbar.classList.remove('visible');
+    }
+  }
+
+  function updatePersistentBarState(type, msg, pctOrStep) {
+    var pbar = document.getElementById('persistent-install-bar');
+    if (!pbar) return;
+    
+    var fill = pbar.querySelector('.pbar-fill');
+    var status = pbar.querySelector('.pbar-status-text');
+    var log = pbar.querySelector('.pbar-latest-log');
+    var spinner = pbar.querySelector('.pbar-spinner');
+    
+    var pct = 0;
+    if (type === 'done') {
+      pct = 100;
+    } else if (type === 'step') {
+      pct = pctOrStep;
+    } else {
+      pct = Math.min(Math.round((_stepCount / TOTAL_STEPS) * 100), 95);
+    }
+    
+    if (fill) fill.style.width = pct + '%';
+    
+    if (type === 'done') {
+      if (status) status.innerHTML = '🎉 Install complete!';
+      if (log) {
+        log.textContent = 'All services active. Click to proceed.';
+        log.style.color = 'var(--green)';
+      }
+      if (spinner) {
+        spinner.style.backgroundColor = 'var(--green)';
+        spinner.style.animation = 'none';
+      }
+    } else if (type === 'error') {
+      if (status) status.innerHTML = '❌ Installation failed';
+      if (log) {
+        log.textContent = msg;
+        log.style.color = 'var(--red)';
+      }
+      if (spinner) {
+        spinner.style.backgroundColor = 'var(--red)';
+        spinner.style.animation = 'none';
+      }
+    } else {
+      if (status) status.innerHTML = '⚡ Installing Total Recall (' + pct + '%)';
+      if (log) {
+        log.textContent = msg;
+        log.style.color = type === 'warn' ? 'var(--yellow)' : 'var(--blue)';
+      }
+      if (spinner) {
+        spinner.style.backgroundColor = 'var(--blue)';
+        spinner.style.animation = 'pbar-pulse 1.4s infinite ease-in-out';
+      }
+    }
+    
+    safeStorage.setItem('tr_wizard_install_pct', pct);
+    safeStorage.setItem('tr_wizard_install_status_msg', msg);
+    safeStorage.setItem('tr_wizard_install_status_type', type);
+  }
+
   function startSSE() {
+    if (activeEs) {
+      return;
+    }
+    // Record that installation is actively running
+    safeStorage.setItem('tr_wizard_install_active', 'true');
+
     var es = new EventSource('/events');
+    activeEs = es;
     var bar = document.getElementById('progress-bar');
     var label = document.getElementById('progress-label');
     var log = document.getElementById('log');
 
+    // Reset progress, logs and notices
+    _stepCount = 0;
+    if (bar) bar.style.width = '0%';
+    if (label) label.textContent = 'Waiting for install to begin...';
+    if (log) log.innerHTML = '';
+    
+    var errorNotice = document.getElementById('install-error-notice');
+    if (errorNotice) errorNotice.style.display = 'none';
+    var doneNotice = document.getElementById('install-done-notice');
+    if (doneNotice) doneNotice.style.display = 'none';
+
+    syncPersistentBarVisibility();
+
     var icons = { step: '>>', ok: '✓', warn: '!!', error: '✗', info: '--' };
 
     function addEntry(type, msg) {
+      if (!log) return;
       var div = document.createElement('div');
       div.className = 'log-entry ' + (type || 'info');
       var icon = document.createElement('span');
@@ -1397,30 +2212,53 @@
       if (data.type === 'step') {
         _stepCount++;
         var pct = Math.min(Math.round((_stepCount / TOTAL_STEPS) * 100), 95);
-        bar.style.width = pct + '%';
-        label.textContent = data.msg;
+        if (bar) bar.style.width = pct + '%';
+        if (label) label.textContent = data.msg;
         addEntry('step', data.msg);
+        updatePersistentBarState('step', data.msg, pct);
       } else if (data.type === 'done') {
-        bar.style.width = '100%';
-        label.textContent = 'Install complete!';
+        if (bar) bar.style.width = '100%';
+        if (label) label.textContent = 'Install complete!';
         addEntry('ok', 'Install complete!');
-        W.apiUrl = data.apiUrl || ('https://' + W.domain + '/v1/chat/completions');
-        W.dashUrl = data.dashUrl || ('https://' + W.domain + '/');
-        W.healthUrl = data.healthUrl || ('https://' + W.domain + '/health');
-        document.getElementById('install-done-notice').style.display = '';
+        var apiUrl = data.apiUrl || ('https://' + W.domain + '/v1/chat/completions');
+        var dashUrl = data.dashUrl || ('https://' + W.domain + '/');
+        var healthUrl = data.healthUrl || ('https://' + W.domain + '/health');
+
+        saveWizardState({
+          apiUrl: apiUrl,
+          dashUrl: dashUrl,
+          healthUrl: healthUrl
+        });
+
+        if (doneNotice) doneNotice.style.display = '';
+        safeStorage.setItem('tr_wizard_install_active', 'false');
+        updatePersistentBarState('done', 'Install complete!', 100);
         es.close();
+        if (activeEs === es) activeEs = null;
+        syncPersistentBarVisibility();
       } else if (data.type === 'error') {
         addEntry('error', data.msg);
+        if (errorNotice) errorNotice.style.display = '';
+        safeStorage.setItem('tr_wizard_install_active', 'false');
+        updatePersistentBarState('error', data.msg, _stepCount);
+        es.close();
+        if (activeEs === es) activeEs = null;
+        syncPersistentBarVisibility();
       } else if (data.type === 'warn') {
         addEntry('warn', data.msg);
+        updatePersistentBarState('warn', data.msg, _stepCount);
       } else {
         addEntry('info', data.msg);
+        updatePersistentBarState('info', data.msg, _stepCount);
       }
     };
 
     es.onerror = function () {
       addEntry('warn', 'Connection closed (install may still be running in the terminal).');
+      updatePersistentBarState('warn', 'Connection closed (install may still be running in the terminal).', _stepCount);
       es.close();
+      if (activeEs === es) activeEs = null;
+      syncPersistentBarVisibility();
     };
   }
 
@@ -1443,8 +2281,16 @@
       .then(function (data) {
         if (data.token || data.key || data.pat) {
           var tok = data.token || data.key || data.pat;
-          W.pat = tok;
-          document.getElementById('key-value').textContent = tok;
+          saveWizardState({ pat: tok });
+          var patInput = document.getElementById('pat-key-display');
+          if (patInput) {
+            patInput.value = tok;
+            patInput.type = 'text'; // Auto-reveal key on generation so user can see it right away
+            var patToggle = patInput.nextElementSibling;
+            if (patToggle) patToggle.textContent = 'Hide';
+          }
+          var settingsPatInput = document.getElementById('settings-pat-key');
+          if (settingsPatInput) settingsPatInput.value = tok;
           document.getElementById('key-result').style.display = '';
           btn.textContent = 'Generate Another';
           btn.disabled = false;
@@ -1460,8 +2306,10 @@
       });
   };
 
-  window.copyToken = function () {
-    var tok = document.getElementById('key-value').textContent;
+  window.copyToken = function (id) {
+    var el = document.getElementById(id || 'pat-key-display');
+    if (!el) return;
+    var tok = el.tagName === 'INPUT' ? el.value : el.textContent;
     navigator.clipboard.writeText(tok).catch(function () {
       var ta = document.createElement('textarea');
       ta.value = tok;
@@ -1470,6 +2318,19 @@
       document.execCommand('copy');
       document.body.removeChild(ta);
     });
+
+    if (event && event.currentTarget) {
+      var btn = event.currentTarget;
+      var origText = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.style.borderColor = 'var(--green)';
+      btn.style.color = 'var(--green)';
+      setTimeout(function() {
+        btn.textContent = origText;
+        btn.style.borderColor = '';
+        btn.style.color = '';
+      }, 1500);
+    }
   };
 
   // ── Phase 4: Integrations ──
@@ -1550,7 +2411,7 @@
   // Download full brain as .tar.gz
   window.downloadBrain = function() {
     var status = document.getElementById('brain-dl-status');
-    var brainUrl = W.apiUrl || '';
+    var brainUrl = getBaseUrl();
     var pat = W.pat || '';
     if (!brainUrl || !pat) {
       if (status) status.textContent = '⚠️ Connect your brain first (need URL + PAT)';
@@ -1558,7 +2419,7 @@
     }
     if (status) status.textContent = 'Preparing download...';
     // Fetch with auth then trigger blob download
-    fetch(brainUrl.replace(/\/$/, '') + '/api/brain/export', {
+    fetch(brainUrl + '/api/brain/export', {
       headers: { 'Authorization': 'Bearer ' + pat }
     })
     .then(function(r) {
@@ -1581,50 +2442,171 @@
     });
   };
 
-  // Scan for existing rule files (AGENTS.md, .cursorrules, etc.)
+  // Scan for existing rule files and skills
   window.scanRuleFiles = function() {
-    var brainUrl = (W.apiUrl || '').replace(/\/$/, '');
-    var pat = W.pat || '';
     var dir = (document.getElementById('import-dir').value || '').trim();
     var resultEl = document.getElementById('import-rules-result');
     var listEl = document.getElementById('import-rules-list');
-    if (!brainUrl || !pat) { resultEl.textContent = '⚠️ Connect your brain first (need URL + PAT)'; return; }
     resultEl.textContent = 'Scanning...';
     listEl.style.display = 'none';
-    var url = brainUrl + '/api/import/rules' + (dir ? '?dir=' + encodeURIComponent(dir) : '');
-    fetch(url, { headers: { 'Authorization': 'Bearer ' + pat } })
+    var url = '/api/import/rules' + (dir ? '?dir=' + encodeURIComponent(dir) : '');
+    fetch(url)
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var detected = data.detected || [];
-      if (detected.length === 0) { resultEl.textContent = 'No rule files found in that directory.'; return; }
+      if (detected.length === 0) { resultEl.textContent = 'No rule or skill files found in that directory.'; return; }
       resultEl.textContent = '';
       listEl.style.display = '';
-      listEl.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Select files to import:</div>' +
-        detected.map(function(f) {
+
+      // Group detected files
+      var groups = {};
+      var groupOrder = [];
+
+      detected.forEach(function(f) {
+        var groupId, groupName, isSkill = false;
+        if (f.filename.startsWith('.agent/skills/')) {
+          // Extract skill name: .agent/skills/<name>/...
+          var parts = f.filename.split('/');
+          var skillName = parts[2] || 'unknown';
+          groupId = 'skill:' + skillName;
+          groupName = '🧠 Skill: ' + skillName;
+          isSkill = true;
+        } else if (f.filename.indexOf('/') !== -1 || f.filename.indexOf('\\') !== -1) {
+          var norm = f.filename.replace(/\\/g, '/');
+          var dirPath = norm.substring(0, norm.lastIndexOf('/'));
+          groupId = 'dir:' + dirPath;
+          groupName = '📂 Rules in ' + dirPath;
+        } else {
+          groupId = 'global';
+          groupName = '🌐 Global IDE Rules';
+        }
+
+        if (!groups[groupId]) {
+          groups[groupId] = {
+            id: groupId,
+            name: groupName,
+            isSkill: isSkill,
+            files: []
+          };
+          groupOrder.push(groupId);
+        }
+        groups[groupId].files.push(f);
+      });
+
+      // Sort groups: skills first, then directories, then global
+      groupOrder.sort(function(a, b) {
+        var gA = groups[a];
+        var gB = groups[b];
+        if (gA.isSkill && !gB.isSkill) return -1;
+        if (!gA.isSkill && gB.isSkill) return 1;
+        if (gA.id === 'global') return 1;
+        if (gB.id === 'global') return -1;
+        return gA.name.localeCompare(gB.name);
+      });
+
+      var html = '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Select files to import:</div>';
+
+      groupOrder.forEach(function(groupId) {
+        var group = groups[groupId];
+        var allAlreadyImported = group.files.every(function(f) { return f.alreadyImported; });
+        
+        var groupClass = 'group-details' + (group.isSkill ? ' skill-group' : '');
+        var badgeColor = group.isSkill ? 'var(--purple)' : 'var(--blue)';
+        var badgeText = group.isSkill ? 'Skill Vault' : 'Modular';
+        if (group.id === 'global') {
+          badgeColor = 'var(--green)';
+          badgeText = 'Global';
+        }
+
+        html += '<details class="' + groupClass + '" open style="background:var(--panel2); border:1px solid var(--border); border-radius:8px; margin-bottom:12px; overflow:hidden">';
+        html += '<summary style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border); cursor:pointer; list-style:none; user-select:none">';
+        html += '<span class="details-arrow" style="font-size:10px; transition:transform 0.15s; display:inline-block; color:var(--muted)">▼</span>';
+        html += '<input type="checkbox" class="import-rule-group-checkbox" data-group-id="' + group.id + '"' + (allAlreadyImported ? '' : ' checked') + ' onclick="event.stopPropagation(); window.toggleGroupCheck(this, \'' + group.id + '\')" style="width:15px; height:15px; accent-color:var(--green); cursor:pointer">';
+        html += '<span style="font-size:13px; font-weight:600; flex:1; display:flex; align-items:center; gap:8px">' + 
+                group.name + 
+                ' <span style="font-size:10px; font-weight:normal; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:10px; color:var(--muted)">' + group.files.length + ' file' + (group.files.length > 1 ? 's' : '') + '</span>' +
+                '</span>';
+        html += '<span style="font-size:11px; font-weight:600; color:' + badgeColor + '; background:rgba(255,255,255,0.04); border:1px solid ' + badgeColor + '33; padding:1px 6px; border-radius:4px">' + badgeText + '</span>';
+        html += '</summary>';
+        
+        html += '<div style="padding:14px; display:flex; flex-direction:column; gap:12px">';
+        
+        group.files.forEach(function(f) {
           var badge = f.alreadyImported ? ' <span style="color:var(--muted);font-size:11px">(already imported)</span>' : '';
-          return '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;cursor:pointer">' +
-            '<input type="checkbox" class="import-rule-file" data-path="' + f.absolutePath + '"' + (f.alreadyImported ? '' : ' checked') + ' style="margin-top:2px;accent-color:var(--green)">' +
-            '<div><div style="font-size:13px;font-weight:500">' + f.filename + badge + '</div>' +
-            '<div style="font-size:11px;color:var(--muted)">' + f.label + ' · ' + (f.size / 1024).toFixed(1) + 'KB</div>' +
-            '<div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">' + f.preview.slice(0, 100).replace(/</g, '&lt;') + '…</div></div></label>';
-        }).join('') +
-        '<button class="btn btn-primary" style="font-size:12px;padding:6px 14px;margin-top:6px" onclick="importSelectedRules()">📥 Import Selected</button>';
+          var shortFilename = f.filename;
+          // Shorten filename if it is inside the group
+          if (group.isSkill) {
+            var prefix = '.agent/skills/' + group.id.split(':')[1] + '/';
+            if (f.filename.startsWith(prefix)) {
+              shortFilename = f.filename.substring(prefix.length);
+            }
+          } else if (group.id !== 'global' && group.id.startsWith('dir:')) {
+            var prefix = group.id.substring(4) + '/';
+            if (f.filename.startsWith(prefix)) {
+              shortFilename = f.filename.substring(prefix.length);
+            }
+          }
+
+          html += '<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">';
+          html += '<input type="checkbox" class="import-rule-file" data-path="' + f.absolutePath + '" data-group-id="' + group.id + '"' + (f.alreadyImported ? '' : ' checked') + ' onchange="window.updateGroupCheckboxState(\'' + group.id + '\')" style="margin-top:3px; width:14px; height:14px; accent-color:var(--green)">';
+          html += '<div style="flex:1">';
+          html += '<div style="font-size:13px;font-weight:500;color:var(--text)">' + shortFilename + badge + '</div>';
+          html += '<div style="font-size:11px;color:var(--muted)">' + f.label + ' · ' + (f.size / 1024).toFixed(1) + 'KB</div>';
+          html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:80px;overflow-y:auto">' + f.preview.slice(0, 150).replace(/</g, '&lt;') + '…</div>';
+          html += '</div>';
+          html += '</label>';
+        });
+
+        html += '</div>';
+        html += '</details>';
+      });
+
+      html += '<button class="btn btn-primary" style="font-size:12px;padding:6px 14px;margin-top:6px" onclick="importSelectedRules()">📥 Import Selected Rules &amp; Skills</button>';
+      
+      listEl.innerHTML = html;
+
+      // Initialize indeterminate state of parent checkboxes
+      groupOrder.forEach(function(groupId) {
+        window.updateGroupCheckboxState(groupId);
+      });
     })
     .catch(function(e) { resultEl.textContent = '❌ ' + e.message; });
   };
 
+  // Toggle group checkboxes helper
+  window.toggleGroupCheck = function(cb, groupId) {
+    var checked = cb.checked;
+    var items = document.querySelectorAll('.import-rule-file[data-group-id="' + groupId + '"]');
+    items.forEach(function(item) {
+      item.checked = checked;
+    });
+  };
+
+  // Update group parent checkbox state helper (supporting intermediate state)
+  window.updateGroupCheckboxState = function(groupId) {
+    var groupCb = document.querySelector('.import-rule-group-checkbox[data-group-id="' + groupId + '"]');
+    if (!groupCb) return;
+    var items = document.querySelectorAll('.import-rule-file[data-group-id="' + groupId + '"]');
+    var allChecked = true;
+    var noneChecked = true;
+    items.forEach(function(item) {
+      if (item.checked) noneChecked = false;
+      else allChecked = false;
+    });
+    groupCb.checked = allChecked;
+    groupCb.indeterminate = (!allChecked && !noneChecked);
+  };
+
   // Import selected rule files into the vault
   window.importSelectedRules = function() {
-    var brainUrl = (W.apiUrl || '').replace(/\/$/, '');
-    var pat = W.pat || '';
     var resultEl = document.getElementById('import-rules-result');
     var selected = [];
     document.querySelectorAll('.import-rule-file:checked').forEach(function(cb) { selected.push(cb.dataset.path); });
     if (!selected.length) { resultEl.textContent = 'No files selected.'; return; }
     resultEl.textContent = 'Importing ' + selected.length + ' file(s)...';
-    fetch(brainUrl + '/api/import/rules', {
+    fetch('/api/import/rules', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + pat },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ files: selected })
     })
     .then(function(r) { return r.json(); })
@@ -1730,6 +2712,36 @@
     document.getElementById('final-dash-link').href   = dashUrl;
     document.getElementById('final-health-link').href = healthUrl;
 
+    // Detect SSH Fallback URL to show warning notice
+    var isSshUrl = apiUrl.includes('vast.ai') || apiUrl.includes(':10120') || (W.vastSshHost && apiUrl.includes(W.vastSshHost));
+    var warningCard = document.getElementById('ssh-fallback-warning');
+    if (warningCard) {
+      if (isSshUrl) {
+        warningCard.style.display = 'block';
+        var hostSpan = document.getElementById('warning-ssh-host');
+        if (hostSpan) {
+          hostSpan.textContent = W.vastSshHost || domain;
+        }
+      } else {
+        warningCard.style.display = 'none';
+      }
+    }
+
+    // Pre-populate manual override fields with current active values
+    var overrideUrlInput = document.getElementById('override-base-url');
+    var overridePatInput = document.getElementById('override-pat-key');
+    if (overrideUrlInput && !overrideUrlInput.value) {
+      overrideUrlInput.value = getBaseUrl();
+    }
+    if (overridePatInput && !overridePatInput.value) {
+      overridePatInput.value = W.pat;
+    }
+
+    var donePassInput = document.getElementById('done-dashboard-password');
+    if (donePassInput) {
+      donePassInput.value = W.dashboardPassword || 'totalrecall';
+    }
+
     checkHealth();
   }
 
@@ -1739,7 +2751,11 @@
     var healthUrl = W.healthUrl || ('https://' + (W.domain || 'localhost') + '/health');
     dot.className = 'health-dot';
     status.textContent = 'Checking…';
-    fetch(healthUrl, { signal: AbortSignal.timeout(5000) })
+    var headers = {};
+    if (W.pat) {
+      headers['Authorization'] = 'Bearer ' + W.pat;
+    }
+    fetch(healthUrl, { headers: headers, signal: AbortSignal.timeout(5000) })
       .then(function (r) {
         if (r.ok) {
           dot.classList.add('ok');
@@ -1751,6 +2767,110 @@
       .catch(function (e) {
         dot.classList.add('err');
         status.textContent = 'Health check failed: ' + e.message;
+      });
+  };
+
+  window.saveManualOverride = function () {
+    var rawUrl = document.getElementById('override-base-url').value.trim();
+    var pat = document.getElementById('override-pat-key').value.trim();
+    var resEl = document.getElementById('override-save-result');
+    if (!resEl) return;
+    
+    if (!rawUrl) {
+      resEl.textContent = '❌ Base URL is required.';
+      resEl.className = 'notice error';
+      resEl.style.display = '';
+      return;
+    }
+    
+    // Ensure absolute protocol
+    var baseUrl = rawUrl;
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      baseUrl = 'http://' + baseUrl;
+    }
+    // Strip trailing slashes
+    baseUrl = baseUrl.replace(/\/+$/, '');
+    
+    var apiUrl = baseUrl + '/v1/chat/completions';
+    var dashUrl = baseUrl + '/';
+    var healthUrl = baseUrl + '/health';
+    
+    saveWizardState({
+      apiUrl: apiUrl,
+      dashUrl: dashUrl,
+      healthUrl: healthUrl,
+      pat: pat
+    });
+    
+    // Re-check Final phase URLs
+    populateDone();
+    
+    resEl.textContent = '⚡ Override saved successfully! Re-checking health...';
+    resEl.className = 'notice info';
+    resEl.style.display = '';
+    
+    // Check health with a callback or timeout to update success/error
+    setTimeout(function() {
+      var headers = {};
+      if (pat) {
+        headers['Authorization'] = 'Bearer ' + pat;
+      }
+      fetch(healthUrl, { headers: headers, signal: AbortSignal.timeout(5000) })
+        .then(function (r) {
+          if (r.ok) {
+            resEl.textContent = '🎉 Connected successfully! Brain is healthy ✓';
+            resEl.className = 'notice ok';
+          } else {
+            resEl.textContent = '⚠️ Saved, but health check returned: HTTP ' + r.status;
+            resEl.className = 'notice warn';
+          }
+        })
+        .catch(function (e) {
+          resEl.textContent = '❌ Saved, but health check failed: ' + e.message;
+          resEl.className = 'notice error';
+        });
+    }, 800);
+  };
+
+  window.resetWizardSetup = function () {
+    if (!confirm('Are you absolutely sure you want to reset the setup wizard? This will clear all stored wizard configurations and return to Phase 0.')) {
+      return;
+    }
+    
+    fetch('/api/reset-wizard-config', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          // Clear all keys from safeStorage (both localStorage and sessionStorage)
+          try {
+            var keysToClear = [];
+            for (var i = 0; i < localStorage.length; i++) {
+              var key = localStorage.key(i);
+              if (key && key.indexOf('tr_wizard_') === 0) {
+                keysToClear.push(key);
+              }
+            }
+            keysToClear.forEach(function (k) { localStorage.removeItem(k); });
+          } catch(e) {}
+          try {
+            var keysToClearSession = [];
+            for (var i = 0; i < sessionStorage.length; i++) {
+              var key = sessionStorage.key(i);
+              if (key && key.indexOf('tr_wizard_') === 0) {
+                keysToClearSession.push(key);
+              }
+            }
+            keysToClearSession.forEach(function (k) { sessionStorage.removeItem(k); });
+          } catch(e) {}
+
+          // Reload page to start completely fresh
+          window.location.reload();
+        } else {
+          alert('Error resetting wizard: ' + (data.error || 'Unknown error'));
+        }
+      })
+      .catch(function (e) {
+        alert('Failed to contact server to reset configuration: ' + e.message);
       });
   };
 
@@ -1777,7 +2897,233 @@
         document.getElementById('settings-usage-remaining').textContent = data.remaining === 'unlimited' ? 'unlimited' : data.remaining;
       })
       .catch(function() {});
+
+    // Load Vast.ai key from wizard config if available and scan
+    fetch('/api/get-wizard-config')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var key = data['cfg-vastai-key'] || safeStorage.getItem('tr_wizard_cfg-vastai-key');
+        if (key) {
+          var input = document.getElementById('settings-vastai-key');
+          if (input && !input.value) {
+            input.value = key;
+            window.scanSettingsVastAI();
+          }
+        }
+      })
+      .catch(function() {});
   }
+
+  // ── Scan Vast.ai instances in Settings ──
+  window.scanSettingsVastAI = function (e) {
+    if (e) e.preventDefault();
+    var keyInput = document.getElementById('settings-vastai-key');
+    var key = keyInput ? keyInput.value : '';
+    if (!key || !key.trim()) {
+      alert('Please enter your Vast.ai API key first.');
+      return;
+    }
+    
+    var scanBtn = document.getElementById('settings-vastai-scan-btn');
+    var container = document.getElementById('settings-vastai-container');
+    var list = document.getElementById('settings-vastai-list');
+    
+    if (scanBtn) {
+      scanBtn.disabled = true;
+      scanBtn.textContent = 'Scanning...';
+    }
+    
+    fetch('/api/vastai-instances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vastaiKey: key.trim() })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (scanBtn) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = '🔍 Scan & Manage';
+      }
+      if (!data.ok || !data.instances) {
+        alert('Scan failed: ' + (data.error || 'Unknown error'));
+        if (container) container.style.display = 'none';
+        return;
+      }
+      
+      var failedIds = [];
+      
+      if (list) {
+        list.innerHTML = '';
+        if (data.instances.length === 0) {
+          list.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">No active instances found on this account.</div>';
+        } else {
+          data.instances.forEach(function (inst) {
+            var gpu = inst.gpu_name || 'GPU';
+            var price = inst.dph_total ? ('$' + (inst.dph_total * 24 * 30).toFixed(2) + '/mo') : 'unknown price';
+            var status = inst.actual_status || inst.status || 'loading';
+            
+            var isFailed = status === 'broken' || status === 'offline' || status === 'exited' || status === 'stopped';
+            if (isFailed) {
+              failedIds.push(inst.id);
+            }
+            
+            var div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.justifyContent = 'space-between';
+            div.style.padding = '10px 14px';
+            div.style.border = '1px solid var(--border)';
+            div.style.borderRadius = '8px';
+            div.style.background = 'var(--panel)';
+            div.style.fontSize = '13px';
+            div.style.gap = '16px';
+            
+            var createdStr = '';
+            if (inst.start_date) {
+              try {
+                var d = new Date(inst.start_date * 1000);
+                createdStr = ' | Created: ' + d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+              } catch (e) {}
+            }
+            
+            var statusColor = 'var(--yellow)';
+            if (status === 'running') {
+              statusColor = 'var(--green)';
+            } else if (isFailed) {
+              statusColor = 'var(--red)';
+            }
+            
+            var detailsDiv = document.createElement('div');
+            detailsDiv.style.flex = '1';
+            detailsDiv.innerHTML = '<strong style="color:var(--text)">' + gpu + ' <span style="color:var(--blue);font-weight:400;font-size:11px;font-family:monospace">(ID: ' + inst.id + ')</span></strong><br>' +
+                                   '<span style="color:var(--muted)">Status: <span style="color:' + statusColor + ';font-weight:600">' + status + '</span> | ' + price + createdStr + '</span>';
+            
+            var actionsDiv = document.createElement('div');
+            actionsDiv.style.display = 'flex';
+            actionsDiv.style.gap = '8px';
+            
+            var adoptBtn = document.createElement('button');
+            adoptBtn.className = 'btn btn-primary';
+            adoptBtn.style.padding = '4px 10px';
+            adoptBtn.style.fontSize = '11px';
+            adoptBtn.textContent = 'Adopt & Connect';
+            adoptBtn.onclick = function (event) {
+              if (event) event.preventDefault();
+              if (confirm('Are you sure you want to adopt instance ' + inst.id + ' (' + gpu + ')? Total Recall will connect and finish installation there.')) {
+                window.provisionVastAI(inst.id);
+              }
+            };
+            
+            var destroyBtn = document.createElement('button');
+            destroyBtn.className = 'btn btn-secondary';
+            destroyBtn.style.padding = '4px 10px';
+            destroyBtn.style.fontSize = '11px';
+            destroyBtn.style.color = 'var(--red)';
+            destroyBtn.style.borderColor = 'var(--red)';
+            destroyBtn.textContent = '🗑️ Destroy';
+            destroyBtn.onclick = function (event) {
+              if (event) event.preventDefault();
+              if (confirm('⚠️ WARNING: This will permanently delete/destroy instance ' + inst.id + ' (' + gpu + '). Any data on it will be lost and billing will stop immediately. Proceed?')) {
+                destroyBtn.disabled = true;
+                destroyBtn.textContent = 'Destroying...';
+                fetch('/api/destroy-vastai-instance', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ vastaiKey: key.trim(), instanceId: inst.id })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                  if (data.ok) {
+                    window.scanSettingsVastAI();
+                  } else {
+                    destroyBtn.disabled = false;
+                    destroyBtn.textContent = '🗑️ Destroy';
+                    alert('Failed to destroy instance: ' + (data.error || 'Unknown error'));
+                  }
+                })
+                .catch(function (err) {
+                  destroyBtn.disabled = false;
+                  destroyBtn.textContent = '🗑️ Destroy';
+                  alert('Error: ' + err.message);
+                });
+              }
+            };
+            
+            actionsDiv.appendChild(adoptBtn);
+            actionsDiv.appendChild(destroyBtn);
+            
+            div.appendChild(detailsDiv);
+            div.appendChild(actionsDiv);
+            list.appendChild(div);
+          });
+        }
+      }
+      
+      // Update failed cleanup banner in Settings
+      var cleanupBanner = document.getElementById('settings-cleanup-banner');
+      if (cleanupBanner) {
+        if (failedIds.length > 0) {
+          cleanupBanner.style.display = 'flex';
+          window._settingsFailedInstanceIds = failedIds;
+        } else {
+          cleanupBanner.style.display = 'none';
+          window._settingsFailedInstanceIds = [];
+        }
+      }
+      
+      if (container) {
+        container.style.display = 'block';
+      }
+    })
+    .catch(function (err) {
+      if (scanBtn) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = '🔍 Scan & Manage';
+      }
+      alert('Network error scanning Vast.ai instances: ' + err.message);
+    });
+  };
+  
+  // ── Clean Up Failed Settings Instances ──
+  window.cleanupSettingsFailedInstances = function (e) {
+    if (e) e.preventDefault();
+    var keyInput = document.getElementById('settings-vastai-key');
+    var key = keyInput ? keyInput.value : '';
+    var failedIds = window._settingsFailedInstanceIds || [];
+    if (!failedIds.length) return;
+    
+    if (confirm('⚠️ WARNING: This will permanently delete/destroy ALL ' + failedIds.length + ' failed/broken instances from your Vast.ai account. Billing will stop immediately. Proceed?')) {
+      var cleanupBtn = document.getElementById('settings-cleanup-btn');
+      if (cleanupBtn) {
+        cleanupBtn.disabled = true;
+        cleanupBtn.textContent = 'Cleaning up...';
+      }
+      
+      var currentIdx = 0;
+      function destroyNext() {
+        if (currentIdx >= failedIds.length) {
+          alert('Successfully cleaned up all failed instances!');
+          window.scanSettingsVastAI();
+          return;
+        }
+        var id = failedIds[currentIdx];
+        fetch('/api/destroy-vastai-instance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vastaiKey: key.trim(), instanceId: id })
+        })
+        .then(function () {
+          currentIdx++;
+          destroyNext();
+        })
+        .catch(function () {
+          currentIdx++;
+          destroyNext();
+        });
+      }
+      destroyNext();
+    }
+  };
 
   window.saveSettings = function() {
     var tavilyKey  = (document.getElementById('s-tavily-key').value  || '').trim();
@@ -1818,6 +3164,48 @@
     });
   };
 
+  window.resetRemotePassword = function() {
+    var newPass = (document.getElementById('settings-new-password').value || '').trim();
+    var resultEl = document.getElementById('settings-password-result');
+    if (!newPass || newPass.length < 8) {
+      alert('Password must be at least 8 characters long.');
+      return;
+    }
+
+    resultEl.style.display = '';
+    resultEl.className = 'notice';
+    resultEl.textContent = 'Updating remote password…';
+
+    fetch('/api/reset-remote-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: newPass })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        resultEl.className = 'notice success';
+        resultEl.textContent = '✅ Success! Remote dashboard password reset and configured. You will be forced to change it upon your next login.';
+        document.getElementById('settings-new-password').value = '';
+        // Also update local state
+        safeStorage.setItem('tr_wizard_cfg-dashboard-password', newPass);
+        W.dashboardPassword = newPass;
+        // Also update Phase 1 password field
+        var inputEl = document.getElementById('cfg-dashboard-password');
+        if (inputEl) {
+          inputEl.value = newPass;
+        }
+      } else {
+        resultEl.className = 'notice warn';
+        resultEl.textContent = '⚠️ ' + (data.error || 'Could not update password.');
+      }
+    })
+    .catch(function(e) {
+      resultEl.className = 'notice warn';
+      resultEl.textContent = '⚠️ Connection error. Is the setup server running?';
+    });
+  };
+
   window.toggleShow = function(id) {
     var el = document.getElementById(id);
     var btn = el.nextElementSibling;
@@ -1853,11 +3241,242 @@
     var text = block.childNodes[0].textContent || block.textContent;
     navigator.clipboard.writeText(text.trim()).then(function () {
       var orig = btn.textContent;
-      btn.textContent = 'Copied!';
-      setTimeout(function () { btn.textContent = orig; }, 1500);
+      btn.textContent = '✓ Copied!';
+      btn.classList.add('copied');
+      setTimeout(function () {
+        btn.textContent = orig;
+        btn.classList.remove('copied');
+      }, 1500);
     }).catch(function () {});
   };
 
-}());
+  // ── Persist & Restore Inputs ──
+  function initPersistence() {
+    var textInputs = [
+      'cfg-domain',
+      'cfg-cloudflare-token',
+      'cfg-localnet-host',
+      'cfg-localnet-user',
+      'cfg-vastai-key',
+      'cfg-dashboard-password'
+    ];
+
+    // 1. Initial restore from browser safeStorage (extremely fast)
+    var initialKey = null;
+    textInputs.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var saved = safeStorage.getItem('tr_wizard_' + id);
+      if (saved !== null) {
+        el.value = saved;
+        if (id === 'cfg-vastai-key') initialKey = saved;
+        if (id === 'cfg-dashboard-password') W.dashboardPassword = saved;
+      }
+    });
+
+    if (initialKey) {
+      setTimeout(function () {
+        window.scanVastAIInstances();
+      }, 200);
+    }
+
+    var savedTarget = safeStorage.getItem('tr_wizard_deploy_target');
+    if (savedTarget) {
+      var targetRadio = document.querySelector('#deploy-target input[value="' + savedTarget + '"]');
+      if (targetRadio) {
+        targetRadio.checked = true;
+        targetRadio.dispatchEvent(new Event('change'));
+      }
+    }
+
+    var savedHttps = safeStorage.getItem('tr_wizard_https_method');
+    if (savedHttps) {
+      var httpsRadio = document.querySelector('input[name="https-method"][value="' + savedHttps + '"]');
+      if (httpsRadio) {
+        httpsRadio.checked = true;
+        httpsRadio.dispatchEvent(new Event('change'));
+      }
+    }
+
+    // Restore W state from browser storage
+    var stateKeys = ['phase', 'domain', 'pat', 'apiUrl', 'dashUrl', 'healthUrl', 'deployTarget'];
+    stateKeys.forEach(function (k) {
+      var saved = safeStorage.getItem('tr_wizard_state_' + k);
+      if (saved !== null && saved !== undefined) {
+        if (k === 'phase') {
+          W.phase = parseInt(saved, 10) || 0;
+        } else {
+          W[k] = saved;
+        }
+      }
+    });
+
+    syncUIFromWizardState();
+
+    if (W.phase > 0) {
+      goPhase(W.phase);
+    }
+
+    // 2. Fetch persistent configuration from server disk to restore everything securely (e.g. for incognito/private tabs)
+    fetch('/api/get-wizard-config')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var serverKey = null;
+        textInputs.forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el && data[id] !== undefined && data[id] !== null) {
+            el.value = data[id];
+            if (id === 'cfg-vastai-key') serverKey = data[id];
+            if (id === 'cfg-dashboard-password') W.dashboardPassword = data[id];
+            // Update browser storage to stay in sync
+            safeStorage.setItem('tr_wizard_' + id, data[id]);
+          }
+        });
+
+        if (serverKey) {
+          setTimeout(function () {
+            window.scanVastAIInstances();
+          }, 200);
+        }
+
+        if (data.deployTarget) {
+          var targetRadio = document.querySelector('#deploy-target input[value="' + data.deployTarget + '"]');
+          if (targetRadio) {
+            targetRadio.checked = true;
+            targetRadio.dispatchEvent(new Event('change'));
+            safeStorage.setItem('tr_wizard_deploy_target', data.deployTarget);
+          }
+        }
+
+        if (data.httpsMethod) {
+          var httpsRadio = document.querySelector('input[name="https-method"][value="' + data.httpsMethod + '"]');
+          if (httpsRadio) {
+            httpsRadio.checked = true;
+            httpsRadio.dispatchEvent(new Event('change'));
+            safeStorage.setItem('tr_wizard_https_method', data.httpsMethod);
+          }
+        }
+
+        // Restore W values from server config disk and sync/navigate if needed
+        var stateUpdated = false;
+        stateKeys.forEach(function (k) {
+          if (data[k] !== undefined && data[k] !== null) {
+            if (k === 'phase') {
+              var p = parseInt(data[k], 10);
+              if (!isNaN(p) && p !== W.phase) {
+                W.phase = p;
+                stateUpdated = true;
+              }
+            } else if (data[k] !== W[k]) {
+              W[k] = data[k];
+              stateUpdated = true;
+            }
+            safeStorage.setItem('tr_wizard_state_' + k, data[k]);
+          }
+        });
+
+        if (stateUpdated) {
+          syncUIFromWizardState();
+          if (W.phase > 0) {
+            goPhase(W.phase);
+          }
+        }
+      })
+      .catch(function (e) {
+        console.warn('Could not load wizard config from server, falling back to local storage:', e);
+      });
+
+    // Helper to send individual key/value updates to the server-side disk config
+    function saveToServer(key, val) {
+      var payload = {};
+      payload[key] = val;
+      fetch('/api/save-wizard-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(function (e) { console.error('Error saving wizard config to server:', e); });
+    }
+
+    // Set up listeners for text inputs to save both locally and on server
+    textInputs.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      ['input', 'change', 'blur', 'keyup', 'paste'].forEach(function (evt) {
+        el.addEventListener(evt, function () {
+          safeStorage.setItem('tr_wizard_' + id, el.value);
+          saveToServer(id, el.value);
+        });
+      });
+    });
+
+    // Set up listeners for radio buttons to save both locally and on server
+    document.querySelectorAll('#deploy-target input[type=radio]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        if (r.checked) {
+          safeStorage.setItem('tr_wizard_deploy_target', r.value);
+          saveToServer('deployTarget', r.value);
+        }
+      });
+    });
+
+    document.querySelectorAll('input[name="https-method"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        if (r.checked) {
+          safeStorage.setItem('tr_wizard_https_method', r.value);
+          saveToServer('httpsMethod', r.value);
+        }
+      });
+    });
+
+    // Restore persistent bar values and auto-reconnect SSE if installation is in progress
+    setTimeout(function () {
+      var savedPct = safeStorage.getItem('tr_wizard_install_pct');
+      var savedMsg = safeStorage.getItem('tr_wizard_install_status_msg');
+      var savedType = safeStorage.getItem('tr_wizard_install_status_type');
+      if (savedPct !== null && savedMsg !== null && savedType !== null) {
+        updatePersistentBarState(savedType, savedMsg, parseInt(savedPct, 10));
+      }
+      
+      syncPersistentBarVisibility();
+
+      // Automatically reconnect SSE if phase is between 2 and 5 OR if safeStorage indicates install is active
+      var isInstallActive = safeStorage.getItem('tr_wizard_install_active') === 'true';
+      if ((W.phase >= 2 && W.phase < 6) || isInstallActive) {
+        startSSE();
+      }
+    }, 50);
+  }
+
+    // 3. Make sidebar navigation items clickable
+    document.querySelectorAll('#step-nav li').forEach(function (li) {
+      var phase = parseInt(li.getAttribute('data-phase'), 10);
+      if (!isNaN(phase)) {
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', function () {
+          goPhase(phase);
+        });
+      }
+    });
+
+    // Run persistence initialization
+    initPersistence();
+
+  }());
 </script>
+<!-- Floating Persistent Status Bar -->
+<div id="persistent-install-bar" class="persistent-install-bar">
+  <div class="pbar-header">
+    <div class="pbar-title">
+      <div class="pbar-spinner"></div>
+      <span id="pbar-title-text">Installing...</span>
+    </div>
+    <a class="pbar-details-link" onclick="goPhase(2); return false;">View Details</a>
+  </div>
+  <div class="pbar-track">
+    <div class="pbar-fill"></div>
+  </div>
+  <div class="pbar-status-text">Connecting to VM...</div>
+  <div class="pbar-latest-log">Waiting for logs...</div>
+</div>
+
 </body>

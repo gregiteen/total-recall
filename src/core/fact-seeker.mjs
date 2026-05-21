@@ -4,7 +4,7 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import os from 'os';
 import { callLocalRuntime } from './runtime.mjs';
-import { loadNodes, writeNode, atomicWrite } from './vault.mjs';
+import { loadNodes, writeNode, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 import {
   loadResearchConfig,
@@ -490,7 +490,7 @@ function writeDraftToInbox(topic, synthesis, sourceResults, inboxDir) {
   if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
   atomicWrite(
     path.join(inboxDir, `${slug}.md`),
-    matter.stringify(body, frontmatter),
+    safeStringify(body, frontmatter),
   );
 
   for (const sr of sourceResults) {

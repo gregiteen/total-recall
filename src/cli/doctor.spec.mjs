@@ -12,13 +12,16 @@ import doctor from './doctor.mjs';
 describe('doctor command', () => {
   let logSpy, errorSpy;
   let totalMemSpy, cpusSpy;
-  let execSyncSpy;
+  let execSyncSpy, execFileSyncSpy;
 
   beforeEach(() => {
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     totalMemSpy = vi.spyOn(os, 'totalmem').mockReturnValue(16 * 1024 * 1024 * 1024); // 16GB default
     cpusSpy = vi.spyOn(os, 'cpus').mockReturnValue(new Array(8).fill({}));
+    execFileSyncSpy = vi.spyOn(child_process, 'execFileSync').mockImplementation((cmd, args) => {
+      return '';
+    });
     execSyncSpy = vi.spyOn(child_process, 'execSync').mockImplementation((cmd) => {
       if (cmd.includes('command -v')) {
         return '/usr/bin/' + cmd.split(' ').pop();
@@ -67,6 +70,9 @@ describe('doctor command', () => {
 
     // Mock command missing
     execSyncSpy.mockImplementation((cmd) => {
+      throw new Error('Command not found');
+    });
+    execFileSyncSpy.mockImplementation(() => {
       throw new Error('Command not found');
     });
 

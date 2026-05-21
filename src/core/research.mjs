@@ -4,7 +4,7 @@ import os from 'os';
 import crypto from 'crypto';
 import matter from 'gray-matter';
 import { callFrontier, loadFrontierConfig } from './frontier.mjs';
-import { atomicWrite } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 import {
   loadResearchConfig,
@@ -258,7 +258,7 @@ function writeDraftBatch(query, results, inboxDir, parentTopic) {
   };
 
   const draftPath = path.join(inboxDir, `${slug}.md`);
-  atomicWrite(draftPath, matter.stringify(bodyLines.join('\n'), frontmatter));
+  atomicWrite(draftPath, safeStringify(bodyLines.join('\n'), frontmatter));
   return draftPath;
 }
 

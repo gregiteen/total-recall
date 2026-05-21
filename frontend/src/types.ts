@@ -18,6 +18,7 @@ export interface MemoryNode {
   modality?: string
   tags?: string[]
   body?: string
+  content?: string
   excerpt?: string
 }
 
@@ -28,6 +29,9 @@ export interface HealthData {
   timestamp: string
   disk?: { free: number, total: number }
   ollama?: string
+  ollama_models?: string[]
+  daemon?: string
+  emergency_alerts?: string | null
 }
 
 export interface SandboxResult {

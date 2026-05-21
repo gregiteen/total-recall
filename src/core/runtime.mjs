@@ -13,19 +13,53 @@ import { logger } from './logger.mjs';
 
 /**
  * Load the active runtime configuration from the vault or config dir.
+ *
+ * Precedence for endpoint:
+ *   1. OLLAMA_ENDPOINT env var (for containerized / cloud deploys)
+ *   2. Value from runtime.yml config file
+ *   3. Default: http://127.0.0.1:11434/v1/chat/completions (local installs)
  */
 export function loadRuntimeConfig(configPath) {
+  const DEFAULT_ENDPOINT = 'http://127.0.0.1:11434/v1/chat/completions';
+  const DEFAULT_MODEL = 'gemma4:26b';
+
+  let config;
   if (!fs.existsSync(configPath)) {
-    // Default to Ollama Gemma 4
-    return {
+    config = {
       runtime: 'ollama',
-      endpoint: 'http://127.0.0.1:11434/v1/chat/completions',
-      model: 'gemma4:26b',
+      endpoint: DEFAULT_ENDPOINT,
+      model: DEFAULT_MODEL,
       temperature: 0.2
     };
+  } else {
+    config = yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
   }
-  const raw = fs.readFileSync(configPath, 'utf8');
-  return yaml.parse(raw) || {};
+
+  // Env var overrides — useful for Docker, cloud, and CI deployments
+  if (process.env.OLLAMA_ENDPOINT) {
+    config.endpoint = process.env.OLLAMA_ENDPOINT;
+  }
+  if (process.env.OLLAMA_MODEL) {
+    config.model = process.env.OLLAMA_MODEL;
+  }
+
+  return config;
+}
+
+/**
+ * Derive the Ollama base URL from the configured endpoint.
+ * e.g. "http://127.0.0.1:11434/v1/chat/completions" → "http://127.0.0.1:11434"
+ *      "https://my-cloud-ollama.example.com/v1/chat/completions" → "https://my-cloud-ollama.example.com"
+ */
+export function getOllamaBaseUrl(config) {
+  if (config.ollama_base_url) return config.ollama_base_url;
+  if (config.endpoint) {
+    try {
+      const u = new URL(config.endpoint);
+      return `${u.protocol}//${u.host}`;
+    } catch { /* fall through */ }
+  }
+  return 'http://127.0.0.1:11434';
 }
 
 /**
@@ -34,7 +68,8 @@ export function loadRuntimeConfig(configPath) {
 export async function checkRuntimeHealth(config) {
   try {
     if (config.runtime === 'ollama') {
-      const resp = await fetch('http://127.0.0.1:11434/api/tags');
+      const baseUrl = getOllamaBaseUrl(config);
+      const resp = await fetch(`${baseUrl}/api/tags`);
       if (!resp.ok) return { status: 'degraded', reason: `Ollama returned ${resp.status}` };
       const data = await resp.json();
       const hasModel = data.models.some(m => m.name === config.model || m.name.startsWith(config.model));
@@ -43,7 +78,6 @@ export async function checkRuntimeHealth(config) {
         : { status: 'degraded', reason: `Model ${config.model} not pulled in Ollama.` };
     } 
     else if (config.runtime === 'llama.cpp') {
-      // llama.cpp server usually running on 8080
       const endpoint = config.health_endpoint || 'http://127.0.0.1:8080/health';
       const resp = await fetch(endpoint);
       if (!resp.ok) return { status: 'degraded', reason: `llama.cpp server returned ${resp.status}` };

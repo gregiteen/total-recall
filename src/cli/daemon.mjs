@@ -12,7 +12,7 @@
  *   npx total-recall daemon --help  Show this help
  */
 
-import { execSync, spawnSync, spawn } from 'node:child_process';
+import { execSync, execFileSync, spawnSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,8 +25,11 @@ const PID_FILE = path.join(AGENT_DIR, 'logs', 'daemon.pid');
 const LOG_FILE = path.join(AGENT_DIR, 'logs', 'daemon.log');
 
 function commandExists(cmd) {
+  if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
+    return false;
+  }
   try {
-    execSync(`command -v ${cmd}`, { stdio: 'ignore' });
+    execFileSync('which', [cmd], { stdio: 'ignore' });
     return true;
   } catch { return false; }
 }

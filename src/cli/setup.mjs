@@ -290,9 +290,9 @@ async function remoteSetup(ip, user, opts = {}) {
   // Install Node.js 20 via nvm
   step(1, 3, 'Installing Node.js...');
   sshRun(ip, user,
-    'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && ' +
+    'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o /tmp/install_nvm.sh && bash /tmp/install_nvm.sh && rm /tmp/install_nvm.sh && ' +
     'source ~/.bashrc && nvm install 20 2>/dev/null || ' +
-    '(curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs)'
+    '(curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/setup_node.sh && bash /tmp/setup_node.sh && rm /tmp/setup_node.sh && apt-get install -y nodejs)'
   );
 
   // Run total-recall deploy

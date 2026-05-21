@@ -12,7 +12,7 @@
  *   --help             Show this help
  */
 
-import { spawnSync, execSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,7 +21,13 @@ import { createInterface } from 'node:readline';
 const AGENT_DIR = path.join(os.homedir(), '.agent');
 
 function commandExists(cmd) {
-  try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
+  if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
+    return false;
+  }
+  try {
+    execFileSync('which', [cmd], { stdio: 'ignore' });
+    return true;
+  } catch { return false; }
 }
 
 function parseArgs(args) {
@@ -87,9 +93,19 @@ export default async function restore(args) {
   try {
     if (isEncrypted) {
       if (!commandExists('gpg')) { console.error('  ❌ gpg not found'); process.exit(1); }
-      const cmd = `gpg --decrypt --batch "${opts.from}" | tar -xf - -C "${os.homedir()}"`;
-      const result = spawnSync('sh', ['-c', cmd], { stdio: 'inherit' });
-      if (result.status !== 0) throw new Error(`gpg|tar failed (exit ${result.status})`);
+      
+      const gpg = spawn('gpg', ['--decrypt', '--batch', opts.from], { stdio: ['ignore', 'pipe', 'inherit'] });
+      const tar = spawn('tar', ['-xf', '-', '-C', os.homedir()], { stdio: ['pipe', 'inherit', 'inherit'] });
+
+      gpg.stdout.pipe(tar.stdin);
+
+      const [gpgExit, tarExit] = await Promise.all([
+        new Promise((resolve) => gpg.on('close', resolve)),
+        new Promise((resolve) => tar.on('close', resolve))
+      ]);
+
+      if (gpgExit !== 0) throw new Error(`gpg failed (exit ${gpgExit})`);
+      if (tarExit !== 0) throw new Error(`tar failed (exit ${tarExit})`);
     } else {
       const result = spawnSync('tar', ['-xzf', opts.from, '-C', os.homedir()], { stdio: 'inherit' });
       if (result.status !== 0) throw new Error(`tar failed (exit ${result.status})`);

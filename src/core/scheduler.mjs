@@ -2,8 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
-import { loadNodes, atomicWrite } from './vault.mjs';
+import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { loadQueue } from './research-queue.mjs';
 
 /**
  * Total Recall Task Scheduler
@@ -129,8 +130,57 @@ export function updateTaskStatus(task, newStatus, queueDir) {
   const raw = fs.readFileSync(filepath, 'utf8');
   const { data, content } = matter(raw);
   data.status = newStatus;
-  data.completed_at = newStatus === 'completed' ? new Date().toISOString() : data.completed_at;
-  atomicWrite(filepath, matter.stringify(content, data));
+  if (newStatus === 'completed') {
+    data.completed_at = new Date().toISOString();
+  }
+
+  // Also update in-memory object properties so they stay in sync
+  task.status = newStatus;
+  if (newStatus === 'completed') {
+    task.completed_at = data.completed_at;
+  }
+
+  // Strip undefined values — js-yaml (used by gray-matter) crashes on explicit undefined
+  for (const key of Object.keys(data)) {
+    if (data[key] === undefined) delete data[key];
+  }
+
+  atomicWrite(filepath, safeStringify(content, data));
+}
+
+/**
+ * Persist a task (especially generated idle tasks) to disk as a pending markdown file.
+ *
+ * @param {object} task Task object
+ * @param {string} queueDir Path to queue directory
+ */
+export function persistTaskToDisk(task, queueDir) {
+  if (!fs.existsSync(queueDir)) {
+    fs.mkdirSync(queueDir, { recursive: true });
+  }
+  const filepath = path.join(queueDir, `${task.slug}.md`);
+  const { body, ...frontmatter } = task;
+
+  // Ensure default fields
+  if (frontmatter.progress === undefined) {
+    frontmatter.progress = 0;
+  }
+  if (frontmatter.estimated_calls === undefined) {
+    frontmatter.estimated_calls = 5;
+  }
+  if (frontmatter.deadline === undefined) {
+    frontmatter.deadline = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  }
+
+  // Strip undefined values — js-yaml (used by gray-matter) crashes on explicit undefined
+  for (const key of Object.keys(frontmatter)) {
+    if (frontmatter[key] === undefined) delete frontmatter[key];
+  }
+
+  const raw = safeStringify(body || '', frontmatter);
+  atomicWrite(filepath, raw);
+  task._filepath = filepath;
+  return filepath;
 }
 
 // ─── Idle Task Generation ───────────────────────────────────────────────────────
@@ -202,7 +252,7 @@ function generateClarityReviewTask(vaultDir) {
     return makeFallbackTask('memory-maintenance', 'No active nodes to review');
   }
 
-  const target = nodes[Math.floor(Math.random() * nodes.length)];
+  const target = nodes[crypto.randomInt(0, nodes.length)];
   return {
     type: 'task',
     slug: `clarity-review-${target.slug}-${Date.now().toString(36)}`,
@@ -395,6 +445,36 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     queue.enqueue(task);
   }
 
+  // Load pending research queue tasks
+  try {
+    const researchItems = loadQueue().filter((i) => i.status === 'pending');
+    for (const item of researchItems) {
+      queue.enqueue({
+        type: 'task',
+        slug: `research-queue-${item.id}`,
+        priority: 85, // Enforced high priority
+        category: 'proactive-research',
+        target: item.topic,
+        status: 'pending',
+        created_by: 'research-queue',
+        reason: `Queued research project: ${item.topic}`,
+        body: `Run knowledge acquisition cycle for queued topic: ${item.topic}.\nNotes: ${item.notes || 'None'}`,
+        _research_id: item.id,
+      });
+    }
+    if (researchItems.length > 0) {
+      logger.info({
+        subsystem: 'scheduler',
+        message: `Enqueued ${researchItems.length} pending research tasks from the dynamic queue.`,
+      });
+    }
+  } catch (err) {
+    logger.error({
+      subsystem: 'scheduler',
+      message: `Failed to load research queue items into scheduler: ${err.message}`,
+    });
+  }
+
   logger.info({
     subsystem: 'scheduler',
     message: `Initialized with ${diskTasks.length} explicit tasks from queue.`,
@@ -420,6 +500,7 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
       if (explicit) return { task: explicit, source: 'explicit' };
 
       const idle = generateIdleTask({ vaultDir, sessionsDir });
+      persistTaskToDisk(idle, queueDir);
       return { task: idle, source: 'idle' };
     },
   };

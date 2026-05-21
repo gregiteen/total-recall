@@ -2,10 +2,22 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import matter from 'gray-matter';
+import { protectIDEInstructions } from '../core/protect-instructions.mjs';
 
 const INJECTION_BEGIN = '<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->';
 const INJECTION_END = '<!-- END INJECTED MEMORY -->';
-const SHIMS = ['.cursorrules', 'CLAUDE.md', '.clauderules', 'AGENTS.md', 'GEMINI.md'];
+const SHIMS = [
+  '.cursorrules',
+  'CLAUDE.md',
+  '.clauderules',
+  'AGENTS.md',
+  'GEMINI.md',
+  '.github/copilot-instructions.md',
+  '.vscode/copilot-instructions.md',
+  '.windsurfrules',
+  'WINDSURF.md'
+];
 
 function parseArgs(args) {
   const opts = {
@@ -95,6 +107,7 @@ function writeProjection(cwd, instructions) {
   const targets = {};
   for (const shim of SHIMS) {
     const target = path.join(cwd, shim);
+    const targetDir = path.dirname(target);
     try {
       if (fs.existsSync(target)) {
         const stat = fs.lstatSync(target);
@@ -106,7 +119,13 @@ function writeProjection(cwd, instructions) {
           targets[shim] = 'symlink';
         }
       } else {
-        fs.symlinkSync('INSTRUCTIONS.md', target);
+        // Ensure parent directory of the shim exists before writing/symlinking
+        if (!fs.existsSync(targetDir)) {
+          fs.mkdirSync(targetDir, { recursive: true });
+        }
+        // Use relative path target for symlink so it's correct from the subdirectory
+        const relativeTarget = path.relative(targetDir, instructionsFile);
+        fs.symlinkSync(relativeTarget, target);
         targets[shim] = 'symlinked';
       }
     } catch (err) {
@@ -146,12 +165,102 @@ async function runOnce(opts) {
     throw new Error('No brain URL configured. Pass --brain <url> or create .agent/config/brain.json.');
   }
 
+  // Auto-protect manual IDE edits locally and sync them to the brain first
+  const vaultDir = path.join(agentDir, 'memory-vault');
+  const derivedDir = path.join(agentDir, 'memory-derived');
+  const instructionsFile = path.join(cwd, 'INSTRUCTIONS.md');
+
+  // Ensure local directories exist so we can track and protect direct IDE manual edits
+  fs.mkdirSync(vaultDir, { recursive: true });
+  fs.mkdirSync(derivedDir, { recursive: true });
+
+  try {
+    const result = protectIDEInstructions({ vaultDir, derivedDir, instructionsFile });
+    if (result && result.imported > 0) {
+      console.error(`  🛡️  [total-recall] Auto-captured ${result.imported} manual IDE instruction edit(s) locally.`);
+      
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      for (const slug of result.slugs) {
+        const nodeFile = path.join(vaultDir, 'invariants', `${slug}.md`);
+        if (!fs.existsSync(nodeFile)) continue;
+
+        const raw = fs.readFileSync(nodeFile, 'utf8');
+        const { data, content } = matter(raw);
+
+        const payload = {
+          slug: data.slug,
+          title: data.title,
+          category: data.category,
+          content: content.trim(),
+          tags: data.tags,
+          priority: data.priority,
+          modality: data.modality,
+          confidence: data.confidence,
+          importance: data.importance,
+          status: data.status,
+          created: data.created,
+          updated: data.updated
+        };
+
+        console.error(`  🛡️  Pushing new invariant to remote brain: ${slug}...`);
+        const postRes = await fetch(`${brainUrl.replace(/\/$/, '')}/api/memory`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        if (!postRes.ok) {
+          if (postRes.status === 409) {
+            console.error(`  ℹ️  Invariant already exists on brain, updating: ${slug}...`);
+            const putRes = await fetch(`${brainUrl.replace(/\/$/, '')}/api/memory/${slug}`, {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify(payload)
+            });
+            if (!putRes.ok) {
+              console.error(`  ⚠️  Failed to update invariant on brain: HTTP ${putRes.status}`);
+            }
+          } else {
+            console.error(`  ⚠️  Failed to push invariant to brain: HTTP ${postRes.status}`);
+          }
+        }
+      }
+
+      // Trigger remote recompile so the pulled instructions contain the new changes
+      console.error(`  ⚙️  Triggering remote recompile on brain...`);
+      const compileHeaders = {};
+      if (token) compileHeaders.Authorization = `Bearer ${token}`;
+      const compileRes = await fetch(`${brainUrl.replace(/\/$/, '')}/api/vault/compile`, {
+        method: 'POST',
+        headers: compileHeaders
+      });
+
+      if (!compileRes.ok) {
+        console.error(`  ⚠️  Failed to trigger remote compile: HTTP ${compileRes.status}`);
+      } else {
+        console.error(`  ✅  Remote compile triggered successfully.`);
+      }
+    }
+  } catch (err) {
+    console.error(`  ⚠️  [total-recall] Failed to run local instruction protection: ${err.message}`);
+  }
+
   const remote = await pullInstructions(brainUrl, token);
   if (!remote.content) {
     throw new Error('Remote /api/instructions response did not include content.');
   }
 
   const projection = writeProjection(cwd, remote.content);
+
+  // Save pristine system compiled output locally for IDE edit diffing in subsequent sync cycles
+  try {
+    const backupFile = path.join(derivedDir, 'INSTRUCTIONS.system.md');
+    fs.writeFileSync(backupFile, remote.content, 'utf8');
+  } catch (err) {
+    // Non-fatal
+  }
   const stateFile = writeSyncState(agentDir, {
     last_sync: new Date().toISOString(),
     brain_url: brainUrl,

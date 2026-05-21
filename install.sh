@@ -59,6 +59,24 @@ install_git_linux() {
   ok "git installed"
 }
 
+install_zstd_linux() {
+  log "Checking for zstd..."
+  if ! command -v zstd &>/dev/null; then
+    log "zstd not found. Installing zstd..."
+    if command -v apt-get &>/dev/null; then
+      apt-get update -qq && apt-get install -y -qq zstd
+    elif command -v yum &>/dev/null; then
+      yum install -y -q zstd
+    elif command -v dnf &>/dev/null; then
+      dnf install -y -q zstd
+    else
+      warn "Could not install zstd automatically — please install it manually."
+    fi
+  else
+    ok "zstd is already installed"
+  fi
+}
+
 # Git
 if ! command -v git &>/dev/null; then
   if [ "$OS" = "Darwin" ]; then
@@ -90,6 +108,9 @@ fi
 
 # ── 3. Install Ollama ────────────────────────────────────────────────────────────
 if ! command -v ollama &>/dev/null; then
+  if [ "$OS" != "Darwin" ]; then
+    install_zstd_linux
+  fi
   log "Installing Ollama (local AI runtime)..."
   curl -fsSL https://ollama.com/install.sh | sh
   ok "Ollama installed"
@@ -147,8 +168,21 @@ open_browser() {
   fi
 }
 
-# Give the wizard a moment then open browser
-(sleep 3 && open_browser "http://localhost:${WIZARD_PORT}") &
+# Give the wizard a moment then open browser if not in headless mode
+if [ "$AUTO_DEPLOY" != "1" ]; then
+  (sleep 3 && open_browser "http://localhost:${WIZARD_PORT}") &
+fi
 
 # Run the wizard (blocks until install complete)
-node "$INSTALL_DIR/bin/total-recall.mjs" deploy --ui --ui-port "$WIZARD_PORT" --allow-insecure-http
+if [ "$AUTO_DEPLOY" = "1" ]; then
+  log "Running in non-interactive remote deploy mode..."
+  DEPLOY_FLAGS=""
+  if [ "$HTTPS_METHOD" = "cloudflare-quick" ]; then
+    DEPLOY_FLAGS="--cloudflare-quick"
+  else
+    DEPLOY_FLAGS="--allow-insecure-http"
+  fi
+  node "$INSTALL_DIR/bin/total-recall.mjs" deploy $DEPLOY_FLAGS
+else
+  node "$INSTALL_DIR/bin/total-recall.mjs" deploy --ui --ui-port "$WIZARD_PORT" --allow-insecure-http
+fi

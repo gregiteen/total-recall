@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import natural from 'natural';
 import { loadNodes, loadSkills, atomicWrite } from './vault.mjs';
+import { readEmergencyAlerts } from './emergency-alerts.mjs';
+import { protectIDEInstructions } from './protect-instructions.mjs';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
@@ -256,26 +258,63 @@ function assertivePrefix(node) {
 }
 
 /**
- * Build the Total Recall injection block content from absolute nodes.
+ * Build the Total Recall injection block content from absolute nodes, guides, and routing.
  * Adds assertive prefixes based on node modality for stronger enforcement.
  */
-function buildInjectionBlock(nodes) {
-  const absolutes = nodes.filter(n => n.priority === 'absolute' && n.status === 'active');
+function buildInjectionBlock(nodes, agentDir, skillsDir) {
+  const activeNodes = nodes.filter(n => n.status === 'active');
+  
+  // Include if priority is 'absolute' or 'high', OR category is 'invariants', 'preferences', or 'corrections'
+  const absolutes = activeNodes.filter(n => 
+    n.priority === 'absolute' || 
+    n.priority === 'high' ||
+    n.category === 'invariants' ||
+    n.category === 'preferences' ||
+    n.category === 'corrections'
+  );
+
+  const categoryOrder = {
+    invariants: 1,
+    preferences: 2,
+    corrections: 3,
+    patterns: 4,
+    concepts: 5,
+    facts: 6
+  };
+
+  absolutes.sort((a, b) => {
+    const orderA = categoryOrder[a.category] || 99;
+    const orderB = categoryOrder[b.category] || 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.slug.localeCompare(b.slug);
+  });
+
   const nodesBySlug = new Map(nodes.map(n => [n.slug, n]));
   const generatedAt = new Date().toISOString();
 
+  const preamble = buildPreamble(agentDir);
+  const systemDocs = buildSystemDocs(agentDir);
+  const routingTable = buildSkillRoutingTable(skillsDir);
+
   const lines = [
     INJECTION_BEGIN,
-    `<!-- @tier: 1, generated_at: ${generatedAt} -->`,
+    `<!-- tier: 1, generated_at: ${generatedAt} -->`,
+    '',
+    preamble,
+    systemDocs,
+    routingTable,
+    '## 🛡️ Active Memory Invariants',
+    'These are active, inviolable memory rules compiled directly from your semantic vault.',
     ''
   ];
 
   for (const node of absolutes) {
     const prefix = assertivePrefix(node);
-    const titleLine = prefix ? `## ${prefix}: ${node.title}` : `## ${node.title}`;
+    const titleLine = prefix ? `### ${prefix}: ${node.title}` : `### ${node.title}`;
     lines.push(titleLine);
-    // Resolve [[wikilinks]] to plain markdown in compiled output
-    lines.push(resolveWikilinks(node.body, nodesBySlug));
+    // Resolve [[wikilinks]] to plain markdown in compiled output, supporting body/content fallback
+    const bodyText = node.body || node.content || '';
+    lines.push(resolveWikilinks(bodyText, nodesBySlug));
     lines.push('');
   }
 
@@ -358,8 +397,9 @@ function buildPreamble(agentDir) {
  * access to tool lists, REST API references, and research protocols.
  */
 function buildSystemDocs(agentDir) {
-  // Read Brain URL from config if available
+  // Read Brain URL and token from config if available
   let brainUrl = 'http://localhost:3000';
+  let token = '<YOUR_PAT_TOKEN>'; // Always redacted in compiled instructions for security
   try {
     const configPath = path.join(agentDir, 'config', 'brain.json');
     if (fs.existsSync(configPath)) {
@@ -374,107 +414,96 @@ function buildSystemDocs(agentDir) {
     '',
     `**What it is:** Total Recall is a Sovereign AI OS — a local, filesystem-native memory and reasoning kernel that runs alongside your IDE. It maintains a structured semantic memory vault (SSSS v2 nodes), compiles rules into IDE instruction files, and runs background research and embedding daemons.`,
     '',
-    `**Brain URL:** \`${brainUrl}\`  (REST API base; also the MCP server endpoint)`,
+    `**REST API Base URL:** \`${brainUrl}\``,
+    `**Active Bearer PAT Token:** \`${token}\``,
     '',
-    '### 🔧 MCP Tools (13 total)',
+    '### 🧭 Tool & API Selection Heuristics',
+    '1. **Local Skills**: Use local skill packages (located in `.agent/skills/`) for file/workspace changes, tests, and linting. If a custom script is provided, invoke it via shell command execution.',
+    '2. **Total Recall Brain**: For all semantic searches, memory retrieval, memory writes, and derived index recompilation, **ALWAYS use shell `curl` commands** targeting the REST API endpoints documented below.',
     '',
-    '| Tool | Purpose |',
-    '|------|---------|',
-    '| `semantic_search` | Vector search across vault nodes and session history |',
-    '| `recall_node` | Fetch a single memory node by slug |',
-    '| `list_nodes` | List vault nodes filtered by category/status/priority |',
-    '| `write_node` | Create or update a memory node (SSSS v2) |',
-    '| `delete_node` | Archive a memory node (sets status → archived) |',
-    '| `queue_research` | Add a topic to the autonomous research agenda |',
-    '| `list_research_queue` | Check status of queued topics + read daemon findings |',
-    '| `recompile_surface` | Rebuild INSTRUCTIONS.md + skill routes + embeddings |',
-    '| `get_health` | Vault stats, Ollama reachability, embedding counts |',
-    '| `list_skills` | Enumerate available agent skills and their descriptions |',
-    '| `read_skill` | Read the full SKILL.md for a specific skill |',
-    '| `list_inbox` | List pending inbox items (draft research, conflicts) |',
-    '| `resolve_inbox` | Promote, reject, or modify an inbox item |',
+    '### 🌐 Direct REST API Reference & curl Templates',
+    'All requests require the header: `Authorization: Bearer ' + token + '`',
     '',
-    '### 🌐 REST API Reference',
-    '',
-    '| Method | Endpoint | Description |',
-    '|--------|----------|-------------|',
-    `| GET | \`${brainUrl}/health\` | System health (vault count, embeddings, Ollama status) |`,
-    `| GET | \`${brainUrl}/api/vault/status\` | Vault stats summary |`,
-    `| GET | \`${brainUrl}/api/nodes\` | List all nodes (query: category, status, priority) |`,
-    `| GET | \`${brainUrl}/api/nodes/:slug\` | Fetch a single node by slug |`,
-    `| POST | \`${brainUrl}/api/nodes\` | Create or upsert a memory node |`,
-    `| DELETE | \`${brainUrl}/api/nodes/:slug\` | Archive a node |`,
-    `| POST | \`${brainUrl}/api/search\` | Semantic search (body: { query, top_k }) |`,
-    `| GET | \`${brainUrl}/api/research/queue\` | List research agenda |`,
-    `| POST | \`${brainUrl}/api/research/queue\` | Queue a research topic |`,
-    `| POST | \`${brainUrl}/api/compile\` | Trigger surface recompile |`,
-    `| GET | \`${brainUrl}/api/import/rules\` | Detect importable rule files in repo |`,
-    `| POST | \`${brainUrl}/api/import/rules\` | Import detected rule files into vault |`,
-    '',
-    '### 📦 SSSS v2 Memory Node Fields',
-    '',
-    '| Field | Type | Description |',
-    '|-------|------|-------------|',
-    '| `slug` | string | Unique ID, kebab-case |',
-    '| `title` | string | Human-readable title |',
-    '| `category` | string | `facts` / `patterns` / `concepts` / `preferences` / `corrections` |',
-    '| `status` | string | `active` / `draft` / `archived` |',
-    '| `priority` | string | `absolute` / `high` / `normal` / `low` |',
-    '| `modality` | string | `must` / `must_not` / `should` / `should_not` / `neutral` |',
-    '| `confidence` | number | 0.0–1.0 (daemon-managed for research nodes) |',
-    '| `importance` | string | `critical` / `high` / `normal` / `low` |',
-    '| `tags` | string[] | Freeform tags for routing and search |',
-    '| `body` | string | Full markdown content; supports `[[wikilinks]]` |',
-    '| `related` | string[] | Slugs of related nodes (graph edges) |',
-    '| `sources` | object[] | Citations: `{ url, title, retrieved_at }` |',
-    '',
-    '### 🔍 Semantic Search Examples',
-    '',
-    '**Via MCP:**',
-    '```json',
-    '{ "tool": "semantic_search", "arguments": { "query": "how to handle rate limiting", "top_k": 5 } }',
+    '#### 1. Check System Health',
+    '```bash',
+    'curl -H "Authorization: Bearer ' + token + '" \\',
+    '  ' + brainUrl + '/health',
     '```',
     '',
-    `**Via REST:** \`POST ${brainUrl}/api/search\``,
-    '```json',
-    '{ "query": "authentication patterns", "top_k": 3 }',
+    '#### 2. Vector Semantic Search',
+    '```bash',
+    'curl -X POST \\',
+    '  -H "Authorization: Bearer ' + token + '" \\',
+    '  -H "Content-Type: application/json" \\',
+    '  -d \'{"query": "YOUR_SEARCH_QUERY", "top_k": 5}\' \\',
+    '  ' + brainUrl + '/api/memory/search/semantic',
     '```',
+    '',
+    '#### 3. Fetch a Specific Memory Node',
+    '```bash',
+    'curl -H "Authorization: Bearer ' + token + '" \\',
+    '  ' + brainUrl + '/api/memory/YOUR_NODE_SLUG',
+    '```',
+    '',
+    '#### 4. List All Memory Nodes',
+    '```bash',
+    'curl -H "Authorization: Bearer ' + token + '" \\',
+    '  "' + brainUrl + '/api/memory"',
+    '```',
+    '',
+    '#### 5. Create or Update a Memory Node',
+    '```bash',
+    'curl -X POST \\',
+    '  -H "Authorization: Bearer ' + token + '" \\',
+    '  -H "Content-Type: application/json" \\',
+    '  -d \'{',
+    '    "slug": "kebab-case-slug",',
+    '    "category": "facts",',
+    '    "title": "Clear concise memory title",',
+    '    "status": "active",',
+    '    "priority": "normal",',
+    '    "modality": "must",',
+    '    "content": "Detailed rule, fact, or workflow in markdown format."',
+    '  }\' \\',
+    '  ' + brainUrl + '/api/memory',
+    '```',
+    '',
+    '#### 6. Recompile Memory Surface',
+    '```bash',
+    'curl -X POST \\',
+    '  -H "Authorization: Bearer ' + token + '" \\',
+    '  ' + brainUrl + '/api/vault/compile',
+    '```',
+    '',
+    '#### 7. Archive a Memory Node',
+    '```bash',
+    'curl -X DELETE \\',
+    '  -H "Authorization: Bearer ' + token + '" \\',
+    '  ' + brainUrl + '/api/memory/YOUR_NODE_SLUG',
+    '```',
+    '',
+    '#### 8. Queue Background Research',
+    '```bash',
+    'curl -X POST \\',
+    '  -H "Authorization: Bearer ' + token + '" \\',
+    '  -H "Content-Type: application/json" \\',
+    '  -d \'{"topic": "Next.js 15 routing models", "priority": "high"}\' \\',
+    '  ' + brainUrl + '/api/research',
+    '```',
+    '',
+    '### 📦 SSSS v2 Memory Node Schema Reference',
+    'Save memories with valid SSSS v2 fields:',
+    '- `slug`: (string) Unique ID, kebab-case (matches filename: `slug.md`)',
+    '- `title`: (string) Descriptive human-readable title',
+    '- `category`: (string) `facts` / `patterns` / `concepts` / `preferences` / `corrections`',
+    '- `status`: (string) `active` / `draft` / `archived`',
+    '- `priority`: (string) `absolute` / `high` / `normal` / `low`',
+    '- `modality`: (string) `must` / `must_not` / `should` / `should_not` / `neutral`',
+    '- `body`: (string) Comprehensive markdown body detailing the rule, preference, or fact',
     '',
     '### 🔬 Research System (Autonomous Background Daemon)',
-    '',
-    'The research system runs as a **background daemon** — not something you trigger manually.',
-    'Your job as an agent is to **queue topics** and **read results**. The daemon does everything else.',
-    '',
-    '**How it works:**',
-    '1. Topics sit on a prioritized Research Agenda (`~/.agent/research-agenda.jsonl`).',
-    '   Topics are added by: session inference (daemon reads sessions post-mortem), direct agent queuing, self-diagnosis, or as follow-up gaps from prior research.',
-    '2. Each daemon cycle pulls the highest-priority `pending` or `partially-covered` topic.',
-    '3. It gathers from **all available real sources in parallel:**',
-    '   - Web search (Brave → Serper fallback)',
-    '   - DuckDuckGo Instant Answers',
-    '   - Wikipedia',
-    '   - arXiv (for academic/ML topics)',
-    '   - npm registry (for JS/Node topics)',
-    '   - GitHub repositories (for code/library topics)',
-    '   - Deep page crawl of the top result (Playwright or plain fetch)',
-    '4. A local LLM synthesizes all results into: summary, key facts with inline citations, confidence score, temporal context, contradictions found, and **further research gaps**.',
-    '5. **Confidence routing:**',
-    '   - ≥0.7 → written directly to vault as `active` node + INSTRUCTIONS.md recompiled immediately',
-    '   - <0.7 → written as `draft` to inbox for validation before promotion',
-    '6. **Self-multiplication:** gaps identified during synthesis are automatically added back to the agenda as follow-up topics with slightly lower priority.',
-    '7. **Topic status** is never binary done/not-done: `pending` → `partially-covered` → `well-covered`. Well-covered topics have a 60-day decay half-life and are automatically re-queued as knowledge goes stale.',
-    '8. When the agenda is empty, the daemon runs **self-diagnosis** — audits vault coverage, ages, and source diversity, then auto-queues new topics for weak areas.',
-    '',
-    '**What you as an agent should do:**',
-    '- `queue_research({ topic, priority, notes })` — add a topic (post-cutoff fact, uncertain claim, knowledge gap)',
-    '- `list_research_queue()` — check status of queued topics and read completed findings',
-    '- `semantic_search({ query })` — search vault for facts already researched by the daemon',
-    '',
-    '**What you should NOT do:**',
-    '- Do not manually run web searches and call that "research done"',
-    '- Do not mark research complete — the daemon manages status based on coverage scores across multiple sources',
-    '- Do not write speculative facts to the vault — that\'s what the inbox validation path is for',
-    '',
+    'The research system runs as an autonomous background daemon. Queue complex topics with the POST `/api/research` route, and monitor progress using GET `/api/research`. Confidence scores >=0.7 automatically create `active` vault nodes.',
+    ''
   ].join('\n');
 }
 
@@ -488,11 +517,14 @@ function buildSystemDocs(agentDir) {
  * - Topic → Skill routing table
  */
 export function compileTier1(nodes, instructionsFile, agentDir) {
-  const injectionBlock = buildInjectionBlock(nodes);
   const skillsDir = path.join(path.dirname(instructionsFile), 'skills');
-  const routingTable = buildSkillRoutingTable(skillsDir);
-  const preamble = buildPreamble(agentDir);
-  const systemDocs = buildSystemDocs(agentDir);
+  const injectionBlock = buildInjectionBlock(nodes, agentDir, skillsDir);
+
+  // Check for emergency alerts — these go at the VERY TOP, before everything else
+  const emergencyAlerts = readEmergencyAlerts();
+  const alertBlock = emergencyAlerts
+    ? emergencyAlerts + '\n---\n\n'
+    : '';
 
   // Always write the canonical INSTRUCTIONS.md fresh
   const header = [
@@ -500,15 +532,34 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
     '> This file is compiled automatically. Do not edit directly.',
     ''
   ].join('\n');
-  atomicWrite(instructionsFile, header + preamble + systemDocs + routingTable + injectionBlock + '\n');
+  atomicWrite(instructionsFile, alertBlock + header + injectionBlock + '\n');
+
+  // Back up the system compiled output for IDE edit diffing
+  const backupFile = path.join(agentDir, 'memory-derived', 'INSTRUCTIONS.system.md');
+  try {
+    fs.mkdirSync(path.dirname(backupFile), { recursive: true });
+    atomicWrite(backupFile, header + injectionBlock + '\n');
+  } catch (err) {
+    // Non-fatal
+  }
 
   // For each IDE shim: inject into existing files, or create a symlink if missing
-  const shims = ['.cursorrules', 'CLAUDE.md', '.clauderules', 'AGENTS.md', 'GEMINI.md'];
+  const shims = [
+    '.cursorrules',
+    'CLAUDE.md',
+    '.clauderules',
+    'AGENTS.md',
+    'GEMINI.md',
+    '.github/copilot-instructions.md',
+    '.vscode/copilot-instructions.md',
+    '.windsurfrules',
+    'WINDSURF.md'
+  ];
   const baseDir = path.dirname(instructionsFile);
-  const baseName = path.basename(instructionsFile);
 
   for (const shim of shims) {
     const shimPath = path.join(baseDir, shim);
+    const shimDir = path.dirname(shimPath);
     try {
       if (fs.existsSync(shimPath)) {
         const stat = fs.lstatSync(shimPath);
@@ -518,8 +569,13 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
         }
         // If it's already a symlink to INSTRUCTIONS.md, nothing to do
       } else {
-        // Doesn't exist — create a symlink pointing to INSTRUCTIONS.md
-        fs.symlinkSync(baseName, shimPath);
+        // Ensure parent directory of the shim exists before writing/symlinking
+        if (!fs.existsSync(shimDir)) {
+          fs.mkdirSync(shimDir, { recursive: true });
+        }
+        // Use relative path target for symlink so it's correct from the subdirectory
+        const relativeTarget = path.relative(shimDir, instructionsFile);
+        fs.symlinkSync(relativeTarget, shimPath);
       }
     } catch (err) {
       // Ignore permission errors etc.
@@ -532,6 +588,14 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
  */
 export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile }) {
   const agentDir = path.dirname(instructionsFile);
+
+  // 1. Run protection check to auto-import any manual edits made in the IDE
+  try {
+    protectIDEInstructions({ vaultDir, derivedDir, instructionsFile });
+  } catch (err) {
+    // Non-fatal
+  }
+
   const nodes = loadNodes(vaultDir);
   const skills = loadSkills(skillsDir);
 

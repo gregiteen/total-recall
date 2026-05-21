@@ -114,3 +114,18 @@ describe('connect — Codex projection', () => {
     expect(registry.clients.codex.mode).toBe('symlink');
   });
 });
+
+describe('connect — Core skills seeding', () => {
+  it('seeds the master total-recall skill folder during connection bootstrap', async () => {
+    // Delete pre-created instructions to trigger connection bootstrapping
+    fs.rmSync(path.join(tmpProject, 'INSTRUCTIONS.md'), { force: true });
+
+    await runConnect(['cursor']);
+    const skillPath = path.join(tmpAgentDir, 'skills', 'total-recall');
+    expect(fs.existsSync(skillPath)).toBe(true);
+    expect(fs.existsSync(path.join(skillPath, 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillPath, 'references', 'architecture-reference.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillPath, 'evals', 'evals.json'))).toBe(true);
+  }, 30000);
+});
+

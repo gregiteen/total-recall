@@ -39,7 +39,7 @@ export async function generateEmbedding(text, opts = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, prompt: text }),
-      signal: AbortSignal.timeout(30_000)
+      signal: AbortSignal.timeout(process.env.VITEST ? 500 : 30_000)
     });
     if (!res.ok) return null;
     const body = await res.json();

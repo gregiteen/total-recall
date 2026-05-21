@@ -1,20 +1,30 @@
-# Total Recall Local Runtime Configuration
+# Total Recall Runtime Configuration
 #
 # This configuration determines how the Sovereign AI OS interacts with
-# the local model for cognitive tasks (Dream Cycle, watchdogs, local chat).
+# the LLM runtime for cognitive tasks (Dream Cycle, watchdogs, local chat).
+#
+# The endpoint can point to a local instance or a remote cloud server.
+# Use HTTPS for remote/cloud deployments.
 
 # ----------------------------------------------------------------------------
-# Option 1: Ollama (Default)
+# Option 1: Ollama (Default — local or remote)
 # ----------------------------------------------------------------------------
 runtime: "ollama"
+# Local default. Change to your cloud URL if running remotely:
+#   endpoint: "https://my-gpu-server.example.com:11434/v1/chat/completions"
 endpoint: "http://127.0.0.1:11434/v1/chat/completions"
+
 # gemma4:26b is a Mixture-of-Experts model — 26B total params, ~4B active.
-# Requires ~16 GB RAM. Multimodal, 256K context window.
+# Requires ~16 GB VRAM. Multimodal, 256K context window.
 # Alternatives:
 #   gemma4:e4b   — edge model, ~6 GB RAM, fastest
 #   gemma4:31b   — dense model, ~32 GB RAM, highest quality
 model: "gemma4:26b"
 temperature: 0.2
+
+# Optional: Override the base URL used for health checks (e.g. /api/tags).
+# If not set, it is derived automatically from the endpoint above.
+# ollama_base_url: "https://my-gpu-server.example.com:11434"
 
 # ----------------------------------------------------------------------------
 # Option 2: llama.cpp (High Performance)
@@ -25,4 +35,15 @@ temperature: 0.2
 # endpoint: "http://127.0.0.1:8080/v1/chat/completions"
 # health_endpoint: "http://127.0.0.1:8080/health"
 # model: "gemma4-26b-q4_k_m.gguf"
+# temperature: 0.2
+
+# ----------------------------------------------------------------------------
+# Option 3: Remote Cloud GPU (e.g. Vast.ai, RunPod, Lambda)
+# Point the endpoint to your cloud instance running Ollama or vLLM.
+# ALWAYS use HTTPS for remote endpoints.
+# ----------------------------------------------------------------------------
+# runtime: "ollama"
+# endpoint: "https://your-cloud-gpu.trycloudflare.com/v1/chat/completions"
+# ollama_base_url: "https://your-cloud-gpu.trycloudflare.com"
+# model: "gemma4:26b"
 # temperature: 0.2
