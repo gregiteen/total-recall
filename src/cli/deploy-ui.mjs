@@ -1172,13 +1172,12 @@ async function provisionVastAI(apiKey, instanceId = null, dashboardPassword = 't
       }
       emitProgress('log', '🔍 Searching for available GPU instances on Vast.ai...');
 
-      // Search for cheapest compatible GPU with Ubuntu, enough disk
+      // Search for cheapest compatible GPU with Ubuntu, enough disk (strictly 24GB+ VRAM for the 26B MoE model)
       const queryObj = {
         gpu_name: {
           in: [
-            "RTX 3060", "RTX 3060 Ti", "RTX 3070", "RTX 3070 Ti", "RTX 3080", "RTX 3080 Ti", "RTX 3090",
-            "RTX 4060", "RTX 4060 Ti", "RTX 4070", "RTX 4070 Ti", "RTX 4080", "RTX 4090",
-            "A4000", "A5000", "RTX A4000", "RTX A5000"
+            "RTX 3090", "RTX 4090", "A5000", "RTX A5000", "A6000", "RTX A6000",
+            "RTX 6000 Ada", "A100", "L40", "L40S"
           ]
         },
         disk_space: { gte: 40 },
