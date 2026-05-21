@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { agentDir } from '../core/config.mjs';
 
 const AGENT_DIR = agentDir;
