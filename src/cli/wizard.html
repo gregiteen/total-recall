@@ -587,6 +587,60 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* ── GitHub automated backup checklist ── */
+  .progress-step-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
+  }
+  .progress-step-item.pending {
+    color: var(--muted);
+    opacity: 0.6;
+  }
+  .progress-step-item.active {
+    color: var(--blue);
+    background: rgba(88, 166, 255, 0.05);
+    border-color: rgba(88, 166, 255, 0.3);
+  }
+  .progress-step-item.success {
+    color: var(--green);
+    background: rgba(63, 185, 80, 0.05);
+    border-color: rgba(63, 185, 80, 0.3);
+  }
+  .progress-step-item.error {
+    color: var(--red);
+    background: rgba(248, 81, 73, 0.05);
+    border-color: rgba(248, 81, 73, 0.3);
+  }
+  .progress-step-item .step-icon {
+    font-size: 14px;
+    font-weight: bold;
+    width: 18px;
+    display: inline-flex;
+    justify-content: center;
+  }
+  .github-log-console {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 12px;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 14px;
+  }
 </style>
 </head>
 <body>
@@ -939,6 +993,52 @@
             <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('pat-key-display')">Show</button>
             <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="copyToken('pat-key-display')">Copy</button>
           </div>
+        </div>
+      </div>
+
+      <div style="height:24px"></div>
+
+      <div class="card">
+        <h3>📦 GitHub Automatic Backup <span style="font-weight:400;font-size:13px;color:var(--muted);margin-left:8px">optional</span></h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:8px">
+          Securely back up your brain's VFS (your personal memory files, rules, and configurations) to a private GitHub repository automatically. We will create a private repository named <strong style="color:var(--text)">total-recall-brain</strong> on your GitHub account, perform the initial push, and schedule a daily automatic update.
+        </p>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:20px">
+          To set this up, create a Personal Access Token (PAT) with <strong style="color:var(--text)">repo</strong> scope.
+        </p>
+
+        <div class="form-group">
+          <label>GitHub Personal Access Token</label>
+          <input type="password" id="cfg-github-token" placeholder="ghp_..." autocomplete="off">
+          <div style="margin-top:5px;font-size:11px;color:var(--muted)">
+            Generate one at <a href="https://github.com/settings/tokens/new?scopes=repo&description=Total%20Recall%20Backup" target="_blank" style="color:var(--blue)">github.com/settings/tokens</a> with the <code>repo</code> scope.
+          </div>
+        </div>
+
+        <div id="github-progress" style="display:none; margin-top:20px; gap:8px">
+          <div class="progress-step-item pending" id="gh-step-1">
+            <span class="step-icon">○</span> Authenticate with GitHub
+          </div>
+          <div class="progress-step-item pending" id="gh-step-2">
+            <span class="step-icon">○</span> Provision private repository "total-recall-brain"
+          </div>
+          <div class="progress-step-item pending" id="gh-step-3">
+            <span class="step-icon">○</span> Initialize &amp; configure local git repository
+          </div>
+          <div class="progress-step-item pending" id="gh-step-4">
+            <span class="step-icon">○</span> Perform initial push to GitHub
+          </div>
+          <div class="progress-step-item pending" id="gh-step-5">
+            <span class="step-icon">○</span> Schedule daily automated backup (2:00 AM)
+          </div>
+        </div>
+
+        <div id="github-log" class="github-log-console" style="display:none"></div>
+
+        <div id="github-result-notice" class="notice" style="display:none; margin-top:14px"></div>
+
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn btn-primary" id="cfg-github-btn" onclick="saveGitHubBackup()">Configure &amp; Back Up</button>
         </div>
       </div>
 
@@ -1603,7 +1703,8 @@
       'cfg-localnet-host',
       'cfg-localnet-user',
       'cfg-vastai-key',
-      'cfg-dashboard-password'
+      'cfg-dashboard-password',
+      'cfg-github-token'
     ];
     var payload = {};
     textInputs.forEach(function (id) {
@@ -2342,6 +2443,105 @@
     } else {
       label.classList.remove('selected');
     }
+  };
+
+  // Configure and configure GitHub backup
+  window.saveGitHubBackup = function() {
+    var tokenInput = document.getElementById('cfg-github-token');
+    var token = (tokenInput.value || '').trim();
+    var resultEl = document.getElementById('github-result-notice');
+    var progressEl = document.getElementById('github-progress');
+    var logEl = document.getElementById('github-log');
+    var btn = document.getElementById('cfg-github-btn');
+
+    if (!token) {
+      resultEl.style.display = 'block';
+      resultEl.className = 'notice warn';
+      resultEl.innerHTML = '⚠️ GitHub Personal Access Token is required.';
+      return;
+    }
+
+    resultEl.style.display = 'none';
+    logEl.style.display = 'block';
+    logEl.textContent = '';
+    progressEl.style.display = 'grid';
+    btn.disabled = true;
+
+    // Reset progress steps
+    for (var i = 1; i <= 5; i++) {
+      var stepEl = document.getElementById('gh-step-' + i);
+      if (stepEl) {
+        stepEl.className = 'progress-step-item pending';
+        stepEl.querySelector('.step-icon').textContent = '○';
+      }
+    }
+
+    fetch('/api/github/configure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token })
+    })
+    .then(function(response) {
+      if (!response.ok) {
+        throw new Error('Server returned HTTP ' + response.status);
+      }
+      
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      function read() {
+        return reader.read().then(function(result) {
+          if (result.done) {
+            return;
+          }
+          buffer += decoder.decode(result.value, { stream: true });
+          var lines = buffer.split('\n');
+          buffer = lines.pop(); // Keep partial line
+          
+          lines.forEach(function(lineStr) {
+            if (!lineStr.trim()) return;
+            try {
+              var line = JSON.parse(lineStr);
+              if (line.type === 'log') {
+                logEl.textContent += line.msg + '\n';
+                logEl.scrollTop = logEl.scrollHeight;
+              } else if (line.type === 'step') {
+                var stepEl = document.getElementById('gh-step-' + line.stepIndex);
+                if (stepEl) {
+                  stepEl.className = 'progress-step-item ' + line.status;
+                  var icon = '○';
+                  if (line.status === 'active') icon = '🔄';
+                  else if (line.status === 'success') icon = '✅';
+                  else if (line.status === 'error') icon = '❌';
+                  stepEl.innerHTML = '<span class="step-icon">' + icon + '</span> ' + line.msg;
+                }
+              } else if (line.type === 'success') {
+                resultEl.style.display = 'block';
+                resultEl.className = 'notice success';
+                resultEl.innerHTML = '✅ ' + line.msg;
+                btn.disabled = false;
+              } else if (line.type === 'error') {
+                resultEl.style.display = 'block';
+                resultEl.className = 'notice warn';
+                resultEl.innerHTML = '⚠️ ' + line.msg;
+                btn.disabled = false;
+              }
+            } catch(e) {
+              console.error('Failed to parse NDJSON line:', lineStr, e);
+            }
+          });
+          return read();
+        });
+      }
+      return read();
+    })
+    .catch(function(err) {
+      resultEl.style.display = 'block';
+      resultEl.className = 'notice warn';
+      resultEl.innerHTML = '⚠️ Configuration failed: ' + err.message;
+      btn.disabled = false;
+    });
   };
 
   // Save search API keys (Brave / Tavily / Exa / Serper)
@@ -3258,7 +3458,8 @@
       'cfg-localnet-host',
       'cfg-localnet-user',
       'cfg-vastai-key',
-      'cfg-dashboard-password'
+      'cfg-dashboard-password',
+      'cfg-github-token'
     ];
 
     // 1. Initial restore from browser safeStorage (extremely fast)
