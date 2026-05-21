@@ -16,31 +16,31 @@ const PRESETS: Preset[] = [
     id: 'antigravity',
     name: 'Antigravity',
     surface: 'AGENTS.md',
-    scopes: 'ssss:read, memory:read, mcp:use',
+    scopes: 'ssss:read, memory:read',
     command: 'npx total-recall connect antigravity',
-    snippet: baseUrl => `Read AGENTS.md from the repo root.\nDiscovery: ${baseUrl}/.well-known/total-recall.json\nMCP: ${baseUrl}/mcp`
+    snippet: baseUrl => `Read AGENTS.md from the repo root.\nDiscovery: ${baseUrl}/.well-known/total-recall.json`
   },
   {
     id: 'cursor',
     name: 'Cursor',
     surface: '.cursor/rules/total-recall.mdc',
-    scopes: 'ssss:read, memory:read, mcp:use',
+    scopes: 'ssss:read, memory:read',
     command: 'npx total-recall connect cursor',
-    snippet: baseUrl => `Discovery: ${baseUrl}/.well-known/total-recall.json\nMCP: ${baseUrl}/mcp`
+    snippet: baseUrl => `Discovery: ${baseUrl}/.well-known/total-recall.json`
   },
   {
     id: 'claude-code',
     name: 'Claude Code',
     surface: 'CLAUDE.md',
-    scopes: 'ssss:read, memory:read, mcp:use',
+    scopes: 'ssss:read, memory:read',
     command: 'npx total-recall connect claude-code',
-    snippet: baseUrl => `Read CLAUDE.md from the repo root.\nMCP: ${baseUrl}/mcp`
+    snippet: () => `Read CLAUDE.md from the repo root.`
   },
   {
     id: 'codex',
     name: 'Codex',
     surface: 'AGENTS.md',
-    scopes: 'ssss:read, memory:read, mcp:use',
+    scopes: 'ssss:read, memory:read',
     command: 'npx total-recall connect codex',
     snippet: baseUrl => `Read AGENTS.md from the repo root.\nDiscovery: ${baseUrl}/.well-known/total-recall.json`
   },
@@ -51,14 +51,6 @@ const PRESETS: Preset[] = [
     scopes: 'models:read, chat:write, ssss:read',
     command: 'npx total-recall connect ultrachat --brain <brain-url>',
     snippet: baseUrl => `Base URL: ${baseUrl}/v1\nModel: total-recall/gemma4\nModels: ${baseUrl}/v1/models`
-  },
-  {
-    id: 'mcp',
-    name: 'MCP Client',
-    surface: 'Streamable HTTP MCP',
-    scopes: 'mcp:use, ssss:read, memory:read',
-    command: 'npx total-recall connect mcp --brain <brain-url>',
-    snippet: baseUrl => `URL: ${baseUrl}/mcp\nHeader: Authorization: Bearer <PAT>`
   },
   {
     id: 'generic',
@@ -105,7 +97,7 @@ export default function IntegrationsPage() {
   const filteredPresets = useMemo(() => {
     if (activeIdes.length === 0) return PRESETS
     return PRESETS.filter(preset => {
-      if (['ultrachat', 'mcp', 'generic'].includes(preset.id)) {
+      if (['ultrachat', 'generic'].includes(preset.id)) {
         return true
       }
       return activeIdes.includes(preset.id)
@@ -142,7 +134,7 @@ export default function IntegrationsPage() {
     <div className="page">
       <div className="page-header">
         <h1>Integrations</h1>
-        <p>Connect IDEs, UltraChat, MCP clients, and scripts to this Total Recall brain</p>
+        <p>Connect IDEs, UltraChat, and scripts to this Total Recall brain</p>
       </div>
 
       {message && (
@@ -239,7 +231,6 @@ export default function IntegrationsPage() {
             if (preset.id === 'codex') return (k.name.toLowerCase().includes('codex') || k.name.toLowerCase().includes('agents')) && !k.revoked;
             if (preset.id === 'antigravity') return k.name.toLowerCase().includes('antigravity') && !k.revoked;
             if (preset.id === 'ultrachat') return k.name.toLowerCase().includes('ultrachat') && !k.revoked;
-            if (preset.id === 'mcp') return k.name.toLowerCase().includes('mcp') && !k.revoked;
             return false;
           })
 
