@@ -17,11 +17,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startDaemon, stopDaemon, readPid } from '../core/daemon-control.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 const AGENT_DIR = path.join(os.homedir(), '.agent');
-const PID_FILE = path.join(AGENT_DIR, 'logs', 'daemon.pid');
 const LOG_FILE = path.join(AGENT_DIR, 'logs', 'daemon.log');
 
 function commandExists(cmd) {
@@ -72,24 +72,6 @@ function printHelp() {
 `);
 }
 
-function readPid() {
-  try {
-    const pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
-    if (isNaN(pid)) return null;
-    // Check if process is alive
-    try { process.kill(pid, 0); return pid; } catch { return null; }
-  } catch { return null; }
-}
-
-function writePid(pid) {
-  const logsDir = path.dirname(PID_FILE);
-  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-  fs.writeFileSync(PID_FILE, String(pid), 'utf8');
-}
-
-function clearPid() {
-  try { fs.unlinkSync(PID_FILE); } catch { /* ignore */ }
-}
 
 // ─── systemd-backed commands ────────────────────────────────────────────────────
 
@@ -169,57 +151,23 @@ function launchctlStatus() {
 // ─── Direct process management ──────────────────────────────────────────────────
 
 function directStart() {
-  const existingPid = readPid();
-  if (existingPid) {
-    console.error(`  ⚠️  Daemon already running (PID ${existingPid})`);
-    return;
+  try {
+    const pid = startDaemon();
+    console.error(`  ✅ Daemon started (PID ${pid})`);
+    console.error(`     Logs: ${LOG_FILE}`);
+  } catch (err) {
+    console.error(`  ❌ Failed to start daemon: ${err.message}`);
+    process.exit(1);
   }
-
-  const dreamScript = path.join(ROOT, 'src', 'core', 'daemon-loop.mjs');
-  if (!fs.existsSync(dreamScript)) {
-    // Fallback to dream.mjs for backward compatibility
-    const fallback = path.join(ROOT, 'src', 'core', 'dream.mjs');
-    if (fs.existsSync(fallback)) {
-      console.error('  ⚠️  daemon-loop.mjs not found, falling back to dream.mjs');
-    } else {
-      console.error(`  ❌ Daemon script not found: ${dreamScript}`);
-      process.exit(1);
-    }
-  }
-
-  const logsDir = path.dirname(LOG_FILE);
-  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
-
-  const logFd = fs.openSync(LOG_FILE, 'a');
-  const child = spawn(process.execPath, [dreamScript], {
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
-    cwd: ROOT,
-    env: { ...process.env, NODE_ENV: 'production' },
-  });
-
-  child.unref();
-  writePid(child.pid);
-  fs.closeSync(logFd);
-
-  console.error(`  ✅ Daemon started (PID ${child.pid})`);
-  console.error(`     Logs: ${LOG_FILE}`);
 }
 
 function directStop() {
-  const pid = readPid();
-  if (!pid) {
+  const stopped = stopDaemon();
+  if (stopped) {
+    console.error('  ✅ Daemon stopped');
+  } else {
     console.error('  ⚠️  Daemon is not running');
-    return;
   }
-
-  try {
-    process.kill(pid, 'SIGTERM');
-    console.error(`  ✅ Daemon stopped (PID ${pid})`);
-  } catch (err) {
-    console.error(`  ⚠️  Failed to stop daemon (PID ${pid}): ${err.message}`);
-  }
-  clearPid();
 }
 
 function directStatus() {

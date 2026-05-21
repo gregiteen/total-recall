@@ -29,6 +29,7 @@ import {
 import { logger } from '../core/logger.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
+import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -141,24 +142,8 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     }
   } catch { /* non-fatal */ }
 
-  // Check daemon status from PID file
-  let daemonStatus = 'unknown';
-  try {
-    const pidPath = path.join(agentDir, 'logs', 'daemon.pid');
-    if (fs.existsSync(pidPath)) {
-      const pid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
-      if (pid > 0) {
-        try {
-          process.kill(pid, 0); // signal 0 = check if process exists
-          daemonStatus = 'running';
-        } catch {
-          daemonStatus = 'dead';
-        }
-      }
-    } else {
-      daemonStatus = 'not_started';
-    }
-  } catch { /* non-fatal */ }
+  // Check daemon status
+  const daemonStatus = getDaemonStatus();
 
   // Determine overall status
   const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || ollamaStatus === 'offline' || ollamaModels.length === 0;
@@ -662,6 +647,34 @@ const server = app.listen(PORT, HOST, () => {
   logger.info('server', `│  Health:    http://${HOST}:${PORT}/health               │`);
   logger.info('server', `│  Dashboard: http://${HOST}:${PORT}/                     │`);
   logger.info('server', '└─────────────────────────────────────────────┘');
+
+  // Unified Background Daemon Auto-Start & Watchdog
+  if (process.env.DISABLE_DAEMON !== 'true' && nodeEnv !== 'test') {
+    // 1. Auto-start on boot
+    ensureDaemonRunning()
+      .then((pid) => {
+        logger.info('server', `Daemon auto-started successfully on PID ${pid}.`);
+      })
+      .catch((err) => {
+        logger.error('server', `Failed to auto-start daemon on boot: ${err.message}`);
+      });
+
+    // 2. Periodic self-healing watchdog every 60 seconds
+    const daemonWatchdogInterval = setInterval(async () => {
+      try {
+        const status = getDaemonStatus();
+        if (status === 'dead' || status === 'not_started') {
+          logger.warn('server', `Daemon status is '${status}'. Watchdog initiating self-healing auto-restart...`);
+          await ensureDaemonRunning();
+        }
+      } catch (err) {
+        logger.error('server', `Daemon self-healing watchdog failed: ${err.message}`);
+      }
+    }, 60000);
+    
+    // Unref the interval so it doesn't block process shutdown
+    daemonWatchdogInterval.unref();
+  }
 });
 
 let shutdownInProgress = false;
