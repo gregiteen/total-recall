@@ -60,6 +60,7 @@ export default function MemoryPage() {
       }
       loadUrlSlug()
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelected(null)
     }
   }, [urlSlug])
