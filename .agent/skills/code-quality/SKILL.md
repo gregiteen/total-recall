@@ -122,9 +122,6 @@ For recurring fixes and subagent behavior, read:
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-20T03:58:33.392Z -->
-
-- **never-run-raw-tsc** (confidence 0.99, importance 4):
-  Never run raw tsc/eslint/npm-build — use the /code-quality skill scripts
+<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
 
 <!-- END INJECTED MEMORY -->

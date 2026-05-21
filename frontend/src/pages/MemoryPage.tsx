@@ -105,7 +105,7 @@ export default function MemoryPage() {
                 {selected.importance !== undefined && <><dt>Importance</dt><dd>{selected.importance}</dd></>}
                 {selected.tags?.length ? <><dt>Tags</dt><dd>{selected.tags.join(', ')}</dd></> : null}
               </dl>
-              {selected.body && <pre>{selected.body}</pre>}
+              {(selected.body || selected.content) && <pre>{selected.body || selected.content}</pre>}
             </div>
           ) : (
             <div className="memory-list">

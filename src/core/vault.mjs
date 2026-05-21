@@ -12,6 +12,34 @@ export function atomicWrite(filePath, content) {
 }
 
 /**
+ * Deep-strip undefined values from an object so js-yaml (via gray-matter)
+ * never encounters `[object Undefined]` and crashes the process.
+ */
+function stripUndefined(obj) {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  const clean = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) {
+      clean[k] = typeof v === 'object' ? stripUndefined(v) : v;
+    }
+  }
+  return clean;
+}
+
+/**
+ * Safe wrapper around matter.stringify that prevents js-yaml crashes.
+ * Use this instead of matter.stringify() everywhere in the codebase.
+ *
+ * @param {string} content  The markdown body
+ * @param {object} data     The YAML frontmatter object
+ * @returns {string}        The serialized markdown with frontmatter
+ */
+export function safeStringify(content, data) {
+  return matter.stringify(content ?? '', stripUndefined(data ?? {}));
+}
+
+/**
  * Walk directory recursively and find all .md files.
  */
 export function walkMd(dir) {
@@ -54,16 +82,22 @@ export function loadNodes(vaultDir) {
 /**
  * Write a memory node to the vault.
  */
+const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
+
 export function writeNode(node, vaultDir) {
+  if (!SAFE_NAME.test(node.slug)) throw new Error(`Invalid slug: ${node.slug}`);
+  if (!SAFE_NAME.test(node.category)) throw new Error(`Invalid category: ${node.category}`);
   const targetDir = path.join(vaultDir, node.category);
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
+  const filePath = path.join(targetDir, `${node.slug}.md`);
+  
+  const dirPath = path.dirname(filePath);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
   }
   
-  const filePath = path.join(targetDir, `${node.slug}.md`);
   const { body, ...frontmatter } = node;
   
-  const raw = matter.stringify(body || '', frontmatter);
+  const raw = safeStringify(body || '', frontmatter);
   atomicWrite(filePath, raw);
 }
 

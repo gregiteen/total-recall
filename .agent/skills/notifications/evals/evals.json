@@ -1,0 +1,17 @@
+[
+  {
+    "name": "verify_notify_export",
+    "description": "Verifies that the notify.mjs script exports the sendNotification function.",
+    "code": "export async function evalExport(fileContent) { return { passed: fileContent.includes('export async function sendNotification') }; }"
+  },
+  {
+    "name": "verify_osascript_usage",
+    "description": "Verifies that osascript is actually used to trigger the notification.",
+    "code": "export async function evalOsascript(fileContent) { return { passed: fileContent.includes('osascript') }; }"
+  },
+  {
+    "name": "verify_cli_support",
+    "description": "Verifies that the script supports direct CLI execution.",
+    "code": "export async function evalCLI(fileContent) { return { passed: fileContent.includes('process.argv') }; }"
+  }
+]

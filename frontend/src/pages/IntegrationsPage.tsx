@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { getApiBase } from '../api'
+import { useMemo, useState, useEffect } from 'react'
+import { getApiBase, listApiKeys, connectClient, fetchActiveIntegrations } from '../api'
+import type { ApiKey } from '../api'
 
 type Preset = {
   id: string
@@ -11,6 +12,14 @@ type Preset = {
 }
 
 const PRESETS: Preset[] = [
+  {
+    id: 'antigravity',
+    name: 'Antigravity',
+    surface: 'AGENTS.md',
+    scopes: 'ssss:read, memory:read, mcp:use',
+    command: 'npx total-recall connect antigravity',
+    snippet: baseUrl => `Read AGENTS.md from the repo root.\nDiscovery: ${baseUrl}/.well-known/total-recall.json\nMCP: ${baseUrl}/mcp`
+  },
   {
     id: 'cursor',
     name: 'Cursor',
@@ -63,11 +72,45 @@ const PRESETS: Preset[] = [
 
 export default function IntegrationsPage() {
   const [copied, setCopied] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [keys, setKeys] = useState<ApiKey[]>([])
+  const [activeIdes, setActiveIdes] = useState<string[]>([])
+
   const baseUrl = useMemo(() => {
     const configured = getApiBase()
     if (configured) return configured.replace(/\/$/, '')
     return window.location.origin
   }, [])
+
+  useEffect(() => {
+    let active = true
+    listApiKeys()
+      .then(res => {
+        if (active) setKeys(res.keys || [])
+      })
+      .catch(() => {})
+
+    fetchActiveIntegrations()
+      .then(res => {
+        if (active && res.success && Array.isArray(res.active)) {
+          setActiveIdes(res.active)
+        }
+      })
+      .catch(() => {})
+
+    return () => { active = false }
+  }, [])
+
+  const filteredPresets = useMemo(() => {
+    if (activeIdes.length === 0) return PRESETS
+    return PRESETS.filter(preset => {
+      if (['ultrachat', 'mcp', 'generic'].includes(preset.id)) {
+        return true
+      }
+      return activeIdes.includes(preset.id)
+    })
+  }, [activeIdes])
 
   const copy = async (id: string, value: string) => {
     await navigator.clipboard.writeText(value)
@@ -75,11 +118,85 @@ export default function IntegrationsPage() {
     setTimeout(() => setCopied(null), 1800)
   }
 
+  const handleConnect = async (presetId: string) => {
+    setConnecting(presetId)
+    setMessage(null)
+    try {
+      const result = await connectClient(presetId, baseUrl)
+      if (result.success) {
+        setMessage({ type: 'success', text: `Successfully connected ${presetId}! All config files have been automatically updated.` })
+        // Refresh keys to show registered/connected status badge
+        const res = await listApiKeys()
+        setKeys(res.keys || [])
+      } else {
+        setMessage({ type: 'error', text: `Failed to connect: ${result.message}` })
+      }
+    } catch (e) {
+      setMessage({ type: 'error', text: (e as Error).message || 'Failed to connect.' })
+    } finally {
+      setConnecting(null)
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
         <h1>Integrations</h1>
         <p>Connect IDEs, UltraChat, MCP clients, and scripts to this Total Recall brain</p>
+      </div>
+
+      {message && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: 8,
+          marginBottom: 16,
+          fontSize: 14,
+          fontWeight: 500,
+          background: message.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+          border: message.type === 'success' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
+          color: message.type === 'success' ? '#34d399' : '#f87171',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backdropFilter: 'blur(8px)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        }}>
+          <span>{message.text}</span>
+          <button 
+            onClick={() => setMessage(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              fontSize: 18,
+              padding: '0 4px',
+              lineHeight: '1',
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Explanatory Banner */}
+      <div style={{
+        background: 'rgba(30, 41, 59, 0.4)',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid var(--border)',
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 22,
+        color: 'var(--text-secondary)',
+        fontSize: 14,
+        lineHeight: '1.5',
+      }}>
+        <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: 6 }}>💡 How Integrations Work</strong>
+        Total Recall acts as a secure, local-first semantic memory hub. To give your development environments (Cursor, Claude Code, etc.) access to your memory vault and instruction layers, they communicate as API clients using secure tokens.
+        <br />
+        <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
+          The status badges below dynamically inspect whether your workspace has successfully registered its connection token and communicated with your active brain.
+        </span>
       </div>
 
       <div style={{
@@ -112,8 +229,86 @@ export default function IntegrationsPage() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: 16,
       }}>
-        {PRESETS.map(preset => {
+        {filteredPresets.map(preset => {
           const snippet = preset.snippet(baseUrl)
+          
+          // Match keys by name (e.g. "Cursor Link", "Claude Code Link", "Codex Link")
+          const matchingKey = keys.find(k => {
+            if (preset.id === 'cursor') return k.name.toLowerCase().includes('cursor') && !k.revoked;
+            if (preset.id === 'claude-code') return k.name.toLowerCase().includes('claude') && !k.revoked;
+            if (preset.id === 'codex') return (k.name.toLowerCase().includes('codex') || k.name.toLowerCase().includes('agents')) && !k.revoked;
+            if (preset.id === 'antigravity') return k.name.toLowerCase().includes('antigravity') && !k.revoked;
+            if (preset.id === 'ultrachat') return k.name.toLowerCase().includes('ultrachat') && !k.revoked;
+            if (preset.id === 'mcp') return k.name.toLowerCase().includes('mcp') && !k.revoked;
+            return false;
+          })
+
+          let statusBadge = (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 8px',
+              borderRadius: 6,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              fontSize: 12,
+              color: 'var(--text-tertiary)'
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8' }} />
+              Not Connected
+            </span>
+          )
+
+          if (matchingKey) {
+            if (matchingKey.hit_count > 0) {
+              const lastUsedStr = matchingKey.last_used_at 
+                ? ` (Active ${new Date(matchingKey.last_used_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
+                : ''
+              statusBadge = (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  fontSize: 12,
+                  color: '#34d399',
+                  fontWeight: 500,
+                }}>
+                  <span style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#10b981',
+                    boxShadow: '0 0 8px #10b981',
+                  }} />
+                  Connected{lastUsedStr}
+                </span>
+              )
+            } else {
+              statusBadge = (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  fontSize: 12,
+                  color: '#fbbf24',
+                  fontWeight: 500,
+                }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                  Registered (Pending Activity)
+                </span>
+              )
+            }
+          }
+
           return (
             <div key={preset.id} style={{
               border: '1px solid var(--border)',
@@ -123,10 +318,14 @@ export default function IntegrationsPage() {
               display: 'flex',
               flexDirection: 'column',
               gap: 12,
+              position: 'relative',
             }}>
-              <div>
-                <h3 style={{ margin: '0 0 4px' }}>{preset.name}</h3>
-                <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>{preset.surface}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                <div>
+                  <h3 style={{ margin: '0 0 4px' }}>{preset.name}</h3>
+                  <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>{preset.surface}</div>
+                </div>
+                {statusBadge}
               </div>
 
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -155,13 +354,34 @@ export default function IntegrationsPage() {
                 color: 'var(--text-secondary)',
               }}>{snippet}</div>
 
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={() => copy(preset.id, `${preset.command}\n\n${snippet}`)}
-                style={{ alignSelf: 'flex-start' }}
-              >
-                {copied === preset.id ? 'Copied' : 'Copy Setup'}
-              </button>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => handleConnect(preset.id)}
+                  disabled={connecting !== null}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
+                    border: 'none',
+                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {connecting === preset.id ? 'Connecting...' : 'Connect'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => copy(preset.id, `${preset.command}\n\n${snippet}`)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {copied === preset.id ? 'Copied!' : 'Copy Config'}
+                </button>
+              </div>
             </div>
           )
         })}

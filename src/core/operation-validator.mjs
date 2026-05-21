@@ -8,7 +8,7 @@ import {
   PatchEnvelopeSchema,
   EventEnvelopeSchema,
 } from './schema.mjs';
-import { atomicWrite } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 const APPEND_TYPES = new Set(['conversation', 'run']);
@@ -202,7 +202,7 @@ export function processOperation(envelope, vaultRoot, options = {}) {
         if (parsed.data && parsed.data.type === 'memory') {
           parsed.data.updated = committedAt;
           parsed.data.last_accessed = committedAt;
-          contentToWrite = matter.stringify(parsed.content, parsed.data);
+          contentToWrite = safeStringify(parsed.content, parsed.data);
         }
       } catch {
         // Fallback to raw content if parsing fails
@@ -218,7 +218,7 @@ export function processOperation(envelope, vaultRoot, options = {}) {
         merged.last_accessed = committedAt;
       }
       const newBody = envelope.patches.__body__ !== undefined ? (APPEND_TYPES.has(data.type) ? body + '\n' + envelope.patches.__body__ : envelope.patches.__body__) : body;
-      atomicWrite(absPath, matter.stringify(newBody, merged));
+      atomicWrite(absPath, safeStringify(newBody, merged));
     } else if (envelope.type === 'event') {
       const logDir = eventLogDir || path.join(vaultRoot, '.events');
       if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });

@@ -51,7 +51,7 @@ const SOURCES = [
   {
     name: 'antigravity',
     root: path.join(HOME, '.gemini', 'antigravity', 'brain'),
-    filter: (filename) => filename === 'overview.txt',
+    filter: (filename) => filename === 'overview.txt' || filename === 'transcript.jsonl',
     adapter: parseAntigravity,
   },
   {
@@ -357,6 +357,67 @@ export function parseAntigravity(filePath) {
     return [];
   }
 
+  if (path.basename(filePath) === 'transcript.jsonl') {
+    const lines = raw.split('\n').filter(Boolean);
+    const entries = [];
+    let prevId = null;
+
+    for (const line of lines) {
+      let data;
+      try {
+        data = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (data.type === 'USER_INPUT') {
+        const id = crypto.randomBytes(4).toString('hex');
+        let cleanContent = data.content || '';
+        if (cleanContent.includes('<USER_REQUEST>')) {
+          const match = cleanContent.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+          if (match) {
+            cleanContent = match[1].trim();
+          }
+        }
+        if (!cleanContent.trim()) continue;
+
+        entries.push(
+          createSessionEntry({
+            id,
+            parentId: prevId,
+            type: 'task',
+            ts: data.timestamp || new Date().toISOString(),
+            content: cleanContent.slice(0, 5000),
+            role: 'user',
+            source: 'antigravity',
+          })
+        );
+        prevId = id;
+      } else if (
+        data.source === 'MODEL' &&
+        (data.type === 'PLANNER_RESPONSE' || data.type === 'RESPONSE' || data.type === 'model_response')
+      ) {
+        let content = data.content || '';
+        if (!content.trim()) continue;
+
+        const id = crypto.randomBytes(4).toString('hex');
+        entries.push(
+          createSessionEntry({
+            id,
+            parentId: prevId,
+            type: 'observation',
+            ts: data.timestamp || new Date().toISOString(),
+            content: content.slice(0, 5000),
+            role: 'assistant',
+            source: 'antigravity',
+          })
+        );
+        prevId = id;
+      }
+    }
+    return entries;
+  }
+
   // overview.txt is a line-by-line action log
   // Each line typically starts with a role indicator or action description
   const lines = raw.split('\n').filter(Boolean);
@@ -589,12 +650,17 @@ export function writeSession(entries, sessionsDir, sourceFile) {
   const sourceHash = crypto.createHash('sha256').update(sourceFile).digest('hex').slice(0, 12);
   const sessionFile = path.join(sessionsDir, `${sourceHash}.jsonl`);
 
-  // Skip if already ingested
+  const jsonl = entries.map((e) => JSON.stringify(e)).join('\n') + '\n';
+
+  // Skip if already ingested and unchanged
   if (fs.existsSync(sessionFile)) {
-    return null;
+    try {
+      if (fs.readFileSync(sessionFile, 'utf8') === jsonl) {
+        return null;
+      }
+    } catch { /* ignore */ }
   }
 
-  const jsonl = entries.map((e) => JSON.stringify(e)).join('\n') + '\n';
   atomicWrite(sessionFile, jsonl);
 
   logger.info({

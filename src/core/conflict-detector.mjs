@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'node:crypto';
-import { atomicWrite, walkMd, loadNodes, writeNode } from './vault.mjs';
+import { atomicWrite, walkMd, loadNodes, writeNode, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -486,7 +486,7 @@ export function writeConflicts(conflicts, inboxDir) {
     // Strip internal provenance refs before persisting
     const { _new_node, _existing_node, ...frontmatter } = conflict;
     const body = `Conflict detected between \`${conflict.new_slug}\` and \`${conflict.existing_slug}\`.\n\nReason: ${conflict.reason}`;
-    const raw = matter.stringify(body, frontmatter);
+    const raw = safeStringify(body, frontmatter);
     atomicWrite(filePath, raw);
     logger.info('conflict-detector', `Conflict written: ${conflict.conflict_id}`);
   }
@@ -515,7 +515,7 @@ export function resolveConflict(conflictId, inboxDir, action, winnerSlug) {
     data.resolved_at = new Date().toISOString();
     data.resolution = `${action}: ${winnerSlug}`;
 
-    const updated = matter.stringify(content, data);
+    const updated = safeStringify(content, data);
     atomicWrite(conflictPath, updated);
 
     return { resolved: true };

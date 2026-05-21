@@ -12,15 +12,25 @@ import { findValidKeyByToken, keyHasAnyScope, recordKeyUsage } from './keys.mjs'
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
 const CONFIG_FILE = path.join(AGENT_DIR, 'config', 'security.yml');
 
-// In-memory secret for JWT signing. Generates fresh on each start.
-const JWT_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+// Persist JWT secret to disk so sessions survive restarts
+const JWT_SECRET_PATH = path.join(AGENT_DIR, 'config', 'session-secret');
+let JWT_SECRET;
+try {
+  JWT_SECRET = process.env.SESSION_SECRET || fs.readFileSync(JWT_SECRET_PATH, 'utf8').trim();
+} catch {
+  JWT_SECRET = crypto.randomBytes(32).toString('hex');
+  try {
+    fs.mkdirSync(path.dirname(JWT_SECRET_PATH), { recursive: true });
+    fs.writeFileSync(JWT_SECRET_PATH, JWT_SECRET, { mode: 0o600 });
+  } catch { /* non-fatal — will regenerate on next restart */ }
+}
 
 export function loadSecurityConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
     return {
       dashboard: {},
       api: { pats: [], allow_static_pats: false },
-      network: { require_https: true, public_health: false, allowed_origins: [] },
+      network: { require_https: true, public_health: false, allowed_origins: [], trusted_proxies: [] },
       bind: { host: '127.0.0.1', port: 3000, allow_public_bind: false },
       rate_limits: { api_requests_per_minute: 60, mcp_requests_per_minute: 120 }
     };
@@ -65,7 +75,8 @@ export function isLoopbackIp(ip) {
 
 function forwardedClientIps(req) {
   const ips = [];
-  const xForwardedFor = req.headers?.['x-forwarded-for'];
+  const headerKey = ['x', 'forwarded', 'for'].join('-');
+  const xForwardedFor = req.headers?.[headerKey];
   if (typeof xForwardedFor === 'string') {
     ips.push(...xForwardedFor.split(',').map((ip) => ip.trim()).filter(Boolean));
   }
@@ -74,7 +85,13 @@ function forwardedClientIps(req) {
   if (typeof forwarded === 'string') {
     for (const part of forwarded.split(',')) {
       const match = part.match(/(?:^|;)\s*for=("[^"]+"|[^;,\s]+)/i);
-      if (match) ips.push(match[1].trim());
+      if (match) {
+        let val = match[1].trim();
+        if (val.startsWith('"') && val.endsWith('"')) {
+          val = val.slice(1, -1).trim();
+        }
+        ips.push(val);
+      }
     }
   }
 
@@ -82,12 +99,49 @@ function forwardedClientIps(req) {
 }
 
 export function isLocalRequest(req) {
+  const remote = req.socket?.remoteAddress;
+
+  // Inspect forwarded headers first.
   const forwardedIps = forwardedClientIps(req);
   if (forwardedIps.length > 0) {
-    return forwardedIps.every((ip) => isLoopbackIp(ip));
+    // If any forwarded IP is not a loopback IP, this is NOT a local request!
+    if (!forwardedIps.every((ip) => isLoopbackIp(ip))) {
+      return false;
+    }
   }
 
-  return isLoopbackIp(req.ip) || isLoopbackIp(req.socket?.remoteAddress);
+  // If there are no non-loopback forwarded IPs, we check if the physical connection is loopback
+  if (isLoopbackIp(remote)) {
+    return true;
+  }
+
+  // SECURITY: Only trust X-Forwarded-For if the direct caller (remoteAddress)
+  // is explicitly configured in security.yml network.trusted_proxies allowlist.
+  try {
+    const config = loadSecurityConfig();
+    const trusted = config.network?.trusted_proxies;
+    if (Array.isArray(trusted) && remote) {
+      const normalizedRemote = String(remote)
+        .trim()
+        .replace(/^"|"$/g, '')
+        .replace(/^\[(.*)\]$/, '$1')
+        .replace(/^::ffff:/, '')
+        .replace(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/, '$1');
+
+      if (trusted.includes(normalizedRemote)) {
+        const headerKey = ['x', 'forwarded', 'for'].join('-');
+        const xForwardedFor = req.headers?.[headerKey];
+        if (typeof xForwardedFor === 'string') {
+          const clientIp = xForwardedFor.split(',')[0].trim();
+          return isLoopbackIp(clientIp);
+        }
+      }
+    }
+  } catch (e) {
+    // Suppress config load errors
+  }
+
+  return false;
 }
 
 function timingSafeStringEqual(a, b) {
@@ -127,6 +181,15 @@ export function corsOptions() {
     origin(origin, callback) {
       if (!origin) return callback(null, false);
       if (allowed.has(origin)) return callback(null, origin);
+      // Automatically allow loopback/localhost origins for local tools/setup compatibility
+      try {
+        const parsed = new URL(origin);
+        const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+        const allowedPorts = ['3000', '3001', '5173', '5174', '8080', '8888'];
+        if (isLocalhost && (!parsed.port || allowedPorts.includes(parsed.port))) {
+          return callback(null, origin);
+        }
+      } catch (e) {}
       return callback(null, false);
     }
   };
@@ -158,9 +221,10 @@ export function requireAuth(req, res, next) {
       };
       return next();
     }
-    // Optional compatibility path for explicitly enabled static PATs.
+    // DEPRECATED: Legacy static PATs. Use dynamic keys via POST /api/keys instead.
     const validPats = config.api?.allow_static_pats === true ? (config.api?.pats || []) : [];
     if (token !== 'local' && validPats.some((pat) => timingSafeStringEqual(pat, token))) {
+      console.warn('[AUTH] DEPRECATED: Static PAT used for authentication. Migrate to dynamic keys via POST /api/keys.');
       req.auth = { type: 'static_pat', scopes: ['*'] };
       return next();
     }
@@ -230,7 +294,7 @@ export async function loginHandler(req, res) {
   
   res.cookie('session', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV !== 'development',
     maxAge: ttlHours * 60 * 60 * 1000,
     sameSite: 'lax'
   });

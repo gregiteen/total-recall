@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { callLocalRuntime } from './runtime.mjs';
-import { atomicWrite } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -163,7 +163,7 @@ async function promoteToVault(draftNode, confidenceAdj, vaultDir) {
   }
 
   const targetPath = path.join(targetDir, `${data.slug}.md`);
-  atomicWrite(targetPath, matter.stringify(content, data));
+  atomicWrite(targetPath, safeStringify(content, data));
 
   // Remove from inbox
   try { fs.unlinkSync(draftNode._filepath); } catch { /* ignore */ }
@@ -179,7 +179,7 @@ async function applyRevision(draftNode, confidenceAdj, revisionInstructions) {
   data.x_revision_requested = revisionInstructions;
   data.updated = new Date().toISOString();
 
-  atomicWrite(draftNode._filepath, matter.stringify(content, data));
+  atomicWrite(draftNode._filepath, safeStringify(content, data));
 }
 
 async function quarantineDraft(draftNode, reason, quarantineDir) {
@@ -196,7 +196,7 @@ async function quarantineDraft(draftNode, reason, quarantineDir) {
   data.x_quarantined_at = new Date().toISOString();
 
   const targetPath = path.join(quarantineDir, `${data.slug}.md`);
-  atomicWrite(targetPath, matter.stringify(content, data));
+  atomicWrite(targetPath, safeStringify(content, data));
 
   try { fs.unlinkSync(draftNode._filepath); } catch { /* ignore */ }
 }

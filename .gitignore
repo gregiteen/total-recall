@@ -76,3 +76,9 @@ claude_help.txt
 dist/
 build/
 *.js.map
+
+# Security: certificate/key files
+*.pem
+*.key
+*.p12
+*.pfx

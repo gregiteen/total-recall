@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'node:crypto';
 import natural from 'natural';
 import { atomicWrite } from './vault.mjs';
 
@@ -73,7 +74,7 @@ export function detectConflicts(candidate, existingNodes) {
     if (l1.collision) {
       conflicts.push({
         type: 'conflict',
-        conflict_id: `conflict-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+        conflict_id: `conflict-${Date.now()}-${crypto.randomInt(0, 1000)}`,
         status: 'pending',
         new_slug: candidate.slug,
         existing_slug: existing.slug,
@@ -91,7 +92,7 @@ export function detectConflicts(candidate, existingNodes) {
     if (l2.collision) {
       conflicts.push({
         type: 'conflict',
-        conflict_id: `conflict-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+        conflict_id: `conflict-${Date.now()}-${crypto.randomInt(0, 1000)}`,
         status: 'pending',
         new_slug: candidate.slug,
         existing_slug: existing.slug,

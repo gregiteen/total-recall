@@ -27,8 +27,11 @@ function hr() {
 }
 
 function commandExists(cmd) {
+  if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
+    return false;
+  }
   try {
-    child_process.execSync(`command -v ${cmd}`, { stdio: 'ignore' });
+    child_process.execFileSync('which', [cmd], { stdio: 'ignore' });
     return true;
   } catch {
     return false;

@@ -11,7 +11,7 @@
  *   --help             Show this help
  */
 
-import { execSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -21,7 +21,13 @@ import { runMigration } from '../core/migrate.mjs';
 const AGENT_DIR = path.join(os.homedir(), '.agent');
 
 function commandExists(cmd) {
-  try { execSync(`command -v ${cmd}`, { stdio: 'ignore' }); return true; } catch { return false; }
+  if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
+    return false;
+  }
+  try {
+    execFileSync('which', [cmd], { stdio: 'ignore' });
+    return true;
+  } catch { return false; }
 }
 
 function parseArgs(args) {
@@ -100,7 +106,7 @@ MCowBQYDK2VwAyEApT1OQ5B0qF2pPjD2uK9f7K8b/sW+v3X1tN0c5A9vGqg=
 
   if (opts.model) {
     if (!commandExists('ollama')) {
-      console.error('  ❌ Ollama not found. Install it first: curl -fsSL https://ollama.com/install.sh | sh');
+      console.error('  ❌ Ollama not found. Install it first: curl -fsSL https://ollama.com/install.sh -o install.sh && sh install.sh && rm install.sh');
       process.exit(1);
     }
 

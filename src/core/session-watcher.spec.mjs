@@ -220,6 +220,38 @@ describe('Antigravity Adapter', () => {
     expect(entries[3].type).toBe('observation');
     expect(entries[3].source).toBe('antigravity');
   });
+
+  it('parses transcript.jsonl with real-time turns and tag stripping', () => {
+    const file = path.join(dir, 'transcript.jsonl');
+    fs.writeFileSync(file, [
+      JSON.stringify({
+        type: 'USER_INPUT',
+        content: '<USER_REQUEST>\nWhy is nothing synced?\n</USER_REQUEST>',
+        timestamp: '2026-05-17T10:00:00Z',
+      }),
+      JSON.stringify({
+        source: 'MODEL',
+        type: 'RESPONSE',
+        content: 'Let me look into it.',
+        timestamp: '2026-05-17T10:01:00Z',
+      }),
+      JSON.stringify({
+        source: 'SYSTEM',
+        type: 'TOOL_RESULT',
+        content: 'ignored step',
+      }),
+    ].join('\n'));
+
+    const entries = parseAntigravity(file);
+    expect(entries).toHaveLength(2);
+    expect(entries[0].type).toBe('task');
+    expect(entries[0].role).toBe('user');
+    expect(entries[0].content).toBe('Why is nothing synced?');
+    expect(entries[0].ts).toBe('2026-05-17T10:00:00Z');
+    expect(entries[1].type).toBe('observation');
+    expect(entries[1].role).toBe('assistant');
+    expect(entries[1].content).toBe('Let me look into it.');
+  });
 });
 
 describe('Cursor Adapter', () => {
@@ -272,6 +304,25 @@ describe('writeSession', () => {
 
     expect(first).toBeTruthy();
     expect(second).toBeNull(); // already ingested
+  });
+
+  it('overwrites session file if entries grow/change', () => {
+    const sessionsDir = path.join(dir, 'sessions');
+    const sourceFile = '/fake/source.jsonl';
+    const entries1 = [createSessionEntry({ content: 'Hello', role: 'user', type: 'task' })];
+    const first = writeSession(entries1, sessionsDir, sourceFile);
+    expect(first).toBeTruthy();
+
+    // Now write again with an additional entry (growing session)
+    const entries2 = [
+      entries1[0],
+      createSessionEntry({ content: 'Hi there', role: 'assistant' }),
+    ];
+    const second = writeSession(entries2, sessionsDir, sourceFile);
+    expect(second).toBeTruthy(); // should NOT be null, since content has changed!
+
+    const lines = fs.readFileSync(second, 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(2);
   });
 
   it('returns null for empty entries', () => {

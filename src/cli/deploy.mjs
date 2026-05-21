@@ -34,12 +34,14 @@
  *   --help              Show this help
  */
 
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, execFileSync, spawnSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
+import bcrypt from 'bcrypt';
+import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -57,8 +59,11 @@ function logSkip(msg)      { console.error(`  ⏭  ${msg}`); _uiEmit?.('info', m
 function logWarn(msg)      { console.error(`  ⚠️  ${msg}`); _uiEmit?.('warn', msg); }
 
 function commandExists(cmd) {
+  if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
+    return false;
+  }
   try {
-    execSync(`command -v ${cmd}`, { stdio: 'ignore' });
+    execFileSync('which', [cmd], { stdio: 'ignore' });
     return true;
   } catch { return false; }
 }
@@ -91,7 +96,18 @@ function detectPlatform() {
 
 function hasSystemd() {
   if (detectPlatform() !== 'linux') return false;
-  return commandExists('systemctl');
+  if (!commandExists('systemctl')) return false;
+  try {
+    const res = spawnSync('systemctl', ['is-system-running'], { timeout: 1000 });
+    const err = res.stderr?.toString() || '';
+    const out = res.stdout?.toString() || '';
+    if (err.includes('Failed to connect to bus') || err.includes('not been booted with systemd') || out.includes('Failed to connect to bus')) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function hasLaunchd() {
@@ -139,6 +155,7 @@ function parseArgs(args) {
     uiPort: 3001,
     dryRun: false,
     help: false,
+    dashboardPassword: null,
   };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -156,6 +173,7 @@ function parseArgs(args) {
       case '--cloudflare-token': opts.cloudflareToken = args[++i]; break;
       case '--cloudflare-quick': opts.cloudflareQuick = true; break;
       case '--allow-insecure-http': opts.allowInsecureHttp = true; break;
+      case '--dashboard-password': opts.dashboardPassword = args[++i]; break;
       case '--ui': opts.ui = true; break;
       case '--ui-port': opts.uiPort = parseInt(args[++i], 10) || 3001; break;
       case '--dry-run': opts.dryRun = true; break;
@@ -315,7 +333,7 @@ function isIpAddress(value) {
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(value || '') || /^\[[0-9a-f:]+\]$/i.test(value || '') || /^[0-9a-f:]{3,}$/i.test(value || '');
 }
 
-function hardenSecurityConfig(dryRun) {
+function hardenSecurityConfig(dryRun, dashboardPassword = null) {
   logStep('7.5/12', 'Hardening security defaults');
   const securityPath = path.join(AGENT_DIR, 'config', 'security.yml');
   if (dryRun) {
@@ -347,6 +365,29 @@ function hardenSecurityConfig(dryRun) {
     public_health: false,
     allowed_origins: config.network?.allowed_origins || []
   };
+
+  if (!config.dashboard) {
+    config.dashboard = {};
+  }
+
+  if (dashboardPassword) {
+    const isDefault = dashboardPassword === 'totalrecall';
+    log(`  🔑 Enforcing admin dashboard password (force reset: ${isDefault})`);
+    config.dashboard.password_hash = bcrypt.hashSync(dashboardPassword, 10);
+    config.dashboard.force_password_reset = isDefault;
+  } else if (!config.dashboard.password_hash) {
+    // Generate secure temporary password
+    const tempPassword = crypto.randomBytes(16).toString('hex');
+    log(`  🔑 No password provided. Generating a secure temporary dashboard password...`);
+    console.error(`\n  ┌────────────────────────────────────────────────────────┐`);
+    console.error(`  │  ⚠️  TEMPORARY DASHBOARD ADMIN PASSWORD:                │`);
+    console.error(`  │  ${tempPassword.padEnd(52)}  │`);
+    console.error(`  │  Please save this password! You will be forced to      │`);
+    console.error(`  │  change it on your first dashboard access.             │`);
+    console.error(`  └────────────────────────────────────────────────────────┘\n`);
+    config.dashboard.password_hash = bcrypt.hashSync(tempPassword, 10);
+    config.dashboard.force_password_reset = true;
+  }
 
   fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
   logOk('Security config hardened: HTTPS required, Express bound to localhost, no public health, no legacy local PAT');
@@ -393,6 +434,7 @@ export default async function deploy(args) {
       if (wizardOpts.skipCaddy)   opts.skipCaddy   = true;
       if (wizardOpts.skipCompile) opts.skipCompile  = true;
       if (wizardOpts.skipModels)  opts.skipModels   = true;
+      if (wizardOpts.dashboardPassword) opts.dashboardPassword = wizardOpts.dashboardPassword;
 
       console.error(`  ✅ Wizard config received — domain: ${opts.domain}`);
 
@@ -408,7 +450,7 @@ export default async function deploy(args) {
         logStep('1/3', `Connecting to remote host ${user}@${ip}...`);
 
         const check = spawnSync('ssh', [
-          '-o', 'StrictHostKeyChecking=no',
+          '-o', 'StrictHostKeyChecking=accept-new',
           '-o', 'ConnectTimeout=5',
           `${user}@${ip}`,
           'echo "OK"'
@@ -422,24 +464,27 @@ export default async function deploy(args) {
 
         logStep('2/3', 'Installing Node.js and dependencies on remote host...');
         spawnSync('ssh', [
-          '-o', 'StrictHostKeyChecking=no',
+          '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
-          'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && ' +
+          'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o nvm_install.sh && bash nvm_install.sh && rm nvm_install.sh && ' +
           'source ~/.bashrc && nvm install 20 2>/dev/null || ' +
-          '(curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs)'
+          '(curl -fsSL https://deb.nodesource.com/setup_20.x -o node_setup.sh && bash node_setup.sh && apt-get install -y nodejs && rm node_setup.sh)'
         ], { stdio: 'inherit' });
 
         logStep('3/3', 'Deploying Total Recall remotely...');
-        const deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
+        let deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
+        if (wizardOpts.dashboardPassword) {
+          deployCmd += ` --dashboard-password "${wizardOpts.dashboardPassword}"`;
+        }
         spawnSync('ssh', [
-          '-o', 'StrictHostKeyChecking=no',
+          '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
           `export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && ${deployCmd}`
         ], { stdio: 'inherit' });
 
         logStep('Done', 'Generating access token...');
         const pat = spawnSync('ssh', [
-          '-o', 'StrictHostKeyChecking=no',
+          '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
           'export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && npx total-recall generate-pat --quiet'
         ], { encoding: 'utf8' }).stdout?.toString().trim();
@@ -500,10 +545,10 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
     logOk('Ollama already installed');
   } else {
     if (opts.dryRun) {
-      log('  Would install Ollama via curl -fsSL https://ollama.com/install.sh | sh');
+      log('  Would install Ollama via curl -fsSL https://ollama.com/install.sh -o install.sh && sh install.sh && rm install.sh');
     } else {
       log('Installing Ollama...');
-      run('curl -fsSL https://ollama.com/install.sh | sh');
+      run('curl -fsSL https://ollama.com/install.sh -o install.sh && sh install.sh && rm install.sh');
       logOk('Ollama installed');
     }
   }
@@ -574,7 +619,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
           'server:',
           '  bind_address: "127.0.0.1"',
           '  port: 8888',
-          '  secret_key: "' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) + '"',
+          '  secret_key: "' + crypto.randomBytes(32).toString('hex') + '"',
           '  base_url: "http://127.0.0.1:8888/"',
           'search:',
           '  formats: [html, json]',
@@ -655,7 +700,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
   // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
-  hardenSecurityConfig(opts.dryRun);
+  hardenSecurityConfig(opts.dryRun, opts.dashboardPassword);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──
   if (opts.cloudflareToken || opts.cloudflareQuick) {
@@ -679,7 +724,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
     if (!opts.dryRun) {
       if (opts.cloudflareToken && platform === 'linux') {
-        run(`sudo cloudflared service install ${opts.cloudflareToken}`);
+        spawnSync('sudo', ['cloudflared', 'service', 'install', opts.cloudflareToken], { stdio: 'inherit' });
         logOk('Cloudflare tunnel running securely via token');
       } else if (opts.cloudflareQuick) {
         log('  Starting Zero-Config Quick Tunnel (trycloudflare.com)...');
@@ -707,7 +752,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       } else {
         if (platform === 'linux') {
           run('sudo apt-get update -qq && sudo apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl', { ignoreErrors: true });
-          run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg', { ignoreErrors: true });
+          run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/gpg.key" -o /tmp/caddy.gpg.key && sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg /tmp/caddy.gpg.key && rm /tmp/caddy.gpg.key', { ignoreErrors: true });
           run('curl -1sLf "https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt" | sudo tee /etc/apt/sources.list.d/caddy-stable.list', { ignoreErrors: true });
           run('sudo apt-get update -qq && sudo apt-get install -y caddy');
         } else if (platform === 'macos') {
@@ -984,6 +1029,38 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       run(`launchctl load -w "${path.join(agentsDir, 'com.totalrecall.server.plist')}"`, { ignoreErrors: true });
       run(`launchctl load -w "${path.join(agentsDir, 'com.totalrecall.daemon.plist')}"`, { ignoreErrors: true });
       logOk('LaunchAgent services loaded (auto-start on login)');
+    }
+  } else if (platform === 'linux') {
+    if (opts.dryRun) {
+      log('  Would fall back to nohup starting server and cognitive daemon in background');
+    } else {
+      logStep('11/12 (fallback)', 'Starting server and daemon in background via nohup (no systemd)');
+      try {
+        fs.mkdirSync(path.join(AGENT_DIR, 'logs'), { recursive: true });
+        const serverLog = path.join(AGENT_DIR, 'logs', 'server.log');
+        const daemonLog = path.join(AGENT_DIR, 'logs', 'daemon.log');
+        const serverScript = path.join(ROOT, 'bin', 'total-recall.mjs');
+        const daemonScript = path.join(ROOT, 'src', 'core', 'daemon-loop.mjs');
+
+        const serverOut = fs.openSync(serverLog, 'a');
+        const daemonOut = fs.openSync(daemonLog, 'a');
+
+        const serverProc = spawn('node', [serverScript, 'start', '--port', '3000', '--host', '127.0.0.1'], {
+          detached: true,
+          stdio: ['ignore', serverOut, serverOut]
+        });
+        serverProc.unref();
+
+        const daemonProc = spawn('node', [daemonScript], {
+          detached: true,
+          stdio: ['ignore', daemonOut, daemonOut]
+        });
+        daemonProc.unref();
+
+        logOk('Server and daemon-loop started in background (safe spawn fallback)');
+      } catch (err) {
+        logWarn(`Background startup fallback failed: ${err.message}`);
+      }
     }
   } else {
     logWarn('Services not auto-started');

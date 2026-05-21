@@ -134,15 +134,17 @@ export async function listMemory(category?: string, status?: string): Promise<Me
   if (status) params.set('status', status)
   const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
   if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : (data.nodes || [])
 }
 
 export async function searchMemory(query: string, category?: string): Promise<MemoryNode[]> {
   const params = new URLSearchParams({ q: query })
   if (category) params.set('category', category)
-  const res = await apiFetch(`${API_BASE}/api/memory/search?${params}`)
+  const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
   if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
-  return res.json()
+  const data = await res.json()
+  return Array.isArray(data) ? data : (data.nodes || [])
 }
 
 export async function readMemory(slug: string): Promise<MemoryNode | null> {
@@ -261,4 +263,61 @@ export async function issueApiKey(name: string, scopes?: string[], expiresAt?: s
 export async function revokeApiKey(id: string): Promise<void> {
   const res = await apiFetch(`${API_BASE}/api/keys/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
+}
+
+export async function connectClient(client: string, baseUrl: string): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE}/api/integrations/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client, baseUrl }),
+  })
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || `Connection error: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchActiveIntegrations(): Promise<{ success: boolean; active: string[] }> {
+  const res = await apiFetch(`${API_BASE}/api/integrations/active`, { method: 'GET' })
+  if (!res.ok) throw new Error(`Integrations API error: ${res.status}`)
+  return res.json()
+}
+
+// ─── Research & Logs ───────────────────────────────────────────────────────────
+
+export interface ResearchQueueResponse {
+  counts: { pending: number; in_progress: number; done: number; failed: number }
+  total: number
+  items: any[]
+}
+
+export async function listResearch(status?: string): Promise<ResearchQueueResponse> {
+  const params = new URLSearchParams()
+  if (status) params.set('status', status)
+  const res = await apiFetch(`${API_BASE}/api/research?${params}`)
+  if (!res.ok) throw new Error(`Research API error: ${res.status}`)
+  return res.json()
+}
+
+export async function createResearch(topic: string, priority?: string, notes?: string): Promise<any> {
+  const res = await apiFetch(`${API_BASE}/api/research`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, priority, notes }),
+  })
+  if (!res.ok) throw new Error(`Research API error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchLogs(type: 'server' | 'daemon'): Promise<{ content: string }> {
+  const res = await apiFetch(`${API_BASE}/api/logs/${type}`)
+  if (!res.ok) throw new Error(`Logs API error: ${res.status}`)
+  return res.json()
+}
+
+export async function triggerRecompile(): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE}/api/vault/compile`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Recompile API error: ${res.status}`)
+  return res.json()
 }

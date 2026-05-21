@@ -1,0 +1,26 @@
+[
+  {
+    "id": "code-quality-eval-1",
+    "description": "Ensure code-quality SKILL.md exists and has frontmatter",
+    "command": "test -f .agent/skills/code-quality/SKILL.md && grep -q 'name: code-quality' .agent/skills/code-quality/SKILL.md",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "code-quality-eval-2",
+    "description": "Ensure start-here-ts.mjs is executable and passes",
+    "command": "node .agent/skills/code-quality/scripts/start-here-ts.mjs --help",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "code-quality-eval-3",
+    "description": "Ensure code-quality-auditor subagent contains tool whitelist",
+    "command": "grep -q '## Tools Available' .agent/skills/code-quality/subagents/code-quality-auditor.md",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "code-quality-eval-4",
+    "description": "Ensure on-lint-error hook executes successfully",
+    "command": "bash .agent/skills/code-quality/hooks/on-lint-error.sh",
+    "expected_exit_code": 0
+  }
+]

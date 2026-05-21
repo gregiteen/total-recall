@@ -24,9 +24,15 @@ const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 
 const RULE_FILE_CANDIDATES = [
   { filename: 'AGENTS.md',        label: 'Generic agent rules',      ide: 'agents'    },
+  { filename: 'AGENTS.override.md', label: 'Codex instructions override', ide: 'agents' },
+  { filename: '.codex/AGENTS.md', label: 'Codex global rules',       ide: 'agents'    },
+  { filename: '.codex/AGENTS.override.md', label: 'Codex global instructions override', ide: 'agents' },
   { filename: 'CLAUDE.md',        label: 'Claude Code rules',        ide: 'claude'    },
   { filename: '.claude/CLAUDE.md',label: 'Claude Code rules (alt)',  ide: 'claude'    },
   { filename: 'GEMINI.md',        label: 'Gemini CLI rules',         ide: 'gemini'    },
+  { filename: '.gemini/GEMINI.md',label: 'Gemini global rules',       ide: 'gemini'    },
+  { filename: '.gemini/system.md',label: 'Gemini system instructions', ide: 'gemini'  },
+  { filename: 'system.md',        label: 'Project system instructions', ide: 'gemini' },
   { filename: '.cursorrules',     label: 'Cursor rules',             ide: 'cursor'    },
   { filename: '.clauderules',     label: 'Claude rules',             ide: 'claude'    },
   { filename: '.windsurfrules',   label: 'Windsurf rules',           ide: 'windsurf'  },
@@ -34,9 +40,21 @@ const RULE_FILE_CANDIDATES = [
   { filename: 'WINDSURF.md',      label: 'Windsurf rules (md)',      ide: 'windsurf'  },
   { filename: 'COPILOT.md',       label: 'GitHub Copilot rules',     ide: 'copilot'   },
   { filename: '.github/copilot-instructions.md', label: 'Copilot instructions', ide: 'copilot' },
+  { filename: '.vscode/copilot-instructions.md', label: 'VS Code Copilot instructions', ide: 'copilot' },
   { filename: 'INSTRUCTIONS.md',  label: 'Custom instructions',      ide: 'generic'   },
   { filename: '.rules',           label: 'Generic rules',            ide: 'generic'   },
   { filename: 'RULES.md',         label: 'Generic rules (md)',       ide: 'generic'   },
+];
+
+// Candidates for directories containing modular rule/prompt files
+const RULE_DIRECTORY_CANDIDATES = [
+  { dirPath: '.claude/rules',     ext: '.md',  label: 'Claude modular rule',      ide: 'claude'   },
+  { dirPath: '.cursor/rules',     ext: '.mdc', label: 'Cursor modular rule',       ide: 'cursor'   },
+  { dirPath: '.agent/skills',     ext: '.md',  label: 'Antigravity/Gemini skill',  ide: 'gemini', recursive: true },
+  { dirPath: '.vscode/prompts',   ext: '.md',  label: 'VS Code modular rule',     ide: 'copilot'  },
+  { dirPath: '.windsurf/rules',   ext: '.md',  label: 'Windsurf modular rule',    ide: 'windsurf' },
+  { dirPath: '.codex/rules',      ext: ['.md', '.rules'], label: 'Codex modular rule', ide: 'agents'   },
+  { dirPath: '.github/instructions', ext: '.md', label: 'VS Code Copilot workspace instruction', ide: 'copilot' },
 ];
 
 // ── Detection ─────────────────────────────────────────────────────────────────
@@ -61,6 +79,8 @@ export function detectRuleFiles(dirs) {
 
   for (const dir of searchDirs) {
     if (!fs.existsSync(dir)) continue;
+
+    // 1. Check individual file candidates
     for (const candidate of RULE_FILE_CANDIDATES) {
       const absPath = path.resolve(dir, candidate.filename);
       if (seen.has(absPath)) continue;
@@ -86,6 +106,90 @@ export function detectRuleFiles(dirs) {
           alreadyImported: existingSlugs.has(slug),
         });
       } catch { /* unreadable */ }
+    }
+
+    // 2. Scan directories for modular rules
+    for (const dirCandidate of RULE_DIRECTORY_CANDIDATES) {
+      const absDirPath = path.resolve(dir, dirCandidate.dirPath);
+      if (!fs.existsSync(absDirPath)) continue;
+
+      try {
+        const dirStat = fs.statSync(absDirPath);
+        if (!dirStat.isDirectory()) continue;
+
+        const scanDir = (currentPath) => {
+          if (!fs.existsSync(currentPath)) return;
+          const currentStat = fs.statSync(currentPath);
+          if (!currentStat.isDirectory()) return;
+
+          const entries = fs.readdirSync(currentPath);
+          for (const entry of entries) {
+            const entryPath = path.join(currentPath, entry);
+            let entryStat;
+            try {
+              entryStat = fs.lstatSync(entryPath);
+            } catch {
+              continue; // Skip completely unreadable/broken entries
+            }
+
+            if (entryStat.isDirectory()) {
+              if (dirCandidate.recursive) {
+                scanDir(entryPath);
+              }
+              continue;
+            }
+
+            // Check extensions
+            const extensions = Array.isArray(dirCandidate.ext) ? dirCandidate.ext : [dirCandidate.ext];
+            const hasMatchingExt = extensions.some(ext => entry.endsWith(ext) || entry === 'SKILL.md');
+            if (!hasMatchingExt) continue;
+
+            if (seen.has(entryPath)) continue;
+            seen.add(entryPath);
+
+            try {
+              let activePath = entryPath;
+              let fileStat;
+              try {
+                fileStat = fs.statSync(entryPath);
+              } catch (err) {
+                if (entryStat.isSymbolicLink()) {
+                  const target = fs.readlinkSync(entryPath);
+                  const healedTarget = healSymlinkTarget(target);
+                  if (fs.existsSync(healedTarget)) {
+                    activePath = healedTarget;
+                    fileStat = fs.statSync(healedTarget);
+                  } else {
+                    continue; // Skip broken symlink that couldn't be healed
+                  }
+                } else {
+                  throw err;
+                }
+              }
+
+              if (!fileStat.isFile() || fileStat.size === 0) continue;
+
+              const content = fs.readFileSync(activePath, 'utf8').trim();
+              if (!content || content.startsWith('# Generated at runtime by: npx total-recall compile')) continue;
+
+              const relFilename = path.relative(dir, entryPath);
+              const slug = makeSlug(relFilename, activePath);
+              detected.push({
+                filename:        relFilename,
+                label:           `${dirCandidate.label} (${entry})`,
+                ide:             dirCandidate.ide,
+                absolutePath:    activePath,
+                size:            fileStat.size,
+                preview:         content.slice(0, 300),
+                slug,
+                alreadyImported: existingSlugs.has(slug),
+              });
+            } catch { /* skip this specific unreadable file, keep scanning others */ }
+          }
+        };
+
+        scanDir(absDirPath);
+      } catch { /* unreadable or unlisting directory */ }
     }
   }
 
@@ -169,4 +273,35 @@ function makeSlug(filename, absPath) {
   // Include a short hash of the path so two files with the same name in different dirs don't collide
   const hash = crypto.createHash('sha1').update(absPath).digest('hex').slice(0, 6);
   return `imported-rules-${base}-${hash}`;
+}
+
+function healSymlinkTarget(target) {
+  let healed = target.replace('/ultrachat/ultrachat-ai-powered/', '/ultrachat-ai-powered/');
+  if (fs.existsSync(healed)) return healed;
+
+  const skillMatch = healed.match(/\/(\.agents?)\/skills\/([^\/]+)\/(SKILL\.md)$/i);
+  if (skillMatch) {
+    const agentDirName = skillMatch[1];
+    const skillName = skillMatch[2];
+    const skillFile = skillMatch[3];
+    
+    const skillsDir = healed.substring(0, healed.indexOf(`/${agentDirName}/skills/`) + `/${agentDirName}/skills/`.length);
+    if (fs.existsSync(skillsDir)) {
+      try {
+        const dirs = fs.readdirSync(skillsDir);
+        const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const targetNorm = normalize(skillName);
+        for (const d of dirs) {
+          if (normalize(d) === targetNorm) {
+            const possiblePath = path.join(skillsDir, d, skillFile);
+            if (fs.existsSync(possiblePath)) {
+              return possiblePath;
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  return healed;
 }

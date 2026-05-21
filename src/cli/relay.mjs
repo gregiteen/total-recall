@@ -91,7 +91,7 @@ function getSources() {
     {
       name: 'antigravity',
       root: path.join(HOME, '.gemini', 'antigravity', 'brain'),
-      filter: (f) => f === 'overview.txt',
+      filter: (f) => f === 'overview.txt' || f === 'transcript.jsonl',
       dirFilter: null,
     },
     {
@@ -141,9 +141,10 @@ async function shipFile(filePath, sourceName, brainBaseUrl, headers) {
   if (!content.trim()) return false;
 
   const payload = {
+    id: crypto.createHash('sha256').update(filePath).digest('hex').slice(0, 12),
     source: sourceName,
     path: filePath,
-    content: content.slice(0, 100_000), // cap at 100KB per file
+    content: content.slice(0, 40_000_000), // cap at 40MB to stay well under the server's 50MB JSON body limit
     sha256: crypto.createHash('sha256').update(content).digest('hex'),
   };
 

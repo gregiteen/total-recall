@@ -19,8 +19,8 @@ export default function ApiKeysPage() {
     setError(null)
     try {
       const result = await listApiKeys()
-      setKeys(result.keys)
-      setAvailableScopes(result.available_scopes)
+      setKeys(result.keys || [])
+      setAvailableScopes(result.available_scopes || ['*'])
     } catch (e: unknown) {
       setError((e as Error).message)
     } finally {

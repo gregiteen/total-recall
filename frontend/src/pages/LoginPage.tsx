@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { login, changePassword } from '../api'
 
 interface Props {
   onAuthenticated: () => void
@@ -28,36 +29,23 @@ export default function LoginPage({ onAuthenticated }: Props) {
           setLoading(false)
           return
         }
-        const res = await fetch('/auth/change-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ newPassword }),
-        })
+        const res = await changePassword(newPassword)
         if (res.ok) {
           onAuthenticated()
         } else {
-          const data = await res.json().catch(() => ({}))
-          setError(data.error || 'Failed to change password')
+          setError(res.error || 'Failed to change password')
         }
       } else {
-        const res = await fetch('/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ password }),
-        })
+        const res = await login(password)
         if (res.ok) {
-          const data = await res.json().catch(() => ({}))
-          if (data.requiresPasswordReset) {
+          if (res.requiresPasswordReset) {
             setNeedsReset(true)
             setPassword('') // Clear for security
           } else {
             onAuthenticated()
           }
         } else {
-          const data = await res.json().catch(() => ({}))
-          setError(data.error || 'Invalid password')
+          setError(res.error || 'Invalid password')
         }
       }
     } catch {

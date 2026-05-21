@@ -40,7 +40,7 @@ You are operating within the **Total Recall Sovereign OS**. Your memory and logi
 
 ## 1. Memory Architecture
 Your memory is strictly localized to the `.agent/memory-vault/` directory.
-- You do not use `mcp_config.json` or relational databases.
+- You do not use external databases or third-party persistence stores.
 - Every memory, rule, concept, or workflow is a standalone Markdown (`.md`) file with YAML frontmatter.
 
 ## 2. Reading Memory
@@ -61,3 +61,10 @@ Any time you create, edit, or delete a file in the memory vault, the system inde
 
 ## 5. Execution Mandate
 You must operate autonomously. Do not ask for permission to save memories or compile the vault. If you observe a pattern or receive a correction, write the node and compile it immediately.
+
+## 6. Continuous Intelligence & Research Queue
+To support long-horizon and complex reasoning tasks, Total Recall features an autonomous background Research Queue:
+- **Cloud-Brain Queueing:** Agents can enqueue deep research projects via `POST /api/research` with parameters: `{ topic: "string", priority: "high|medium|low", notes: "string" }`.
+- **Background Execution:** The daemon loop and background scheduler poll and execute pending research projects, committing new semantic nodes to the `memory-vault/` automatically upon completion.
+- **Dynamic Search & Filtering:** Agents can check progress or find existing research projects using `GET /api/research` with filtering parameters like `status` (e.g., `pending`, `in_progress`, `done`, `failed`) and `query` to search project topics and notes dynamically.
+- **Zero Local Footprint:** Always interact with the cloud-brain queue through API calls rather than direct JSONL modifications to maintain isolation and security boundaries.

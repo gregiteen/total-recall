@@ -54,6 +54,7 @@ const COMMANDS = {
   status:   'status.mjs',
   'generate-pat': 'generate-pat.mjs',
   'hash-password': 'hash-password.mjs',
+  'reset-password': 'reset-password.mjs',
   compile:  'rebuild.mjs',
   rebuild:  'rebuild.mjs',
   snapshot: 'snapshot.mjs',
@@ -88,6 +89,7 @@ function printHelp() {
     status              Show brain connection and sync state
     generate-pat        Issue a PAT; stores only a hash in keys.jsonl
     hash-password       Generate a bcrypt dashboard password hash
+    reset-password      Reset the dashboard admin password and force a change on login
     compile             Alias for rebuild: deterministically rebuild projections
     rebuild [--check]   Detect index drift and deterministically rebuild projections
     snapshot            Manage fast point-in-time VFS snapshots and rollbacks
@@ -95,7 +97,7 @@ function printHelp() {
     import [--dir <path>] [--force]   Import existing AGENTS.md, .cursorrules, CLAUDE.md, etc.
                                      into the vault (run before compile on first install)
     ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
-    connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, MCP, etc.
+    connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, Gemini, etc.
     sync [--watch]      Pull remote brain instructions into the current workspace
     relay <cmd>         Local background relay: ship IDE sessions to remote brain
                         Commands: start | stop | status | once | install | uninstall

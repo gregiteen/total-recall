@@ -54,10 +54,11 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../core/runtime.mjs';
 
 
-import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload, walkMd } from '../core/vault.mjs';
+import { loadNodes, writeNode, deleteNode, createNodeFromMcpPayload, walkMd, safeStringify } from '../core/vault.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { issueKey, revokeKey, loadKeys } from './keys.mjs';
+import connect from '../cli/connect.mjs';
 import {
   requireAuth,
   requireScope,
@@ -152,7 +153,7 @@ function badRequest(res, msg) {
 
 function serverError(res, err) {
   console.error('[REST]', err);
-  return res.status(500).json({ error: err?.message || String(err) });
+  return res.status(500).json({ error: 'Internal server error' });
 }
 
 function nodes() {
@@ -235,16 +236,25 @@ router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, 
  */
 router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const { slug, title, category, content, tags } = req.body || {};
-    if (!slug || !title || !category || !content) {
-      return badRequest(res, 'Required fields: slug, title, category, content');
+    const { slug, title, category, content, body, tags } = req.body || {};
+    const actualContent = content || body;
+    if (!slug || !title || !category || !actualContent) {
+      return badRequest(res, 'Required fields: slug, title, category, content (or body)');
     }
     const existing = nodes().find(n => n.slug === slug);
     if (existing) {
       return res.status(409).json({ error: `Node already exists: ${slug}. Use PUT to update.` });
     }
-    const node = createNodeFromMcpPayload({ slug, title, category, content });
+    const node = createNodeFromMcpPayload({ slug, title, category, content: actualContent });
     if (tags && Array.isArray(tags)) node.tags = tags;
+    
+    // Copy any custom SSSS v2 frontmatter fields if specified in req.body
+    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
+      if (req.body[key] !== undefined) {
+        node[key] = req.body[key];
+      }
+    }
+
     writeNode(node, VAULT_DIR);
     res.status(201).json(sanitizeNode(node));
   } catch (err) {
@@ -257,12 +267,21 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
  */
 router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const { title, category, content, tags } = req.body || {};
-    if (!title || !category || !content) {
-      return badRequest(res, 'Required fields: title, category, content');
+    const { title, category, content, body, tags } = req.body || {};
+    const actualContent = content || body;
+    if (!title || !category || !actualContent) {
+      return badRequest(res, 'Required fields: title, category, content (or body)');
     }
-    const node = createNodeFromMcpPayload({ slug: req.params.slug, title, category, content });
+    const node = createNodeFromMcpPayload({ slug: req.params.slug, title, category, content: actualContent });
     if (tags && Array.isArray(tags)) node.tags = tags;
+
+    // Copy any custom SSSS v2 frontmatter fields if specified in req.body
+    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
+      if (req.body[key] !== undefined) {
+        node[key] = req.body[key];
+      }
+    }
+
     writeNode(node, VAULT_DIR);
     res.json(sanitizeNode(node));
   } catch (err) {
@@ -278,15 +297,30 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
     const existing = nodes().find(n => n.slug === req.params.slug);
     if (!existing) return notFound(res, `Memory node not found: ${req.params.slug}`);
 
-    const { title, category, content, tags } = req.body || {};
+    const { title, category, content, body, tags } = req.body || {};
+    const actualContent = content || body || existing.body;
     const updated = createNodeFromMcpPayload({
       slug:     existing.slug,
       title:    title    ?? existing.title,
       category: category ?? existing.category,
-      content:  content  ?? existing.body,
+      content:  actualContent,
     });
     updated.tags = tags ?? existing.tags ?? [];
     updated.created_at = existing.created_at;
+
+    // Merge existing non-destructured fields
+    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
+      if (existing[key] !== undefined) {
+        updated[key] = existing[key];
+      }
+    }
+
+    // Copy any custom SSSS v2 frontmatter fields if specified in req.body
+    for (const key of ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources']) {
+      if (req.body[key] !== undefined) {
+        updated[key] = req.body[key];
+      }
+    }
 
     writeNode(updated, VAULT_DIR);
     res.json(sanitizeNode(updated));
@@ -657,6 +691,20 @@ function parseRawSessionContent(content, source) {
     try { rec = JSON.parse(line); } catch { continue; }
     jsonlParsed++;
 
+    // Antigravity transcript.jsonl format
+    if (source === 'antigravity' && (rec.type === 'USER_INPUT' || (rec.source === 'MODEL' && (rec.type === 'PLANNER_RESPONSE' || rec.type === 'RESPONSE' || rec.type === 'model_response')))) {
+      let role = rec.type === 'USER_INPUT' ? 'user' : 'assistant';
+      let text = rec.content || '';
+      if (role === 'user' && text.includes('<USER_REQUEST>')) {
+        const match = text.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/);
+        if (match) text = match[1].trim();
+      }
+      if (text.trim()) {
+        messages.push({ role, content: text.slice(0, 8000) });
+      }
+      continue;
+    }
+
     // Claude Code / Codex / Cursor format
     if (rec.role && (rec.content || rec.message)) {
       const text = typeof rec.content === 'string' ? rec.content
@@ -947,8 +995,8 @@ router.get('/api', (req, res) => {
 
 router.get('/api/research', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const { status, limit, offset } = req.query;
-    res.json(listQueue({ status, limit, offset }));
+    const { status, query, limit, offset } = req.query;
+    res.json(listQueue({ status, query, limit, offset }));
   } catch (err) { serverError(res, err); }
 });
 
@@ -978,6 +1026,109 @@ router.delete('/api/research/:id', requireAuth, requireScope('memory:write'), (r
   }
 });
 
+// ─── Active Integrations ──────────────────────────────────────────────────────
+
+/**
+ * GET /api/integrations/active
+ */
+router.get('/api/integrations/active', requireAuth, (req, res) => {
+  try {
+    const HOME = os.homedir();
+    const configDir = path.join(HOME, '.agent', 'config');
+    const configFile = path.join(configDir, 'wizard-config.json');
+
+    let configuredIdes = [];
+    if (fs.existsSync(configFile)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+        if (Array.isArray(parsed.configuredIdes)) {
+          configuredIdes = parsed.configuredIdes;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Fallback detection (filesystem probing) if configuredIdes is empty
+    if (configuredIdes.length === 0) {
+      const checks = {
+        'claude-code': [path.join(HOME, '.claude', 'projects'), path.join(HOME, '.claude', 'CLAUDE.md')],
+        'codex':       [path.join(HOME, '.codex', 'sessions'), path.join(HOME, '.codex', 'AGENTS.md')],
+        'cursor':      [path.join(HOME, '.cursor', 'projects'), path.join(HOME, '.cursor')],
+        'antigravity': [path.join(HOME, '.gemini', 'antigravity')],
+        'vscode':      [path.join(HOME, 'Library', 'Application Support', 'Code'), path.join(HOME, '.vscode')],
+        'gemini':      [path.join(HOME, '.gemini')],
+        'pi':          [path.join(HOME, '.pi', 'agent')],
+        'hermes':      [path.join(HOME, '.hermes')],
+        'openclaw':    [path.join(HOME, '.openclaw')],
+      };
+
+      for (const [ide, paths] of Object.entries(checks)) {
+        if (paths.some(p => { try { return fs.existsSync(p); } catch { return false; } })) {
+          configuredIdes.push(ide);
+        }
+      }
+    }
+
+    res.json({ success: true, active: configuredIdes });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── Integrations Connection ──────────────────────────────────────────────────
+
+
+/**
+ * POST /api/integrations/connect
+ * Body: { client: string, baseUrl?: string }
+ */
+router.post('/api/integrations/connect', requireAuth, (req, res) => {
+  try {
+    const { client, baseUrl } = req.body || {};
+    if (!client) return badRequest(res, 'client is required');
+
+    const validClients = [
+      'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'claude-code',
+      'codex', 'gemini', 'windsurf', 'aider', 'ultrachat', 'obsidian',
+      'mcp', 'generic', 'antigravity'
+    ];
+
+    if (!validClients.includes(client)) {
+      return badRequest(res, `Unknown client: ${client}`);
+    }
+
+    // Generate a fresh key for this client
+    const scopes = ['ssss:read', 'memory:read', 'mcp:use'];
+    const keyName = `${client.charAt(0).toUpperCase() + client.slice(1)} Link`;
+    const newKey = issueKey(keyName, { scopes });
+    const token = newKey.token;
+
+    // Call the connect function from cli/connect.mjs
+    const args = [client, '--token', token];
+    if (baseUrl) {
+      args.push('--brain', baseUrl);
+    }
+
+    // Run the connection logic asynchronously in the background so it doesn't block,
+    // or run it synchronously (it is extremely fast as it just writes a few local files).
+    connect(args)
+      .then(() => {
+        res.json({
+          success: true,
+          message: `Successfully connected ${client}`,
+          token_preview: newKey.token_prefix,
+          key_id: newKey.id
+        });
+      })
+      .catch(err => {
+        serverError(res, err);
+      });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
 // ─── Rule File Import ─────────────────────────────────────────────────────────
 // Thin wrappers over src/core/import-rules.mjs
 
@@ -988,7 +1139,10 @@ router.delete('/api/research/:id', requireAuth, requireScope('memory:write'), (r
  */
 router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const dirs = req.query.dir ? (Array.isArray(req.query.dir) ? req.query.dir : [req.query.dir]) : [process.cwd()];
+    const allowedRoots = [process.cwd(), os.homedir()];
+    const rawDirs = req.query.dir ? (Array.isArray(req.query.dir) ? req.query.dir : [req.query.dir]) : allowedRoots;
+    const dirs = rawDirs.filter(d => allowedRoots.some(root => path.resolve(d).startsWith(path.resolve(root))));
+    if (dirs.length === 0) return badRequest(res, 'No permitted directories specified');
     const detected = detectRuleFiles(dirs);
     res.json({ dirs, detected });
   } catch (err) { serverError(res, err); }
@@ -1002,7 +1156,8 @@ router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, 
 router.post('/api/import/rules', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
     const { dirs, force = false, dryRun = false } = req.body || {};
-    const detected = detectRuleFiles(dirs?.length ? dirs : [process.cwd()]);
+    const searchDirs = dirs?.length ? dirs : [process.cwd(), os.homedir()];
+    const detected = detectRuleFiles(searchDirs);
     const toImport = req.body?.files?.length
       ? detected.filter(f => req.body.files.includes(f.absolutePath))
       : detected.filter(f => !f.alreadyImported || force);
@@ -1019,7 +1174,7 @@ router.post('/api/import/rules', requireAuth, requireScope('memory:write'), (req
  * Streams entire brain as .tar.gz: vault, derived, sessions, config, skills.
  * Query: ?include=vault,derived,sessions,config,skills  (default: all)
  */
-router.get('/api/brain/export', requireAuth, requireScope('memory:read'), async (req, res) => {
+router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async (req, res) => {
   try {
     const ALL_PARTS = {
       vault:    VAULT_DIR,
@@ -1039,7 +1194,7 @@ router.get('/api/brain/export', requireAuth, requireScope('memory:read'), async 
     res.setHeader('Content-Disposition', `attachment; filename="total-recall-brain-${date}.tar.gz"`);
 
     const relativeDirs = dirs.map(k => path.relative(AGENT_DIR, ALL_PARTS[k]));
-    const tar = spawn('tar', ['czf', '-', '-C', AGENT_DIR, ...relativeDirs], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const tar = spawn('tar', ['czf', '-', '-C', AGENT_DIR, '--exclude=security.yml', '--exclude=keys.jsonl', '--exclude=session-secret', ...relativeDirs], { stdio: ['ignore', 'pipe', 'ignore'] });
     tar.stdout.pipe(res);
     tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
     tar.on('close', code => { if (code !== 0 && !res.writableEnded) res.end(); });
@@ -1125,6 +1280,75 @@ router.get('/api/skills', requireAuth, requireScope('files:read', 'ssss:read'), 
   } catch (err) { serverError(res, err); }
 });
 
+router.get('/api/skills/:name', requireAuth, requireScope('files:read', 'ssss:read'), (req, res) => {
+  try {
+    const { name } = req.params;
+    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid skill name' });
+    }
+    const skillPath = path.join(SKILLS_DIR, name, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) {
+      return res.status(404).json({ error: `Skill "${name}" not found` });
+    }
+    const content = fs.readFileSync(skillPath, 'utf8');
+    res.json({ name, content });
+  } catch (err) { serverError(res, err); }
+});
+
+router.put('/api/skills/:name', requireAuth, requireScope('files:write', 'ssss:write'), (req, res) => {
+  try {
+    const { name } = req.params;
+    const { content } = req.body;
+    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid skill name' });
+    }
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid `content` field.' });
+    }
+    const skillDir = path.join(SKILLS_DIR, name);
+    if (!fs.existsSync(skillDir)) {
+      fs.mkdirSync(skillDir, { recursive: true });
+    }
+    const skillPath = path.join(skillDir, 'SKILL.md');
+    fs.writeFileSync(skillPath, content, 'utf8');
+    res.json({ success: true, message: `Skill "${name}" updated successfully` });
+  } catch (err) { serverError(res, err); }
+});
+
+router.delete('/api/skills/:name', requireAuth, requireScope('files:write', 'ssss:write'), (req, res) => {
+  try {
+    const { name } = req.params;
+    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid skill name' });
+    }
+    const skillDir = path.join(SKILLS_DIR, name);
+    if (!fs.existsSync(skillDir)) {
+      return res.status(404).json({ error: `Skill "${name}" not found` });
+    }
+    fs.rmSync(skillDir, { recursive: true, force: true });
+    res.json({ success: true, message: `Skill "${name}" deleted successfully` });
+  } catch (err) { serverError(res, err); }
+});
+
+router.get('/api/logs/:type', requireAuth, requireScope('health:read'), (req, res) => {
+  try {
+    const { type } = req.params;
+    if (type !== 'server' && type !== 'daemon') {
+      return res.status(400).json({ error: 'Invalid log type. Must be "server" or "daemon"' });
+    }
+    const logPath = path.join(AGENT_DIR, 'logs', `${type}.log`);
+    if (!fs.existsSync(logPath)) {
+      return res.json({ content: '(no logs yet)' });
+    }
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.split('\n');
+    const lastLines = lines.slice(-200).join('\n');
+    res.json({ content: lastLines });
+  } catch (err) { serverError(res, err); }
+});
+
+
+
 router.get('/api/tasks', requireAuth, requireScope('tasks:read'), (req, res) => {
   try {
     if (!fs.existsSync(TASKS_DIR)) {
@@ -1168,7 +1392,7 @@ router.post('/api/tasks', requireAuth, requireScope('tasks:write'), (req, res) =
       status: 'pending',
       progress: 0
     };
-    const raw = matter.stringify(body || '', frontmatter);
+    const raw = safeStringify(body || '', frontmatter);
     fs.writeFileSync(path.join(TASKS_DIR, `${slug}.md`), raw, 'utf8');
     res.json({ slug, ...frontmatter });
   } catch (err) { serverError(res, err); }
@@ -1176,9 +1400,18 @@ router.post('/api/tasks', requireAuth, requireScope('tasks:write'), (req, res) =
 
 // ─── Config & Sandbox ─────────────────────────────────────────────────────────
 
+function safeConfigName(name) {
+  // Allow alphanumeric, hyphens, underscores, and dots (for file extensions like .yml)
+  if (!/^[a-zA-Z0-9_.-]+$/.test(name) || name.includes('..')) {
+    return null;
+  }
+  return path.join(CONFIG_DIR, name);
+}
+
 router.get('/api/config/:name', requireAuth, requireScope('config:read'), (req, res) => {
   try {
-    const filePath = path.join(CONFIG_DIR, req.params.name);
+    const filePath = safeConfigName(req.params.name);
+    if (!filePath) return badRequest(res, 'Invalid config name');
     if (!fs.existsSync(filePath)) {
       if (req.params.name === 'DESIGN.md') {
         return res.json({ content: '# Design System\n\nPreview your markdown here.' });
@@ -1192,7 +1425,8 @@ router.get('/api/config/:name', requireAuth, requireScope('config:read'), (req, 
 
 router.put('/api/config/:name', requireAuth, requireScope('config:write'), (req, res) => {
   try {
-    const filePath = path.join(CONFIG_DIR, req.params.name);
+    const filePath = safeConfigName(req.params.name);
+    if (!filePath) return badRequest(res, 'Invalid config name');
     if (!fs.existsSync(CONFIG_DIR)) {
       fs.mkdirSync(CONFIG_DIR, { recursive: true });
     }
@@ -1201,20 +1435,7 @@ router.put('/api/config/:name', requireAuth, requireScope('config:write'), (req,
   } catch (err) { serverError(res, err); }
 });
 
-router.post('/api/sandbox', requireAuth, requireScope('sandbox:run'), async (req, res) => {
-  const { code, timeout_ms = 5000 } = req.body || {};
-  if (!code) return badRequest(res, 'code is required');
-  const tmpPath = path.join(os.tmpdir(), `sandbox-${Date.now()}.mjs`);
-  try {
-    fs.writeFileSync(tmpPath, code);
-    const result = await runInSandbox(tmpPath, timeout_ms);
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ success: false, output: e.message });
-  } finally {
-    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
-  }
-});
+
 
 // ─── Quick Capture — Slack / Discord inbound webhooks ────────────────────────────
 // Feature: Phase 8 quick-capture (parallel to future Telegram path).
@@ -1280,6 +1501,21 @@ router.post('/api/tts', requireAuth, requireScope('tts:use'), async (req, res) =
 router.get('/api/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {
   return sendTextResource(res, INSTRUCTIONS, 'instructions');
 });
+
+router.put('/api/instructions', requireAuth, requireScope('instructions:write'), (req, res) => {
+  const { content } = req.body;
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid `content` field.' });
+  }
+  try {
+    fs.writeFileSync(INSTRUCTIONS, content, 'utf8');
+    return res.json({ success: true, message: 'Instructions updated successfully' });
+  } catch (err) {
+    logger.error('api', `Failed to write instructions: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 
 // ─── SSSS Resources (sync and integration consumers) ─────────────────────────
 

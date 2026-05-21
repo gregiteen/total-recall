@@ -1,0 +1,30 @@
+{
+  "name": "cli-agents",
+  "version": "1.0.0",
+  "assertions": [
+    {
+      "id": "health-check",
+      "description": "All three CLI agents must be installed and return version info",
+      "command": "node .agent/skills/cli-agents/scripts/health.mjs",
+      "expected_exit_code": 0
+    },
+    {
+      "id": "dispatch-gemini-plan",
+      "description": "Gemini CLI can execute a read-only plan mode prompt without error",
+      "command": "/Users/greg/.nvm/versions/node/v24.12.0/bin/gemini -p 'List the files in the current directory' --approval-mode plan -o json 2>&1 | head -5",
+      "expected_exit_code": 0
+    },
+    {
+      "id": "dispatch-claude-plan",
+      "description": "Claude Code can execute a read-only plan mode prompt without error",
+      "command": "claude -p 'What files are in this repo root?' --permission-mode plan --output-format text 2>&1 | head -5",
+      "expected_exit_code": 0
+    },
+    {
+      "id": "no-file-conflicts",
+      "description": "After parallel dispatch, git status should show no merge conflicts",
+      "command": "git diff --check 2>&1 | grep -c 'conflict' || echo 0",
+      "expected_output": "0"
+    }
+  ]
+}

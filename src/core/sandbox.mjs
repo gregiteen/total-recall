@@ -9,10 +9,12 @@ import { escalateToFrontier } from './frontier.mjs';
 
 export async function runInSandbox(scriptPath, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
+    // Cap timeout between 1s and 30s to prevent resource exhaustion
+    const cappedTimeout = Math.min(Math.max(timeoutMs, 1000), 30000);
     // Uses --experimental-vm-modules for ESM isolation if needed,
     // but typically a simple spawn with restricted permissions is enough for prototype.
     const safeEnv = {};
-    const whitelist = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'TERM', 'USER', 'SHELL', 'AGENT_DIR'];
+    const whitelist = ['PATH', 'TMPDIR', 'LANG', 'TERM'];
     for (const key of whitelist) {
       if (process.env[key]) {
         safeEnv[key] = process.env[key];
@@ -22,7 +24,7 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000) {
 
     const proc = spawn('node', ['--no-warnings', scriptPath], {
       env: safeEnv,
-      timeout: timeoutMs
+      timeout: cappedTimeout
     });
 
     let stdout = '';

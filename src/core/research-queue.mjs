@@ -37,18 +37,27 @@ export function saveQueue(items) {
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 /**
- * List all research projects, optionally filtered by status.
+ * List all research projects, optionally filtered by status or search query.
  * Sorted: pending → in_progress → done → failed, then by updated_at desc.
  *
- * @param {{ status?: string, limit?: number, offset?: number }} [opts]
+ * @param {{ status?: string, query?: string, limit?: number, offset?: number }} [opts]
  * @returns {{ counts: object, total: number, items: object[] }}
  */
-export function listQueue({ status, limit = 100, offset = 0 } = {}) {
+export function listQueue({ status, query, limit = 100, offset = 0 } = {}) {
   const all = loadQueue();
   const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
   all.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
 
   let items = status && status !== 'all' ? all.filter(i => i.status === status) : [...all];
+
+  if (query) {
+    const q = String(query).toLowerCase();
+    items = items.filter(i => 
+      (i.topic && i.topic.toLowerCase().includes(q)) || 
+      (i.notes && i.notes.toLowerCase().includes(q))
+    );
+  }
+
   items.sort((a, b) => {
     const ra = STATUS_RANK[a.status] ?? 4, rb = STATUS_RANK[b.status] ?? 4;
     if (ra !== rb) return ra - rb;

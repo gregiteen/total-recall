@@ -16,12 +16,13 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { loadRuntimeConfig } from './runtime.mjs';
 import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { runDreamCycle } from './dream.mjs';
 import { logger } from './logger.mjs';
+import { updateQueueItem } from './research-queue.mjs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
 
@@ -164,9 +165,12 @@ async function pushConclusion(conclusions = []) {
   fs.appendFileSync(INTERRUPTS_FILE, lines.join('\n'));
 
   // 3. macOS notification
-  const msg = summary.replace(/"/g, "'");
+  // Sanitize: strip all non-printable and shell-dangerous characters, then truncate
+  const msg = summary.replace(/[^ -~]/g, '').replace(/["'`$\\]/g, '').slice(0, 200);
   try {
-    execSync(`osascript -e 'display notification "${msg}" with title "Total Recall"'`, { timeout: 3000 });
+    execFileSync('osascript', [
+      '-e', `display notification "${msg}" with title "Total Recall"`
+    ], { timeout: 3000 });
   } catch { /* non-macOS — silent */ }
 }
 
@@ -233,6 +237,7 @@ async function runResearchTask(task, runtimeConfig) {
     return {
       success: true,
       output: `Researched "${result.topic}": ${result.sources?.join(', ')} | confidence: ${result.confidence || 'n/a'} | slug: ${result.factSlug}${surfaceNote}`,
+      factSlug: result.factSlug,
     };
   }
 
@@ -373,6 +378,30 @@ async function main() {
     message: `Runtime: ${runtimeConfig.runtime} / ${runtimeConfig.model}`,
   });
 
+  // ─── Startup Health Check ───────────────────────────────────────────────────
+  // Detect catastrophic issues BEFORE entering the task loop.
+  // Writes emergency alerts that get injected into all IDE instruction files.
+  const { runStartupHealthCheck, writeEmergencyAlert, clearEmergencyAlerts } =
+    await import('./emergency-alerts.mjs');
+
+  const health = await runStartupHealthCheck(runtimeConfig);
+  if (!health.healthy) {
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: `STARTUP HEALTH CHECK FAILED: ${health.issues.join(' | ')}`,
+    });
+    // Don't exit — continue anyway so the daemon can recover if the model becomes available
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: 'Continuing despite health check failure — will retry tasks and alert on persistent failures.',
+    });
+  } else {
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: 'Startup health check PASSED — LLM runtime healthy, emergency alerts cleared.',
+    });
+  }
+
   // Initial session ingest
   try {
     const ingestResult = scanAndIngest(SESSIONS_DIR);
@@ -384,65 +413,157 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Boot ingest failed: ${err.message}` });
   }
 
+  // Track consecutive LLM failures to detect persistent outages
+  let consecutiveLlmFailures = 0;
+  const LLM_FAILURE_ALERT_THRESHOLD = 5;
+  let llmAlertWritten = false;
+
   while (running) {
-    // Periodically run the full dream cycle for surface compilation + conflict resolution
-    if (taskCount > 0 && taskCount % DREAM_CYCLE_EVERY_N_TASKS === 0) {
-      logger.info({ subsystem: 'daemon-loop', message: 'Running scheduled dream cycle...' });
-      try {
-        await runDreamCycle({
-          vaultDir: VAULT_DIR,
-          skillsDir: SKILLS_DIR,
-          derivedDir: DERIVED_DIR,
-          conflictsDir: CONFLICTS_DIR,
-          instructionsFile: INSTRUCTIONS_FILE,
-        });
-      } catch (err) {
-        logger.info({ subsystem: 'daemon-loop', message: `Dream cycle error: ${err.message}` });
+    try {
+      // Periodically run the full dream cycle for surface compilation + conflict resolution
+      if (taskCount > 0 && taskCount % DREAM_CYCLE_EVERY_N_TASKS === 0) {
+        logger.info({ subsystem: 'daemon-loop', message: 'Running scheduled dream cycle...' });
+        try {
+          await runDreamCycle({
+            vaultDir: VAULT_DIR,
+            skillsDir: SKILLS_DIR,
+            derivedDir: DERIVED_DIR,
+            conflictsDir: CONFLICTS_DIR,
+            instructionsFile: INSTRUCTIONS_FILE,
+          });
+        } catch (err) {
+          logger.info({ subsystem: 'daemon-loop', message: `Dream cycle error: ${err.message}` });
+        }
       }
-    }
 
-    // Refresh scheduler from disk on each iteration (picks up new tasks)
-    const scheduler = createScheduler({
-      queueDir: QUEUE_DIR,
-      vaultDir: VAULT_DIR,
-      sessionsDir: SESSIONS_DIR,
-    });
+      // Refresh scheduler from disk on each iteration (picks up new tasks)
+      const scheduler = createScheduler({
+        queueDir: QUEUE_DIR,
+        vaultDir: VAULT_DIR,
+        sessionsDir: SESSIONS_DIR,
+      });
 
-    const { task, source } = scheduler.next();
-    taskCount++;
+      const { task, source } = scheduler.next();
+      taskCount++;
 
-    logger.info({
-      subsystem: 'daemon-loop',
-      message: `Task #${taskCount} [${source}] ${task.category}: ${task.slug}`,
-    });
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Task #${taskCount} [${source}] ${task.category}: ${task.slug}`,
+      });
 
-    // Mark in-progress
-    if (source === 'explicit' && task._filepath) {
-      updateTaskStatus(task, 'in-progress', QUEUE_DIR);
-    }
+      // Mark in-progress
+      if ((source === 'explicit' || source === 'idle') && task._filepath) {
+        try {
+          updateTaskStatus(task, 'in-progress', QUEUE_DIR);
+        } catch (statusErr) {
+          logger.info({
+            subsystem: 'daemon-loop',
+            message: `Failed to mark task in-progress (non-fatal): ${statusErr.message}`,
+          });
+        }
+      }
+      if (task._research_id) {
+        try {
+          updateQueueItem(task._research_id, { status: 'in_progress' });
+        } catch (err) {
+          logger.error({
+            subsystem: 'daemon-loop',
+            message: `Failed to update research queue status to in_progress: ${err.message}`,
+          });
+        }
+      }
 
-    const result = await dispatchTask(task, runtimeConfig);
+      const result = await dispatchTask(task, runtimeConfig);
 
-    // Mark complete
-    if (source === 'explicit' && task._filepath) {
-      updateTaskStatus(task, result.success ? 'completed' : 'failed', QUEUE_DIR);
-    }
+      // Mark complete
+      if ((source === 'explicit' || source === 'idle') && task._filepath) {
+        try {
+          updateTaskStatus(task, result.success ? 'completed' : 'failed', QUEUE_DIR);
+        } catch (statusErr) {
+          logger.info({
+            subsystem: 'daemon-loop',
+            message: `Failed to mark task complete (non-fatal): ${statusErr.message}`,
+          });
+        }
+      }
+      if (task._research_id) {
+        try {
+          const patch = {
+            status: result.success ? 'done' : 'failed',
+            notes: result.output || result.error || null,
+          };
+          if (result.factSlug) {
+            patch.node_slug = result.factSlug;
+          }
+          updateQueueItem(task._research_id, patch);
+        } catch (err) {
+          logger.error({
+            subsystem: 'daemon-loop',
+            message: `Failed to update research queue completion status: ${err.message}`,
+          });
+        }
+      }
 
-    logger.info({
-      subsystem: 'daemon-loop',
-      message: `Task #${taskCount} done: ${result.output || result.error || 'ok'}`,
-    });
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Task #${taskCount} done: ${result.output || result.error || 'ok'}`,
+      });
 
-    // If no LLM is available, the tasks fail fast — add a small pause to avoid spinning
-    if (!result.success && result.error?.includes('Connection failed')) {
-      await new Promise(r => setTimeout(r, FALLBACK_SLEEP_MS));
+      // Track consecutive LLM failures
+      if (!result.success && result.error?.includes('Connection failed')) {
+        consecutiveLlmFailures++;
+        if (consecutiveLlmFailures >= LLM_FAILURE_ALERT_THRESHOLD && !llmAlertWritten) {
+          writeEmergencyAlert(
+            `LLM runtime is persistently unreachable (${consecutiveLlmFailures} consecutive failures). ` +
+            `The daemon is running but CANNOT do any cognitive work. Check if Ollama is running and the model "${runtimeConfig.model}" is pulled.`
+          );
+          llmAlertWritten = true;
+        }
+        await new Promise(r => setTimeout(r, FALLBACK_SLEEP_MS));
+      } else {
+        // Reset failure counter on any success
+        if (consecutiveLlmFailures > 0 && result.success) {
+          consecutiveLlmFailures = 0;
+          if (llmAlertWritten) {
+            clearEmergencyAlerts();
+            llmAlertWritten = false;
+            logger.info({
+              subsystem: 'daemon-loop',
+              message: 'LLM connection recovered — emergency alerts cleared.',
+            });
+          }
+        }
+      }
+    } catch (loopErr) {
+      // ─── CRASH GUARD ─────────────────────────────────────────────────────
+      // Individual task failures must NEVER kill the daemon.
+      // Log the error and continue to the next task.
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Task loop iteration crashed (non-fatal, continuing): ${loopErr.message}`,
+      });
+      // Brief pause to avoid tight error loops
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 
   logger.info({ subsystem: 'daemon-loop', message: 'Active Intelligence Daemon stopped.' });
 }
 
-main().catch(err => {
+main().catch(async (err) => {
   logger.info({ subsystem: 'daemon-loop', message: `Fatal error: ${err.message}` });
+
+  // Write emergency alert so every IDE agent knows the daemon is dead
+  try {
+    const { writeEmergencyAlert } = await import('./emergency-alerts.mjs');
+    writeEmergencyAlert(
+      `The Active Intelligence Daemon has CRASHED with a fatal error: ${err.message}. ` +
+      `No background research, inference, or memory maintenance is running. ` +
+      `Restart with: node bin/total-recall.mjs daemon start`
+    );
+  } catch {
+    // If even the alert system fails, we still exit
+  }
+
   process.exit(1);
 });

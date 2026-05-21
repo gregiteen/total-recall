@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync, execSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 
 // ─── Logging Helpers ────────────────────────────────────────────────────────
 function log(msg)      { console.error(`  ${msg}`); }
@@ -21,8 +21,11 @@ function logSkip(msg)  { console.error(`  ⏭  ${msg}`); }
 function logWarn(msg)  { console.error(`  ⚠️  ${msg}`); }
 
 function commandExists(cmd) {
+  if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
+    return false;
+  }
   try {
-    execSync(`command -v ${cmd}`, { stdio: 'ignore' });
+    execFileSync('which', [cmd], { stdio: 'ignore' });
     return true;
   } catch { return false; }
 }
@@ -212,6 +215,10 @@ export default async function uninstall() {
     '.cursorrules',
     'AGENTS.md',
     'GEMINI.md',
+    '.github/copilot-instructions.md',
+    '.vscode/copilot-instructions.md',
+    '.windsurfrules',
+    'WINDSURF.md',
     'INSTRUCTIONS.md'
   ];
 

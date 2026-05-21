@@ -530,27 +530,6 @@ This skill includes an automated watcher (`scripts/watch.mjs`) that runs daily v
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-20T03:58:33.392Z -->
-
-- **voice-memory-capture-architecture** (confidence 0.92, importance 5):
-  Voice Memory Bank: whisper.cpp (tiny) for STT, Kokoro for TTS, mobile shortcuts for capture
-
-- **session-ingestion-via-file-watchers** (confidence 0.95, importance 5):
-  Ingest IDE conversations by watching local log directories, not proxying or capturing keystrokes
-
-- **non-developer-brain-backup** (confidence 1, importance 5):
-  Brain backup must work for non-developers — no git required
-
-- **premature-phase-completion-pattern** (confidence 0.99, importance 5):
-  Multiple project phases were marked complete in the tracker without actual implementation
-
-- **fix-or-add-to-tracker** (confidence 0.99, importance 4):
-  When you see something wrong, either fix it inline or add it to the master project tracker
-
-- **no-action-on-hypotheticals** (confidence 1, importance 5):
-  Never Take Action on Hypothetical Questions
-
-- **never-ignore-questions** (confidence 1, importance 5):
-  Never ignore direct questions from the user
+<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
 
 <!-- END INJECTED MEMORY -->

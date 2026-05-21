@@ -3,7 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime } from './runtime.mjs';
-import { loadNodes, atomicWrite } from './vault.mjs';
+import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -128,7 +128,7 @@ export async function runClarityReview(slug, { vaultDir, inboxDir, runtimeConfig
 
   atomicWrite(
     path.join(inboxDir, `${proposalSlug}.md`),
-    matter.stringify(proposalBody, proposalFrontmatter),
+    safeStringify(proposalBody, proposalFrontmatter),
   );
 
   logger.info({
@@ -255,7 +255,7 @@ export async function runStalenessCheck(slug, { vaultDir, queueDir, runtimeConfi
 
     atomicWrite(
       path.join(queueDir, `${taskSlug}.md`),
-      matter.stringify(taskBody, taskData),
+      safeStringify(taskBody, taskData),
     );
 
     logger.info({
@@ -367,7 +367,7 @@ export async function runFactSeeker({ vaultDir, queueDir, runtimeConfig }) {
 
     atomicWrite(
       path.join(queueDir, `${taskSlug}.md`),
-      matter.stringify(taskBody, taskData),
+      safeStringify(taskBody, taskData),
     );
   }
 
@@ -551,7 +551,7 @@ export async function runCutoffAudit({ vaultDir, queueDir, runtimeConfig }) {
         result.cutoff_assumption_summary || '',
       ].join('\n');
 
-      atomicWrite(path.join(queueDir, `${taskSlug}.md`), matter.stringify(taskBody, taskData));
+      atomicWrite(path.join(queueDir, `${taskSlug}.md`), safeStringify(taskBody, taskData));
     }
 
     // Stamp the node with an audit timestamp and risk level
@@ -573,7 +573,7 @@ async function stampVerified(node) {
     const { data, content } = matter(raw);
     data.x_cutoff_verified_at = new Date().toISOString();
     data.x_cutoff_risk = 'none';
-    atomicWrite(node._filepath, matter.stringify(content, data));
+    atomicWrite(node._filepath, safeStringify(content, data));
   } catch { /* non-fatal */ }
 }
 
@@ -588,7 +588,7 @@ async function stampCutoffRisk(node, riskLevel, claimCount) {
     // Lower confidence to reflect that claims are unverified
     const confidencePenalty = riskLevel === 'critical' ? 0.3 : riskLevel === 'high' ? 0.2 : 0.1;
     data.confidence = Math.max(0.1, (data.confidence || 0.5) - confidencePenalty);
-    atomicWrite(node._filepath, matter.stringify(content, data));
+    atomicWrite(node._filepath, safeStringify(content, data));
   } catch { /* non-fatal */ }
 }
 
@@ -727,7 +727,7 @@ export async function writeCorrection(originalSlug, researchEvidence, { vaultDir
   ].join('\n');
 
   if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
-  atomicWrite(path.join(inboxDir, `${correctionSlug}.md`), matter.stringify(body, correctionFrontmatter));
+  atomicWrite(path.join(inboxDir, `${correctionSlug}.md`), safeStringify(body, correctionFrontmatter));
 
   // Stamp the original node as pending-correction
   await stampNodeForCorrection(original, correctionSlug, result.original_should_be);
@@ -751,6 +751,6 @@ async function stampNodeForCorrection(node, correctionSlug, disposition) {
     // Lower confidence significantly — this fact has been proven wrong
     data.confidence = Math.max(0.05, (data.confidence || 0.5) * 0.3);
     data.updated = new Date().toISOString();
-    atomicWrite(node._filepath, matter.stringify(content, data));
+    atomicWrite(node._filepath, safeStringify(content, data));
   } catch { /* non-fatal */ }
 }

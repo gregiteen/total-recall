@@ -6,28 +6,25 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 # SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-20T03:58:33.392Z -->
+<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
 
-- **self-improving-loop-architecture** (confidence 1, importance 5):
-  Total Recall self-improving loop — the improver improves the improver
+- **inviolable-ide-instruction-7a4d8913** (confidence 1, importance critical):
+  Inviolable IDE Instruction: # Temporary Cursor Rules for testing
 
-- **no-ultrachat-memory-path-drift** (confidence 1, importance 5):
-  Do not store UltraChat memory in ad hoc memory/assistants paths
-
-- **no-ultrachat-memory-database-framing** (confidence 1, importance 5):
-  Do not frame UltraChat memory as database-backed
-
-- **operating-instructions** (confidence undefined, importance 5):
+- **operating-instructions** (confidence 1, importance 5):
   Total Recall Core Operating Protocol
 
-- **no-local-ultrachat-restart-guidance** (confidence 1, importance 5):
-  Do not tell users to restart UltraChat as a local service
+- **always-reply-to-all-messages** (confidence 1, importance critical):
+  Always reply directly to all user messages without exception
 
-- **no-local-total-recall-runtime-assumption** (confidence 1, importance 5):
-  Do not assume Total Recall runs on the local Mac
+- **no-cursor-or-windsurf-mentions** (confidence 1, importance critical):
+  Do not mention Cursor or Windsurf
 
-- **never-ignore-questions** (confidence 1, importance 5):
-  Never ignore direct questions from the user
+- **research-code-as-agent-harness** (confidence 0.95, importance 4):
+  Research: Code as Agent Harness (arXiv:2605.18747)
+
+- **chocolate-brownies** (confidence 0.95, importance 4):
+  Chocolate brownies must be fudgey and rich
 
 <!-- END INJECTED MEMORY -->
 

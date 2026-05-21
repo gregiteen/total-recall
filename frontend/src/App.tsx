@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import './App.css'
-import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback } from './api'
+import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
+import type { HealthData } from './types'
 import LoginPage from './pages/LoginPage'
 import ChatPage from './pages/ChatPage'
 import MemoryPage from './pages/MemoryPage'
@@ -20,9 +21,10 @@ type AuthState = 'loading' | 'authed' | 'unauthed'
 
 interface SidebarProps {
   onLogout: () => void
+  health: HealthData | null
 }
 
-function Sidebar({ onLogout }: SidebarProps) {
+function Sidebar({ onLogout, health }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -109,8 +111,45 @@ function Sidebar({ onLogout }: SidebarProps) {
           </select>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-tertiary)' }}>
-            <span className="pulse" /> System Online
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
+            {(() => {
+              const ollamaOk = health?.ollama === 'online'
+              const hasModel = ollamaOk && (health?.ollama_models?.length ?? 0) > 0
+              const daemonOk = health?.daemon === 'running'
+              const allGood = ollamaOk && hasModel && daemonOk
+
+              const Dot = ({ ok, label }: { ok: boolean; label: string }) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}>
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: ok ? '#22c55e' : '#ef4444',
+                    boxShadow: ok ? '0 0 6px rgba(34,197,94,0.5)' : '0 0 6px rgba(239,68,68,0.5)',
+                    display: 'inline-block',
+                    animation: ok ? undefined : 'blink 1s ease-in-out infinite',
+                  }} />
+                  {label}
+                </div>
+              )
+
+              if (!health) return <div style={{ color: 'var(--text-tertiary)' }}>Checking…</div>
+
+              return (
+                <>
+                  <style>{`@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }`}</style>
+                  {allGood ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}>
+                      <span className="pulse" /> All Systems Go
+                    </div>
+                  ) : (
+                    <>
+                      <Dot ok={ollamaOk} label={ollamaOk ? 'Ollama' : 'Ollama offline'} />
+                      <Dot ok={hasModel} label={hasModel ? (health?.ollama_models?.[0] ?? 'Model') : 'No model'} />
+                      <Dot ok={daemonOk} label={daemonOk ? 'Daemon' : 'Daemon ' + (health?.daemon ?? 'unknown')} />
+                    </>
+                  )}
+                </>
+              )
+            })()}
           </div>
           {/* Logout button */}
           <button
@@ -213,10 +252,83 @@ function MainContent() {
   );
 }
 
+// ─── Emergency Alert Banner ───────────────────────────────────────────────────
+// Polls /health every 10s and shows a loud, pulsing red banner when anything
+// is critically wrong: daemon dead, Ollama offline, model missing, etc.
+
+function EmergencyAlertBanner({ health }: { health: HealthData | null }) {
+
+  if (!health) return null
+
+  const issues: string[] = []
+
+  if (health.status === 'unreachable') {
+    issues.push('🔌 Brain server is unreachable — is it running?')
+  }
+  if (health.daemon === 'dead') {
+    issues.push('💀 Active Intelligence Daemon is DEAD — no background research or inference is running. Restart: node bin/total-recall.mjs daemon start')
+  }
+  if (health.daemon === 'not_started') {
+    issues.push('⏸️ Daemon has never been started — run: node bin/total-recall.mjs daemon start')
+  }
+  if (health.ollama === 'offline') {
+    issues.push('🔴 Ollama is offline — the brain cannot think. Start Ollama.')
+  }
+  if (health.ollama === 'online' && health.ollama_models && health.ollama_models.length === 0) {
+    issues.push('⚠️ No models pulled in Ollama — run: ollama pull gemma4:26b')
+  }
+  if (health.emergency_alerts) {
+    issues.push(health.emergency_alerts.replace(/<!--[^>]*-->/g, '').trim())
+  }
+
+  if (issues.length === 0) return null
+
+  return (
+    <div id="emergency-alert-banner" style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 99999,
+      background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 50%, #dc2626 100%)',
+      backgroundSize: '200% 200%',
+      animation: 'alertPulse 2s ease-in-out infinite',
+      color: '#fff',
+      padding: '12px 24px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: 14,
+      fontWeight: 600,
+      boxShadow: '0 4px 20px rgba(220, 38, 38, 0.5)',
+      borderBottom: '2px solid #fca5a5',
+    }}>
+      <style>{`
+        @keyframes alertPulse {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+      `}</style>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, maxWidth: 1200, margin: '0 auto' }}>
+        <span style={{ fontSize: 22, lineHeight: '1' }}>🚨</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Critical System Failure
+          </div>
+          {issues.map((issue, i) => (
+            <div key={i} style={{ fontSize: 13, fontWeight: 400, opacity: 0.95, marginTop: 2, whiteSpace: 'pre-wrap' }}>
+              {issue}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Root App with auth gate ──────────────────────────────────────────────────
 
 function App() {
   const [authState, setAuthState] = useState<AuthState>('loading')
+  const [health, setHealth] = useState<HealthData | null>(null)
 
   // Register 401 interceptor so any API call that gets a 401 flips us to unauthed
   useEffect(() => {
@@ -227,6 +339,22 @@ function App() {
   // Session check on mount — probe /auth/me before rendering anything
   useEffect(() => {
     checkSession().then(ok => setAuthState(ok ? 'authed' : 'unauthed'))
+  }, [])
+
+  // Health polling — shared by EmergencyAlertBanner and Sidebar
+  useEffect(() => {
+    let active = true
+    const poll = async () => {
+      try {
+        const data = await fetchHealth()
+        if (active) setHealth(data)
+      } catch {
+        if (active) setHealth({ status: 'unreachable', version: '', uptime_seconds: 0, timestamp: '' })
+      }
+    }
+    poll()
+    const interval = setInterval(poll, 10000)
+    return () => { active = false; clearInterval(interval) }
   }, [])
 
   async function handleLogout() {
@@ -261,11 +389,12 @@ function App() {
     return <LoginPage onAuthenticated={handleAuthenticated} />
   }
 
-  // Authed — render full dashboard
+  // Authed — render full dashboard with emergency alert banner
   return (
     <BrowserRouter>
+      <EmergencyAlertBanner health={health} />
       <div className="app-layout">
-        <Sidebar onLogout={handleLogout} />
+        <Sidebar onLogout={handleLogout} health={health} />
         <MainContent />
       </div>
     </BrowserRouter>

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { atomicWrite } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
 
 /**
  * Task Runner for Total Recall
@@ -40,7 +40,7 @@ export function updateTaskStatus(task, newStatus, error = null) {
     frontmatter.error = error;
   }
 
-  const raw = matter.stringify(body || '', frontmatter);
+  const raw = safeStringify(body || '', frontmatter);
   atomicWrite(filepath, raw);
   return { ...task, status: newStatus };
 }
