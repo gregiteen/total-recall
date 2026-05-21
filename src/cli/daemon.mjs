@@ -35,7 +35,7 @@ function commandExists(cmd) {
 }
 
 function hasSystemd() {
-  return os.platform() === 'linux' && commandExists('systemctl');
+  return os.platform() === 'linux' && commandExists('systemctl') && fs.existsSync('/run/systemd/system');
 }
 
 function launchAgentPlist(name) {
