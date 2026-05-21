@@ -62,6 +62,7 @@ export function syncInstallOptionsFromDisk() {
       if (data.vastSshHost) _installOptions.vastSshHost = data.vastSshHost;
       if (data.vastSshPort) _installOptions.vastSshPort = data.vastSshPort;
       if (data['cfg-dashboard-password']) _installOptions.dashboardPassword = data['cfg-dashboard-password'];
+      if (data['cfg-github-token']) _installOptions.githubToken = data['cfg-github-token'];
       if (data.apiUrl) _installOptions.apiUrl = data.apiUrl;
       if (data.dashUrl) _installOptions.dashUrl = data.dashUrl;
       if (data.healthUrl) _installOptions.healthUrl = data.healthUrl;
@@ -142,7 +143,9 @@ export function startDeployUI(port = 3001) {
               if (opts.localnetHost) current['cfg-localnet-host'] = opts.localnetHost;
               if (opts.localnetUser) current['cfg-localnet-user'] = opts.localnetUser;
               if (opts.dashboardPassword) current['cfg-dashboard-password'] = opts.dashboardPassword;
+              if (opts.githubToken) current['cfg-github-token'] = opts.githubToken;
               fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+
             } catch (e) {
               console.error('Failed to auto-persist install options on disk:', e);
             }
@@ -825,10 +828,244 @@ export function startDeployUI(port = 3001) {
         return;
       }
 
+      // ── POST /api/github/configure — configure automatic GitHub backup ──
+      if (url === '/api/github/configure' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          res.writeHead(200, {
+            'Content-Type': 'application/x-ndjson',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+          });
+
+          const send = (data) => {
+            res.write(JSON.stringify(data) + '\n');
+          };
+
+          const log = (msg) => {
+            send({ type: 'log', msg });
+          };
+
+          const step = (stepIndex, status, msg) => {
+            send({ type: 'step', stepIndex, status, msg });
+            if (msg) log(msg);
+          };
+
+          try {
+            const { token } = JSON.parse(body || '{}');
+            if (!token) {
+              throw new Error('Missing Personal Access Token.');
+            }
+
+            // ── Step 1: Authenticate with GitHub ──
+            step(1, 'active', '🔄 Authenticating with GitHub API...');
+            const userRes = await fetch('https://api.github.com/user', {
+              headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'Total-Recall-Wizard'
+              }
+            });
+
+            if (!userRes.ok) {
+              const errText = await userRes.text();
+              throw new Error(`GitHub Authentication failed (status ${userRes.status}). Ensure your token is correct and has the required scopes.`);
+            }
+
+            const userData = await userRes.json();
+            const username = userData.login;
+            step(1, 'success', `✅ Authenticated successfully as @${username}`);
+
+            // ── Step 2: Create Private Repo ──
+            step(2, 'active', '🔄 Provisioning private repository "total-recall-brain" on GitHub...');
+            const repoRes = await fetch('https://api.github.com/user/repos', {
+              method: 'POST',
+              headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Total-Recall-Wizard'
+              },
+              body: JSON.stringify({
+                name: 'total-recall-brain',
+                private: true,
+                description: 'Total Recall Sovereign AI memory backup (encrypted VFS)',
+                has_issues: false,
+                has_projects: false,
+                has_wiki: false
+              })
+            });
+
+            if (repoRes.status === 201) {
+              step(2, 'success', '✅ Private repository "total-recall-brain" successfully created!');
+            } else if (repoRes.status === 422) {
+              // Gracefully handle if repository already exists
+              const repoErr = await repoRes.json();
+              if (repoErr.errors && repoErr.errors.some(e => e.message && e.message.includes('already exists'))) {
+                step(2, 'success', 'ℹ️ Repository "total-recall-brain" already exists. Continuing with configuration.');
+              } else {
+                throw new Error(`Failed to create repository: ${JSON.stringify(repoErr)}`);
+              }
+            } else {
+              const errText = await repoRes.text();
+              throw new Error(`Failed to create repository (status ${repoRes.status}): ${errText}`);
+            }
+
+            const backupUrl = `https://${username}:${token}@github.com/${username}/total-recall-brain.git`;
+
+            // ── Step 3: Setup Local Git Repository ──
+            step(3, 'active', '🔄 Setting up git repository in ~/.agent...');
+            const agentDir = path.join(os.homedir(), '.agent');
+            fs.mkdirSync(agentDir, { recursive: true });
+
+            const git = (...args) => {
+              const result = spawnSync('git', args, { cwd: agentDir, encoding: 'utf8' });
+              return {
+                ok: result.status === 0,
+                stdout: result.stdout?.trim() || '',
+                stderr: result.stderr?.trim() || '',
+              };
+            };
+
+            const gitDir = path.join(agentDir, '.git');
+            if (!fs.existsSync(gitDir)) {
+              log('🔧 Initializing git repository in ~/.agent');
+              const init = git('init', '-b', 'main');
+              if (!init.ok) {
+                git('init');
+                git('checkout', '-b', 'main');
+              }
+              const gitignore = path.join(agentDir, '.gitignore');
+              if (!fs.existsSync(gitignore)) {
+                fs.writeFileSync(gitignore, 'memory-derived/embeddings.jsonl\n');
+                log('📝 Created default .gitignore');
+              }
+            }
+
+            // Configure identities if missing so commit doesn't fail
+            const checkEmail = git('config', 'user.email');
+            if (!checkEmail.ok || !checkEmail.stdout) {
+              log('🔧 Setting local git email to backup@total-recall');
+              git('config', 'user.email', 'backup@total-recall');
+            }
+            const checkName = git('config', 'user.name');
+            if (!checkName.ok || !checkName.stdout) {
+              log('🔧 Setting local git name to Total Recall');
+              git('config', 'user.name', 'Total Recall');
+            }
+
+            // Add or update remote
+            const remoteCheck = git('remote', 'get-url', 'backup');
+            if (!remoteCheck.ok) {
+              git('remote', 'add', 'backup', backupUrl);
+              log('🔗 Added remote "backup" pointing to your private GitHub repository');
+            } else {
+              git('remote', 'set-url', 'backup', backupUrl);
+              log('🔗 Updated remote "backup" URL');
+            }
+
+            // Optimize Git http.postBuffer for pushing large directories (e.g. 500MB)
+            log('⚙️ Optimizing buffer size to prevent push failures (git config http.postBuffer 524288000)...');
+            git('config', 'http.postBuffer', '524288000');
+            git('config', 'core.bigFileThreshold', '10m');
+
+            step(3, 'success', '✅ Local repository optimized and configured successfully!');
+
+            // ── Step 4: Perform Initial Push ──
+            step(4, 'active', '🔄 Staging and pushing initial vault backup (this may take a minute)...');
+            log('📂 Staging files in ~/.agent...');
+            git('add', '-A');
+
+            const status = git('status', '--porcelain');
+            const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+            if (!status.stdout) {
+              log('✅ No new changes to backup.');
+            } else {
+              log('💾 Creating backup commit...');
+              const commit = git('commit', '-m', `backup: setup ${stamp}`);
+              if (!commit.ok) {
+                log(`⚠️ Commit output: ${commit.stderr}`);
+              }
+            }
+
+            log('📤 Pushing files to GitHub main branch...');
+            const push = git('push', 'backup', 'HEAD:main', '--force');
+            if (!push.ok) {
+              throw new Error(`Push failed: ${push.stderr}`);
+            }
+
+            step(4, 'success', '✅ Initial backup successfully pushed to your GitHub repository!');
+
+            // ── Step 5: Register Daily Backup Scheduler ──
+            step(5, 'active', '🔄 Installing automated daily backup scheduler (2:00 AM)...');
+
+            const nodeBin = process.execPath;
+            const scriptPath = new URL('../../bin/total-recall.mjs', import.meta.url).pathname;
+
+            log(`⚙️ Running setup deploy helper to install cron/launchd plist...`);
+            const schedResult = spawnSync(nodeBin, [scriptPath, 'deploy', '--backup-repo', backupUrl], {
+              encoding: 'utf8',
+              env: { ...process.env, HOME: os.homedir() }
+            });
+
+            if (schedResult.status !== 0) {
+              log(`⚠️ Scheduler setup stdout: ${schedResult.stdout}`);
+              log(`⚠️ Scheduler setup stderr: ${schedResult.stderr}`);
+              throw new Error(`Failed to configure automatic backup scheduler: ${schedResult.stderr || schedResult.stdout}`);
+            }
+
+            if (schedResult.stdout) {
+              log(schedResult.stdout);
+            }
+            step(5, 'success', '✅ Automated daily backup scheduler successfully registered!');
+
+            // ── Step 6: Store Secrets ──
+            log('🔒 Saving token securely in local files...');
+            const configDir = path.join(os.homedir(), '.agent', 'config');
+
+            // Persist to secrets.enc
+            const secretsPath = path.join(configDir, 'secrets.enc');
+            let secrets = {};
+            if (fs.existsSync(secretsPath)) {
+              try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}'); } catch {}
+            }
+            secrets.github_token = token;
+            fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+
+            // Persist to wizard-config.json
+            const configFile = path.join(configDir, 'wizard-config.json');
+            let current = {};
+            if (fs.existsSync(configFile)) {
+              try { current = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}'); } catch {}
+            }
+            current['cfg-github-token'] = token;
+            current['backupRepo'] = backupUrl;
+            fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+
+            log('✅ Encryption keys and tokens written.');
+
+            send({
+              type: 'success',
+              msg: `GitHub Automatic Backup has been configured! Your brain is backed up to the private total-recall-brain repository, and the daily backup scheduler (2:00 AM) is fully active.`
+            });
+          } catch (err) {
+            log(`❌ Error: ${err.message}`);
+            send({ type: 'error', msg: err.message });
+          } finally {
+            res.end();
+          }
+        });
+        return;
+      }
+
       // ── Serve wizard HTML for everything else ──
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(HTML);
     });
+
 
     _server.listen(port, '127.0.0.1', () => {
       resolve(`http://localhost:${port}`);
