@@ -34,7 +34,6 @@ api:
 # Rate limiting
 rate_limits:
   api_requests_per_minute: 60
-  mcp_requests_per_minute: 120
 
 # Network binding
 bind:
