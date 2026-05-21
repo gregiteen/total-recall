@@ -237,15 +237,6 @@ To avoid digging through source code or executing blind searches, use these auth
 ---
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
-
-- **operating-instructions** (confidence 1, importance 5):
-  Total Recall Core Operating Protocol
-
-- **no-cursor-or-windsurf-mentions** (confidence 1, importance critical):
-  Do not mention Cursor or Windsurf
-
-- **always-reply-to-all-messages** (confidence 1, importance critical):
-  Always reply directly to all user messages without exception
+<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
 
 <!-- END INJECTED MEMORY -->

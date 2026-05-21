@@ -338,12 +338,6 @@ console.log(`Found ${results.total} matching research tasks.`);
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
-
-- **chocolate-brownies** (confidence 0.95, importance 4):
-  Chocolate brownies must be fudgey and rich
-
-- **research-code-as-agent-harness** (confidence 0.95, importance 4):
-  Research: Code as Agent Harness (arXiv:2605.18747)
+<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
 
 <!-- END INJECTED MEMORY -->

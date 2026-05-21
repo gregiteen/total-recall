@@ -423,9 +423,6 @@ Each CLI agent stores usage data natively. The monitor reads these for real stat
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
-
-- **security-audit-protocol** (confidence 1, importance 4):
-  Security audit protocol and hardening requirements
+<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
 
 <!-- END INJECTED MEMORY -->

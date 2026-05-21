@@ -6,25 +6,7 @@ description: "Use this skill when reading, writing, parsing, or verifying the St
 # SSSS — Total Recall Implementation
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
-
-- **inviolable-ide-instruction-7a4d8913** (confidence 1, importance critical):
-  Inviolable IDE Instruction: # Temporary Cursor Rules for testing
-
-- **operating-instructions** (confidence 1, importance 5):
-  Total Recall Core Operating Protocol
-
-- **always-reply-to-all-messages** (confidence 1, importance critical):
-  Always reply directly to all user messages without exception
-
-- **no-cursor-or-windsurf-mentions** (confidence 1, importance critical):
-  Do not mention Cursor or Windsurf
-
-- **research-code-as-agent-harness** (confidence 0.95, importance 4):
-  Research: Code as Agent Harness (arXiv:2605.18747)
-
-- **chocolate-brownies** (confidence 0.95, importance 4):
-  Chocolate brownies must be fudgey and rich
+<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
 
 <!-- END INJECTED MEMORY -->
 

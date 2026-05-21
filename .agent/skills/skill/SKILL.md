@@ -248,9 +248,6 @@ The enforcement script (`scripts/enforce-skill-optimization.mjs`) validates all 
 
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T08:13:53.299Z -->
-
-- **inviolable-ide-instruction-7a4d8913** (confidence 1, importance critical):
-  Inviolable IDE Instruction: # Temporary Cursor Rules for testing
+<!-- @route: tfidf, generated_at: 2026-05-21T22:16:17.207Z -->
 
 <!-- END INJECTED MEMORY -->
