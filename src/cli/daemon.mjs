@@ -191,7 +191,7 @@ function directStart() {
   if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
   const logFd = fs.openSync(LOG_FILE, 'a');
-  const child = spawn('node', [dreamScript], {
+  const child = spawn(process.execPath, [dreamScript], {
     detached: true,
     stdio: ['ignore', logFd, logFd],
     cwd: ROOT,
