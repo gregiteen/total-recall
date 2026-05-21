@@ -4,7 +4,7 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
-import { loadQueue } from './research-queue.mjs';
+import { loadQueue, updateQueueItem } from './research-queue.mjs';
 
 /**
  * Total Recall Task Scheduler
@@ -447,6 +447,37 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
 
   // Load pending research queue tasks
   try {
+    const COOLDOWN_MS = process.env.RESEARCH_COOLDOWN_MS
+      ? parseInt(process.env.RESEARCH_COOLDOWN_MS, 10)
+      : 60 * 60 * 1000; // 1 hour default
+
+    const allItems = loadQueue();
+    let resetCount = 0;
+
+    for (const item of allItems) {
+      if (item.status === 'done' || item.status === 'failed') {
+        const completedTime = new Date(item.completed_at || item.updated_at || 0).getTime();
+        if (Date.now() - completedTime >= COOLDOWN_MS) {
+          try {
+            updateQueueItem(item.id, { status: 'pending' });
+            resetCount++;
+          } catch (updateErr) {
+            logger.error({
+              subsystem: 'scheduler',
+              message: `Failed to reset research queue item ${item.id} to pending: ${updateErr.message}`,
+            });
+          }
+        }
+      }
+    }
+
+    if (resetCount > 0) {
+      logger.info({
+        subsystem: 'scheduler',
+        message: `Auto-reset ${resetCount} completed/failed research items back to pending after cooldown.`,
+      });
+    }
+
     const researchItems = loadQueue().filter((i) => i.status === 'pending');
     for (const item of researchItems) {
       queue.enqueue({

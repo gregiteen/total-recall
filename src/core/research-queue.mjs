@@ -14,24 +14,28 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
-const QUEUE_FILE = path.join(AGENT_DIR, 'research-queue.jsonl');
+function getQueueFile() {
+  const agentDir = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+  return path.join(agentDir, 'research-queue.jsonl');
+}
 
 const STATUS_RANK = { pending: 0, in_progress: 1, done: 2, failed: 3 };
 
 // ── I/O ───────────────────────────────────────────────────────────────────────
 
 export function loadQueue() {
-  if (!fs.existsSync(QUEUE_FILE)) return [];
-  return fs.readFileSync(QUEUE_FILE, 'utf8')
+  const queueFile = getQueueFile();
+  if (!fs.existsSync(queueFile)) return [];
+  return fs.readFileSync(queueFile, 'utf8')
     .split('\n').filter(Boolean)
     .map(l => { try { return JSON.parse(l); } catch { return null; } })
     .filter(Boolean);
 }
 
 export function saveQueue(items) {
-  fs.mkdirSync(path.dirname(QUEUE_FILE), { recursive: true });
-  fs.writeFileSync(QUEUE_FILE, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
+  const queueFile = getQueueFile();
+  fs.mkdirSync(path.dirname(queueFile), { recursive: true });
+  fs.writeFileSync(queueFile, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -107,7 +111,12 @@ export function updateQueueItem(id, patch = {}) {
   if (idx === -1) throw Object.assign(new Error(`Research project not found: ${id}`), { status: 404 });
 
   const item = { ...items[idx] };
-  if (patch.status    !== undefined) item.status    = patch.status;
+  if (patch.status    !== undefined) {
+    item.status    = patch.status;
+    if (patch.status === 'pending') {
+      item.completed_at = null;
+    }
+  }
   if (patch.notes     !== undefined) item.notes     = patch.notes;
   if (patch.node_slug !== undefined) item.node_slug = patch.node_slug;
   if (patch.priority  !== undefined) item.priority  = patch.priority;
