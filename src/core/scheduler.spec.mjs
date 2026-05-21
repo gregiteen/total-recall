@@ -11,6 +11,7 @@ import {
   generateIdleTask,
   createScheduler,
 } from './scheduler.mjs';
+import { saveQueue, loadQueue } from './research-queue.mjs';
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sched-'));
@@ -221,12 +222,16 @@ describe('generateIdleTask', () => {
 // ─── createScheduler ────────────────────────────────────────────────────────────
 
 describe('createScheduler', () => {
-  let queueDir, vaultDir, sessionsDir;
+  let queueDir, vaultDir, sessionsDir, tempAgentDir;
+  let originalAgentDir;
 
   beforeEach(() => {
     queueDir = tmpDir();
     vaultDir = tmpDir();
     sessionsDir = tmpDir();
+    tempAgentDir = tmpDir();
+    originalAgentDir = process.env.AGENT_DIR;
+    process.env.AGENT_DIR = tempAgentDir;
 
     // Create vault with nodes
     const dir = path.join(vaultDir, 'patterns');
@@ -246,9 +251,11 @@ describe('createScheduler', () => {
   });
 
   afterEach(() => {
+    process.env.AGENT_DIR = originalAgentDir;
     fs.rmSync(queueDir, { recursive: true, force: true });
     fs.rmSync(vaultDir, { recursive: true, force: true });
     fs.rmSync(sessionsDir, { recursive: true, force: true });
+    fs.rmSync(tempAgentDir, { recursive: true, force: true });
   });
 
   it('loads explicit tasks and serves them first', () => {
@@ -277,6 +284,120 @@ describe('createScheduler', () => {
     for (let i = 0; i < 10; i++) {
       const { task } = sched.next();
       expect(task).toBeTruthy();
+    }
+  });
+});
+
+describe('createScheduler - Continuous Research Mode', () => {
+  let queueDir, vaultDir, sessionsDir, tempAgentDir;
+  let originalAgentDir;
+
+  beforeEach(() => {
+    queueDir = tmpDir();
+    vaultDir = tmpDir();
+    sessionsDir = tmpDir();
+    tempAgentDir = tmpDir();
+    originalAgentDir = process.env.AGENT_DIR;
+    process.env.AGENT_DIR = tempAgentDir;
+  });
+
+  afterEach(() => {
+    process.env.AGENT_DIR = originalAgentDir;
+    fs.rmSync(queueDir, { recursive: true, force: true });
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+    fs.rmSync(sessionsDir, { recursive: true, force: true });
+    fs.rmSync(tempAgentDir, { recursive: true, force: true });
+  });
+
+  it('resets completed/failed research queue items whose cooldown has elapsed', () => {
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+
+    const items = [
+      {
+        id: '1',
+        topic: 'Topic A',
+        status: 'done',
+        priority: 'medium',
+        completed_at: new Date(now - oneHour - 1000).toISOString(),
+        updated_at: new Date(now - oneHour - 1000).toISOString()
+      },
+      {
+        id: '2',
+        topic: 'Topic B',
+        status: 'failed',
+        priority: 'high',
+        completed_at: new Date(now - oneHour - 5000).toISOString(),
+        updated_at: new Date(now - oneHour - 5000).toISOString()
+      },
+      {
+        id: '3',
+        topic: 'Topic C',
+        status: 'done',
+        priority: 'low',
+        completed_at: new Date(now - 10000).toISOString(), // recently done
+        updated_at: new Date(now - 10000).toISOString()
+      }
+    ];
+
+    saveQueue(items);
+
+    // Run scheduler
+    createScheduler({ queueDir, vaultDir, sessionsDir });
+    
+    // Check queue
+    const updatedItems = loadQueue();
+    const topicA = updatedItems.find(i => i.id === '1');
+    const topicB = updatedItems.find(i => i.id === '2');
+    const topicC = updatedItems.find(i => i.id === '3');
+
+    // Topic A and B should be pending and completed_at should be null
+    expect(topicA.status).toBe('pending');
+    expect(topicA.completed_at).toBeNull();
+    expect(topicB.status).toBe('pending');
+    expect(topicB.completed_at).toBeNull();
+
+    // Topic C should remain done
+    expect(topicC.status).toBe('done');
+    expect(topicC.completed_at).toBeTruthy();
+  });
+
+  it('supports custom cooldown via environment variable', () => {
+    process.env.RESEARCH_COOLDOWN_MS = '10000'; // 10 seconds custom cooldown
+    const now = Date.now();
+
+    const items = [
+      {
+        id: '1',
+        topic: 'Topic A',
+        status: 'done',
+        priority: 'medium',
+        completed_at: new Date(now - 15000).toISOString(),
+        updated_at: new Date(now - 15000).toISOString()
+      },
+      {
+        id: '2',
+        topic: 'Topic B',
+        status: 'done',
+        priority: 'medium',
+        completed_at: new Date(now - 5000).toISOString(),
+        updated_at: new Date(now - 5000).toISOString()
+      }
+    ];
+
+    saveQueue(items);
+
+    try {
+      createScheduler({ queueDir, vaultDir, sessionsDir });
+      
+      const updatedItems = loadQueue();
+      const topicA = updatedItems.find(i => i.id === '1');
+      const topicB = updatedItems.find(i => i.id === '2');
+
+      expect(topicA.status).toBe('pending');
+      expect(topicB.status).toBe('done');
+    } finally {
+      delete process.env.RESEARCH_COOLDOWN_MS;
     }
   });
 });
