@@ -400,4 +400,111 @@ describe('createScheduler - Continuous Research Mode', () => {
       delete process.env.RESEARCH_COOLDOWN_MS;
     }
   });
+
+  it('sorts pending items oldest-first and applies dynamic priority boosts so the oldest runs first', () => {
+    const now = Date.now();
+    const items = [
+      {
+        id: 'newest',
+        topic: 'Newest Topic',
+        status: 'pending',
+        priority: 'medium',
+        updated_at: new Date(now - 1000).toISOString(),
+        created_at: new Date(now - 1000).toISOString()
+      },
+      {
+        id: 'oldest',
+        topic: 'Oldest Topic',
+        status: 'pending',
+        priority: 'medium',
+        updated_at: new Date(now - 10000).toISOString(),
+        created_at: new Date(now - 10000).toISOString()
+      },
+      {
+        id: 'middle',
+        topic: 'Middle Topic',
+        status: 'pending',
+        priority: 'medium',
+        updated_at: new Date(now - 5000).toISOString(),
+        created_at: new Date(now - 5000).toISOString()
+      }
+    ];
+
+    saveQueue(items);
+
+    const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
+    
+    // The scheduler next task should dequeue the oldest item first
+    const firstTask = sched.next().task;
+    expect(firstTask.slug).toBe('research-acquisition-oldest');
+    expect(firstTask.priority).toBe(88); // 85 + (3 - 0)
+
+    const secondTask = sched.next().task;
+    expect(secondTask.slug).toBe('research-acquisition-middle');
+    expect(secondTask.priority).toBe(87); // 85 + (3 - 1)
+
+    const thirdTask = sched.next().task;
+    expect(thirdTask.slug).toBe('research-acquisition-newest');
+    expect(thirdTask.priority).toBe(86); // 85 + (3 - 2)
+  });
+
+  it('correctly enqueues tasks based on their research phase', () => {
+    const items = [
+      {
+        id: 'delib',
+        topic: 'Topic Delib',
+        status: 'pending',
+        priority: 'medium',
+        research_phase: 'deliberation',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'improve',
+        topic: 'Topic Improve',
+        status: 'pending',
+        priority: 'medium',
+        research_phase: 'improvement',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'monitor',
+        topic: 'Topic Monitor',
+        status: 'pending',
+        priority: 'medium',
+        research_phase: 'monitoring',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'expand',
+        topic: 'Topic Expand',
+        status: 'pending',
+        priority: 'medium',
+        research_phase: 'expansion',
+        created_at: new Date().toISOString()
+      }
+    ];
+
+    saveQueue(items);
+
+    const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
+    
+    const allTasks = sched.queue.all();
+    
+    const delibTask = allTasks.find(t => t.slug === 'research-deliberation-delib');
+    expect(delibTask).toBeTruthy();
+    expect(delibTask.category).toBe('system2-deliberation');
+
+    const improveTask = allTasks.find(t => t.slug === 'research-improvement-improve');
+    expect(improveTask).toBeTruthy();
+    expect(improveTask.category).toBe('memory-maintenance');
+
+    const monitorTask = allTasks.find(t => t.slug === 'research-monitoring-monitor');
+    expect(monitorTask).toBeTruthy();
+    expect(monitorTask.category).toBe('proactive-research');
+
+    const expandTask = allTasks.find(t => t.slug === 'research-expansion-expand');
+    expect(expandTask).toBeTruthy();
+    expect(expandTask.category).toBe('exploration');
+  });
 });
+

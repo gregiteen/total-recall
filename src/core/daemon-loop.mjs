@@ -22,7 +22,7 @@ import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { runDreamCycle } from './dream.mjs';
 import { logger } from './logger.mjs';
-import { updateQueueItem } from './research-queue.mjs';
+import { updateQueueItem, loadQueue } from './research-queue.mjs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
 
@@ -43,7 +43,21 @@ const FALLBACK_SLEEP_MS = 5000;
 // How often to run a full dream cycle (every N task ticks)
 const DREAM_CYCLE_EVERY_N_TASKS = 20;
 
-// ─── Task Engine Dispatch ───────────────────────────────────────────────────────
+function getResearchNodeSlug(task) {
+  if (task._research_id) {
+    try {
+      const items = loadQueue();
+      const item = items.find(i => i.id === task._research_id);
+      if (item && item.node_slug) return item.node_slug;
+    } catch (err) {
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Error loading queue for slug lookup: ${err.message}`,
+      });
+    }
+  }
+  return null;
+}
 
 /**
  * Dispatch a task to the appropriate cognitive engine based on category.
@@ -63,6 +77,7 @@ async function dispatchTask(task, runtimeConfig) {
 
       case 'research-acquisition':
       case 'proactive-research':
+      case 'exploration':
         return await runResearchTask(task, runtimeConfig);
 
       case 'cutoff-audit':
@@ -175,6 +190,18 @@ async function pushConclusion(conclusions = []) {
 }
 
 async function runSystem2Task(task, runtimeConfig) {
+  if (task.slug.startsWith('research-deliberation-')) {
+    const { runResearchDeliberationCycle } = await import('./fact-seeker.mjs');
+    const nodeSlug = getResearchNodeSlug(task);
+    const result = await runResearchDeliberationCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug,
+      topic: task.target,
+      runtimeConfig,
+    });
+    return result;
+  }
+
   if (task.slug.includes('inference') && task.target) {
     const { runInferenceTask } = await import('./inference-engine.mjs');
     const slugs = task.target.split(',').map(s => s.trim());
@@ -217,8 +244,35 @@ async function runResearchTask(task, runtimeConfig) {
     };
   }
 
+  if (task.slug.startsWith('research-monitoring-')) {
+    const { runResearchMonitoringCycle } = await import('./fact-seeker.mjs');
+    const nodeSlug = getResearchNodeSlug(task);
+    const result = await runResearchMonitoringCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug,
+      topic: task.target,
+      runtimeConfig,
+      skillsDir: SKILLS_DIR,
+      derivedDir: DERIVED_DIR,
+      instructionsFile: INSTRUCTIONS_FILE,
+    });
+    return result;
+  }
+
+  if (task.slug.startsWith('research-expansion-')) {
+    const { runResearchExpansionCycle } = await import('./fact-seeker.mjs');
+    const nodeSlug = getResearchNodeSlug(task);
+    const result = await runResearchExpansionCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug,
+      topic: task.target,
+      runtimeConfig,
+    });
+    return result;
+  }
+
   // Proactive research — run one acquisition cycle from the agenda
-  if (task.category === 'proactive-research' || task.slug.includes('fact-seeker') || task.slug.includes('knowledge-acquisition')) {
+  if (task.slug.startsWith('research-acquisition-') || task.category === 'proactive-research' || task.slug.includes('fact-seeker') || task.slug.includes('knowledge-acquisition')) {
     const { runKnowledgeAcquisitionCycle } = await import('./fact-seeker.mjs');
     const forceTopic = task.target || null;
     const result = await runKnowledgeAcquisitionCycle({
@@ -267,6 +321,18 @@ async function runResearchTask(task, runtimeConfig) {
 // ─── Maintenance Layer Engine ───────────────────────────────────────────────────
 
 async function runMaintenanceTask(task, runtimeConfig) {
+  if (task.slug.startsWith('research-improvement-')) {
+    const { runResearchImprovementCycle } = await import('./fact-seeker.mjs');
+    const nodeSlug = getResearchNodeSlug(task);
+    const result = await runResearchImprovementCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug,
+      topic: task.target,
+      runtimeConfig,
+    });
+    return result;
+  }
+
   // Stage 8: Advisory Lease Vacuuming
   try {
     const leasesDir = path.join(AGENT_DIR, 'leases');
@@ -489,11 +555,19 @@ async function main() {
       if (task._research_id) {
         try {
           const patch = {
-            status: result.success ? 'done' : 'failed',
+            status: result.success ? 'pending' : 'failed',
             notes: result.output || result.error || null,
           };
           if (result.factSlug) {
             patch.node_slug = result.factSlug;
+          }
+          if (result.success && task._research_phase) {
+            const phases = ['acquisition', 'deliberation', 'improvement', 'monitoring', 'expansion'];
+            const idx = phases.indexOf(task._research_phase);
+            if (idx !== -1) {
+              const nextPhase = phases[(idx + 1) % phases.length];
+              patch.research_phase = nextPhase;
+            }
           }
           updateQueueItem(task._research_id, patch);
         } catch (err) {

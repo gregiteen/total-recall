@@ -1202,7 +1202,15 @@ async function provisionVastAI(apiKey, instanceId = null, dashboardPassword = 't
         continue;
       }
 
-      const offerList = (offers.offers || []).filter(o => o.rentable && !failedOfferIds.has(o.id));
+      const offerList = (offers.offers || []).filter(o => {
+        if (!o.rentable || failedOfferIds.has(o.id)) return false;
+        const geo = (o.geolocation || '').toLowerCase();
+        if (geo.includes('cn') || geo.includes('china') || geo.includes('russia') || geo.includes('ru')) {
+          console.log(`[Vast.ai] Skipping offer ${o.id} due to Chinese/Russian geolocation: ${o.geolocation}`);
+          return false;
+        }
+        return true;
+      });
       if (!offerList.length) {
         console.warn('[Vast.ai] No suitable rentable GPU offers found.');
         emitProgress('log', '⚠️ No suitable GPU offers available right now or all tried offers failed.');
@@ -1300,9 +1308,10 @@ async function provisionVastAI(apiKey, instanceId = null, dashboardPassword = 't
         break;
       }
       
-      // Early failure detection: stopped, offline, or broken
-      if (state === 'broken' || state === 'offline' || state === 'stopped') {
-        emitProgress('log', `⚠️ Instance failed to boot and is in status '${state}': ${statusMsg || 'Host failed to start container.'}`);
+      // Early failure detection: stopped, offline, or broken, or having daemon errors in status_msg
+      const hasCriticalError = statusMsg && (statusMsg.toLowerCase().includes('error') || statusMsg.toLowerCase().includes('failed'));
+      if (state === 'broken' || state === 'offline' || state === 'stopped' || hasCriticalError) {
+        emitProgress('log', `⚠️ Instance failed to boot (state: '${state}'): ${statusMsg || 'Host failed to start container.'}`);
         pollFailed = true;
         break;
       }

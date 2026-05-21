@@ -88,6 +88,7 @@ export function addToQueue({ topic, priority = 'medium', notes } = {}) {
     priority:     priority || 'medium',
     notes:        notes || null,
     node_slug:    null,
+    research_phase: 'acquisition',
     created_at:   new Date().toISOString(),
     updated_at:   new Date().toISOString(),
     completed_at: null,
@@ -102,7 +103,7 @@ export function addToQueue({ topic, priority = 'medium', notes } = {}) {
  * Update an existing item by id.
  *
  * @param {string} id
- * @param {{ status?: string, notes?: string, node_slug?: string, priority?: string }} patch
+ * @param {{ status?: string, notes?: string, node_slug?: string, priority?: string, research_phase?: string }} patch
  * @returns {object} The updated item
  */
 export function updateQueueItem(id, patch = {}) {
@@ -120,6 +121,7 @@ export function updateQueueItem(id, patch = {}) {
   if (patch.notes     !== undefined) item.notes     = patch.notes;
   if (patch.node_slug !== undefined) item.node_slug = patch.node_slug;
   if (patch.priority  !== undefined) item.priority  = patch.priority;
+  if (patch.research_phase !== undefined) item.research_phase = patch.research_phase;
   item.updated_at = new Date().toISOString();
   if ((item.status === 'done' || item.status === 'failed') && !item.completed_at) {
     item.completed_at = new Date().toISOString();

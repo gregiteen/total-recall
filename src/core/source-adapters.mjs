@@ -180,7 +180,7 @@ export async function braveSearch(query, config, count = 5) {
     title: r.title || '',
     url: r.url || '',
     snippet: r.description || '',
-    published: r.age || null,
+    published: normalizePublishedDate(r.age),
     relevance: 0.8,
   }));
 }
@@ -225,7 +225,7 @@ export async function serperSearch(query, config, count = 5) {
     title: r.title || '',
     url: r.link || '',
     snippet: r.snippet || '',
-    published: r.date || null,
+    published: normalizePublishedDate(r.date),
     relevance: 0.8,
   }));
 }
@@ -264,7 +264,7 @@ export async function tavilySearch(query, config, count = 5) {
     title: r.title || '',
     url: r.url || '',
     snippet: r.content || r.snippet || '',
-    published: r.published_date || null,
+    published: normalizePublishedDate(r.published_date),
     relevance: r.score || 0.8,
   }));
 }
@@ -305,7 +305,7 @@ export async function exaSearch(query, config, count = 5) {
     title: r.title || '',
     url: r.url || '',
     snippet: r.text?.slice(0, 500) || r.highlight || '',
-    published: r.publishedDate || null,
+    published: normalizePublishedDate(r.publishedDate),
     relevance: r.score || 0.8,
   }));
 }
@@ -385,7 +385,7 @@ export async function arxivSearch(query, config, maxResults = 5) {
         title,
         url,
         snippet: summary.slice(0, 500),
-        published: published ? published.slice(0, 10) : null,
+        published: normalizePublishedDate(published),
         relevance: 0.9,
       });
     }
@@ -428,7 +428,7 @@ export async function npmSearch(query, config, size = 5) {
       title: `${pkg.name}@${pkg.version}`,
       url: pkg.links?.npm || `https://www.npmjs.com/package/${pkg.name}`,
       snippet: pkg.description || '',
-      published: pkg.date ? pkg.date.slice(0, 10) : null,
+      published: normalizePublishedDate(pkg.date),
       relevance: obj.score?.final || 0.5,
       extra: {
         name: pkg.name,
@@ -471,7 +471,7 @@ export async function npmPackageDetail(packageName, config) {
     title: `${data.name}@${latest || 'unknown'}`,
     url: `https://www.npmjs.com/package/${data.name}`,
     snippet: data.description || '',
-    published: data.time?.[latest] ? data.time[latest].slice(0, 10) : null,
+    published: normalizePublishedDate(data.time?.[latest]),
     relevance: 1.0,
     extra: {
       name: data.name,
@@ -530,7 +530,7 @@ export async function githubSearch(query, config, searchType = 'repositories', p
       title: repo.full_name,
       url: repo.html_url,
       snippet: repo.description || '',
-      published: repo.updated_at ? repo.updated_at.slice(0, 10) : null,
+      published: normalizePublishedDate(repo.updated_at),
       relevance: Math.min(1.0, (repo.stargazers_count || 0) / 10000),
       extra: {
         stars: repo.stargazers_count,
@@ -549,7 +549,7 @@ export async function githubSearch(query, config, searchType = 'repositories', p
       title: issue.title,
       url: issue.html_url,
       snippet: (issue.body || '').slice(0, 400),
-      published: issue.created_at ? issue.created_at.slice(0, 10) : null,
+      published: normalizePublishedDate(issue.created_at),
       relevance: 0.6,
     }));
   }
@@ -593,7 +593,7 @@ export async function wikipediaFetch(topic, config) {
     title: data.title || topic,
     url: data.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encoded}`,
     snippet: data.extract || '',
-    published: data.timestamp ? data.timestamp.slice(0, 10) : null,
+    published: normalizePublishedDate(data.timestamp),
     relevance: 0.85,
     extra: {
       pageId: data.pageid,
@@ -923,6 +923,98 @@ export async function smartFetch(url, config) {
   }
 
   return webFetch(url, config);
+}
+
+/**
+ * Normalizes fuzzy, relative, or partial date/time strings into a standardized ISO 8601 timestamp.
+ * Supports:
+ * - Relative time: "3 hours ago", "5 days ago", "yesterday", "just now", "2 weeks ago"
+ * - Partial date: "April 2026", "2026"
+ * - Standard formats: "2026-05-21", "2026-05-21T13:40:12Z", "May 21, 2026"
+ *
+ * @param {string|null|undefined} rawDateStr
+ * @param {Date|string|number} [referenceTime=new Date()] - dynamic system execution context
+ * @returns {string|null} ISO 8601 timestamp or null if unparseable
+ */
+export function normalizePublishedDate(rawDateStr, referenceTime = new Date()) {
+  if (!rawDateStr || typeof rawDateStr !== 'string') return null;
+  const clean = rawDateStr.trim().toLowerCase();
+  if (!clean) return null;
+
+  const ref = referenceTime instanceof Date ? referenceTime : new Date(referenceTime);
+  if (isNaN(ref.getTime())) return null;
+
+  // Check relative time patterns
+  let match;
+  
+  if (clean === 'yesterday') {
+    return new Date(ref.getTime() - 86400 * 1000).toISOString();
+  }
+  
+  if (clean === 'today' || clean === 'now' || clean === 'just now') {
+    return ref.toISOString();
+  }
+
+  match = clean.match(/^(\d+)\s+(minute|min|m)s?\s+ago$/);
+  if (match) {
+    const mins = parseInt(match[1], 10);
+    return new Date(ref.getTime() - mins * 60 * 1000).toISOString();
+  }
+
+  match = clean.match(/^(\d+)\s+(hour|hr|h)s?\s+ago$/);
+  if (match) {
+    const hrs = parseInt(match[1], 10);
+    return new Date(ref.getTime() - hrs * 3600 * 1000).toISOString();
+  }
+
+  match = clean.match(/^(\d+)\s+(day|d)s?\s+ago$/);
+  if (match) {
+    const days = parseInt(match[1], 10);
+    return new Date(ref.getTime() - days * 86400 * 1000).toISOString();
+  }
+
+  match = clean.match(/^(\d+)\s+(week|wk|w)s?\s+ago$/);
+  if (match) {
+    const weeks = parseInt(match[1], 10);
+    return new Date(ref.getTime() - weeks * 7 * 86400 * 1000).toISOString();
+  }
+
+  match = clean.match(/^(\d+)\s+(month|mo)s?\s+ago$/);
+  if (match) {
+    const months = parseInt(match[1], 10);
+    return new Date(ref.getTime() - months * 30.4 * 86400 * 1000).toISOString();
+  }
+
+  match = clean.match(/^(\d+)\s+(year|yr|y)s?\s+ago$/);
+  if (match) {
+    const years = parseInt(match[1], 10);
+    return new Date(ref.getTime() - years * 365.25 * 86400 * 1000).toISOString();
+  }
+
+  // Handle Month YYYY or YYYY formats
+  const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const monthRegex = new RegExp(`^(${monthNames.join('|')})\\w*\\s+(\\d{4})$`);
+  match = clean.match(monthRegex);
+  if (match) {
+    const monthIdx = monthNames.indexOf(match[1]);
+    const year = parseInt(match[2], 10);
+    const d = new Date(Date.UTC(year, monthIdx, 1, 0, 0, 0, 0));
+    return d.toISOString();
+  }
+
+  if (/^\d{4}$/.test(clean)) {
+    const year = parseInt(clean, 10);
+    const d = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+    return d.toISOString();
+  }
+
+  // Standard parsing via JS Date
+  const parsed = Date.parse(rawDateStr);
+  if (!isNaN(parsed)) {
+    return new Date(parsed).toISOString();
+  }
+
+  return null;
 }
 
 /**
