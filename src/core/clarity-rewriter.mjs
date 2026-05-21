@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
-import { callLocalRuntime } from './runtime.mjs';
+import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
@@ -83,7 +83,7 @@ export async function runClarityReview(slug, { vaultDir, inboxDir, runtimeConfig
     const rawResponse = await callLocalRuntime(prompt, CLARITY_SYSTEM, runtimeConfig);
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    result = JSON.parse(jsonMatch[0]);
+    result = cleanAndParseJSON(jsonMatch[0]);
   } catch (err) {
     logger.info({
       subsystem: 'clarity-rewriter',
@@ -206,7 +206,7 @@ export async function runStalenessCheck(slug, { vaultDir, queueDir, runtimeConfi
     const rawResponse = await callLocalRuntime(prompt, STALENESS_SYSTEM, runtimeConfig);
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    result = JSON.parse(jsonMatch[0]);
+    result = cleanAndParseJSON(jsonMatch[0]);
   } catch (err) {
     logger.info({
       subsystem: 'staleness-verifier',
@@ -324,7 +324,7 @@ export async function runFactSeeker({ vaultDir, queueDir, runtimeConfig }) {
     const rawResponse = await callLocalRuntime(prompt, FACT_SEEKER_SYSTEM, runtimeConfig);
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    result = JSON.parse(jsonMatch[0]);
+    result = cleanAndParseJSON(jsonMatch[0]);
   } catch (err) {
     logger.info({
       subsystem: 'fact-seeker',
@@ -492,7 +492,7 @@ export async function runCutoffAudit({ vaultDir, queueDir, runtimeConfig }) {
       const raw = await callLocalRuntime(prompt, CUTOFF_AUDIT_SYSTEM, runtimeConfig);
       const match = raw.match(/\{[\s\S]*\}/);
       if (!match) continue;
-      result = JSON.parse(match[0]);
+      result = cleanAndParseJSON(match[0]);
     } catch (err) {
       logger.info({ subsystem: 'cutoff-auditor', message: `Audit failed for ${node.slug}: ${err.message}` });
       continue;
@@ -669,7 +669,7 @@ export async function writeCorrection(originalSlug, researchEvidence, { vaultDir
     const raw = await callLocalRuntime(prompt, CORRECTION_SYSTEM, runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in response');
-    result = JSON.parse(match[0]);
+    result = cleanAndParseJSON(match[0]);
   } catch (err) {
     logger.info({ subsystem: 'correction-writer', message: `Correction write failed for ${originalSlug}: ${err.message}` });
     return { correctionSlug: null, verdict: 'error', error: err.message };

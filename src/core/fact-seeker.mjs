@@ -3,7 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import os from 'os';
-import { callLocalRuntime } from './runtime.mjs';
+import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { loadNodes, writeNode, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 import { addToQueue } from './research-queue.mjs';
@@ -227,7 +227,7 @@ export async function inferTopicsFromSession(transcript, runtimeConfig) {
     const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM(runtimeConfig), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return [];
-    const result = JSON.parse(match[0]);
+    const result = cleanAndParseJSON(match[0]);
     return Array.isArray(result.topics) ? result.topics : [];
   } catch (err) {
     logger.info({ subsystem: 'fact-seeker', message: `Topic inference failed: ${err.message}` });
@@ -383,7 +383,7 @@ async function synthesizeFacts(topic, results, runtimeConfig) {
     const raw = await callLocalRuntime(prompt, SYNTHESIS_SYSTEM(runtimeConfig), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in synthesis response');
-    return JSON.parse(match[0]);
+    return cleanAndParseJSON(match[0]);
   } catch (err) {
     logger.info({ subsystem: 'fact-seeker', message: `Synthesis failed for "${topic}": ${err.message}` });
     return null;
@@ -760,7 +760,7 @@ export async function runSelfDiagnosis({ vaultDir, runtimeConfig }) {
     const raw = await callLocalRuntime(prompt, SELF_DIAGNOSIS_SYSTEM, runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in diagnosis response');
-    const diagnosis = JSON.parse(match[0]);
+    const diagnosis = cleanAndParseJSON(match[0]);
 
     // Auto-enqueue high-priority recommended topics
     const recommended = Array.isArray(diagnosis.recommended_immediate_research)
@@ -1083,7 +1083,7 @@ Output ONLY valid JSON.`;
     const raw = await callLocalRuntime(prompt, systemPrompt, runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in deliberation response');
-    const result = JSON.parse(match[0]);
+    const result = cleanAndParseJSON(match[0]);
     
     // Update target node body and frontmatter
     let updatedBody = targetNode.body;
@@ -1433,7 +1433,7 @@ Output ONLY valid JSON.`;
     const raw = await callLocalRuntime(prompt, systemPrompt, runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in monitoring response');
-    const parsed = JSON.parse(match[0]);
+    const parsed = cleanAndParseJSON(match[0]);
     const sources = parsed.sources || [];
     
     if (sources.length === 0) {
@@ -1524,7 +1524,7 @@ Output ONLY valid JSON.`;
     const raw = await callLocalRuntime(prompt, systemPrompt, runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('No JSON in expansion response');
-    const parsed = JSON.parse(match[0]);
+    const parsed = cleanAndParseJSON(match[0]);
     const tangents = parsed.tangents || [];
     
     if (tangents.length === 0) {

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
-import { callLocalRuntime } from './runtime.mjs';
+import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 
@@ -96,7 +96,7 @@ export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfi
     const rawResponse = await callLocalRuntime(prompt, INFERENCE_SYSTEM, runtimeConfig);
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    result = JSON.parse(jsonMatch[0]);
+    result = cleanAndParseJSON(jsonMatch[0]);
   } catch (err) {
     logger.info({
       subsystem: 'inference-engine',
@@ -333,7 +333,7 @@ export async function runSynthesisTask(slugA, slugB, { vaultDir, inboxDir, runti
     const rawResponse = await callLocalRuntime(prompt, SYNTHESIS_SYSTEM, runtimeConfig);
     const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in response');
-    const result = JSON.parse(jsonMatch[0]);
+    const result = cleanAndParseJSON(jsonMatch[0]);
 
     if (result.verdict === 'MERGE' && result.merged_title) {
       writeConclusionNode(inboxDir, {
