@@ -42,6 +42,8 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import bcrypt from 'bcrypt';
 import crypto from 'node:crypto';
+import { BCRYPT_COST } from '../server/auth.mjs';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -367,7 +369,7 @@ function hardenSecurityConfig(dryRun, dashboardPassword = null) {
   if (dashboardPassword) {
     const isDefault = dashboardPassword === 'totalrecall';
     log(`  🔑 Enforcing admin dashboard password (force reset: ${isDefault})`);
-    config.dashboard.password_hash = bcrypt.hashSync(dashboardPassword, 10);
+    config.dashboard.password_hash = bcrypt.hashSync(dashboardPassword, BCRYPT_COST);
     config.dashboard.force_password_reset = isDefault;
   } else if (!config.dashboard.password_hash) {
     // Generate secure temporary password
@@ -379,7 +381,7 @@ function hardenSecurityConfig(dryRun, dashboardPassword = null) {
     console.error(`  │  Please save this password! You will be forced to      │`);
     console.error(`  │  change it on your first dashboard access.             │`);
     console.error(`  └────────────────────────────────────────────────────────┘\n`);
-    config.dashboard.password_hash = bcrypt.hashSync(tempPassword, 10);
+    config.dashboard.password_hash = bcrypt.hashSync(tempPassword, BCRYPT_COST);
     config.dashboard.force_password_reset = true;
   }
 

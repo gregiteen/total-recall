@@ -19,6 +19,26 @@ type AuthState = 'loading' | 'authed' | 'unauthed'
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
 
+interface DotProps {
+  ok: boolean
+  label: string
+}
+
+function StatusDot({ ok, label }: DotProps) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}>
+      <span style={{
+        width: 7, height: 7, borderRadius: '50%',
+        background: ok ? '#22c55e' : '#ef4444',
+        boxShadow: ok ? '0 0 6px rgba(34,197,94,0.5)' : '0 0 6px rgba(239,68,68,0.5)',
+        display: 'inline-block',
+        animation: ok ? undefined : 'blink 1s ease-in-out infinite',
+      }} />
+      {label}
+    </div>
+  )
+}
+
 interface SidebarProps {
   onLogout: () => void
   health: HealthData | null
@@ -118,19 +138,6 @@ function Sidebar({ onLogout, health }: SidebarProps) {
               const daemonOk = health?.daemon === 'running'
               const allGood = ollamaOk && hasModel && daemonOk
 
-              const Dot = ({ ok, label }: { ok: boolean; label: string }) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}>
-                  <span style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: ok ? '#22c55e' : '#ef4444',
-                    boxShadow: ok ? '0 0 6px rgba(34,197,94,0.5)' : '0 0 6px rgba(239,68,68,0.5)',
-                    display: 'inline-block',
-                    animation: ok ? undefined : 'blink 1s ease-in-out infinite',
-                  }} />
-                  {label}
-                </div>
-              )
-
               if (!health) return <div style={{ color: 'var(--text-tertiary)' }}>Checking…</div>
 
               return (
@@ -142,9 +149,9 @@ function Sidebar({ onLogout, health }: SidebarProps) {
                     </div>
                   ) : (
                     <>
-                      <Dot ok={ollamaOk} label={ollamaOk ? 'Ollama' : 'Ollama offline'} />
-                      <Dot ok={hasModel} label={hasModel ? (health?.ollama_models?.[0] ?? 'Model') : 'No model'} />
-                      <Dot ok={daemonOk} label={daemonOk ? 'Daemon' : 'Daemon ' + (health?.daemon ?? 'unknown')} />
+                      <StatusDot ok={ollamaOk} label={ollamaOk ? 'Ollama' : 'Ollama offline'} />
+                      <StatusDot ok={hasModel} label={hasModel ? (health?.ollama_models?.[0] ?? 'Model') : 'No model'} />
+                      <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon' : 'Daemon ' + (health?.daemon ?? 'unknown')} />
                     </>
                   )}
                 </>

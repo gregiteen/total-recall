@@ -28,6 +28,7 @@
  *   npx total-recall chat            Interactive terminal chat
  *   npx total-recall friction        Analyze logs for workflow bottlenecks
  *   npx total-recall upgrade         Swap kernel model
+ *   npx total-recall research <cmd>  Manage/query ongoing autonomous research agenda
  *   npx total-recall --help          Show this help
  */
 
@@ -52,6 +53,7 @@ const COMMANDS = {
   friction: 'friction.mjs',
   chat:     'chat.mjs',
   status:   'status.mjs',
+  research: 'research.mjs',
   'generate-pat': 'generate-pat.mjs',
   'hash-password': 'hash-password.mjs',
   'reset-password': 'reset-password.mjs',
@@ -87,6 +89,7 @@ function printHelp() {
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
     status              Show brain connection and sync state
+    research <command>  Manage/query ongoing autonomous research agenda (list, add, show, report, cancel)
     generate-pat        Issue a PAT; stores only a hash in keys.jsonl
     hash-password       Generate a bcrypt dashboard password hash
     reset-password      Reset the dashboard admin password and force a change on login

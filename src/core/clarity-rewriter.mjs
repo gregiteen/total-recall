@@ -574,7 +574,9 @@ async function stampVerified(node) {
     data.x_cutoff_verified_at = new Date().toISOString();
     data.x_cutoff_risk = 'none';
     atomicWrite(node._filepath, safeStringify(content, data));
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    logger.debug('clarity-rewriter: stampCutoffRiskNone failed', { err: err.message });
+  }
 }
 
 async function stampCutoffRisk(node, riskLevel, claimCount) {
@@ -589,7 +591,9 @@ async function stampCutoffRisk(node, riskLevel, claimCount) {
     const confidencePenalty = riskLevel === 'critical' ? 0.3 : riskLevel === 'high' ? 0.2 : 0.1;
     data.confidence = Math.max(0.1, (data.confidence || 0.5) - confidencePenalty);
     atomicWrite(node._filepath, safeStringify(content, data));
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    logger.debug('clarity-rewriter: stampCutoffRisk failed', { err: err.message });
+  }
 }
 
 // ─── Correction Writer ───────────────────────────────────────────────────────────
@@ -712,7 +716,15 @@ export async function writeCorrection(originalSlug, researchEvidence, { vaultDir
     x_was_wrong_about: result.was_wrong_about,
     x_applies_to_date: result.applies_to_date || now.slice(0, 10),
     x_original_should_be: result.original_should_be || 'superseded',
-    x_citations: (researchEvidence.sources || []).map(s => ({ url: s.url, source: s.source, title: s.title })),
+    x_temporal_context: now,
+    x_citations: (researchEvidence.sources || []).map(s => ({
+      url: s.url || '',
+      source: s.source || 'web',
+      title: s.title || 'Untitled Source',
+      published: s.published || now,
+      relevance: 1.0,
+      accessed: now
+    })),
   };
 
   const body = result.correction_body || [
@@ -752,5 +764,7 @@ async function stampNodeForCorrection(node, correctionSlug, disposition) {
     data.confidence = Math.max(0.05, (data.confidence || 0.5) * 0.3);
     data.updated = new Date().toISOString();
     atomicWrite(node._filepath, safeStringify(content, data));
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    logger.debug('clarity-rewriter: stampNodeForCorrection failed', { err: err.message });
+  }
 }

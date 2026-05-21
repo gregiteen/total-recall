@@ -115,7 +115,7 @@ export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfi
   }
 
   for (const conclusion of conclusions) {
-    writeConclusionNode(inboxDir, conclusion, slugs);
+    writeConclusionNode(inboxDir, conclusion, slugs, vaultDir);
   }
 
   // Write contradictions as conflict records
@@ -144,9 +144,52 @@ export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfi
 
 // ─── Node Writers ───────────────────────────────────────────────────────────────
 
-function writeConclusionNode(inboxDir, conclusion, sourceSlugList) {
+function writeConclusionNode(inboxDir, conclusion, sourceSlugList, vaultDir) {
   const slug = `inference-${crypto.randomBytes(4).toString('hex')}`;
   const now = new Date().toISOString();
+
+  let latestPublished = null;
+  let citations = null;
+  
+  if (vaultDir) {
+    try {
+      const allNodes = loadNodes(vaultDir);
+      citations = sourceSlugList.map(s => {
+        const matchingNode = allNodes.find(n => n.slug === s);
+        const cat = matchingNode ? matchingNode.category : 'facts';
+        const published = matchingNode ? (matchingNode.updated || matchingNode.created || now) : now;
+        if (!latestPublished || new Date(published) > new Date(latestPublished)) {
+          latestPublished = published;
+        }
+        return {
+          source: 'memory-vault',
+          title: matchingNode ? matchingNode.title : `Memory Node: ${s}`,
+          url: `file://${path.join(vaultDir, cat, s + '.md')}`,
+          published,
+          relevance: 1.0,
+          accessed: now
+        };
+      });
+    } catch (err) {
+      logger.info({
+        subsystem: 'inference-engine',
+        message: `Failed to build citations for conclusion node: ${err.message}`
+      });
+    }
+  }
+
+  if (!citations) {
+    citations = sourceSlugList.map(s => ({
+      source: 'memory-vault',
+      title: `Memory Node: ${s}`,
+      url: `memory://${s}`,
+      published: now,
+      relevance: 1.0,
+      accessed: now
+    }));
+  }
+
+  const temporalContext = latestPublished || now;
 
   const frontmatter = {
     type: 'memory',
@@ -181,6 +224,8 @@ function writeConclusionNode(inboxDir, conclusion, sourceSlugList) {
     schema_version: 2,
     x_memory_layer: 'system2',
     x_reasoning: (conclusion.reasoning || '').slice(0, 500),
+    x_temporal_context: temporalContext,
+    x_citations: citations,
   };
 
   const body = conclusion.body || '';
@@ -297,7 +342,7 @@ export async function runSynthesisTask(slugA, slugB, { vaultDir, inboxDir, runti
         category: nodeA.category,
         confidence: Math.max(nodeA.confidence || 0, nodeB.confidence || 0),
         reasoning: `Merged from ${slugA} and ${slugB}: ${result.reason}`,
-      }, [slugA, slugB]);
+      }, [slugA, slugB], vaultDir);
 
       logger.info({
         subsystem: 'inference-engine',

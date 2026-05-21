@@ -4,7 +4,6 @@
  * Covers:
  *   - UltraChat session sync endpoints (GET /api/sessions, GET /api/sessions/:id,
  *     POST /api/sessions/ingest)
- *   - MCP resource smoke (resources/list returns SSSS and derived resources)
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { vi } from 'vitest';
@@ -40,7 +39,10 @@ vi.mock('./auth.mjs', () => ({
   loginHandler: (_req, res) => res.json({}),
   logoutHandler: (_req, res) => res.json({}),
   changePasswordHandler: (_req, res) => res.json({}),
-  apiRateLimiter: () => (_req, _res, next) => next()
+  apiRateLimiter: () => (_req, _res, next) => next(),
+  sandboxRateLimiter: () => (_req, _res, next) => next(),
+  ingestRateLimiter: () => (_req, _res, next) => next(),
+  requireSandboxEnabled: (_req, _res, next) => next()
 }));
 vi.mock('./tools.mjs', () => ({ AVAILABLE_TOOLS: [], handleToolCall: vi.fn() }));
 

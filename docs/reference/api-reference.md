@@ -2,14 +2,13 @@
 
 - **Plane**: Reference
 - **Status**: Active
-- **Version**: 3.0.0
-- **Summary**: Complete specification of the Total Recall REST API endpoints, Personal Access Tokens (PATs) system, scopes, and the JSON-RPC Model Context Protocol (MCP) gateway.
+- **Summary**: Complete specification of the Total Recall REST API endpoints, Personal Access Tokens (PATs) system, and scopes.
 
 ---
 
 ## 🔒 Authentication & Access Control
 
-All API and MCP endpoints (except public discovery and health checks) require bearer authentication via a **Personal Access Token (PAT)**.
+All API endpoints (except public discovery and health checks) require bearer authentication via a **Personal Access Token (PAT)**.
 
 - **Header Format**: `Authorization: Bearer tr_<token>`
 - **Token Generation**: Use the CLI to issue tokens with specific labels and granular scopes:
@@ -33,7 +32,6 @@ Total Recall implements role-based granular scopes to enforce security boundarie
 | `keys:write` | Issue new access keys or revoke existing keys |
 | `sandbox:run` | Execute untrusted script components within the hardened local VFS sandbox |
 | `config:read` | Inspect sanitized system and model runtime configs |
-| `mcp:use` | Direct access to execute JSON-RPC tools and resources via the MCP gateway |
 | `health:read` | Basic system check (disk, vault stats, Ollama status) |
 
 ---
@@ -239,33 +237,9 @@ Cancel or remove a research topic.
 #### `GET /.well-known/total-recall.json`
 Public manifest allowing client auto-configuration.
 - **Authentication**: None required.
-- **Response**: Emits base URLs, API versions, MCP capability links, supported scopes, and rates limits.
+- **Response**: Emits base URLs, API versions, supported scopes, and rates limits.
 
 #### `GET /health`
 Verify system status.
 - **Authentication**: None required.
 - **Response**: Emits disk availability, SSSS vault size, Ollama connectivity status, and background daemon health states.
-
----
-
-## 🔌 Model Context Protocol (MCP) Gateway
-
-Total Recall features a built-in JSON-RPC MCP gateway at `http://localhost:3000/mcp` (or your remote domain counterpart).
-
-### Available MCP Resources
-- `total-recall://instructions` — The fully compiled system memory file.
-- `total-recall://memory/index` — Structured list of all memory vault nodes.
-- `total-recall://ssss/skill` — Detailed syntax references for constructing SSSS-compliant nodes.
-
-### Available MCP Tools
-Total Recall exposes powerful filesystem, memory, and automation tools to IDE agents:
-
-1. **`list_memory`**: Enumerate vault memory nodes.
-2. **`read_memory`**: Fetch raw markdown of a memory node by slug.
-3. **`write_memory`**: Create or edit SSSS memory nodes.
-4. **`delete_memory`**: Archive a node.
-5. **`search_memory`**: Perform text searching on memory folders.
-6. **`semantic_search`**: High-performance semantic match via local embeddings.
-7. **`recompile_surface`**: Trigger an immediate system compile.
-8. **`run_sandbox`**: Safe sandbox execution.
-9. **`read_file` / `list_directory` / `search_files`**: Hardened workspace utilities.

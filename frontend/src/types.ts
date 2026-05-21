@@ -57,3 +57,17 @@ export interface FileNode {
   modified: string
   isDirectory: boolean
 }
+
+export interface ResearchItem {
+  id: string
+  topic: string
+  status: 'pending' | 'in_progress' | 'done' | 'failed'
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  notes: string | null
+  node_slug?: string | null
+  research_phase?: string
+  created_at: string
+  updated_at: string
+  completed_at?: string | null
+}
+

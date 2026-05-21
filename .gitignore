@@ -68,6 +68,8 @@ HANDOFF.md
 .clauderules
 .cursorrules
 claude_help.txt
+gemini_help.txt
+manual-test-agent.mjs
 
 # Claude Code slash commands (personal, IDE-generated)
 .claude/commands/

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { agentDir as configAgentDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
 
@@ -69,12 +70,6 @@ const CLIENTS = {
     mode: 'symlink',
     target: 'GEMINI.md',
     writeSlashCommands: true
-  },
-  windsurf: {
-    label: 'Windsurf',
-    mode: 'file',
-    target: path.join('.windsurf', 'rules', 'total-recall.md'),
-    render: instructions => instructions
   },
   aider: {
     label: 'Aider',
@@ -148,7 +143,6 @@ function printHelp() {
     codex
     antigravity
     gemini
-    windsurf
     aider
     ultrachat
     obsidian
@@ -335,7 +329,7 @@ function detectObsidianVault() {
     } catch { /* ignore parse errors */ }
   }
   // Linux: check common locations
-  const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+  const xdgConfig = xdgConfigHome;
   const linuxConfig = path.join(xdgConfig, 'obsidian', 'obsidian.json');
   if (fs.existsSync(linuxConfig)) {
     try {
@@ -569,8 +563,6 @@ Instructions:
   return written;
 }
 
-// MCP configurations are deprecated and disabled.
-
 
 export default async function connect(args) {
   const opts = parseArgs(args);
@@ -588,12 +580,12 @@ export default async function connect(args) {
 
 
   const cwd = process.cwd();
-  const agentDir = process.env.AGENT_DIR || resolveAgentDir();
+  const agentDir = configAgentDir;
 
   // Auto-resolve brain URL and token if not explicitly provided
   if (!opts.brain) {
-    if (process.env.TR_BRAIN) {
-      opts.brain = process.env.TR_BRAIN;
+    if (trBrain) {
+      opts.brain = trBrain;
     } else {
       const globalAgentDir = path.join(os.homedir(), '.agent');
       const candidateConfigDirs = [
@@ -635,8 +627,8 @@ export default async function connect(args) {
   }
 
   if (!opts.token) {
-    if (process.env.TR_PAT) {
-      opts.token = process.env.TR_PAT;
+    if (trPat) {
+      opts.token = trPat;
     } else {
       const globalAgentDir = path.join(os.homedir(), '.agent');
       const candidateConfigDirs = [
@@ -692,10 +684,6 @@ export default async function connect(args) {
     projection: null,
     notes: []
   };
-
-  if (opts.client === 'codex') {
-    result.notes.push('  ⚠️  OpenAI Codex TOML configuration format does not support custom Authorization headers natively.\n     To authenticate Codex MCP requests, you must set the environment variable TR_PAT=<token> in the terminal session running the Codex client.');
-  }
 
   if (preset.mode === 'file') {
     const instructions = readInstructions(cwd, agentDir);
@@ -802,8 +790,6 @@ export default async function connect(args) {
       }
     }
   }
-
-  // MCP config generation is disabled.
 
   // Record this client in the registry so `status` can report freshness
   registerClient(agentDir, opts.client, preset, result.projection?.targetPath || null);

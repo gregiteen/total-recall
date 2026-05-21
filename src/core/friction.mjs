@@ -1,5 +1,6 @@
 import fs from 'fs';
 import readline from 'readline';
+import { logger } from './logger.mjs';
 
 /**
  * Total Recall Friction Detection
@@ -9,7 +10,7 @@ import readline from 'readline';
 
 export async function detectFriction(logFilePath) {
   if (!fs.existsSync(logFilePath)) {
-    console.warn(`[Friction] Log file not found at ${logFilePath}.`);
+    logger.warn('friction', `Log file not found at ${logFilePath}`);
     return null;
   }
 

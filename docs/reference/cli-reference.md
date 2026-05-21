@@ -38,7 +38,7 @@ Interactive wizard for first-time deployment.
 Wire an IDE or external system to your brain.
 
 - **Usage**: `npx total-recall connect <client> [options]`
-- **Clients**: `cursor`, `claude-code`, `codex`, `antigravity`, `gemini`, `windsurf`, `aider`, `ultrachat`, `obsidian`, `mcp`, `generic`
+- **Clients**: `cursor`, `claude-code`, `codex`, `antigravity`, `gemini`, `windsurf`, `aider`, `ultrachat`, `obsidian`, `generic`
 
 **Options:**
 
@@ -96,6 +96,47 @@ Manually trigger a Dream Cycle.
 
 - **What it does**: Runs the Light → REM → Deep sleep consolidation pass: extracts patterns, flags duplicates, decays confidence scores, and writes a daily note to `memory-vault/daily/YYYY-MM-DD.md`.
 - **Usage**: `npx total-recall dream`
+
+---
+
+### `research`
+
+Manage, query, or queue ongoing autonomous research projects.
+
+- **What it does**: Interacts directly with the Sovereign AI OS research engine queue. It supports viewing a color-coded agenda, enqueuing new topics, checking task phases, showing updated conclusions/ongoing directions, reading full raw report documents, and cancelling pending/running tasks.
+- **Usage**: `npx total-recall research <command> [options]`
+- **Commands**:
+  - `list` (default): Stunning, color-coded, border-framed terminal dashboard of active, pending, completed, and failed research tasks.
+  - `add "<topic>"`: Enqueues a new topic for research.
+  - `status`: Clean summary count of all states and phases.
+  - `show <id-or-topic>`: Beautiful, detailed dashboard showing conclusions, active phase, gaps, and ongoing directions for a project.
+  - `report <id-or-topic>`: Read the full raw Markdown report directly from the vault (supports staged and promoted facts).
+  - `cancel <id>`: Cancel and remove a project.
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--priority <low|medium|high>` | Priority for newly added research (default: medium) |
+| `--notes "<text>"` | Initialization notes for the topic |
+| `--status <status>` | Filter the list command by status (pending, in_progress, done, failed) |
+| `--query "<text>"` | Filter list items by matching text query |
+
+**Examples:**
+
+```bash
+# List all ongoing research
+npx total-recall research list
+
+# Queue a new topic
+npx total-recall research add "Ollama performance tuning for gemma2" --priority high
+
+# View a project's conclusions & directions
+npx total-recall research show "gemma2"
+
+# Read the full raw markdown report
+npx total-recall research report "gemma2"
+```
 
 ---
 

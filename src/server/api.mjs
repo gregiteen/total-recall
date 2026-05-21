@@ -8,7 +8,7 @@ import { requireAuth, requireScope, loginHandler, logoutHandler, changePasswordH
 import { logger } from '../core/logger.mjs';
 import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
 import { KNOWN_SCOPES, loadKeys, issueKey, revokeKey } from './keys.mjs';
-import { loadNodes, writeNode, createNodeFromMcpPayload } from '../core/vault.mjs';
+import { loadNodes, writeNode } from '../core/vault.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { resolveAgentDir } from '../cli/agent-dir.mjs';
@@ -16,9 +16,9 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import matter from 'gray-matter';
-import { fileURLToPath } from 'node:url';
+import { agentDir } from '../core/config.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || resolveAgentDir();
+const AGENT_DIR = agentDir;
 const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
@@ -68,7 +68,6 @@ function endpointManifest(req) {
     discovery: absoluteUrl(req, '/.well-known/total-recall.json'),
     chat_completions: absoluteUrl(req, '/v1/chat/completions'),
     models: absoluteUrl(req, '/v1/models'),
-    mcp: absoluteUrl(req, '/mcp'),
     health: absoluteUrl(req, '/health'),
     api_health: absoluteUrl(req, '/api/health'),
     instructions: absoluteUrl(req, '/api/instructions'),
@@ -204,11 +203,11 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
     
     const { messages, model, temperature } = req.body;
     
-    console.error(`\n[API] === NEW CHAT REQUEST ===`);
-    console.error(`[API] Messages count: ${messages?.length || 0}`);
+    logger.info('api', '=== NEW CHAT REQUEST ===');
+    logger.info('api', `Messages count: ${messages?.length || 0}`);
     if (messages && messages.length > 0) {
       const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-      if (lastUserMsg) console.error(`[API] User Prompt: "${lastUserMsg.content.slice(0, 150)}${lastUserMsg.content.length > 150 ? '...' : ''}"`);
+      if (lastUserMsg) logger.info('api', `User Prompt: "${lastUserMsg.content.slice(0, 150)}${lastUserMsg.content.length > 150 ? '...' : ''}"`);
     }
     
     if (!messages || messages.length === 0) {
@@ -370,8 +369,7 @@ INTERVIEW TASK:
 ${interviewTask}`;
       }
     } catch (e) {
-      console.error('[API] Failed to load system documentation:', e.message);
-
+      logger.error('api', `Failed to load system documentation: ${e.message}`);
     }
 
     let currentMessages = [...messages];
@@ -385,7 +383,7 @@ ${interviewTask}`;
 
     // Tool loop (up to 5 iterations to prevent infinite loops)
     for (let i = 0; i < 5; i++) {
-      console.error(`[API] Invoking ${isLocal ? 'local' : 'frontier'} model (Iteration ${i + 1})...`);
+      logger.info('api', `Invoking ${isLocal ? 'local' : 'frontier'} model (Iteration ${i + 1})...`);
       const message = isLocal 
         ? await callLocalRuntimeRaw(currentMessages, activeConfig, AVAILABLE_TOOLS)
         : await callFrontierRaw(currentMessages, activeConfig, AVAILABLE_TOOLS);
@@ -394,7 +392,7 @@ ${interviewTask}`;
       if (message.tool_calls && message.tool_calls.length > 0) {
         // Execute tools
         for (const toolCall of message.tool_calls) {
-          console.error(`[API] Executing tool: ${toolCall.function.name}`);
+          logger.info('api', `Executing tool: ${toolCall.function.name}`);
           const toolResult = await handleToolCall(toolCall);
           currentMessages.push({
             role: 'tool',
@@ -414,11 +412,11 @@ ${interviewTask}`;
     
     const elapsedMs = Date.now() - startTime;
     const elapsed = (elapsedMs / 1000).toFixed(2);
-    console.error(`[API] === CHAT RESPONSE GENERATED (${elapsed}s) ===`);
+    logger.info('api', `=== CHAT RESPONSE GENERATED (${elapsed}s) ===`);
     if (finalMessage.content) {
-      console.error(`[API] Response: "${finalMessage.content.slice(0, 150)}${finalMessage.content.length > 150 ? '...' : ''}"`);
+      logger.info('api', `Response: "${finalMessage.content.slice(0, 150)}${finalMessage.content.length > 150 ? '...' : ''}"`);
     } else if (finalMessage.tool_calls) {
-      console.error(`[API] Response: [Triggered ${finalMessage.tool_calls.length} tool calls]`);
+      logger.info('api', `Response: [Triggered ${finalMessage.tool_calls.length} tool calls]`);
     }
 
     // Persist this exchange so dream-cycle Light Sleep can scan it for candidates.
@@ -457,7 +455,7 @@ ${interviewTask}`;
       ]
     });
   } catch (error) {
-    console.error('[API Error]', error);
+    logger.error('api', 'API Error', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -494,7 +492,7 @@ apiRouter.get('/v1/chat/history', requireAuth, requireScope('chat:read'), (req, 
       
     res.json({ messages: chatHistory });
   } catch (err) {
-    console.error('[API] Error loading chat history:', err);
+    logger.error('api', 'Error loading chat history', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 });

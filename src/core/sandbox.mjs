@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { escalateToFrontier } from './frontier.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Isolated VM Sandbox
@@ -55,26 +56,26 @@ export async function executeWithEscalation(task, scriptPath, maxRetries = 3, co
   let failureContext = '';
 
   for (let i = 0; i < maxRetries; i++) {
-    console.log(`[Sandbox] Attempt ${i + 1}/${maxRetries} for ${task.slug}`);
+    logger.info('sandbox', `Attempt ${i + 1}/${maxRetries} for ${task.slug}`);
     const result = await runInSandbox(scriptPath);
 
     if (result.success) {
-      console.log(`[Sandbox] ✅ Success!`);
+      logger.info('sandbox', 'Success!');
       return { success: true, output: result.output, escalated: false };
     }
 
-    console.warn(`[Sandbox] ⚠️ Failure: ${result.output.slice(0, 100)}...`);
+    logger.warn('sandbox', `Failure: ${result.output.slice(0, 100)}...`);
     failures++;
     failureContext += `Attempt ${i + 1}:\n${result.output}\n\n`;
   }
 
   // Threshold exceeded, escalate to Frontier
-  console.log(`[Sandbox] 🚨 Max retries exceeded. Escalating to Frontier Intelligence...`);
+  logger.info('sandbox', 'Max retries exceeded. Escalating to Frontier Intelligence...');
   try {
     const frontierResponse = await escalateToFrontier(task, failureContext, configPath);
     return { success: true, output: frontierResponse, escalated: true };
   } catch (err) {
-    console.error(`[Sandbox] ❌ Frontier Escalation Failed: ${err.message}`);
+    logger.error('sandbox', `Frontier Escalation Failed: ${err.message}`);
     return { success: false, output: err.message, escalated: true };
   }
 }

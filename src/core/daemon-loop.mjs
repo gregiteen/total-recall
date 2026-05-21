@@ -16,7 +16,7 @@
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { loadRuntimeConfig } from './runtime.mjs';
 import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
@@ -26,7 +26,9 @@ import { updateQueueItem, loadQueue } from './research-queue.mjs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+import { agentDir } from './config.mjs';
+
+const AGENT_DIR = agentDir;
 const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
@@ -157,16 +159,7 @@ async function pushConclusion(conclusions = []) {
 
   const summary = (conclusions[0] || 'New System 2 conclusion ready').slice(0, 120);
 
-  // 1. MCP SSE — broadcast to all connected IDEs immediately
-  try {
-    const { broadcastMcpNotification } = await import('../server/mcp.mjs');
-    broadcastMcpNotification('info', `\ud83e\udde0 Total Recall: ${summary}`, {
-      conclusions,
-      vault_query: 'search_memory to get full context',
-    });
-  } catch { /* server may not be running — non-fatal */ }
-
-  // 2. Interrupt file — agents pick this up on next turn via INSTRUCTIONS.md rule
+  // 1. Interrupt file — agents pick this up on next turn via INSTRUCTIONS.md rule
   const lines = [
     `\n\n---`,
     `<!-- total-recall interrupt: ${new Date().toISOString()} -->`,

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import { logger } from './logger.mjs';
 
 /**
  * Task Runner for Total Recall
@@ -24,7 +25,7 @@ export function loadPendingTasks(queueDir) {
         tasks.push({ ...data, body: content.trim(), filepath: filePath });
       }
     } catch (err) {
-      console.warn(`Failed to parse task ${file}: ${err.message}`);
+      logger.warn('task-runner', `Failed to parse task ${file}`, { err: err.message });
     }
   }
 
@@ -49,7 +50,7 @@ export function updateTaskStatus(task, newStatus, error = null) {
  * Executes a single task.
  */
 export async function executeTask(task, context) {
-  console.log(`[Task Runner] Executing Task [P${task.priority}]: ${task.target}`);
+  logger.info('task-runner', `Executing Task [P${task.priority}]: ${task.target}`);
   updateTaskStatus(task, 'in_progress');
 
   try {
@@ -66,14 +67,14 @@ export async function executeTask(task, context) {
         await handleSystem2Deliberation(task, context);
         break;
       case 'proactive-research':
-        console.log(`[Task Runner] Handling Deep Research...`);
+        logger.info('task-runner', 'Handling Deep Research...');
         const { handleProactiveResearch } = await import('./research.mjs');
         const report = await handleProactiveResearch(task, context);
         task.body = `# Deep Research Report\n\n${report}`;
         break;
       case 'self-evaluation':
       case 'exploration':
-        console.log(`[Task Runner] Handling ${task.category}...`);
+        logger.info('task-runner', `Handling ${task.category}...`);
         // Simulated work
         await new Promise(resolve => setTimeout(resolve, 500));
         break;
@@ -82,43 +83,43 @@ export async function executeTask(task, context) {
     }
 
     updateTaskStatus(task, 'done');
-    console.log(`[Task Runner] ✅ Completed Task: ${task.target}`);
+    logger.info('task-runner', `Completed Task: ${task.target}`);
   } catch (err) {
-    console.error(`[Task Runner] ❌ Failed Task: ${task.target}`, err.message);
+    logger.error('task-runner', `Failed Task: ${task.target}`, { err: err.message });
     updateTaskStatus(task, 'failed', err.message);
   }
 }
 
 async function handleSkillEngineering(task, context) {
   // E.g., spawn an agent with the template to create a skill
-  console.log(`   Engineering skill: ${task.target}`);
+  logger.info('task-runner', `Engineering skill: ${task.target}`);
 }
 
 async function handleMemoryMaintenance(task, context) {
-  console.log(`   Running memory maintenance for: ${task.target}`);
+  logger.info('task-runner', `Running memory maintenance for: ${task.target}`);
 }
 
 async function handleSystem2Deliberation(task, context) {
-  console.log(`   Running System 2 deliberation for: ${task.target}`);
+  logger.info('task-runner', `Running System 2 deliberation for: ${task.target}`);
 }
 
 /**
  * Main loop for the task runner.
  */
 export async function runTaskQueue(queueDir, context) {
-  console.log('\n🚀 Starting Task Runner...');
+  logger.info('task-runner', 'Starting Task Runner...');
   const pending = loadPendingTasks(queueDir);
 
   if (pending.length === 0) {
-    console.log('   No pending tasks in queue.');
+    logger.info('task-runner', 'No pending tasks in queue.');
     return;
   }
 
-  console.log(`   Found ${pending.length} pending tasks.`);
+  logger.info('task-runner', `Found ${pending.length} pending tasks.`);
 
   for (const task of pending) {
     await executeTask(task, context);
   }
 
-  console.log('🛑 Task Runner queue empty.');
+  logger.info('task-runner', 'Task Runner queue empty.');
 }

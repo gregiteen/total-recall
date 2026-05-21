@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { logger } from './logger.mjs';
 
 /**
  * Automatically detects direct manual additions/modifications to any compiled
@@ -136,13 +137,12 @@ ${cleanInstructionText}
       fs.writeFileSync(nodeFile, nodeContent, 'utf8');
       importedSlugs.push(slug);
 
-      console.log(`\n🛡️  [total-recall] Auto-captured manual IDE instruction edit in ${path.basename(file)}!`);
-      console.log(`   Promoted new rule to canonical invariant: ${slug}\n`);
+      logger.info('kernel', `Auto-captured manual IDE instruction edit in ${path.basename(file)}! Promoted new rule to canonical invariant: ${slug}`);
     }
 
     return { imported: importedSlugs.length, slugs: importedSlugs };
   } catch (err) {
-    console.error(`⚠️  [total-recall] Failed to run IDE instruction protection check: ${err.message}`);
+    logger.error('kernel', `Failed to run IDE instruction protection check: ${err.message}`);
     return { imported: 0, slugs: [] };
   }
 }

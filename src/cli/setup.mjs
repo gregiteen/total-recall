@@ -373,7 +373,7 @@ function storeBrainConfig(agentDir, brainUrl, token, provider, apiKey, extra = {
     try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')); } catch {}
   }
   if (apiKey) secrets[`${provider}_api_key`] = apiKey;
-  fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), 'utf8');
+  fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -446,7 +446,7 @@ export default async function setup(args) {
         let secrets = {};
         if (fs.existsSync(secretsPath)) { try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')); } catch {} }
         secrets.github_token = githubToken;
-        if (!dryRun) fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), 'utf8');
+        if (!dryRun) fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
       } else {
         warn('Could not authenticate with that token — skipping GitHub backup.');
       }
@@ -559,11 +559,9 @@ export default async function setup(args) {
     { label: 'Antigravity',   value: 'antigravity' },
     { label: 'Gemini CLI',    value: 'gemini' },
     { label: 'Cursor',        value: 'cursor' },
-    { label: 'Windsurf',      value: 'windsurf' },
     { label: 'Aider',         value: 'aider' },
     { label: 'Obsidian',      value: 'obsidian' },
     { label: 'UltraChat',     value: 'ultrachat' },
-    { label: 'Generic (MCP)', value: 'mcp' },
   ];
 
   const selectedIDEs = await chooseMultiple(

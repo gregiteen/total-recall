@@ -18,8 +18,11 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { loadQueue } from '../core/research-queue.mjs';
 
-const AGENT_DIR = path.join(os.homedir(), '.agent');
+import { agentDir, totalRecallToken } from '../core/config.mjs';
+
+const AGENT_DIR = agentDir;
 const BRAIN_CONFIG = path.join(AGENT_DIR, 'config', 'brain.json');
 const SYNC_STATE = path.join(AGENT_DIR, 'config', 'sync-state.json');
 const CLIENTS_REGISTRY = path.join(AGENT_DIR, 'config', 'clients.json');
@@ -116,7 +119,7 @@ export default async function statusCmd(args) {
   const syncState = loadSyncState();
   const clientsRegistry = loadClientsRegistry();
   const brainUrl = opts.brain || brainConfig?.url || null;
-  const token = opts.token || brainConfig?.token || process.env.TOTAL_RECALL_TOKEN || null;
+  const token = opts.token || brainConfig?.token || totalRecallToken || null;
 
   let localInstructions = null;
   if (fs.existsSync(INSTRUCTIONS_FILE)) {
@@ -161,8 +164,24 @@ export default async function statusCmd(args) {
     },
     last_sync: syncState.last_sync || null,
     targets: syncState.targets ? Object.keys(syncState.targets) : [],
-    clients: clientProjections
+    clients: clientProjections,
+    research: []
   };
+
+  // Load ongoing research agenda
+  let ongoingResearch = [];
+  try {
+    ongoingResearch = loadQueue().filter(item => item.status === 'in_progress' || item.status === 'pending');
+    report.research = ongoingResearch.map(item => ({
+      id: item.id,
+      topic: item.topic,
+      status: item.status,
+      research_phase: item.research_phase,
+      updated_at: item.updated_at
+    }));
+  } catch (err) {
+    // Ignore queue loading errors if not configured or file doesn't exist
+  }
 
   if (opts.json) {
     console.log(JSON.stringify(report, null, 2));
@@ -191,6 +210,18 @@ export default async function statusCmd(args) {
     }
   } else {
     console.log('  Connected clients: (none — run total-recall connect <client>)');
+  }
+
+  if (ongoingResearch.length) {
+    console.log('\n  Ongoing Autonomous Research:');
+    for (const item of ongoingResearch) {
+      const badge = item.status === 'in_progress' ? '\x1b[36m🧪 [IN PROGRESS]\x1b[0m' : '\x1b[33m⏳ [PENDING]\x1b[0m';
+      const phase = item.research_phase || 'acquisition';
+      console.log(`    ${badge} "${item.topic}"`);
+      console.log(`      Phase: \x1b[36m${phase}\x1b[0m | ID: ${item.id.slice(0, 8)}…`);
+    }
+  } else {
+    console.log('\n  Ongoing Autonomous Research: (none)');
   }
   console.log();
 }

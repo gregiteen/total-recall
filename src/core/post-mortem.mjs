@@ -252,6 +252,15 @@ function writeDraftNode(inboxDir, { title, body, category, layer, tags, sourceSe
     decay: { half_life_days: 90, access_count: 1 },
     schema_version: 2,
     x_memory_layer: layer,
+    x_temporal_context: now,
+    x_citations: [{
+      source: 'post-mortem-engine',
+      title: `Extracted from session post-mortem: ${sourceSession}`,
+      url: `session://${sourceSession}`,
+      published: now,
+      relevance: 1.0,
+      accessed: now
+    }]
   };
 
   const raw = safeStringify(body, frontmatter);

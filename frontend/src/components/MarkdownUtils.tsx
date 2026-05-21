@@ -1,4 +1,5 @@
 // ─── Shared markdown rendering utilities for the Cognitive Dashboard ─────────
+import { Link } from 'react-router-dom';
 
 export function extractSources(body?: string) {
   if (!body) return [];
@@ -18,7 +19,7 @@ export function extractSources(body?: string) {
 }
 
 export function parseInlineStyles(text: string) {
-  const regex = /(\*\*.*?\*\*|`.*?`)/g;
+  const regex = /(\*\*.*?\*\*|`.*?`|\[\[.*?\]\])/g;
   const matches = text.split(regex);
   
   return matches.map((part, index) => {
@@ -27,6 +28,28 @@ export function parseInlineStyles(text: string) {
     }
     if (part.startsWith('`') && part.endsWith('`')) {
       return <code key={index} style={{ background: 'var(--bg-elevated)', padding: '2px 5px', borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: '#ff79c6', border: '1px solid var(--border)' }}>{part.slice(1, -1)}</code>;
+    }
+    if (part.startsWith('[[') && part.endsWith(']]')) {
+      const inner = part.slice(2, -2);
+      const pipeIdx = inner.indexOf('|');
+      const slug = pipeIdx !== -1 ? inner.slice(0, pipeIdx).trim() : inner.trim();
+      const display = pipeIdx !== -1 ? inner.slice(pipeIdx + 1).trim() : slug;
+      
+      return (
+        <Link 
+          key={index} 
+          to={`/memory?slug=${encodeURIComponent(slug)}`} 
+          style={{ 
+            color: 'var(--accent)', 
+            textDecoration: 'none', 
+            fontWeight: 500,
+            borderBottom: '1px dashed var(--accent)',
+            cursor: 'pointer'
+          }}
+        >
+          {display}
+        </Link>
+      );
     }
     return part;
   });

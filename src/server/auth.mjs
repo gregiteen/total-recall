@@ -8,15 +8,20 @@ import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { watchdog } from '../core/watchdog.mjs';
 import { findValidKeyByToken, keyHasAnyScope, recordKeyUsage } from './keys.mjs';
+import { logger } from '../core/logger.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+import { agentDir, sessionSecret, nodeEnv } from '../core/config.mjs';
+
+const AGENT_DIR = agentDir;
 const CONFIG_FILE = path.join(AGENT_DIR, 'config', 'security.yml');
 
 // Persist JWT secret to disk so sessions survive restarts
 const JWT_SECRET_PATH = path.join(AGENT_DIR, 'config', 'session-secret');
+export const BCRYPT_COST = 12;
+
 let JWT_SECRET;
 try {
-  JWT_SECRET = process.env.SESSION_SECRET || fs.readFileSync(JWT_SECRET_PATH, 'utf8').trim();
+  JWT_SECRET = sessionSecret || fs.readFileSync(JWT_SECRET_PATH, 'utf8').trim();
 } catch {
   JWT_SECRET = crypto.randomBytes(32).toString('hex');
   try {
@@ -32,10 +37,15 @@ export function loadSecurityConfig() {
       api: { pats: [], allow_static_pats: false },
       network: { require_https: true, public_health: false, allowed_origins: [], trusted_proxies: [] },
       bind: { host: '127.0.0.1', port: 3000, allow_public_bind: false },
-      rate_limits: { api_requests_per_minute: 60, mcp_requests_per_minute: 120 }
+      rate_limits: { api_requests_per_minute: 60 },
+      sandbox: { enabled: false }
     };
   }
-  return yaml.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+  const parsed = yaml.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+  if (parsed.sandbox === undefined) {
+    parsed.sandbox = { enabled: false };
+  }
+  return parsed;
 }
 
 export function apiRateLimiter() {
@@ -44,21 +54,61 @@ export function apiRateLimiter() {
   return rateLimit({
     windowMs: 60 * 1000,
     max: limit,
-    message: 'Too many requests to the API',
+    message: { error: 'Too many requests to the API' },
     standardHeaders: true,
     legacyHeaders: false,
   });
 }
 
-export function mcpRateLimiter() {
+/**
+ * Key the rate limit on the authenticated principal when possible so a
+ * single misbehaving PAT can't lock out other keys. Falls back to the
+ * client IP otherwise.
+ */
+function keyOrIp(req) {
+  // findValidKeyByToken populates req.key when requireAuth has already run.
+  if (req.key?.id) return `key:${req.key.id}`;
+  if (req.user?.id) return `user:${req.user.id}`;
+  return `ip:${req.ip || 'unknown'}`;
+}
+
+/**
+ * Strict per-principal limiter for `POST /api/sandbox`.
+ *
+ * The sandbox endpoint executes arbitrary Node.js code; even authenticated
+ * abuse is expensive. Defaults to 10/min per key/user, overridable via
+ * `security.yml.rate_limits.sandbox_requests_per_minute`.
+ */
+export function sandboxRateLimiter() {
   const config = loadSecurityConfig();
-  const limit = config.rate_limits?.mcp_requests_per_minute || 120;
+  const limit = config.rate_limits?.sandbox_requests_per_minute || 10;
   return rateLimit({
     windowMs: 60 * 1000,
     max: limit,
-    message: 'Too many requests to the MCP gateway',
+    message: { error: 'Too many sandbox executions' },
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: keyOrIp,
+  });
+}
+
+/**
+ * Moderate per-principal limiter for `POST /api/sessions/ingest`.
+ *
+ * The relay legitimately fires many times during a busy IDE day, so the
+ * default is generous. Overridable via
+ * `security.yml.rate_limits.ingest_requests_per_minute`.
+ */
+export function ingestRateLimiter() {
+  const config = loadSecurityConfig();
+  const limit = config.rate_limits?.ingest_requests_per_minute || 120;
+  return rateLimit({
+    windowMs: 60 * 1000,
+    max: limit,
+    message: { error: 'Too many ingest requests' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: keyOrIp,
   });
 }
 
@@ -154,7 +204,7 @@ function timingSafeStringEqual(a, b) {
 
 export function requireHttps(req, res, next) {
   const config = loadSecurityConfig();
-  if (process.env.NODE_ENV !== 'production') return next();
+  if (nodeEnv !== 'production') return next();
   if (config.network?.require_https === false) return next();
   if (isLocalRequest(req)) return next();
 
@@ -224,7 +274,7 @@ export function requireAuth(req, res, next) {
     // DEPRECATED: Legacy static PATs. Use dynamic keys via POST /api/keys instead.
     const validPats = config.api?.allow_static_pats === true ? (config.api?.pats || []) : [];
     if (token !== 'local' && validPats.some((pat) => timingSafeStringEqual(pat, token))) {
-      console.warn('[AUTH] DEPRECATED: Static PAT used for authentication. Migrate to dynamic keys via POST /api/keys.');
+      logger.warn('auth', 'DEPRECATED: Static PAT used for authentication. Migrate to dynamic keys via POST /api/keys.');
       req.auth = { type: 'static_pat', scopes: ['*'] };
       return next();
     }
@@ -263,6 +313,16 @@ export function requireScope(...requiredScopes) {
   };
 }
 
+export function requireSandboxEnabled(req, res, next) {
+  const config = loadSecurityConfig();
+  if (!config.sandbox?.enabled) {
+    logger.warn('Sandbox request rejected: sandbox is disabled in security.yml', { ip: req.ip });
+    return res.status(403).json({ error: 'Sandbox is disabled in security.yml' });
+  }
+  logger.info('Executing sandbox payload (sandbox is explicitly enabled in security.yml)', { ip: req.ip });
+  next();
+}
+
 export async function loginHandler(req, res) {
   const ip = req.ip || req.socket?.remoteAddress;
   if (ip && watchdog.isIpBlocked(ip)) {
@@ -294,7 +354,7 @@ export async function loginHandler(req, res) {
   
   res.cookie('session', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV !== 'development',
+    secure: nodeEnv !== 'development',
     maxAge: ttlHours * 60 * 60 * 1000,
     sameSite: 'lax'
   });
@@ -310,7 +370,7 @@ export async function changePasswordHandler(req, res) {
   }
 
   const config = loadSecurityConfig();
-  const hash = await bcrypt.hash(newPassword, 10);
+  const hash = await bcrypt.hash(newPassword, BCRYPT_COST);
   
   if (!config.dashboard) config.dashboard = {};
   config.dashboard.password_hash = hash;

@@ -176,12 +176,32 @@ async function runTsc() {
   } catch {}
 
   try {
-    await sendNotification("Code Quality (TS)", `TS pass finished. ${errors} errors. Last zero-error run: ${lastSuccessStr}`, { source: 'ts-checker' });
+    if (consecutiveIdentical === 1) {
+      await sendNotification(
+        "Code Quality (TS)",
+        `TS pass finished. ${errors} errors. Last zero-error run: ${lastSuccessStr}`,
+        {
+          source: 'ts-checker',
+          severity: errors > 0 ? 'error' : 'success',
+          open: 'http://localhost:3000/health'
+        }
+      );
+    }
   } catch {}
 
   if (consecutiveIdentical >= CONFIG.autoStopPasses) {
     await log(`💤 Stability detected (3 identical passes). ${errors} errors remaining. RECLAIMING RAM...`);
-    await sendNotification("TS Checker Auto-Stopped", `Stable state reached (${consecutiveIdentical} identical passes with ${errors} errors remaining). Reclaiming RAM.`, { source: 'ts-checker' });
+    if (errors > 0) {
+      await sendNotification(
+        "TS Checker Auto-Stopped",
+        `Stable state reached (${consecutiveIdentical} identical passes with ${errors} errors remaining). Reclaiming RAM.`,
+        {
+          source: 'ts-checker',
+          severity: 'warning',
+          open: 'http://localhost:3000/health'
+        }
+      );
+    }
     await cleanup();
     process.exit(0);
   }

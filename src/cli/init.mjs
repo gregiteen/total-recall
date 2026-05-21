@@ -242,7 +242,7 @@ export default async function init(args) {
     fs.mkdirSync(cfgDir, { recursive: true });
     const brainCfg = { url: opts.brain };
     if (opts.token) brainCfg.token = opts.token;
-    fs.writeFileSync(path.join(cfgDir, 'brain.json'), JSON.stringify(brainCfg, null, 2));
+    fs.writeFileSync(path.join(cfgDir, 'brain.json'), JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
     logOk(`Registered brain at ${opts.brain}. Run \`npx total-recall sync\` to pull instructions.`);
   }
 

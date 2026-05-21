@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import matter from 'gray-matter';
 import { protectIDEInstructions } from '../core/protect-instructions.mjs';
+import { totalRecallToken } from '../core/config.mjs';
 
 const INJECTION_BEGIN = '<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->';
 const INJECTION_END = '<!-- END INJECTED MEMORY -->';
@@ -14,9 +15,7 @@ const SHIMS = [
   'AGENTS.md',
   'GEMINI.md',
   '.github/copilot-instructions.md',
-  '.vscode/copilot-instructions.md',
-  '.windsurfrules',
-  'WINDSURF.md'
+  '.vscode/copilot-instructions.md'
 ];
 
 function parseArgs(args) {
@@ -49,9 +48,9 @@ function parseArgs(args) {
 function printHelp() {
   console.log(`
   total-recall sync — Sync brain instructions and back up vault to GitHub
-
+ 
   Usage: total-recall sync [options]
-
+ 
   Options:
     --brain <url>       Brain base URL. Defaults to .agent/config/brain.json
     --token <token>     Bearer PAT. Defaults to brain.json or TOTAL_RECALL_TOKEN
@@ -59,7 +58,7 @@ function printHelp() {
     --interval <sec>    Watch interval in seconds (default: 60)
     --push              Back up vault to your GitHub fork (git add -f + push)
     --help, -h          Show this help
-
+ 
   Backup workflow (--push):
     Commits .agent/memory-vault/, .agent/INSTRUCTIONS.md, and
     .agent/config/brain.json to your fork via force-add (bypasses .gitignore).
@@ -159,7 +158,7 @@ async function runOnce(opts) {
   const agentDir = workspaceAgentDir(cwd);
   const brainConfig = loadBrainConfig(agentDir);
   const brainUrl = opts.brain || brainConfig?.url;
-  const token = opts.token || brainConfig?.token || process.env.TOTAL_RECALL_TOKEN;
+  const token = opts.token || brainConfig?.token || totalRecallToken;
 
   if (!brainUrl) {
     throw new Error('No brain URL configured. Pass --brain <url> or create .agent/config/brain.json.');

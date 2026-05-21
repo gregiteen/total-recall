@@ -19,6 +19,8 @@ import os from 'node:os';
 import path from 'node:path';
 import bcrypt from 'bcrypt';
 import yaml from 'yaml';
+import { BCRYPT_COST } from '../server/auth.mjs';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -726,9 +728,7 @@ export function startDeployUI(port = 3001) {
         req.on('end', async () => {
           let opts;
           try { opts = JSON.parse(body || '{}'); } catch { opts = {}; }
-          const { ides = [], mcpFor, installRelay = true, installObsidian = false, brainUrl, token } = opts;
-          // mcpFor defaults to all selected IDEs (backward compat)
-          const mcpEnabled = new Set(Array.isArray(mcpFor) ? mcpFor : ides);
+          const { ides = [], installRelay = true, installObsidian = false, brainUrl, token } = opts;
           const results = [];
 
           // IDE-to-connect-client mapping (coding agents only — Obsidian handled separately)
@@ -753,13 +753,12 @@ export function startDeployUI(port = 3001) {
             if (!mapping) { results.push({ label: ide, ok: false, message: 'Unknown IDE' }); continue; }
             const args = ['connect', mapping.client];
             if (brainUrl) args.push('--brain', brainUrl);
-            if (token && mcpEnabled.has(ide)) args.push('--token', token);
-            if (!mcpEnabled.has(ide)) args.push('--no-mcp');
+            if (token) args.push('--token', token);
             args.push('--force');
             try {
               const r = sp(nodeBin, [scriptPath, ...args], { encoding: 'utf8', timeout: 30000 });
               if (r.status === 0) {
-                results.push({ label: mapping.label, ok: true, message: 'Connected' + (mcpEnabled.has(ide) ? ' + MCP' : '') });
+                results.push({ label: mapping.label, ok: true, message: 'Connected' });
               } else {
                 const err = (r.stderr || r.stdout || '').trim().split('\n').pop() || 'failed';
                 results.push({ label: mapping.label, ok: false, skipped: err.includes('exists'), message: err });
@@ -792,13 +791,13 @@ export function startDeployUI(port = 3001) {
             }
           }
 
-          // Connect Obsidian vault sync (Backup & Sync section, not an MCP IDE)
+          // Connect Obsidian vault sync
           let obsidianResult = null;
           if (installObsidian) {
             try {
               const obsArgs = [scriptPath, 'connect', 'obsidian'];
               if (brainUrl) obsArgs.push('--brain', brainUrl);
-              obsArgs.push('--no-mcp', '--force');
+              obsArgs.push('--force');
               const or = sp(nodeBin, obsArgs, { encoding: 'utf8', timeout: 30000 });
               obsidianResult = { ok: or.status === 0, message: or.status === 0 ? 'Vault sync configured' : (or.stderr || or.stdout || '').trim().split('\n').pop() };
             } catch (e) {
@@ -1444,7 +1443,7 @@ async function provisionVastAI(apiKey, instanceId = null, dashboardPassword = 't
     if (dashboardPassword) {
       emitProgress('log', '🔒 Configuring remote admin dashboard password...');
       try {
-        const hash = bcrypt.hashSync(dashboardPassword, 10);
+        const hash = bcrypt.hashSync(dashboardPassword, BCRYPT_COST);
         const forceReset = (!dashboardPassword || dashboardPassword === 'totalrecall');
         // We run a remote node one-liner to update security.yml on the remote VM
         const remoteScript = `

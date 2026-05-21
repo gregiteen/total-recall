@@ -120,12 +120,32 @@ async function runLint() {
     } catch {}
 
     try {
-      await sendNotification("Code Quality (Lint)", `Lint pass finished. ${errors} issues. Last zero-error run: ${lastSuccessStr}`, { source: 'lint-checker' });
+      if (consecutiveIdentical === 1) {
+        await sendNotification(
+          "Code Quality (Lint)",
+          `Lint pass finished. ${errors} issues. Last zero-error run: ${lastSuccessStr}`,
+          {
+            source: 'lint-checker',
+            severity: errors > 0 ? 'warning' : 'success',
+            open: 'http://localhost:3000/health'
+          }
+        );
+      }
     } catch {}
 
     if (consecutiveIdentical >= CONFIG.autoStopPasses) {
       await log(`💤 Stability detected (3 identical passes). ${errors} issues remaining. RECLAIMING RAM...`);
-      await sendNotification("Lint Checker Auto-Stopped", `Stable state reached (${consecutiveIdentical} identical passes with ${errors} issues remaining). Reclaiming RAM.`, { source: 'lint-checker' });
+      if (errors > 0) {
+        await sendNotification(
+          "Lint Checker Auto-Stopped",
+          `Stable state reached (${consecutiveIdentical} identical passes with ${errors} issues remaining). Reclaiming RAM.`,
+          {
+            source: 'lint-checker',
+            severity: 'warning',
+            open: 'http://localhost:3000/health'
+          }
+        );
+      }
       await cleanup();
       process.exit(0);
     }

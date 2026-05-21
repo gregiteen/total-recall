@@ -11,9 +11,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import crypto from 'node:crypto';
+import { agentDir } from '../core/config.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+const AGENT_DIR = agentDir;
 const KEYS_FILE = path.join(AGENT_DIR, 'config', 'keys.jsonl');
 
 export const ALL_SCOPES = '*';
@@ -28,7 +28,6 @@ export const KNOWN_SCOPES = [
   'memory:read',
   'memory:write',
   'memory:recompile',
-  'mcp:use',
   'sandbox:run',
   'tts:use',
   'tasks:read',

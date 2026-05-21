@@ -15,8 +15,9 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { writeNode, loadNodes } from './vault.mjs';
+import { agentDir } from './config.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+const AGENT_DIR = agentDir;
 const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
 
 // ── Candidate rule files we look for ─────────────────────────────────────────

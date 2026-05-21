@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { listMemory, searchMemory, readMemory } from '../api'
 import type { MemoryNode } from '../types'
 
@@ -8,6 +9,9 @@ const CATEGORIES = [
 ]
 
 export default function MemoryPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlSlug = searchParams.get('slug')
+
   const [nodes, setNodes] = useState<MemoryNode[]>([])
   const [selected, setSelected] = useState<MemoryNode | null>(null)
   const [category, setCategory] = useState('all')
@@ -39,13 +43,29 @@ export default function MemoryPage() {
     return () => clearTimeout(timer)
   }, [fetchNodes])
 
-  const handleSelect = async (node: MemoryNode) => {
-    try {
-      const full = await readMemory(node.slug)
-      setSelected(full)
-    } catch {
-      setSelected(node)
+  useEffect(() => {
+    if (urlSlug) {
+      const loadUrlSlug = async () => {
+        setLoading(true)
+        setError('')
+        try {
+          const full = await readMemory(urlSlug)
+          setSelected(full)
+        } catch (e) {
+          setError(`Failed to load memory node '${urlSlug}': ${(e as Error).message}`)
+          setSelected(null)
+        } finally {
+          setLoading(false)
+        }
+      }
+      loadUrlSlug()
+    } else {
+      setSelected(null)
     }
+  }, [urlSlug])
+
+  const handleSelect = (node: MemoryNode) => {
+    setSearchParams({ slug: node.slug })
   }
 
   const categoryCounts = nodes.reduce<Record<string, number>>((acc, n) => {
@@ -66,7 +86,7 @@ export default function MemoryPage() {
             <button
               key={c}
               className={`category-btn ${category === c ? 'active' : ''}`}
-              onClick={() => { setCategory(c); setSelected(null) }}
+              onClick={() => { setCategory(c); setSearchParams({}) }}
             >
               <span>{c === 'all' ? '📋 All Nodes' : c}</span>
               {c === 'all'
@@ -96,7 +116,7 @@ export default function MemoryPage() {
             </div>
           ) : selected ? (
             <div className="memory-detail">
-              <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)} style={{ marginBottom: 12 }}>← Back</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSearchParams({})} style={{ marginBottom: 12 }}>← Back</button>
               <h2>{selected.title}</h2>
               <dl className="frontmatter">
                 <dt>Slug</dt><dd><code>{selected.slug}</code></dd>
