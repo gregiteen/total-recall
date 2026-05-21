@@ -32,7 +32,7 @@ const router = express.Router();
 
 const activeEmbeddings = new Set();
 
-export async function drainActiveEmbeddings() {
+async function drainActiveEmbeddings() {
   if (activeEmbeddings.size === 0) return;
   await Promise.allSettled(Array.from(activeEmbeddings));
 }
