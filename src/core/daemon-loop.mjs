@@ -173,13 +173,17 @@ async function pushConclusion(conclusions = []) {
   fs.appendFileSync(INTERRUPTS_FILE, lines.join('\n'));
 
   // 3. macOS notification
-  // Sanitize: strip all non-printable and shell-dangerous characters, then truncate
-  const msg = summary.replace(/[^ -~]/g, '').replace(/["'`$\\]/g, '').slice(0, 200);
   try {
-    execFileSync('osascript', [
-      '-e', `display notification "${msg}" with title "Total Recall"`
-    ], { timeout: 3000 });
-  } catch { /* non-macOS — silent */ }
+    const { sendSystemNotification } = await import('./notifications.mjs');
+    await sendSystemNotification('Total Recall', summary, {
+      open: INTERRUPTS_FILE,
+      sound: 'Hero',
+      subtitle: 'New Insight Available',
+      group: 'total-recall-insight'
+    });
+  } catch (err) {
+    logger.debug('daemon-loop: pushConclusion notification failed', { err: err.message });
+  }
 }
 
 async function runSystem2Task(task, runtimeConfig) {

@@ -65,7 +65,7 @@ export function formatBeautifulDate(isoString) {
 
 import { agentDir } from './config.mjs';
 
-const getAgentDir = () => agentDir;
+const getAgentDir = () => process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
 const getAgendaFile = () => path.join(getAgentDir(), 'research-agenda.jsonl');
 const getSourcesRegistry = () => path.join(getAgentDir(), 'memory-derived', 'source-registry.jsonl');
 
@@ -934,36 +934,57 @@ export async function ingestSessionTopics(sessionTranscript, runtimeConfig) {
 
 // ─── Specialized Cognitive Research Phase Engines ────────────────────────────────
 
-/**
- * Push a deliberation conclusion to interrupts and issue system notification.
- */
 async function pushDeliberationConclusion(conclusions = []) {
   if (!conclusions.length) return;
-  const summary = (conclusions[0] || 'New deliberation conclusion').slice(0, 120);
   
-  // 2. Interrupt file
+  // 1. Resolve interrupts file path
+  // Use isolated dynamic agent dir in tests, global in production
+  const isTest = process.env.VITEST || process.env._TR_TEST_AGENT_DIR || process.env.NODE_ENV === 'test';
+  const interruptsFile = isTest
+    ? path.join(getAgentDir(), 'interrupts', 'pending.md')
+    : path.join(os.homedir(), '.agent', 'interrupts', 'pending.md');
+
+  const dir = path.dirname(interruptsFile);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // 2. Read existing content to check for duplication
+  const existingContent = fs.existsSync(interruptsFile) ? fs.readFileSync(interruptsFile, 'utf8') : '';
+  
+  // Filter out conclusions that are already present in pending.md to prevent duplicate alerts
+  const uniqueConclusions = conclusions.filter(c => !existingContent.includes(c));
+  if (uniqueConclusions.length === 0) {
+    logger.info({ subsystem: 'fact-seeker', message: 'Deliberation conclusions are already present in pending.md, skipping notifications.' });
+    return;
+  }
+
+  // 3. Append unique conclusions to the interrupts file
   const lines = [
     `\n\n---`,
     `<!-- total-recall deliberation-interrupt: ${new Date().toISOString()} -->`,
     `## 🧠 New Deliberation Insight`,
-    ...conclusions.map(c => `- ${c}`),
+    ...uniqueConclusions.map(c => `- ${c}`),
     ``,
     `*Query \`search_memory\` or check vault for full context.*`,
   ];
-  const interruptsFile = path.join(os.homedir(), '.agent', 'interrupts', 'pending.md');
-  const dir = path.dirname(interruptsFile);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(interruptsFile, lines.join('\n'));
   
-  // 3. macOS notification
-  const msg = summary.replace(/[^ -~]/g, '').replace(/["'`$\\]/g, '').slice(0, 200);
+  // 4. macOS notification (Skip in tests)
+  if (isTest) {
+    logger.debug('fact-seeker: bypassing notification in test environment');
+    return;
+  }
+
+  const notificationSummary = uniqueConclusions[0] || 'New deliberation conclusion';
   try {
-    const { execFileSync } = await import('node:child_process');
-    execFileSync('osascript', [
-      '-e', `display notification "${msg}" with title "Total Recall Deliberation"`
-    ], { timeout: 3000 });
+    const { sendSystemNotification } = await import('./notifications.mjs');
+    await sendSystemNotification('Total Recall Deliberation', notificationSummary, {
+      open: interruptsFile,
+      sound: 'Glass',
+      subtitle: 'Deliberation Insight',
+      group: 'total-recall-deliberation'
+    });
   } catch (err) {
-    logger.debug('fact-seeker: osascript notification failed or unsupported', { err: err.message });
+    logger.debug('fact-seeker: deliberation notification failed', { err: err.message });
   }
 }
 
