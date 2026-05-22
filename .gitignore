@@ -56,6 +56,8 @@ frontend/.eslintcache
 .agent/INSTRUCTIONS.md
 .agent/.clauderules
 .agent/.cursorrules
+.agent/CODEX.md
+.agent/.codexrules
 
 # Personal workspace projections at repo root
 # These are IDE shims compiled for Greg's local setup — not product files.
@@ -67,6 +69,8 @@ GEMINI.md
 HANDOFF.md
 .clauderules
 .cursorrules
+CODEX.md
+.codexrules
 claude_help.txt
 gemini_help.txt
 manual-test-agent.mjs

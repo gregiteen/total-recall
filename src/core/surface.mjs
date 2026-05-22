@@ -553,7 +553,9 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
     '.github/copilot-instructions.md',
     '.vscode/copilot-instructions.md',
     '.windsurfrules',
-    'WINDSURF.md'
+    'WINDSURF.md',
+    'CODEX.md',
+    '.codexrules'
   ];
   const baseDir = path.dirname(instructionsFile);
 
