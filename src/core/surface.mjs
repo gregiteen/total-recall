@@ -557,7 +557,7 @@ export function compileTier1(nodes, instructionsFile, agentDir) {
     'CODEX.md',
     '.codexrules'
   ];
-  const baseDir = path.dirname(instructionsFile);
+  const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
 
   for (const shim of shims) {
     const shimPath = path.join(baseDir, shim);
