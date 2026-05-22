@@ -536,7 +536,20 @@ async function main() {
         }
       }
 
-      const result = await dispatchTask(task, runtimeConfig);
+      let result;
+      if (task._research_id && task._research_phase && task._research_phase !== 'acquisition' && !getResearchNodeSlug(task)) {
+        logger.warn({
+          subsystem: 'daemon-loop',
+          message: `Research task ${task.slug} in phase ${task._research_phase} has no node slug. Resetting phase to acquisition.`,
+        });
+        result = {
+          success: false,
+          error: 'Target node slug is missing in queue item. Resetting to acquisition.',
+          resetPhaseTo: 'acquisition',
+        };
+      } else {
+        result = await dispatchTask(task, runtimeConfig);
+      }
 
       // Mark complete
       if ((source === 'explicit' || source === 'idle') && task._filepath) {
@@ -558,12 +571,21 @@ async function main() {
           if (result.factSlug) {
             patch.node_slug = result.factSlug;
           }
-          if (result.success && task._research_phase) {
-            const phases = ['acquisition', 'deliberation', 'improvement', 'monitoring', 'expansion'];
-            const idx = phases.indexOf(task._research_phase);
-            if (idx !== -1) {
-              const nextPhase = phases[(idx + 1) % phases.length];
-              patch.research_phase = nextPhase;
+          if (result.resetPhaseTo) {
+            patch.status = 'pending';
+            patch.research_phase = result.resetPhaseTo;
+          } else if (result.success && task._research_phase) {
+            let shouldAdvance = true;
+            if (task._research_phase === 'acquisition' && !result.factSlug) {
+              shouldAdvance = false;
+            }
+            if (shouldAdvance) {
+              const phases = ['acquisition', 'deliberation', 'improvement', 'monitoring', 'expansion'];
+              const idx = phases.indexOf(task._research_phase);
+              if (idx !== -1) {
+                const nextPhase = phases[(idx + 1) % phases.length];
+                patch.research_phase = nextPhase;
+              }
             }
           }
           updateQueueItem(task._research_id, patch);
