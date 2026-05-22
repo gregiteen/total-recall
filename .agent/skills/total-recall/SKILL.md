@@ -237,7 +237,7 @@ To avoid digging through source code or executing blind searches, use these auth
 ---
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-22T06:35:37.991Z -->
+<!-- @route: tfidf, generated_at: 2026-05-22T19:39:18.057Z -->
 
 - **inviolable-ide-instruction-67d37aaf** (confidence 1, importance 5):
   Inviolable IDE Instruction: ### ⚠️ MANDATORY: Always provide the new active Cl
@@ -250,5 +250,8 @@ To avoid digging through source code or executing blind searches, use these auth
 
 - **auto-pull-self-healing-deployment** (confidence 1, importance 5):
   Use auto-pull self-healing cron script on cloud VPS in place of GitHub Actions
+
+- **inviolable-ide-instruction-720c64be** (confidence 1, importance 5):
+  Inviolable IDE Instruction: 5. **CHECK INTERRUPTS FIRST:** Read `/Users/greg/G
 
 <!-- END INJECTED MEMORY -->
