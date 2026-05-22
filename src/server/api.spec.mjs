@@ -467,5 +467,53 @@ describe('API Proxy', () => {
       expect(res.body[2].title).toBe('❓ Brain Health & Scaling');
     });
   });
+
+  describe('fallback tool calling parsing', () => {
+    it('successfully triggers tool calls when fallback tool call is in message content', async () => {
+      // Setup local config and mock health so we enter the local path
+      fs.mkdirSync(path.join(AGENT_DIR, 'config'), { recursive: true });
+      fs.writeFileSync(path.join(AGENT_DIR, 'config', 'runtime.yml'), 'runtime: ollama\n');
+      
+      let callCount = 0;
+      callLocalRuntimeRawSpy.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // In the first call, return a message with fallback tool call in content
+          return {
+            role: 'assistant',
+            content: 'Let me look that up.\n<tool_call>{"name": "search_web", "arguments": {"query": "Vast.ai Cloud"}}</tool_call>',
+            tool_calls: undefined
+          };
+        } else {
+          // In the second call, return the final response
+          return {
+            role: 'assistant',
+            content: 'Here are the search results: Vast.ai is a cloud GPU platform.',
+            tool_calls: undefined
+          };
+        }
+      });
+
+      const handleToolCallSpy = vi.spyOn(await import('./tools.mjs'), 'handleToolCall');
+      handleToolCallSpy.mockResolvedValue('Search result: Vast.ai offers on-demand GPUs.');
+
+      const res = await request(buildApp())
+        .post('/v1/chat/completions')
+        .send({
+          model: 'total-recall/gemma4',
+          messages: [{ role: 'user', content: 'What is Vast.ai?' }]
+        });
+
+      expect(res.status).toBe(200);
+      expect(callCount).toBe(2);
+      expect(handleToolCallSpy).toHaveBeenCalledTimes(1);
+      const toolCallArg = handleToolCallSpy.mock.calls[0][0];
+      expect(toolCallArg.function.name).toBe('search_web');
+      expect(JSON.parse(toolCallArg.function.arguments).query).toBe('Vast.ai Cloud');
+      expect(res.body.choices[0].message.content).toBe('Here are the search results: Vast.ai is a cloud GPU platform.');
+
+      handleToolCallSpy.mockRestore();
+    });
+  });
 });
 

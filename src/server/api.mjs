@@ -3,7 +3,7 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { callFrontier, callFrontierRaw, loadFrontierConfig } from '../core/frontier.mjs';
-import { callLocalRuntimeRaw, loadRuntimeConfig, checkRuntimeHealth } from '../core/runtime.mjs';
+import { callLocalRuntimeRaw, loadRuntimeConfig, checkRuntimeHealth, cleanAndParseJSON } from '../core/runtime.mjs';
 import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
 import { requireAuth, requireScope, loginHandler, logoutHandler, changePasswordHandler, apiRateLimiter } from './auth.mjs';
 import { logger } from '../core/logger.mjs';
@@ -200,6 +200,115 @@ export const apiRouter = express.Router();
 
 apiRouter.use('/v1', apiRateLimiter(), requireAuth);
 
+function extractToolCallsFromContent(content) {
+  if (!content || typeof content !== 'string') return [];
+  const toolCalls = [];
+
+  // 1. Look for <tool_call>...</tool_call> tags
+  const matches = [...content.matchAll(/<tool_call>([\s\S]*?)<\/tool_call>/g)];
+  for (const match of matches) {
+    const raw = match[1].trim();
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.name) {
+        toolCalls.push({
+          id: `call_${crypto.randomUUID()}`,
+          type: 'function',
+          function: {
+            name: parsed.name,
+            arguments: typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments || {})
+          }
+        });
+      }
+    } catch {
+      try {
+        const parsed = cleanAndParseJSON(raw);
+        if (parsed && parsed.name) {
+          toolCalls.push({
+            id: `call_${crypto.randomUUID()}`,
+            type: 'function',
+            function: {
+              name: parsed.name,
+              arguments: typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments || {})
+            }
+          });
+        }
+      } catch {}
+    }
+  }
+
+  // 2. If no tag-based tool calls found, check for json markdown blocks
+  if (toolCalls.length === 0) {
+    const jsonBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (jsonBlockMatch) {
+      const raw = jsonBlockMatch[1].trim();
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.name && parsed.arguments) {
+          toolCalls.push({
+            id: `call_${crypto.randomUUID()}`,
+            type: 'function',
+            function: {
+              name: parsed.name,
+              arguments: typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments || {})
+            }
+          });
+        }
+      } catch {
+        try {
+          const parsed = cleanAndParseJSON(raw);
+          if (parsed && parsed.name && parsed.arguments) {
+            toolCalls.push({
+              id: `call_${crypto.randomUUID()}`,
+              type: 'function',
+              function: {
+                name: parsed.name,
+                arguments: typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments || {})
+              }
+            });
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 3. If still none, check if the entire content is a raw JSON block representing a tool call
+  if (toolCalls.length === 0) {
+    const trimmed = content.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.name && parsed.arguments) {
+          toolCalls.push({
+            id: `call_${crypto.randomUUID()}`,
+            type: 'function',
+            function: {
+              name: parsed.name,
+              arguments: typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments || {})
+            }
+          });
+        }
+      } catch {
+        try {
+          const parsed = cleanAndParseJSON(trimmed);
+          if (parsed && parsed.name && parsed.arguments) {
+            toolCalls.push({
+              id: `call_${crypto.randomUUID()}`,
+              type: 'function',
+              function: {
+                name: parsed.name,
+                arguments: typeof parsed.arguments === 'string' ? parsed.arguments : JSON.stringify(parsed.arguments || {})
+              }
+            });
+          }
+        } catch {}
+      }
+    }
+  }
+
+  return toolCalls;
+}
+
 // ─── Chat Completions ──────────────────────────────────────────────────────────
 
 apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, res) => {
@@ -282,6 +391,22 @@ COMPUTER USE TOOLS (desktop/X11 — use to control apps or the full desktop):
 CODE / MEMORY:
 - 'execute_code': Run Node.js to call APIs, process data, or perform calculations.
 - 'update_design': Write markdown to DESIGN.md when asked to create a UI or document.
+
+MANDATORY TOOL USE AND CITATION RULES:
+1. FORCE SEARCH: If the user asks you to "search", "lookup", "find", or asks about current/recent events or anything you do not explicitly have in your memory vault, you MUST output a tool call to 'search_web' immediately. Do not write a conversational introduction first.
+2. CITATION MANDATE: When answering using results from 'search_web' or 'browser_navigate', you MUST explicitly cite your sources by embedding clickable markdown links (e.g., [Source Title](URL)) directly in your response. Never summarize web facts without providing their corresponding URLs.
+3. BE DETERMINISTIC: Do not explain what you would do or write placeholders. Always execute the actual tool call.
+4. FALLBACK FORMAT: If your runtime does not support native OpenAI-compatible tool calls, or if your tool calls fail to trigger, you MUST write the tool call in your text response wrapped in <tool_call> tags.
+Example:
+<tool_call>
+{
+  "name": "search_web",
+  "arguments": {
+    "query": "precise search keywords here"
+  }
+}
+</tool_call>
+Do not add any other conversational text when outputting the fallback tool call. Output it immediately as your entire response.
 
 You have a REAL browser AND full desktop control. Use them. Navigate, click, type, scrape — do not just describe what you would do. For web tasks prefer browser tools. For native apps or desktop workflows use computer_screenshot first to orient yourself.`;
 
@@ -416,6 +541,24 @@ ${interviewTask}`;
         ? await callLocalRuntimeRaw(currentMessages, activeConfig, AVAILABLE_TOOLS)
         : await callFrontierRaw(currentMessages, activeConfig, AVAILABLE_TOOLS);
       currentMessages.push(message);
+
+      if (!message.tool_calls || message.tool_calls.length === 0) {
+        const parsedCalls = extractToolCallsFromContent(message.content);
+        if (parsedCalls && parsedCalls.length > 0) {
+          logger.info('api', `Extracted ${parsedCalls.length} fallback tool calls from text content`);
+          message.tool_calls = parsedCalls;
+          // Optionally clean content of XML tags to keep user-facing text clean
+          message.content = message.content.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '').trim();
+          
+          // Also handle ```json blocks if they were parsed
+          const jsonBlockRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/;
+          if (jsonBlockRegex.test(message.content)) {
+            if (message.content.replace(jsonBlockRegex, '').trim() === '') {
+              message.content = '';
+            }
+          }
+        }
+      }
 
       if (message.tool_calls && message.tool_calls.length > 0) {
         // Execute tools
