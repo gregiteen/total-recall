@@ -13,6 +13,7 @@ import { loadNodes, writeNode } from '../core/vault.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { resolveAgentDir } from '../cli/agent-dir.mjs';
+import { removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
@@ -171,6 +172,10 @@ function getSessionId(req) {
   if (typeof fromHeader === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(fromHeader)) {
     return fromHeader;
   }
+  const fromQuery = req.query?.sessionId;
+  if (typeof fromQuery === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(fromQuery)) {
+    return fromQuery;
+  }
   const cookieSession = req.cookies?.session_id;
   if (typeof cookieSession === 'string' && /^[a-zA-Z0-9_-]{4,64}$/.test(cookieSession)) {
     return cookieSession;
@@ -202,7 +207,7 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
     const frontierConfigPath = path.join(CONFIG_DIR, 'frontier.yml');
     const runtimeConfigPath = path.join(CONFIG_DIR, 'runtime.yml');
     
-    const { messages, model, temperature } = req.body;
+    const { messages, model, temperature, groundingNodes } = req.body;
     
     logger.info('api', '=== NEW CHAT REQUEST ===');
     logger.info('api', `Messages count: ${messages?.length || 0}`);
@@ -373,6 +378,28 @@ ${interviewTask}`;
       logger.error('api', `Failed to load system documentation: ${e.message}`);
     }
 
+    // Support topical grounding context
+    if (Array.isArray(groundingNodes) && groundingNodes.length > 0) {
+      try {
+        const allNodes = loadNodes(VAULT_DIR);
+        let groundingPrompt = '\n\n=== ACTIVE GROUNDING BRAIN NODES ===\nThe user has explicitly selected the following brain memory nodes as context for this conversation. Integrate their contents into your knowledge base and refer to them to inform your answers:';
+        let groundedAny = false;
+        for (const slug of groundingNodes) {
+          const node = allNodes.find(n => n.slug === slug);
+          if (node) {
+            const bodyTruncated = node.body ? (node.body.slice(0, 5000) + (node.body.length > 5000 ? '\n[Truncated for context size]' : '')) : '';
+            groundingPrompt += `\n\nNode Slug: ${node.slug}\nTitle: "${node.title || 'Untitled'}"\nCategory: ${node.category || 'unknown'}\n---\n${bodyTruncated}\n---`;
+            groundedAny = true;
+          }
+        }
+        if (groundedAny) {
+          baseSystemPrompt += groundingPrompt;
+        }
+      } catch (err) {
+        logger.error('api', `Failed to load grounding nodes: ${err.message}`);
+      }
+    }
+
     let currentMessages = [...messages];
     if (currentMessages.length > 0 && currentMessages[0].role === 'system') {
       currentMessages[0].content = `${baseSystemPrompt}\n\n${currentMessages[0].content}`;
@@ -497,3 +524,164 @@ apiRouter.get('/v1/chat/history', requireAuth, requireScope('chat:read'), (req, 
     res.status(500).json({ error: err.message });
   }
 });
+
+apiRouter.get('/v1/chat/threads', requireAuth, requireScope('chat:read'), (req, res) => {
+  try {
+    if (!fs.existsSync(SESSIONS_DIR)) {
+      return res.json([]);
+    }
+    const files = fs.readdirSync(SESSIONS_DIR);
+    const threads = [];
+    for (const file of files) {
+      if (!file.endsWith('.jsonl')) continue;
+      if (file.startsWith('relay-')) continue;
+      
+      const filePath = path.join(SESSIONS_DIR, file);
+      const stat = fs.statSync(filePath);
+      if (stat.size === 0) continue;
+      
+      try {
+        const content = fs.readFileSync(filePath, 'utf8').trim().split('\n').filter(Boolean);
+        if (content.length === 0) continue;
+        
+        const firstLine = content[0];
+        const firstRecord = JSON.parse(firstLine);
+        const messages = firstRecord.messages || [];
+        const userMsg = messages.find(m => m.role === 'user');
+        
+        let title = file.replace(/\.jsonl$/, '');
+        if (userMsg && typeof userMsg.content === 'string' && userMsg.content.trim()) {
+          const contentStr = userMsg.content.trim();
+          title = contentStr.slice(0, 45) + (contentStr.length > 45 ? '...' : '');
+        }
+        
+        const lastLine = content[content.length - 1];
+        const lastRecord = JSON.parse(lastLine);
+        const lastUpdated = lastRecord.timestamp ? new Date(lastRecord.timestamp).getTime() : stat.mtimeMs;
+        const turns = content.length;
+        
+        threads.push({
+          id: file.replace(/\.jsonl$/, ''),
+          title,
+          turns,
+          lastUpdated
+        });
+      } catch (err) {
+        logger.error('api', `Error reading session file ${file}`, { error: err.message });
+      }
+    }
+    
+    threads.sort((a, b) => b.lastUpdated - a.lastUpdated);
+    res.json(threads);
+  } catch (err) {
+    logger.error('api', 'Error listing threads', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.delete('/v1/chat/threads/:id', requireAuth, requireScope('chat:write'), (req, res) => {
+  try {
+    const threadId = req.params.id;
+    if (!/^[a-zA-Z0-9_-]{4,64}$/.test(threadId)) {
+      return res.status(400).json({ error: 'Invalid thread ID format' });
+    }
+    const file = path.join(SESSIONS_DIR, `${threadId}.jsonl`);
+    if (!fs.existsSync(file)) {
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+    
+    fs.unlinkSync(file);
+    
+    try {
+      removeSessionEmbeddingFromIndex(DERIVED_DIR, threadId);
+    } catch (err) {
+      logger.error('api', `Failed to remove session embeddings for ${threadId}`, { error: err.message });
+    }
+    
+    res.json({ deleted: true, id: threadId });
+  } catch (err) {
+    logger.error('api', 'Error deleting thread', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+apiRouter.get('/v1/chat/suggestions', requireAuth, requireScope('chat:read'), (req, res) => {
+  try {
+    const allNodes = loadNodes(VAULT_DIR);
+    // Find active or draft memory nodes that represent facts, concepts, or research
+    const candidates = allNodes.filter(n => n.status !== 'archived' && n.category !== 'preferences');
+
+    const suggestions = [];
+
+    // Fact Suggestion
+    const factNode = candidates.find(n => n.category === 'facts') || candidates[0];
+    if (factNode) {
+      suggestions.push({
+        type: 'fact',
+        title: `🧠 Brain Fact: ${factNode.title}`,
+        text: `Let's discuss the facts and findings documented in '**${factNode.title}**'. What else should we analyze?`,
+        nodes: [factNode.slug]
+      });
+    }
+
+    // Concept Suggestion
+    const conceptNode = candidates.find(n => n.category === 'concepts' && n.slug !== (factNode?.slug)) || candidates.find(n => n.slug !== (factNode?.slug));
+    if (conceptNode) {
+      suggestions.push({
+        type: 'concept',
+        title: `💡 Concept Idea: ${conceptNode.title}`,
+        text: `Regarding the concept '**${conceptNode.title}**', would you like to brainstorm how we can expand this into a production-ready system?`,
+        nodes: [conceptNode.slug]
+      });
+    }
+
+    // Question Suggestion
+    const draftNode = candidates.find(n => n.status === 'draft' && n.slug !== (factNode?.slug) && n.slug !== (conceptNode?.slug))
+      || candidates.find(n => n.category === 'patterns' && n.slug !== (factNode?.slug) && n.slug !== (conceptNode?.slug))
+      || candidates.find(n => n.slug !== (factNode?.slug) && n.slug !== (conceptNode?.slug));
+    if (draftNode) {
+      suggestions.push({
+        type: 'question',
+        title: `❓ Topic Question: ${draftNode.title}`,
+        text: `I noticed the '**${draftNode.title}**' node in your vault. Moving forward, how should we prioritize its development or resolve any open design details?`,
+        nodes: [draftNode.slug]
+      });
+    }
+
+    // Default suggestions fallback if vault is mostly empty
+    if (suggestions.length < 3) {
+      const standardSuggestions = [
+        {
+          type: 'fact',
+          title: '🧠 Sovereign OS Operations',
+          text: 'Let\'s review the core architecture of your Sovereign OS and see how we can make memory vaults even more powerful.',
+          nodes: []
+        },
+        {
+          type: 'concept',
+          title: '💡 Custom Agent Skills',
+          text: 'What kind of specialized automation skills should we design next for developer productivity?',
+          nodes: []
+        },
+        {
+          type: 'question',
+          title: '❓ Brain Health & Scaling',
+          text: 'Would you like to analyze system health indexes and run a memory compilation to ensure all search indexes are fully synchronized?',
+          nodes: []
+        }
+      ];
+      while (suggestions.length < 3 && standardSuggestions.length > 0) {
+        const standard = standardSuggestions.shift();
+        if (!suggestions.some(s => s.title === standard.title)) {
+          suggestions.push(standard);
+        }
+      }
+    }
+
+    res.json(suggestions.slice(0, 3));
+  } catch (err) {
+    logger.error('api', 'Error loading chat suggestions', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+

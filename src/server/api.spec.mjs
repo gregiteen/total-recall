@@ -255,4 +255,217 @@ describe('API Proxy', () => {
       expect(systemMsg.content).toContain('TOTAL_RECALL_INSTRUCTIONS_FIXTURE_TOKEN');
     });
   });
+
+  describe('Chat threads & session IDs', () => {
+    const sessionsDir = path.join(TEST_AGENT_DIR, 'sessions');
+
+    beforeEach(() => {
+      fs.mkdirSync(sessionsDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      fs.rmSync(sessionsDir, { recursive: true, force: true });
+    });
+
+    it('honors x-session-id header and sessionId query parameters for history loading', async () => {
+      // 1. Create a dummy session file
+      const sessionFile = path.join(sessionsDir, 'custom-thread.jsonl');
+      const dummyRecord = {
+        messages: [
+          { role: 'user', content: 'hello custom query' },
+          { role: 'assistant', content: 'hi query prompt' }
+        ],
+        timestamp: new Date().toISOString()
+      };
+      fs.writeFileSync(sessionFile, JSON.stringify(dummyRecord) + '\n');
+
+      // 2. Fetch via Query Param
+      const resQuery = await request(buildApp())
+        .get('/v1/chat/history?sessionId=custom-thread');
+      expect(resQuery.status).toBe(200);
+      expect(resQuery.body.messages).toHaveLength(2);
+      expect(resQuery.body.messages[0].content).toBe('hello custom query');
+
+      // 3. Fetch via Header
+      const resHeader = await request(buildApp())
+        .get('/v1/chat/history')
+        .set('x-session-id', 'custom-thread');
+      expect(resHeader.status).toBe(200);
+      expect(resHeader.body.messages).toHaveLength(2);
+      expect(resHeader.body.messages[0].content).toBe('hello custom query');
+    });
+
+    it('lists chat threads via GET /v1/chat/threads and extracts prompt titles', async () => {
+      // 1. Create thread-1
+      const thread1File = path.join(sessionsDir, 'thread-1.jsonl');
+      const record1 = {
+        messages: [
+          { role: 'user', content: 'What is deep learning?' },
+          { role: 'assistant', content: 'AI technique' }
+        ],
+        timestamp: new Date(Date.now() - 60000).toISOString()
+      };
+      fs.writeFileSync(thread1File, JSON.stringify(record1) + '\n');
+
+      // 2. Create thread-2 with longer content to test truncation
+      const thread2File = path.join(sessionsDir, 'thread-2.jsonl');
+      const record2 = {
+        messages: [
+          { role: 'user', content: 'A very long user prompt that exceeds the forty five character limit definitely' },
+          { role: 'assistant', content: 'truncated' }
+        ],
+        timestamp: new Date().toISOString()
+      };
+      fs.writeFileSync(thread2File, JSON.stringify(record2) + '\n');
+
+      // 3. Create relay file (should be ignored)
+      fs.writeFileSync(path.join(sessionsDir, 'relay-something.jsonl'), '{}');
+
+      // 4. Create empty file (should be ignored)
+      fs.writeFileSync(path.join(sessionsDir, 'empty-one.jsonl'), '');
+
+      const res = await request(buildApp()).get('/v1/chat/threads');
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(2);
+
+      // Verify sorting (thread-2 should be first since it has a newer timestamp)
+      expect(res.body[0].id).toBe('thread-2');
+      expect(res.body[0].title).toBe('A very long user prompt that exceeds the fort...');
+      expect(res.body[0].turns).toBe(1);
+
+      expect(res.body[1].id).toBe('thread-1');
+      expect(res.body[1].title).toBe('What is deep learning?');
+      expect(res.body[1].turns).toBe(1);
+    });
+
+    it('deletes a chat thread and sweeps embeddings via DELETE /v1/chat/threads/:id', async () => {
+      const threadId = 'delete-target';
+      const file = path.join(sessionsDir, `${threadId}.jsonl`);
+      fs.writeFileSync(file, '{"messages":[]}\n');
+
+      expect(fs.existsSync(file)).toBe(true);
+
+      const res = await request(buildApp())
+        .delete(`/v1/chat/threads/${threadId}`);
+      
+      expect(res.status).toBe(200);
+      expect(res.body.deleted).toBe(true);
+      expect(res.body.id).toBe(threadId);
+
+      // File should be physically gone
+      expect(fs.existsSync(file)).toBe(false);
+    });
+  });
+
+  describe('Grounding context and suggested discussions (Topical Chats)', () => {
+    const vaultDir = path.join(TEST_AGENT_DIR, 'memory-vault');
+
+    beforeEach(() => {
+      fs.mkdirSync(vaultDir, { recursive: true });
+      callFrontierRawSpy.mockReset();
+      callFrontierRawSpy.mockResolvedValue({
+        role: 'assistant',
+        content: 'grounded mock response',
+        tool_calls: undefined
+      });
+    });
+
+    afterEach(() => {
+      fs.rmSync(vaultDir, { recursive: true, force: true });
+    });
+
+    it('injects grounding nodes into the system prompt before forwarding to frontier', async () => {
+      const { writeNode } = await import('../core/vault.mjs');
+      writeNode({
+        slug: 'my-project-recall',
+        category: 'facts',
+        type: 'memory',
+        title: 'Project Recall Research',
+        status: 'active',
+        body: 'The details of the project recall memory system.'
+      }, vaultDir);
+
+      const res = await request(buildApp())
+        .post('/v1/chat/completions')
+        .send({
+          messages: [{ role: 'user', content: 'Tell me about the project' }],
+          groundingNodes: ['my-project-recall']
+        });
+
+      expect(res.status).toBe(200);
+      expect(callFrontierRawSpy).toHaveBeenCalledTimes(1);
+
+      const [messages] = callFrontierRawSpy.mock.calls[0];
+      const systemMsg = messages.find(m => m.role === 'system');
+      expect(systemMsg).toBeTruthy();
+      expect(systemMsg.content).toContain('=== ACTIVE GROUNDING BRAIN NODES ===');
+      expect(systemMsg.content).toContain('my-project-recall');
+      expect(systemMsg.content).toContain('Project Recall Research');
+      expect(systemMsg.content).toContain('The details of the project recall memory system.');
+    });
+
+    it('returns proactive suggested discussions matching structure constraints', async () => {
+      const { writeNode } = await import('../core/vault.mjs');
+      
+      writeNode({
+        slug: 'fact-node',
+        category: 'facts',
+        type: 'memory',
+        title: 'Fact Master Node',
+        status: 'active',
+        body: 'Vibrant facts of the system.'
+      }, vaultDir);
+
+      writeNode({
+        slug: 'concept-node',
+        category: 'concepts',
+        type: 'memory',
+        title: 'Concept Sandbox',
+        status: 'active',
+        body: 'Dynamic ideas of the brain.'
+      }, vaultDir);
+
+      writeNode({
+        slug: 'draft-node',
+        category: 'patterns',
+        type: 'memory',
+        title: 'Unfinished Pattern',
+        status: 'draft',
+        body: 'Drafting structure details.'
+      }, vaultDir);
+
+      const res = await request(buildApp())
+        .get('/v1/chat/suggestions');
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body).toHaveLength(3);
+
+      const [factS, conceptS, draftS] = res.body;
+
+      expect(factS.type).toBe('fact');
+      expect(factS.title).toContain('Fact Master Node');
+      expect(factS.nodes).toContain('fact-node');
+
+      expect(conceptS.type).toBe('concept');
+      expect(conceptS.title).toContain('Concept Sandbox');
+      expect(conceptS.nodes).toContain('concept-node');
+
+      expect(draftS.type).toBe('question');
+      expect(draftS.title).toContain('Unfinished Pattern');
+      expect(draftS.nodes).toContain('draft-node');
+    });
+
+    it('falls back to default suggestions when memory-vault is empty', async () => {
+      const res = await request(buildApp())
+        .get('/v1/chat/suggestions');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(3);
+      expect(res.body[0].title).toBe('🧠 Sovereign OS Operations');
+      expect(res.body[1].title).toBe('💡 Custom Agent Skills');
+      expect(res.body[2].title).toBe('❓ Brain Health & Scaling');
+    });
+  });
 });
+
