@@ -677,7 +677,7 @@ apiRouter.get('/v1/chat/threads', requireAuth, requireScope('chat:read'), (req, 
     const threads = [];
     for (const file of files) {
       if (!file.endsWith('.jsonl')) continue;
-      if (file.startsWith('relay-')) continue;
+      if (!file.startsWith('thread-')) continue;
       
       const filePath = path.join(SESSIONS_DIR, file);
       const stat = fs.statSync(filePath);
