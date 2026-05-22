@@ -1,8 +1,24 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory } from '../api'
-import type { ChatMessage } from '../types'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, fetchChatSuggestions, listMemory } from '../api'
+import type { ChatThread, ChatSuggestion } from '../api'
+import type { ChatMessage, MemoryNode } from '../types'
 
 let msgId = 0
+
+function getCurrentTimestamp(): number {
+  return Date.now()
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const diffMs = getCurrentTimestamp() - timestamp
+  if (diffMs < 60000) return 'just now'
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 60) return `${diffMins}m ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours}h ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays}d ago`
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -17,24 +33,82 @@ export default function ChatPage() {
   const [kokoroEnabled, setKokoroEnabled] = useState<boolean | null>(null)
   const [deepResearchMode, setDeepResearchMode] = useState(false)
 
+  // Threads listing & session control state
+  const [threads, setThreads] = useState<ChatThread[]>([])
+  const [activeThreadId, setActiveThreadId] = useState<string | undefined>(undefined)
+
+  // Grounding nodes & suggested discussions state
+  const [suggestions, setSuggestions] = useState<ChatSuggestion[]>([])
+  const [selectedGroundingNodes, setSelectedGroundingNodes] = useState<string[]>([])
+  const [allMemoryNodes, setAllMemoryNodes] = useState<MemoryNode[]>([])
+  const [showNodeSelector, setShowNodeSelector] = useState(false)
+  const [nodeSearchQuery, setNodeSearchQuery] = useState('')
+  const nodeSelectorRef = useRef<HTMLDivElement>(null)
+
   const scrollToBottom = useCallback(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
   useEffect(scrollToBottom, [messages, scrollToBottom])
 
-  // Load chat history on mount
-  useEffect(() => {
-    fetchChatHistory()
-      .then(history => {
-        if (history && history.length > 0) {
-          setMessages(history as ChatMessage[]);
-          // Update msgId to avoid collisions
-          msgId = Math.max(msgId, history.length + 1);
-        }
+  const refreshThreads = useCallback(() => {
+    fetchChatThreads()
+      .then(list => {
+        setThreads(list)
       })
       .catch(console.error)
   }, [])
+
+  // Load threads list, suggestions, and memory nodes on mount
+  useEffect(() => {
+    fetchChatThreads()
+      .then(list => {
+        setThreads(list)
+        if (list.length > 0) {
+          setActiveThreadId(list[0].id)
+        }
+      })
+      .catch(console.error)
+
+    fetchChatSuggestions()
+      .then(setSuggestions)
+      .catch(console.error)
+
+    listMemory()
+      .then(setAllMemoryNodes)
+      .catch(console.error)
+  }, [])
+
+  // Click outside listener for grounding node selector popover
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (nodeSelectorRef.current && !nodeSelectorRef.current.contains(event.target as Node)) {
+        setShowNodeSelector(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [nodeSelectorRef])
+
+  // Load chat history when activeThreadId changes
+  useEffect(() => {
+    fetchChatHistory(activeThreadId)
+      .then(history => {
+        if (history) {
+          setMessages(history as ChatMessage[])
+          msgId = Math.max(msgId, history.length + 1)
+        } else {
+          setMessages([])
+        }
+      })
+      .catch(err => {
+        console.error(err)
+        setMessages([])
+      })
+  }, [activeThreadId])
+
 
   // Probe the Kokoro endpoint once when voice mode is turned on so we know
   // whether to call /api/tts or fall back to the browser engine.
@@ -77,11 +151,83 @@ export default function ChatPage() {
     }
   }
 
+  const handleNewChat = () => {
+    const newId = `thread-${getCurrentTimestamp()}`
+    setActiveThreadId(newId)
+    setMessages([])
+    setInput('')
+    setSelectedGroundingNodes([])
+    if (textareaRef.current) textareaRef.current.style.height = '44px'
+  }
+
+  const handleDeleteThread = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    if (!confirm('Are you sure you want to delete this conversation thread?')) return
+    try {
+      await deleteChatThread(id)
+      if (activeThreadId === id) {
+        const remaining = threads.filter(t => t.id !== id)
+        if (remaining.length > 0) {
+          setActiveThreadId(remaining[0].id)
+        } else {
+          setActiveThreadId(undefined)
+          setMessages([])
+        }
+      }
+      refreshThreads()
+    } catch (err) {
+      console.error('Failed to delete thread:', err)
+    }
+  }
+
+  const handleSuggestionClick = async (suggestion: ChatSuggestion) => {
+    if (loading) return
+    const text = suggestion.text
+    const nodes = suggestion.nodes
+    setSelectedGroundingNodes(nodes)
+    setInput('')
+
+    const sessionId = activeThreadId || `thread-${getCurrentTimestamp()}`
+    if (!activeThreadId) {
+      setActiveThreadId(sessionId)
+    }
+
+    const userMsg: ChatMessage = { id: String(++msgId), role: 'user', content: text, timestamp: getCurrentTimestamp() }
+    setMessages(prev => [...prev, userMsg])
+    setLoading(true)
+
+    abortControllerRef.current = new AbortController()
+
+    try {
+      const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, nodes)
+      const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: getCurrentTimestamp(), versions: [reply], currentVersionIndex: 0 }
+      setMessages(prev => [...prev, assistantMsg])
+      speak(reply)
+      refreshThreads()
+    } catch (e: unknown) {
+      if ((e as Error).name === 'AbortError') {
+        setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '⛔ Generation stopped by user.', timestamp: getCurrentTimestamp(), versions: ['⛔ Generation stopped by user.'], currentVersionIndex: 0 }])
+      } else {
+        const errorMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: `⚠️ Error: ${(e as Error).message}`, timestamp: getCurrentTimestamp(), versions: [`⚠️ Error: ${(e as Error).message}`], currentVersionIndex: 0 }
+        setMessages(prev => [...prev, errorMsg])
+      }
+    } finally {
+      setLoading(false)
+      abortControllerRef.current = null
+    }
+  }
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || loading) return
 
-    const userMsg: ChatMessage = { id: String(++msgId), role: 'user', content: text, timestamp: Date.now() }
+    const sessionId = activeThreadId || `thread-${getCurrentTimestamp()}`
+    if (!activeThreadId) {
+      setActiveThreadId(sessionId)
+    }
+
+    const userMsg: ChatMessage = { id: String(++msgId), role: 'user', content: text, timestamp: getCurrentTimestamp() }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setLoading(true)
@@ -93,7 +239,7 @@ export default function ChatPage() {
 
     try {
       if (deepResearchMode) {
-        setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '🕵️ **Deep Research Agents dispatched.** Gathering facts across parallel web streams...', timestamp: Date.now() }]);
+        setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '🕵️ **Deep Research Agents dispatched.** Gathering facts across parallel web streams...', timestamp: getCurrentTimestamp() }]);
         
         const { slug } = await createTask('proactive-research', text, text);
         
@@ -106,7 +252,7 @@ export default function ChatPage() {
           if (t && (t.status === 'completed' || t.status === 'failed')) {
             taskCompleted = true;
             setMessages(prev => prev.filter(m => m.content !== '🕵️ **Deep Research Agents dispatched.** Gathering facts across parallel web streams...'));
-            setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: t.body || '', timestamp: Date.now() }]);
+            setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: t.body || '', timestamp: getCurrentTimestamp() }]);
             speak(t.body || '');
           }
         }
@@ -115,15 +261,16 @@ export default function ChatPage() {
       }
 
       const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal)
-      const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: Date.now(), versions: [reply], currentVersionIndex: 0 }
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes)
+      const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: getCurrentTimestamp(), versions: [reply], currentVersionIndex: 0 }
       setMessages(prev => [...prev, assistantMsg])
       speak(reply)
+      refreshThreads()
     } catch (e: unknown) {
       if ((e as Error).name === 'AbortError') {
-        setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '⛔ Generation stopped by user.', timestamp: Date.now(), versions: ['⛔ Generation stopped by user.'], currentVersionIndex: 0 }])
+        setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '⛔ Generation stopped by user.', timestamp: getCurrentTimestamp(), versions: ['⛔ Generation stopped by user.'], currentVersionIndex: 0 }])
       } else {
-        const errorMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: `⚠️ Error: ${(e as Error).message}`, timestamp: Date.now(), versions: [`⚠️ Error: ${(e as Error).message}`], currentVersionIndex: 0 }
+        const errorMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: `⚠️ Error: ${(e as Error).message}`, timestamp: getCurrentTimestamp(), versions: [`⚠️ Error: ${(e as Error).message}`], currentVersionIndex: 0 }
         setMessages(prev => [...prev, errorMsg])
       }
     } finally {
@@ -138,7 +285,7 @@ export default function ChatPage() {
     setLoading(true)
     abortControllerRef.current = new AbortController()
     try {
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal)
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId)
       setMessages(prev => {
         const next = [...prev]
         const target = next[msgIndex]
@@ -150,6 +297,7 @@ export default function ChatPage() {
         return next
       })
       speak(reply)
+      refreshThreads()
     } catch (e: unknown) {
       if ((e as Error).name !== 'AbortError') console.error(e)
     } finally {
@@ -196,113 +344,285 @@ export default function ChatPage() {
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
   }
 
-  return (
-    <div className="chat-container">
-      <div className="chat-messages">
-        {messages.length === 0 && (
-          <div className="chat-empty">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a9.96 9.96 0 0 1-4.644-1.142l-4.29 1.117a.85.85 0 0 1-1.04-1.04l1.116-4.29A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2z" />
-            </svg>
-            <h2>Total Recall Brain</h2>
-            <p>Start a conversation with your sovereign AI.</p>
-          </div>
-        )}
-        {messages.map((m, index) => (
-          <div key={m.id} className={`message message-${m.role}`}>
-            <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>{m.content}</div>
-            {m.role === 'assistant' && (
-              <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)', alignItems: 'center', userSelect: 'none' }}>
-                {m.versions && m.versions.length > 1 && (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginRight: 4 }}>
-                    <button 
-                      onClick={() => handleVersionSwitch(index, -1)} 
-                      disabled={(m.currentVersionIndex || 0) === 0} 
-                      style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2, opacity: (m.currentVersionIndex || 0) === 0 ? 0.3 : 1 }}
-                    >◄</button>
-                    <span>{(m.currentVersionIndex || 0) + 1} / {m.versions.length}</span>
-                    <button 
-                      onClick={() => handleVersionSwitch(index, 1)} 
-                      disabled={(m.currentVersionIndex || 0) === m.versions.length - 1} 
-                      style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2, opacity: (m.currentVersionIndex || 0) === m.versions.length - 1 ? 0.3 : 1 }}
-                    >►</button>
-                  </div>
-                )}
-                <button onClick={() => handleCopy(m.content)} title="Copy to clipboard" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                </button>
-                <button onClick={() => speak(m.content)} title="Read Aloud" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                </button>
-                <button onClick={() => handleRegenerate(index)} disabled={loading} title="Regenerate Response" style={{ background: 'none', border: 'none', color: 'inherit', cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 4, opacity: loading ? 0.3 : 1 }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg>
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-        {loading && (
-          <div className="message message-assistant">
-            <span className="skeleton" style={{ display: 'inline-block', width: 180, height: 16 }} />
-          </div>
-        )}
-        <div ref={messagesEnd} />
-      </div>
-      <div className="chat-input-bar">
-        <div className="chat-input-wrapper">
-          <button 
-            className={`btn btn-ghost ${voiceMode ? 'active' : ''}`} 
-            style={{ width: 44, height: 44, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: voiceMode ? 'var(--accent)' : 'var(--text-tertiary)', borderColor: voiceMode ? 'var(--accent)' : 'var(--border)' }}
-            onClick={() => {
-              setVoiceMode(!voiceMode)
-              if (voiceMode && 'speechSynthesis' in window) window.speechSynthesis.cancel()
-            }}
-            title={voiceMode ? "Voice Mode On" : "Voice Mode Off"}
-          >
-            {voiceMode ? (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
-                <line x1="1" x2="23" y1="1" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.88"/><path d="M19 10v2a7 7 0 0 1-1.39 4.2M5 10v2a7 7 0 0 0 1.93 4.88"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
-              </svg>
-            )}
-          </button>
+  const filteredNodes = allMemoryNodes.filter(node => 
+    node.title.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
+    node.slug.toLowerCase().includes(nodeSearchQuery.toLowerCase()) ||
+    (node.category && node.category.toLowerCase().includes(nodeSearchQuery.toLowerCase()))
+  )
 
-          <button 
-            className={`btn btn-ghost ${deepResearchMode ? 'active' : ''}`} 
-            style={{ width: 44, height: 44, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: deepResearchMode ? 'var(--accent)' : 'var(--text-tertiary)', borderColor: deepResearchMode ? 'var(--accent)' : 'var(--border)' }}
-            onClick={() => setDeepResearchMode(!deepResearchMode)}
-            title={deepResearchMode ? "Deep Research On" : "Deep Research Off"}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
-              <path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  return (
+    <div className="chat-layout">
+      {/* Threads Sidebar */}
+      <aside className="chat-threads-sidebar">
+        <div className="sidebar-header">
+          <button className="new-chat-btn" onClick={handleNewChat}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6 }}>
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
+            New Chat
           </button>
-          <textarea
-            ref={textareaRef}
-            id="chat-input"
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            placeholder="Message your brain…"
-            rows={1}
-            disabled={loading}
-          />
-          {loading ? (
-            <button className="chat-send-btn" onClick={handleStop} id="chat-stop" style={{ background: 'var(--error)', color: '#fff' }} title="Stop Generation">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 20, height: 20 }}>
-                <rect x="6" y="6" width="12" height="12" rx="2" ry="2"/>
-              </svg>
-            </button>
-          ) : (
-            <button className="chat-send-btn" onClick={handleSend} disabled={!input.trim()} id="chat-send" title="Send Message">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-              </svg>
-            </button>
+        </div>
+        <div className="thread-list">
+          {threads.map(t => (
+            <div 
+              key={t.id} 
+              className={`thread-item ${activeThreadId === t.id ? 'active' : ''}`}
+              onClick={() => setActiveThreadId(t.id)}
+            >
+              <div className="thread-info">
+                <div className="thread-title" title={t.title}>{t.title}</div>
+                <div className="thread-meta">
+                  <span>{t.turns} {t.turns === 1 ? 'turn' : 'turns'}</span>
+                  <span>•</span>
+                  <span>{formatRelativeTime(t.lastUpdated)}</span>
+                </div>
+              </div>
+              <button 
+                className="thread-delete-btn" 
+                onClick={(e) => handleDeleteThread(e, t.id)}
+                title="Delete chat thread"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* Main Chat Area */}
+      <div className="chat-container">
+        <div className="chat-messages">
+          {messages.length === 0 && (
+            <div className="chat-empty">
+              <div className="chat-empty-intro">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a9.96 9.96 0 0 1-4.644-1.142l-4.29 1.117a.85.85 0 0 1-1.04-1.04l1.116-4.29A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2z" />
+                </svg>
+                <h2>Total Recall Brain</h2>
+                <p>Start a conversation with your sovereign AI.</p>
+              </div>
+
+              {suggestions.length > 0 && (
+                <div className="chat-suggestions-container">
+                  <h3>Suggested Discussions</h3>
+                  <div className="chat-suggestions-deck">
+                    {suggestions.map((s, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`suggestion-card card-${s.type}`}
+                        onClick={() => handleSuggestionClick(s)}
+                      >
+                        <div className="suggestion-card-icon">
+                          {s.type === 'fact' && '🧠'}
+                          {s.type === 'concept' && '💡'}
+                          {s.type === 'question' && '❓'}
+                        </div>
+                        <div className="suggestion-card-content">
+                          <h4>{s.title}</h4>
+                          <p>{s.text}</p>
+                          {s.nodes && s.nodes.length > 0 && (
+                            <div className="suggestion-card-nodes">
+                              {s.nodes.map(nSlug => {
+                                const matched = allMemoryNodes.find(node => node.slug === nSlug);
+                                return (
+                                  <span key={nSlug} className="suggestion-node-pill">
+                                    {matched?.title || nSlug}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
+          {messages.map((m, index) => (
+            <div key={m.id} className={`message message-${m.role}`}>
+              <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>{m.content}</div>
+              {m.role === 'assistant' && (
+                <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)', alignItems: 'center', userSelect: 'none' }}>
+                  {m.versions && m.versions.length > 1 && (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginRight: 4 }}>
+                      <button 
+                        onClick={() => handleVersionSwitch(index, -1)} 
+                        disabled={(m.currentVersionIndex || 0) === 0} 
+                        style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2, opacity: (m.currentVersionIndex || 0) === 0 ? 0.3 : 1 }}
+                      >◄</button>
+                      <span>{(m.currentVersionIndex || 0) + 1} / {m.versions.length}</span>
+                      <button 
+                        onClick={() => handleVersionSwitch(index, 1)} 
+                        disabled={(m.currentVersionIndex || 0) === m.versions.length - 1} 
+                        style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2, opacity: (m.currentVersionIndex || 0) === m.versions.length - 1 ? 0.3 : 1 }}
+                      >►</button>
+                    </div>
+                  )}
+                  <button onClick={() => handleCopy(m.content)} title="Copy to clipboard" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                  <button onClick={() => speak(m.content)} title="Read Aloud" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                  </button>
+                  <button onClick={() => handleRegenerate(index)} disabled={loading} title="Regenerate Response" style={{ background: 'none', border: 'none', color: 'inherit', cursor: loading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 4, opacity: loading ? 0.3 : 1 }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {loading && (
+            <div className="message message-assistant">
+              <span className="skeleton" style={{ display: 'inline-block', width: 180, height: 16 }} />
+            </div>
+          )}
+          <div ref={messagesEnd} />
+        </div>
+        <div className="chat-input-bar">
+          {selectedGroundingNodes.length > 0 && (
+            <div className="grounding-pills">
+              {selectedGroundingNodes.map(slug => {
+                const node = allMemoryNodes.find(n => n.slug === slug);
+                return (
+                  <div key={slug} className="grounding-pill animate-fade-in">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span className="grounding-pill-title">{node?.title || slug}</span>
+                    <button className="grounding-pill-remove" onClick={() => setSelectedGroundingNodes(prev => prev.filter(s => s !== slug))} title="Remove grounding context">×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="chat-input-wrapper">
+            <button 
+              className={`btn btn-ghost ${voiceMode ? 'active' : ''}`} 
+              style={{ width: 44, height: 44, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: voiceMode ? 'var(--accent)' : 'var(--text-tertiary)', borderColor: voiceMode ? 'var(--accent)' : 'var(--border)' }}
+              onClick={() => {
+                setVoiceMode(!voiceMode)
+                if (voiceMode && 'speechSynthesis' in window) window.speechSynthesis.cancel()
+              }}
+              title={voiceMode ? "Voice Mode On" : "Voice Mode Off"}
+            >
+              {voiceMode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
+                  <line x1="1" x2="23" y1="1" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.88"/><path d="M19 10v2a7 7 0 0 1-1.39 4.2M5 10v2a7 7 0 0 0 1.93 4.88"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
+                </svg>
+              )}
+            </button>
+
+            <button 
+              className={`btn btn-ghost ${deepResearchMode ? 'active' : ''}`} 
+              style={{ width: 44, height: 44, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: deepResearchMode ? 'var(--accent)' : 'var(--text-tertiary)', borderColor: deepResearchMode ? 'var(--accent)' : 'var(--border)' }}
+              onClick={() => setDeepResearchMode(!deepResearchMode)}
+              title={deepResearchMode ? "Deep Research On" : "Deep Research Off"}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+                <path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </button>
+
+            <div style={{ position: 'relative', display: 'flex' }} ref={nodeSelectorRef}>
+              <button 
+                className={`btn btn-ghost ${selectedGroundingNodes.length > 0 ? 'active' : ''}`} 
+                style={{ width: 44, height: 44, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: selectedGroundingNodes.length > 0 ? 'var(--accent)' : 'var(--text-tertiary)', borderColor: selectedGroundingNodes.length > 0 ? 'var(--accent)' : 'var(--border)' }}
+                onClick={() => setShowNodeSelector(!showNodeSelector)}
+                title="Ground with brain nodes"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                {selectedGroundingNodes.length > 0 && (
+                  <span className="grounding-count-badge">{selectedGroundingNodes.length}</span>
+                )}
+              </button>
+
+              {showNodeSelector && (
+                <div className="node-selector-popover glass">
+                  <div className="node-selector-header">
+                    <h4>Ground with Brain Nodes</h4>
+                    <input 
+                      type="text" 
+                      placeholder="Search nodes..." 
+                      value={nodeSearchQuery}
+                      onChange={e => setNodeSearchQuery(e.target.value)}
+                      className="node-search-input"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="node-selector-list">
+                    {filteredNodes.length === 0 ? (
+                      <div className="node-selector-empty">No nodes found</div>
+                    ) : (
+                      filteredNodes.map(node => {
+                        const isSelected = selectedGroundingNodes.includes(node.slug);
+                        return (
+                          <div 
+                            key={node.slug} 
+                            className={`node-selector-item ${isSelected ? 'selected' : ''}`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedGroundingNodes(prev => prev.filter(s => s !== node.slug));
+                              } else {
+                                setSelectedGroundingNodes(prev => [...prev, node.slug]);
+                              }
+                            }}
+                          >
+                            <span className="node-selector-item-checkbox">
+                              {isSelected ? '✓' : ''}
+                            </span>
+                            <div className="node-selector-item-info">
+                              <span className="node-selector-item-title">{node.title}</span>
+                              <span className="node-selector-item-meta">{node.category} • {node.status || 'active'}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              id="chat-input"
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              placeholder="Message your brain…"
+              rows={1}
+              disabled={loading}
+            />
+            {loading ? (
+              <button className="chat-send-btn" onClick={handleStop} id="chat-stop" style={{ background: 'var(--error)', color: '#fff' }} title="Stop Generation">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 20, height: 20 }}>
+                  <rect x="6" y="6" width="12" height="12" rx="2" ry="2"/>
+                </svg>
+              </button>
+            ) : (
+              <button className="chat-send-btn" onClick={handleSend} disabled={!input.trim()} id="chat-send" title="Send Message">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

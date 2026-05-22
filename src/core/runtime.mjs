@@ -214,22 +214,29 @@ export function cleanAndParseJSON(jsonStr) {
       continue;
     }
 
-    // Check for comments outside of strings
-    if (char === '/' && nextChar === '/') {
-      i += 2;
-      while (i < str.length && str[i] !== '\n' && str[i] !== '\r') {
+    // Check for comments outside of strings (supporting standard //, /* and single / comment typos)
+    if (char === '/') {
+      if (nextChar === '/') {
+        i += 2;
+        while (i < str.length && str[i] !== '\n' && str[i] !== '\r') {
+          i++;
+        }
+        continue;
+      } else if (nextChar === '*') {
+        i += 2;
+        while (i < str.length && !(str[i] === '*' && str[i + 1] === '/')) {
+          i++;
+        }
+        i += 2; // skip */
+        continue;
+      } else {
+        // Single slash outside of quotes — treat as comment typo and strip the rest of the line
         i++;
+        while (i < str.length && str[i] !== '\n' && str[i] !== '\r') {
+          i++;
+        }
+        continue;
       }
-      continue;
-    }
-
-    if (char === '/' && nextChar === '*') {
-      i += 2;
-      while (i < str.length && !(str[i] === '*' && str[i + 1] === '/')) {
-        i++;
-      }
-      i += 2; // skip */
-      continue;
     }
 
     if (char === '"') {

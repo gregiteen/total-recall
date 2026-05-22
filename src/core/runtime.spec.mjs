@@ -39,6 +39,18 @@ describe('cleanAndParseJSON', () => {
     });
   });
 
+  it('strips single slash comment/bullet typos outside of strings', () => {
+    const input = `
+      {
+        "name": "John",
+        / "age": 30
+      }
+    `;
+    expect(cleanAndParseJSON(input)).toEqual({
+      name: 'John'
+    });
+  });
+
   it('does NOT strip comment-like patterns inside string literals', () => {
     const input = '{"url": "https://example.com/api", "text": "This is a // comment inside a string"}';
     expect(cleanAndParseJSON(input)).toEqual({

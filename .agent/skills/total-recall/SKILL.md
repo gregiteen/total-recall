@@ -237,7 +237,7 @@ To avoid digging through source code or executing blind searches, use these auth
 ---
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T22:41:36.409Z -->
+<!-- @route: tfidf, generated_at: 2026-05-22T01:44:36.765Z -->
 
 - **inviolable-ide-instruction-16c6f427** (confidence 1, importance 5):
   Inviolable IDE Instruction: 5. **CHECK INTERRUPTS FIRST:** Read `/root/.agent/
