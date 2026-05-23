@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, fetchChatSuggestions, listMemory, listResearch } from '../api'
-import type { ChatThread, ChatSuggestion } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch } from '../api'
+import type { ChatThread } from '../api'
 import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
 import Graph3D from '../components/Graph3D'
 
@@ -381,7 +381,6 @@ export default function ChatPage() {
                   prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug]
                 )
               }}
-              onClose={() => {}}
               selectedGroundingNodes={selectedGroundingNodes}
             />
           )}
