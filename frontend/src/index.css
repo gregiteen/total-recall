@@ -1216,15 +1216,223 @@ code, pre { font-family: var(--font-mono); }
   100% { transform: scale(1); opacity: 1; }
 }
 
-@media (max-width: 768px) {
-  .chat-suggestions-deck {
-    grid-template-columns: 1fr;
+/* ─── 3D Constellation Graph Styles ─────────────────────────────────────────── */
+
+.graph-3d-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, #0a0d16 0%, #020408 100%);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Glassmorphic Node Detail Drawer (Slide-in from right) */
+.node-detail-drawer {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  bottom: 20px;
+  width: 350px;
+  background: rgba(10, 15, 30, 0.75);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  color: var(--text-primary);
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
   }
-  .node-selector-popover {
-    width: calc(100vw - 32px);
-    max-width: 320px;
-    left: -12px;
+  to {
+    transform: translateX(0);
+    opacity: 1;
   }
 }
+
+.drawer-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.drawer-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.drawer-badge.badge-memory {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.drawer-badge.badge-thread {
+  background: rgba(6, 182, 212, 0.15);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.drawer-badge.badge-research {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.drawer-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+}
+
+.drawer-close-btn:hover {
+  color: #ffffff;
+}
+
+.drawer-body {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drawer-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.drawer-subtitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: -4px;
+}
+
+.drawer-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  width: fit-content;
+}
+
+.drawer-status .label {
+  color: var(--text-tertiary);
+}
+
+.drawer-status .value {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.drawer-status .value.status-completed,
+.drawer-status .value.status-done,
+.drawer-status .value.status-active {
+  color: #10b981;
+}
+
+.drawer-status .value.status-in-progress {
+  color: #f59e0b;
+}
+
+.drawer-status .value.status-pending {
+  color: #3b82f6;
+}
+
+.drawer-excerpt {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  margin-top: 8px;
+}
+
+.drawer-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.drawer-action-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 13px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drawer-action-btn.btn-cyan {
+  background: #06b6d4;
+  color: #ffffff;
+}
+
+.drawer-action-btn.btn-cyan:hover {
+  background: #0891b2;
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.4);
+}
+
+.drawer-action-btn.btn-purple {
+  background: #8b5cf6;
+  color: #ffffff;
+}
+
+.drawer-action-btn.btn-purple:hover {
+  background: #7c3aed;
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.4);
+}
+
+@media (max-width: 768px) {
+  .node-detail-drawer {
+    left: 20px;
+    width: auto;
+    bottom: 20px;
+    height: 300px;
+  }
+}
+
+.chat-messages:has(.graph-3d-wrapper) {
+  padding: 0;
+  overflow: hidden;
+}
+
 
 
