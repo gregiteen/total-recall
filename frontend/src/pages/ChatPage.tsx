@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, fetchChatSuggestions, listMemory } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, fetchChatSuggestions, listMemory, listResearch } from '../api'
 import type { ChatThread, ChatSuggestion } from '../api'
-import type { ChatMessage, MemoryNode } from '../types'
+import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
+import Graph3D from '../components/Graph3D'
+
 
 let msgId = 0
 
@@ -41,6 +43,7 @@ export default function ChatPage() {
   const [suggestions, setSuggestions] = useState<ChatSuggestion[]>([])
   const [selectedGroundingNodes, setSelectedGroundingNodes] = useState<string[]>([])
   const [allMemoryNodes, setAllMemoryNodes] = useState<MemoryNode[]>([])
+  const [researchItems, setResearchItems] = useState<ResearchItem[]>([])
   const [showNodeSelector, setShowNodeSelector] = useState(false)
   const [nodeSearchQuery, setNodeSearchQuery] = useState('')
   const nodeSelectorRef = useRef<HTMLDivElement>(null)
@@ -56,6 +59,10 @@ export default function ChatPage() {
       .then(list => {
         setThreads(list)
       })
+      .catch(console.error)
+
+    listResearch()
+      .then(res => setResearchItems(res.items || []))
       .catch(console.error)
   }, [])
 
@@ -76,6 +83,10 @@ export default function ChatPage() {
 
     listMemory()
       .then(setAllMemoryNodes)
+      .catch(console.error)
+
+    listResearch()
+      .then(res => setResearchItems(res.items || []))
       .catch(console.error)
   }, [])
 
@@ -399,52 +410,19 @@ export default function ChatPage() {
       <div className="chat-container">
         <div className="chat-messages">
           {messages.length === 0 && (
-            <div className="chat-empty">
-              <div className="chat-empty-intro">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a9.96 9.96 0 0 1-4.644-1.142l-4.29 1.117a.85.85 0 0 1-1.04-1.04l1.116-4.29A9.96 9.96 0 0 1 2 12C2 6.477 6.477 2 12 2z" />
-                </svg>
-                <h2>Total Recall Brain</h2>
-                <p>Start a conversation with your sovereign AI.</p>
-              </div>
-
-              {suggestions.length > 0 && (
-                <div className="chat-suggestions-container">
-                  <h3>Suggested Discussions</h3>
-                  <div className="chat-suggestions-deck">
-                    {suggestions.map((s, idx) => (
-                      <div 
-                        key={idx} 
-                        className={`suggestion-card card-${s.type}`}
-                        onClick={() => handleSuggestionClick(s)}
-                      >
-                        <div className="suggestion-card-icon">
-                          {s.type === 'fact' && '🧠'}
-                          {s.type === 'concept' && '💡'}
-                          {s.type === 'question' && '❓'}
-                        </div>
-                        <div className="suggestion-card-content">
-                          <h4>{s.title}</h4>
-                          <p>{s.text}</p>
-                          {s.nodes && s.nodes.length > 0 && (
-                            <div className="suggestion-card-nodes">
-                              {s.nodes.map(nSlug => {
-                                const matched = allMemoryNodes.find(node => node.slug === nSlug);
-                                return (
-                                  <span key={nSlug} className="suggestion-node-pill">
-                                    {matched?.title || nSlug}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <Graph3D
+              threads={threads}
+              memoryNodes={allMemoryNodes}
+              researchItems={researchItems}
+              onOpenThread={(threadId) => setActiveThreadId(threadId)}
+              onGroundMemoryNode={(slug) => {
+                setSelectedGroundingNodes(prev =>
+                  prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug]
+                )
+              }}
+              onClose={() => {}}
+              selectedGroundingNodes={selectedGroundingNodes}
+            />
           )}
           {messages.map((m, index) => (
             <div key={m.id} className={`message message-${m.role}`}>
