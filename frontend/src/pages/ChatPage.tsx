@@ -40,7 +40,6 @@ export default function ChatPage() {
   const [activeThreadId, setActiveThreadId] = useState<string | undefined>(undefined)
 
   // Grounding nodes & suggested discussions state
-  const [suggestions, setSuggestions] = useState<ChatSuggestion[]>([])
   const [selectedGroundingNodes, setSelectedGroundingNodes] = useState<string[]>([])
   const [allMemoryNodes, setAllMemoryNodes] = useState<MemoryNode[]>([])
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([])
@@ -77,9 +76,7 @@ export default function ChatPage() {
       })
       .catch(console.error)
 
-    fetchChatSuggestions()
-      .then(setSuggestions)
-      .catch(console.error)
+
 
     listMemory()
       .then(setAllMemoryNodes)
@@ -191,43 +188,7 @@ export default function ChatPage() {
     }
   }
 
-  const handleSuggestionClick = async (suggestion: ChatSuggestion) => {
-    if (loading) return
-    const text = suggestion.text
-    const nodes = suggestion.nodes
-    setSelectedGroundingNodes(nodes)
-    setInput('')
 
-    const sessionId = activeThreadId || `thread-${getCurrentTimestamp()}`
-    if (!activeThreadId) {
-      setActiveThreadId(sessionId)
-    }
-
-    const userMsg: ChatMessage = { id: String(++msgId), role: 'user', content: text, timestamp: getCurrentTimestamp() }
-    setMessages(prev => [...prev, userMsg])
-    setLoading(true)
-
-    abortControllerRef.current = new AbortController()
-
-    try {
-      const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, nodes)
-      const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: getCurrentTimestamp(), versions: [reply], currentVersionIndex: 0 }
-      setMessages(prev => [...prev, assistantMsg])
-      speak(reply)
-      refreshThreads()
-    } catch (e: unknown) {
-      if ((e as Error).name === 'AbortError') {
-        setMessages(prev => [...prev, { id: String(++msgId), role: 'assistant', content: '⛔ Generation stopped by user.', timestamp: getCurrentTimestamp(), versions: ['⛔ Generation stopped by user.'], currentVersionIndex: 0 }])
-      } else {
-        const errorMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: `⚠️ Error: ${(e as Error).message}`, timestamp: getCurrentTimestamp(), versions: [`⚠️ Error: ${(e as Error).message}`], currentVersionIndex: 0 }
-        setMessages(prev => [...prev, errorMsg])
-      }
-    } finally {
-      setLoading(false)
-      abortControllerRef.current = null
-    }
-  }
 
   const handleSend = async () => {
     const text = input.trim()

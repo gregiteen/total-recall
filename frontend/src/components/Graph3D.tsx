@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react'
 import type { MemoryNode, ResearchItem } from '../types'
 import type { ChatThread } from '../api'
 
@@ -8,7 +9,6 @@ interface Graph3DProps {
   researchItems: ResearchItem[]
   onOpenThread: (threadId: string) => void
   onGroundMemoryNode: (slug: string) => void
-  onClose: () => void
   selectedGroundingNodes: string[]
 }
 
@@ -43,7 +43,6 @@ export default function Graph3D({
   researchItems,
   onOpenThread,
   onGroundMemoryNode,
-  onClose,
   selectedGroundingNodes,
 }: Graph3DProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -61,7 +60,6 @@ export default function Graph3D({
   const lastMousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const velocityX = useRef<number>(0.002) // Auto rotation speed
   const velocityY = useRef<number>(0)
-  const lastTime = useRef<number>(performance.now())
 
   // Generate deterministic 3D nodes using Fibonacci Sphere layout
   const nodes = useMemo(() => {
