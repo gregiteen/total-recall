@@ -57,6 +57,7 @@ export function apiRateLimiter() {
     message: { error: 'Too many requests to the API' },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false,
   });
 }
 
@@ -89,6 +90,7 @@ export function sandboxRateLimiter() {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyOrIp,
+    validate: false,
   });
 }
 
@@ -109,6 +111,7 @@ export function ingestRateLimiter() {
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: keyOrIp,
+    validate: false,
   });
 }
 
