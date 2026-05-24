@@ -1,37 +1,41 @@
 # Total Recall — Architecture
 
-> Verified against source code: `relay.mjs`, `session-watcher.mjs`, `daemon-loop.mjs`, `dream.mjs`, `surface.mjs`, `scheduler.mjs`.
+> Verified against source code: `relay.mjs`, `session-watcher.mjs`, `daemon-loop.mjs`, `surface.mjs`, `scheduler.mjs`, `embeddings.mjs`, `dispatch.mjs`.
+> Last Updated: May 24, 2026
 
 ---
 
 ## The One-Sentence Version
 
-Total Recall is a **background relay + brain** system: a lightweight daemon runs on your laptop, silently ships your IDE conversation logs to a remote brain server, and the brain's local AI (Gemma 4) processes everything — extracting memory, building knowledge, and compiling a single `INSTRUCTIONS.md` that any AI session can pick up automatically.
+Total Recall is a **background relay + brain** system: a lightweight daemon runs on your workstation, silently ships your IDE conversation logs to a remote brain server, and the brain's specialized CLI dispatch engine and enterprise-grade semantic search (Google `text-embedding-004`) process everything — extracting memory, building knowledge, and compiling a **5-line pointer shim** that any AI session picks up automatically, progressively disclosing deep domain rules through tailored `SKILL.md` packages.
 
 ---
 
 ## Two-Component Architecture
 
 ```
-YOUR LAPTOP / WORKSTATION                    YOUR BRAIN SERVER
-(any machine you use IDEs on)                (Mac Mini, Vast.ai GPU, VPS, etc.)
+YOUR WORKSTATION                                 YOUR BRAIN SERVER
+(any machine you use IDEs on)                    (Mac Mini, Vast.ai GPU, VPS, etc.)
 
-┌─────────────────────────────┐              ┌──────────────────────────────────┐
-│  IDE Session Files           │              │  Total Recall Brain               │
-│                              │              │                                   │
-│  ~/.claude/projects/         │   relay      │  POST /api/sessions/ingest        │
-│  ~/.cursor/projects/         │ ──────────► │                                   │
-│  ~/.codex/sessions/          │  (every 60s, │  Gemma 4 26B (via Ollama)         │
-│  ~/.gemini/antigravity/      │   new files  │  runs dream cycle, post-mortems,  │
-│  ~/Library/.../chatSessions/ │   only)      │  research, memory maintenance     │
-│                              │              │                                   │
-│  npx total-recall relay      │              │  .agent/                          │
-│  (launchd/systemd service)   │ ◄────────── │  ├── INSTRUCTIONS.md  ◄── compiled│
-│                              │   INSTRUCTIONS│  ├── memory-vault/               │
-│  CLAUDE.md → INSTRUCTIONS.md│   .md pulled  │  ├── skills/                     │
-│  AGENTS.md → INSTRUCTIONS.md│   (connect)  │  ├── memory-inbox/                │
-│  .cursor/rules/              │              │  └── sessions/                    │
-└─────────────────────────────┘              └──────────────────────────────────┘
+┌─────────────────────────────┐                  ┌──────────────────────────────────┐
+│  IDE Session Files           │                  │  Total Recall Brain               │
+│                              │                  │                                   │
+│  ~/.claude/projects/         │     relay        │  POST /api/sessions/ingest        │
+│  ~/.cursor/projects/         │  ─────────────►  │                                   │
+│  ~/.codex/sessions/          │   (every 60s,    │  Headless CLI Agent Dispatch      │
+│  ~/.gemini/antigravity/      │    new files     │  (Antigravity/Claude Code/Codex)  │
+│  ~/Library/.../chatSessions/ │    only)         │  runs post-mortems, dream cycles, │
+│                              │                  │  research via spawnSync           │
+│  npx total-recall relay      │                  │                                   │
+│  (launchd/systemd service)   │  ◄─────────────  │  Google text-embedding-004        │
+│                              │   INSTRUCTIONS.  │  (and OpenAI fallback) handles    │
+│  CLAUDE.md                   │   md pulled      │  semantic search & indexing       │
+│  MEMORY.md (5-line shim)     │   (connect)      │                                   │
+│  .cursor/rules/              │                  │  .agent/                          │
+└─────────────────────────────┘                  │  ├── INSTRUCTIONS.md (5-line shim)│
+                                                 │  ├── memory-vault/               │
+                                                 │  └── skills/ (capsule injection) │
+                                                 └──────────────────────────────────┘
 ```
 
 ### Component 1: The Relay (runs on YOUR machine)
@@ -39,10 +43,10 @@ YOUR LAPTOP / WORKSTATION                    YOUR BRAIN SERVER
 **File:** `src/cli/relay.mjs`
 
 The relay is a tiny Node.js daemon that:
-1. Watches known IDE log directories for new/updated session files
-2. Ships changed files to the brain via `POST /api/sessions/ingest`
-3. Tracks what it has already sent (mtime-based deduplication)
-4. Runs as a macOS launchd or Linux systemd service — starts on boot, runs silently forever
+1. Watches known IDE log directories for new/updated session files.
+2. Ships changed files to the brain via `POST /api/sessions/ingest`.
+3. Tracks what it has already sent using efficient mtime-based deduplication.
+4. Runs as a macOS launchd or Linux systemd service — starts on boot, runs silently forever.
 
 ```bash
 npx total-recall relay install   # installs as system service (starts on boot)
@@ -68,30 +72,20 @@ Config lives at `~/.agent/config/brain.json`:
 
 ### Component 2: The Brain (runs on YOUR server)
 
-**Files:** `daemon-loop.mjs`, `dream.mjs`, `surface.mjs`, `session-watcher.mjs`, `scheduler.mjs`, `semantic-index.mjs`, `backup.mjs`
+**Files:** `daemon-loop.mjs`, `dream.mjs`, `surface.mjs`, `session-watcher.mjs`, `scheduler.mjs`, `semantic-index.mjs`, `backup.mjs`, `dispatch.mjs`, `embeddings.mjs`
 
 The brain is a Node.js server + autonomous AI daemon that:
 1. **Deduplicates Session Ingestion:** Collapses duplicate chat transcripts using a content-hash SHA-256 fingerprinting pipeline.
-2. **Local Semantic Search:** Runs cosine-similarity search against incremental vector embeddings computed locally via Ollama (`embeddings.jsonl` in `memory-derived/`) without any database dependency.
-3. **Dream Cycle Consolidation:** Runs Gemma 4 locally (via Ollama) to distill ingested logs into structured SSSS markdown memory nodes.
-4. **Surface Compilation:** Resolves wikilinks, weights, and compiles memory nodes into a single standard system instruction shim (`INSTRUCTIONS.md`).
-5. **Encrypted & Git-Pushed Backups:** Creates scheduled daily backups (macOS LaunchAgent or Linux cron) that are AES-256 encrypted and automatically pushed to a private git remote (`npx total-recall backup --push-git`).
-
-The brain NEVER sends unencrypted data to any cloud service. Gemma 4 runs entirely on your server hardware.
-
-### Component 3: Setup & Teardown Fabric
-
-**Files:** `setup.mjs`, `deploy-ui.mjs`, `uninstall.mjs`
-
-To make Total Recall exceptionally user-friendly and production-safe, a control layer governs installations, dashboards, and system cleanup:
-1. **Interactive Setup Wizard UI:** Running `npx total-recall deploy --ui` serves a multi-phase dashboard on port `3001` (by default) with SSE installation streaming, an API key builder, playground chat interfaces (in knowledge, journal, and reflect modes), and integration step-charts.
-2. **First-Class OS Service Uninstaller:** Running `npx total-recall uninstall` completely halts detached background processes, unregisters macOS launchd plists/Linux systemd units, removes workspace shims/rules, and cleans the global VFS, while explicitly preserving version-controlled developer vault folders.
+2. **Enterprise-Grade Semantic Search**: Generates high-fidelity vector representations utilizing Google's `text-embedding-004` (featuring OpenAI fallback) via `GOOGLE_API_KEY`. Flat JSONL files store indices locally (`embeddings.json` / `session-embeddings.json`) and an active local query cache (`embeddings-cache.json`) delivers blistering-fast query times (<50ms) without database overhead.
+3. **Headless CLI Agent Dispatch**: Completely replaces local Ollama/Gemma models. The brain dispatches cognitive tasks (post-mortems, steering, dream cycle consolidation, and fact-seeking) to headlessly spawned CLI agents (`Antigravity/Gemini`, `Claude Code`, `Codex CLI`) using `spawnSync` from the central registry in `.agent/skills/total-recall/skills/cli-agents/agents.yml`.
+4. **Progressive Disclosure Surface Compilation**: Rebuilds instructions into an optimized **5-line pointer shim** that references the meta-skill `SKILL.md` system. This avoids prompt bloat by keeping Tier 1 contexts under 1,000 tokens while dynamically injecting the top-7 relevant memory nodes (Tier 2) into domain-specific skill manifests on demand.
+5. **Encrypted & Git-Pushed Backups**: Creates scheduled daily backups (macOS LaunchAgent or Linux cron) that are AES-256 encrypted and automatically pushed to a private git remote (`npx total-recall backup --push-git`).
 
 ---
 
 ## The Daemon Loop (inside the brain)
 
-The brain runs a continuous intelligence loop, keeping Gemma 4 busy 24/7 at $0 cost.
+The brain runs a continuous intelligence loop, utilizing high-performance CLI agents to process cognitive tasks.
 
 ```
 Boot → scan existing sessions → start main loop:
@@ -100,12 +94,12 @@ Boot → scan existing sessions → start main loop:
   ┌─────────────────────────────────────────────┐
   │ 1. Check for new ingested sessions           │
   │ 2. Pick next task from priority queue        │
-  │ 3. Dispatch to cognitive engine              │
+  │ 3. Dispatch headlessly to CLI Agent Registry │
   │ 4. Write results to memory-inbox/pending/    │
   │                                              │
   │ Every 20 ticks: run Dream Cycle              │
   │   Light Sleep → REM → Deep Sleep            │
-  │   → recompile INSTRUCTIONS.md               │
+  │   → recompile 5-line pointer shims           │
   └─────────────────────────────────────────────┘
 ```
 
@@ -120,17 +114,18 @@ Boot → scan existing sessions → start main loop:
 | P4 | Self-evaluation (frontier eval loop) |
 | P5 | Exploration (speculative background work) |
 
-### Cognitive Engines
+### Cognitive Engines (CLI-Dispatched)
 
-| Engine | What it does |
-|--------|-------------|
-| `post-mortem.mjs` | Analyzes session → extracts patterns, facts, skill gaps |
-| `inference-engine.mjs` | Draws new conclusions from vault node combinations |
-| `fact-seeker.mjs` | Proactive web research, knowledge acquisition |
-| `clarity-rewriter.mjs` | Rewrites stale or unclear vault nodes |
-| `conflict-detector.mjs` | O(1) SPO ontology check + fuzzy similarity → quarantine conflicts |
-| `dream.mjs` | Full memory maintenance + surface compilation |
-| `steering.mjs` | Conflict resolution and memory promotion/demotion |
+All cognitive engines are run through headlessly spawned CLI subagents that execute specialized instruction scripts:
+
+| Engine | Operation Mode |
+|--------|----------------|
+| `post-mortem.mjs` | Spawns headless Claude/Gemini to extract patterns, facts, and skill gaps from ingested logs |
+| `inference-engine.mjs` | Dispatches Codex/Claude to combine vault nodes and write new logical conclusions |
+| `fact-seeker.mjs` | Initiates autonomous web-search dispatches, crawling references and acquiring cited facts |
+| `conflict-detector.mjs` | Evaluates new nodes against SSSS v2 ontology, auto-resolving or quarantining conflicts |
+| `dream.mjs` | Conducts memory pruning, promotes active facts, decays disused nodes, and compiles instruction shims |
+| `steering.mjs` | Handles direct memory promotion/demotion and human overrides |
 
 ---
 
@@ -138,11 +133,9 @@ Boot → scan existing sessions → start main loop:
 
 Runs every 20 task ticks. Three phases:
 
-- **Light Sleep** — scan vault for modified files, update derived indexes
-- **REM** — pattern recognition, score memories, promote active / decay stale
-- **Deep Sleep** — recompile `INSTRUCTIONS.md` from `priority: absolute` vault nodes
-
-The compiled `INSTRUCTIONS.md` is what every AI session picks up. It's the distilled output of everything the brain has learned about you.
+- **Light Sleep** — Scan vault for modified files, refresh `text-embedding-004` vectors, update derived indexes.
+- **REM** — Score memories, perform semantic clustering, promote active cards, and decay stale confidence indexes.
+- **Deep Sleep** — Recompile instruction files. Write a highly compact **5-line pointer shim** pointing to `SKILL.md` to prevent prompt bloat.
 
 ---
 
@@ -152,61 +145,60 @@ Everything lives in plain Markdown files. No database. No lock-in.
 
 ```
 .agent/
-├── INSTRUCTIONS.md              ← TIER 1: Compiled hot memory (auto-injected into AI sessions)
+├── INSTRUCTIONS.md              ← TIER 1: Compiled 5-line pointer shim (auto-loaded in IDEs)
 ├── memory-vault/                ← TIER 3: Permanent vault (source of truth)
-│   ├── invariants/              ← priority: absolute → compiles to TIER 1
+│   ├── invariants/              ← priority: absolute → compiles to pointer shims
 │   ├── preferences/
 │   ├── anti-patterns/           ← "Never do X"
 │   ├── patterns/                ← "Always do X"
 │   ├── decisions/               ← Architectural reasoning
 │   ├── concepts/                ← Domain knowledge
-│   ├── facts/                   ← Verified assertions
-│   └── lore/                    ← Backstory and context
+│   └── facts/                   ← Verified assertions
 ├── skills/                      ← TIER 2: Progressive disclosure
-│   └── <skill-name>/SKILL.md   ← Injected with top-7 relevant memory nodes
+│   └── <skill-name>/SKILL.md   ← Dynamic capsule injected with top-7 semantic nodes
 ├── memory-inbox/
 │   ├── pending/                 ← New observations awaiting promotion
 │   └── conflicts/               ← Needs human resolution
-├── memory-derived/              ← Disposable JSONL indexes (rebuilt by dream cycle)
+├── memory-derived/              ← Ephemeral JSONL indexes (rebuilt by reindex/dream)
+│   ├── embeddings.json          ← Local text-embedding-004 vector index
+│   └── embeddings-cache.json    ← High-speed cosine query cache
 ├── sessions/                    ← Ingested IDE conversation files
 ├── scheduler/queue/             ← Autonomous task queue (type: task markdown files)
 ├── config/
 │   ├── brain.json               ← Brain URL + PAT (relay reads this)
-│   ├── runtime.yml              ← LLM runtime config
+│   ├── frontier.yml             ← Escalation endpoint config
 │   ├── auth.yml                 ← API auth config
 │   └── secrets.enc              ← AES-256 encrypted secrets
-├── logs/
-│   ├── relay.log                ← Relay shipping activity
-│   └── daemon.log               ← Brain daemon activity
 └── .backups/                    ← Nightly tar.gpg archives
 ```
 
 ---
 
-## Intelligence Model
+## Intelligence & Dispatch Model
 
-### Local: Gemma 4 26B-A4B (via Ollama)
-- Runs on YOUR server hardware — zero cloud cost
-- Q4_K_M quantization (~15.5 GB RAM)
-- Handles all background work: post-mortems, research, memory maintenance, dream cycle
-- 1,000+ inferences/day at $0
+Total Recall completely eliminates local hardware overhead (Ollama and local LLMs are fully removed) in favor of high-fidelity, high-speed remote dispatches and headless CLI agent orchestrations.
 
-### Frontier API (optional, BYOK)
-Used only for high-stakes eval and confidence escalation:
-- Gemma 4 builds skills → self-tests → escalates to frontier for ~$0.012/eval → corrections → applied to vault
-- Target spend: <$15/month
-- Privacy: `privacy: local_only` vault nodes are redacted before any frontier call
+### The Headless Agent Registry (`agents.yml`)
+
+The system routes cognitive tasks to specialized CLI agents operating headlessly:
+
+| Agent Binary | Target Model | Context Focus | Use Case |
+|--------------|--------------|---------------|----------|
+| **Gemini CLI** | `gemini-3.5-flash` | 1M+ token context | Heavy-lifting, bulk logs ingestion, repo-wide post-mortems |
+| **Claude Code** | `claude-opus-4-7` | Frontier SWE capability | Hard logic, complex reasoning, code review, precise steering |
+| **Codex CLI** | `gpt-5.5` | Sandboxed automation | Ephemeral TDD scripts, test suite execution, isolated files |
+
+Dispatches are triggered via the `dispatch.mjs` script using non-interactive shells (`spawnSync`) and automatically notify the developer's macOS environment upon completion.
 
 ---
 
 ## Security & Privacy
 
-- **Your conversations never leave your control.** The relay ships logs from your laptop to YOUR server (not Google, not Anthropic, not anyone else).
-- **Gemma 4 runs on your hardware.** No inference goes to any third-party cloud.
-- **Frontier API is opt-in and redacted.** `privacy: local_only` nodes are always stripped before escalation.
+- **Your conversations never leave your control**: The relay ships logs from your laptop to YOUR server (not third-party SaaS platforms).
+- **Redaction of sensitive memory**: Memory nodes marked with `privacy: local_only` are systematically redacted before any external CLI agent dispatch or frontier API call.
+- **Sandboxed Execution**: Subagents run inside an isolated sandbox wrapper (`sandbox.mjs`) featuring strict POSIX namespaces, RAM/CPU allocation caps, restricted directory access, and command-execution whitelists.
 - **Secrets**: Argon2id master password → AES-256-GCM `secrets.enc`. No plaintext keys on disk.
-- **Code sandbox**: 512MB RAM cap, 60s timeout, offline network namespace, scoped to `~/.agent/`.
-- **Backups**: Nightly AES-256 + GPG encrypted tarballs, optional rsync to S3/B2.
+- **Backups**: Nightly AES-256 + GPG encrypted tarballs, automatically pushed to your private Git repo.
 
 ---
 
@@ -214,7 +206,7 @@ Used only for high-stakes eval and confidence escalation:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  YOUR LAPTOP (or any machine with IDEs)                                  │
+│  YOUR WORKSTATION (or any machine with IDEs)                            │
 │                                                                          │
 │  Claude Code → ~/.claude/projects/*.jsonl ──┐                           │
 │  Cursor      → ~/.cursor/projects/*.jsonl ──┤                           │
@@ -222,21 +214,20 @@ Used only for high-stakes eval and confidence escalation:
 │  VS Copilot  → workspaceStorage/...       ──┤    (launchd/systemd)      │
 │  Antigravity → ~/.gemini/antigravity/...  ──┘    ships new files        │
 │                                                   every 60 seconds       │
-│  CLAUDE.md / AGENTS.md / .cursor/rules/                                 │
-│    → symlinked to INSTRUCTIONS.md (pulled from brain)                   │
+│  CLAUDE.md / MEMORY.md / .cursorrules/                                  │
+│    → symlinked to compiled 5-line pointer shim                          │
 └──────────────────────┬────────────────────────────────────────────────--┘
                        │ POST /api/sessions/ingest
                        ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  YOUR BRAIN SERVER (Mac Mini / Vast.ai GPU / VPS / Oracle Cloud ARM)    │
+│  YOUR BRAIN SERVER (Mac Mini / Vast.ai / VPS)                           │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │  REST API (Caddy TLS → Node.js)                                    │ │
 │  │  POST /api/sessions/ingest  ← receives from relay                 │ │
-│  │  GET  /api/instructions     ← serves INSTRUCTIONS.md to clients   │ │
-│  │  POST /v1/chat/completions  ← OpenAI-compatible chat endpoint     │ │
-│  │  MCP Gateway                ← for IDEs that want direct access     │ │
-│  │  Dashboard (React SPA)      ← browser-based memory explorer       │ │
+│  │  GET  /api/instructions     ← serves pointer shim to clients       │ │
+│  │  POST /api/search           ← Google text-embedding-004 endpoint  │ │
+│  │  Dashboard (React Glass)    ← browser-based memory explorer        │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
@@ -244,12 +235,12 @@ Used only for high-stakes eval and confidence escalation:
 │  │                                                                    │ │
 │  │  session-watcher → post-mortem → memory-inbox/pending/            │ │
 │  │  dream cycle     → conflict resolution → memory-vault/            │ │
-│  │  scheduler       → research / inference / clarity rewrite         │ │
-│  │  surface.mjs     → compile INSTRUCTIONS.md ← ← ← ← ← ← ← ←     │ │
+│  │  scheduler       → dispatches headless agents via spawnSync        │ │
+│  │  surface.mjs     → compile 5-line pointer shims                    │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  Gemma 4 26B via Ollama (ALL inference is local, zero cloud cost) │ │
+│  │  Headless CLI Agent Registry (Antigravity/Claude Code/Codex CLI)   │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -258,8 +249,7 @@ Used only for high-stakes eval and confidence escalation:
 
 ## What This Is NOT
 
-- ❌ Not a proxy — it does NOT intercept or sit between you and Claude/Cursor/GPT
-- ❌ Not a plugin — IDEs don't need to be modified or configured
-- ❌ Not manual — zero setup per-IDE beyond symlinking INSTRUCTIONS.md
-- ❌ Not sending data to Anthropic/OpenAI/Google — only to YOUR server
-- ❌ Not replacing your IDE's AI — it runs in parallel, invisibly
+- ❌ **Not a proxy** — it does NOT intercept or sit in the network path of Cursor/Claude/GPT.
+- ❌ **Not a heavy IDE plugin** — IDEs don't need configuration, just a lightweight pointer shim.
+- ❌ **Not a local GPU resource hog** — Ollama and local LLMs are completely removed, avoiding memory constraints and keeping local workstations lightning-fast.
+- ❌ **Not sending raw data to the cloud** — Redacts sensitive `local_only` vault nodes before any API or CLI agent dispatch.

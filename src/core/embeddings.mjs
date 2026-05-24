@@ -1,29 +1,28 @@
 /**
  * src/core/embeddings.mjs
  *
- * Ollama-backed embedding generation + cosine similarity for semantic vault search.
+ * Google AI embedding generation + cosine similarity for semantic vault search.
  *
  * Index file: .agent/memory-derived/embeddings.json
  *   { [slug]: { embedding: number[], model: string, generated_at: string } }
  *
- * Embedding model: nomic-embed-text (274MB, runs locally on Ollama)
- *   Install: ollama pull nomic-embed-text
+ * Embedding model: text-embedding-004 (Google, 768 dims, free tier)
+ *   Auth: GOOGLE_API_KEY env var
  *
- * Supports both Ollama API versions:
- *   New (>= 0.3.6): POST /api/embed   { model, input }  → { embeddings: [[...]] }
- *   Old:            POST /api/embeddings { model, prompt } → { embedding: [...] }
+ * Fallback: If GOOGLE_API_KEY is not set, tries OpenAI's text-embedding-3-small
+ *   via OPENAI_API_KEY env var.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
 
-import { ollamaUrl, embedModel, agentDir } from './config.mjs';
+import { googleApiKey, embedModel, agentDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
-const DEFAULT_OLLAMA_URL = ollamaUrl;
 const DEFAULT_EMBED_MODEL = embedModel;
+const GOOGLE_API_KEY = googleApiKey || process.env.GOOGLE_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const AGENT_DIR = agentDir;
 const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
@@ -64,16 +63,80 @@ function saveCache() {
 // ─── Embedding generation ────────────────────────────────────────────────────
 
 /**
- * Get an embedding vector for the given text from Ollama.
- * Tries the new /api/embed endpoint first, falls back to /api/embeddings.
+ * Get an embedding from Google's text-embedding-004 API.
+ */
+async function getGoogleEmbedding(text, model = 'text-embedding-004') {
+  if (!GOOGLE_API_KEY) {
+    throw new Error('GOOGLE_API_KEY not set. Cannot generate embeddings.');
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${GOOGLE_API_KEY}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: `models/${model}`,
+      content: { parts: [{ text }] },
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Google embedding API error ${res.status}: ${body || 'no response body'}`);
+  }
+
+  const data = await res.json();
+  if (!data.embedding?.values || !Array.isArray(data.embedding.values)) {
+    throw new Error('Google returned no embedding vector');
+  }
+
+  return data.embedding.values;
+}
+
+/**
+ * Fallback: Get an embedding from OpenAI's text-embedding-3-small API.
+ */
+async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
+  if (!OPENAI_API_KEY) {
+    throw new Error('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is set. Cannot generate embeddings.');
+  }
+
+  const res = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({ model, input: text }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`OpenAI embedding API error ${res.status}: ${body || 'no response body'}`);
+  }
+
+  const data = await res.json();
+  if (!data.data?.[0]?.embedding) {
+    throw new Error('OpenAI returned no embedding vector');
+  }
+
+  return data.data[0].embedding;
+}
+
+/**
+ * Get an embedding vector for the given text.
+ * Tries Google first, falls back to OpenAI.
  *
  * @param {string} text
- * @param {string} [ollamaUrl]
+ * @param {string} [_unused]   — kept for backward compatibility (was ollamaUrl)
  * @param {string} [model]
  * @returns {Promise<number[]>}
  */
-export async function getEmbedding(text, ollamaUrl = DEFAULT_OLLAMA_URL, model = DEFAULT_EMBED_MODEL) {
-  const input = String(text).slice(0, 8000); // cap at 8k chars — safe for all embed models
+export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
+  const input = String(text).slice(0, 8000); // cap at 8k chars
 
   const cache = loadCache();
   const cacheKey = `${model}:${sha256(input)}`;
@@ -83,43 +146,27 @@ export async function getEmbedding(text, ollamaUrl = DEFAULT_OLLAMA_URL, model =
 
   let embedding;
 
-  // Try new API: POST /api/embed { model, input } → { embeddings: [[...]] }
-  try {
-    const res = await fetch(`${ollamaUrl}/api/embed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, input }),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.embeddings?.[0])) {
-        embedding = data.embeddings[0];
-      }
+  // Try Google first
+  if (GOOGLE_API_KEY) {
+    try {
+      embedding = await getGoogleEmbedding(input, model);
+    } catch (err) {
+      logger.debug('embeddings: Google API failed, trying OpenAI fallback', { err: err.message });
     }
-  } catch (err) {
-    logger.debug('embeddings: new embed API failed, falling back to legacy API', { err: err.message });
+  }
+
+  // Fallback to OpenAI
+  if (!embedding && OPENAI_API_KEY) {
+    try {
+      embedding = await getOpenAIEmbedding(input);
+    } catch (err) {
+      logger.debug('embeddings: OpenAI fallback also failed', { err: err.message });
+      throw err;
+    }
   }
 
   if (!embedding) {
-    // Fall back to old API: POST /api/embeddings { model, prompt } → { embedding: [...] }
-    const res = await fetch(`${ollamaUrl}/api/embeddings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: input }),
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Ollama embedding API error ${res.status}: ${body || 'no response body'}`);
-    }
-
-    const data = await res.json();
-    if (!Array.isArray(data.embedding)) {
-      throw new Error(`Ollama returned no embedding. Is '${model}' installed? Run: ollama pull ${model}`);
-    }
-    embedding = data.embedding;
+    throw new Error('No embedding provider available. Set GOOGLE_API_KEY or OPENAI_API_KEY.');
   }
 
   // Save to cache
@@ -226,12 +273,11 @@ export function nodeToEmbedText(node) {
  *
  * @param {object[]} nodes
  * @param {string} derivedDir
- * @param {{ ollamaUrl?: string, model?: string, force?: boolean, onProgress?: Function }} [opts]
+ * @param {{ model?: string, force?: boolean, onProgress?: Function }} [opts]
  * @returns {Promise<{ built: number, skipped: number, failed: number }>}
  */
 export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
   const {
-    ollamaUrl = DEFAULT_OLLAMA_URL,
     model = DEFAULT_EMBED_MODEL,
     force = false,
     onProgress,
@@ -248,7 +294,7 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
     }
     try {
       const text = nodeToEmbedText(node);
-      const embedding = await getEmbedding(text, ollamaUrl, model);
+      const embedding = await getEmbedding(text, undefined, model);
       index[node.slug] = { embedding, model, generated_at: new Date().toISOString() };
       built++;
       onProgress?.({ slug: node.slug, built, skipped, failed });
@@ -262,10 +308,8 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
   fs.writeFileSync(indexPath(derivedDir), JSON.stringify(index), 'utf8');
   return { built, skipped, failed };
 }
+
 // ─── Session index ───────────────────────────────────────────────────────────
-// Separate index file for raw session content.
-// Keyed as "<sessionId>" or "<sessionId>:chunk-N" for long sessions.
-// File: .agent/memory-derived/session-embeddings.json
 
 const SESSION_INDEX_FILE = 'session-embeddings.json';
 
@@ -293,7 +337,6 @@ export function saveSessionEmbeddingToIndex(derivedDir, key, snippet, embedding,
 
 export function removeSessionEmbeddingFromIndex(derivedDir, sessionId) {
   const index = loadSessionEmbeddingsIndex(derivedDir);
-  // Remove all chunks for this session
   for (const key of Object.keys(index)) {
     if (key === sessionId || key.startsWith(`${sessionId}:chunk-`)) {
       delete index[key];
@@ -305,9 +348,6 @@ export function removeSessionEmbeddingFromIndex(derivedDir, sessionId) {
 /**
  * Build a readable text representation of a session for embedding.
  * Concatenates role:content pairs. Returns array of chunks (each ≤ 6000 chars).
- *
- * @param {object[]} messages  — array of { role, content } objects
- * @returns {string[]}         — array of chunk strings
  */
 export function sessionToEmbedChunks(messages) {
   const CHUNK_SIZE = 6000;
@@ -318,7 +358,6 @@ export function sessionToEmbedChunks(messages) {
 
   if (full.length === 0) return [];
 
-  // Split into chunks of CHUNK_SIZE characters
   const chunks = [];
   for (let i = 0; i < full.length; i += CHUNK_SIZE) {
     chunks.push(full.slice(i, i + CHUNK_SIZE));
@@ -328,9 +367,6 @@ export function sessionToEmbedChunks(messages) {
 
 /**
  * Parse a session JSONL file into an array of message objects.
- *
- * @param {string} filePath
- * @returns {object[]}
  */
 export function parseSessionFile(filePath) {
   try {
@@ -347,18 +383,15 @@ export function parseSessionFile(filePath) {
 
 /**
  * Embed all sessions in sessionsDir that are not yet in the index.
- * Each session gets one vector per chunk (long sessions get multiple vectors).
- * Skips already-indexed sessions unless force=true.
  *
  * @param {string} sessionsDir
  * @param {string} derivedDir
- * @param {{ force?: boolean, ollamaUrl?: string, model?: string, onProgress?: Function }} [opts]
+ * @param {{ force?: boolean, model?: string, onProgress?: Function }} [opts]
  * @returns {Promise<{ indexed: number, skipped: number, failed: number, chunks: number }>}
  */
 export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts = {}) {
   const {
     force = false,
-    ollamaUrl = DEFAULT_OLLAMA_URL,
     model = DEFAULT_EMBED_MODEL,
     onProgress,
   } = opts;
@@ -374,7 +407,6 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
 
   for (const file of files) {
     const sessionId = file.replace(/\.(jsonl|json)$/, '');
-    // Skip if already indexed (check for the base key or chunk-0)
     if (!force && (existing[sessionId] || existing[`${sessionId}:chunk-0`])) {
       skipped++;
       continue;
@@ -387,7 +419,7 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
 
       for (let i = 0; i < chunks.length; i++) {
         const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
-        const embedding = await getEmbedding(chunks[i], ollamaUrl, model);
+        const embedding = await getEmbedding(chunks[i], undefined, model);
         index[key] = {
           embedding,
           snippet: chunks[i].slice(0, 300),

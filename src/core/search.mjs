@@ -24,7 +24,6 @@ import {
  * @param {string} opts.derivedDir
  * @param {number} [opts.top_k=5]          Max results to return (capped at 20)
  * @param {boolean} [opts.includeSessions=true]  Include session chunk results
- * @param {string} [opts.ollamaUrl]        Ollama base URL (optional override)
  *
  * @returns {Promise<Array<{
  *   type: 'vault' | 'session',
@@ -33,9 +32,9 @@ import {
  *   // session fields: key, session_id, snippet, chunk, total_chunks
  * }>>}
  */
-export async function semanticSearch(query, { vaultDir, derivedDir, top_k = 5, includeSessions = true, ollamaUrl } = {}) {
+export async function semanticSearch(query, { vaultDir, derivedDir, top_k = 5, includeSessions = true } = {}) {
   const k = Math.min(Number(top_k) || 5, 20);
-  const queryEmbedding = await getEmbedding(String(query), ollamaUrl);
+  const queryEmbedding = await getEmbedding(String(query));
   const results = [];
 
   // ── Vault nodes ────────────────────────────────────────────────────────────

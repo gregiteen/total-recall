@@ -12,8 +12,7 @@ node_modules/
 *.pem
 
 # Total Recall runtime — never commit
-# The .agent/skills/ directory IS tracked (it ships with the package).
-# Everything else .agent/ generates at runtime is excluded below.
+.agent/skills/
 .agent/memory-vault/
 .agent/memory-derived/
 .agent/memory-inbox/

@@ -206,7 +206,7 @@ function bootstrapAgentDir(agentDir) {
     }
   }
 
-  const scaffoldSkillsDir = path.join(TEMPLATES_DIR, '..', 'scaffold', '.agent', 'skills');
+  const scaffoldSkillsDir = path.join(TEMPLATES_DIR, '..', '.agent', 'skills');
   let skillsToCopy = ['total-recall'];
   if (fs.existsSync(scaffoldSkillsDir)) {
     try {
@@ -222,12 +222,6 @@ function bootstrapAgentDir(agentDir) {
     if (fs.existsSync(skillSrc) && !fs.existsSync(skillDest)) {
       copyDirRecursive(skillSrc, skillDest);
     }
-  }
-
-  const vaultSrc = path.join(TEMPLATES_DIR, '..', 'scaffold', '.agent', 'memory-vault');
-  const vaultDest = path.join(agentDir, 'memory-vault');
-  if (fs.existsSync(vaultSrc)) {
-    copyDirRecursive(vaultSrc, vaultDest);
   }
 }
 

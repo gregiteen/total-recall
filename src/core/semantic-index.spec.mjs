@@ -1,3 +1,4 @@
+process.env.GOOGLE_API_KEY = 'mock-google-key';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -102,7 +103,7 @@ describe('buildSemanticIndex', () => {
       callCount++;
       return {
         ok: true,
-        json: async () => ({ embedding: [callCount, 0] })
+        json: async () => ({ embedding: { values: [callCount, 0] } })
       };
     });
 
@@ -170,7 +171,7 @@ describe('semanticSearch', () => {
     const origFetch = global.fetch;
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ embedding: [1, 0, 0] })
+      json: async () => ({ embedding: { values: [1, 0, 0] } })
     });
 
     const results = await semanticSearch('test query', tmpDir, { threshold: 0 });

@@ -39,7 +39,7 @@ describe('CLI Backup — --push-git mode', () => {
   beforeEach(() => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-test-'));
     const testAgentDir = path.join(tmpHome, '.agent');
-    fs.mkdirSync(testAgentDir, { recursive: true });
+    fs.mkdirSync(path.join(testAgentDir, 'skills', 'total-recall'), { recursive: true });
     vi.spyOn(os, 'homedir').mockReturnValue(tmpHome);
     process.env._TR_TEST_AGENT_DIR = testAgentDir;
   });

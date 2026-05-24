@@ -103,35 +103,19 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     // ignore
   }
 
-  let ollamaStatus = 'unknown';
-  let ollamaModels = [];
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const ollamaRes = await fetch('http://localhost:11434/', { signal: controller.signal });
-    clearTimeout(timeoutId);
-    ollamaStatus = ollamaRes.ok ? 'online' : 'offline';
-
-    if (ollamaStatus === 'online') {
-      try {
-        const modelsController = new AbortController();
-        const modelsTimeout = setTimeout(() => modelsController.abort(), 2000);
-        const modelsRes = await fetch('http://localhost:11434/api/tags', { signal: modelsController.signal });
-        clearTimeout(modelsTimeout);
-        if (modelsRes.ok) {
-          const data = await modelsRes.json();
-          ollamaModels = (data.models || []).map(m => m.name);
-        }
-      } catch (e) {
-        // ignore model list fetch failures
-      }
-    }
-  } catch (e) {
-    ollamaStatus = 'offline';
+  // CLI agent availability
+  const { spawnSync } = await import('node:child_process');
+  const cliAgents = [];
+  for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
+    try {
+      const r = spawnSync('which', [bin], { stdio: 'pipe', timeout: 2000 });
+      if (r.status === 0) cliAgents.push(bin);
+    } catch { /* not found */ }
   }
 
   const agentDir = configAgentDir;
   const vaultExists = fs.existsSync(path.join(agentDir, 'memory-vault'));
+  const skillExists = fs.existsSync(path.join(agentDir, 'skills', 'total-recall', 'SKILL.md'));
 
   // Check emergency alerts
   let emergencyAlerts = '';
@@ -146,7 +130,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   const daemonStatus = getDaemonStatus();
 
   // Determine overall status
-  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || ollamaStatus === 'offline' || ollamaModels.length === 0;
+  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || cliAgents.length === 0;
 
   res.json({
     status: hasCriticalIssue ? 'degraded' : 'healthy',
@@ -154,12 +138,12 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     uptime_seconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     disk,
-    ollama: ollamaStatus,
-    ollama_models: ollamaModels,
+    cli_agents: cliAgents,
     daemon: daemonStatus,
     emergency_alerts: emergencyAlerts || null,
     vfs: {
       exists: vaultExists,
+      skill_exists: skillExists,
       path: agentDir,
     },
   });
@@ -168,57 +152,34 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
 // ─── Brain Health Check (MODEL.md contract) ─────────────────────────────────────
 
 app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res) => {
-  let ollamaOnline = false;
-  let activeModel = null;
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const ollamaRes = await fetch('http://localhost:11434/', { signal: controller.signal });
-    clearTimeout(timeoutId);
-    ollamaOnline = ollamaRes.ok;
-
-    if (ollamaOnline) {
-      try {
-        const modelsController = new AbortController();
-        const modelsTimeout = setTimeout(() => modelsController.abort(), 2000);
-        const modelsRes = await fetch('http://localhost:11434/api/tags', { signal: modelsController.signal });
-        clearTimeout(modelsTimeout);
-        if (modelsRes.ok) {
-          const data = await modelsRes.json();
-          const models = data.models || [];
-          // Prefer gemma4:26b, fall back to first available
-          const gemma = models.find(m => m.name.startsWith('gemma4'));
-          activeModel = gemma ? gemma.name : (models[0]?.name || null);
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-  } catch (e) {
-    // Ollama offline
+  const { spawnSync: sp } = await import('node:child_process');
+  const agents = [];
+  for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
+    try {
+      const r = sp('which', [bin], { stdio: 'pipe', timeout: 2000 });
+      if (r.status === 0) agents.push(bin);
+    } catch { /* not found */ }
   }
 
-  if (!ollamaOnline) {
+  if (agents.length === 0) {
     return res.status(503).json({
       status: 'degraded',
-      model: null,
-      runtime: 'ollama',
+      runtime: 'cli-agents',
       uptime_seconds: Math.floor(process.uptime()),
       capabilities: [],
-      reason: 'Ollama runtime is offline',
+      reason: 'No CLI agents found. Install antigravity, claude, or codex.',
     });
   }
 
   res.json({
     status: 'ok',
-    model: activeModel,
-    runtime: 'ollama',
+    runtime: 'cli-agents',
+    agents,
     uptime_seconds: Math.floor(process.uptime()),
     capabilities: [
       'text-generation',
-      'function-calling',
-      'system-instructions',
+      'code-generation',
+      'research-synthesis',
       'structured-output',
     ],
   });

@@ -128,7 +128,7 @@ Total Recall uses [Ollama](https://ollama.com) for local inference. Default mode
 | `npx total-recall compile` | Rebuild `INSTRUCTIONS.md` from vault nodes |
 | `npx total-recall dream` | Manually trigger a Dream Cycle (GC + pattern extraction) |
 | `npx total-recall lint` | Validate all vault nodes against the SSSS schema |
-| `npx total-recall backup` | Encrypt and snapshot the vault |
+| `npx total-recall backup` | Create encrypted VFS, push git backup, or Obsidian sync |
 | `npx total-recall sync` | Pull compiled instructions from a remote brain |
 | `npx total-recall status` | Show brain health, connected clients, last dream |
 | `npx total-recall generate-pat` | Create a Bearer token for API/IDE auth |
@@ -136,6 +136,12 @@ Total Recall uses [Ollama](https://ollama.com) for local inference. Default mode
 | `npx total-recall relay` | Manage background local session-sync relay (start/stop/install/uninstall) |
 | `npx total-recall uninstall` | Completely stop services and purge Total Recall VFS & config |
 | `npx total-recall friction` | Analyze watchdog logs for bottlenecks |
+
+### Backup Options
+The `backup` command supports three distinct operating modes:
+* **Local Symmetric Archive:** `npx total-recall backup` (Creates a GPG AES-256 encrypted tarball in your home directory). Use `--no-encrypt` to write plain compressed tarballs.
+* **Sovereign Git Push:** `npx total-recall backup --push-git <remote-url>` (Commits and pushes diff-based snapshots of SSSS vault and sessions directly to a private backup repository, e.g., GitHub).
+* **Obsidian Sync:** `npx total-recall backup --obsidian <path-to-vault>` (rsyncs the `memory-vault/` directory incrementally into your Obsidian folder for Mobile/iCloud sync integration).
 
 ---
 

@@ -1074,7 +1074,7 @@ export function startDeployUI(port = 3001) {
 
 // ── Vast.ai auto-provisioner ────────────────────────────────────────────────────────
 
-async function vastAPI(key, method, path, body) {
+export async function vastAPI(key, method, path, body) {
   const { default: https } = await import('node:https');
   return new Promise((resolve) => {
     const data = body ? JSON.stringify(body) : null;
@@ -1156,7 +1156,7 @@ async function isTunnelUrlAlive(url) {
   return false;
 }
 
-async function provisionVastAI(apiKey, instanceId = null, dashboardPassword = 'totalrecall') {
+export async function provisionVastAI(apiKey, instanceId = null, dashboardPassword = 'totalrecall') {
   let finalInstanceId = instanceId;
   const isAdopting = !!finalInstanceId;
   const maxAttempts = isAdopting ? 1 : 5;

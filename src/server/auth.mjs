@@ -357,7 +357,7 @@ export async function loginHandler(req, res) {
   
   res.cookie('session', token, {
     httpOnly: true,
-    secure: nodeEnv !== 'development',
+    secure: nodeEnv !== 'development' && config.network?.require_https !== false,
     maxAge: ttlHours * 60 * 60 * 1000,
     sameSite: 'lax'
   });

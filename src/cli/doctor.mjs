@@ -84,16 +84,13 @@ export default async function doctor() {
   log(`CPU Cores:     ${cpus} threads`);
   log(`Total Memory:  ${ramGb} GB RAM`);
 
-  if (ramGb >= 16) {
-    logOk('System RAM matches recommendations for large models (≥16 GB)');
-  } else if (ramGb >= 8) {
-    logWarn(`System RAM (${ramGb} GB) is slightly low. Recommended: ≥16 GB.`);
-    log('     Tip: Configure a smaller kernel model (e.g., gemma5:2b or gemma4:9b)');
+  if (ramGb >= 4) {
+    logOk('System RAM is fully sufficient for headless CLI agent dispatch (≥4 GB)');
+  } else if (ramGb >= 2) {
+    logWarn(`System RAM (${ramGb} GB) is slightly low, but sufficient for headless execution.`);
     warnings++;
   } else {
-    logFail(`System RAM (${ramGb} GB) is critically low (under 8 GB).`);
-    log('     Running local Gemma 4 26B models will likely trigger out-of-memory crashes.');
-    log('     Recommendation: Deploy to a remote cloud host or use an external API provider.');
+    logFail(`System RAM (${ramGb} GB) is critically low.`);
     failures++;
   }
 
@@ -103,7 +100,7 @@ export default async function doctor() {
 
   const dependencies = [
     { name: 'git', required: true, desc: 'sync and backup operations' },
-    { name: 'curl', required: true, desc: 'Ollama install & REST communications' },
+    { name: 'curl', required: true, desc: 'REST communications & API fetches' },
     { name: 'python3', required: true, desc: 'native SearXNG search engine' },
     { name: 'pip3', required: false, desc: 'SearXNG package installation (fallback to python3 -m pip)' },
     { name: 'caddy', required: false, desc: 'auto-TLS reverse proxying' },
@@ -144,7 +141,6 @@ export default async function doctor() {
   const ports = [
     { num: 3000, desc: 'Total Recall API Server', critical: true },
     { num: 8888, desc: 'SearXNG Web Search Engine', critical: false },
-    { num: 11434, desc: 'Ollama local LLM API', critical: false },
     { num: 80, desc: 'HTTP Caddy redirection (Let\'s Encrypt)', critical: false },
     { num: 443, desc: 'HTTPS Caddy TLS ingress', critical: false },
   ];
@@ -154,18 +150,7 @@ export default async function doctor() {
     if (free) {
       logOk(`Port ${String(port.num).padEnd(5)}: Free (${port.desc})`);
     } else {
-      // Check if it's already running our own service
-      let ownedByUs = false;
-      if (port.num === 11434 && commandExists('ollama')) {
-        try {
-          const res = child_process.execSync('curl -s http://127.0.0.1:11434/api/tags', { encoding: 'utf8' });
-          if (res.includes('models')) ownedByUs = true;
-        } catch { /* ignore */ }
-      }
-
-      if (ownedByUs) {
-        logOk(`Port ${String(port.num).padEnd(5)}: In use by active Ollama Service`);
-      } else if (port.critical) {
+      if (port.critical) {
         logFail(`Port ${String(port.num).padEnd(5)}: CONFLICT — Already bound by another service (${port.desc})`);
         failures++;
       } else {
@@ -175,38 +160,46 @@ export default async function doctor() {
     }
   }
 
-  // ── Step 4: Ollama & LLM Models ──
+  // ── Step 4: CLI Agents & Embeddings Providers ──
   hr();
-  logInfo('4. OLLAMA ENGINE & MODELS');
+  logInfo('4. CLI AGENTS & EMBEDDINGS PROVIDERS');
 
-  if (commandExists('ollama')) {
-    try {
-      const response = child_process.execSync('curl -s http://127.0.0.1:11434/api/tags', { encoding: 'utf8' });
-      const parsed = JSON.parse(response);
-      logOk('Ollama server: Running');
-      const models = parsed.models || [];
-      const hasGemma4 = models.some(m => m.name.startsWith('gemma4:26b'));
-      const hasEmbed = models.some(m => m.name.startsWith('nomic-embed-text'));
+  const { loadRuntimeConfig } = await import('../core/runtime.mjs');
+  let config;
+  try {
+    config = loadRuntimeConfig();
+  } catch (err) {
+    config = { agents: [] };
+  }
+  const agents = config.agents || [];
 
-      if (hasGemma4) {
-        logOk('Model gemma4:26b: Installed');
+  if (agents.length > 0) {
+    let healthyCount = 0;
+    for (const agent of agents) {
+      const exists = commandExists(agent.binary);
+      if (exists) {
+        logOk(`Agent ${agent.name.padEnd(8)}: Available (Binary: ${agent.binary})`);
+        healthyCount++;
       } else {
-        logWarn('Model gemma4:26b: Missing (Will be pulled during npx total-recall deploy)');
+        logWarn(`Agent ${agent.name.padEnd(8)}: NOT FOUND in PATH (Binary: ${agent.binary})`);
         warnings++;
       }
-
-      if (hasEmbed) {
-        logOk('Model nomic-embed-text: Installed');
-      } else {
-        logWarn('Model nomic-embed-text: Missing (Will be pulled during npx total-recall deploy)');
-        warnings++;
-      }
-    } catch {
-      logWarn('Ollama server: Installed but not running. Start it to use local models.');
-      warnings++;
     }
   } else {
-    logWarn('Ollama: Not installed. Recommended for sovereign/local LLM inference.');
+    logWarn('No CLI agents found in registry configuration.');
+    warnings++;
+  }
+
+  const googleKey = process.env.GOOGLE_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  
+  if (googleKey) {
+    logOk('GOOGLE_API_KEY environment variable is configured (Primary Embeddings)');
+  } else if (openaiKey) {
+    logOk('OPENAI_API_KEY environment variable is configured (Fallback Embeddings)');
+  } else {
+    logWarn('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is configured in the environment.');
+    log('     Tip: Configure GOOGLE_API_KEY to use text-embedding-004 (free tier).');
     warnings++;
   }
 

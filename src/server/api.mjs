@@ -410,17 +410,75 @@ Do not add any other conversational text when outputting the fallback tool call.
 
 You have a REAL browser AND full desktop control. Use them. Navigate, click, type, scrape — do not just describe what you would do. For web tasks prefer browser tools. For native apps or desktop workflows use computer_screenshot first to orient yourself.`;
 
+    const compressInstructions = (text) => {
+      if (!text) return '';
+      if (text.length < 1000) return text;
+      const sections = text.split(/\r?\n(?=#+ )/);
+      const result = [];
+      for (const sec of sections) {
+        const trimmed = sec.trim();
+        if (!trimmed) continue;
+        const lines = trimmed.split('\n');
+        const header = lines[0];
+        if (header.includes('Before You Respond') || header.includes('Topic → Skill Routing')) {
+          result.push(trimmed);
+          continue;
+        }
+        if (header.includes('Total Recall System')) {
+          let compressed = trimmed;
+          compressed = compressed.replace(/```bash\s*curl[\s\S]*?```/g, '(endpoint usage curl example omitted for brevity)');
+          result.push(compressed);
+          continue;
+        }
+        if (header.includes('Always reply directly') || header.includes('Do not mention') || header.includes('Operating Protocol') || header.includes('CHECK INTERRUPTS')) {
+          const bodyLines = lines.slice(1).filter(l => l.trim()).slice(0, 5);
+          result.push(`${header}\n${bodyLines.join('\n')}`);
+          continue;
+        }
+      }
+      return result.join('\n\n');
+    };
+
+    const compressSsssSkill = (text) => {
+      if (!text) return '';
+      if (text.length < 1000) return text;
+      const sections = text.split(/\r?\n(?=#+ )/);
+      const result = [];
+      for (const sec of sections) {
+        const trimmed = sec.trim();
+        if (!trimmed) continue;
+        const lines = trimmed.split('\n');
+        const header = lines[0];
+        if (!header.startsWith('#')) {
+          result.push(trimmed);
+          continue;
+        }
+        if (header.includes('Core Mandate') || header.includes('Three-Tier Memory Hierarchy') || header.includes('Cognitive Memory Layers') || header.includes('Vault Directory Layout')) {
+          result.push(trimmed);
+          continue;
+        }
+        if (header.includes('File Types') || header.includes('Derived Artifacts') || header.includes('Staging Area') || header.includes('Interoperability') || header.includes('Naming Conventions')) {
+          result.push(`${header}\n\n[SSSS architectural specifications compressed. Refer to ssss/SKILL.md or references/ssss-spec.md for schema details]`);
+          continue;
+        }
+        if (trimmed.length < 800) {
+          result.push(trimmed);
+        }
+      }
+      return result.join('\n\n');
+    };
+
     try {
       const instructionsPath = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
       if (fs.existsSync(instructionsPath)) {
         const instructions = fs.readFileSync(instructionsPath, 'utf8');
-        baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${instructions}`;
+        baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${compressInstructions(instructions)}`;
       }
 
       const ssssPath = path.join(AGENT_DIR, 'skills', 'ssss', 'SKILL.md');
       if (fs.existsSync(ssssPath)) {
         const ssssContent = fs.readFileSync(ssssPath, 'utf8');
-        baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nYou are the orchestrator of this system. Here is the architectural specification:\n${ssssContent}`;
+        baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nYou are the orchestrator of this system. Here is the architectural specification:\n${compressSsssSkill(ssssContent)}`;
       }
 
       // Load user profile — drives all personalisation and idle work
@@ -534,12 +592,32 @@ ${interviewTask}`;
     let finalMessage = null;
     const startTime = Date.now();
 
+    let useTools = AVAILABLE_TOOLS;
     // Tool loop (up to 5 iterations to prevent infinite loops)
     for (let i = 0; i < 5; i++) {
       logger.info('api', `Invoking ${isLocal ? 'local' : 'frontier'} model (Iteration ${i + 1})...`);
-      const message = isLocal 
-        ? await callLocalRuntimeRaw(currentMessages, activeConfig, AVAILABLE_TOOLS)
-        : await callFrontierRaw(currentMessages, activeConfig, AVAILABLE_TOOLS);
+      let message;
+      try {
+        message = isLocal 
+          ? await callLocalRuntimeRaw(currentMessages, activeConfig, useTools)
+          : await callFrontierRaw(currentMessages, activeConfig, useTools);
+      } catch (err) {
+        if (isLocal && useTools && (err.message.includes('does not support tools') || err.message.includes('invalid_request_error') || err.message.includes('400'))) {
+          logger.warn('api', `Local model ${activeConfig.model} does not support native tools. Retrying without tools and with simplified system prompt.`);
+          useTools = undefined;
+          
+          // Overwrite system prompt to protect the CPU/memory footprint of the fallback model
+          const systemMsgIdx = currentMessages.findIndex(m => m.role === 'system');
+          if (systemMsgIdx !== -1) {
+            currentMessages[systemMsgIdx].content = `You are Total Recall, a Sovereign AI OS running a database-free, Markdown-first Structured Semantic Syntax System (SSSS) architecture. The current date and time is ${dateStr}.
+You are operating in a lightweight text-only mode. Answer the user's questions directly, concisely, and helpfully without using tools. Keep your responses short and complete.`;
+          }
+          
+          message = await callLocalRuntimeRaw(currentMessages, activeConfig, undefined);
+        } else {
+          throw err;
+        }
+      }
       currentMessages.push(message);
 
       if (!message.tool_calls || message.tool_calls.length === 0) {
