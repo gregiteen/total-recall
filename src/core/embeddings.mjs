@@ -37,6 +37,9 @@ function sha256(text) {
 }
 
 function loadCache() {
+  if (process.env.NODE_ENV === 'test') {
+    return {};
+  }
   if (embeddingCache) return embeddingCache;
   try {
     if (fs.existsSync(CACHE_PATH)) {
@@ -51,6 +54,7 @@ function loadCache() {
 }
 
 function saveCache() {
+  if (process.env.NODE_ENV === 'test') return;
   if (!embeddingCache) return;
   try {
     fs.mkdirSync(DERIVED_DIR, { recursive: true });
