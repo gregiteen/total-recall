@@ -17,7 +17,6 @@
 
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'node:child_process';
 import { agentDir } from './config.mjs';
 import { logger } from './logger.mjs';
 import { sendSystemNotification } from './notifications.mjs';
@@ -104,52 +103,24 @@ export function readEmergencyAlerts() {
 // ─── Startup Health Check ───────────────────────────────────────────────────────
 
 /**
- * Run a comprehensive health check on startup.
- * If anything is catastrophically wrong, writes emergency alerts.
- * If everything is healthy, clears any stale alerts.
+ * Run a basic health check on startup.
+ * Verifies filesystem structure is intact. No LLM checks — daemon is deterministic.
  *
- * @param {object} runtimeConfig  The loaded runtime configuration
  * @returns {{ healthy: boolean, issues: string[] }}
  */
-export async function runStartupHealthCheck(runtimeConfig) {
+export async function runStartupHealthCheck() {
   const issues = [];
 
-  // Import the base URL helper from runtime.mjs
-  const { getOllamaBaseUrl } = await import('./runtime.mjs');
+  // Check: Does the vault directory exist?
+  const vaultDir = path.join(AGENT_DIR, 'memory-vault');
+  if (!fs.existsSync(vaultDir)) {
+    issues.push(`Memory vault directory not found at ${vaultDir}. Run: npx total-recall init`);
+  }
 
-  // Check 1: Is the LLM runtime reachable?
-  try {
-    let healthUrl;
-    if (runtimeConfig.runtime === 'ollama') {
-      const baseUrl = getOllamaBaseUrl(runtimeConfig);
-      healthUrl = `${baseUrl}/api/tags`;
-    } else {
-      healthUrl = runtimeConfig.health_endpoint || 'http://127.0.0.1:8080/health';
-    }
-
-    const resp = await fetch(healthUrl, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) {
-      issues.push(`LLM runtime (${runtimeConfig.runtime}) returned HTTP ${resp.status} at ${healthUrl} — the brain cannot think.`);
-    } else if (runtimeConfig.runtime === 'ollama') {
-      // Check 2: Is the configured model pulled?
-      const data = await resp.json();
-      const models = data.models || [];
-      const hasModel = models.some(m =>
-        m.name === runtimeConfig.model || m.name.startsWith(runtimeConfig.model)
-      );
-      if (!hasModel) {
-        const modelNames = models.map(m => m.name).join(', ') || '(none)';
-        issues.push(
-          `Ollama model "${runtimeConfig.model}" is NOT pulled. Available models: ${modelNames}. ` +
-          `Run: ollama pull ${runtimeConfig.model}`
-        );
-      }
-    }
-  } catch (err) {
-    issues.push(
-      `Cannot reach LLM runtime (${runtimeConfig.runtime || 'ollama'}) at configured endpoint: ${err.message}. ` +
-      `Check that the runtime is running and the endpoint in runtime.yml is correct.`
-    );
+  // Check: Does the skills directory exist?
+  const skillsDir = path.join(AGENT_DIR, 'skills');
+  if (!fs.existsSync(skillsDir)) {
+    issues.push(`Skills directory not found at ${skillsDir}. Run: npx total-recall init`);
   }
 
   // Verdict

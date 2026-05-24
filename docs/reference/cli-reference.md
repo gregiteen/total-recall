@@ -150,10 +150,32 @@ Validate all vault nodes against the SSSS v2 schema.
 
 ### `backup`
 
-Create an encrypted snapshot of the vault.
+Create a local archive snapshot, push a git-based vault diff, or sync with an Obsidian vault.
 
-- **What it does**: Compresses `~/.agent/` and encrypts with AES-256-GCM using the master password.
-- **Usage**: `npx total-recall backup`
+- **What it does**: Compresses, encrypts, or git-commits the local `~/.agent/` VFS based on your parameters.
+- **Usage**: `npx total-recall backup [options]`
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--output, -o <path>` | Destination archive path (defaults to a timestamped file in your home folder) |
+| `--no-encrypt` | Compresses the VFS without password-based symmetric GPG encryption (.tar.gz) |
+| `--push-git <remote>` | Commits the entire SSSS vault to a git remote repository and pushes it (diff-based, sovereign backup pattern) |
+| `--obsidian <path>` | Performs an incremental `rsync` sync of your `memory-vault/` directly into an Obsidian vault folder for automatic cloud backup (e.g. via iCloud/Obsidian Sync) |
+
+**Examples:**
+
+```bash
+# Encrypted tarball
+npx total-recall backup
+
+# Git-based push to custom repository
+npx total-recall backup --push-git git@github.com:username/total-recall-brain.git
+
+# Obsidian vault sync
+npx total-recall backup --obsidian "~/Documents/Obsidian Vault"
+```
 
 ---
 

@@ -124,8 +124,8 @@ describe('connect — Core skills seeding', () => {
     const skillPath = path.join(tmpAgentDir, 'skills', 'total-recall');
     expect(fs.existsSync(skillPath)).toBe(true);
     expect(fs.existsSync(path.join(skillPath, 'SKILL.md'))).toBe(true);
-    expect(fs.existsSync(path.join(skillPath, 'references', 'architecture-reference.md'))).toBe(true);
-    expect(fs.existsSync(path.join(skillPath, 'evals', 'evals.json'))).toBe(true);
+    expect(fs.existsSync(path.join(skillPath, 'system', 'architecture.md'))).toBe(true);
+    expect(fs.existsSync(path.join(skillPath, 'rules', 'invariants.md'))).toBe(true);
   }, 30000);
 });
 

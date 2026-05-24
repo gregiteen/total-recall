@@ -65,9 +65,9 @@ describe('doctor command', () => {
   });
 
   it('sets process.exitCode = 1 and reports failures when critical components are missing', async () => {
-    // Force a RAM failure (under 8GB)
-    totalMemSpy.mockReturnValue(4 * 1024 * 1024 * 1024);
-
+    // Force a RAM failure (under 2GB)
+    totalMemSpy.mockReturnValue(1 * 1024 * 1024 * 1024);
+ 
     // Mock command missing
     execSyncSpy.mockImplementation((cmd) => {
       throw new Error('Command not found');
@@ -75,7 +75,7 @@ describe('doctor command', () => {
     execFileSyncSpy.mockImplementation(() => {
       throw new Error('Command not found');
     });
-
+ 
     // Mock port taken
     const mockServer = {
       once: vi.fn().mockImplementation((event, callback) => {
@@ -87,16 +87,16 @@ describe('doctor command', () => {
       close: vi.fn(),
     };
     vi.spyOn(net, 'createServer').mockReturnValue(mockServer);
-
+ 
     // Clean exitCode state before run
     process.exitCode = undefined;
-
+ 
     await doctor();
-
+ 
     expect(process.exitCode).toBe(1);
-
+ 
     const logs = logSpy.mock.calls.map(args => args[0]).join('\n');
-    expect(logs).toContain('System RAM (4 GB) is critically low');
+    expect(logs).toContain('System RAM (1 GB) is critically low');
     expect(logs).toContain('git     : MISSING');
     expect(logs).toContain('python3 : MISSING');
     expect(logs).toContain('CONFLICT — Already bound by another service');

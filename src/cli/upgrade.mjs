@@ -31,10 +31,11 @@ function commandExists(cmd) {
 }
 
 function parseArgs(args) {
-  const opts = { model: null, protocol: null, help: false };
+  const opts = { model: null, agents: false, protocol: null, help: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--model': opts.model = args[++i]; break;
+      case '--agents': opts.agents = true; break;
       case '--protocol': opts.protocol = args[++i]; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -44,16 +45,16 @@ function parseArgs(args) {
 
 function printHelp() {
   console.log(`
-  total-recall upgrade — Swap the kernel model
+  total-recall upgrade — System and CLI agents upgrade utility
 
   Usage: total-recall upgrade [options]
 
   Examples:
-    total-recall upgrade --model gemma2:27b
+    total-recall upgrade --agents
     total-recall upgrade --protocol release_v3.json
 
   Options:
-    --model <name>     Ollama model tag to pull
+    --agents           Verify and upgrade CLI agent integrations
     --protocol <file>  Signed SSSS protocol release JSON to apply
     --help, -h         Show this help
 `);
@@ -105,29 +106,36 @@ MCowBQYDK2VwAyEApT1OQ5B0qF2pPjD2uK9f7K8b/sW+v3X1tN0c5A9vGqg=
   }
 
   if (opts.model) {
-    if (!commandExists('ollama')) {
-      console.error('  ❌ Ollama not found. Install it first: curl -fsSL https://ollama.com/install.sh -o install.sh && sh install.sh && rm install.sh');
+    console.error(`\n  ⚠️  Notice: Local LLM models (--model) are deprecated.`);
+    console.error(`     Total Recall v3 has transitioned to headlessly dispatched CLI agents.`);
+    console.error(`     To inspect your current CLI agents registry and status, run:`);
+    console.error(`       npx total-recall upgrade --agents\n`);
+    return;
+  }
+
+  if (opts.agents) {
+    console.error(`\n  🔄 Probing headless CLI agents from registry...\n`);
+    const { loadRuntimeConfig } = await import('../core/runtime.mjs');
+    const config = loadRuntimeConfig();
+    const agents = config.agents || [];
+
+    if (agents.length === 0) {
+      console.error('  ❌ No agents found in registry config (agents.yml).');
       process.exit(1);
     }
 
-    console.error(`\n  🔄 Upgrading kernel model to: ${opts.model}`);
-    console.error('  Pulling model (this may take a while)...\n');
-
-    const result = spawnSync('ollama', ['pull', opts.model], { stdio: 'inherit', timeout: 3600_000 });
-    if (result.status !== 0) {
-      console.error(`  ❌ Failed to pull model: ${opts.model}`);
-      process.exit(1);
+    let healthyCount = 0;
+    for (const agent of agents) {
+      const exists = commandExists(agent.binary);
+      if (exists) {
+        console.error(`  ✅ Agent ${agent.name.padEnd(8)}: Available (Binary: ${agent.binary})`);
+        healthyCount++;
+      } else {
+        console.error(`  ❌ Agent ${agent.name.padEnd(8)}: NOT FOUND in PATH (Binary: ${agent.binary})`);
+      }
     }
 
-    // Update frontier.yml
-    const configPath = path.join(AGENT_DIR, 'config', 'frontier.yml');
-    if (fs.existsSync(configPath)) {
-      let config = fs.readFileSync(configPath, 'utf8');
-      config = config.replace(/model:\s*.+/m, `model: ${opts.model}`);
-      fs.writeFileSync(configPath, config, 'utf8');
-      console.error(`  ✅ Updated ${configPath}`);
-    }
-
-    console.error(`  ✅ Model upgraded to ${opts.model}\n`);
+    console.error(`\n  Diagnostic complete: ${healthyCount}/${agents.length} agents healthy.\n`);
+    return;
   }
 }

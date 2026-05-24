@@ -203,26 +203,22 @@ let _idleCycleCounter = 0;
  *   8: cutoff-audit         — check for training-drift
  */
 export function generateIdleTask({ vaultDir, sessionsDir }) {
-  const strategies = [
-    () => generateProactiveResearchTask(),      // 0
-    () => generateInferenceTask(vaultDir),      // 1
-    () => generateProactiveResearchTask(),      // 2
-    () => generateStalenessCheckTask(vaultDir), // 3
-    () => generateProactiveResearchTask(),      // 4
-    () => generateInferenceTask(vaultDir),      // 5
-    () => generatePostMortemTask(sessionsDir),  // 6
-    () => generateClarityReviewTask(vaultDir),  // 7
-    () => generateCutoffAuditTask(),            // 8
+  // Only allow purely local task generation strategies.
+  // Absolutely no automated/proactive web searches or staleness checks that make internet queries.
+  const cleanStrategies = [
+    () => generateInferenceTask(vaultDir),
+    () => generatePostMortemTask(sessionsDir),
+    () => generateClarityReviewTask(vaultDir),
   ];
 
-  const strategy = strategies[_idleCycleCounter % strategies.length];
+  const strategy = cleanStrategies[_idleCycleCounter % cleanStrategies.length];
   _idleCycleCounter++;
 
   try {
     return strategy();
   } catch {
-    // Fallback: always return a research task — never go idle doing nothing
-    return generateProactiveResearchTask();
+    // Local fallback only — never query the internet or make automated web searches
+    return makeFallbackTask('memory-maintenance', 'Wait for active conversation task');
   }
 }
 

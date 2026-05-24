@@ -11,10 +11,11 @@ const configSchema = z.object({
     (val) => val || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent'),
     z.string()
   ),
-  ollamaUrl: z.string().default('http://127.0.0.1:11434'),
-  ollamaEndpoint: z.string().optional(),
-  ollamaModel: z.string().default('gemma4:26b'),
-  embedModel: z.string().default('nomic-embed-text'),
+  cliAgent: z.string().optional(),
+  cliModel: z.string().optional(),
+  cliTimeout: z.preprocess((val) => val === undefined || val === '' ? 300 : parseInt(String(val), 10), z.number().int().default(300)),
+  googleApiKey: z.string().optional(),
+  embedModel: z.string().default('text-embedding-004'),
   searxngBaseUrl: z.string().optional(),
   braveApiKey: z.string().optional(),
   braveSearchApiKey: z.string().optional(),
@@ -41,9 +42,10 @@ const configSchema = z.object({
 // Capture raw configuration values from process.env
 const rawConfig = {
   agentDir: process.env.AGENT_DIR,
-  ollamaUrl: process.env.OLLAMA_URL,
-  ollamaEndpoint: process.env.OLLAMA_ENDPOINT,
-  ollamaModel: process.env.OLLAMA_MODEL,
+  cliAgent: process.env.TR_CLI_AGENT,
+  cliModel: process.env.TR_CLI_MODEL,
+  cliTimeout: process.env.TR_CLI_TIMEOUT,
+  googleApiKey: process.env.GOOGLE_API_KEY,
   embedModel: process.env.TR_EMBED_MODEL,
   searxngBaseUrl: process.env.SEARXNG_BASE_URL,
   braveApiKey: process.env.BRAVE_API_KEY,
@@ -78,9 +80,10 @@ const config = Object.freeze(validated);
 export default config;
 export const {
   agentDir,
-  ollamaUrl,
-  ollamaEndpoint,
-  ollamaModel,
+  cliAgent,
+  cliModel,
+  cliTimeout,
+  googleApiKey,
   embedModel,
   searxngBaseUrl,
   braveApiKey,

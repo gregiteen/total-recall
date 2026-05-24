@@ -84,6 +84,7 @@ function printHelp() {
     dream               Manually trigger a dream cycle (Light → REM → Deep)
     lint                Validate all vault nodes against SSSS schema v2
     daemon <start|stop|status>  Manage the background daemon
+    backup [options]    Create encrypted VFS tarball, push git backup, or Obsidian sync
     restore <path>      Restore from an encrypted backup
     upgrade --model <n> Swap the kernel model (e.g., gemma5-32b)
     friction            Analyze logs to detect workflow bottlenecks

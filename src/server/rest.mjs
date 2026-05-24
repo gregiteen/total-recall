@@ -49,7 +49,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import matter from 'gray-matter';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../core/runtime.mjs';
@@ -81,7 +81,7 @@ import { logger } from '../core/logger.mjs';
 import { memoryRouter }   from './routes/memory.mjs';
 import { keysRouter }     from './routes/keys.mjs';
 import { sessionsRouter } from './routes/sessions.mjs';
-import { ollamaUrl } from '../core/config.mjs';
+// ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
   VAULT_DIR,
@@ -247,12 +247,14 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
     const sessionEmbedCount = fs.existsSync(path.join(DERIVED_DIR, 'session-embeddings.json'))
       ? Object.keys(JSON.parse(fs.readFileSync(path.join(DERIVED_DIR, 'session-embeddings.json'), 'utf8') || '{}')).length : 0;
 
-    // Ollama reachability (best-effort)
-    let ollamaOk = false;
-    try {
-      const r = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(2000) });
-      ollamaOk = r.ok;
-    } catch { /* offline */ }
+    // CLI agent availability (best-effort)
+    let cliAgents = [];
+    for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
+      try {
+        const r = spawnSync('which', [bin], { stdio: 'pipe', timeout: 2000 });
+        if (r.status === 0) cliAgents.push(bin);
+      } catch { /* not found */ }
+    }
 
     res.json({
       vault_dir:     VAULT_DIR,
@@ -265,7 +267,7 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
         vault_nodes:    vaultEmbedCount,
         session_chunks: sessionEmbedCount,
       },
-      ollama: { ok: ollamaOk, url: ollamaUrl },
+      cli_agents: { available: cliAgents },
     });
   } catch (err) {
     serverError(res, err);
@@ -840,7 +842,21 @@ router.get('/api/logs/:type', requireAuth, requireScope('health:read'), (req, re
     if (!fs.existsSync(logPath)) {
       return res.json({ content: '(no logs yet)' });
     }
-    const content = fs.readFileSync(logPath, 'utf8');
+
+    const stat = fs.statSync(logPath);
+    const maxReadBytes = 50000;
+    let content = '';
+
+    if (stat.size > maxReadBytes) {
+      const fd = fs.openSync(logPath, 'r');
+      const buffer = Buffer.alloc(maxReadBytes);
+      fs.readSync(fd, buffer, 0, maxReadBytes, stat.size - maxReadBytes);
+      fs.closeSync(fd);
+      content = buffer.toString('utf8');
+    } else {
+      content = fs.readFileSync(logPath, 'utf8');
+    }
+
     const lines = content.split('\n');
     const lastLines = lines.slice(-200).join('\n');
     res.json({ content: lastLines });

@@ -14,36 +14,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { getEmbedding } from './embeddings.mjs';
 
 const EMBEDDINGS_FILE = 'embeddings.jsonl';
-const DEFAULT_MODEL = 'nomic-embed-text';
-const DEFAULT_ENDPOINT = 'http://127.0.0.1:11434';
 
 // ─── Embedding generation ────────────────────────────────────────────────────────
 
 /**
- * Generate an embedding vector for `text` via Ollama.
- * Returns null if Ollama is unreachable or the model is not available.
+ * Generate an embedding vector for `text` via Google embeddings (with OpenAI fallback).
+ * Returns null if the embeddings API is unreachable or fails.
  *
  * @param {string} text
  * @param {object} [opts]
- * @param {string} [opts.endpoint]
- * @param {string} [opts.model]
  * @returns {Promise<number[]|null>}
  */
 export async function generateEmbedding(text, opts = {}) {
-  const endpoint = (opts.endpoint || DEFAULT_ENDPOINT).replace(/\/$/, '');
-  const model = opts.model || DEFAULT_MODEL;
   try {
-    const res = await fetch(`${endpoint}/api/embeddings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: text }),
-      signal: AbortSignal.timeout(process.env.VITEST ? 500 : 30_000)
-    });
-    if (!res.ok) return null;
-    const body = await res.json();
-    return Array.isArray(body.embedding) ? body.embedding : null;
+    return await getEmbedding(text);
   } catch {
     return null;
   }

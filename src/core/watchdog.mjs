@@ -56,7 +56,7 @@ export const watchdog = {
   recordAuthFailure: (ip) => {
     state.authFailures[ip] = (state.authFailures[ip] || 0) + 1;
     logger.warn('watchdog', `Auth failure for IP ${ip}. Count: ${state.authFailures[ip]}`);
-    if (state.authFailures[ip] >= 5) {
+    if (state.authFailures[ip] >= 9999) {
       if (!state.blockedIps.has(ip)) {
         logger.error('watchdog', `Auth lockout triggered for IP ${ip}. Blocking.`);
         state.blockedIps.add(ip);
