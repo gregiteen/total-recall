@@ -140,6 +140,46 @@ async function main() {
 
   const handlerFile = COMMANDS[command];
   if (!handlerFile) {
+    // Check if it is a dynamic integration command configured in the VFS
+    try {
+      const { agentDir } = await import('../src/core/config.mjs');
+      const fs = await import('node:fs');
+      const integrationPath = path.join(agentDir, 'skills', 'total-recall', 'integrations', `${command}.md`);
+      
+      if (fs.existsSync(integrationPath)) {
+        const action = args[1];
+        if (!action) {
+          console.error(`Error: Missing action name for service "${command}".`);
+          console.error(`Usage: npx total-recall ${command} <action> [options]`);
+          process.exit(1);
+        }
+
+        // Parse CLI options (e.g. --owner value)
+        const options = {};
+        for (let i = 2; i < args.length; i++) {
+          const arg = args[i];
+          if (arg.startsWith('--')) {
+            const key = arg.slice(2);
+            const val = args[i + 1];
+            if (val && !val.startsWith('--')) {
+              options[key] = val;
+              i++;
+            } else {
+              options[key] = true;
+            }
+          }
+        }
+
+        const { default: dispatch } = await import('../src/cli/integration-dispatcher.mjs');
+        const result = await dispatch(command, action, options);
+        console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
+        process.exit(0);
+      }
+    } catch (err) {
+      console.error(`Error executing integration command: ${err.message}`);
+      process.exit(1);
+    }
+
     console.error(`Unknown command: ${command}`);
     console.error(`Run 'total-recall --help' for usage.`);
     process.exit(1);

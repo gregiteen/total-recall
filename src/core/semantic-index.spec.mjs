@@ -1,8 +1,11 @@
 process.env.GOOGLE_API_KEY = 'mock-google-key';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+const mockAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-semantic-agent-'));
+process.env.AGENT_DIR = mockAgentDir;
+
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import crypto from 'node:crypto';
 import {
   cosineSimilarity,
@@ -13,8 +16,15 @@ import {
 } from './semantic-index.mjs';
 
 let tmpDir;
-beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-semantic-')); });
-afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-semantic-'));
+});
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+afterAll(() => {
+  fs.rmSync(mockAgentDir, { recursive: true, force: true });
+});
 
 // ─── cosineSimilarity ────────────────────────────────────────────────────────────
 
