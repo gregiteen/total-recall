@@ -10,7 +10,7 @@ import { logger } from './logger.mjs';
  *
  * Watches known IDE agent conversation log directories for new files,
  * parses them through source-specific adapters, and writes unified
- * SSSS session JSONL to .agent/sessions/.
+ * SSSS session JSONL to .agent/skills/total-recall/sessions/.
  *
  * Supported sources:
  *   - Claude Code   (~/.claude/projects/)           JSONL

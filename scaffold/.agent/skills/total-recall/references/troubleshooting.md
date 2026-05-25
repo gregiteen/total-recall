@@ -22,13 +22,10 @@ Use this reference to diagnose and repair failures in the **Total Recall Soverei
    ```
 
 ### Symptom: Background Research Daemon Is Frozen
-**Causes**: Low disk space, Ollama server is offline, or rate-limiting on Brave Search API.
+**Causes**: Low disk space, CLI agent binaries missing from PATH, or rate-limiting on Brave Search API.
 **Diagnostic Flow**:
 1. Check Brave Search API rate status.
-2. Verify local Ollama server status by running:
-   ```bash
-   curl http://localhost:11434/api/tags
-   ```
+2. Verify that CLI agent binaries (`antigravity`, `gemini`, `claude`, `codex`) are available in your `$PATH`.
 3. Restart the daemon loop:
    ```bash
    node src/core/daemon-loop.mjs

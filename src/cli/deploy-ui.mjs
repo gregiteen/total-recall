@@ -74,6 +74,9 @@ export function syncInstallOptionsFromDisk() {
       if (data.dashUrl) _installOptions.dashUrl = data.dashUrl;
       if (data.healthUrl) _installOptions.healthUrl = data.healthUrl;
       if (data.skipLocalInstall != null) _installOptions.skipLocalInstall = data.skipLocalInstall;
+      if (data['cfg-cloud-provider']) _installOptions.cloudProvider = data['cfg-cloud-provider'];
+      if (data['cfg-cloud-token']) _installOptions.cloudToken = data['cfg-cloud-token'];
+      if (data['cfg-cloud-region']) _installOptions.cloudRegion = data['cfg-cloud-region'];
     }
   } catch (e) {
     console.error('Failed to sync wizard config from disk:', e);
@@ -128,10 +131,25 @@ export function startDeployUI(port = 3001) {
             _log = [];
             _done = false;
             _installOptions = opts;
-            _installOptionsReceived = true;
-            if (_resolveInstallOptions) {
-              _resolveInstallOptions(opts);
-              _resolveInstallOptions = null;
+
+            // Persist keys to secrets.enc
+            try {
+              const configDir = path.join(_brainDir(), 'config');
+              const secretsPath = path.join(configDir, 'secrets.enc');
+              fs.mkdirSync(configDir, { recursive: true });
+              let secrets = {};
+              if (fs.existsSync(secretsPath)) {
+                try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}'); } catch {}
+              }
+              if (opts.googleApiKey) {
+                secrets.google_api_key = opts.googleApiKey.trim();
+              }
+              if (opts.openaiApiKey) {
+                secrets.openai_api_key = opts.openaiApiKey.trim();
+              }
+              fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+            } catch (e) {
+              console.error('Failed to save API keys to secrets.enc:', e);
             }
 
             // Auto-persist options to wizard-config.json on server disk
@@ -151,120 +169,24 @@ export function startDeployUI(port = 3001) {
               if (opts.localnetUser) current['cfg-localnet-user'] = opts.localnetUser;
               if (opts.dashboardPassword) current['cfg-dashboard-password'] = opts.dashboardPassword;
               if (opts.githubToken) current['cfg-github-token'] = opts.githubToken;
+              if (opts.cloudProvider) current['cfg-cloud-provider'] = opts.cloudProvider;
+              if (opts.cloudToken) current['cfg-cloud-token'] = opts.cloudToken;
+              if (opts.cloudRegion) current['cfg-cloud-region'] = opts.cloudRegion;
               fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
 
             } catch (e) {
               console.error('Failed to auto-persist install options on disk:', e);
             }
 
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true }));
-          } catch (e) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
-          }
-        });
-        return;
-      }
-
-      // ── POST /api/vastai-instances — list existing Vast.ai instances ──
-      if (url === '/api/vastai-instances' && req.method === 'POST') {
-        let body = '';
-        req.on('data', d => { body += d; });
-        req.on('end', async () => {
-          try {
-            const { vastaiKey } = JSON.parse(body || '{}');
-            if (!vastaiKey) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Missing vastaiKey parameter' }));
-              return;
-            }
-            const data = await vastAPI(vastaiKey, 'GET', '/instances/');
-            if (data.success === false) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: data.msg || 'Vast.ai API Error' }));
-              return;
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, instances: data.instances || [] }));
-          } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
-          }
-        });
-        return;
-      }
-
-      // ── POST /api/destroy-vastai-instance — destroy a Vast.ai instance ──
-      if (url === '/api/destroy-vastai-instance' && req.method === 'POST') {
-        let body = '';
-        req.on('data', d => { body += d; });
-        req.on('end', async () => {
-          try {
-            const { vastaiKey, instanceId } = JSON.parse(body || '{}');
-            if (!vastaiKey || !instanceId) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Missing vastaiKey or instanceId parameter' }));
-              return;
-            }
-            const data = await vastAPI(vastaiKey, 'DELETE', `/instances/${instanceId}/`);
-            if (data.success === false) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: data.msg || 'Vast.ai API Error' }));
-              return;
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true }));
-          } catch (e) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: e.message }));
-          }
-        });
-        return;
-      }
-
-      // ── POST /api/provision-vastai — provision remote Vast.ai GPU ──
-      if (url === '/api/provision-vastai' && req.method === 'POST') {
-        let body = '';
-        req.on('data', d => { body += d; });
-        req.on('end', async () => {
-          try {
-            const { vastaiKey, instanceId, dashboardPassword } = JSON.parse(body || '{}');
-            if (!vastaiKey) {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Missing vastaiKey parameter' }));
-              return;
-            }
-
-            // Clear server-side setup logs, status, options when starting a new remote install/adoption
-            _log = [];
-            _done = false;
-            _installOptions = null;
-            _installOptionsReceived = false;
-
-            // Auto-persist vastaiKey to wizard-config.json on server disk
-            try {
-              const configDir = path.join(_brainDir(), 'config');
-              const configFile = path.join(configDir, 'wizard-config.json');
-              fs.mkdirSync(configDir, { recursive: true });
-              let current = {};
-              if (fs.existsSync(configFile)) {
-                try { current = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}'); } catch {}
-              }
-              current['cfg-vastai-key'] = vastaiKey.trim();
-              if (dashboardPassword) current['cfg-dashboard-password'] = dashboardPassword.trim();
-              fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
-            } catch (e) {
-              console.error('Failed to auto-persist vastaiKey on disk:', e);
+            // Unblock the main installer process
+            _installOptionsReceived = true;
+            if (_resolveInstallOptions) {
+              _resolveInstallOptions(opts);
+              _resolveInstallOptions = null;
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ ok: true }));
-
-            // Start provision asynchronously
-            provisionVastAI(vastaiKey, instanceId, dashboardPassword).catch(err => {
-              emitProgress('error', `❌ Provisioning failed: ${err.message}`);
-            });
           } catch (e) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: e.message }));
@@ -828,6 +750,87 @@ export function startDeployUI(port = 3001) {
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: true, results, relayResult, obsidianResult }));
+        });
+        return;
+      }
+
+      // ── POST /api/vastai-instances ──
+      if (url === '/api/vastai-instances' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          try {
+            const { vastaiKey } = JSON.parse(body || '{}');
+            if (!vastaiKey) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing vastaiKey' }));
+              return;
+            }
+            const data = await vastAPI(vastaiKey, 'GET', '/instances/');
+            if (data.success === false) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: false, error: data.msg }));
+            } else {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: true, instances: data.instances || [] }));
+            }
+          } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
+      // ── POST /api/destroy-vastai-instance ──
+      if (url === '/api/destroy-vastai-instance' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          try {
+            const { vastaiKey, instanceId } = JSON.parse(body || '{}');
+            if (!vastaiKey || !instanceId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing vastaiKey or instanceId' }));
+              return;
+            }
+            const data = await vastAPI(vastaiKey, 'DELETE', `/instances/${instanceId}/`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: data.success !== false, data }));
+          } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
+      // ── POST /api/provision-vastai ──
+      if (url === '/api/provision-vastai' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          try {
+            const { vastaiKey, instanceId, dashboardPassword } = JSON.parse(body || '{}');
+            if (!vastaiKey) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing vastaiKey' }));
+              return;
+            }
+            
+            _log = [];
+            _done = false;
+            provisionVastAI(vastaiKey, instanceId, dashboardPassword).catch(err => {
+              console.error('provisionVastAI background error:', err);
+              emitProgress('error', err.message);
+            });
+            
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+          } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
         });
         return;
       }
@@ -1613,8 +1616,14 @@ export function finishDeployUI({ apiUrl, dashUrl, healthUrl } = {}) {
   setTimeout(() => {
     for (const client of _clients) { try { client.end(); } catch {} }
     _clients = [];
-    // Keep the wizard server alive so that subsequent steps and settings dashboard continue working!
-    // if (_server) _server.close();
+    if (_server) {
+      try { _server.close(); } catch {}
+    }
+    const finalUrl = dashUrl || apiUrl || '';
+    console.log(`\n  🎉 Installation successfully completed!`);
+    console.log(`  📍 Deployed Brain Site URL: \u001b[36m${finalUrl}\u001b[0m`);
+    console.log(`  📍 API Endpoint:           \u001b[36m${apiUrl}\u001b[0m\n`);
+    process.exit(0);
   }, 4000);
 }
 

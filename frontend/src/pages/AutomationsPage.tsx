@@ -31,6 +31,7 @@ export default function AutomationsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate task queue polling on mount
     void fetchActiveTasks();
     const interval = setInterval(fetchActiveTasks, 4000);
     return () => clearInterval(interval);

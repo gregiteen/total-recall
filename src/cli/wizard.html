@@ -32,6 +32,28 @@
     line-height: 1.6;
   }
 
+  /* ── Security Badges & Tooltips ── */
+  .security-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(88, 166, 255, 0.1);
+    color: var(--blue);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-left: 8px;
+    vertical-align: middle;
+    cursor: help;
+    position: relative;
+  }
+  .security-badge:hover {
+    background: rgba(88, 166, 255, 0.2);
+    border-color: var(--blue);
+  }
+
   /* ── Layout ── */
   .wizard-shell {
     display: flex;
@@ -309,7 +331,8 @@
     font-size: 12px;
     color: var(--text);
     overflow-x: auto;
-    white-space: pre;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
   .code-block .copy-btn {
     position: absolute;
@@ -652,23 +675,23 @@
     <section class="phase active" id="phase-0">
       <div class="phase-header">
         <h1>Welcome to Total Recall</h1>
-        <p>Your own private AI that remembers everything — across every tool you use. Takes about 10 minutes to set up.</p>
+        <p>Your own private AI memory that feeds your IDEs and coding agents. Takes about 5 minutes to set up.</p>
       </div>
 
       <div class="card">
         <h3>What does it do?</h3>
-        <p style="margin-bottom:14px">Total Recall gives your AI tools a <strong style="color:var(--text)">persistent memory</strong> — so Claude, Cursor, and any other AI always know who you are, what you're working on, and how you like things done. No cloud. No subscription. Yours.</p>
+        <p style="margin-bottom:14px">Total Recall gives your AI coding agents a persistent, sovereign memory. Your AI always knows who you are, what you're working on, and how you like code to be written. No cloud subscriptions. 100% local ownership.</p>
         <ul>
           <li>🧠 <strong>Remembers across sessions</strong> <span>— your preferences, projects, and decisions survive every new chat</span></li>
-          <li>🔗 <strong>Works with every AI tool</strong> <span>— Claude Code, Cursor, Windsurf, Obsidian, any OpenAI-compatible app</span></li>
-          <li>🔒 <strong>100% private</strong> <span>— runs on your hardware, never sent to any server you don't control</span></li>
-          <li>⚡ <strong>Powered by gemma4</strong> <span>— Google's latest open-source model, free to run</span></li>
+          <li>🔗 <strong>Works with your AI tools</strong> <span>— Claude Code, Codex, Gemini CLI, and any OpenAI-compatible app</span></li>
+          <li>🔮 <strong>Syncs with Obsidian</strong> <span>— browse and explore your personal VFS memory files visually in a markdown note graph</span></li>
+          <li>🔒 <strong>100% private</strong> <span>— runs entirely on your hardware under your control</span></li>
         </ul>
       </div>
 
       <div class="card">
         <h3>How it works</h3>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Your memory lives in plain text files on your machine. The AI reads them automatically at the start of every conversation.</p>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Your memory lives in plain text Markdown files on your machine. Your AI agents read them automatically at the start of every conversation.</p>
         <div class="arch-row">
           <span class="arch-box">📁 Your memory files</span>
           <span class="arch-arrow">→</span>
@@ -677,9 +700,9 @@
           <span class="arch-box">💬 Every chat is personalized</span>
         </div>
         <div class="arch-row" style="margin-top:10px">
-          <span class="arch-box">Claude / Cursor / Obsidian</span>
+          <span class="arch-box">Claude Code / Codex / Gemini CLI</span>
           <span class="arch-arrow">→</span>
-          <span class="arch-box">All connect to the same brain</span>
+          <span class="arch-box">All connect to the same sovereign VFS brain</span>
         </div>
       </div>
 
@@ -688,194 +711,128 @@
       </div>
     </section>
 
-    <!-- ═══════════════════════════════ PHASE 1 — Where to Run ══════════════════ -->
+    <!-- ═══════════════════════════════ PHASE 1 — Local Setup & Credentials ══════════════════ -->
     <section class="phase" id="phase-1">
       <div class="phase-header">
-        <h1>Where do you want to run your brain?</h1>
-        <p>Pick the option that fits you. All three use the same model (gemma4) and have the same features.</p>
+        <h1>Configure sovereign VFS Brain Server</h1>
+        <p>Set up your private VFS brain server. You can run the database server locally on this computer, or offload it to an always-on remote server/VM while keeping your local coding integrations active.</p>
       </div>
 
-      <div class="radio-group" id="deploy-target" style="margin-bottom:20px">
-
-        <label class="radio-item" id="target-local-label">
-          <input type="radio" name="deploy-target" value="local" id="target-local">
-          <div style="flex:1">
-            <div class="ri-label">🖥&nbsp; On this computer <span style="color:var(--green);font-size:11px;font-weight:400">(simplest — if this machine has 16 GB+ RAM)</span></div>
-            <div class="ri-desc">Install right here. Works on Mac or PC, with or without a GPU. Ollama doesn't need to be pre-installed.</div>
-            <div id="local-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer will check your RAM, install Ollama if needed, download the gemma4 model (~10 GB), and start your brain — all automatically.</div>
-              <div class="form-group" style="margin-top:14px;margin-bottom:0">
-                <label>Public access (optional)</label>
-                <div class="radio-group" id="local-access">
-                  <label class="radio-item selected">
-                    <input type="radio" name="local-access" value="local" checked>
-                    <div><div class="ri-label">Local only</div><div class="ri-desc">Access from this computer only. Easiest.</div></div>
-                  </label>
-                  <label class="radio-item">
-                    <input type="radio" name="local-access" value="cloudflare-quick">
-                    <div><div class="ri-label">Share over internet (free Cloudflare URL)</div><div class="ri-desc">Reach your brain from your phone or other devices. Zero config, no account needed.</div></div>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </label>
-
-        <label class="radio-item" id="target-localnet-label">
-          <input type="radio" name="deploy-target" value="localnet" id="target-localnet">
-          <div style="flex:1">
-            <div class="ri-label">🏠&nbsp; Another computer on my network <span style="color:var(--blue);font-size:11px;font-weight:400">(recommended for most users)</span></div>
-            <div class="ri-desc">Mac Mini, iMac, gaming PC, or any always-on desktop on your home or office network. The brain runs there — you connect from anywhere.</div>
-            <div id="localnet-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;The wizard will connect to that computer and install everything automatically. You just need its IP address and username.</div>
-              <div class="form-group" style="margin-bottom:10px">
-                <label>IP address or hostname of that computer</label>
-                <input type="text" id="cfg-localnet-host" placeholder="192.168.1.100  or  mac-mini.local" autocomplete="off" spellcheck="false">
-                <div class="hint">On a Mac: Apple menu → System Settings → General → Sharing → look for the local hostname. On Windows: open Command Prompt, type <code>ipconfig</code>.</div>
-              </div>
-              <div class="form-group" style="margin-bottom:0">
-                <label>Username on that computer</label>
-                <input type="text" id="cfg-localnet-user" placeholder="greg" autocomplete="off" spellcheck="false">
-                <div class="hint">The username you log in with. <strong>SSH must be enabled</strong> — on Mac: System Settings → General → Sharing → Remote Login → On.</div>
-              </div>
-            </div>
-          </div>
-        </label>
-
-        <label class="radio-item" id="target-vastai-label">
-          <input type="radio" name="deploy-target" value="vastai" id="target-vastai">
-          <div style="flex:1">
-            <div class="ri-label">☁️&nbsp; Rent a GPU in the cloud <span style="color:var(--muted);font-size:11px;font-weight:400">~$5/mo — no hardware needed</span></div>
-            <div class="ri-desc">We rent a GPU server for you automatically. Good if you don't have a suitable computer at home. About $0.07/hour — pause it when not in use.</div>
-            <div id="vastai-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="notice info" style="margin-bottom:12px">ℹ️ &nbsp;<strong>What is Vast.ai?</strong> A marketplace where you rent GPU computers by the hour. We handle everything — you just paste your API key below.</div>
-              <div class="form-group" style="margin-bottom:10px">
-                <label>Step 1 — Create a free Vast.ai account</label>
-                <p style="color:var(--muted);font-size:12px;margin-bottom:8px">Go to <a href="https://vast.ai" target="_blank" rel="noopener" style="color:var(--blue)">vast.ai</a>, sign up free, then add $10 credit (enough for ~6 weeks).</p>
-              </div>
-              <div class="form-group" style="margin-bottom:10px">
-                <label>Step 2 — Get your API key</label>
-                <p style="color:var(--muted);font-size:12px;margin-bottom:6px">Go to <a href="https://cloud.vast.ai/manage-keys/" target="_blank" rel="noopener" style="color:var(--blue)">cloud.vast.ai/manage-keys</a> → copy it.</p>
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-                  <input type="password" id="cfg-vastai-key" placeholder="Paste your Vast.ai API key here" autocomplete="off" style="font-family:monospace;flex:1">
-                  <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-vastai-key')">Show</button>
-                  <button class="btn btn-blue" id="vastai-scan-btn" style="padding:5px 10px;font-size:12px" onclick="scanVastAIInstances(event)">🔍 Scan Account</button>
-                </div>
-              </div>
-              <div id="vastai-existing-container" style="display:none;margin-bottom:15px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--panel2)">
-                <div id="vastai-cleanup-banner" class="notice warn" style="display:none;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:6px;font-size:11px">
-                  <span>⚠️ We detected failed/broken instances billing your account.</span>
-                  <button class="btn btn-secondary" id="vastai-cleanup-btn" style="color:var(--red);border-color:var(--red);padding:3px 8px;font-size:10px" onclick="cleanupOnboardingFailedInstances(event)">🧹 Clean Up All Failed</button>
-                </div>
-                <h4 style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--blue)">📋 Found Existing Instances on your Account:</h4>
-                <div id="vastai-existing-list" style="display:flex;flex-direction:column;gap:8px"></div>
-              </div>
-              <div class="form-group" style="margin-bottom:0">
-                <label>Step 3 — We do the rest</label>
-                <p style="color:var(--muted);font-size:12px">Click "Provision &amp; Install" — we'll rent a GPU, run the installer, and pull the AI model. Takes about 10 minutes total.</p>
-              </div>
-            </div>
-          </div>
-        </label>
-
-        <label class="radio-item" id="target-vps-label">
-          <input type="radio" name="deploy-target" value="vps" id="target-vps">
-          <div style="flex:1">
-            <div class="ri-label">🌐&nbsp; Your own VPS or cloud server <span style="color:var(--muted);font-size:11px;font-weight:400">(advanced)</span></div>
-            <div class="ri-desc">Hetzner, DigitalOcean, RunPod, or any Linux server you already have. Needs Ubuntu 22.04+ and ~16 GB RAM.</div>
-            <div id="vps-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-              <div class="form-group" style="margin-bottom:10px">
-                <label>SSH into your server and run this one command</label>
-                <div class="code-block" style="margin:0"><button class="copy-btn" onclick="copyCode(this)">Copy</button>curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh -o /tmp/install.sh && bash /tmp/install.sh && rm /tmp/install.sh</div>
-              </div>
-              <div class="notice info" style="margin-bottom:0">ℹ️ &nbsp;The installer handles Node.js, Ollama, the gemma4 model, HTTPS, and the brain server — everything from scratch.</div>
-            </div>
-          </div>
-        </label>
-
+      <!-- Dual-Layer Relationship Explainer -->
+      <div class="notice success" style="margin-bottom:20px;line-height:1.5;font-size:13px;border-left:4px solid var(--green)">
+        <strong>💡 Workstation & Server Relationship:</strong>
+        <p style="color:var(--muted);margin-top:4px;font-size:12px">
+          Regardless of where your brain server is hosted, <strong>the wizard will automatically configure this computer</strong> in Phase 4. This ensures your local IDEs, background log relays, and CLI coding agents (like Claude Code) can securely communicate with your memory files.
+        </p>
       </div>
 
-      <!-- HTTPS section — shown for VPS/local with public access -->
-      <div id="domain-section" style="display:none">
-        <div class="card">
-          <h3>🔒 HTTPS &amp; Public Access</h3>
-          <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-            All traffic to your brain is encrypted. Choose how you want to expose it:
-          </p>
+      <!-- Deploy Target Selection -->
+      <div class="card">
+        <h3>📍 Where to Host the Brain Server</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+          Choose where to host your core plain-text VFS database and SQLite caches.
+        </p>
+        <div class="radio-group" id="deploy-target" style="margin-bottom:0">
+          <label class="radio-item selected">
+            <input type="radio" name="deploy-target" value="local" checked>
+            <div>
+              <div class="ri-label">This Computer <span style="font-weight:400;color:var(--muted)">(Mac or PC)</span></div>
+              <div class="ri-desc">Run both the VFS brain server and editor integrations on this machine. Ideal for single-workstation setups. <span style="color:var(--yellow);font-weight:600;display:block;margin-top:4px">⚠️ Note: This computer must remain turned on and awake 24/7 to run background memory optimizations (Dream Cycle) and task schedulers.</span></div>
+            </div>
+          </label>
+          <label class="radio-item" style="margin-top:8px">
+            <input type="radio" name="deploy-target" value="localnet">
+            <div>
+              <div class="ri-label">Mac Mini / Home Server via SSH <span style="font-weight:400;color:var(--muted)">(Local Network Server, Mac Mini, PC, or private VPS)</span></div>
+              <div class="ri-desc">Deploy remotely onto a dedicated home server, a local Mac Mini, or a pre-provisioned Linux machine on your private network.</div>
+            </div>
+          </label>
+          <label class="radio-item" style="margin-top:8px">
+            <input type="radio" name="deploy-target" value="agent-cloud">
+            <div>
+              <div class="ri-label">Cloud VM / VPS — Fully Automated <span class="security-badge" title="No CLI/Terminal Needed: Our built-in CLI agent automatically boots the VM on your provider, registers your SSH key, and deploys everything behind the scenes.">🔒 Zero-Terminal</span></div>
+              <div class="ri-desc">No server? No problem! Paste your cloud provider API key, and our built-in agent will automatically spin up a fresh $4–$6 VPS instance, authorize your SSH keys, and deploy Total Recall in one click.</div>
+            </div>
+          </label>
+        </div>
 
-          <div style="display:grid;gap:10px;margin-bottom:16px">
-
-            <label class="radio-item selected" id="cf-quick-option">
-              <input type="radio" name="https-method" value="cloudflare-quick" checked>
-              <div style="flex:1">
-                <div class="ri-label">⚡ Cloudflare Quick Tunnel <span style="color:var(--green);font-size:11px;font-weight:400">recommended — free, zero config</span></div>
-                <div class="ri-desc">
-                  Cloudflare assigns you a free <code>*.trycloudflare.com</code> URL automatically — no account, no sign-up needed. 
-                  Your brain is accessible from your phone or any device instantly, over HTTPS. 
-                  <strong style="color:var(--text)">Nothing leaves your machine unencrypted.</strong>
-                </div>
-              </div>
-            </label>
-
-            <label class="radio-item" id="cf-tunnel-option">
-              <input type="radio" name="https-method" value="cloudflare-tunnel">
-              <div style="flex:1">
-                <div class="ri-label">🌐 Cloudflare Zero Trust Tunnel <span style="color:var(--muted);font-size:11px;font-weight:400">permanent custom URL</span></div>
-                <div class="ri-desc">Use your own domain (e.g. <code>brain.yourdomain.com</code>) with a permanent Cloudflare tunnel. Free Cloudflare account required.</div>
-                <div id="cf-tunnel-fields" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-                  <div class="form-group" style="margin-bottom:10px">
-                    <label>Your domain <span style="font-weight:400;color:var(--muted)">(must be on Cloudflare DNS)</span></label>
-                    <input type="text" id="cfg-domain" placeholder="brain.yourdomain.com" autocomplete="off" spellcheck="false">
-                    <div class="hint">Add your domain to Cloudflare for free at <a href="https://dash.cloudflare.com" target="_blank" rel="noopener" style="color:var(--blue)">dash.cloudflare.com</a> — then come back here.</div>
-                  </div>
-                  <div class="form-group" style="margin-bottom:0">
-                    <label>Cloudflare Tunnel Token</label>
-                    <div style="display:flex;gap:8px;align-items:center">
-                      <input type="password" id="cfg-cloudflare-token" placeholder="eyJh…" autocomplete="off" style="font-family:monospace;flex:1">
-                      <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-cloudflare-token')">Show</button>
-                    </div>
-                    <div class="hint">
-                      In Cloudflare Zero Trust → Networks → Tunnels → Create tunnel → copy the token from the install command.
-                      <a href="https://one.dash.cloudflare.com" target="_blank" rel="noopener" style="color:var(--blue)">one.dash.cloudflare.com →</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </label>
-
+        <!-- Localnet SSH details (shown only when Localnet is selected) -->
+        <div id="localnet-details" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Mac Mini or Home Server Host / IP Address <span style="font-weight:400;color:var(--muted)">(e.g. macmini.local or 192.168.1.150)</span></label>
+            <input type="text" id="cfg-localnet-host" placeholder="e.g. macmini.local or 192.168.1.100" autocomplete="off" spellcheck="false">
           </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>SSH Username <span style="font-weight:400;color:var(--muted)">(e.g. root, admin, ubuntu)</span></label>
+            <input type="text" id="cfg-localnet-user" placeholder="root" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
 
-          <div style="font-size:11px;color:var(--muted)">
-            Both options use Cloudflare's global network as an encrypted proxy — your brain never exposes a raw port to the internet.
-            For VPS/advanced users: you can also use Caddy + Let's Encrypt with any domain (including <a href="https://www.duckdns.org" target="_blank" rel="noopener" style="color:var(--muted)">duckdns.org</a>) by passing <code>--domain yourname.duckdns.org</code> to the CLI installer.
+        <!-- Agent-Automated details (shown only when agent-cloud is selected) -->
+        <div id="agent-cloud-details" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div class="notice info" style="margin-bottom:16px;line-height:1.5;font-size:12px;border:1px solid rgba(88,166,255,0.3);background:rgba(88,166,255,0.05)">
+            <div><strong>🤖 Zero-Terminal Automated Cloud Installation:</strong></div>
+            <p style="color:var(--muted);margin-top:4px;font-size:11px">
+              No need to open a terminal, configure Linux, or manage SSH keys! The local CLI agent will automatically generate a secure SSH key pair, provision a lightweight standard VM under your account, and set up your brain securely.
+            </p>
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Cloud Provider (e.g. DigitalOcean, Hetzner, AWS, Linode, Vultr)</label>
+            <input type="text" id="cfg-cloud-provider" placeholder="Enter your cloud provider name" style="width:100%;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit">
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Provider API Key / Token <span class="security-badge" title="Local Encryption: This token is encrypted locally on this machine and never exposed. It is used strictly to provision your server instance.">🔒 Secure Local</span></label>
+            <input type="password" id="cfg-cloud-token" placeholder="Paste your cloud provider's API key or token" autocomplete="off" style="font-family:monospace">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Preferred Region / Zone (Optional)</label>
+            <input type="text" id="cfg-cloud-region" placeholder="e.g. nyc3, fra1, us-east-1 (or leave empty for auto)" style="width:100%;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit">
           </div>
         </div>
       </div>
 
-      <!-- Dashboard security password -->
-      <div class="card" id="security-section" style="margin-top:20px">
-        <h3>🔑 Dashboard Admin Password</h3>
+      <!-- API Keys card -->
+      <div class="card">
+        <h3>🔑 Embedding API Keys (Semantic Search Only)</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-          Set the password you will use to log into your remote settings dashboard (<code>/dashboard</code>).
+          Total Recall routes all semantic search indexing tasks to lightweight embedding API calls (strictly for vector generation). All reasoning, codegen, and cognitive loops run 100% locally in your developer CLI coding agents (like Claude Code, Codex, or Antigravity) without any third-party routing. At least one key is required.
+        </p>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Google API Key <span class="security-badge" title="End-to-End Encrypted: Your keys are encrypted locally using AES-256-GCM + scrypt. They never leave this machine.">🔒 Secure Local</span> <span style="font-weight:400;color:var(--muted)">(recommended — text-embedding-004)</span></label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="password" id="cfg-google-key" placeholder="AIzaSy..." autocomplete="off" style="font-family:monospace;flex:1">
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-google-key')">Show</button>
+          </div>
+          <div class="hint">Get a key from <a href="https://aistudio.google.com" target="_blank" rel="noopener" style="color:var(--blue)">Google AI Studio</a>. Generous free tier.</div>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>OpenAI API Key <span class="security-badge" title="End-to-End Encrypted: Your keys are encrypted locally using AES-256-GCM + scrypt. They never leave this machine.">🔒 Secure Local</span> <span style="font-weight:400;color:var(--muted)">(optional fallback — text-embedding-3)</span></label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="password" id="cfg-openai-key" placeholder="sk-proj-..." autocomplete="off" style="font-family:monospace;flex:1">
+            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-openai-key')">Show</button>
+          </div>
+          <div class="hint" style="margin-top:4px">Get a key from the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color:var(--blue)">OpenAI Platform</a>. Paid account/credits required.</div>
+        </div>
+      </div>
+
+      <!-- Public Access Sharing -->
+      <div class="card" style="margin-top:20px">
+        <h3>🌐 Public Access Sharing (Optional)</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          Configure secure remote access to your brain server.
         </p>
         <div class="form-group" style="margin-bottom:0">
-          <label>Admin Password <span style="font-weight:400;color:var(--muted)">(minimum 8 characters)</span></label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="cfg-dashboard-password" value="totalrecall" placeholder="Enter initial password" autocomplete="off" style="font-family:monospace;flex:1">
-            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('cfg-dashboard-password')">Hide</button>
-          </div>
-          <div class="hint">
-            <strong>Default: <code>totalrecall</code></strong>. For security, the dashboard will force you to reset this password upon your first login. Click Hide to mask it.
-          </div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="cfg-cloudflare-quick" checked style="width:16px;height:16px;accent-color:var(--green)">
+            <span style="font-size:13px;font-weight:600">Share over secure internet (free Cloudflare Quick Tunnel)</span>
+          </label>
+          <div class="hint" style="margin-top:5px;color:var(--muted);font-size:11px">Generates a secure, temporary <code>*.trycloudflare.com</code> HTTPS URL so you can connect coding agents and tools safely over the internet without configuring ports.</div>
         </div>
       </div>
 
       <div class="btn-row">
         <button class="btn btn-secondary" onclick="goPhase(0)">← Back</button>
-        <button class="btn btn-primary" id="phase1-next-btn" onclick="startInstall()" style="display:none">Install on this computer →</button>
-        <button class="btn btn-primary" id="phase1-localnet-btn" onclick="installOnNetwork()" style="display:none">Install on network computer →</button>
-        <button class="btn btn-primary" id="phase1-vastai-btn" onclick="provisionVastAI()" style="display:none">☁️ Provision &amp; Install →</button>
-        <button class="btn btn-blue" id="phase1-continue-btn" onclick="goPhase(2)" style="display:none">My VPS is ready — Continue →</button>
+        <button class="btn btn-primary" onclick="startInstall()"><span id="install-btn-text">Install on this computer</span> →</button>
       </div>
     </section>
 
@@ -883,7 +840,7 @@
     <section class="phase" id="phase-2">
       <div class="phase-header">
         <h1>Installing...</h1>
-        <p>Total Recall is being provisioned on your server. This may take 5–20 minutes.</p>
+        <p>Total Recall is being provisioned on your server. This is a lightweight install and usually takes less than 60 seconds.</p>
       </div>
 
       <div class="card">
@@ -1551,32 +1508,6 @@
         </div>
       </div>
 
-      <!-- Cloud Instances Management (Vast.ai) -->
-      <div class="card" style="margin-top: 24px;">
-        <h3>☁️ Cloud GPU Instance Management</h3>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
-          Monitor, adopt, or destroy cloud GPU instances rented on your Vast.ai account at any time.
-        </p>
-
-        <div style="border:1px solid var(--border);border-radius:8px;padding:14px;background:rgba(255,255,255,0.02)">
-          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">Vast.ai API Key</label>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
-            <input type="password" id="settings-vastai-key" placeholder="Paste your Vast.ai API Key..." autocomplete="off" style="font-family:monospace;flex:1">
-            <button class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleShow('settings-vastai-key')">Show</button>
-            <button class="btn btn-primary" id="settings-vastai-scan-btn" onclick="scanSettingsVastAI()" style="padding:5px 14px;font-size:12px">🔍 Scan &amp; Manage</button>
-          </div>
-
-          <div id="settings-vastai-container" style="display:none;margin-top:14px">
-            <div id="settings-cleanup-banner" class="notice warn" style="display:none;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:6px;font-size:12px">
-              <span>⚠️ We detected failed/broken instances that are still billing your account.</span>
-              <button class="btn btn-secondary" id="settings-cleanup-btn" style="color:var(--red);border-color:var(--red);padding:3px 8px;font-size:11px" onclick="cleanupSettingsFailedInstances()">🧹 Clean Up All Failed</button>
-            </div>
-            <h4 style="margin-bottom:8px;font-size:13px;color:var(--text)">Your Vast.ai Instances:</h4>
-            <div id="settings-vastai-list" style="display:grid;gap:10px"></div>
-          </div>
-        </div>
-      </div>
-
       <!-- Remote Dashboard Password Settings -->
       <div class="card" style="margin-top: 24px;">
         <h3>🔑 Remote Dashboard Password</h3>
@@ -1591,7 +1522,7 @@
             <button class="btn btn-primary" onclick="resetRemotePassword()">Update Remote Password</button>
           </div>
           <div class="hint">
-            This will update the configuration on your active brain (locally or over SSH on your Vast.ai VM) and force a password reset on next dashboard login.
+            This will update the configuration on your active brain (locally or over SSH on your remote server/VM) and force a password reset on next dashboard login.
           </div>
         </div>
       </div>
@@ -1604,7 +1535,7 @@
         </p>
         <div style="border:1px solid rgba(248,81,73,0.2);border-radius:8px;padding:14px;background:rgba(248,81,73,0.03)">
           <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
-            This clears both local storage and the server-side configuration file (`~/.agent/config/wizard-config.json`). The remote VM will not be automatically destroyed, so make sure to destroy it using the GPU Instance Management panel above if needed to avoid ongoing charges.
+            This clears both local storage and the server-side configuration file (`~/.agent/config/wizard-config.json`). If you deployed to a Cloud VM/VPS, remember to destroy or stop it directly in your cloud provider's console to avoid ongoing charges.
           </p>
           <button class="btn" style="background:var(--red);color:#fff;font-size:12px;padding:8px 16px" onclick="resetWizardSetup()">Reset Wizard Setup</button>
         </div>
@@ -1673,11 +1604,22 @@
       'cfg-localnet-host',
       'cfg-localnet-user',
       'cfg-vastai-key',
-      'cfg-dashboard-password',
-      'cfg-github-token'
+      'cfg-github-token',
+      'cfg-cloud-token'
+    ];
+    var selectInputs = [
+      'cfg-cloud-provider',
+      'cfg-cloud-region'
     ];
     var payload = {};
     textInputs.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        safeStorage.setItem('tr_wizard_' + id, el.value);
+        payload[id] = el.value;
+      }
+    });
+    selectInputs.forEach(function (id) {
       var el = document.getElementById(id);
       if (el) {
         safeStorage.setItem('tr_wizard_' + id, el.value);
@@ -1779,55 +1721,42 @@
     window.scrollTo({ top: 0 });
   };
 
-  // ── Phase 1: Deploy target selection ──
   document.querySelectorAll('#deploy-target input[type=radio]').forEach(function (r) {
     r.addEventListener('change', function () {
       document.querySelectorAll('#deploy-target .radio-item').forEach(function (el) { el.classList.remove('selected'); });
-      r.closest('.radio-item').classList.add('selected');
+      var parentItem = r.closest('.radio-item');
+      if (parentItem) parentItem.classList.add('selected');
 
       var val = r.value;
       // Show/hide path-specific detail panels
-      document.getElementById('local-details').style.display    = val === 'local'    ? '' : 'none';
-      document.getElementById('localnet-details').style.display  = val === 'localnet' ? '' : 'none';
-      document.getElementById('vastai-details').style.display   = val === 'vastai'   ? '' : 'none';
-      document.getElementById('vps-details').style.display      = val === 'vps'      ? '' : 'none';
-      // Domain/HTTPS section: VPS always shows it; local shows it when public access wanted
-      var showDomainSection = (val === 'vps') || (val === 'local');
-      document.getElementById('domain-section').style.display = showDomainSection ? '' : 'none';
-      // Show the right action button
-      document.getElementById('phase1-next-btn').style.display      = val === 'local'    ? '' : 'none';
-      document.getElementById('phase1-localnet-btn').style.display  = val === 'localnet' ? '' : 'none';
-      document.getElementById('phase1-vastai-btn').style.display    = val === 'vastai'   ? '' : 'none';
-      document.getElementById('phase1-continue-btn').style.display  = val === 'vps'      ? '' : 'none';
+      var localnetDetails = document.getElementById('localnet-details');
+      if (localnetDetails) {
+        localnetDetails.style.display = val === 'localnet' ? '' : 'none';
+      }
+
+      var agentCloudDetails = document.getElementById('agent-cloud-details');
+      if (agentCloudDetails) {
+        agentCloudDetails.style.display = val === 'agent-cloud' ? '' : 'none';
+      }
+      
+      var installBtnText = document.getElementById('install-btn-text');
+      if (installBtnText) {
+        if (val === 'localnet') {
+          installBtnText.innerText = 'Install on remote network computer';
+        } else if (val === 'agent-cloud') {
+          installBtnText.innerText = '🚀 Provision & Install via Agent';
+        } else {
+          installBtnText.innerText = 'Install on this computer';
+        }
+      }
+      
       W.deployTarget = val;
-    });
-  });
-
-  // Show/hide Zero Trust token fields when https-method radio changes
-  document.querySelectorAll('input[name="https-method"]').forEach(function(r) {
-    r.addEventListener('change', function() {
-      document.querySelectorAll('#domain-section .radio-item').forEach(function(el) { el.classList.remove('selected'); });
-      r.closest('.radio-item').classList.add('selected');
-      var tunnelFields = document.getElementById('cf-tunnel-fields');
-      if (tunnelFields) tunnelFields.style.display = (r.value === 'cloudflare-tunnel') ? '' : 'none';
-    });
-  });
-
-  // Local access sub-radios
-  document.querySelectorAll('#local-access input[type=radio]').forEach(function (r) {
-    r.addEventListener('change', function () {
-      document.querySelectorAll('#local-access .radio-item').forEach(function (el) { el.classList.remove('selected'); });
-      r.closest('.radio-item').classList.add('selected');
     });
   });
 
   // ── Phase 1: Install on another computer on the network ──
   window.installOnNetwork = function () {
-    var pass = ((document.getElementById('cfg-dashboard-password') || {}).value || '').trim();
-    if (!pass || pass.length < 8) {
-      alert('Dashboard Admin Password must be at least 8 characters long.');
-      return;
-    }
+    var pass = 'totalrecall';
     window.saveAllToLocalStorage();
     var host = (document.getElementById('cfg-localnet-host') || {}).value;
     var user = (document.getElementById('cfg-localnet-user') || {}).value;
@@ -1844,7 +1773,7 @@
         deployTarget: 'localnet',
         localnetHost: host.trim(),
         localnetUser: user.trim(),
-        model: 'gemma4:26b',
+        model: 'flash',
         httpsMethod: 'local',
         skipSearxng: true,
         skipCaddy: true,
@@ -1857,11 +1786,7 @@
 
   // ── Phase 1: Vast.ai provision (client-side) ──
   window.provisionVastAI = function (instanceId) {
-    var pass = ((document.getElementById('cfg-dashboard-password') || {}).value || '').trim();
-    if (!pass || pass.length < 8) {
-      alert('Dashboard Admin Password must be at least 8 characters long.');
-      return;
-    }
+    var pass = 'totalrecall';
     window.saveAllToLocalStorage();
     var key = (document.getElementById('cfg-vastai-key') || {}).value;
     if (!key || !key.trim()) {
@@ -2082,55 +2007,87 @@
 
   // ── Phase 1: Start Install ──
   window.startInstall = function () {
-    var pass = ((document.getElementById('cfg-dashboard-password') || {}).value || '').trim();
-    if (!pass || pass.length < 8) {
-      alert('Dashboard Admin Password must be at least 8 characters long.');
+    var pass = 'totalrecall';
+
+    var googleApiKey = ((document.getElementById('cfg-google-key') || {}).value || '').trim();
+    var openaiApiKey = ((document.getElementById('cfg-openai-key') || {}).value || '').trim();
+    if (!googleApiKey && !openaiApiKey) {
+      alert('At least one API Key (Google or OpenAI) is required for semantic VFS indexing & reasoning.');
       return;
     }
-    window.saveAllToLocalStorage();
-    var deployTarget = W.deployTarget || 'local';
-    var domain = 'localhost';
-    var httpsMethod = 'local';
-    var duckdnsToken = null;
-    var cloudflareToken = null;
 
-    if (deployTarget === 'local') {
-      var localAccess = document.querySelector('#local-access input[type=radio]:checked');
-      if (localAccess && localAccess.value === 'cloudflare-quick') {
-        httpsMethod = 'cloudflare-quick';
-      }
-    } else {
-      // Remote path: read Cloudflare https-method radio
-      var httpsRadio = document.querySelector('input[name="https-method"]:checked');
-      var selectedMethod = httpsRadio ? httpsRadio.value : 'cloudflare-quick';
-      cloudflareToken = ((document.getElementById('cfg-cloudflare-token') || {}).value || '').trim() || null;
-      var domainVal = (document.getElementById('cfg-domain') || {}).value;
-      if (domainVal) domain = domainVal.trim() || 'localhost';
-
-      if (selectedMethod === 'cloudflare-tunnel' && cloudflareToken) {
-        httpsMethod = 'cloudflare-tunnel';
-      } else {
-        httpsMethod = 'cloudflare-quick'; // Quick Tunnel: zero config, temp URL
-      }
+    var deployTarget = 'local';
+    var targetRadio = document.querySelector('#deploy-target input[type=radio]:checked');
+    if (targetRadio) {
+      deployTarget = targetRadio.value;
     }
 
+    var domain = 'localhost';
+    var httpsMethod = 'local';
+    var localnetHost = null;
+    var localnetUser = null;
+    var cloudProvider = null;
+    var cloudToken = null;
+    var cloudRegion = null;
+
+    var quickTunnel = document.getElementById('cfg-cloudflare-quick');
+    if (quickTunnel && quickTunnel.checked) {
+      httpsMethod = 'cloudflare-quick';
+    }
+
+    if (deployTarget === 'localnet') {
+      localnetHost = ((document.getElementById('cfg-localnet-host') || {}).value || '').trim();
+      localnetUser = ((document.getElementById('cfg-localnet-user') || {}).value || '').trim() || 'root';
+      if (!localnetHost) {
+        alert('Please enter the Remote Host or IP Address of the network computer.');
+        return;
+      }
+      httpsMethod = 'cloudflare-quick'; // Always use Quick Tunnel for remote localnet access
+    }
+
+    if (deployTarget === 'agent-cloud') {
+      cloudProvider = document.getElementById('cfg-cloud-provider').value;
+      cloudToken = ((document.getElementById('cfg-cloud-token') || {}).value || '').trim();
+      cloudRegion = document.getElementById('cfg-cloud-region').value;
+      if (!cloudToken) {
+        alert('Please enter your Cloud Provider API Key / Token.');
+        return;
+      }
+      httpsMethod = 'cloudflare-quick'; // Always Quick Tunnel for fully automated setups
+    }
+
+    window.saveAllToLocalStorage();
     W.domain = domain;
     W.dashboardPassword = pass;
-    saveWizardState({ domain: domain });
+    W.deployTarget = deployTarget;
+    saveWizardState({ domain: domain, deployTarget: deployTarget });
 
     var payload = {
       domain: domain,
       httpsMethod: httpsMethod,
-      model: 'gemma4:26b',           // always — one model
-      duckdnsToken: duckdnsToken,
-      cloudflareToken: cloudflareToken,
-      skipSearxng: true,             // SearXNG optional, skip by default for speed
+      model: 'flash',
+      duckdnsToken: null,
+      cloudflareToken: null,
+      skipSearxng: true,
       skipCaddy: (httpsMethod === 'local' || httpsMethod === 'cloudflare-quick'),
       skipCompile: false,
       skipModels: false,
       deployTarget: deployTarget,
-      dashboardPassword: pass
+      dashboardPassword: pass,
+      googleApiKey: googleApiKey,
+      openaiApiKey: openaiApiKey
     };
+
+    if (deployTarget === 'localnet') {
+      payload.localnetHost = localnetHost;
+      payload.localnetUser = localnetUser;
+    }
+
+    if (deployTarget === 'agent-cloud') {
+      payload.cloudProvider = cloudProvider;
+      payload.cloudToken = cloudToken;
+      payload.cloudRegion = cloudRegion;
+    }
 
     goPhase(2);
     startSSE();
@@ -2151,8 +2108,8 @@
     var pbar = document.getElementById('persistent-install-bar');
     if (!pbar) return;
     
-    // Do not show the persistent bar on Phase 2 (full logs)
-    if (W.phase === 2) {
+    // Do not show the persistent bar on Phase 0, Phase 1, or Phase 2
+    if (W.phase === 0 || W.phase === 1 || W.phase === 2) {
       pbar.classList.remove('visible');
       return;
     }
@@ -3057,233 +3014,9 @@
         document.getElementById('settings-usage-remaining').textContent = data.remaining === 'unlimited' ? 'unlimited' : data.remaining;
       })
       .catch(function() {});
-
-    // Load Vast.ai key from wizard config if available and scan
-    fetch('/api/get-wizard-config')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var key = data['cfg-vastai-key'] || safeStorage.getItem('tr_wizard_cfg-vastai-key');
-        if (key) {
-          var input = document.getElementById('settings-vastai-key');
-          if (input && !input.value) {
-            input.value = key;
-            window.scanSettingsVastAI();
-          }
-        }
-      })
-      .catch(function() {});
   }
 
-  // ── Scan Vast.ai instances in Settings ──
-  window.scanSettingsVastAI = function (e) {
-    if (e) e.preventDefault();
-    var keyInput = document.getElementById('settings-vastai-key');
-    var key = keyInput ? keyInput.value : '';
-    if (!key || !key.trim()) {
-      alert('Please enter your Vast.ai API key first.');
-      return;
-    }
-    
-    var scanBtn = document.getElementById('settings-vastai-scan-btn');
-    var container = document.getElementById('settings-vastai-container');
-    var list = document.getElementById('settings-vastai-list');
-    
-    if (scanBtn) {
-      scanBtn.disabled = true;
-      scanBtn.textContent = 'Scanning...';
-    }
-    
-    fetch('/api/vastai-instances', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vastaiKey: key.trim() })
-    })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (scanBtn) {
-        scanBtn.disabled = false;
-        scanBtn.textContent = '🔍 Scan & Manage';
-      }
-      if (!data.ok || !data.instances) {
-        alert('Scan failed: ' + (data.error || 'Unknown error'));
-        if (container) container.style.display = 'none';
-        return;
-      }
-      
-      var failedIds = [];
-      
-      if (list) {
-        list.innerHTML = '';
-        if (data.instances.length === 0) {
-          list.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">No active instances found on this account.</div>';
-        } else {
-          data.instances.forEach(function (inst) {
-            var gpu = inst.gpu_name || 'GPU';
-            var price = inst.dph_total ? ('$' + (inst.dph_total * 24 * 30).toFixed(2) + '/mo') : 'unknown price';
-            var status = inst.actual_status || inst.status || 'loading';
-            
-            var isFailed = status === 'broken' || status === 'offline' || status === 'exited' || status === 'stopped';
-            if (isFailed) {
-              failedIds.push(inst.id);
-            }
-            
-            var div = document.createElement('div');
-            div.style.display = 'flex';
-            div.style.alignItems = 'center';
-            div.style.justifyContent = 'space-between';
-            div.style.padding = '10px 14px';
-            div.style.border = '1px solid var(--border)';
-            div.style.borderRadius = '8px';
-            div.style.background = 'var(--panel)';
-            div.style.fontSize = '13px';
-            div.style.gap = '16px';
-            
-            var createdStr = '';
-            if (inst.start_date) {
-              try {
-                var d = new Date(inst.start_date * 1000);
-                createdStr = ' | Created: ' + d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-              } catch (e) {}
-            }
-            
-            var statusColor = 'var(--yellow)';
-            if (status === 'running') {
-              statusColor = 'var(--green)';
-            } else if (isFailed) {
-              statusColor = 'var(--red)';
-            }
-            
-            var detailsDiv = document.createElement('div');
-            detailsDiv.style.flex = '1';
-            detailsDiv.innerHTML = '<strong style="color:var(--text)">' + gpu + ' <span style="color:var(--blue);font-weight:400;font-size:11px;font-family:monospace">(ID: ' + inst.id + ')</span></strong><br>' +
-                                   '<span style="color:var(--muted)">Status: <span style="color:' + statusColor + ';font-weight:600">' + status + '</span> | ' + price + createdStr + '</span>';
-            
-            var actionsDiv = document.createElement('div');
-            actionsDiv.style.display = 'flex';
-            actionsDiv.style.gap = '8px';
-            
-            var adoptBtn = document.createElement('button');
-            adoptBtn.className = 'btn btn-primary';
-            adoptBtn.style.padding = '4px 10px';
-            adoptBtn.style.fontSize = '11px';
-            adoptBtn.textContent = 'Adopt & Connect';
-            adoptBtn.onclick = function (event) {
-              if (event) event.preventDefault();
-              if (confirm('Are you sure you want to adopt instance ' + inst.id + ' (' + gpu + ')? Total Recall will connect and finish installation there.')) {
-                window.provisionVastAI(inst.id);
-              }
-            };
-            
-            var destroyBtn = document.createElement('button');
-            destroyBtn.className = 'btn btn-secondary';
-            destroyBtn.style.padding = '4px 10px';
-            destroyBtn.style.fontSize = '11px';
-            destroyBtn.style.color = 'var(--red)';
-            destroyBtn.style.borderColor = 'var(--red)';
-            destroyBtn.textContent = '🗑️ Destroy';
-            destroyBtn.onclick = function (event) {
-              if (event) event.preventDefault();
-              if (confirm('⚠️ WARNING: This will permanently delete/destroy instance ' + inst.id + ' (' + gpu + '). Any data on it will be lost and billing will stop immediately. Proceed?')) {
-                destroyBtn.disabled = true;
-                destroyBtn.textContent = 'Destroying...';
-                fetch('/api/destroy-vastai-instance', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ vastaiKey: key.trim(), instanceId: inst.id })
-                })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                  if (data.ok) {
-                    window.scanSettingsVastAI();
-                  } else {
-                    destroyBtn.disabled = false;
-                    destroyBtn.textContent = '🗑️ Destroy';
-                    alert('Failed to destroy instance: ' + (data.error || 'Unknown error'));
-                  }
-                })
-                .catch(function (err) {
-                  destroyBtn.disabled = false;
-                  destroyBtn.textContent = '🗑️ Destroy';
-                  alert('Error: ' + err.message);
-                });
-              }
-            };
-            
-            actionsDiv.appendChild(adoptBtn);
-            actionsDiv.appendChild(destroyBtn);
-            
-            div.appendChild(detailsDiv);
-            div.appendChild(actionsDiv);
-            list.appendChild(div);
-          });
-        }
-      }
-      
-      // Update failed cleanup banner in Settings
-      var cleanupBanner = document.getElementById('settings-cleanup-banner');
-      if (cleanupBanner) {
-        if (failedIds.length > 0) {
-          cleanupBanner.style.display = 'flex';
-          window._settingsFailedInstanceIds = failedIds;
-        } else {
-          cleanupBanner.style.display = 'none';
-          window._settingsFailedInstanceIds = [];
-        }
-      }
-      
-      if (container) {
-        container.style.display = 'block';
-      }
-    })
-    .catch(function (err) {
-      if (scanBtn) {
-        scanBtn.disabled = false;
-        scanBtn.textContent = '🔍 Scan & Manage';
-      }
-      alert('Network error scanning Vast.ai instances: ' + err.message);
-    });
-  };
-  
-  // ── Clean Up Failed Settings Instances ──
-  window.cleanupSettingsFailedInstances = function (e) {
-    if (e) e.preventDefault();
-    var keyInput = document.getElementById('settings-vastai-key');
-    var key = keyInput ? keyInput.value : '';
-    var failedIds = window._settingsFailedInstanceIds || [];
-    if (!failedIds.length) return;
-    
-    if (confirm('⚠️ WARNING: This will permanently delete/destroy ALL ' + failedIds.length + ' failed/broken instances from your Vast.ai account. Billing will stop immediately. Proceed?')) {
-      var cleanupBtn = document.getElementById('settings-cleanup-btn');
-      if (cleanupBtn) {
-        cleanupBtn.disabled = true;
-        cleanupBtn.textContent = 'Cleaning up...';
-      }
-      
-      var currentIdx = 0;
-      function destroyNext() {
-        if (currentIdx >= failedIds.length) {
-          alert('Successfully cleaned up all failed instances!');
-          window.scanSettingsVastAI();
-          return;
-        }
-        var id = failedIds[currentIdx];
-        fetch('/api/destroy-vastai-instance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vastaiKey: key.trim(), instanceId: id })
-        })
-        .then(function () {
-          currentIdx++;
-          destroyNext();
-        })
-        .catch(function () {
-          currentIdx++;
-          destroyNext();
-        });
-      }
-      destroyNext();
-    }
-  };
+
 
   window.saveSettings = function() {
     var tavilyKey  = (document.getElementById('s-tavily-key').value  || '').trim();
@@ -3418,8 +3151,12 @@
       'cfg-localnet-host',
       'cfg-localnet-user',
       'cfg-vastai-key',
-      'cfg-dashboard-password',
-      'cfg-github-token'
+      'cfg-github-token',
+      'cfg-cloud-token',
+      'cfg-cloud-provider',
+      'cfg-cloud-region'
+    ];
+    var selectInputs = [
     ];
 
     // 1. Initial restore from browser safeStorage (extremely fast)
@@ -3432,6 +3169,14 @@
         el.value = saved;
         if (id === 'cfg-vastai-key') initialKey = saved;
         if (id === 'cfg-dashboard-password') W.dashboardPassword = saved;
+      }
+    });
+    selectInputs.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var saved = safeStorage.getItem('tr_wizard_' + id);
+      if (saved !== null) {
+        el.value = saved;
       }
     });
 

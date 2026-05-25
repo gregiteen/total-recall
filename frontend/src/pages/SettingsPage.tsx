@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { fetchConfigJson, saveConfigJson, fetchConfig, saveConfig, type ConfigJson } from '../api';
+import { fetchConfigJson, saveConfigJson, fetchConfig, saveConfig } from '../api';
+import type { ConfigJson } from '../types';
 
 export default function SettingsPage() {
   const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
@@ -60,7 +61,7 @@ export default function SettingsPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate config loader on visual active
       void loadVisualConfig();
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate config loader on yaml active
+       
       void loadYamlConfig(activeYamlTab);
     }
   }, [viewMode, activeYamlTab]);
@@ -99,7 +100,7 @@ export default function SettingsPage() {
   };
 
   // Safe mutators for deeply nested properties
-  const updateSecurityProp = (section: string, prop: string, value: any) => {
+  const updateSecurityProp = (section: string, prop: string, value: unknown) => {
     if (!configData) return;
     setConfigData({
       ...configData,
@@ -113,7 +114,7 @@ export default function SettingsPage() {
     });
   };
 
-  const updateRootSecurityProp = (prop: string, value: any) => {
+  const updateRootSecurityProp = (prop: string, value: unknown) => {
     if (!configData) return;
     setConfigData({
       ...configData,
@@ -124,7 +125,7 @@ export default function SettingsPage() {
     });
   };
 
-  const updateBudgetProp = (prop: string, value: any) => {
+  const updateBudgetProp = (prop: string, value: unknown) => {
     if (!configData) return;
     setConfigData({
       ...configData,

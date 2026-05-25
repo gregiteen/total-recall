@@ -269,7 +269,7 @@ export async function listFiles(): Promise<import('./types').FileNode[]> {
   return res.json()
 }
 
-export async function listSkills(): Promise<unknown[]> {
+export async function listSkills(): Promise<import('./types').FileNode[]> {
   const res = await apiFetch(API_BASE + '/api/skills')
   if (!res.ok) throw new Error(`Skills API error: ${res.status}`)
   return res.json()

@@ -86,7 +86,7 @@ function printHelp() {
     init                Bootstrap Total Recall into an existing project repo
     setup               Interactive wizard: provider → API key → provision → connect IDEs
     start [--port N]    Start the brain server in the foreground (alias for running the server directly)
-    deploy              Provision a target machine (Ollama, models, VFS, Cloudflare/Caddy, systemd, cron)
+    deploy              Provision a target machine (Caddy/TLS, system services, VFS setup, environment checks)
     doctor              Run environment diagnostics and verify dependency health
     dream               Manually trigger a dream cycle (Light → REM → Deep)
     lint                Validate all vault nodes against SSSS schema v2

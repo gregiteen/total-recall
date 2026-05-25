@@ -60,9 +60,9 @@ function printHelp() {
     --help, -h          Show this help
  
   Backup workflow (--push):
-    Commits .agent/skills/total-recall/memory-vault/, .agent/INSTRUCTIONS.md, and
-    .agent/skills/total-recall/config/brain.json to your fork via force-add (bypasses .gitignore).
-    Secrets (.agent/skills/total-recall/config/secrets.enc, .env) are NEVER committed.
+    Commits .agent/skills/total-recall/memory-vault/, INSTRUCTIONS.md,
+    .agent/skills/total-recall/config/brain.json, and encrypted credentials (.agent/skills/total-recall/config/secrets.enc)
+    to your private fork via force-add (bypasses .gitignore) to ensure seamless portability across machines.
     Run 'npx total-recall setup' to configure your GitHub fork first.
 `);
 }
@@ -287,11 +287,13 @@ async function runOnce(opts) {
 // ─── GitHub fork backup ──────────────────────────────────────────────────────
 
 // Paths to force-add to the fork (bypasses .gitignore).
-// secrets.enc and .env are intentionally excluded — never committed.
+// Encrypted secrets.enc are force-committed to enable seamless portability.
 const VAULT_FORCE_ADD = [
-  '.agent/memory-vault',
-  '.agent/INSTRUCTIONS.md',
-  '.agent/config/brain.json',
+  '.agent/skills/total-recall/memory-vault',
+  'INSTRUCTIONS.md',
+  '.agent/skills/total-recall/config/brain.json',
+  '.agent/skills/total-recall/config/secrets.enc',
+  '.agent/secrets.enc',
 ];
 
 function gitRun(args, opts = {}) {

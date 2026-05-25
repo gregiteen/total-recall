@@ -1,104 +1,61 @@
 # UltraChat — Total Recall Integration Guide
 
-UltraChat connects to Total Recall as an OpenAI-compatible model endpoint. No
-file-based projection is created; the API contract is the integration boundary.
+UltraChat connects to Total Recall as an OpenAI-compatible model endpoint. No file-based projection is created; the API contract serves as the secure integration boundary.
 
-## Prerequisites
+---
 
-- Total Recall server running and reachable (HTTPS recommended for remote use)
-- A scoped Personal Access Token (PAT) with at minimum `chat:write chat:read models:read`
+## 🔒 Prerequisites
 
-## 1. Issue a Scoped PAT
+- A running Total Recall server (HTTPS TLS recommended for production).
+- A Personal Access Token (PAT) carrying `chat:write`, `chat:read`, and `models:read` scopes.
 
+---
+
+## 🚀 Setup Steps
+
+### 1. Issue a Scoped PAT
 ```bash
-npx total-recall generate-pat --scopes "chat:write chat:read models:read instructions:read" --label ultrachat
+npx total-recall generate-pat --scopes "chat:write,chat:read,models:read,memory:read" --label "ultrachat"
 ```
+*Copy the raw token `tr_...` — it is only displayed once.*
 
-Copy the emitted token — it is shown once.
+### 2. Register the Model in UltraChat
+Point your UltraChat client at your Total Recall server using standard OpenAI-compatible parameters:
 
-## 2. Register the Model in UltraChat
+| Parameter | Configuration Value |
+| :--- | :--- |
+| **Base URL** | `https://<your-domain>/v1` |
+| **Model ID** | `total-recall/default` |
+| **API Key** | Scoped PAT issued in Step 1 |
 
-Point UltraChat at your Total Recall server with the OpenAI-compatible config:
+*Discovery Manifest: Total Recall publishes an auto-configuration manifest at `https://<your-domain>/.well-known/total-recall.json` which clients can scan to auto-load endpoints.*
 
-| Setting       | Value                                             |
-|---------------|---------------------------------------------------|
-| Base URL      | `https://<your-domain>/v1`                        |
-| Model ID      | `total-recall/gemma4`                             |
-| API Key       | PAT from step 1                                   |
-
-### Discovery manifest
-
-Total Recall publishes a discovery document at:
-
-```
-https://<your-domain>/.well-known/total-recall.json
-```
-
-UltraChat can use this to auto-populate base URL and model list.
-
-## 3. Connect via CLI
-
-Running the connect command prints the connection details and registers the
-client in `~/.agent/config/clients.json`:
-
+### 3. Connect via CLI
+Run the connect command to register the client inside the consolidated configuration registry:
 ```bash
 npx total-recall connect ultrachat --brain https://<your-domain> --token <PAT>
 ```
 
-**Why no file projection?** UltraChat communicates via the API, not by reading
-a local rules file. The OpenAI-compatible endpoint already injects the compiled
-`INSTRUCTIONS.md` context into every chat completion. A file projection would
-be redundant and is intentionally omitted for API-mode clients.
+**Why no file projection?** UltraChat communicates dynamically via our REST endpoints. The OpenAI-compatible `/v1/chat/completions` completion router automatically injects the compiled `INSTRUCTIONS.md` system prompt context into every chat completion turn on the fly, eliminating redundant local rule files.
 
-## 4. Session Sync (Sync Fabric)
+---
 
-Total Recall exposes session sync endpoints so UltraChat can read and write
-session transcripts to the local VFS.
+## 🔄 Ingest Fabric (Session Sync)
 
-### Pull sessions from Total Recall
+Total Recall exposes session sync endpoints so UltraChat can push conversation transcripts into the brain:
 
-```bash
-# List available sessions
-curl -H "Authorization: Bearer <PAT>" https://<your-domain>/api/sessions
-
-# Fetch a specific session
-curl -H "Authorization: Bearer <PAT>" https://<your-domain>/api/sessions/<id>
-```
-
-### Push a session into Total Recall
-
+### Push a Session into the Ingest Fabric:
 ```bash
 curl -X POST https://<your-domain>/api/sessions/ingest \
   -H "Authorization: Bearer <PAT>" \
   -H "Content-Type: application/json" \
   -d '{
-    "id": "ultrachat-2026-05-18-abc123",
+    "id": "ultrachat-2026-05-25-abc123",
     "source": "ultrachat",
     "messages": [
-      {"role": "user", "content": "..."},
-      {"role": "assistant", "content": "..."}
+      {"role": "user", "content": "Prefer atomic file writes in Node.js."},
+      {"role": "assistant", "content": "Got it, I will write files write-then-rename."}
     ]
   }'
 ```
-
-Ingested sessions are stored as JSONL in `~/.agent/sessions/` and will be
-picked up by the Dream Cycle's session watcher on the next compile.
-
-## 5. Verify the Connection
-
-```bash
-npx total-recall status
-```
-
-The `Connected clients` section will show `UltraChat [api]`. Since API-mode
-clients have no projection file, no fresh/stale check is performed — the API
-endpoint itself is the liveness signal.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| `401 Unauthorized` | Check the PAT is correct and not expired |
-| `403 Insufficient token scope` | Re-issue PAT with required scopes |
-| Model not listed | Confirm server is running: `curl https://<domain>/v1/models` |
-| Session ingest rejected | Ensure `id` is a string and `messages` is an array |
+*Ingested sessions are saved securely as JSONL under `.agent/skills/total-recall/sessions/` and are automatically picked up by the next Dream Cycle.*

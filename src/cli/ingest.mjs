@@ -42,7 +42,7 @@ function printHelp() {
     • Antigravity   (~/.gemini/antigravity/brain/)
     • Cursor        (~/.cursor/projects/)
 
-  Ingested sessions are written as JSONL to .agent/sessions/
+  Ingested sessions are written as JSONL to .agent/skills/total-recall/sessions/
 
   Usage: total-recall ingest [options]
 

@@ -1,193 +1,128 @@
 # How to Deploy on a Cloud VM
 
-- **Plane**: How-To
-- **Last Updated**: 2026-05-18
-- **Summary**: Step-by-step guide to deploying Total Recall on a cloud VM with a local AI model via Ollama.
+- **Plan**: How-To
+- **Last Updated**: May 25, 2026
+- **Summary**: Step-by-step guide to deploying a Total Recall Sovereign Brain on a lightweight cloud VM.
 
 ---
 
 ## Why a Cloud VM?
 
-Total Recall works great locally, but a dedicated VM gives you:
+Total Recall works great locally, but hosting your brain on a private virtual machine (VM) provides several benefits:
 
-- **Always-on daemon** — Dream Cycle and task scheduler run 24/7 uninterrupted
-- **Offloaded compute** — inference doesn't slow down your workstation
-- **Accessible from anywhere** — browser dashboard and API from any device
+- **Always-on daemon** — The Dream Cycle optimization loop and Priority Task Scheduler run 24/7 uninterrupted.
+- **Offloaded compute** — Vector embedding updates and headless CLI agent dispatches run on the VM, keeping your workstation light.
+- **Accessible from anywhere** — Conversational terminal REPL logs, session relays, and visual dashboards sync to a single remote brain.
 
 ---
 
 ## Choosing a Provider
 
-See [Cloud Provider Guide](../reference/cloud-providers.md) for a full breakdown. Quick recommendations:
+Because Total Recall completely deprecated local GPU/Ollama VM requirements in favor of **Unified Headless CLI Dispatches** and **Google Embeddings APIs**, your server footprint is exceptionally small. 
 
-| Budget | Provider | Cost | Model |
-|--------|----------|------|-------|
-| Cheapest always-on | **Hetzner CX42** ⭐ | ~€18/mo | gemma4:26b |
-| Best value + headroom | **Hetzner AX42** | ~€46/mo | gemma4:26b or 31b |
-| Pay-as-you-go GPU | **RunPod RTX 4090** | $0.29/hr | any |
-| Easiest setup | **DigitalOcean** | $96-160/mo | gemma4:26b |
-| Free (if you can get it) | **Oracle Cloud Free** | $0 | gemma4:e4b |
+You **DO NOT** need to rent expensive GPU VM clusters or large-RAM instances. A small, cost-effective server (such as a Hetzner CX22 for €3.79/mo or a DigitalOcean 1GB Droplet for $6.00/mo) is all you need.
 
-> **Default model: `gemma4:26b`** — Mixture-of-Experts, 26B total params but only ~4B active. Needs **~16 GB RAM**, not 32 GB.
+See the [Cloud Provider Guide](../reference/cloud-providers.md) for a full breakdown.
 
 ---
 
 ## Step 1: Provision the VM
 
-Use the interactive setup wizard (recommended):
-
-```bash
-npx total-recall setup
-```
-
-The wizard asks what provider you want, fetches their current pricing, collects your API key (masked — never logged), and provisions the server for you.
-
----
-
-### Manual Provisioning
-
-**Hetzner** (via hcloud CLI):
-```bash
-brew install hcloud
-hcloud context create total-recall   # paste your API token
-hcloud server create \
-  --name total-recall-brain \
-  --type cx42 \
-  --image ubuntu-24.04 \
-  --location nbg1 \
-  --ssh-key ~/.ssh/id_ed25519.pub
-```
-
-**DigitalOcean** (via API):
-```bash
-curl -s -X POST "https://api.digitalocean.com/v2/droplets" \
-  -H "Authorization: Bearer $DO_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "total-recall-brain",
-    "region": "nyc3",
-    "size": "s-8vcpu-16gb",
-    "image": "ubuntu-24-04-x64",
-    "ssh_keys": [YOUR_KEY_ID]
-  }'
-```
-
-**RunPod** (GPU, pay-as-you-go):
-1. Go to [runpod.io](https://www.runpod.io) → Secure Cloud → Deploy
-2. Pick RTX 4090 (24 GB VRAM, 32 GB RAM)
-3. Use `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04` template
-4. Enable persistent volume at `/workspace`
+1. Log in to your cloud provider (e.g. Hetzner Cloud or DigitalOcean).
+2. Create a new virtual server running **Ubuntu 24.04 LTS** (or 22.04 LTS).
+3. Choose the standard shared-CPU type (e.g. Hetzner **CX22** or DigitalOcean **Basic $6/mo**).
+4. Add your workstation's SSH public key (`~/.ssh/id_ed25519.pub`) for secure access.
+5. Complete provisioning to get your server's public IPv4 address.
 
 ---
 
 ## Step 2: SSH In and Install Node.js
 
+SSH into your server as root:
+
 ```bash
 ssh root@<your-server-ip>
+```
 
-# Install Node.js 20+ via nvm
+Install **Node.js 20+** using standard Node Version Manager (nvm):
+
+```bash
+# Install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
+
+# Install Node.js
 nvm install 20
+nvm use 20
 ```
 
 ---
 
-## Step 3: Deploy
+## Step 3: Deploy the Brain Server
+
+Total Recall provides a comprehensive `deploy` script to configure the entire server natively from scratch:
 
 ```bash
-# With a domain (recommended — Caddy handles HTTPS automatically):
+# Deploy with a DNS domain (recommended — Caddy handles SSL certificates natively):
 npx total-recall deploy --domain brain.yourdomain.com
 
-# Without a domain (HTTP on port 3000):
+# Deploy without a domain (binds HTTP directly on port 3000):
 npx total-recall deploy
 ```
 
-**What `deploy` does:**
-1. Detects CPU architecture (x86_64 / arm64)
-2. Installs [Ollama](https://ollama.com)
-3. Pulls the configured model (default: `gemma4:26b` — ~10 GB download)
-4. Scaffolds `~/.agent/` vault
-5. Configures Caddy for auto-TLS (if `--domain` is set)
-6. Installs systemd services for the API server and Dream Daemon
+**What `deploy` does on the VM:**
+1. **Scaffolds the VFS**: Sets up the consolidated `.agent/skills/total-recall/` data structure.
+2. **Configures HTTPS Edge**: Installs Caddy and configures it to reverse proxy incoming SSL traffic to the Express REST server on port 3000.
+3. **Installs System Services**: Registers the API server and the Dream Daemon as standard `systemd` user services to auto-start on VM boot.
+4. **Validates Environment**: Verifies that standard CLI agent binaries (`antigravity`, `gemini`, `claude`, `codex`) are discoverable.
 
 ---
 
-## Step 4: Connect Your IDEs
+## Step 4: Secure Your API Credentials
 
-Back on your **local machine**, wire your IDEs to the remote brain:
+All third-party credentials (e.g. `GOOGLE_API_KEY`, `GITHUB_TOKEN`, `OPENAI_API_KEY`) must be configured securely on the server.
+
+Generate your initial master encryption password:
 
 ```bash
-# Generate a PAT first (run on the server):
+npx total-recall init
+```
+
+The setup wizard will prompt you to enter your credentials securely. They are immediately encrypted using **AES-256-GCM** under `secrets.enc` using OWASP-aligned **scrypt** key derivation. Your plaintext credentials are never logged or written to disk.
+
+---
+
+## Step 5: Connect Your Local Workstation
+
+Once the server is running, generate a Personal Access Token (PAT) on the server to authorize your workstation clients:
+
+```bash
 npx total-recall generate-pat
-# → prints: sk-tr-xxxxxxxxxxxx
-
-# Then on your local machine:
-npx total-recall connect claude-code --brain https://brain.yourdomain.com --token sk-tr-xxxx
-npx total-recall connect codex --brain https://brain.yourdomain.com --token sk-tr-xxxx
-npx total-recall connect obsidian   # local vault only, no --brain needed
+# → prints: tr_xxxxxxxxxxxx
 ```
 
-For UltraChat, add this in the UltraChat settings:
-```
-baseURL: https://brain.yourdomain.com/v1
-model:   total-recall/gemma4
-Authorization: Bearer sk-tr-xxxx
-```
-
----
-
-## Step 5: Verify
+Back on your **local workstation**, configure your IDE agents and Relays to sync with your remote sovereign brain:
 
 ```bash
-# On the server:
-npx total-recall status
+# Configure Claude Code CLI
+npx total-recall connect claude-code --brain https://brain.yourdomain.com --token tr_xxxx
 
-# From your local machine:
-curl https://brain.yourdomain.com/v1/models \
-  -H "Authorization: Bearer sk-tr-xxxx"
+# Configure Codex CLI
+npx total-recall connect codex --brain https://brain.yourdomain.com --token tr_xxxx
+
+# Start the silent background log relay on your workstation
+npx total-recall relay --start
 ```
-
-You should see `total-recall/gemma4` in the models list.
 
 ---
 
-## Model Configuration
+## Step 6: Verify Diagnostics
 
-The model is set in `~/.agent/config/runtime.yml` on the server:
+Check server health from the command-line on your workstation:
 
-```yaml
-runtime: "ollama"
-endpoint: "http://127.0.0.1:11434/v1/chat/completions"
-model: "gemma4:26b"   # change to gemma4:e4b (6GB) or gemma4:31b (32GB)
-temperature: 0.2
+```bash
+curl -H "Authorization: Bearer tr_xxxx" \
+  https://brain.yourdomain.com/health
 ```
 
-After changing, restart the daemon: `npx total-recall daemon restart`
-
----
-
-## Troubleshooting
-
-### Model won't load — out of memory
-
-Check your server RAM: `free -h`
-
-- 8 GB RAM → use `gemma4:e4b`
-- 16 GB RAM → use `gemma4:26b` (default)
-- 32 GB RAM → use `gemma4:31b`
-
-### Oracle Cloud — "Out of capacity"
-
-Oracle free tier instances are frequently out of stock. Options:
-1. **Upgrade to Pay-As-You-Go** — unlocks priority queue; the instance stays free
-2. **Use Hetzner instead** — €18/mo, always available, equivalent RAM
-3. **Run the sniper script** — `./bin/oci-sniper.sh` pings Oracle every 60 seconds and grabs a slot when one opens. Configure your OCIDs in the script header first (get them from the Oracle "Save as stack" → "Download Terraform config" flow).
-
-### Caddy not serving HTTPS
-
-Make sure port 80 and 443 are open in your firewall, and your domain's DNS A record points to the server IP. Caddy handles certificate issuance automatically once the domain resolves.
-
-### Dashboard loads but chat returns 500
-
-The Ollama service may still be pulling the model. Check: `ollama ps` on the server. The first request after a cold start may take 30-60 seconds while the model loads into RAM.
+The server will return a clean JSON health summary detailing disk usage, active CLI agents, running daemon status, and VFS exists verification.

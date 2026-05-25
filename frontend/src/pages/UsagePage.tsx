@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { fetchUsageStats, fetchConfigJson, type ConfigJson } from '../api';
+import { fetchUsageStats, fetchConfigJson } from '../api';
+import type { ConfigJson } from '../types';
 
 interface UsageBreakdown {
   dailyUsd: number;

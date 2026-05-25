@@ -1,30 +1,53 @@
 # SSSS — Structured Semantic Syntax System
 
-> The schema specification that `total-recall` uses for all vault files, session logs, and derived indexes.
-
-SSSS is a **database-free, Markdown-first schema** for AI agent memory. Every rule, fact, preference, and observation is a plain `.md` file with YAML frontmatter. There is no relational database, no binary format, and no proprietary lock-in.
-
-`total-recall` implements SSSS as its storage layer. Any IDE plugin, CLI tool, or AI agent framework that can read Markdown can interoperate with a `total-recall` vault.
+The official database-free schema specification utilized by the **Total Recall Sovereign AI OS** for SSSS memory vaults, conflict quarantine files, session traces, and background research queue manifests.
 
 ---
 
-## 1. Core Mandate
+## ⚡ 1. Core Principles
 
-| Principle | Rule |
-|-----------|------|
-| **No Relational Databases** | Workspace configuration must not live in Postgres or any external database. |
-| **Markdown is Law** | Every memory primitive (rule, pattern, decision, concept) exists as a `.md` file. |
-| **Semantic Frontmatter** | Every file MUST contain YAML frontmatter with a `type` field that identifies how engines interpret it. |
-| **Disposable Indexes** | Derived JSONL indexes are ephemeral caches, fully rebuildable from the Markdown vault. Delete them freely. |
-| **Git-Versioned** | The vault directory is version-controlled. History = provenance. |
+The SSSS specification operates strictly on the following sovereign architecture:
+
+| Principle | Specification |
+| :--- | :--- |
+| **No Relation Databases** | System configuration and memories must never live in Postgres, SQLite, or third-party database engines. |
+| **Markdown is Law** | Every primary memory component (rules, patterns, concepts, decisions) exists as a plain `.md` file. |
+| **Semantic YAML** | Every Markdown file MUST contain valid YAML frontmatter specifying its SSSS ontology and parameters. |
+| **Disposable Indexes** | Derived cached indexes (`graph-index.jsonl`, embeddings vectors) are disposable. They are fully rebuildable from the canonical Markdown vaults. |
+| **Git Provenance** | The vault directories are version-controlled, providing a transparent audit trail of intelligence shifts. |
 
 ---
 
-## 2. File Types
+## 📂 2. Virtual File System VFS Topography
 
-### 2.1 Memory Node (`type: memory`)
+All user data directories are consolidated directly under the meta-skill `skills/total-recall/` path (in the global home directory layer `~/.agent/` or project repository layers `<repo>/.agent/`):
 
-A single unit of agent knowledge. Lives in `.agent/memory-vault/<category>/<slug>.md`.
+```text
+.agent/
+└── skills/
+    └── total-recall/                  # THE BRAIN Root Folder
+        ├── memory-vault/              # Canonical SSSS Markdown Nodes
+        │   ├── invariants/            # absolute invariants (compiled to T1)
+        │   ├── patterns/              # best practices ("Always do X")
+        │   ├── anti-patterns/         # negative constraints ("Never do X")
+        │   ├── preferences/           # style and editor rules
+        │   ├── decisions/             # architectural histories
+        │   ├── concepts/              # domain models and definitions
+        │   └── facts/                 # verified evidence and research outputs
+        ├── memory-derived/            # Ephemeral cached indexes (JSONL/JSON)
+        ├── memory-inbox/              # Staging area for new nodes
+        │   ├── pending/               # observational drafts awaiting check
+        │   └── conflicts/             # quarantined rule collisions
+        └── sessions/                  # Ingested conversation history files (JSONL)
+```
+
+---
+
+## 📝 3. File Type Specifications
+
+### 3.1 Memory Node Specification (`type: memory`)
+
+Lives under `.agent/skills/total-recall/memory-vault/<category>/<slug>.md`.
 
 ```markdown
 ---
@@ -32,412 +55,176 @@ type: memory
 slug: prefer-atomic-writes
 category: patterns
 title: "Always write files atomically (write-then-rename)"
+schema_version: 2
 status: active
-confidence: 0.92
+confidence: 0.95
 importance: 4
-created: 2026-01-15T10:00:00Z
-updated: 2026-05-01T14:03:00Z
-last_accessed: 2026-05-10T09:55:00Z
+modality: must
+priority: normal
+created: '2026-05-25T14:00:00Z'
+updated: '2026-05-25T14:02:15Z'
+last_accessed: '2026-05-25T14:05:00Z'
 source:
-  type: chat
-  session_id: abc123
-  agent: my-agent
+  type: manual
+  session_id: active-session-id
   evidence_count: 3
 supersedes: []
 superseded_by: null
 contradicts: []
-tags: [filesystem, reliability, writes]
-related: [no-partial-files]
-routes_to_skills: []
-sentiment_polarity: directive_must
-sentiment_target: file writes
-modality: must
+tags: [filesystem, reliability]
+routes_to_skills: [deploy]
 subject: agent
 predicate: use_atomic_write
 object: file_system
+sentiment_polarity: directive_must
+sentiment_target: file writes
 decay:
   half_life_days: 180
-  access_count: 7
-schema_version: 2
+  access_count: 5
 ---
 
-Always write to a `.tmp.<pid>` file first, then `fs.renameSync()` to the target path.
-`rename()` is atomic on POSIX filesystems. Direct writes risk partial file corruption
-on crash or concurrent access.
+Always write to a temporary file first, then synchronously execute `fs.renameSync()` to overwrite the target path. `rename` is atomic on POSIX-compliant filesystems, preventing partial file corruption.
 ```
 
 #### Category Taxonomy
+- `invariants/`: Absolute rules that must never be bypassed. Injected directly into Tier 1 shims.
+- `patterns/`: Best practices and standard operations ("Always do X").
+- `anti-patterns/`: Anti-patterns and constraints to avoid ("Never do X").
+- `preferences/`: Custom style preferences, styling tokens, or coding conventions.
+- `decisions/`: One-time design choices or architectural histories.
+- `concepts/`: Deep technical domain models, explanations, or definitions.
+- `facts/`: Validated factual assertions, library signatures, or platform constraints.
 
-| Category | Purpose | Example slugs |
-|----------|---------|---------------|
-| `invariants/` | Absolute rules — always enforced | `rule-zero-text-first`, `no-silent-push` |
-| `patterns/` | "Always do X" best practices | `prefer-atomic-writes`, `use-pm2-reload` |
-| `anti-patterns/` | "Never do X" negative rules | `no-hardcoded-secrets`, `no-raw-tsc` |
-| `preferences/` | User or project style preferences | `prefer-kebab-case-slugs` |
-| `decisions/` | One-time architectural decisions | `chose-sqlite-over-postgres` |
-| `concepts/` | Domain knowledge and definitions | `what-is-bm25-scoring` |
-| `facts/` | Evidence-backed knowledge acquired from research or observation | `stripe-connect-api-version` |
-
-#### Required Fields (schema_version: 2)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | `"memory"` | Fixed value |
-| `slug` | `string` | Globally unique, kebab-case, matches filename without `.md` |
-| `category` | `string` | Must match parent directory name |
-| `title` | `string` | One-line human-readable description |
-| `status` | `active \| superseded \| deprecated \| draft` | Lifecycle state |
-| `confidence` | `0..1` | Adjusted by Dream Cycle decay/promotion |
-| `importance` | `1..5` | Set by user or distillation |
-| `modality` | `must \| must_not \| should \| should_not` | Directive strength |
-| `subject` | `string` | Who is constrained (usually `"agent"`) |
-| `predicate` | `string` | What action, in snake_case verb form |
-| `object` | `string` | What target the action applies to |
-| `sentiment_polarity` | enum | `directive_must \| directive_must_not \| descriptive \| preference` |
-| `decay.half_life_days` | `number` | Days until confidence halves from disuse |
-| `schema_version` | `2` | Must be `2` for v2 nodes |
-
-#### Absolute Invariant Extensions
-
-Nodes in `invariants/` also carry:
-
-```yaml
-priority: absolute      # only absolute nodes compile into Tier 1 (INSTRUCTIONS.md)
-immutable: true         # surface.mjs refuses to overwrite without --force
-```
+#### Required Fields (Zod Schema Spec v2.0)
+- `type`: Must be strictly `"memory"`.
+- `slug`: kebab-case identifier that matches the filename on disk.
+- `category`: Must match the parent directory name.
+- `title`: A single-line human-readable summary of the rule.
+- `schema_version`: Integer specifying the schema standard (must be `2`).
+- `status`: Lifecycle enum: `active | draft | superseded | deprecated`.
+- `confidence`: Floating-point value between `0.0` and `1.0`.
+- `importance`: Integer between `1` and `5`.
+- `modality`: Enforcement strength enum: `must | must_not | should | should_not`.
+- `subject`/`predicate`/`object`: Structured triple checks used for O(1) semantic clash detection.
+- `sentiment_polarity`: Sentiment weight mapping: `directive_must | directive_must_not | descriptive | preference`.
+- `decay.half_life_days`: Interval in days before confidence halves from disuse.
 
 ---
 
-### 2.2 Conflict Record (`type: conflict`)
+### 3.2 Conflict Record Specification (`type: conflict`)
 
-Written by the conflict detector when two nodes contradict each other. Lives in
-`.agent/memory-inbox/conflicts/<conflict-id>.md`.
-
-Most conflicts are **auto-resolved** using a tiered heuristic engine. Only truly
-ambiguous cases are quarantined for human review.
+Quarantined under `.agent/skills/total-recall/memory-inbox/conflicts/<conflict-id>.md` when two rules collide.
 
 ```markdown
 ---
 type: conflict
-conflict_id: conflict-2026-05-10-001
+conflict_id: conflict-2026-05-25-001
 status: auto-resolved
-new_slug: use-html-email
-existing_slug: use-plaintext-email
-similarity: 0.847
-polarity_flip: true
-detected_at: 2026-05-10T18:30:00Z
-reason: "Polarity flip on target 'email-format' with similarity 0.847 ≥ 0.78"
-resolution: "supersede: use-html-email"
-resolution_reason: "User-created node supersedes machine-generated node 'use-plaintext-email'."
-resolved_at: 2026-05-10T18:30:01Z
+new_slug: use-pm2-reload
+existing_slug: use-pm2-restart
+detected_at: '2026-05-25T14:10:00Z'
+reason: "Semantic clash on subject 'pm2' with cosine similarity 0.89 ≥ 0.75"
+resolution: "supersede: use-pm2-reload"
+resolved_at: '2026-05-25T14:10:01Z'
 ---
+
+### Collision Targets:
+- New: `use-pm2-reload` (User-written preferences)
+- Existing: `use-pm2-restart` (Research-derived facts)
 ```
 
-#### Auto-Resolution Tiers
-
-The `detectAndResolve()` function applies heuristics in order. The first matching
-tier wins:
-
-| Tier | Condition | Action | Human needed? |
-|------|-----------|--------|---------------|
-| 1 | Both nodes are `priority: absolute` or `immutable: true` | **Quarantine** | Yes |
-| 2 | One node is a protected invariant, the other is not | **Invariant wins** | No |
-| 3 | User-created vs machine-generated (or vice versa) | **User intent wins** | No |
-| 4 | Same source authority, different timestamps | **Most recent wins** | No |
-| 5 | Identical provenance and timestamps | **Quarantine** | Yes |
-
-When auto-resolved, the losing node is marked `status: superseded` with a
-`superseded_by` pointer, and the winning node gets a `supersedes` entry.
-
-**Manual resolution (for quarantined conflicts only):**
-```bash
-# Keep the existing rule, deprecate the new one
-total-recall resolve --keep use-plaintext-email
-
-# The new rule supersedes the old one
-total-recall resolve --supersede use-html-email
-```
+#### Collision Tier Resolution Matrix
+When conflicts are checked, the steering engine attempts auto-resolution in order:
+1. **Double Absolute**: Both are `priority: absolute` → **Quarantine** (Requires manual developer intervention via `total-recall resolve`).
+2. **Invariant Dominance**: One is a protected invariant → **Invariant wins** automatically.
+3. **User Authority**: One is user-created and the other is machine-derived → **User intent wins**.
+4. **Temporal Cascade**: Same source authority → **Most recent timestamp wins**.
 
 ---
 
-### 2.3 Session Entry (`type: session`, JSONL)
+### 3.3 Session Log Specification (`type: session`, JSONL)
 
-Branching DAG of agent actions. Lives in `.agent/sessions/<session-id>.jsonl`.
-One JSON object per line.
+Stored under `.agent/skills/total-recall/sessions/<session-id>.jsonl`. One flat JSON object per conversation trace.
 
 ```jsonl
-{"id":"a1","parentId":null,"type":"task","ts":"2026-05-10T14:00:00Z","content":"Deploy API v2"}
-{"id":"a2","parentId":"a1","type":"tool_call","ts":"2026-05-10T14:01:00Z","content":"view_file SKILL.md"}
-{"id":"a3","parentId":"a2","type":"branch_summary","ts":"2026-05-10T14:05:00Z","content":"Resolved build error; used pm2 reload"}
+{"id":"a1","parentId":null,"type":"task","ts":"2026-05-25T14:00:00Z","content":"Provision REST router."}
+{"id":"a2","parentId":"a1","type":"tool_call","ts":"2026-05-25T14:00:15Z","content":"write_file src/server/routes/keys.mjs"}
+{"id":"a3","parentId":"a2","type":"observation","ts":"2026-05-25T14:01:00Z","content":"Keys router successfully mounted."}
 ```
-
-**Entry types:**
-| `type` | Purpose |
-|--------|---------|
-| `task` | Root node — the user's directive |
-| `tool_call` | A tool execution (view_file, grep, shell, etc.) |
-| `observation` | Agent's intermediate conclusion |
-| `branch_summary` | Compressed summary of a completed sub-branch |
 
 ---
 
-### 2.4 Skill Manifest (`type: skill`)
+### 3.4 Skill Manifest Specification (`type: skill`)
 
-The canonical format for skill packages that receive injected memory. Lives in
-`.agent/skills/<name>/SKILL.md` (or equivalent path in your system).
+Stored under `.agent/skills/<name>/SKILL.md` (or consolidated namespaces).
 
 ```markdown
 ---
 type: skill
-name: deploy
-description: >-
-  Deploy Node.js services with zero downtime. Use when the user mentions
-  deploy, release, ship, rollout, or production push.
-needs: []                           # ★ populated by total-recall surface
-token_budget: 4500
-last_compiled: 2026-05-10T14:03:00Z
+name: code-quality
+description: "Verify TypeScript compiles and lint checks pass cleanly."
+needs: []
+token_budget: 4000
+last_compiled: '2026-05-25T14:02:00Z'
 schema_version: 1
 ---
 
-# Deploy
+# Code Quality
 
 ## Authoritative Rules (compiled from memory-vault)
 
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: hybrid-bm25-tfidf, generated_at: 2026-05-10T14:03:00Z -->
+<!-- @route: hybrid-bm25, generated_at: 2026-05-25T14:02:00Z -->
 
-- **prefer-pm2-reload** (confidence 0.92, importance 4):
-  Use `pm2 reload <app>` for zero-downtime restarts. Never `stop && start`.
+- **never-run-tsc-directly** (confidence 1.0, importance 5):
+  NEVER run tsc or eslint directly. Always use standard skills scripts.
 
 <!-- END INJECTED MEMORY -->
 
-## Procedure
+## Mechanics
 ...
 ```
 
-The `<!-- BEGIN INJECTED MEMORY -->` block is managed entirely by `total-recall surface`.
-Do not edit it by hand.
-
 ---
 
-### 2.5 Task (`type: task`)
+### 3.5 Research Queue Task Specification (`type: task`)
 
-Autonomous work items generated by the scheduler and Dream Cycle. Live in
-`.agent/scheduler/queue/<slug>.md`. The kernel processes these in priority order
-during background inference loops.
+Lives under `.agent/skills/total-recall/scheduler/queue/<slug>.md`. Outlines background research agendas.
 
 ```markdown
 ---
 type: task
 priority: 85
-category: skill-engineering
-target: skills/stripe-expert.md
-estimated_calls: 50
-deadline: 2026-05-18
-created_by: dream-cycle
-reason: "User asked about Stripe 3 times this week, no skill exists"
+category: proactive-research
+target: concepts/cloudflare-worker-bindings.md
+estimated_calls: 30
+deadline: '2026-06-01'
+created_by: research-daemon
 status: pending
 progress: 0
 ---
 
 ## Objective
-Research Stripe Connect API for marketplace payouts.
+Research Cloudflare Workers bind capabilities for environment mappings.
 
 ## Steps
-1. Web search Stripe Connect official docs
-2. Write create-connected-account.mjs, test against Stripe test mode
-3. Add "Marketplace Payouts" section to stripe-expert.md
-4. Run self-eval: can I execute a full payout flow?
+1. Crawl official Cloudflare Worker environment binding documentation.
+2. Draft a conceptual node with code examples.
+3. Validate node against SSSS Zod v2 specifications.
 
 ## Success Criteria
-- [ ] Script tested against Stripe test API
-- [ ] Self-eval passes 3/3 payout scenarios
-```
-
-**Task categories:**
-
-| Category | Purpose |
-|----------|---------|
-| `memory-maintenance` | Dream Cycle hygiene: compression, dedup, decay |
-| `system2-deliberation` | Slow reasoning, synthesis, validation, and planning over memory |
-| `skill-engineering` | Building, testing, and improving skill files |
-| `proactive-research` | Web search, knowledge refresh, trend monitoring |
-| `self-evaluation` | Testing own capabilities, benchmarking accuracy |
-| `exploration` | Speculative research, low-priority curiosity |
-
-**Task generation sources:**
-
-| Source | Trigger |
-|--------|---------|
-| Pattern Detection | User repeatedly asks about a topic with no skill |
-| Staleness Detection | Memory node `last_accessed` exceeds threshold |
-| Workflow Failures | A workflow step fails |
-| Self-Eval Failures | System tests itself and fails |
-| Skill Dependencies | A skill references another that doesn't exist |
-| User Explicit | User says "learn about X for me" |
-
----
-
-## 3. Three-Tier Memory Hierarchy
-
-Memory nodes are surfaced to the AI through a progressive disclosure system.
-Not all memories are relevant to every prompt.
-
-| Tier | Location | Purpose | Size Limit | Latency |
-|------|----------|---------|------------|---------|
-| **Tier 1: Hot** | `INSTRUCTIONS.md` | Critical invariants, always in system prompt | < 1,000 tokens | 0ms |
-| **Tier 2: Skills** | `SKILL.md` files | Curated rules injected by semantic relevance | ≤ 7 rules/skill | ~100ms |
-| **Tier 3: Vault** | `.agent/memory-vault/` | Full knowledge graph, source of truth | Unlimited | ~500ms |
-
-**How nodes move between tiers:**
-- `priority: absolute` + `modality: must|must_not` → Tier 1 (always in system prompt)
-- Active nodes with `confidence ≥ 0.35` → Tier 2 candidates (routed by `surface.mjs`)
-- Everything else → Tier 3 (accessible on-demand via full-text search)
-- The Dream Cycle continuously promotes/demotes based on access frequency and confidence
-
----
-
-## 4. Cognitive Memory Layers
-
-Total Recall also assigns each memory node to an implementation-specific cognitive
-layer. This is orthogonal to the three surfacing tiers above:
-
-| Layer | Frontmatter | Purpose | Writer | Promotion path |
-|-------|-------------|---------|--------|----------------|
-| **Conscious** | `x_memory_layer: conscious` | Immediate working awareness: current user directives, absolute invariants, active preferences, and task-local context. | User turns, steering, surface compiler | Surfaces into Tier 1 or Tier 2 when active and important. |
-| **System 2** | `x_memory_layer: system2` | Deliberate reasoning: plans, decisions, conflict resolutions, synthesis, and eval-backed conclusions. | Dream Cycle, optimizer, `system2-deliberation` tasks | Converts research drafts into decisions, concepts, or proposals after validation. |
-| **Research** | `x_memory_layer: research` | Knowledge acquisition: web-backed facts, stale-knowledge refreshes, citations, and externally observed evidence. | `proactive-research` tasks and research tools | Starts as draft/pending evidence, then moves through System 2 before broad surfacing. |
-
-`x_memory_layer` is host-specific and intentionally uses the `x_` prefix required
-for implementation fields. If omitted, Total Recall infers the layer from the
-node category, tags, source type, and `priority`.
-
-The cooperation contract is:
-
-1. Conscious memory notices an uncertainty, repeated need, or active user goal.
-2. System 2 creates or consumes a `system2-deliberation` task to reason over the
-   current vault state and decide whether more evidence is needed.
-3. Research creates cited draft facts with `x_memory_layer: research`.
-4. System 2 validates, deduplicates, and resolves conflicts before promoting the
-   result into active facts, concepts, decisions, or proposals.
-5. The surface compiler writes `memory-layers.jsonl`, skill routes, and Tier 1
-   instructions so the Conscious layer sees only the validated working set.
-
----
-
-## 5. Derived Artifacts (Disposable — Fully Rebuildable)
-
-These files live in `.agent/memory-derived/` and are **never** source-of-truth.
-Delete the entire directory at any time; `total-recall reindex` regenerates everything.
-
-| File | Format | Description |
-|------|--------|-------------|
-| `graph-index.jsonl` | JSONL | One flat JSON object per node — used by routing and search |
-| `memory-layers.jsonl` | JSONL | One flat JSON object per node with its inferred cognitive layer |
-| `skill-routes.jsonl` | JSONL | Routing decision log (slug → skill mappings + scores) |
-| `conflict-index.jsonl` | JSONL | All detected conflicts across all sessions |
-| `dream-report.jsonl` | JSONL | Dream Cycle execution log |
-
-**`graph-index.jsonl` line schema:**
-```jsonc
-{
-  "v": 2,
-  "slug": "prefer-atomic-writes",
-  "path": ".agent/memory-vault/patterns/prefer-atomic-writes.md",
-  "type": "memory",
-  "title": "Always write files atomically",
-  "category": "patterns",
-  "status": "active",
-  "confidence": 0.92,
-  "memory_layer": "conscious",
-  "importance": 4,
-  "tags": ["filesystem", "reliability"],
-  "routes_to_skills": ["deploy"],
-  "modality": "must",
-  "subject": "agent",
-  "predicate": "use_atomic_write",
-  "object": "file_system",
-  "token_count": 142,
-  "updated": "2026-05-01T14:03:00Z",
-  "content_sha256": "8c2fe1a3"
-}
+- [ ] MD report has valid schema-v2 frontmatter
+- [ ] Zero lint issues detected
 ```
 
 ---
 
-## 6. Staging Area
+## ⚡ 4. Three-Tier Memory Surfacing Hierarchy
 
-`.agent/memory-inbox/` is the staging area for new nodes before conflict resolution.
+To ensure local IDE sessions remain lightning-fast and under token thresholds, memory nodes are progressively disclosed based on context relevance:
 
-```
-.agent/memory-inbox/
-├── pending/       # New nodes not yet conflict-checked
-└── conflicts/     # Quarantined collision pairs (block promotion)
-```
-
-Workflow:
-1. New node arrives (from agent observation or `tr-steer` CLI)
-2. `steering.mjs` runs O(1) ontology check + fuzzy similarity
-3. No conflict → node moves to `memory-vault/` with `status: active`
-4. Conflict found → `detectAndResolve()` attempts auto-resolution via tiered heuristics
-5. Auto-resolved → loser marked `superseded`, winner updated, conflict record logged
-6. Cannot auto-resolve → conflict quarantined in `conflicts/`, human resolves via `total-recall resolve`
-
----
-
-## 7. Vault Directory Layout
-
-```
-.agent/
-├── memory-vault/              # TIER 3: Source of Truth (Git-versioned)
-│   ├── invariants/            # Absolute rules → compiled to Tier 1
-│   ├── patterns/              # "Always do X" rules
-│   ├── anti-patterns/         # "Never do X" rules
-│   ├── preferences/           # Style and workflow preferences
-│   ├── decisions/             # One-time architectural decisions
-│   ├── concepts/              # Domain knowledge
-│   └── facts/                 # Evidence-backed research outputs
-├── memory-derived/            # Disposable indexes (rebuildable)
-├── memory-inbox/
-│   ├── pending/               # Awaiting conflict check
-│   └── conflicts/             # Quarantined collisions
-├── sessions/                  # Branching JSONL session DAGs
-└── skills/                    # TIER 2 skill packages
-    └── <skill-name>/
-        └── SKILL.md           # Receives injected memory capsule
-```
-
----
-
-## 8. Interoperability
-
-`total-recall` is designed to work alongside **any** AI agent, IDE plugin, or CLI tool
-that can read files.
-
-| Interface | How it works |
-|-----------|-------------|
-| **Antigravity (Google DeepMind IDE)** | Reads `INSTRUCTIONS.md` (Tier 1) on every boot; reads `SKILL.md` on demand via `view_file` |
-| **Cursor / VS Code Agent** | Same — `.cursorrules` is a shim copy of `INSTRUCTIONS.md` |
-| **Claude Code** | `CLAUDE.md` shim |
-| **Custom CLI agent** | Point at vault root via `totalrecall.config.mjs`, call `total-recall compile` |
-| **Any other agent** | Point it at `INSTRUCTIONS.md` for hot rules; at any `SKILL.md` for domain rules |
-
-The only hard dependency is `totalrecall.config.mjs` in the repo root, which tells
-`total-recall` where your vault, skills, and instructions file live.
-
----
-
-## 9. Naming Conventions
-
-| Thing | Convention | Example |
-|-------|-----------|---------|
-| Node slug | `kebab-case`, globally unique, matches filename | `prefer-pm2-reload` |
-| Category | lowercase, matches directory name | `patterns` |
-| Skill name | `kebab-case`, matches directory name | `deploy` |
-| Conflict ID | `conflict-YYYY-MM-DD-NNN` | `conflict-2026-05-10-001` |
-| Session ID | 8-char hex | `7f3a2b1c` |
-| Timestamp | ISO 8601 with `Z` suffix | `2026-05-10T14:03:00Z` |
-
----
-
-*This document is part of `total-recall`. For implementation details, see [ARCHITECTURE.md](./ARCHITECTURE.md).*
+| Surfacing Tier | File Location | Intended Scope / Purpose | Token Overhead | Latency |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 1: Hot** | `INSTRUCTIONS.md` / `.cursorrules` | Absolute invariants that must govern every single prompt. | < 1,000 tokens | 0ms (pre-loaded) |
+| **Tier 2: Skills** | `SKILL.md` files | Behavioral rule capsules loaded dynamically on demand. | ≤ 7 rules / skill | ~100ms (file read) |
+| **Tier 3: Vault** | `memory-vault/` directory | Full vector-indexed catalog of experiences and facts. | Unlimited | ~500ms (semantic scan) |

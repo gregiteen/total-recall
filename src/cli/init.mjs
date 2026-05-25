@@ -204,7 +204,7 @@ export default async function init(args) {
   // ── Step 3: Copy default memory vault nodes ──
   logStep('3/4', 'Seeding default memory vault nodes');
 
-  const scaffoldVaultSrc = path.join(ROOT, 'scaffold', '.agent', 'memory-vault');
+  const scaffoldVaultSrc = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'memory-vault');
   const localVaultDest = path.join(brainDir, 'memory-vault');
 
   if (!fs.existsSync(scaffoldVaultSrc)) {
