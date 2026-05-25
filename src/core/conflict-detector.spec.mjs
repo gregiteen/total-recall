@@ -227,13 +227,13 @@ describe('Auto-Resolution Engine', () => {
     const newNode = makeNode('new-node', {
       created: '2026-05-17T10:00:00Z',
       updated: '2026-05-17T10:00:00Z',
-      source: { type: 'chat', session_id: 's2', evidence_count: 1 },
+      source: { type: 'dream-cycle', session_id: 's2', evidence_count: 1 },
       ...newOverrides,
     });
     const existingNode = makeNode('existing-node', {
       created: '2026-05-15T10:00:00Z',
       updated: '2026-05-15T10:00:00Z',
-      source: { type: 'chat', session_id: 's1', evidence_count: 1 },
+      source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 },
       sentiment_polarity: 'directive_must_not',
       modality: 'must_not',
       ...existingOverrides,
@@ -254,6 +254,39 @@ describe('Auto-Resolution Engine', () => {
       _existing_node: existingNode,
     };
   }
+
+  it('Tier 0: new user-created node (from CLI, API, or chat) always wins and auto-supersedes', () => {
+    // 1. Candidate is remember-cli, existing is machine
+    const conflict1 = makeConflict(
+      { source: { type: 'remember-cli', session_id: 's2', evidence_count: 1 } },
+      { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 } }
+    );
+    const result1 = autoResolveConflict(conflict1);
+    expect(result1.resolved).toBe(true);
+    expect(result1.action).toBe('supersede');
+    expect(result1.winner).toBe('new-node');
+    expect(result1.reason).toContain('User-created candidate node');
+
+    // 2. Candidate is api-client, existing is user-created chat
+    const conflict2 = makeConflict(
+      { source: { type: 'api-client', session_id: 's2', evidence_count: 1 } },
+      { source: { type: 'chat', session_id: 's1', evidence_count: 1 } }
+    );
+    const result2 = autoResolveConflict(conflict2);
+    expect(result2.resolved).toBe(true);
+    expect(result2.action).toBe('supersede');
+    expect(result2.winner).toBe('new-node');
+
+    // 3. Candidate is chat, existing is protected invariant user-created node
+    const conflict3 = makeConflict(
+      { source: { type: 'chat', session_id: 's2', evidence_count: 1 } },
+      { source: { type: 'chat', session_id: 's1', evidence_count: 1 }, priority: 'absolute', immutable: true }
+    );
+    const result3 = autoResolveConflict(conflict3);
+    expect(result3.resolved).toBe(true);
+    expect(result3.action).toBe('supersede');
+    expect(result3.winner).toBe('new-node');
+  });
 
   it('Tier 1: quarantines when both nodes are protected invariants', () => {
     const conflict = makeConflict(
@@ -312,8 +345,8 @@ describe('Auto-Resolution Engine', () => {
 
   it('Tier 4: newer node wins when both have same source authority', () => {
     const conflict = makeConflict(
-      { source: { type: 'chat', session_id: 's2', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
-      { source: { type: 'chat', session_id: 's1', evidence_count: 1 }, updated: '2026-05-15T12:00:00Z' },
+      { source: { type: 'dream-cycle', session_id: 's2', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
+      { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 }, updated: '2026-05-15T12:00:00Z' },
     );
     const result = autoResolveConflict(conflict);
     expect(result.resolved).toBe(true);
@@ -323,8 +356,8 @@ describe('Auto-Resolution Engine', () => {
 
   it('Tier 4: existing node wins when it is more recent', () => {
     const conflict = makeConflict(
-      { source: { type: 'chat', session_id: 's2', evidence_count: 1 }, updated: '2026-05-10T12:00:00Z' },
-      { source: { type: 'chat', session_id: 's1', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
+      { source: { type: 'dream-cycle', session_id: 's2', evidence_count: 1 }, updated: '2026-05-10T12:00:00Z' },
+      { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
     );
     const result = autoResolveConflict(conflict);
     expect(result.resolved).toBe(true);
