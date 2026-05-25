@@ -166,7 +166,7 @@ Everything lives in plain Markdown files. No database. No lock-in.
 ├── scheduler/queue/             ← Autonomous task queue (type: task markdown files)
 ├── config/
 │   ├── brain.json               ← Brain URL + PAT (relay reads this)
-│   ├── frontier.yml             ← Escalation endpoint config
+│   ├── budget.yml               ← Daily/weekly budget caps config
 │   ├── auth.yml                 ← API auth config
 │   └── secrets.enc              ← AES-256 encrypted secrets
 └── .backups/                    ← Nightly tar.gpg archives

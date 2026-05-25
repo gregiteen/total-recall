@@ -17,9 +17,9 @@ gantt
     Pointer Shim & Cleanup                    :done,    des2, 2026-05-23, 2026-05-24
     section Phase 2: Safety
     Usage Watchdog & Token Tracker            :done,    des3, 2026-05-25, 2026-05-28
-    Sandbox Hardening & Isolation             :active,  des4, 2026-05-27, 2026-05-31
+    Sandbox Hardening & Isolation             :done,    des4, 2026-05-27, 2026-05-31
     section Phase 3: Interface
-    UI Memory Browser & Graph Updates          :         des5, 2026-06-01, 2026-06-07
+    UI Memory Browser & Graph Updates          :active,  des5, 2026-06-01, 2026-06-07
     Conflict manual override panel            :         des6, 2026-06-06, 2026-06-10
 ```
 
@@ -50,11 +50,11 @@ gantt
 - [x] Wire usage watchdog into pre-flight checks of `runtime.mjs` (Pivot from `dispatch.mjs`) to block runs when limits are reached
 - [x] Add active dispatch loop watchdog that halts and kills unresponsive/runaway subagent processes (spawnSync timeout)
 
-### Phase 3: Sandbox Hardening & Security (P1 Priority)
-- [ ] Research and implement POSIX namespace isolation for shell calls in `sandbox.mjs`
-- [ ] Restrict subagent file modifications to designated workspaces and git worktrees
-- [ ] Write system egress firewall rules to restrict network communication to whitelisted domains
-- [ ] Build command execution whitelist, blocking high-risk shell inputs (e.g. recursive deletes, arbitrary curl downloads)
+### Phase 3: Sandbox Hardening & Security (P1 Priority — 100% COMPLETE)
+- [x] Research and implement POSIX namespace isolation for shell calls in `sandbox.mjs` (Darwin sandbox-exec & Linux unshare)
+- [x] Restrict subagent file modifications to designated workspaces and git worktrees (OS directory constraints)
+- [x] Write system egress firewall rules to restrict network communication to whitelisted domains (Outbound network denials)
+- [x] Build command execution whitelist, blocking high-risk shell inputs (e.g. recursive deletes, arbitrary curl downloads)
 
 ### Phase 4: UI Memory Browser & Graph Updates (P2 Priority)
 - [ ] Rebuild React constellation graph to visualize SSSS v2 node relations

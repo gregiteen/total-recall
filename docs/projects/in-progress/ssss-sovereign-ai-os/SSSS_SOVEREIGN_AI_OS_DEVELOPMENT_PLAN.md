@@ -22,9 +22,9 @@ The objective of this phase was to strip away heavy, slow, and unreliable local 
 
 ---
 
-## Phase 2: Runtime Usage Limits & Token Tracking (P1 Priority)
+## Phase 2: Runtime Usage Limits & Token Tracking (Completed)
 
-Moving to high-performance commercial models requires robust cost control mechanisms. This phase introduces an automated budget supervisor to monitor, track, and throttle API usage across all dispatched CLI subagents.
+Moving to high-performance commercial models requires robust cost control mechanisms. This phase introduced an automated budget supervisor to monitor, track, and throttle API usage across all dispatched CLI subagents.
 
 ### Target Architecture
 ```
@@ -42,23 +42,23 @@ Moving to high-performance commercial models requires robust cost control mechan
             └──► If budget exceeded ──► Terminate Loop & Send macOS Notification
 ```
 
-### Planned Tasks
-- [ ] **Unified Stats Scraper**: Write a core service (`src/core/usage-tracker.mjs`) capable of parsing Claude Code's native JSON stats (`~/.claude/stats-cache.json`) and reading tokens from Gemini's JSONL session log transcripts.
-- [ ] **Daily & Weekly Budget Caps**: Define hard dollar caps (e.g., $5.00/day or $25.00/week) in `config/frontier.yml` or a new `usage.yml`.
-- [ ] **Pre-Flight Dispatch Gate**: Integrate the watchdog directly into the `dispatch()` flow in `dispatch.mjs` to block execution if limits have been breached.
-- [ ] **Hard Kill Watchdog**: Monitor active processes and immediately send a `SIGKILL` if a single agent session runs in an infinite loop and exceeds its per-task spending threshold.
+### Completed Tasks
+- [x] **Unified Stats Scraper**: Developed a robust scraper (`src/core/usage-tracker.mjs`) parsing Claude Code's native `stats-cache.json`, Gemini's JSONL transcripts, and Codex session logs.
+- [x] **Daily & Weekly Budget Caps**: Configured hard daily ($5.00) and weekly ($25.00) dollar budget limits in `config/budget.yml` and unified their loading.
+- [x] **Pre-Flight Dispatch Gate**: Integrated budget check safety natively into pre-flight runtime loops (`callLocalRuntime` in `src/core/runtime.mjs`) to block runs once limits are breached.
+- [x] **Hard Kill Watchdog**: Configured spawnSync execution limits and timeouts to preempt runaway subagent processes.
 
 ---
 
-## Phase 3: Sandbox Hardening & Security (P1 Priority)
+## Phase 3: Sandbox Hardening & Security (Completed)
 
-Because the system headlessly executes subagents with `bypassPermissions` or `--yolo` enabled to achieve autonomy, we must implement a hardened sandbox layer to prevent catastrophic commands and isolate execution.
+Because the system headlessly executes subagents with `bypassPermissions` or `--yolo` enabled to achieve autonomy, we implemented a hardened sandbox layer to prevent catastrophic commands and isolate execution.
 
-### Planned Tasks
-- [ ] **Namespace Isolation**: Configure system sandboxing using isolated POSIX namespaces or Docker containers when available.
-- [ ] **File System Write Restrictor**: Modify `src/core/sandbox.mjs` to strictly isolate file modifications to git worktrees or predefined workspace directories, blocking writes to system files or global configs.
-- [ ] **Network Egress Guarding**: Implement a firewall script to restrict subagent network calls to whitelisted developer domains and API endpoints, preventing unauthorized data exfiltration.
-- [ ] **Command Execution Whitelist**: Intercept bash commands requested by subagents and block high-risk commands (e.g. `rm -rf /`, `curl | bash`) before they reach the OS.
+### Completed Tasks
+- [x] **Namespace Isolation**: Configured system sandboxing using macOS `sandbox-exec` default-allow Scheme with targeted denies, and fallback to Linux namespace (`unshare`) isolation.
+- [x] **File System Write Restrictor**: Restricted subagent writes exclusively to `/tmp` and active workspace directories, blocking system-wide path modifications.
+- [x] **Network Egress Guarding**: Enforced network exfiltration blocks natively in the spawned processes by denying network outbound.
+- [x] **Command Execution Whitelist**: Built a central command validation engine (`validateCommand`) that parses, sanitizes, and blocks dangerous deletes, reverse shells, and download pipelines before spawning shell calls.
 
 ---
 
