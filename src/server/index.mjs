@@ -264,6 +264,26 @@ try {
 // ─── Static Frontend (SPA catch-all) ────────────────────────────────────────────
 
 const frontendDist = path.join(ROOT, 'frontend', 'dist');
+
+// Auto-build frontend if dist/ doesn't exist
+if (!fs.existsSync(path.join(frontendDist, 'index.html'))) {
+  const frontendDir = path.join(ROOT, 'frontend');
+  if (fs.existsSync(path.join(frontendDir, 'package.json'))) {
+    log.info('Frontend not built. Building automatically...');
+    try {
+      const { execSync } = await import('node:child_process');
+      execSync('npm install --no-audit --no-fund 2>/dev/null && npm run build', {
+        cwd: frontendDir,
+        stdio: 'pipe',
+        timeout: 120_000,
+      });
+      log.info('Frontend build complete.');
+    } catch (err) {
+      log.warn(`Frontend auto-build failed: ${err.message?.split('\\n')[0] || 'unknown error'}. Dashboard will show API info instead.`);
+    }
+  }
+}
+
 app.use(express.static(frontendDist));
 
 // ─── Built-in Chat UI (/chat) ────────────────────────────────────────────────────

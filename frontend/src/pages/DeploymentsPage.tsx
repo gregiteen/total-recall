@@ -160,7 +160,6 @@ export default function DeploymentsPage() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {MODELS_CATALOG.map((m) => {
-                  const isReady = m.status === 'ready';
                   const activeModel = health?.ollama_models?.includes(m.id) || m.type !== 'ollama';
                   return (
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-tertiary)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>

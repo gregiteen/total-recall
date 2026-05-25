@@ -251,11 +251,11 @@ export async function listTasks(): Promise<import('./types').Task[]> {
   return res.json()
 }
 
-export async function createTask(category: string, target: string, body: string): Promise<{ slug: string }> {
+export async function createTask(category: string, target: string, body: string, priority?: number): Promise<{ slug: string }> {
   const res = await apiFetch(API_BASE + '/api/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category, target, body }),
+    body: JSON.stringify({ category, target, body, priority }),
   })
   if (!res.ok) throw new Error(`Tasks API error: ${res.status}`)
   return res.json()

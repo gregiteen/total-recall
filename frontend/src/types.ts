@@ -60,6 +60,7 @@ export interface Task {
   priority: number
   body?: string
   error?: string
+  progress?: number
 }
 
 export interface FileNode {
