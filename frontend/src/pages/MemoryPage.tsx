@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "react-router-dom"
 import { listMemory, searchMemory, readMemory, fetchConflicts, resolveConflict, saveMemory, createMemory, deleteMemory, fetchSessions, deleteSession } from "../api"
-import type { MemoryNode } from "../types"
+import type { MemoryNode, Conflict } from "../types"
 import type { SessionSummary } from "../api"
 
 const CATEGORIES = [
@@ -30,10 +30,10 @@ function renderMarkdown(md: string) {
   html = html.replace(/`(.*?)`/g, "<code style=\"background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-family:monospace;\">$1</code>");
   
   // Blockquotes
-  html = html.replace(/^\> (.*$)/gim, "<blockquote style=\"border-left:4px solid var(--purple-primary);padding-left:14px;color:var(--text-secondary);margin:16px 0;font-style:italic;\">$1</blockquote>");
+  html = html.replace(/^> (.*$)/gim, "<blockquote style=\"border-left:4px solid var(--purple-primary);padding-left:14px;color:var(--text-secondary);margin:16px 0;font-style:italic;\">$1</blockquote>");
   
   // Lists
-  html = html.replace(/^\- (.*$)/gim, "<li style=\"margin-left:20px;list-style-type:disc;\">$1</li>");
+  html = html.replace(/^- (.*$)/gim, "<li style=\"margin-left:20px;list-style-type:disc;\">$1</li>");
   
   // Linebreaks
   html = html.replace(/\n/g, "<br />");
@@ -58,10 +58,10 @@ function markdownToHtml(md: string): string {
   html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
   
   // Blockquotes
-  html = html.replace(/^\> (.*$)/gim, "<blockquote>$1</blockquote>");
+  html = html.replace(/^> (.*$)/gim, "<blockquote>$1</blockquote>");
   
   // Lists
-  html = html.replace(/^\- (.*$)/gim, "<li>$1</li>");
+  html = html.replace(/^- (.*$)/gim, "<li>$1</li>");
   
   // Newlines
   html = html.replace(/\n/g, "<br />");
@@ -123,7 +123,7 @@ export default function MemoryPage() {
   const [sessionsLoading, setSessionsLoading] = useState(false)
 
   // Conflicts state
-  const [conflicts, setConflicts] = useState<any[]>([])
+  const [conflicts, setConflicts] = useState<Conflict[]>([])
   const [resolvingId, setResolvingId] = useState<string | null>(null)
 
   // Rich inline editing states
@@ -178,7 +178,7 @@ export default function MemoryPage() {
     }
   }, [category, query])
 
-  // Set edit state when selected changes
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate form state binding on selected node change
   useEffect(() => {
     if (selected) {
       setEditSlug(selected.slug || "")
@@ -300,15 +300,7 @@ export default function MemoryPage() {
     return () => clearTimeout(timer)
   }, [fetchNodes])
 
-  useEffect(() => {
-    if (activeTab === "conflicts") {
-      fetchConflictsList()
-    } else if (activeTab === "sessions") {
-      loadSessions()
-    }
-  }, [activeTab, fetchConflictsList])
-
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     setSessionsLoading(true)
     try {
       const data = await fetchSessions(100)
@@ -319,7 +311,16 @@ export default function MemoryPage() {
     } finally {
       setSessionsLoading(false)
     }
-  }
+  }, [])
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetching on tab change
+  useEffect(() => {
+    if (activeTab === "conflicts") {
+      fetchConflictsList()
+    } else if (activeTab === "sessions") {
+      loadSessions()
+    }
+  }, [activeTab, fetchConflictsList, loadSessions])
 
   const handleDeleteSession = async (id: string) => {
     if (!window.confirm(`Delete session "${id}"?`)) return
@@ -331,6 +332,7 @@ export default function MemoryPage() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetch on url slug change
   useEffect(() => {
     if (urlSlug) {
       const loadUrlSlug = async () => {
@@ -369,7 +371,7 @@ export default function MemoryPage() {
           fetchNodes()
           fetchConflictsList()
         }
-      } catch (err) {
+      } catch {
         // ignore
       }
     }

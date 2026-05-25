@@ -1,6 +1,6 @@
 // ─── API helpers for Total Recall backend ────────────────────────────────────────
 
-import type { HealthData, MemoryNode, SandboxResult, ResearchItem } from './types'
+import type { HealthData, MemoryNode, SandboxResult, ResearchItem, Conflict, UsageData, ConfigJson } from './types'
 
 let API_BASE = localStorage.getItem('TOTAL_RECALL_API_BASE') || ''
 
@@ -269,7 +269,7 @@ export async function listFiles(): Promise<import('./types').FileNode[]> {
   return res.json()
 }
 
-export async function listSkills(): Promise<any[]> {
+export async function listSkills(): Promise<unknown[]> {
   const res = await apiFetch(API_BASE + '/api/skills')
   if (!res.ok) throw new Error(`Skills API error: ${res.status}`)
   return res.json()
@@ -303,7 +303,7 @@ export async function deleteSkill(name: string): Promise<void> {
  * @param query - The keyword or package name search term to locate in the registry.
  * @returns A promise resolving to an array of matching registry skill records.
  */
-export async function searchSkillsRegistry(query: string): Promise<any[]> {
+export async function searchSkillsRegistry(query: string): Promise<unknown[]> {
   const params = new URLSearchParams({ q: query })
   const res = await apiFetch(`${API_BASE}/api/skills/search?${params}`)
   if (!res.ok) throw new Error(`Registry search API error: ${res.status}`)
@@ -327,7 +327,7 @@ export async function installRegistrySkill(pkg: string): Promise<{ success: bool
   return res.json()
 }
 
-export async function fetchUsageStats(): Promise<any> {
+export async function fetchUsageStats(): Promise<UsageData> {
   const res = await apiFetch(`${API_BASE}/api/usage`)
   if (!res.ok) throw new Error(`Usage API error: ${res.status}`)
   return res.json()
@@ -349,11 +349,6 @@ export async function saveConfig(name: string, content: string): Promise<void> {
     body: JSON.stringify({ content }),
   })
   if (!res.ok) throw new Error(`Config API error: ${res.status}`)
-}
-
-export interface ConfigJson {
-  security: any
-  budget: any
 }
 
 export async function fetchConfigJson(): Promise<ConfigJson> {
@@ -479,13 +474,13 @@ export async function triggerDream(): Promise<{ success: boolean; status: string
   return res.json()
 }
 
-export async function fetchGraph(): Promise<{ nodes: any[]; routes: any[] }> {
+export async function fetchGraph(): Promise<{ nodes: MemoryNode[]; routes: unknown[] }> {
   const res = await apiFetch(`${API_BASE}/api/graph`)
   if (!res.ok) throw new Error(`Graph API error: ${res.status}`)
   return res.json()
 }
 
-export async function fetchConflicts(): Promise<{ conflicts: any[] }> {
+export async function fetchConflicts(): Promise<{ conflicts: Conflict[] }> {
   const res = await apiFetch(`${API_BASE}/api/conflicts`)
   if (!res.ok) throw new Error(`Conflicts API error: ${res.status}`)
   return res.json()
