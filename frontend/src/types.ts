@@ -25,6 +25,10 @@ export interface MemoryNode {
   related?: string[]
   supersedes?: string[]
   contradicts?: string[]
+  subject?: string
+  predicate?: string
+  object?: string
+  sentiment_polarity?: string
 }
 
 export interface ScriptFile {
