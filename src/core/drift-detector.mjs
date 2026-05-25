@@ -28,7 +28,7 @@ function propertiesMatch(a, b, keys) {
  * @param {string} derivedDir - Path to the memory-derived directory.
  * @returns {{ drifted: boolean, missing_in_index: string[], stale_in_index: string[], missing_in_vault: string[] }}
  */
-export function detectIndexDrift(vaultDir, derivedDir) {
+export function detectIndexDrift(vaultDir, derivedDir, globalVaultDir = undefined) {
   const result = {
     drifted: false,
     missing_in_index: [],
@@ -46,6 +46,14 @@ export function detectIndexDrift(vaultDir, derivedDir) {
 
   // Load canonical nodes
   const nodes = loadNodes(vaultDir);
+  if (globalVaultDir && fs.existsSync(globalVaultDir)) {
+    try {
+      const globalNodes = loadNodes(globalVaultDir);
+      nodes.push(...globalNodes);
+    } catch (err) {
+      // Ignore or log global vault load failure
+    }
+  }
   const canonicalMap = new Map();
   for (const node of nodes) {
     canonicalMap.set(node.slug, node);
