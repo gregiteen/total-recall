@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
 import { agentDir } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
+import { validateCommand } from './sandbox.mjs';
 
 /**
  * Total Recall Runtime — CLI Agent Dispatch
@@ -204,6 +205,9 @@ export async function callLocalRuntime(prompt, system, config) {
       message: `Dispatching to ${agent.name} (attempt ${attempt + 1})`,
       promptLength: fullPrompt.length,
     });
+
+    // Pre-flight command execution validation
+    validateCommand(cmd);
 
     const result = spawnSync('sh', ['-c', cmd], {
       encoding: 'utf8',
