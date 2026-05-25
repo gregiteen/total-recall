@@ -50,6 +50,8 @@ export default function ChatPage() {
   // Model Selector state
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [selectedSubModel, setSelectedSubModel] = useState<string>('')
+  const [customSubModel, setCustomSubModel] = useState<string>('')
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -254,8 +256,12 @@ export default function ChatPage() {
         return;
       }
 
+      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel)
+        ? (selectedSubModel === 'custom' ? (customSubModel ? `${selectedModel}:${customSubModel}` : selectedModel) : (selectedSubModel ? `${selectedModel}:${selectedSubModel}` : selectedModel))
+        : selectedModel
+
       const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes, selectedModel)
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes, modelWithSubModel)
       const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: getCurrentTimestamp(), versions: [reply], currentVersionIndex: 0 }
       setMessages(prev => [...prev, assistantMsg])
       speak(reply)
@@ -279,7 +285,11 @@ export default function ChatPage() {
     setLoading(true)
     abortControllerRef.current = new AbortController()
     try {
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId, undefined, selectedModel)
+      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel)
+        ? (selectedSubModel === 'custom' ? (customSubModel ? `${selectedModel}:${customSubModel}` : selectedModel) : (selectedSubModel ? `${selectedModel}:${selectedSubModel}` : selectedModel))
+        : selectedModel
+
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId, undefined, modelWithSubModel)
       setMessages(prev => {
         const next = [...prev]
         const target = next[msgIndex]
@@ -421,6 +431,8 @@ export default function ChatPage() {
                       className={`model-selector-item ${selectedModel === modelName ? 'selected' : ''}`}
                       onClick={() => {
                         setSelectedModel(modelName)
+                        setSelectedSubModel('')
+                        setCustomSubModel('')
                         setShowModelDropdown(false)
                       }}
                     >
@@ -439,6 +451,60 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
+            {['gemini', 'antigravity'].includes(selectedModel) && (
+              <div className="chat-header-submodel-selector" style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
+                <span className="selector-label" style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>Base:</span>
+                <select
+                  value={selectedSubModel}
+                  onChange={(e) => {
+                    setSelectedSubModel(e.target.value)
+                    if (e.target.value !== 'custom') {
+                      setCustomSubModel('')
+                    }
+                  }}
+                  className="submodel-select"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-secondary)',
+                    padding: '6px 12px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    outline: 'none',
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                >
+                  <option value="" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Default Model</option>
+                  <option value="gemini-2.5-flash" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 2.5 Flash</option>
+                  <option value="gemini-2.5-pro" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 2.5 Pro</option>
+                  <option value="gemini-1.5-pro" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 1.5 Pro</option>
+                  <option value="gemini-1.5-flash" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 1.5 Flash</option>
+                  <option value="custom" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Custom Model...</option>
+                </select>
+                {selectedSubModel === 'custom' && (
+                  <input
+                    type="text"
+                    placeholder="Enter model name..."
+                    value={customSubModel}
+                    onChange={(e) => setCustomSubModel(e.target.value)}
+                    className="custom-submodel-input"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      width: '150px',
+                      outline: 'none',
+                      transition: 'all var(--transition-fast)'
+                    }}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </header>
 

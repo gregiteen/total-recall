@@ -338,14 +338,28 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
 
     // If the requested model matches one of our CLI agents, elevate that agent to highest priority
     if (model && activeConfig.agents) {
-      const targetAgentName = model.toLowerCase();
+      let targetAgentName = model.toLowerCase();
+      let subModel = null;
+      if (targetAgentName.includes(':')) {
+        const parts = targetAgentName.split(':');
+        targetAgentName = parts[0];
+        subModel = parts[1];
+      } else if (targetAgentName.includes('/')) {
+        const parts = targetAgentName.split('/');
+        targetAgentName = parts[0];
+        subModel = parts[1];
+      }
+
       const idx = activeConfig.agents.findIndex(a => a.name === targetAgentName);
       if (idx >= 0) {
         // Deep copy the agents list so we don't mutate the cached config
         activeConfig.agents = activeConfig.agents.map(a => ({ ...a }));
         activeConfig.agents[idx].priority = 0;
+        if (subModel) {
+          activeConfig.agents[idx].model = subModel;
+        }
         activeConfig.agents.sort((a, b) => a.priority - b.priority);
-        logger.info('api', `Elevated priority of agent "${targetAgentName}" to 0 based on model request.`);
+        logger.info('api', `Elevated priority of agent "${targetAgentName}" to 0 based on model request.${subModel ? ` Submodel set to "${subModel}"` : ''}`);
       }
     }
 
