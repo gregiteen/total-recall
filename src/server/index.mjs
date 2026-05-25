@@ -26,9 +26,9 @@ import {
   requireHttps,
   requireScope
 } from './auth.mjs';
-import { logger } from '../core/logger.mjs';
+import { logger, logEvents } from "../core/logger.mjs";
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
-import { agentDir as configAgentDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
 import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
 
 
@@ -114,13 +114,14 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   }
 
   const agentDir = configAgentDir;
-  const vaultExists = fs.existsSync(path.join(agentDir, 'memory-vault'));
+  const brainDir = configBrainDir;
+  const vaultExists = fs.existsSync(path.join(brainDir, 'memory-vault'));
   const skillExists = fs.existsSync(path.join(agentDir, 'skills', 'total-recall', 'SKILL.md'));
 
   // Check emergency alerts
   let emergencyAlerts = '';
   try {
-    const alertsPath = path.join(agentDir, 'alerts', 'emergency.md');
+    const alertsPath = path.join(brainDir, 'alerts', 'emergency.md');
     if (fs.existsSync(alertsPath)) {
       emergencyAlerts = fs.readFileSync(alertsPath, 'utf8');
     }
@@ -220,7 +221,7 @@ try {
         return res.status(401).json({ error: 'Missing or invalid Authorization header' });
       }
 
-      const configPath = path.join(os.homedir(), '.agent', 'config', 'runtime.yml');
+      const configPath = path.join(configBrainDir, 'config', 'runtime.yml');
       const config = loadRuntimeConfig(configPath);
       const { messages, model, temperature } = req.body;
 
@@ -267,11 +268,11 @@ import os from 'node:os';
 
 app.get('/chat', (req, res) => {
   const agentDir = configAgentDir;
-  const instructionsPath = path.join(agentDir, 'INSTRUCTIONS.md');
+  const instructionsPath = path.join(configBrainDir, 'INSTRUCTIONS.md');
   const hasInstructions = fs.existsSync(instructionsPath);
   const nodeCount = (() => {
     try {
-      const vaultDir = path.join(agentDir, 'memory-vault', 'active');
+      const vaultDir = path.join(configBrainDir, 'memory-vault', 'active');
       if (!fs.existsSync(vaultDir)) return 0;
       return fs.readdirSync(vaultDir).filter(f => f.endsWith('.md')).length;
     } catch { return 0; }
@@ -593,18 +594,59 @@ const HOST = nodeEnv === 'production' && publicBindRequested && serverSecurityCo
 
 const server = app.listen(PORT, HOST, () => {
   if (HOST !== configuredHost) {
-    logger.error('server', `Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
+    logger.error("server", `Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
   }
-  logger.info('server', `Total Recall Brain v3.0.0 is listening on http://${HOST}:${PORT}`);
+  logger.info("server", `Total Recall Brain v3.0.0 is listening on http://${HOST}:${PORT}`);
 
-  logger.info('server', '┌─────────────────────────────────────────────┐');
-  logger.info('server', '│  Total Recall Brain v3.0.0                  │');
-  logger.info('server', '│                                             │');
-  logger.info('server', `│  API:       http://${HOST}:${PORT}/v1/chat/completions │`);
-  logger.info('server', `│  Memory:    http://${HOST}:${PORT}/api/memory           │`);
-  logger.info('server', `│  Health:    http://${HOST}:${PORT}/health               │`);
-  logger.info('server', `│  Dashboard: http://${HOST}:${PORT}/                     │`);
-  logger.info('server', '└─────────────────────────────────────────────┘');
+  logger.info("server", "┌─────────────────────────────────────────────┐");
+  logger.info("server", "│  Total Recall Brain v3.0.0                  │");
+  logger.info("server", "│                                             │");
+  logger.info("server", `│  API:       http://${HOST}:${PORT}/v1/chat/completions │`);
+  logger.info("server", `│  Memory:    http://${HOST}:${PORT}/api/memory           │`);
+  logger.info("server", `│  Health:    http://${HOST}:${PORT}/health               │`);
+  logger.info("server", `│  Dashboard: http://${HOST}:${PORT}/                     │`);
+  logger.info("server", "└─────────────────────────────────────────────┘");
+
+  // ─── Live Agent Monitor Server (Port 9111) ───
+  const monitorApp = express();
+  monitorApp.use(cors(corsOptions()));
+
+  let sseClients = [];
+
+  logEvents.on("log", (entry) => {
+    const sseMessage = `data: ${JSON.stringify(entry)}\n\n`;
+    sseClients.forEach(res => {
+      try {
+        res.write(sseMessage);
+      } catch (err) {
+        // failed write
+      }
+    });
+  });
+
+  monitorApp.get("/stream", (req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive"
+    });
+    res.write("\n"); // keep-alive initial chunk
+
+    sseClients.push(res);
+
+    req.on("close", () => {
+      sseClients = sseClients.filter(c => c !== res);
+    });
+  });
+
+  const monitorServer = monitorApp.listen(9111, HOST, () => {
+    logger.info("server", `Live Agent Monitor listening on http://${HOST}:9111/stream`);
+  });
+
+  // Track monitorServer for graceful shutdown
+  server.on("close", () => {
+    monitorServer.close();
+  });
 
   // Unified Background Daemon Auto-Start & Watchdog
   if (process.env.DISABLE_DAEMON !== 'true' && nodeEnv !== 'test') {

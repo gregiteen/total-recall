@@ -4,11 +4,11 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-import { agentDir } from './config.mjs';
+import { brainDir } from './config.mjs';
 
 const ALGORITHM = 'aes-256-gcm';
-const AGENT_DIR = agentDir;
-const SECRETS_FILE = path.join(AGENT_DIR, 'config', 'secrets.enc');
+const BRAIN_DIR = brainDir;
+const SECRETS_FILE = path.join(BRAIN_DIR, 'config', 'secrets.enc');
 
 const scryptAsync = promisify(crypto.scrypt);
 

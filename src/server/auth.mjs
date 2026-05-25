@@ -10,13 +10,13 @@ import { watchdog } from '../core/watchdog.mjs';
 import { findValidKeyByToken, keyHasAnyScope, recordKeyUsage } from './keys.mjs';
 import { logger } from '../core/logger.mjs';
 
-import { agentDir, sessionSecret, nodeEnv } from '../core/config.mjs';
+import { agentDir, brainDir, sessionSecret, nodeEnv } from '../core/config.mjs';
 
-const AGENT_DIR = agentDir;
-const CONFIG_FILE = path.join(AGENT_DIR, 'config', 'security.yml');
+const BRAIN_DIR = brainDir;
+const CONFIG_FILE = path.join(BRAIN_DIR, 'config', 'security.yml');
 
 // Persist JWT secret to disk so sessions survive restarts
-const JWT_SECRET_PATH = path.join(AGENT_DIR, 'config', 'session-secret');
+const JWT_SECRET_PATH = path.join(BRAIN_DIR, 'config', 'session-secret');
 export const BCRYPT_COST = 12;
 
 let JWT_SECRET;

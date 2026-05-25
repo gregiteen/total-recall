@@ -86,7 +86,7 @@ describe('remember and recall CLI commands', () => {
 
     await remember(['fact', 'The project server runs on port 3000.']);
 
-    const factsDir = path.join(tmpAgentDir, 'memory-vault', 'facts');
+    const factsDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault', 'facts');
     const files = fs.readdirSync(factsDir);
     expect(files.length).toBe(1);
 
@@ -103,7 +103,7 @@ describe('remember and recall CLI commands', () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     // Create a mock embedding index
-    const derivedDir = path.join(tmpAgentDir, 'memory-derived');
+    const derivedDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-derived');
     fs.mkdirSync(derivedDir, { recursive: true });
     fs.writeFileSync(
       path.join(derivedDir, 'embeddings.json'),
@@ -118,7 +118,7 @@ describe('remember and recall CLI commands', () => {
     );
 
     // Populate mock vault node
-    const vaultDir = path.join(tmpAgentDir, 'memory-vault');
+    const vaultDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault');
     const invariantsDir = path.join(vaultDir, 'invariants');
     fs.mkdirSync(invariantsDir, { recursive: true });
     fs.writeFileSync(

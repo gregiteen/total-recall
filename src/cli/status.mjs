@@ -20,12 +20,12 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { loadQueue } from '../core/research-queue.mjs';
 
-import { agentDir, totalRecallToken } from '../core/config.mjs';
+import { agentDir, brainDir, totalRecallToken } from '../core/config.mjs';
 
 const AGENT_DIR = agentDir;
-const BRAIN_CONFIG = path.join(AGENT_DIR, 'config', 'brain.json');
-const SYNC_STATE = path.join(AGENT_DIR, 'config', 'sync-state.json');
-const CLIENTS_REGISTRY = path.join(AGENT_DIR, 'config', 'clients.json');
+const BRAIN_CONFIG = path.join(brainDir, 'config', 'brain.json');
+const SYNC_STATE = path.join(brainDir, 'config', 'sync-state.json');
+const CLIENTS_REGISTRY = path.join(brainDir, 'config', 'clients.json');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
 function parseArgs(args) {

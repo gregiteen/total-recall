@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import os from 'os';
+import { brainDir } from './config.mjs';
 
 /**
  * Research Source Adapters — Real Service Integrations
@@ -17,8 +17,8 @@ import os from 'os';
 
 // ─── Config Loading ────────────────────────────────────────────────────────────
 
-const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.agent', 'config', 'research.yml');
-const USAGE_FILE = path.join(os.homedir(), '.agent', 'config', 'search-usage.json');
+const DEFAULT_CONFIG_PATH = path.join(brainDir, 'config', 'research.yml');
+const USAGE_FILE = path.join(brainDir, 'config', 'search-usage.json');
 
 // Default: 50 paid searches/day ≈ 1,500/month — just under Brave's ~1,000 free credit
 // (credit rounds up, so we stay safe). Users on paid plans can raise this.

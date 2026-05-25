@@ -17,17 +17,18 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import matter from 'gray-matter';
-import { agentDir } from '../core/config.mjs';
+import { agentDir, brainDir } from '../core/config.mjs';
 
 const AGENT_DIR = agentDir;
-const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
+const BRAIN_DIR = brainDir;
+const VAULT_DIR = path.join(BRAIN_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
-const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
+const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
-const SESSIONS_DIR = path.join(AGENT_DIR, 'sessions');
-const FILES_DIR = path.join(AGENT_DIR, 'files');
-const TASKS_DIR = path.join(AGENT_DIR, 'scheduler', 'queue');
-const CONFIG_DIR = path.join(AGENT_DIR, 'config');
+const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
+const FILES_DIR = path.join(BRAIN_DIR, 'files');
+const TASKS_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
+const CONFIG_DIR = path.join(BRAIN_DIR, 'config');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
 
@@ -465,9 +466,9 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
       }
 
       // Load user profile — drives all personalisation and idle work
-      const profilePath = path.join(AGENT_DIR, 'memory-vault', 'preferences', 'user-profile.md');
-      const prioritiesPath = path.join(AGENT_DIR, 'memory-vault', 'preferences', 'user-priorities.md');
-      const interviewTaskPath = path.join(AGENT_DIR, 'scheduler', 'queue', 'onboarding-interview.md');
+      const profilePath = path.join(BRAIN_DIR, 'memory-vault', 'preferences', 'user-profile.md');
+      const prioritiesPath = path.join(BRAIN_DIR, 'memory-vault', 'preferences', 'user-priorities.md');
+      const interviewTaskPath = path.join(BRAIN_DIR, 'scheduler', 'queue', 'onboarding-interview.md');
 
       // Self-aware API reference — inject brain URL so the AI can call its own endpoints
       const selfBase = baseUrl(req);
@@ -532,9 +533,9 @@ This user has not been onboarded yet. You MUST conduct the onboarding interview 
 DO NOT answer any other questions until the interview is complete.
 Ask questions one at a time, warmly and conversationally. Listen carefully. Reflect back what you hear.
 After the interview, write the user's answers to:
-  - ${AGENT_DIR}/memory-vault/preferences/user-profile.md
-  - ${AGENT_DIR}/memory-vault/preferences/user-priorities.md
-  - ${AGENT_DIR}/memory-vault/preferences/user-interests.md
+   - ${BRAIN_DIR}/memory-vault/preferences/user-profile.md
+   - ${BRAIN_DIR}/memory-vault/preferences/user-priorities.md
+   - ${BRAIN_DIR}/memory-vault/preferences/user-interests.md
 Then mark ${interviewTaskPath} as status: done.
 
 INTERVIEW TASK:

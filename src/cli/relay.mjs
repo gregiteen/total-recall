@@ -16,7 +16,7 @@
  *   npx total-recall relay once     Single scan (no watch loop) — good for testing
  *   npx total-recall relay --help   Show this help
  *
- * Config (read from ~/.agent/config/brain.json):
+ * Config (read from ~/.agent/skills/total-recall/config/brain.json):
  *   { "url": "https://yourdomain.duckdns.org", "token": "tr_..." }
  *
  * Install as system service:
@@ -31,7 +31,7 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
-import { agentDir as configAgentDir } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir } from '../core/config.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -398,7 +398,7 @@ function printHelp() {
   New/updated session files are shipped to the brain at:
     POST <brain_url>/api/sessions/ingest
 
-  Config: ~/.agent/config/brain.json  (written by: npx total-recall connect)
+  Config: ~/.agent/skills/total-recall/config/brain.json  (written by: npx total-recall connect)
 `);
 }
 
@@ -406,23 +406,23 @@ export default async function relay(args) {
   const opts = parseArgs(args);
   if (opts.help || !opts.command) { printHelp(); return; }
 
-  const agentDir = configAgentDir;
-  fs.mkdirSync(path.join(agentDir, 'logs'), { recursive: true });
+  const brDir = configBrainDir;
+  fs.mkdirSync(path.join(brDir, 'logs'), { recursive: true });
 
   switch (opts.command) {
 
     case '_loop': {
       // Internal: run the watch loop (called by launchd/systemd or `start`)
       const pid = process.pid;
-      fs.writeFileSync(pidFile(agentDir), String(pid), 'utf8');
-      process.on('SIGTERM', () => { try { fs.unlinkSync(pidFile(agentDir)); } catch {} process.exit(0); });
-      process.on('SIGINT',  () => { try { fs.unlinkSync(pidFile(agentDir)); } catch {} process.exit(0); });
-      await runLoop(agentDir);
+      fs.writeFileSync(pidFile(brDir), String(pid), 'utf8');
+      process.on('SIGTERM', () => { try { fs.unlinkSync(pidFile(brDir)); } catch {} process.exit(0); });
+      process.on('SIGINT',  () => { try { fs.unlinkSync(pidFile(brDir)); } catch {} process.exit(0); });
+      await runLoop(brDir);
       break;
     }
 
     case 'start': {
-      const pid = readPid(agentDir);
+      const pid = readPid(brDir);
       if (isRunning(pid)) {
         console.log(`  Relay already running (PID ${pid})`);
         break;
@@ -432,37 +432,37 @@ export default async function relay(args) {
       ], {
         detached: true,
         stdio: ['ignore',
-          fs.openSync(path.join(agentDir, 'logs', 'relay.log'), 'a'),
-          fs.openSync(path.join(agentDir, 'logs', 'relay-err.log'), 'a'),
+          fs.openSync(path.join(brDir, 'logs', 'relay.log'), 'a'),
+          fs.openSync(path.join(brDir, 'logs', 'relay-err.log'), 'a'),
         ],
-        env: { ...process.env, AGENT_DIR: agentDir },
+        env: { ...process.env, AGENT_DIR: configAgentDir },
       });
       child.unref();
-      fs.writeFileSync(pidFile(agentDir), String(child.pid), 'utf8');
+      fs.writeFileSync(pidFile(brDir), String(child.pid), 'utf8');
       console.log(`  ✅ Relay started (PID ${child.pid})`);
-      console.log(`     Log: ${path.join(agentDir, 'logs', 'relay.log')}`);
+      console.log(`     Log: ${path.join(brDir, 'logs', 'relay.log')}`);
       break;
     }
 
     case 'stop': {
-      const pid = readPid(agentDir);
+      const pid = readPid(brDir);
       if (!isRunning(pid)) {
         console.log('  Relay is not running');
-        try { fs.unlinkSync(pidFile(agentDir)); } catch {}
+        try { fs.unlinkSync(pidFile(brDir)); } catch {}
         break;
       }
       process.kill(pid, 'SIGTERM');
-      try { fs.unlinkSync(pidFile(agentDir)); } catch {}
+      try { fs.unlinkSync(pidFile(brDir)); } catch {}
       console.log(`  ✅ Relay stopped (PID ${pid})`);
       break;
     }
 
     case 'status': {
-      const pid = readPid(agentDir);
+      const pid = readPid(brDir);
       const running = isRunning(pid);
       console.log(`\n  Relay: ${running ? `running (PID ${pid})` : 'stopped'}`);
 
-      const config = loadBrainConfig(agentDir);
+      const config = loadBrainConfig(brDir);
       if (config) {
         console.log(`  Brain: ${brainUrl(config)}`);
         console.log(`  Auth:  ${config.token ? 'PAT configured' : 'no token'}`);
@@ -477,7 +477,7 @@ export default async function relay(args) {
         console.log(`    ${exists ? '✅' : '○ '} ${src.name.padEnd(14)} ${exists ? `${files} session files` : 'not found'}`);
       }
 
-      const state = loadState(agentDir);
+      const state = loadState(brDir);
       const tracked = Object.keys(state).length;
       if (tracked > 0) {
         const latest = Object.values(state).sort((a, b) => b - a)[0];
@@ -489,12 +489,12 @@ export default async function relay(args) {
 
     case 'once': {
       console.log('  Running single scan...');
-      const { shipped, skipped, errors } = await runScan(agentDir, { verbose: true });
+      const { shipped, skipped, errors } = await runScan(brDir, { verbose: true });
       console.log(`\n  Done: shipped=${shipped} skipped=${skipped} errors=${errors}`);
       break;
     }
 
-    case 'install':   installService(agentDir); break;
+    case 'install':   installService(brDir); break;
     case 'uninstall': uninstallService(); break;
 
     default:

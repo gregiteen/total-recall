@@ -1,20 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { captureMessage, listCaptureInbox } from './quick-capture.mjs';
 
-let tmpHome;
-let homedirSpy;
+let tmpDir;
+let origEnv;
 
 beforeEach(() => {
-  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-capture-'));
-  homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(tmpHome);
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-capture-'));
+  origEnv = process.env._TR_TEST_AGENT_DIR;
+  process.env._TR_TEST_AGENT_DIR = tmpDir;
 });
 
 afterEach(() => {
-  homedirSpy.mockRestore();
-  fs.rmSync(tmpHome, { recursive: true, force: true });
+  if (origEnv === undefined) delete process.env._TR_TEST_AGENT_DIR;
+  else process.env._TR_TEST_AGENT_DIR = origEnv;
+  fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 describe('captureMessage', () => {

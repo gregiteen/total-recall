@@ -1,0 +1,20 @@
+[
+  {
+    "id": "pm-eval-1",
+    "description": "SKILL.md exists",
+    "command": "test -f .agent/skills/project-management/SKILL.md",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "pm-eval-2",
+    "description": "Subagent exists",
+    "command": "test -f .agent/skills/project-management/subagents/pm-assistant.md",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "pm-eval-3",
+    "description": "Hook executes",
+    "command": "bash .agent/skills/project-management/hooks/on-issue-update.sh",
+    "expected_exit_code": 0
+  }
+]

@@ -9,18 +9,19 @@
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { agentDir } from '../../core/config.mjs';
+import { agentDir, brainDir } from '../../core/config.mjs';
 import { logger } from '../../core/logger.mjs';
 
 export const AGENT_DIR    = agentDir;
-export const VAULT_DIR    = path.join(AGENT_DIR, 'memory-vault');
+export const BRAIN_DIR    = brainDir;
+export const VAULT_DIR    = path.join(BRAIN_DIR, 'memory-vault');
 export const SKILLS_DIR   = path.join(AGENT_DIR, 'skills');
-export const DERIVED_DIR  = path.join(AGENT_DIR, 'memory-derived');
-export const SESSIONS_DIR = path.join(AGENT_DIR, 'sessions');
+export const DERIVED_DIR  = path.join(BRAIN_DIR, 'memory-derived');
+export const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
 export const INSTRUCTIONS = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
-export const FILES_DIR    = path.join(AGENT_DIR, 'files');
-export const TASKS_DIR    = path.join(AGENT_DIR, 'scheduler', 'queue');
-export const CONFIG_DIR   = path.join(AGENT_DIR, 'config');
+export const FILES_DIR    = path.join(BRAIN_DIR, 'files');
+export const TASKS_DIR    = path.join(BRAIN_DIR, 'scheduler', 'queue');
+export const CONFIG_DIR   = path.join(BRAIN_DIR, 'config');
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');

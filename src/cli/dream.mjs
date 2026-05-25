@@ -13,10 +13,11 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_DIR = resolveAgentDir();
+const BRAIN_DIR = resolveBrainDir();
 
 function parseArgs(args) {
   const opts = { vault: null, help: false };
@@ -50,10 +51,10 @@ export default async function dream(args) {
   const opts = parseArgs(args);
   if (opts.help) { printHelp(); return; }
 
-  const vaultDir = opts.vault || path.join(AGENT_DIR, 'memory-vault');
+  const vaultDir = opts.vault || path.join(BRAIN_DIR, 'memory-vault');
   const skillsDir = path.join(AGENT_DIR, 'skills');
-  const derivedDir = path.join(AGENT_DIR, 'memory-derived');
-  const conflictsDir = path.join(AGENT_DIR, 'memory-inbox', 'conflicts');
+  const derivedDir = path.join(BRAIN_DIR, 'memory-derived');
+  const conflictsDir = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
   const instructionsFile = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
   console.error('\n  🌙 Starting dream cycle...\n');

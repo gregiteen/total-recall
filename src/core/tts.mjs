@@ -28,12 +28,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import yaml from 'yaml';
 import { logger } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
-const VOICE_CONFIG = path.join(AGENT_DIR, 'config', 'voice.yml');
+const VOICE_CONFIG = path.join(brainDir, 'config', 'voice.yml');
 
 const DEFAULT_CONFIG = {
   tts: {

@@ -53,7 +53,7 @@ function buildApp() {
   return app;
 }
 
-const SESSIONS_DIR = path.join(TEST_AGENT_DIR, 'sessions');
+const SESSIONS_DIR = path.join(TEST_AGENT_DIR, 'skills', 'total-recall', 'sessions');
 
 afterEach(() => {
   // Clean sessions between tests

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { compileSurface } from '../core/surface.mjs';
 import { detectIndexDrift } from '../core/drift-detector.mjs';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 import { logger } from '../core/logger.mjs';
 
 /**
@@ -15,9 +15,10 @@ import { logger } from '../core/logger.mjs';
 
 export async function runRebuild(options = {}) {
   const agentDir = resolveAgentDir();
-  const vaultDir = path.join(agentDir, 'memory-vault');
+  const brainDir = resolveBrainDir();
+  const vaultDir = path.join(brainDir, 'memory-vault');
   const skillsDir = path.join(agentDir, 'skills');
-  const derivedDir = path.join(agentDir, 'memory-derived');
+  const derivedDir = path.join(brainDir, 'memory-derived');
   const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
 
   console.log('🔄 SSSS Projection Rebuild');

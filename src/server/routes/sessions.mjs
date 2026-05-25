@@ -21,6 +21,7 @@ import {
 } from '../../core/embeddings.mjs';
 import {
   AGENT_DIR,
+  BRAIN_DIR,
   SESSIONS_DIR,
   DERIVED_DIR,
   notFound,
@@ -195,7 +196,7 @@ router.post('/api/sessions/ingest', ingestRateLimiter(), requireAuth, requireSco
 
     // Deduplicate by sha256 of the raw content (relay always sends sha256)
     if (body.sha256) {
-      const hashIndex = path.join(AGENT_DIR, 'memory-derived', 'relay-hashes.jsonl');
+      const hashIndex = path.join(BRAIN_DIR, 'memory-derived', 'relay-hashes.jsonl');
       fs.mkdirSync(path.dirname(hashIndex), { recursive: true });
       const seen = new Set(
         fs.existsSync(hashIndex)

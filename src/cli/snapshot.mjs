@@ -1,5 +1,5 @@
 import { createSnapshot, listSnapshots, rollbackVault } from '../core/snapshot.mjs';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import path from 'path';
 
@@ -85,10 +85,11 @@ export default async function snapshotCli(args) {
       console.log(`🔄 Recompiling derived indexes from restored vault...`);
       
       const agentDir = resolveAgentDir();
+      const brainDir = resolveBrainDir();
       await compileSurface({
-        vaultDir: path.join(agentDir, 'memory-vault'),
+        vaultDir: path.join(brainDir, 'memory-vault'),
         skillsDir: path.join(agentDir, 'skills'),
-        derivedDir: path.join(agentDir, 'memory-derived'),
+        derivedDir: path.join(brainDir, 'memory-derived'),
         instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md')
       });
       

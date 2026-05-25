@@ -18,8 +18,17 @@ export function resolveAgentDir() {
     return process.env.AGENT_DIR;
   }
   const localDir = path.join(process.cwd(), '.agent');
-  if (fs.existsSync(path.join(localDir, 'memory-vault'))) {
+  if (fs.existsSync(path.join(localDir, 'skills', 'total-recall', 'memory-vault'))) {
     return localDir;
   }
   return path.join(os.homedir(), '.agent');
+}
+
+/**
+ * Resolve the brain directory — the Total Recall meta-skill that contains
+ * ALL user data (memory-vault, memory-derived, memory-inbox, sessions,
+ * scheduler, config, logs, .backups).
+ */
+export function resolveBrainDir() {
+  return path.join(resolveAgentDir(), 'skills', 'total-recall');
 }

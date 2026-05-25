@@ -1,6 +1,6 @@
 import { detectFriction } from '../core/friction.mjs';
 import path from 'path';
-import os from 'os';
+import { resolveBrainDir } from './agent-dir.mjs';
 
 /**
  * CLI command to run Friction Detection on logs
@@ -9,7 +9,7 @@ export default async function runFriction(args) {
   console.log(`[Friction] 🔍 Analyzing logs for workflow bottlenecks...`);
   
   // Default path for watchdog logs
-  const logPath = args[0] || path.join(os.homedir(), '.agent', 'logs', 'watchdog.jsonl');
+  const logPath = args[0] || path.join(resolveBrainDir(), 'logs', 'watchdog.jsonl');
   
   const result = await detectFriction(logPath);
   if (!result) {

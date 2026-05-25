@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import crypto from 'crypto';
 import matter from 'gray-matter';
 import { callLocalRuntime } from './runtime.mjs';
@@ -19,6 +18,7 @@ import {
   checkSourceAvailability,
 } from './source-adapters.mjs';
 import { addToAgenda, runKnowledgeAcquisitionCycle, getLocalizedDateTime } from './fact-seeker.mjs';
+import { brainDir } from './config.mjs';
 
 /**
  * Total Recall Deep Research Engine
@@ -30,7 +30,7 @@ import { addToAgenda, runKnowledgeAcquisitionCycle, getLocalizedDateTime } from 
  *   handleQuickResearch()     — local-LLM + direct source fetch (fast, no frontier required)
  */
 
-const AGENT_DIR = path.join(os.homedir(), '.agent');
+const BRAIN_DIR = brainDir;
 
 // ─── Frontier-Orchestrated Deep Research ────────────────────────────────────────
 
@@ -42,7 +42,7 @@ const AGENT_DIR = path.join(os.homedir(), '.agent');
  * @param {object} context - { runtimeConfig }
  */
 export async function handleProactiveResearch(task, context = {}) {
-  const inboxDir = path.join(AGENT_DIR, 'memory-inbox', 'pending');
+  const inboxDir = path.join(BRAIN_DIR, 'memory-inbox', 'pending');
   if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
 
   const researchConfig = loadResearchConfig();

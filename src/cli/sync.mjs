@@ -60,9 +60,9 @@ function printHelp() {
     --help, -h          Show this help
  
   Backup workflow (--push):
-    Commits .agent/memory-vault/, .agent/INSTRUCTIONS.md, and
-    .agent/config/brain.json to your fork via force-add (bypasses .gitignore).
-    Secrets (.agent/config/secrets.enc, .env) are NEVER committed.
+    Commits .agent/skills/total-recall/memory-vault/, .agent/INSTRUCTIONS.md, and
+    .agent/skills/total-recall/config/brain.json to your fork via force-add (bypasses .gitignore).
+    Secrets (.agent/skills/total-recall/config/secrets.enc, .env) are NEVER committed.
     Run 'npx total-recall setup' to configure your GitHub fork first.
 `);
 }
@@ -71,9 +71,13 @@ function workspaceAgentDir(cwd = process.cwd()) {
   return path.join(cwd, '.agent');
 }
 
+function workspaceBrainDir(cwd = process.cwd()) {
+  return path.join(cwd, '.agent', 'skills', 'total-recall');
+}
+
 function loadBrainConfig(agentDir) {
-  const local = path.join(agentDir, 'config', 'brain.json');
-  const global = path.join(os.homedir(), '.agent', 'config', 'brain.json');
+  const local = path.join(agentDir, 'skills', 'total-recall', 'config', 'brain.json');
+  const global = path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'brain.json');
   for (const file of [local, global]) {
     if (!fs.existsSync(file)) continue;
     try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -136,7 +140,7 @@ function writeProjection(cwd, instructions) {
 }
 
 function writeSyncState(agentDir, state) {
-  const configDir = path.join(agentDir, 'config');
+  const configDir = path.join(agentDir, 'skills', 'total-recall', 'config');
   fs.mkdirSync(configDir, { recursive: true });
   const stateFile = path.join(configDir, 'sync-state.json');
   fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf8');
@@ -165,8 +169,8 @@ async function runOnce(opts) {
   }
 
   // Auto-protect manual IDE edits locally and sync them to the brain first
-  const vaultDir = path.join(agentDir, 'memory-vault');
-  const derivedDir = path.join(agentDir, 'memory-derived');
+  const vaultDir = path.join(workspaceBrainDir(cwd), 'memory-vault');
+  const derivedDir = path.join(workspaceBrainDir(cwd), 'memory-derived');
   const instructionsFile = path.join(cwd, 'INSTRUCTIONS.md');
 
   // Ensure local directories exist so we can track and protect direct IDE manual edits

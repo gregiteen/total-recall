@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { writeNode } from '../core/vault.mjs';
 
@@ -155,9 +155,10 @@ export default async function remember(args) {
   }
 
   const resolvedAgentDir = resolveAgentDir();
+  const resolvedBrainDir = resolveBrainDir();
   const skillsDir = path.join(resolvedAgentDir, 'skills');
-  const vaultDir = path.join(resolvedAgentDir, 'memory-vault');
-  const derivedDir = path.join(resolvedAgentDir, 'memory-derived');
+  const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
+  const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
   const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
 
   // Rule sheet mapping (for push rules projection)

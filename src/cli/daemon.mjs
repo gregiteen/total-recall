@@ -17,12 +17,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveBrainDir } from './agent-dir.mjs';
 import { startDaemon, stopDaemon, readPid } from '../core/daemon-control.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
-const AGENT_DIR = path.join(os.homedir(), '.agent');
-const LOG_FILE = path.join(AGENT_DIR, 'logs', 'daemon.log');
+const BRAIN_DIR = resolveBrainDir();
+const LOG_FILE = path.join(BRAIN_DIR, 'logs', 'daemon.log');
 
 function commandExists(cmd) {
   if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
@@ -137,7 +138,7 @@ function launchctlStatus() {
     console.error('  🔴 Daemon is not loaded in launchd');
   }
 
-  const logFile = path.join(os.homedir(), '.agent', 'logs', 'daemon.log');
+  const logFile = path.join(BRAIN_DIR, 'logs', 'daemon.log');
   try {
     const log = fs.readFileSync(logFile, 'utf8');
     const lines = log.trim().split('\n').slice(-5);

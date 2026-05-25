@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import matter from 'gray-matter';
 import { loadNodes, writeNode } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
 /**
  * Total Recall Optimizer
@@ -123,8 +124,7 @@ export async function generateSkillImprovementProposals(vaultDir) {
  * Tasks that have been 'in-progress' for >1 hour are considered stalled.
  */
 export async function generateWorkflowRepairProposals(vaultDir) {
-  const agentDir = path.dirname(vaultDir);
-  const queueDir = path.join(agentDir, 'scheduler', 'queue');
+  const queueDir = path.join(brainDir, 'scheduler', 'queue');
   const proposals = [];
 
   if (!fs.existsSync(queueDir)) return proposals;

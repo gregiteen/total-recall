@@ -14,6 +14,7 @@ export interface MemoryNode {
   title: string
   category: string
   status?: string
+  priority?: string
   importance?: number
   confidence?: number
   modality?: string
@@ -21,6 +22,15 @@ export interface MemoryNode {
   body?: string
   content?: string
   excerpt?: string
+  related?: string[]
+  supersedes?: string[]
+  contradicts?: string[]
+}
+
+export interface ScriptFile {
+  name: string
+  size: number
+  modified: string
 }
 
 export interface HealthData {

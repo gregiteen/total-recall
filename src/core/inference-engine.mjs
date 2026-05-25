@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
 /**
  * Total Recall System 2 Inference Engine
@@ -120,7 +121,7 @@ export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfi
 
   // Write contradictions as conflict records
   if (contradictions.length > 0) {
-    const conflictsDir = path.join(path.dirname(path.dirname(inboxDir)), 'memory-inbox', 'conflicts');
+    const conflictsDir = path.join(brainDir, 'memory-inbox', 'conflicts');
     for (const contradiction of contradictions) {
       writeContradictionRecord(conflictsDir, contradiction);
     }

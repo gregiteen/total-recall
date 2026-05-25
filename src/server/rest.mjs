@@ -84,6 +84,7 @@ import { sessionsRouter } from './routes/sessions.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
+  BRAIN_DIR,
   VAULT_DIR,
   SKILLS_DIR,
   DERIVED_DIR,
@@ -322,7 +323,7 @@ router.get('/api/config', requireAuth, requireScope('config:read'), async (req, 
     if (safe.api) { safe.api.pats = '[redacted]'; }
 
     // Runtime config (sanitized)
-    const runtimePath = path.join(AGENT_DIR, 'config', 'runtime.yml');
+    const runtimePath = path.join(BRAIN_DIR, 'config', 'runtime.yml');
     let runtime = null;
     if (fs.existsSync(runtimePath)) {
       try {
@@ -536,7 +537,7 @@ router.delete('/api/research/:id', requireAuth, requireScope('memory:write'), (r
 router.get('/api/integrations/active', requireAuth, (req, res) => {
   try {
     const HOME = os.homedir();
-    const configDir = path.join(HOME, '.agent', 'config');
+    const configDir = path.join(BRAIN_DIR, 'config');
     const configFile = path.join(configDir, 'wizard-config.json');
 
     let configuredIdes = [];
@@ -682,7 +683,7 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
       vault:    VAULT_DIR,
       derived:  DERIVED_DIR,
       sessions: SESSIONS_DIR,
-      config:   path.join(AGENT_DIR, 'config'),
+      config:   path.join(BRAIN_DIR, 'config'),
       skills:   SKILLS_DIR,
     };
     const requested = req.query.include
@@ -695,8 +696,8 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
     res.setHeader('Content-Type', 'application/gzip');
     res.setHeader('Content-Disposition', `attachment; filename="total-recall-brain-${date}.tar.gz"`);
 
-    const relativeDirs = dirs.map(k => path.relative(AGENT_DIR, ALL_PARTS[k]));
-    const tar = spawn('tar', ['czf', '-', '-C', AGENT_DIR, '--exclude=security.yml', '--exclude=keys.jsonl', '--exclude=session-secret', ...relativeDirs], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const relativeDirs = dirs.map(k => path.relative(BRAIN_DIR, ALL_PARTS[k]));
+    const tar = spawn('tar', ['czf', '-', '-C', BRAIN_DIR, '--exclude=security.yml', '--exclude=keys.jsonl', '--exclude=session-secret', ...relativeDirs], { stdio: ['ignore', 'pipe', 'ignore'] });
     tar.stdout.pipe(res);
     tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
     tar.on('close', code => { if (code !== 0 && !res.writableEnded) res.end(); });
@@ -727,20 +728,79 @@ router.get('/api/graph', requireAuth, requireScope('ssss:read'), (req, res) => {
   } catch (err) { serverError(res, err); }
 });
 
-router.get('/api/conflicts', requireAuth, requireScope('ssss:read'), async (req, res) => {
+router.get("/api/conflicts", requireAuth, requireScope("ssss:read"), async (req, res) => {
   if (!isDashboardEnhanced()) {
-    return res.status(404).json({ error: 'dashboard-enhanced feature flag not enabled' });
+    return res.status(404).json({ error: "dashboard-enhanced feature flag not enabled" });
   }
   try {
-    const { detectSemanticConflicts } = await import('../core/conflict-detector.mjs');
-    const list = nodes();
+    const conflictsDir = path.join(BRAIN_DIR, "memory-inbox", "conflicts");
     const conflicts = [];
+
+    if (fs.existsSync(conflictsDir)) {
+      const files = fs.readdirSync(conflictsDir).filter(f => f.endsWith(".md"));
+      for (const file of files) {
+        try {
+          const raw = fs.readFileSync(path.join(conflictsDir, file), "utf8");
+          const parsed = matter(raw);
+          conflicts.push({
+            ...parsed.data,
+            body: parsed.content
+          });
+        } catch (e) {
+          // ignore malformed
+        }
+      }
+    }
+
+    // Also run a dynamic scan just in case
+    const { detectSemanticConflicts } = await import("../core/conflict-detector.mjs");
+    const list = nodes();
+    const dynamicConflicts = [];
     for (let i = 0; i < list.length; i++) {
       const found = detectSemanticConflicts(list[i], list.slice(0, i));
-      conflicts.push(...found);
+      dynamicConflicts.push(...found);
     }
-    res.json({ conflicts });
-  } catch (err) { serverError(res, err); }
+
+    // Merge them: if a conflict is already on disk, don't duplicate it.
+    const merged = [...conflicts];
+    for (const dc of dynamicConflicts) {
+      const exists = merged.some(c =>
+        (c.new_slug === dc.new_slug && c.existing_slug === dc.existing_slug) ||
+        (c.new_slug === dc.existing_slug && c.existing_slug === dc.new_slug)
+      );
+      if (!exists) {
+        merged.push(dc);
+      }
+    }
+
+    res.json({ conflicts: merged });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.post("/api/conflicts/resolve", requireAuth, requireScope("memory:write"), async (req, res) => {
+  try {
+    const { conflict_id, action, winner_slug } = req.body || {};
+    if (!conflict_id || !action || !winner_slug) {
+      return badRequest(res, "Required fields: conflict_id, action, winner_slug");
+    }
+    if (action !== "keep" && action !== "supersede") {
+      return badRequest(res, "action must be either 'keep' or 'supersede'");
+    }
+
+    const inboxDir = path.join(BRAIN_DIR, "memory-inbox");
+    const { resolveConflict } = await import("../core/conflict-detector.mjs");
+    const result = resolveConflict(conflict_id, inboxDir, action, winner_slug);
+    if (!result.resolved) {
+      return badRequest(res, result.error || "Failed to resolve conflict");
+    }
+
+    invalidate(); // clear cache
+    res.json({ success: true, conflict_id });
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 // ─── Files, Skills & Tasks ───────────────────────────────────────────────────
@@ -832,13 +892,104 @@ router.delete('/api/skills/:name', requireAuth, requireScope('files:write', 'sss
   } catch (err) { serverError(res, err); }
 });
 
+// ─── Scripts Editor & Execution ───────────────────────────────────────────────
+
+const SCRIPTS_DIR = path.join(SKILLS_DIR, "total-recall", "scripts");
+
+router.get("/api/scripts", requireAuth, requireScope("files:read"), (req, res) => {
+  try {
+    if (!fs.existsSync(SCRIPTS_DIR)) {
+      fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
+    }
+    const files = fs.readdirSync(SCRIPTS_DIR).filter(file => 
+      file.endsWith(".mjs") || file.endsWith(".js") || file.endsWith(".py") || file.endsWith(".sh")
+    ).map(file => {
+      const stats = fs.statSync(path.join(SCRIPTS_DIR, file));
+      return {
+        name: file,
+        size: stats.size,
+        modified: stats.mtime
+      };
+    });
+    res.json(files);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.get("/api/scripts/:name", requireAuth, requireScope("files:read"), (req, res) => {
+  try {
+    const { name } = req.params;
+    if (name.includes("..") || name.includes("/") || name.includes("\\")) {
+      return res.status(400).json({ error: "Invalid script name" });
+    }
+    const scriptPath = path.join(SCRIPTS_DIR, name);
+    if (!fs.existsSync(scriptPath)) {
+      return res.status(404).json({ error: `Script "${name}" not found` });
+    }
+    const content = fs.readFileSync(scriptPath, "utf8");
+    res.json({ name, content });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.put("/api/scripts/:name", requireAuth, requireScope("files:write"), (req, res) => {
+  try {
+    const { name } = req.params;
+    const { content } = req.body;
+    if (name.includes("..") || name.includes("/") || name.includes("\\")) {
+      return res.status(400).json({ error: "Invalid script name" });
+    }
+    if (typeof content !== "string") {
+      return res.status(400).json({ error: "Missing or invalid `content` field." });
+    }
+    if (!fs.existsSync(SCRIPTS_DIR)) {
+      fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
+    }
+    const scriptPath = path.join(SCRIPTS_DIR, name);
+    fs.writeFileSync(scriptPath, content, "utf8");
+    res.json({ success: true, message: `Script "${name}" saved successfully` });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.post("/api/scripts/:name/run", requireAuth, requireScope("sandbox:run"), (req, res) => {
+  try {
+    const { name } = req.params;
+    if (name.includes("..") || name.includes("/") || name.includes("\\")) {
+      return res.status(400).json({ error: "Invalid script name" });
+    }
+    const scriptPath = path.join(SCRIPTS_DIR, name);
+    if (!fs.existsSync(scriptPath)) {
+      return res.status(404).json({ error: `Script "${name}" not found` });
+    }
+
+    const isPython = name.endsWith(".py");
+    const isShell = name.endsWith(".sh");
+    const runner = isPython ? "python3" : isShell ? "bash" : "node";
+
+    const result = spawnSync(runner, [scriptPath], { encoding: "utf8", timeout: 10000 });
+    res.json({
+      success: result.status === 0,
+      output: result.stdout || result.stderr || "(no output)",
+      exitCode: result.status
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+
+
 router.get('/api/logs/:type', requireAuth, requireScope('health:read'), (req, res) => {
   try {
     const { type } = req.params;
     if (type !== 'server' && type !== 'daemon') {
       return res.status(400).json({ error: 'Invalid log type. Must be "server" or "daemon"' });
     }
-    const logPath = path.join(AGENT_DIR, 'logs', `${type}.log`);
+    const logPath = path.join(BRAIN_DIR, 'logs', `${type}.log`);
     if (!fs.existsSync(logPath)) {
       return res.json({ content: '(no logs yet)' });
     }
@@ -982,6 +1133,21 @@ router.post('/auth/login', loginHandler);
 router.post('/auth/logout', logoutHandler);
 router.post('/auth/change-password', requireAuth, changePasswordHandler);
 router.get('/auth/me', requireAuth, (req, res) => res.json({ authenticated: true }));
+
+router.get("/auth/status", (req, res) => {
+  const config = loadSecurityConfig();
+  const configured = !!config.dashboard?.password_hash;
+  res.json({ configured });
+});
+
+router.post("/auth/setup", async (req, res) => {
+  const config = loadSecurityConfig();
+  const alreadyConfigured = !!config.dashboard?.password_hash;
+  if (alreadyConfigured) {
+    return res.status(400).json({ error: "Dashboard password is already configured" });
+  }
+  return changePasswordHandler(req, res);
+});
 
 // ─── Voice / TTS (Kokoro / System) ───────────────────────────────────────────────
 

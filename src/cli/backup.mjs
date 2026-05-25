@@ -105,10 +105,8 @@ function printHelp() {
                                     integrations, automations, scripts)
 
   What does NOT get backed up (runtime/derived, can be regenerated):
-    .agent/memory-vault/          — Canonical SSSS nodes (compiled from skill folder)
-    .agent/memory-derived/        — Embeddings, indexes
-    .agent/sessions/              — Conversation logs
-    .agent/scheduler/             — Task queue
+    memory-derived/               — Embeddings, indexes (inside the brain, but regenerable)
+    sessions/                     — Conversation logs (inside the brain, ingested from IDEs)
 
   Scheduling:
     Add --backup-repo <remote> to "total-recall deploy" to install a

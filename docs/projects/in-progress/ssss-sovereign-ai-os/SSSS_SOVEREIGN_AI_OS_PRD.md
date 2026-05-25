@@ -69,6 +69,10 @@ To achieve ultimate performance, reliability, and precision, the core architectu
 - **Problem**: Deleting local visualizers leaves users blind to the state of their semantic graph.
 - **Solution**: Upgrade the SSSS web dashboard. Feed the React-based Constellation Graph with real-time vector relations from `embeddings.json` and `graph-index.jsonl`. Allow the user to browse, edit, and resolve conflicts in their memory nodes directly from a premium glassmorphic UI.
 
+### 3.4 Automatic Backup-on-Uninstall & Secure Purge (P1)
+- **Problem**: Running `uninstall` without backing up can lead to permanent data loss if memories were not previously committed. Alternatively, leaving raw, git-tracked memory files behind violates the core "completely clean uninstallation" expectations of users.
+- **Solution**: Enhance the uninstaller. The `uninstall` command must automatically detect if a backup remote (Obsidian or Git) is configured. If found, it must push all active memories to GitHub automatically before purging. Once successfully backed up, the uninstaller will execute a complete hard purge, removing all local `.agent/` folders entirely.
+
 ---
 
 ## 4. Key Performance Indicators (KPIs)
@@ -79,3 +83,4 @@ To achieve ultimate performance, reliability, and precision, the core architectu
 | **Hot Prompt Size** | < 1,200 tokens | Checked on compile by `surface.mjs` |
 | **Co-dispatch Success Rate** | > 98% | Completed runs with exit code `0` |
 | **Budget Safety Overhead** | 0% overages | Watchdog stops loop exactly at daily cap |
+| **Backup-on-Uninstall Success** | 100% | Memory pushed to remote before full VFS purge |

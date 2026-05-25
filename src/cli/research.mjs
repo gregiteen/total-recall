@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { agentDir as configAgentDir } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir } from '../core/config.mjs';
 import {
   listQueue,
   addToQueue,
@@ -111,9 +111,9 @@ function findProject(idOrTopic) {
 
 function getReportContent(nodeSlug) {
   if (!nodeSlug) return null;
-  const agentDir = configAgentDir;
-  const vaultFile = path.join(agentDir, 'memory-vault', 'facts', `${nodeSlug}.md`);
-  const inboxFile = path.join(agentDir, 'memory-inbox', 'pending', `${nodeSlug}.md`);
+  const brainDir = configBrainDir;
+  const vaultFile = path.join(brainDir, 'memory-vault', 'facts', `${nodeSlug}.md`);
+  const inboxFile = path.join(brainDir, 'memory-inbox', 'pending', `${nodeSlug}.md`);
 
   if (fs.existsSync(vaultFile)) {
     return { path: vaultFile, content: fs.readFileSync(vaultFile, 'utf8'), promoted: true };

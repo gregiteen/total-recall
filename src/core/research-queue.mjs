@@ -12,15 +12,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import os from 'node:os';
 import matter from 'gray-matter';
 import { loadNodes, writeNode, deleteNode } from './vault.mjs';
-import { agentDir } from './config.mjs';
+import { brainDir } from './config.mjs';
 
-const getAgentDir = () => process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
+const getBrainDir = () => process.env._TR_TEST_AGENT_DIR || brainDir;
 
 function getQueueFile() {
-  return path.join(getAgentDir(), 'research-queue.jsonl');
+  return path.join(getBrainDir(), 'research-queue.jsonl');
 }
 
 const STATUS_RANK = { pending: 0, in_progress: 1, done: 2, failed: 3 };
@@ -109,7 +108,7 @@ export function compileResearchProjectSummary(item, node) {
  */
 export function syncResearchProjectNode(item) {
   if (!item) return;
-  const vaultDir = path.join(getAgentDir(), 'memory-vault');
+  const vaultDir = path.join(getBrainDir(), 'memory-vault');
 
   // Build a beautiful markdown body for the summary node
   const lines = [];
@@ -213,7 +212,7 @@ export function loadQueue() {
 
   // Dynamic self-healing: ensure every research item has a summary enqueued
   let changed = false;
-  const vaultDir = path.join(getAgentDir(), 'memory-vault');
+  const vaultDir = path.join(getBrainDir(), 'memory-vault');
 
   for (const item of items) {
     if (!item.summary) {
@@ -223,7 +222,7 @@ export function loadQueue() {
           const nodes = loadNodes(vaultDir);
           node = nodes.find(n => n.slug === item.node_slug);
           if (!node) {
-            const inboxFile = path.join(getAgentDir(), 'memory-inbox', 'pending', `${item.node_slug}.md`);
+            const inboxFile = path.join(getBrainDir(), 'memory-inbox', 'pending', `${item.node_slug}.md`);
             if (fs.existsSync(inboxFile)) {
               const raw = fs.readFileSync(inboxFile, 'utf8');
               const { data, content } = matter(raw);
@@ -358,8 +357,8 @@ export function updateQueueItem(id, patch = {}) {
   }
 
   // Load the latest node (from vault or inbox pending) to compile summary
-  const agentDir = getAgentDir();
-  const vaultDir = path.join(agentDir, 'memory-vault');
+  const localBrainDir = getBrainDir();
+  const vaultDir = path.join(localBrainDir, 'memory-vault');
   let node = null;
   if (item.node_slug) {
     try {
@@ -367,7 +366,7 @@ export function updateQueueItem(id, patch = {}) {
       node = nodes.find(n => n.slug === item.node_slug);
       
       if (!node) {
-        const inboxFile = path.join(agentDir, 'memory-inbox', 'pending', `${item.node_slug}.md`);
+        const inboxFile = path.join(getBrainDir(), 'memory-inbox', 'pending', `${item.node_slug}.md`);
         if (fs.existsSync(inboxFile)) {
           const raw = fs.readFileSync(inboxFile, 'utf8');
           const { data, content } = matter(raw);
@@ -406,7 +405,7 @@ export function removeFromQueue(id) {
 
   // Delete the corresponding summary node from the vault
   try {
-    const vaultDir = path.join(getAgentDir(), 'memory-vault');
+    const vaultDir = path.join(getBrainDir(), 'memory-vault');
     deleteNode(`research-project-${id}`, vaultDir);
   } catch {}
 

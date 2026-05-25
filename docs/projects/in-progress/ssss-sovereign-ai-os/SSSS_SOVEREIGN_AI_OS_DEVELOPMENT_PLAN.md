@@ -62,20 +62,83 @@ Because the system headlessly executes subagents with `bypassPermissions` or `--
 
 ---
 
-## Phase 4: UI Memory Browser & Constellation Graph (P2 Priority)
+## Phase 4: UI Memory Browser & Constellation Graph (Completed)
 
-Following the deletion of the old visualizers, the frontend must be upgraded to support the new SSSS v2 node standard and provide clear insight into the agent's semantic memory graph.
+Following the deletion of the old visualizers, the frontend was upgraded to support the SSSS v2 node standard and provide clear insight into the agent's semantic memory graph.
 
-### Planned Tasks
-- [ ] **Constellation Visualizer Migration**: Rebuild the 3D interactive constellation graph using Three.js / React-Force-Graph to visualize semantic connections between SSSS v2 memory nodes.
-- [ ] **Glassmorphic Vault Browser**: Create a modern, dark-mode, glassmorphic UI under `frontend/` allowing users to search, filter, and read memory nodes directly.
-- [ ] **Conflict Resolution Interface**: Build an SSE-driven visual panel that highlights quarantined conflict records (`.agent/memory-inbox/conflicts/`) and allows users to manually trigger promotions/supersedes.
-- [ ] **Live Monitor Integration**: Connect the memory browser to the Live Agent Monitor server (running on port 9111) to show live semantic ingestion updates.
+### Completed Tasks
+- [x] **Constellation Visualizer Migration**: Rebuilt the 3D interactive constellation graph using Three.js / React-Force-Graph logic to visualize semantic connections between SSSS v2 memory nodes.
+- [x] **Glassmorphic Vault Browser**: Created a modern, dark-mode, glassmorphic UI under `frontend/` allowing users to search, filter, and read memory nodes directly.
+- [x] **Conflict Resolution Interface**: Built an SSE-driven visual panel that highlights quarantined conflict records (`.agent/memory-inbox/conflicts/`) and allows users to manually trigger promotions/supersedes.
+- [x] **Live Monitor Integration**: Connected the memory browser to the Live Agent Monitor server (running on port 9111) to show live semantic ingestion updates.
 
 ---
 
-## Phase 5: Verification & Integration Testing
+## Phase 5: Verification & Integration Testing (Active)
 
 - [ ] **Core Test Suite Re-alignment**: Re-align the Total Recall Test Suite (`.agent/skills/test/SKILL.md`) to verify that `semantic-index.mjs` and `surface.mjs` work perfectly with the new `text-embedding-004` model.
 - [ ] **Dry-Run Validation**: Implement automated integration tests simulating parallel subagent dispatch and verifying that progressive disclosure shims correctly route memory capsules.
 - [ ] **Performance Benchmarks**: Log semantic search latency, ensuring local cache hits stay under 50ms.
+
+---
+
+## Phase 6: Automatic Backup-on-Uninstall & Full Wiping (Active)
+
+Provide a fully automated uninstaller subsystem that pushes code/memory to GitHub before executing a clean environment teardown.
+
+### Target Architecture
+```
+[npx total-recall uninstall]
+       │
+       ▼
+[Detect Backup Remotes]
+ (Git "backup" remote or config)
+       │
+  ┌────┴──────────────────────────┐
+  ▼ (if remote exists)            ▼ (if no remote)
+[Auto-Commit & Push]      [Prompt User / Warn]
+       │                          │
+  ┌────┴──────────────────────────┘
+  ▼
+[Execute Complete Teardown]
+ - Unload LaunchAgents / plists
+ - Kill background daemons
+ - Purge ~/.agent (Global VFS)
+ - Purge local .agent completely (including memory-vault and skills)
+```
+
+### Tasks
+- [x] **Backup Remote Auto-Discovery**: Update `uninstall.mjs` to check for configured git backup remotes (`backup` or `origin`) in `.agent/skills/total-recall/`.
+- [x] **Automatic Commit and Push Sequence**: Wire the `pushGitBackup` routine into the uninstaller pre-teardown step.
+- [x] **Secure Hard Purging**: Wipes the entire local `.agent` folder (including `skills/` and `memory-vault/`) once a successful backup to the cloud has been established, or if the user forces it.
+- [x] **Test Coverage**: Write unit and integration tests in `uninstall.spec.mjs` targeting these safety gates, backup sequences, and hard purging behaviors.
+
+---
+
+## Phase 7: Radically Useful UI & Cloudflare Quick Tunnel (Active)
+
+Upgrade the SSSS initialization sequence and frontend dashboard to offer a highly secure, interactive workspace.
+
+### Target Architecture
+```
+[npx total-recall init]
+       │ (Auto-detect cloudflared)
+       ▼
+[Spawn cloudflared Background Quick Tunnel]
+       │
+       ▼ (Poll cloudflared.log)
+[Capture dynamic trycloudflare.com URL]
+       │
+       ▼
+[Register URL inside wizard-config.json]
+       │
+       ▼
+[Auto-open walkthrough URL in system browser]
+```
+
+### Tasks
+- [x] **Dynamic Quick Tunnel Spawner**: Update `src/cli/init.mjs` to auto-detect `cloudflared`, spawn a background tunnel redirecting stdout to `logs/cloudflared.log`, capture the generated domain, and write it to `~/.agent/config/wizard-config.json`.
+- [x] **Modality Border & Confidence Aesthetics**: Restructure Memory list cards and detail cards to dynamically present border states reflecting modalities (`must` -> emerald, `must_not` -> ruby, `should` -> violet) and sleek HSL progress bars for confidence.
+- [x] **Split-Screen HTML Markdown Editor**: Refactor `MemoryPage.tsx` detail panel to enable full frontmatter property editing alongside a side-by-side split screen raw textarea editor and live HTML rendering container.
+- [x] **Interactive Scripts Console & Runner**: Engineer a `"Scripts"` tab in `FilesPage.tsx` featuring inline script files editing, saving, and an execution terminal emulator displaying dynamic process streams.
+

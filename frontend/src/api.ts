@@ -70,6 +70,31 @@ export async function changePassword(newPassword: string): Promise<{ ok: boolean
   }
 }
 
+export async function getAuthStatus(): Promise<{ configured: boolean }> {
+  try {
+    const res = await fetch(API_BASE + "/auth/status")
+    if (res.ok) return await res.json()
+    return { configured: true }
+  } catch {
+    return { configured: true }
+  }
+}
+
+export async function setupPassword(newPassword: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(API_BASE + "/auth/setup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) return { ok: true }
+    return { ok: false, error: data.error || "Failed to setup password" }
+  } catch {
+    return { ok: false, error: "Network error — is the server running?" }
+  }
+}
+
 export async function logout(): Promise<void> {
   await fetch(API_BASE + '/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
 }
@@ -368,3 +393,100 @@ export async function triggerRecompile(): Promise<{ success: boolean; message: s
   if (!res.ok) throw new Error(`Recompile API error: ${res.status}`)
   return res.json()
 }
+
+export async function fetchGraph(): Promise<{ nodes: any[]; routes: any[] }> {
+  const res = await apiFetch(`${API_BASE}/api/graph`)
+  if (!res.ok) throw new Error(`Graph API error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchConflicts(): Promise<{ conflicts: any[] }> {
+  const res = await apiFetch(`${API_BASE}/api/conflicts`)
+  if (!res.ok) throw new Error(`Conflicts API error: ${res.status}`)
+  return res.json()
+}
+
+export async function resolveConflict(
+  conflictId: string,
+  action: "keep" | "supersede",
+  winnerSlug: string
+): Promise<{ success: boolean; conflict_id: string }> {
+  const res = await apiFetch(`${API_BASE}/api/conflicts/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conflict_id: conflictId, action, winner_slug: winnerSlug }),
+  })
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || `Conflict resolution API error: ${res.status}`)
+  }
+  return res.json()
+}
+
+// ─── Memory Editor APIs ────────────────────────────────────────────────────────
+
+export async function saveMemory(slug: string, node: Partial<MemoryNode>): Promise<MemoryNode> {
+  const res = await apiFetch(`${API_BASE}/api/memory/${slug}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(node),
+  })
+  if (!res.ok) throw new Error(`Failed to save memory: ${res.status}`)
+  return res.json()
+}
+
+export async function createMemory(node: Partial<MemoryNode> & { slug: string }): Promise<MemoryNode> {
+  const res = await apiFetch(`${API_BASE}/api/memory`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(node),
+  })
+  if (!res.ok) throw new Error(`Failed to create memory: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteMemory(slug: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/memory/${slug}`, {
+    method: "DELETE",
+  })
+  if (!res.ok) throw new Error(`Failed to delete memory: ${res.status}`)
+}
+
+// ─── Scripts APIs ──────────────────────────────────────────────────────────────
+
+export interface ScriptFile {
+  name: string
+  size: number
+  modified: string
+}
+
+export async function listScripts(): Promise<ScriptFile[]> {
+  const res = await apiFetch(`${API_BASE}/api/scripts`)
+  if (!res.ok) throw new Error(`Failed to list scripts: ${res.status}`)
+  return res.json()
+}
+
+export async function readScript(name: string): Promise<{ name: string; content: string }> {
+  const res = await apiFetch(`${API_BASE}/api/scripts/${name}`)
+  if (!res.ok) throw new Error(`Failed to read script: ${res.status}`)
+  return res.json()
+}
+
+export async function saveScript(name: string, content: string): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE}/api/scripts/${name}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) throw new Error(`Failed to save script: ${res.status}`)
+  return res.json()
+}
+
+export async function runScript(name: string): Promise<{ success: boolean; output: string; exitCode: number }> {
+  const res = await apiFetch(`${API_BASE}/api/scripts/${name}/run`, {
+    method: "POST"
+  })
+  if (!res.ok) throw new Error(`Failed to run script: ${res.status}`)
+  return res.json()
+}
+

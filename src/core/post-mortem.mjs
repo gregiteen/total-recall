@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';
 import { atomicWrite, loadNodes, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
 /**
  * Total Recall Session Post-Mortem Engine
@@ -178,7 +179,7 @@ export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeCo
   }
 
   // Write skill gaps as tasks
-  const queueDir = path.join(path.dirname(vaultDir), 'scheduler', 'queue');
+  const queueDir = path.join(brainDir, 'scheduler', 'queue');
   if (!fs.existsSync(queueDir)) {
     fs.mkdirSync(queueDir, { recursive: true });
   }

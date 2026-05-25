@@ -12,6 +12,8 @@ node_modules/
 *.pem
 
 # Total Recall runtime — never commit
+# The meta-skill (.agent/skills/total-recall/) IS the user's brain.
+# All user data directories live inside it.
 .agent/skills/
 .agent/memory-vault/
 .agent/memory-derived/

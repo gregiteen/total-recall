@@ -52,6 +52,7 @@ const { apiRouter } = await import('./api.mjs');
 const { restRouter } = await import('./rest.mjs');
 
 const AGENT_DIR = TEST_AGENT_DIR;
+const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 const SSSS_FILE = path.join(AGENT_DIR, 'skills', 'ssss', 'SKILL.md');
 
@@ -145,8 +146,8 @@ describe('API Proxy', () => {
     });
 
     it('normalizes known Total Recall model aliases before calling the local runtime', async () => {
-      fs.mkdirSync(path.join(AGENT_DIR, 'config'), { recursive: true });
-      fs.writeFileSync(path.join(AGENT_DIR, 'config', 'runtime.yml'), 'runtime: ollama\n');
+      fs.mkdirSync(path.join(BRAIN_DIR, 'config'), { recursive: true });
+      fs.writeFileSync(path.join(BRAIN_DIR, 'config', 'runtime.yml'), 'runtime: ollama\n');
       callLocalRuntimeRawSpy.mockResolvedValue({
         role: 'assistant',
         content: 'local runtime response',
@@ -249,7 +250,7 @@ describe('API Proxy', () => {
   });
 
   describe('Chat threads & session IDs', () => {
-    const sessionsDir = path.join(TEST_AGENT_DIR, 'sessions');
+    const sessionsDir = path.join(TEST_AGENT_DIR, 'skills', 'total-recall', 'sessions');
 
     beforeEach(() => {
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -350,7 +351,7 @@ describe('API Proxy', () => {
   });
 
   describe('Grounding context and suggested discussions (Topical Chats)', () => {
-    const vaultDir = path.join(TEST_AGENT_DIR, 'memory-vault');
+    const vaultDir = path.join(TEST_AGENT_DIR, 'skills', 'total-recall', 'memory-vault');
 
     beforeEach(() => {
       fs.mkdirSync(vaultDir, { recursive: true });
@@ -463,8 +464,8 @@ describe('API Proxy', () => {
   describe('fallback tool calling parsing', () => {
     it('successfully triggers tool calls when fallback tool call is in message content', async () => {
       // Setup local config and mock health so we enter the local path
-      fs.mkdirSync(path.join(AGENT_DIR, 'config'), { recursive: true });
-      fs.writeFileSync(path.join(AGENT_DIR, 'config', 'runtime.yml'), 'runtime: ollama\n');
+      fs.mkdirSync(path.join(BRAIN_DIR, 'config'), { recursive: true });
+      fs.writeFileSync(path.join(BRAIN_DIR, 'config', 'runtime.yml'), 'runtime: ollama\n');
       
       let callCount = 0;
       callLocalRuntimeRawSpy.mockImplementation(async () => {

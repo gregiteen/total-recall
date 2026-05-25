@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execSync, execFileSync } from 'node:child_process';
-import { searxngBaseUrl, display } from '../core/config.mjs';
+import { searxngBaseUrl, display, brainDir } from '../core/config.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { logger } from '../core/logger.mjs';
 
@@ -202,7 +202,7 @@ export async function executeCode(code) {
 
 export async function updateDesign(markdown) {
   try {
-    const configDir = path.join(os.homedir(), '.agent', 'config');
+    const configDir = path.join(brainDir, 'config');
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(path.join(configDir, 'DESIGN.md'), markdown);
     return 'Successfully updated DESIGN.md.';

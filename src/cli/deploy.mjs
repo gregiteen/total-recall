@@ -48,6 +48,7 @@ import { BCRYPT_COST } from '../server/auth.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 const AGENT_DIR = path.join(os.homedir(), '.agent');
+const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -267,7 +268,7 @@ function scaffoldVfs(opts) {
     }
   } else if (fs.existsSync(inRepoVault)) {
     logStep('6.5/12', 'Brain vault found in project repo — copying to ~/.agent/');
-    if (!dryRun) copyDirMerge(inRepoVault, path.join(AGENT_DIR, 'memory-vault'), false);
+    if (!dryRun) copyDirMerge(inRepoVault, path.join(BRAIN_DIR, 'memory-vault'), false);
     logOk('In-repo brain vault merged into ~/.agent/');
   } else {
     logWarn('No brain repo specified and no in-repo vault found — starting with empty brain.');
@@ -301,7 +302,7 @@ function copyDefaultConfig(dryRun) {
   logStep('7/12', 'Copying default configuration');
 
   const configSrc = path.join(ROOT, 'templates', 'default-config');
-  const configDest = path.join(AGENT_DIR, 'config');
+  const configDest = path.join(BRAIN_DIR, 'config');
 
   if (!fs.existsSync(configSrc)) {
     logWarn(`Default config template directory not found: ${configSrc}`);
@@ -331,7 +332,7 @@ function isIpAddress(value) {
 
 function hardenSecurityConfig(dryRun, dashboardPassword = null) {
   logStep('7.5/12', 'Hardening security defaults');
-  const securityPath = path.join(AGENT_DIR, 'config', 'security.yml');
+  const securityPath = path.join(BRAIN_DIR, 'config', 'security.yml');
   if (dryRun) {
     log(`  Would enforce HTTPS, localhost bind, hashed PATs, and private health checks in ${securityPath}`);
     return;
@@ -724,14 +725,14 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
         logOk('Cloudflare tunnel running securely via token');
       } else if (opts.cloudflareQuick) {
         log('  Starting Zero-Config Quick Tunnel (trycloudflare.com)...');
-        run(`mkdir -p ${AGENT_DIR}/logs`);
-        run(`nohup cloudflared tunnel --url http://localhost:3000 > ${AGENT_DIR}/logs/cloudflared.log 2>&1 &`);
+        run(`mkdir -p ${BRAIN_DIR}/logs`);
+        run(`nohup cloudflared tunnel --url http://localhost:3000 > ${BRAIN_DIR}/logs/cloudflared.log 2>&1 &`);
         run('sleep 4');
         try {
-          const url = run(`grep -o "https://.*\\.trycloudflare\\.com" ${AGENT_DIR}/logs/cloudflared.log | head -1`);
+          const url = run(`grep -o "https://.*\\.trycloudflare\\.com" ${BRAIN_DIR}/logs/cloudflared.log | head -1`);
           logOk(`Quick Tunnel Active: ${url}`);
         } catch (e) {
-          logWarn(`Could not extract Quick Tunnel URL. Check ${AGENT_DIR}/logs/cloudflared.log`);
+          logWarn(`Could not extract Quick Tunnel URL. Check ${BRAIN_DIR}/logs/cloudflared.log`);
         }
       }
     }
@@ -785,13 +786,13 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       }
     } else {
       // macOS / other — write to ~/.agent/config/Caddyfile
-      const caddyDest = path.join(AGENT_DIR, 'config', 'Caddyfile');
+      const caddyDest = path.join(BRAIN_DIR, 'config', 'Caddyfile');
       if (opts.dryRun) {
         log(`  Would write Caddyfile to ${caddyDest} (domain: ${opts.domain})`);
       } else {
         fs.writeFileSync(caddyDest, caddyContent);
         logOk(`Caddyfile written to ${caddyDest} (domain: ${opts.domain})`);
-        log('  Run Caddy manually: caddy run --config ~/.agent/config/Caddyfile');
+        log('  Run Caddy manually: caddy run --config ~/.agent/skills/total-recall/config/Caddyfile');
       }
     }
   }
@@ -945,9 +946,9 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
     <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
   </dict>
   <key>StandardOutPath</key>
-  <string>${os.homedir()}/.agent/logs/obsidian-backup.log</string>
+  <string>${os.homedir()}/.agent/skills/total-recall/logs/obsidian-backup.log</string>
   <key>StandardErrorPath</key>
-  <string>${os.homedir()}/.agent/logs/obsidian-backup.log</string>
+  <string>${os.homedir()}/.agent/skills/total-recall/logs/obsidian-backup.log</string>
   <key>RunAtLoad</key>
   <false/>
 </dict>
@@ -1032,9 +1033,9 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
     } else {
       logStep('11/12 (fallback)', 'Starting server and daemon in background via nohup (no systemd)');
       try {
-        fs.mkdirSync(path.join(AGENT_DIR, 'logs'), { recursive: true });
-        const serverLog = path.join(AGENT_DIR, 'logs', 'server.log');
-        const daemonLog = path.join(AGENT_DIR, 'logs', 'daemon.log');
+        fs.mkdirSync(path.join(BRAIN_DIR, 'logs'), { recursive: true });
+        const serverLog = path.join(BRAIN_DIR, 'logs', 'server.log');
+        const daemonLog = path.join(BRAIN_DIR, 'logs', 'daemon.log');
         const serverScript = path.join(ROOT, 'bin', 'total-recall.mjs');
         const daemonScript = path.join(ROOT, 'src', 'core', 'daemon-loop.mjs');
 
@@ -1078,9 +1079,9 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
         // Compile vault surface directly (compile.mjs no longer exists — SSSS migration)
         const { compileSurface } = await import('../core/surface.mjs');
         await compileSurface({
-          vaultDir: path.join(AGENT_DIR, 'memory-vault'),
+          vaultDir: path.join(BRAIN_DIR, 'memory-vault'),
           skillsDir: path.join(AGENT_DIR, 'skills'),
-          derivedDir: path.join(AGENT_DIR, 'memory-derived'),
+          derivedDir: path.join(BRAIN_DIR, 'memory-derived'),
           instructionsFile: path.join(AGENT_DIR, 'INSTRUCTIONS.md'),
         });
         logOk('Initial compile complete');

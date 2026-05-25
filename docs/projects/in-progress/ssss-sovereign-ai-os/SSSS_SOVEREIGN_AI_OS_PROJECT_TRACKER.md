@@ -1,8 +1,8 @@
 # SSSS Sovereign AI OS — Project Tracker
 
 > **Status**: In-Progress  
-> **Last Updated**: May 24, 2026  
-> **Active Milestone**: Milestone 2 (Budget Safety & Sandboxing)  
+> **Last Updated**: May 25, 2026  
+> **Active Milestone**: Milestone 7 (Radically Useful UI & Cloudflare Quick Tunnel)  
 
 ---
 
@@ -19,8 +19,10 @@ gantt
     Usage Watchdog & Token Tracker            :done,    des3, 2026-05-25, 2026-05-28
     Sandbox Hardening & Isolation             :done,    des4, 2026-05-27, 2026-05-31
     section Phase 3: Interface
-    UI Memory Browser & Graph Updates          :active,  des5, 2026-06-01, 2026-06-07
-    Conflict manual override panel            :         des6, 2026-06-06, 2026-06-10
+    UI Memory Browser & Graph Updates          :done,    des5, 2026-06-01, 2026-06-07
+    Conflict manual override panel            :done,    des6, 2026-06-06, 2026-06-10
+    section Phase 4: Backup & Wiping
+    Automatic Backup on Uninstall             :active,  des7, 2026-06-11, 2026-06-15
 ```
 
 ---
@@ -56,17 +58,37 @@ gantt
 - [x] Write system egress firewall rules to restrict network communication to whitelisted domains (Outbound network denials)
 - [x] Build command execution whitelist, blocking high-risk shell inputs (e.g. recursive deletes, arbitrary curl downloads)
 
-### Phase 4: UI Memory Browser & Graph Updates (P2 Priority)
-- [ ] Rebuild React constellation graph to visualize SSSS v2 node relations
-- [ ] Implement dark-mode, glassmorphic SSSS vault memory browser in `frontend/`
-- [ ] Develop SSE-driven conflict warning panel for quarantined records in `.agent/memory-inbox/conflicts/`
-- [ ] Support manual conflict resolution triggers (promotions/supersedes) from UI panel
-- [ ] Integrate vault browser with Live Agent Monitor (running on port 9111)
+### Phase 4: UI Memory Browser & Graph Updates (P2 Priority — 100% COMPLETE)
+- [x] Rebuild React constellation graph to visualize SSSS v2 node relations
+- [x] Implement dark-mode, glassmorphic SSSS vault memory browser in `frontend/`
+- [x] Develop SSE-driven conflict warning panel for quarantined records in `.agent/memory-inbox/conflicts/`
+- [x] Support manual conflict resolution triggers (promotions/supersedes) from UI panel
+- [x] Integrate vault browser with Live Agent Monitor (running on port 9111)
+
+### Phase 5: Verification & Integration Testing (Active)
+- [ ] Align Total Recall Test Suite (`.agent/skills/test/SKILL.md`) to verify `semantic-index.mjs` and `surface.mjs` with text-embedding-004.
+- [ ] Run automated integration tests simulating parallel subagent dispatches and pointer routing.
+- [ ] Ensure local cache hit latencies stay strictly under 50ms.
+
+### Phase 6: Automatic Backup-on-Uninstall & Full Wiping (100% COMPLETE)
+- [x] Implement active backup remote auto-discovery in `uninstall.mjs`.
+- [x] Integrate automatic commit and push sequence to the detected git remote.
+- [x] Enable secure hard purging of the entire local `.agent` directory (including version-controlled skills & vault folders) post-backup.
+- [x] Author comprehensive test cases in `uninstall.spec.mjs` verifying safety gates and full wiping behavior.
+
+### Phase 7: Radically Useful UI & Cloudflare Quick Tunnel (Active)
+- [x] Implement background `cloudflared` Quick Tunnel spawner inside `src/cli/init.mjs`
+- [x] Extract dynamically allocated `trycloudflare.com` domain and persist inside `wizard-config.json`
+- [x] Modernize memory list cards with border visualizer, confidence progress tracks, and priority stars
+- [x] Re-engineer details layout in `MemoryPage.tsx` using frontmatter visual overlays
+- [x] Create split-screen Markdown text-editor and live HTML render preview in `MemoryPage.tsx`
+- [x] Implement multi-functional `"Scripts"` tab in `FilesPage.tsx` with editable script textarea, save actions, sandboxed execution runner, and live dynamic process streams terminal log
 
 ---
 
 ## 🚀 Next Strategic Action Items
 
-1. **Usage Watchdog Implementation**: Define the structure for `src/core/usage-tracker.mjs` and wire it up to `dispatch.mjs`.
-2. **Security Sandboxing Specs**: Architect POSIX isolation barriers for subagents running headlessly with full write permissions.
-3. **Frontend Re-engagement**: Design modern UI wireframes for the SSSS glassmorphic vault browser.
+1. **Implement Cloudflare spawner inside init.mjs**: Dynamically capture quick tunnel domain.
+2. **Build SSSS Memory Editor split-screen layout**: Inject frontmatter borders, stars, sliders, and HTML live rendering preview.
+3. **Build Interactive Scripts tab & terminal**: Enable execution and save endpoints in files page.
+
