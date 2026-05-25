@@ -91,7 +91,7 @@ export class TaskQueue {
 /**
  * Load pending tasks from the scheduler queue directory.
  *
- * @param {string} queueDir  Path to .agent/scheduler/queue/
+ * @param {string} queueDir  Path to .agent/skills/total-recall/scheduler/queue/
  * @returns {object[]} Array of task objects
  */
 export function loadPendingTasks(queueDir) {
@@ -427,9 +427,9 @@ function makeFallbackTask(category, reason) {
  * Create a populated scheduler from disk.
  *
  * @param {object} opts
- * @param {string} opts.queueDir     Path to .agent/scheduler/queue/
- * @param {string} opts.vaultDir     Path to .agent/memory-vault/
- * @param {string} opts.sessionsDir  Path to .agent/sessions/
+ * @param {string} opts.queueDir     Path to .agent/skills/total-recall/scheduler/queue/
+ * @param {string} opts.vaultDir     Path to .agent/skills/total-recall/memory-vault/
+ * @param {string} opts.sessionsDir  Path to .agent/skills/total-recall/sessions/
  * @returns {{ queue: TaskQueue, stats: object }}
  */
 export function createScheduler({ queueDir, vaultDir, sessionsDir }) {

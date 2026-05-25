@@ -24,6 +24,11 @@ import { BCRYPT_COST } from '../server/auth.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Brain data dir — all user config/data lives inside the meta-skill. */
+function _brainDir() {
+  return path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+}
+
 let _server  = null;
 let _clients = [];    // active SSE response objects
 let _log     = [];    // buffered events (replayed to late-joining browsers)
@@ -50,7 +55,7 @@ const HTML = readFileSync(path.join(__dirname, 'wizard.html'), 'utf8');
 
 export function syncInstallOptionsFromDisk() {
   try {
-    const configFile = path.join(os.homedir(), '.agent', 'config', 'wizard-config.json');
+    const configFile = path.join(_brainDir(), 'config', 'wizard-config.json');
     if (fs.existsSync(configFile)) {
       const data = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}');
       _installOptions = _installOptions || {};
@@ -131,7 +136,7 @@ export function startDeployUI(port = 3001) {
 
             // Auto-persist options to wizard-config.json on server disk
             try {
-              const configDir = path.join(os.homedir(), '.agent', 'config');
+              const configDir = path.join(_brainDir(), 'config');
               const configFile = path.join(configDir, 'wizard-config.json');
               fs.mkdirSync(configDir, { recursive: true });
               let current = {};
@@ -239,7 +244,7 @@ export function startDeployUI(port = 3001) {
 
             // Auto-persist vastaiKey to wizard-config.json on server disk
             try {
-              const configDir = path.join(os.homedir(), '.agent', 'config');
+              const configDir = path.join(_brainDir(), 'config');
               const configFile = path.join(configDir, 'wizard-config.json');
               fs.mkdirSync(configDir, { recursive: true });
               let current = {};
@@ -452,7 +457,7 @@ export function startDeployUI(port = 3001) {
         req.on('end', () => {
           try {
             const { braveKey, tavilyKey, exaKey, serperKey, dailyLimit, mergeExisting } = JSON.parse(body);
-            const configDir = path.join(os.homedir(), '.agent', 'config');
+            const configDir = path.join(_brainDir(), 'config');
             const configFile = path.join(configDir, 'research.yml');
             fs.mkdirSync(configDir, { recursive: true });
 
@@ -520,7 +525,7 @@ export function startDeployUI(port = 3001) {
       // Returns booleans only — never exposes actual key values
       if (url === '/api/get-search-config' && req.method === 'GET') {
         try {
-          const configFile = path.join(os.homedir(), '.agent', 'config', 'research.yml');
+          const configFile = path.join(_brainDir(), 'config', 'research.yml');
           let hasTavily = false, hasBrave = false, hasExa = false, hasSerper = false, dailyLimitVal = 50;
           if (fs.existsSync(configFile)) {
             const raw = fs.readFileSync(configFile, 'utf8');
@@ -571,11 +576,11 @@ export function startDeployUI(port = 3001) {
               res.end(JSON.stringify({ error: 'Missing files parameter or files is empty' }));
               return;
             }
-            const { resolveAgentDir } = await import('./agent-dir.mjs');
+            const { resolveAgentDir, resolveBrainDir } = await import('./agent-dir.mjs');
             const { detectRuleFiles, importRuleFiles } = await import('../core/import-rules.mjs');
             
-            const agentDir = resolveAgentDir();
-            const vaultDir = path.join(agentDir, 'memory-vault');
+            const brDir = resolveBrainDir();
+            const vaultDir = path.join(brDir, 'memory-vault');
             
             // Gather parent directories to run detectRuleFiles and retrieve rich metadata
             const parentDirs = Array.from(new Set(files.map(f => path.dirname(f))));
@@ -596,8 +601,8 @@ export function startDeployUI(port = 3001) {
       // ── GET /api/get-search-usage — today's search count vs limit ──
       if (url === '/api/get-search-usage' && req.method === 'GET') {
         try {
-          const usageFile  = path.join(os.homedir(), '.agent', 'config', 'search-usage.json');
-          const configFile = path.join(os.homedir(), '.agent', 'config', 'research.yml');
+          const usageFile  = path.join(_brainDir(), 'config', 'search-usage.json');
+          const configFile = path.join(_brainDir(), 'config', 'research.yml');
           const today = new Date().toISOString().slice(0, 10);
           let todayCount = 0, dailyLimitVal = 50;
           if (fs.existsSync(usageFile)) {
@@ -629,7 +634,7 @@ export function startDeployUI(port = 3001) {
         req.on('end', () => {
           try {
             const data = JSON.parse(body || '{}');
-            const configDir = path.join(os.homedir(), '.agent', 'config');
+            const configDir = path.join(_brainDir(), 'config');
             const configFile = path.join(configDir, 'wizard-config.json');
             fs.mkdirSync(configDir, { recursive: true });
 
@@ -659,7 +664,7 @@ export function startDeployUI(port = 3001) {
       if (url === '/api/get-wizard-config' && req.method === 'GET') {
         try {
           syncInstallOptionsFromDisk();
-          const configFile = path.join(os.homedir(), '.agent', 'config', 'wizard-config.json');
+          const configFile = path.join(_brainDir(), 'config', 'wizard-config.json');
           let saved = {};
           if (fs.existsSync(configFile)) {
             saved = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}');
@@ -676,7 +681,7 @@ export function startDeployUI(port = 3001) {
       // ── POST /api/reset-wizard-config — reset setup wizard state ──
       if (url === '/api/reset-wizard-config' && req.method === 'POST') {
         try {
-          const configFile = path.join(os.homedir(), '.agent', 'config', 'wizard-config.json');
+          const configFile = path.join(_brainDir(), 'config', 'wizard-config.json');
           if (fs.existsSync(configFile)) {
             fs.unlinkSync(configFile);
           }
@@ -778,7 +783,7 @@ export function startDeployUI(port = 3001) {
                 // Write brain config so relay knows where to ship
                 const { resolveAgentDir } = await import('./agent-dir.mjs');
                 const agentDir = resolveAgentDir();
-                const configDir = path.join(agentDir, 'config');
+                const configDir = path.join(agentDir, 'skills', 'total-recall', 'config');
                 fs.mkdirSync(configDir, { recursive: true });
                 const config = { url: brainUrl };
                 if (token) config.token = token;
@@ -807,9 +812,9 @@ export function startDeployUI(port = 3001) {
 
           // Persist the connected IDE choices to wizard-config.json
           try {
-            const { resolveAgentDir } = await import('./agent-dir.mjs');
-            const agentDir = resolveAgentDir();
-            const configFilePath = path.join(agentDir, 'config', 'wizard-config.json');
+            const { resolveBrainDir } = await import('./agent-dir.mjs');
+            const brDir = resolveBrainDir();
+            const configFilePath = path.join(brDir, 'config', 'wizard-config.json');
             let current = {};
             if (fs.existsSync(configFilePath)) {
               current = JSON.parse(fs.readFileSync(configFilePath, 'utf8') || '{}');
@@ -938,7 +943,7 @@ export function startDeployUI(port = 3001) {
               }
               const gitignore = path.join(agentDir, '.gitignore');
               if (!fs.existsSync(gitignore)) {
-                fs.writeFileSync(gitignore, 'memory-derived/embeddings.jsonl\n');
+                fs.writeFileSync(gitignore, 'skills/total-recall/memory-derived/embeddings.jsonl\n');
                 log('📝 Created default .gitignore');
               }
             }
@@ -1023,7 +1028,7 @@ export function startDeployUI(port = 3001) {
 
             // ── Step 6: Store Secrets ──
             log('🔒 Saving token securely in local files...');
-            const configDir = path.join(os.homedir(), '.agent', 'config');
+            const configDir = path.join(_brainDir(), 'config');
 
             // Persist to secrets.enc
             const secretsPath = path.join(configDir, 'secrets.enc');
@@ -1452,7 +1457,7 @@ const path = require('path');
 const os = require('os');
 
 // Wait for config dir and security.yml to exist if needed
-const securityFile = path.join(os.homedir(), '.agent', 'config', 'security.yml');
+const securityFile = path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'security.yml');
 for (let i = 0; i < 15; i++) {
   if (fs.existsSync(securityFile)) break;
   require('child_process').spawnSync('sleep', ['1']);
@@ -1549,7 +1554,7 @@ console.log("REMOTE_PASS_OK");
 
     // Persist to disk so it stays across restarts!
     try {
-      const configDir = path.join(os.homedir(), '.agent', 'config');
+      const configDir = path.join(_brainDir(), 'config');
       const configFile = path.join(configDir, 'wizard-config.json');
       fs.mkdirSync(configDir, { recursive: true });
       let current = {};

@@ -5,7 +5,8 @@ import os from 'node:os';
 import { loadVoiceConfig, synthesize, TtsNotConfiguredError, isTtsEnabled } from './tts.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
-const VOICE_FILE = path.join(AGENT_DIR, 'config', 'voice.yml');
+const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
+const VOICE_FILE = path.join(BRAIN_DIR, 'config', 'voice.yml');
 
 describe('TTS (Kokoro façade)', () => {
   let savedVoiceYml = null;

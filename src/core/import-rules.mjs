@@ -15,10 +15,10 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { writeNode, loadNodes } from './vault.mjs';
-import { agentDir } from './config.mjs';
+import { agentDir, brainDir } from './config.mjs';
 
 const AGENT_DIR = agentDir;
-const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
+const VAULT_DIR = path.join(brainDir, 'memory-vault');
 
 // ── Candidate rule files we look for ─────────────────────────────────────────
 // Checked relative to the given directory (usually cwd or home).

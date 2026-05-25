@@ -18,7 +18,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 
-const AGENT_DIR = path.join(os.homedir(), '.agent');
+import { agentDir } from '../core/config.mjs';
+
+function getAgentDir() {
+  return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
+}
+
+/** Parent of the skill dir — where the tarball gets extracted to */
+function getExtractDir() {
+  return path.join(getAgentDir(), 'skills');
+}
 
 function commandExists(cmd) {
   if (!cmd || !/^[a-zA-Z0-9_-]+$/.test(cmd)) {
@@ -78,13 +87,17 @@ export default async function restore(args) {
   }
 
   const isEncrypted = opts.from.endsWith('.gpg');
+  const extractDir = getExtractDir();
 
   if (!opts.yes) {
-    console.error(`\n  ⚠️  This will overwrite ~/.agent/ with the contents of:`);
+    console.error(`\n  ⚠️  This will overwrite .agent/skills/total-recall/ with the contents of:`);
     console.error(`     ${opts.from}`);
     const ok = await confirm('  Continue? (y/N) ');
     if (!ok) { console.error('  Aborted.'); return; }
   }
+
+  // Ensure the extract target exists
+  fs.mkdirSync(extractDir, { recursive: true });
 
   console.error(`\n  📦 Restoring from backup...`);
   console.error(`     Source:    ${opts.from}`);
@@ -95,7 +108,7 @@ export default async function restore(args) {
       if (!commandExists('gpg')) { console.error('  ❌ gpg not found'); process.exit(1); }
       
       const gpg = spawn('gpg', ['--decrypt', '--batch', opts.from], { stdio: ['ignore', 'pipe', 'inherit'] });
-      const tar = spawn('tar', ['-xf', '-', '-C', os.homedir()], { stdio: ['pipe', 'inherit', 'inherit'] });
+      const tar = spawn('tar', ['-xf', '-', '-C', extractDir], { stdio: ['pipe', 'inherit', 'inherit'] });
 
       gpg.stdout.pipe(tar.stdin);
 
@@ -107,7 +120,7 @@ export default async function restore(args) {
       if (gpgExit !== 0) throw new Error(`gpg failed (exit ${gpgExit})`);
       if (tarExit !== 0) throw new Error(`tar failed (exit ${tarExit})`);
     } else {
-      const result = spawnSync('tar', ['-xzf', opts.from, '-C', os.homedir()], { stdio: 'inherit' });
+      const result = spawnSync('tar', ['-xzf', opts.from, '-C', extractDir], { stdio: 'inherit' });
       if (result.status !== 0) throw new Error(`tar failed (exit ${result.status})`);
     }
 

@@ -32,7 +32,7 @@ describe('PAT key store', () => {
     expect(isValidToken(issued.token)).toBe(true);
     expect(isValidToken('local')).toBe(false);
 
-    const raw = fs.readFileSync(path.join(agentDir, 'config', 'keys.jsonl'), 'utf8');
+    const raw = fs.readFileSync(path.join(agentDir, 'skills', 'total-recall', 'config', 'keys.jsonl'), 'utf8');
     expect(raw).not.toContain(issued.token);
     expect(raw).toContain('token_hash');
 
@@ -70,7 +70,7 @@ describe('PAT key store', () => {
   });
 
   it('migrates legacy plaintext keys without keeping the plaintext token', async () => {
-    const configDir = path.join(agentDir, 'config');
+    const configDir = path.join(agentDir, 'skills', 'total-recall', 'config');
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(
       path.join(configDir, 'keys.jsonl'),

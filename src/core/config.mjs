@@ -78,6 +78,15 @@ try {
 const config = Object.freeze(validated);
 
 export default config;
+
+/**
+ * brainDir — The Total Recall meta-skill directory.
+ * This IS the user's brain. ALL user data (memory-vault, config, sessions,
+ * scheduler, memory-derived, memory-inbox, logs, .backups) lives inside here.
+ * Backup backs up this one directory and gets everything.
+ */
+export const brainDir = path.join(config.agentDir, 'skills', 'total-recall');
+
 export const {
   agentDir,
   cliAgent,
@@ -107,4 +116,86 @@ export const {
 
 export function getEnvVar(name) {
   return process.env[name];
+}
+
+// ─── Layered Brain Resolution ───────────────────────────────────────────────
+
+import fs from 'fs';
+
+/**
+ * Global brain — always at ~/.agent/skills/total-recall/
+ * Holds identity: universal preferences, invariants, corrections, coding principles.
+ */
+export const globalAgentDir = path.join(os.homedir(), '.agent');
+export const globalBrainDir = path.join(globalAgentDir, 'skills', 'total-recall');
+
+/**
+ * Detect a project-level brain by walking up from startDir looking for
+ * .agent/skills/total-recall/. Skips the home directory (that's the global brain).
+ *
+ * @param {string} [startDir=process.cwd()] - Directory to start searching from
+ * @returns {{ agentDir: string, brainDir: string, projectRoot: string } | null}
+ */
+export function detectProjectBrain(startDir = process.cwd()) {
+  // In test mode, skip project detection
+  if (process.env._TR_TEST_AGENT_DIR) return null;
+
+  let dir = startDir;
+  const homeDir = os.homedir();
+  while (dir !== path.dirname(dir)) {
+    if (dir === homeDir) break; // don't detect global as project
+    const candidate = path.join(dir, '.agent', 'skills', 'total-recall');
+    if (fs.existsSync(path.join(candidate, 'SKILL.md'))) {
+      return {
+        agentDir: path.join(dir, '.agent'),
+        brainDir: candidate,
+        projectRoot: dir,
+      };
+    }
+    dir = path.dirname(dir);
+  }
+  return null;
+}
+
+/**
+ * Get both brain layers for the current context.
+ *
+ * @returns {{ global: { agentDir: string, brainDir: string, layer: 'global' },
+ *             project: { agentDir: string, brainDir: string, projectRoot: string, layer: 'project' } | null }}
+ */
+export function getActiveBrains() {
+  const global = { agentDir: globalAgentDir, brainDir: globalBrainDir, layer: 'global' };
+  const project = detectProjectBrain();
+  return {
+    global,
+    project: project ? { ...project, layer: 'project' } : null,
+  };
+}
+
+/**
+ * Resolve which brain to use for a given operation.
+ *
+ * @param {'global' | 'project' | 'auto'} layer - Explicit layer choice or auto-detect
+ * @param {string} [category] - Memory category (used for auto-detect heuristic)
+ * @returns {{ agentDir: string, brainDir: string, layer: 'global' | 'project' }}
+ */
+export function resolveBrainLayer(layer = 'auto', category) {
+  const { global, project } = getActiveBrains();
+
+  if (layer === 'global') return global;
+  if (layer === 'project') {
+    if (!project) {
+      throw new Error('No project brain found. Run `npx total-recall init --project` to create one.');
+    }
+    return project;
+  }
+
+  // Auto-detect by category heuristic
+  if (project && category) {
+    const projectCategories = new Set(['fact', 'concept', 'pattern', 'anti-pattern', 'decision']);
+    if (projectCategories.has(category)) return project;
+  }
+
+  // Default: project if exists, else global
+  return project || global;
 }

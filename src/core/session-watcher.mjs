@@ -605,7 +605,7 @@ export function loadSeenHashes(derivedDir) {
  * Appends new hashes to the derived index file and returns the unique entries.
  *
  * @param {object[]} entries   Session entries to deduplicate
- * @param {string}   derivedDir  Path to .agent/memory-derived/
+ * @param {string}   derivedDir  Path to .agent/skills/total-recall/memory-derived/
  * @param {string}   [source]    Source name for index provenance
  * @returns {{ unique: object[], duplicates: number }}
  */
@@ -635,7 +635,7 @@ export function deduplicateByContent(entries, derivedDir, source = 'unknown') {
  * Write parsed session entries to the sessions directory as JSONL.
  *
  * @param {object[]} entries  Array of unified session entries
- * @param {string} sessionsDir  Path to .agent/sessions/
+ * @param {string} sessionsDir  Path to .agent/skills/total-recall/sessions/
  * @param {string} sourceFile   Original source file path (used for dedup)
  * @returns {string} Path to the written session file
  */
@@ -711,7 +711,7 @@ function findFiles(root, filter, maxDepth = 5, dirFilter = null) {
 /**
  * Scan all known IDE sources and ingest any new conversation files.
  *
- * @param {string} sessionsDir  Path to .agent/sessions/
+ * @param {string} sessionsDir  Path to .agent/skills/total-recall/sessions/
  * @param {object} [opts]
  * @param {string[]} [opts.enabledSources]  Only scan these sources (default: all)
  * @returns {{ ingested: number, sources: object[] }}
@@ -771,7 +771,7 @@ export function scanAndIngest(sessionsDir, opts = {}) {
  * Start watching all known IDE source directories for new conversation files.
  * Returns a cleanup function to stop all watchers.
  *
- * @param {string} sessionsDir  Path to .agent/sessions/
+ * @param {string} sessionsDir  Path to .agent/skills/total-recall/sessions/
  * @param {object} [opts]
  * @param {string[]} [opts.enabledSources]  Only watch these sources (default: all)
  * @returns {{ stop: () => void }}

@@ -1,0 +1,34 @@
+[
+  {
+    "method": "POST",
+    "path": "/auth/login"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/logout"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/chat/completions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/files"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tasks"
+  },
+  {
+    "method": "POST",
+    "path": "/api/tasks"
+  },
+  {
+    "method": "GET",
+    "path": "/api/config/:name"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/config/:name"
+  }
+]

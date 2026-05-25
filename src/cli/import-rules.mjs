@@ -8,7 +8,7 @@
 
 import path from 'node:path';
 import { detectAndImport } from '../core/import-rules.mjs';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
 export async function run(argv = []) {
   const args = argv.slice(3); // strip node, script, 'import'
@@ -33,8 +33,8 @@ export async function run(argv = []) {
   // Default: search cwd
   if (dirs.length === 0) dirs.push(process.cwd());
 
-  const agentDir = resolveAgentDir();
-  const vaultDir = path.join(agentDir, 'memory-vault');
+  const brainDir = resolveBrainDir();
+  const vaultDir = path.join(brainDir, 'memory-vault');
 
   console.log(`\n🔍 Scanning for rule files in: ${dirs.join(', ')}\n`);
 

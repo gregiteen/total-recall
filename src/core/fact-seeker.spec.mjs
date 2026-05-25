@@ -286,7 +286,7 @@ describe('multi-note wiki-graph architecture', () => {
       expect(ruleNodes[0].category).toBe('patterns');
       
       // Verify autonomous task persisted to disk
-      const queueDir = path.join(tempAgentDir, 'scheduler', 'queue');
+      const queueDir = path.join(tempAgentDir, 'skills', 'total-recall', 'scheduler', 'queue');
       expect(fs.existsSync(queueDir)).toBe(true);
       const { loadPendingTasks } = await import('./scheduler.mjs');
       const pendingTasks = loadPendingTasks(queueDir);
@@ -365,7 +365,7 @@ describe('multi-note wiki-graph architecture', () => {
       expect(updatedTarget.tags).toContain('expanded');
       
       // Verify autonomous task persisted to disk
-      const queueDir = path.join(tempAgentDir, 'scheduler', 'queue');
+      const queueDir = path.join(tempAgentDir, 'skills', 'total-recall', 'scheduler', 'queue');
       expect(fs.existsSync(queueDir)).toBe(true);
       const { loadPendingTasks } = await import('./scheduler.mjs');
       const pendingTasks = loadPendingTasks(queueDir);

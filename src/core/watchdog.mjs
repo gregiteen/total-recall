@@ -1,11 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import readline from 'node:readline';
 import { logger, logEvents, LOG_DIR, getLogFile } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
-const QUARANTINE_FILE = path.join(AGENT_DIR, 'config', 'quarantine.json');
+const QUARANTINE_FILE = path.join(brainDir, 'config', 'quarantine.json');
 
 let state = {
   sandboxFailures: 0,
@@ -97,7 +96,7 @@ export const watchdog = {
 
   checkDiskSpace: () => {
     try {
-      const stat = fs.statfsSync(AGENT_DIR);
+      const stat = fs.statfsSync(brainDir);
       const percentFree = stat.bavail / stat.blocks;
       const percentUsed = 1 - percentFree;
 

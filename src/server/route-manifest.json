@@ -32,6 +32,7 @@
   { "method": "GET", "path": "/api/brain/export" },
   { "method": "GET", "path": "/api/graph" },
   { "method": "GET", "path": "/api/conflicts" },
+  { "method": "POST", "path": "/api/conflicts/resolve" },
   { "method": "GET", "path": "/api/files" },
   { "method": "GET", "path": "/api/skills" },
   { "method": "GET", "path": "/api/skills/:name" },
@@ -47,6 +48,8 @@
   { "method": "POST", "path": "/auth/logout" },
   { "method": "POST", "path": "/auth/change-password" },
   { "method": "GET", "path": "/auth/me" },
+  { "method": "GET", "path": "/auth/status" },
+  { "method": "POST", "path": "/auth/setup" },
   { "method": "GET", "path": "/api/tts/status" },
   { "method": "POST", "path": "/api/tts" },
   { "method": "GET", "path": "/api/instructions" },
@@ -56,5 +59,9 @@
   { "method": "GET", "path": "/api/ssss/skill/ssss" },
   { "method": "GET", "path": "/api/ssss/spec" },
   { "method": "GET", "path": "/api/ssss/references" },
-  { "method": "GET", "path": "/api/ssss/references/:name" }
+  { "method": "GET", "path": "/api/ssss/references/:name" },
+  { "method": "GET", "path": "/api/scripts" },
+  { "method": "GET", "path": "/api/scripts/:name" },
+  { "method": "PUT", "path": "/api/scripts/:name" },
+  { "method": "POST", "path": "/api/scripts/:name/run" }
 ]

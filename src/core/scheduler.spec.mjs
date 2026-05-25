@@ -232,6 +232,8 @@ describe('createScheduler', () => {
     tempAgentDir = tmpDir();
     originalAgentDir = process.env.AGENT_DIR;
     process.env.AGENT_DIR = tempAgentDir;
+    // research-queue.mjs uses _TR_TEST_AGENT_DIR to resolve brainDir in tests
+    process.env._TR_TEST_AGENT_DIR = path.join(tempAgentDir, 'skills', 'total-recall');
 
     // Create vault with nodes
     const dir = path.join(vaultDir, 'patterns');
@@ -252,6 +254,7 @@ describe('createScheduler', () => {
 
   afterEach(() => {
     process.env.AGENT_DIR = originalAgentDir;
+    delete process.env._TR_TEST_AGENT_DIR;
     fs.rmSync(queueDir, { recursive: true, force: true });
     fs.rmSync(vaultDir, { recursive: true, force: true });
     fs.rmSync(sessionsDir, { recursive: true, force: true });
@@ -299,10 +302,12 @@ describe('createScheduler - Continuous Research Mode', () => {
     tempAgentDir = tmpDir();
     originalAgentDir = process.env.AGENT_DIR;
     process.env.AGENT_DIR = tempAgentDir;
+    process.env._TR_TEST_AGENT_DIR = path.join(tempAgentDir, 'skills', 'total-recall');
   });
 
   afterEach(() => {
     process.env.AGENT_DIR = originalAgentDir;
+    delete process.env._TR_TEST_AGENT_DIR;
     fs.rmSync(queueDir, { recursive: true, force: true });
     fs.rmSync(vaultDir, { recursive: true, force: true });
     fs.rmSync(sessionsDir, { recursive: true, force: true });

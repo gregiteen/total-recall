@@ -17,10 +17,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_DIR = resolveAgentDir();
+const BRAIN_DIR = resolveBrainDir();
 
 function parseArgs(args) {
   const opts = { vault: null, strict: false, json: false, help: false };
@@ -60,7 +61,7 @@ export default async function lint(args) {
   const opts = parseArgs(args);
   if (opts.help) { printHelp(); return; }
 
-  const vaultDir = opts.vault || path.join(AGENT_DIR, 'memory-vault');
+  const vaultDir = opts.vault || path.join(BRAIN_DIR, 'memory-vault');
 
   if (!opts.json) {
     console.error(`\n  🔍 Linting vault: ${vaultDir}\n`);

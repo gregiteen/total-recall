@@ -17,12 +17,12 @@
 
 import fs from 'fs';
 import path from 'path';
-import { agentDir } from './config.mjs';
+import { agentDir, brainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 import { sendSystemNotification } from './notifications.mjs';
 
-const AGENT_DIR = agentDir;
-const ALERTS_DIR = path.join(AGENT_DIR, 'alerts');
+const BRAIN_DIR = brainDir;
+const ALERTS_DIR = path.join(BRAIN_DIR, 'alerts');
 const EMERGENCY_FILE = path.join(ALERTS_DIR, 'emergency.md');
 
 // ─── Core Alert Operations ──────────────────────────────────────────────────────
@@ -112,13 +112,13 @@ export async function runStartupHealthCheck() {
   const issues = [];
 
   // Check: Does the vault directory exist?
-  const vaultDir = path.join(AGENT_DIR, 'memory-vault');
+  const vaultDir = path.join(BRAIN_DIR, 'memory-vault');
   if (!fs.existsSync(vaultDir)) {
     issues.push(`Memory vault directory not found at ${vaultDir}. Run: npx total-recall init`);
   }
 
   // Check: Does the skills directory exist?
-  const skillsDir = path.join(AGENT_DIR, 'skills');
+  const skillsDir = path.join(agentDir, 'skills');
   if (!fs.existsSync(skillsDir)) {
     issues.push(`Skills directory not found at ${skillsDir}. Run: npx total-recall init`);
   }

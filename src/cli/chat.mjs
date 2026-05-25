@@ -1,6 +1,6 @@
 import readline from 'readline';
 import path from 'path';
-import os from 'os';
+import { resolveBrainDir } from './agent-dir.mjs';
 import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core/runtime.mjs';
 
 /**
@@ -10,7 +10,7 @@ import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core
 export default async function runChat(args) {
   console.log('🤖 Total Recall CLI Chat initialized. Type "exit" to quit.\n');
 
-  const configDir = path.join(os.homedir(), '.agent', 'config');
+  const configDir = path.join(resolveBrainDir(), 'config');
   
   let config;
   let caller;

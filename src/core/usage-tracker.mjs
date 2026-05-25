@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import yaml from 'yaml';
 import { logger } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
 // Standard pricing constants ($ per million tokens)
 export const PRICING = {
@@ -306,7 +307,7 @@ export function checkBudgetSafety(configPath) {
         resolvedPath = workspacePath;
       } else {
         // Fallback 2: agentDir config
-        const agentHomePath = path.join(os.homedir(), '.agent', 'config', 'budget.yml');
+        const agentHomePath = path.join(brainDir, 'config', 'budget.yml');
         if (fs.existsSync(agentHomePath)) {
           resolvedPath = agentHomePath;
         }

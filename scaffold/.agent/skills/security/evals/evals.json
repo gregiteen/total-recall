@@ -1,0 +1,52 @@
+[
+  {
+    "name": "no-execSync-interpolation",
+    "assertion": "No instances of execSync with template literal string interpolation of user input exist in src/",
+    "severity": "error"
+  },
+  {
+    "name": "no-innerHTML-with-dynamic-data",
+    "assertion": "No innerHTML assignments with dynamic/user-controlled data exist in src/ or frontend/",
+    "severity": "error"
+  },
+  {
+    "name": "path-validation-on-config-endpoints",
+    "assertion": "GET /api/config/:name and PUT /api/config/:name both use safeConfigName() validator",
+    "severity": "error"
+  },
+  {
+    "name": "vault-slug-validation",
+    "assertion": "writeNode() in vault.mjs validates slug and category against SAFE_NAME regex before path construction",
+    "severity": "error"
+  },
+  {
+    "name": "sandbox-env-restricted",
+    "assertion": "Sandbox env whitelist does NOT include HOME, SHELL, USER, or AGENT_DIR",
+    "severity": "error"
+  },
+  {
+    "name": "sandbox-timeout-capped",
+    "assertion": "Sandbox timeout is capped at max 30 seconds server-side regardless of client input",
+    "severity": "error"
+  },
+  {
+    "name": "no-hardcoded-tokens",
+    "assertion": "No hardcoded PAT tokens (tr_*) exist in source code files",
+    "severity": "error"
+  },
+  {
+    "name": "isLocalRequest-no-forwarded-headers",
+    "assertion": "isLocalRequest() only checks req.socket.remoteAddress, not X-Forwarded-For",
+    "severity": "error"
+  },
+  {
+    "name": "brain-export-excludes-secrets",
+    "assertion": "GET /api/brain/export tar command excludes security.yml, keys.jsonl, and session-secret",
+    "severity": "error"
+  },
+  {
+    "name": "mitigations-script-passes",
+    "assertion": "run-audit.mjs reports all mitigations as verified (mitigations_passed === mitigations_checked)",
+    "severity": "error"
+  }
+]

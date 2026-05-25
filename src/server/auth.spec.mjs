@@ -124,9 +124,9 @@ describe('server auth request locality', () => {
   });
 
   it('allows sandbox run when sandbox.enabled is true in security.yml', () => {
-    fs.mkdirSync(path.join(tempAgentDir, 'config'), { recursive: true });
+    fs.mkdirSync(path.join(tempAgentDir, 'skills', 'total-recall', 'config'), { recursive: true });
     fs.writeFileSync(
-      path.join(tempAgentDir, 'config', 'security.yml'),
+      path.join(tempAgentDir, 'skills', 'total-recall', 'config', 'security.yml'),
       'sandbox:\n  enabled: true\n'
     );
 

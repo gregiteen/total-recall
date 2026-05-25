@@ -4,14 +4,14 @@ import os from 'os';
 import bcrypt from 'bcrypt';
 import yaml from 'yaml';
 import { BCRYPT_COST } from '../server/auth.mjs';
-import { agentDir } from '../core/config.mjs';
+import { brainDir } from '../core/config.mjs';
 
 export default async function resetPassword(args) {
   if (args.includes('--help') || args.includes('-h') || args.length === 0) {
     console.log(`
   total-recall reset-password "new_password"
 
-  Resets the dashboard admin password in ~/.agent/config/security.yml.
+  Resets the dashboard admin password in ~/.agent/skills/total-recall/config/security.yml.
   Sets force_password_reset to true so you will be prompted to change it upon first login.
 `);
     return;
@@ -23,8 +23,7 @@ export default async function resetPassword(args) {
     process.exit(1);
   }
 
-  const AGENT_DIR = agentDir;
-  const configDir = path.join(AGENT_DIR, 'config');
+  const configDir = path.join(brainDir, 'config');
   const securityPath = path.join(configDir, 'security.yml');
 
   // Enforce directories exist

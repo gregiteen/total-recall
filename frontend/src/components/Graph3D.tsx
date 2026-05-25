@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react'
-import type { MemoryNode, ResearchItem } from '../types'
-import type { ChatThread } from '../api'
+import { useState, useEffect, useRef, useMemo } from "react"
+import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from "react"
+import type { MemoryNode, ResearchItem } from "../types"
+import type { ChatThread } from "../api"
 
 interface Graph3DProps {
   threads: ChatThread[]
@@ -14,12 +14,12 @@ interface Graph3DProps {
 
 interface VisualNode {
   id: string
-  type: 'thread' | 'memory' | 'research'
+  type: "thread" | "memory" | "research"
   title: string
   subtitle: string
   status?: string
   excerpt?: string
-  originalData: any
+  originalData: ChatThread | MemoryNode | ResearchItem
   // Initial 3D coordinates
   x: number
   y: number
@@ -35,6 +35,8 @@ interface VisualLink {
   source: VisualNode
   target: VisualNode
   opacity: number
+  color?: string
+  dashPattern?: number[]
 }
 
 export default function Graph3D({
@@ -52,6 +54,7 @@ export default function Graph3D({
   const [zoom, setZoom] = useState<number>(1.2)
   const [selectedNode, setSelectedNode] = useState<VisualNode | null>(null)
   const [hoveredNode, setHoveredNode] = useState<VisualNode | null>(null)
+  const [dragging, setDragging] = useState<boolean>(false)
 
   // Dragging and orbital rotation state (stored in refs for high frame rate access)
   const angleX = useRef<number>(0.3)
@@ -145,40 +148,89 @@ export default function Graph3D({
     // Match criteria for a beautiful connected web
     nodes.forEach((nodeA, idx) => {
       // 1. Link Research nodes to their matching Memory node
-      if (nodeA.type === 'research') {
+      if (nodeA.type === "research") {
         const researchItem = nodeA.originalData as ResearchItem
         if (researchItem.node_slug) {
-          const targetNode = nodes.find(n => n.type === 'memory' && n.originalData.slug === researchItem.node_slug)
+          const targetNode = nodes.find(n => n.type === "memory" && (n.originalData as any).slug === researchItem.node_slug)
           if (targetNode) {
             list.push({ source: nodeA, target: targetNode, opacity: 0.8 })
           }
         }
       }
 
-      // 2. Link Memory nodes to other Memory nodes of similar categories or tags
-      if (nodeA.type === 'memory') {
+      // 2. Link Memory nodes based on explicit SSSS v2 relations (related, supersedes, contradicts)
+      if (nodeA.type === "memory") {
         const memA = nodeA.originalData as MemoryNode
-        // Link to up to 2 other memory nodes of the same category to avoid high congestion
-        let count = 0
-        for (let j = idx + 1; j < nodes.length; j++) {
-          const nodeB = nodes[j]
-          if (nodeB.type === 'memory' && count < 2) {
-            const memB = nodeB.originalData as MemoryNode
-            if (memA.category && memA.category === memB.category) {
-              list.push({ source: nodeA, target: nodeB, opacity: 0.4 })
-              count++
+        
+        // Explicit related links (purple)
+        if (Array.isArray(memA.related)) {
+          memA.related.forEach(relSlug => {
+            const targetNode = nodes.find(n => n.type === "memory" && (n.originalData as any).slug === relSlug)
+            if (targetNode) {
+              list.push({
+                source: nodeA,
+                target: targetNode,
+                opacity: 0.7,
+                color: "rgba(167, 139, 250, 0.55)"
+              })
+            }
+          })
+        }
+
+        // Explicit contradicts links (red)
+        if (Array.isArray(memA.contradicts)) {
+          memA.contradicts.forEach(conSlug => {
+            const targetNode = nodes.find(n => n.type === "memory" && (n.originalData as any).slug === conSlug)
+            if (targetNode) {
+              list.push({
+                source: nodeA,
+                target: targetNode,
+                opacity: 0.9,
+                color: "rgba(239, 68, 68, 0.7)"
+              })
+            }
+          })
+        }
+
+        // Explicit supersedes links (dashed orange)
+        if (Array.isArray(memA.supersedes)) {
+          memA.supersedes.forEach(supSlug => {
+            const targetNode = nodes.find(n => n.type === "memory" && (n.originalData as any).slug === supSlug)
+            if (targetNode) {
+              list.push({
+                source: nodeA,
+                target: targetNode,
+                opacity: 0.8,
+                color: "rgba(245, 158, 11, 0.6)",
+                dashPattern: [3, 3]
+              })
+            }
+          })
+        }
+
+        // Fallback: Link Memory nodes of similar categories or tags if no explicit relations exist to maintain beautiful web structure
+        if (!memA.related?.length && !memA.contradicts?.length && !memA.supersedes?.length) {
+          let count = 0
+          for (let j = idx + 1; j < nodes.length; j++) {
+            const nodeB = nodes[j]
+            if (nodeB.type === "memory" && count < 2) {
+              const memB = nodeB.originalData as MemoryNode
+              if (memA.category && memA.category === memB.category) {
+                list.push({ source: nodeA, target: nodeB, opacity: 0.4 })
+                count++
+              }
             }
           }
         }
       }
 
       // 3. Link Chat threads to grounded memory nodes if titles/slugs align or randomly to create constellations
-      if (nodeA.type === 'thread') {
+      if (nodeA.type === "thread") {
         // Find 1-2 memory nodes to anchor the thread node
         let matches = 0
         for (let j = 0; j < nodes.length; j++) {
           const nodeB = nodes[j]
-          if (nodeB.type === 'memory' && matches < 1) {
+          if (nodeB.type === "memory" && matches < 1) {
             // Draw a thin connection
             list.push({ source: nodeA, target: nodeB, opacity: 0.35 })
             matches++
@@ -243,12 +295,12 @@ export default function Graph3D({
       // Project all nodes first
       nodes.forEach((node) => {
         // Rotate Y axis
-        let x1 = node.x * cosY + node.z * sinY
-        let z1 = -node.x * sinY + node.z * cosY
+        const x1 = node.x * cosY + node.z * sinY
+        const z1 = -node.x * sinY + node.z * cosY
 
         // Rotate X axis
-        let y2 = node.y * cosX - z1 * sinX
-        let z2 = node.y * sinX + z1 * cosX
+        const y2 = node.y * cosX - z1 * sinX
+        const z2 = node.y * sinX + z1 * cosX
 
         // Perspective Projection
         const scale = focalLength / (focalLength + z2)
@@ -264,7 +316,7 @@ export default function Graph3D({
       // ─── DRAW LINKS ───
       ctx.lineWidth = 1.0
       links.forEach((link) => {
-        const { source, target, opacity } = link
+        const { source, target, opacity, color, dashPattern } = link
         if (source.px === undefined || source.py === undefined || target.px === undefined || target.py === undefined) return
 
         // Fade links that are deeper or far
@@ -283,24 +335,38 @@ export default function Graph3D({
         ctx.moveTo(source.px, source.py)
         ctx.lineTo(target.px, target.py)
 
+        if (dashPattern) {
+          ctx.setLineDash(dashPattern)
+        } else {
+          ctx.setLineDash([])
+        }
+
         if (isHighlight) {
-          ctx.strokeStyle = source.type === 'memory' ? 'rgba(139, 92, 246, 0.65)' : source.type === 'thread' ? 'rgba(6, 182, 212, 0.65)' : 'rgba(245, 158, 11, 0.65)'
+          ctx.strokeStyle = color || (source.type === "memory" ? "rgba(139, 92, 246, 0.65)" : source.type === "thread" ? "rgba(6, 182, 212, 0.65)" : "rgba(245, 158, 11, 0.65)")
           ctx.lineWidth = 1.8
         } else {
-          ctx.strokeStyle = `rgba(100, 116, 139, ${opacity * 0.25 * depthFade})`
+          ctx.strokeStyle = color 
+            ? color.replace(/[\d.]+\)$/, `${opacity * 0.4 * depthFade})`) 
+            : `rgba(100, 116, 139, ${opacity * 0.25 * depthFade})`
           ctx.lineWidth = 0.8
         }
         ctx.stroke()
+        ctx.setLineDash([]) // Reset dash pattern
       })
 
       // ─── DRAW NODES ───
       sortedNodes.forEach((node) => {
         if (node.px === undefined || node.py === undefined || node.scale === undefined) return
 
-        const size = Math.max(4, Math.min(22, 10 * node.scale * zoom))
+        // Support confidence decay mapping to node size
+        const confidenceMultiplier = node.type === "memory" && (node.originalData as any).confidence !== undefined 
+          ? Math.max(0.4, (node.originalData as any).confidence) 
+          : 1.0
+        
+        const size = Math.max(4, Math.min(22, 10 * node.scale * zoom * confidenceMultiplier))
         const isHovered = hoveredNode?.id === node.id
         const isSelected = selectedNode?.id === node.id
-        const isGrounded = node.type === 'memory' && selectedGroundingNodes.includes(node.originalData.slug)
+        const isGrounded = node.type === "memory" && selectedGroundingNodes.includes((node.originalData as any).slug)
 
         // Draw radial glow
         const gradient = ctx.createRadialGradient(
@@ -312,23 +378,27 @@ export default function Graph3D({
           size * (isHovered || isSelected ? 2.5 : 1.5)
         )
 
-        let color = '#8b5cf6' // memory nodes (purple)
-        let glowColor = 'rgba(139, 92, 246, 0.2)'
-        if (node.type === 'thread') {
-          color = '#06b6d4' // thread nodes (cyan)
-          glowColor = 'rgba(6, 182, 212, 0.2)'
-        } else if (node.type === 'research') {
-          color = '#f59e0b' // research nodes (gold)
-          glowColor = 'rgba(245, 158, 11, 0.2)'
+        let color = "#8b5cf6" // memory nodes (purple)
+        let glowColor = "rgba(139, 92, 246, 0.2)"
+        if (node.type === "thread") {
+          color = "#06b6d4" // thread nodes (cyan)
+          glowColor = "rgba(6, 182, 212, 0.2)"
+        } else if (node.type === "research") {
+          color = "#f59e0b" // research nodes (gold)
+          glowColor = "rgba(245, 158, 11, 0.2)"
         }
 
         gradient.addColorStop(0, color)
         gradient.addColorStop(0.4, color)
         gradient.addColorStop(1, glowColor)
 
-        // Faint shadow/depth sorting opacity
+        // Faint shadow/depth sorting opacity and confidence scaling
         const nodeDepthOpacity = Math.max(0.2, Math.min(1.0, 1 - (node.pz || 0 + 200) / 450))
-        ctx.globalAlpha = nodeDepthOpacity
+        const confidenceOpacity = node.type === "memory" && (node.originalData as any).confidence !== undefined 
+          ? Math.max(0.35, (node.originalData as any).confidence) 
+          : 1.0
+
+        ctx.globalAlpha = nodeDepthOpacity * confidenceOpacity
 
         ctx.beginPath()
         ctx.arc(node.px, node.py, size * (isHovered || isSelected ? 2.5 : 1.5), 0, Math.PI * 2)
@@ -389,6 +459,7 @@ export default function Graph3D({
   // Mouse / Touch Interaction Handlers
   const handleStartDrag = (clientX: number, clientY: number) => {
     isDragging.current = true
+    setDragging(true)
     lastMousePos.current = { x: clientX, y: clientY }
     velocityX.current = 0
     velocityY.current = 0
@@ -412,6 +483,7 @@ export default function Graph3D({
 
   const handleEndDrag = () => {
     isDragging.current = false
+    setDragging(false)
   }
 
   // Handle canvas mouse move to detect hovering
@@ -454,7 +526,7 @@ export default function Graph3D({
   }
 
   // Zoom Handler
-  const handleWheel = (e: any) => {
+  const handleWheel = (e: ReactWheelEvent<HTMLCanvasElement>) => {
     e.preventDefault()
     const zoomDelta = e.deltaY * -0.001
     setZoom((prev) => Math.max(0.5, Math.min(3.0, prev + zoomDelta)))
@@ -512,7 +584,7 @@ export default function Graph3D({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleEndDrag}
-        style={{ cursor: isDragging.current ? 'grabbing' : hoveredNode ? 'pointer' : 'grab', display: 'block' }}
+        style={{ cursor: dragging ? "grabbing" : hoveredNode ? "pointer" : "grab", display: "block" }}
       />
 
       {/* Cosmic Floating Background Dust overlay */}
@@ -566,47 +638,86 @@ export default function Graph3D({
         <div className="node-detail-drawer animate-slide-in">
           <div className="drawer-header">
             <span className={`drawer-badge badge-${selectedNode.type}`}>
-              {selectedNode.type === 'memory' ? '🧠 Knowledge' : selectedNode.type === 'thread' ? '💬 Thread' : '🕵️ Research'}
+              {selectedNode.type === "memory" ? "🧠 Knowledge" : selectedNode.type === "thread" ? "💬 Thread" : "🕵️ Research"}
             </span>
             <button className="drawer-close-btn" onClick={() => setSelectedNode(null)}>×</button>
           </div>
           <div className="drawer-body">
             <h4 className="drawer-title">{selectedNode.title}</h4>
             <span className="drawer-subtitle">{selectedNode.subtitle}</span>
-            {selectedNode.status && (
-              <div className="drawer-status">
-                <span className="label">Status:</span>
-                <span className={`value status-${selectedNode.status.toLowerCase().replace(/_/g, '-')}`}>{selectedNode.status}</span>
+            
+            {selectedNode.type === "memory" && (
+              <div className="drawer-meta-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", margin: "12px 0", fontSize: "11px", background: "rgba(255,255,255,0.03)", padding: "8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                {(selectedNode.originalData as any).confidence !== undefined && (
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.45)" }}>Confidence:</span>{" "}
+                    <strong style={{ color: (selectedNode.originalData as any).confidence > 0.7 ? "#22c55e" : "#f59e0b" }}>
+                      {Math.round((selectedNode.originalData as any).confidence * 100)}%
+                    </strong>
+                  </div>
+                )}
+                {(selectedNode.originalData as any).importance !== undefined && (
+                  <div>
+                    <span style={{ color: "rgba(255,255,255,0.45)" }}>Importance:</span>{" "}
+                    <strong style={{ color: "#a78bfa" }}>★ {(selectedNode.originalData as any).importance}/5</strong>
+                  </div>
+                )}
+                {selectedNode.status && (
+                  <div style={{ gridColumn: "span 2" }}>
+                    <span style={{ color: "rgba(255,255,255,0.45)" }}>Status:</span>{" "}
+                    <span className={`value status-${selectedNode.status.toLowerCase().replace(/_/g, "-")}`} style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "10px", background: "rgba(255,255,255,0.08)", textTransform: "uppercase" }}>
+                      {selectedNode.status}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
-            <p className="drawer-excerpt">{selectedNode.excerpt}</p>
+
+            {selectedNode.type === "memory" && ((selectedNode.originalData as any).related?.length || (selectedNode.originalData as any).contradicts?.length || (selectedNode.originalData as any).supersedes?.length) && (
+              <div className="drawer-relations" style={{ fontSize: "11px", margin: "12px 0" }}>
+                <span style={{ color: "rgba(255,255,255,0.45)", display: "block", marginBottom: "4px" }}>Ontology Relations:</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                  {(selectedNode.originalData as any).related?.map((slug: string) => (
+                    <span key={slug} style={{ color: "#a78bfa", background: "rgba(139,92,246,0.1)", padding: "1px 6px", borderRadius: "4px" }}>🔗 {slug}</span>
+                  ))}
+                  {(selectedNode.originalData as any).contradicts?.map((slug: string) => (
+                    <span key={slug} style={{ color: "#ef4444", background: "rgba(239,68,68,0.1)", padding: "1px 6px", borderRadius: "4px" }}>⚠️ contradicts: {slug}</span>
+                  ))}
+                  {(selectedNode.originalData as any).supersedes?.map((slug: string) => (
+                    <span key={slug} style={{ color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "1px 6px", borderRadius: "4px" }}>✓ supersedes: {slug}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="drawer-excerpt" style={{ whiteSpace: "pre-wrap" }}>{selectedNode.excerpt}</p>
           </div>
           <div className="drawer-footer">
-            {selectedNode.type === 'thread' && (
+            {selectedNode.type === "thread" && (
               <button 
                 className="drawer-action-btn btn-cyan" 
                 onClick={() => {
-                  onOpenThread(selectedNode.originalData.id)
+                  onOpenThread((selectedNode.originalData as any).id)
                   setSelectedNode(null)
                 }}
               >
                 Open Thread
               </button>
             )}
-            {selectedNode.type === 'memory' && (
+            {selectedNode.type === "memory" && (
               <button 
                 className="drawer-action-btn btn-purple" 
                 onClick={() => {
-                  onGroundMemoryNode(selectedNode.originalData.slug)
+                  onGroundMemoryNode((selectedNode.originalData as any).slug)
                 }}
               >
-                {selectedGroundingNodes.includes(selectedNode.originalData.slug) 
-                  ? 'Remove Grounding Context' 
-                  : 'Ground Chat with Node'}
+                {selectedGroundingNodes.includes((selectedNode.originalData as any).slug) 
+                  ? "Remove Grounding Context" 
+                  : "Ground Chat with Node"}
               </button>
             )}
-            {selectedNode.type === 'research' && (
-              <div style={{ width: '100%', fontSize: 11, color: 'rgba(255,255,255,0.4)', textAlign: 'center', fontStyle: 'italic', padding: '8px 0' }}>
+            {selectedNode.type === "research" && (
+              <div style={{ width: "100%", fontSize: 11, color: "rgba(255,255,255,0.4)", textAlign: "center", fontStyle: "italic", padding: "8px 0" }}>
                 Background intelligence agent running...
               </div>
             )}

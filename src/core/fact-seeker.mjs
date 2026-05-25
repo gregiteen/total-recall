@@ -63,11 +63,16 @@ export function formatBeautifulDate(isoString) {
  *   7. Accepts direct research instructions from users
  */
 
-import { agentDir } from './config.mjs';
+import { agentDir, brainDir } from './config.mjs';
 
 const getAgentDir = () => process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
-const getAgendaFile = () => path.join(getAgentDir(), 'research-agenda.jsonl');
-const getSourcesRegistry = () => path.join(getAgentDir(), 'memory-derived', 'source-registry.jsonl');
+const getBrainDir = () => {
+  const ad = getAgentDir();
+  // If agentDir was overridden (e.g. in tests), derive brainDir from it
+  return ad !== agentDir ? path.join(ad, 'skills', 'total-recall') : brainDir;
+};
+const getAgendaFile = () => path.join(getBrainDir(), 'research-agenda.jsonl');
+const getSourcesRegistry = () => path.join(getBrainDir(), 'memory-derived', 'source-registry.jsonl');
 
 // ─── Research Agenda ────────────────────────────────────────────────────────────
 
@@ -939,10 +944,7 @@ async function pushDeliberationConclusion(conclusions = []) {
   
   // 1. Resolve interrupts file path
   // Use isolated dynamic agent dir in tests, global in production
-  const isTest = process.env.VITEST || process.env._TR_TEST_AGENT_DIR || process.env.NODE_ENV === 'test';
-  const interruptsFile = isTest
-    ? path.join(getAgentDir(), 'interrupts', 'pending.md')
-    : path.join(os.homedir(), '.agent', 'interrupts', 'pending.md');
+  const interruptsFile = path.join(getBrainDir(), 'interrupts', 'pending.md');
 
   const dir = path.dirname(interruptsFile);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -969,7 +971,7 @@ async function pushDeliberationConclusion(conclusions = []) {
   fs.appendFileSync(interruptsFile, lines.join('\n'));
   
   // 4. macOS notification (Skip in tests)
-  if (isTest) {
+  if (process.env.VITEST) {
     logger.debug('fact-seeker: bypassing notification in test environment');
     return;
   }
@@ -1184,7 +1186,7 @@ Output ONLY valid JSON.`;
     }
 
     // Process synthesized instructions
-    const agentDir = getAgentDir();
+    const localBrainDir = getBrainDir();
     const now = new Date().toISOString();
     let rulesSynthesized = false;
     
@@ -1247,9 +1249,9 @@ Output ONLY valid JSON.`;
       // Trigger immediate surface recompilation if active rules were synthesized
       if (rulesSynthesized) {
         try {
-          const skillsDir = path.join(agentDir, 'skills');
-          const derivedDir = path.join(agentDir, 'memory-derived');
-          const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
+          const skillsDir = path.join(getAgentDir(), 'skills');
+          const derivedDir = path.join(localBrainDir, 'memory-derived');
+          const instructionsFile = path.join(getAgentDir(), 'INSTRUCTIONS.md');
           const { compileSurface } = await import('./surface.mjs');
           await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
           logger.info({
@@ -1267,7 +1269,7 @@ Output ONLY valid JSON.`;
 
     // Process autonomous tasks
     if (result.autonomous_tasks && result.autonomous_tasks.length > 0) {
-      const queueDir = path.join(agentDir, 'scheduler', 'queue');
+      const queueDir = path.join(localBrainDir, 'scheduler', 'queue');
       const { persistTaskToDisk } = await import('./scheduler.mjs');
       for (const t of result.autonomous_tasks) {
         const taskSlug = `delib-task-${crypto.randomBytes(4).toString('hex')}`;
@@ -1531,8 +1533,8 @@ Output ONLY valid JSON.`;
       return { success: true, output: `Expansion complete: no new tangents brainstormed for "${topic}".`, factSlug: nodeSlug };
     }
     
-    const agentDir = getAgentDir();
-    const queueDir = path.join(agentDir, 'scheduler', 'queue');
+    const localBrainDir = getBrainDir();
+    const queueDir = path.join(localBrainDir, 'scheduler', 'queue');
     const { persistTaskToDisk } = await import('./scheduler.mjs');
     
     const spawnedList = [];

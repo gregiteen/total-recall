@@ -20,7 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -355,8 +355,8 @@ async function getGitHubUser(githubToken) {
 
 // ─── Store brain config ───────────────────────────────────────────────────────
 
-function storeBrainConfig(agentDir, brainUrl, token, provider, apiKey, extra = {}) {
-  const configDir = path.join(agentDir, 'config');
+function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
+  const configDir = path.join(brDir, 'config');
   fs.mkdirSync(configDir, { recursive: true });
 
   // brain.json
@@ -389,6 +389,7 @@ export default async function setup(args) {
   }
 
   const agentDir = resolveAgentDir();
+  const brDir = resolveBrainDir();
 
   // ── Step 1: Where are you running? ──────────────────────────────────────────
   console.log('\n  Where do you want to run Total Recall?\n');
@@ -441,7 +442,7 @@ export default async function setup(args) {
           info('[dry-run] would fork gregiteen/total-recall to your account');
         }
         // Store GitHub token for sync --push
-        const secretsPath = path.join(resolveAgentDir(), 'config', 'secrets.enc');
+        const secretsPath = path.join(resolveBrainDir(), 'config', 'secrets.enc');
         fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
         let secrets = {};
         if (fs.existsSync(secretsPath)) { try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')); } catch {} }
@@ -543,8 +544,8 @@ export default async function setup(args) {
   // ── Step 5: Store config locally ─────────────────────────────────────────────
 
   if (brainUrl && !dryRun) {
-    storeBrainConfig(agentDir, brainUrl, pat, deployTarget, apiKey);
-    ok(`Brain config saved to ${path.join(agentDir, 'config', 'brain.json')}`);
+    storeBrainConfig(brDir, brainUrl, pat, deployTarget, apiKey);
+    ok(`Brain config saved to ${path.join(brDir, 'config', 'brain.json')}`);
   }
 
   // ── Step 6: Connect IDEs ─────────────────────────────────────────────────────
@@ -607,7 +608,7 @@ export default async function setup(args) {
   }
 
   console.log('\n  Next steps:');
-  console.log('    • Add memory: edit files in ~/.agent/memory-vault/ then run: npx total-recall compile');
+  console.log('    • Add memory: edit files in ~/.agent/skills/total-recall/memory-vault/ then run: npx total-recall compile');
   console.log('    • Check status: npx total-recall status');
   console.log('    • Start Dream Cycle: npx total-recall daemon start');
   console.log('    • Full CLI: npx total-recall --help');

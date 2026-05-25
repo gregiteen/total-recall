@@ -14,9 +14,10 @@
  */
 
 import path from 'node:path';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
 const AGENT_DIR = resolveAgentDir();
+const BRAIN_DIR = resolveBrainDir();
 
 function parseArgs(args) {
   const opts = { sources: null, watch: false, help: false };
@@ -56,7 +57,7 @@ export default async function ingest(args) {
   const opts = parseArgs(args);
   if (opts.help) { printHelp(); return; }
 
-  const sessionsDir = path.join(AGENT_DIR, 'sessions');
+  const sessionsDir = path.join(BRAIN_DIR, 'sessions');
 
   const { scanAndIngest, startWatching } = await import('../core/session-watcher.mjs');
 

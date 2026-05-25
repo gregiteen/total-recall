@@ -2,10 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { EventEmitter } from 'node:events';
-import { agentDir } from './config.mjs';
+import { brainDir } from './config.mjs';
 
-const AGENT_DIR = agentDir;
-const LOG_DIR = path.join(AGENT_DIR, 'logs');
+const BRAIN_DIR = brainDir;
+const LOG_DIR = path.join(BRAIN_DIR, 'logs');
 
 if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });

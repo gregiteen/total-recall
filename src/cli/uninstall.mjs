@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
+import backup from './backup.mjs';
 
 // ─── Logging Helpers ────────────────────────────────────────────────────────
 function log(msg)      { console.error(`  ${msg}`); }
@@ -48,7 +49,7 @@ function hasSystemd() {
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
-export default async function uninstall() {
+export default async function uninstall(args = []) {
   const HOME = os.homedir();
   console.error(`
   ┌─────────────────────────────────────────────────────────┐
@@ -59,6 +60,66 @@ export default async function uninstall() {
 
   const globalAgentDir = path.join(HOME, '.agent');
   const localAgentDir = path.join(process.cwd(), '.agent');
+
+  let pushGit = null;
+  let purge = false;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--push-git') {
+      pushGit = args[++i];
+    } else if (args[i] === '--purge') {
+      purge = true;
+    }
+  }
+
+  // Detect configured backup git remote if present
+  let detectedRemote = null;
+  const SKILL_DIR = path.join(localAgentDir, 'skills', 'total-recall');
+  if (!pushGit && fs.existsSync(SKILL_DIR)) {
+    try {
+      const remoteCheck = spawnSync('git', ['remote', 'get-url', 'backup'], { cwd: SKILL_DIR, stdio: 'pipe' });
+      if (remoteCheck.status === 0) {
+        detectedRemote = remoteCheck.stdout.toString().trim();
+      } else {
+        const originCheck = spawnSync('git', ['remote', 'get-url', 'origin'], { cwd: SKILL_DIR, stdio: 'pipe' });
+        if (originCheck.status === 0) {
+          detectedRemote = originCheck.stdout.toString().trim();
+        }
+      }
+    } catch {
+      // Ignored
+    }
+  }
+
+  const targetRemote = pushGit || detectedRemote;
+  if (targetRemote) {
+    logStep('0/4', `Automatically backing up brain to remote: ${targetRemote}`);
+    try {
+      await backup(['--push-git', targetRemote]);
+      logOk('Pre-uninstall backup successfully pushed to remote!');
+    } catch (err) {
+      logWarn(`Git backup push failed: ${err.message}`);
+      logWarn('Falling back to local tarball backup...');
+      try {
+        await backup(['--no-encrypt']);
+        logOk('Local tarball backup created successfully.');
+      } catch (tarErr) {
+        logWarn(`Local tarball backup also failed: ${tarErr.message}`);
+        logWarn('Teardown aborted to protect your brain. Resolve backup issues and try again.');
+        return;
+      }
+    }
+  } else if (fs.existsSync(SKILL_DIR)) {
+    logStep('0/4', 'No git remote or Obsidian vault configured — creating local tarball backup');
+    try {
+      await backup(['--no-encrypt']);
+      logOk('Local tarball backup created before uninstall.');
+    } catch (err) {
+      logWarn(`Local tarball backup failed: ${err.message}`);
+      logWarn('Teardown aborted to protect your brain. Resolve backup issues and try again.');
+      return;
+    }
+  }
 
   // ── Step 1: Stop and disable background services ──
   logStep('1/4', 'Stopping and disabling background services');
@@ -160,7 +221,10 @@ export default async function uninstall() {
   // ── Step 2: Stop detached background Node.js processes ──
   logStep('2/4', 'Stopping any standalone background processes');
 
-  const dirsToScan = [globalAgentDir, localAgentDir];
+  const dirsToScan = [
+    path.join(globalAgentDir, 'skills', 'total-recall'),
+    path.join(localAgentDir, 'skills', 'total-recall'),
+  ];
   for (const dir of dirsToScan) {
     if (!fs.existsSync(dir)) continue;
     const logsDir = path.join(dir, 'logs');
@@ -279,52 +343,71 @@ export default async function uninstall() {
     }
   }
 
-  // ── Step 4: Purge VFS directory ──
-  logStep('4/4', 'Purging VFS and configuration folders');
+  // ── Step 4: Purge Total Recall data ──
+  logStep('4/4', 'Removing Total Recall brain and runtime artifacts');
 
-  if (fs.existsSync(globalAgentDir)) {
-    log(`Purging Global ~/.agent VFS at ${globalAgentDir}...`);
-    try {
-      fs.rmSync(globalAgentDir, { recursive: true, force: true });
-      logOk('Purged: Global ~/.agent VFS');
-    } catch (err) {
-      logWarn(`Failed to delete global agent directory: ${err.message}`);
+  // What we remove:
+  //   .agent/skills/total-recall/  — the brain (already backed up)
+  //   .agent/INSTRUCTIONS.md, AGENTS.md, etc. — compiled shims
+  // What we NEVER touch:
+  //   .agent/                      — always stays
+  //   .agent/skills/               — always stays (user may have other skills)
+  //   .agent/skills/<other>/       — other user skills, never ours to delete
+
+  for (const agentDir of [globalAgentDir, localAgentDir]) {
+    if (!fs.existsSync(agentDir)) {
+      logSkip(`${agentDir === globalAgentDir ? 'Global' : 'Local'} .agent VFS is not present`);
+      continue;
     }
-  } else {
-    logSkip('Global ~/.agent VFS is not present');
-  }
+    const label = agentDir === globalAgentDir ? 'Global' : 'Local';
+    log(`Cleaning ${label} .agent at ${agentDir}...`);
 
-  if (fs.existsSync(localAgentDir)) {
-    log(`Cleaning Local workspace .agent VFS at ${localAgentDir}...`);
-    // In a development environment, .agent/skills/ and .agent/memory-vault/ may be tracked in git.
-    // To protect against deleting source files, we only remove runtime folders.
-    const subdirs = ['memory-derived', 'memory-inbox', 'sessions', 'logs', 'scheduler'];
-    for (const sub of subdirs) {
-      const p = path.join(localAgentDir, sub);
-      if (fs.existsSync(p)) {
+    // 1. Remove the brain: .agent/skills/total-recall/
+    const brainPath = path.join(agentDir, 'skills', 'total-recall');
+    if (fs.existsSync(brainPath)) {
+      try {
+        fs.rmSync(brainPath, { recursive: true, force: true });
+        logOk(`${label}: Removed brain (skills/total-recall/)`);
+      } catch (err) {
+        logWarn(`${label}: Failed to remove brain: ${err.message}`);
+      }
+    }
+
+    // 2. Strip Total Recall injected blocks from IDE instruction files.
+    //    These files belong to the IDE ecosystem, NOT to Total Recall.
+    //    TR only injects managed blocks between comment markers.
+    const shimFiles = ['INSTRUCTIONS.md', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md',
+      'CODEX.md', '.clauderules', '.cursorrules', '.codexrules',
+      'WINDSURF.md', '.windsurfrules'];
+    const INJECT_PATTERNS = [
+      /<!-- BEGIN INJECTED MEMORY:.*?-->[\s\S]*?<!-- END INJECTED MEMORY -->\n?/g,
+      /<!-- BEGIN INJECTED ACTIVE DIRECTIVES:.*?-->[\s\S]*?<!-- END INJECTED ACTIVE DIRECTIVES -->\n?/g,
+    ];
+    // Check both .agent/ level and project root
+    const shimDirs = [agentDir, agentDir === localAgentDir ? path.dirname(localAgentDir) : null].filter(Boolean);
+    for (const dir of shimDirs) {
+      for (const file of shimFiles) {
+        const p = path.join(dir, file);
+        if (!fs.existsSync(p)) continue;
         try {
-          fs.rmSync(p, { recursive: true, force: true });
-          logOk(`Removed local runtime folder: .agent/${sub}`);
-        } catch (err) {
-          logWarn(`Failed to delete local folder .agent/${sub}: ${err.message}`);
-        }
+          let content = fs.readFileSync(p, 'utf8');
+          let changed = false;
+          for (const pat of INJECT_PATTERNS) {
+            const cleaned = content.replace(pat, '');
+            if (cleaned !== content) { content = cleaned; changed = true; }
+          }
+          if (changed) {
+            // If only whitespace remains after stripping, delete the file
+            if (content.trim().length === 0) {
+              fs.rmSync(p, { force: true });
+            } else {
+              fs.writeFileSync(p, content, 'utf8');
+            }
+          }
+        } catch {}
       }
     }
-    // Check if anything else is left. If empty, we can remove .agent entirely.
-    try {
-      const files = fs.readdirSync(localAgentDir);
-      const keeps = files.filter(f => f === 'skills' || f === 'memory-vault');
-      if (keeps.length === 0) {
-        fs.rmSync(localAgentDir, { recursive: true, force: true });
-        logOk('Purged empty local workspace .agent folder');
-      } else {
-        logOk('Preserved version-controlled local workspace .agent folders (skills, memory-vault)');
-      }
-    } catch {
-      // ignore
-    }
-  } else {
-    logSkip('Local workspace .agent VFS is not present');
+    logOk(`${label}: Stripped Total Recall injections from IDE instruction files`);
   }
 
   console.error(`

@@ -19,19 +19,18 @@ import { createScheduler, updateTaskStatus } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { logger } from './logger.mjs';
 import { updateQueueItem, loadQueue } from './research-queue.mjs';
-
-// ─── Configuration ──────────────────────────────────────────────────────────────
-
-import { agentDir } from './config.mjs';
+import { execFileSync } from "node:child_process";
+import { agentDir, brainDir } from './config.mjs';
 
 const AGENT_DIR = agentDir;
-const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
+const BRAIN_DIR = brainDir;
+const VAULT_DIR = path.join(BRAIN_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
-const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
-const CONFLICTS_DIR = path.join(AGENT_DIR, 'memory-inbox', 'conflicts');
-const SESSIONS_DIR = path.join(AGENT_DIR, 'sessions');
-const QUEUE_DIR = path.join(AGENT_DIR, 'scheduler', 'queue');
-const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
+const CONFLICTS_DIR = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
+const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
+const QUEUE_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
+const INSTRUCTIONS_FILE = path.join(BRAIN_DIR, 'INSTRUCTIONS.md');
 
 // How often to recompile surfaces (every N task ticks)
 const RECOMPILE_EVERY_N_TASKS = 20;
@@ -102,7 +101,7 @@ async function dispatchTask(task) {
 // ─── Research Engine (Web Fetching Only — No LLM Synthesis) ─────────────────────
 
 async function runResearchTask(task) {
-  const inboxDir = path.join(AGENT_DIR, 'memory-inbox', 'pending');
+  const inboxDir = path.join(BRAIN_DIR, 'memory-inbox', 'pending');
 
   // Knowledge acquisition — fetch from web, save raw results
   if (task.slug.startsWith('research-acquisition-') || task.category === 'proactive-research' || task.slug.includes('fact-seeker') || task.slug.includes('knowledge-acquisition')) {
@@ -132,7 +131,7 @@ async function runResearchTask(task) {
     const result = await runConclusionWriter({
       inboxDir,
       vaultDir: VAULT_DIR,
-      quarantineDir: path.join(AGENT_DIR, 'memory-inbox', 'quarantine'),
+      quarantineDir: path.join(BRAIN_DIR, 'memory-inbox', 'quarantine'),
     });
     if (result.skipped) return { success: true, output: `Conclusion writer: ${result.skipped}` };
     return {
@@ -149,7 +148,7 @@ async function runResearchTask(task) {
 async function runMaintenanceTask(task) {
   // Lease vacuuming — purely filesystem, no LLM
   try {
-    const leasesDir = path.join(AGENT_DIR, 'leases');
+    const leasesDir = path.join(BRAIN_DIR, 'leases');
     if (fs.existsSync(leasesDir)) {
       const workspaces = fs.readdirSync(leasesDir);
       for (const ws of workspaces) {

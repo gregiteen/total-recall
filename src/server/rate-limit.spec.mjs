@@ -17,7 +17,7 @@ const TEST_AGENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ratelimit-'));
 process.env.AGENT_DIR = TEST_AGENT_DIR;
 
 // Write a security.yml with tight limits so we can hit them quickly.
-const SEC_DIR = path.join(TEST_AGENT_DIR, 'config');
+const SEC_DIR = path.join(TEST_AGENT_DIR, 'skills', 'total-recall', 'config');
 fs.mkdirSync(SEC_DIR, { recursive: true });
 fs.writeFileSync(
   path.join(SEC_DIR, 'security.yml'),

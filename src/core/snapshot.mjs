@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { resolveAgentDir } from '../cli/agent-dir.mjs';
+import { brainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -14,8 +14,7 @@ import { logger } from './logger.mjs';
  */
 
 export function getSnapshotsDir() {
-  const agentDir = resolveAgentDir();
-  const snapshotsDir = path.join(agentDir, '.snapshots');
+  const snapshotsDir = path.join(brainDir, '.snapshots');
   if (!fs.existsSync(snapshotsDir)) {
     fs.mkdirSync(snapshotsDir, { recursive: true });
   }
@@ -30,8 +29,7 @@ export function getSnapshotsDir() {
  */
 export function createSnapshot(reason = 'manual') {
   try {
-    const agentDir = resolveAgentDir();
-    const vaultDir = path.join(agentDir, 'memory-vault');
+    const vaultDir = path.join(brainDir, 'memory-vault');
     const snapshotsDir = getSnapshotsDir();
 
     if (!fs.existsSync(vaultDir)) {
@@ -100,8 +98,7 @@ export function listSnapshots() {
  */
 export function rollbackVault(snapshotId) {
   try {
-    const agentDir = resolveAgentDir();
-    const vaultDir = path.join(agentDir, 'memory-vault');
+    const vaultDir = path.join(brainDir, 'memory-vault');
     const snapshotsDir = getSnapshotsDir();
 
     const tarball = path.join(snapshotsDir, `vault-${snapshotId}.tar.gz`);

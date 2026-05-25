@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { agentDir, brainDir } from './config.mjs';
 
 /**
  * Write a daily dream-cycle summary to memory-vault/daily/YYYY-MM-DD.md.
@@ -133,8 +134,7 @@ export function evaluateCandidates(candidates, existingNodes, conflictsDir) {
 export async function runDreamCycle({
   vaultDir, skillsDir, derivedDir, conflictsDir, instructionsFile
 }) {
-  const agentDir = path.dirname(vaultDir);
-  const sessionsDir = path.join(agentDir, 'sessions');
+  const sessionsDir = path.join(brainDir, 'sessions');
 
   logger.info('dream', 'PHASE 0 — Session Ingestion (IDE Conversation Logs)');
   try {
@@ -219,12 +219,11 @@ import { fileURLToPath } from 'url';
 import os from 'os';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const AGENT_DIR = path.join(os.homedir(), '.agent');
-  const vaultDir = path.join(AGENT_DIR, 'memory-vault');
-  const skillsDir = path.join(AGENT_DIR, 'skills');
-  const derivedDir = path.join(AGENT_DIR, 'memory-derived');
-  const conflictsDir = path.join(AGENT_DIR, 'memory-inbox', 'conflicts');
-  const instructionsFile = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+  const vaultDir = path.join(brainDir, 'memory-vault');
+  const skillsDir = path.join(agentDir, 'skills');
+  const derivedDir = path.join(brainDir, 'memory-derived');
+  const conflictsDir = path.join(brainDir, 'memory-inbox', 'conflicts');
+  const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
 
   logger.info('dream', 'Total Recall Dream Cycle Daemon Started');
 

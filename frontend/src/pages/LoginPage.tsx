@@ -1,31 +1,62 @@
-import { useState, useRef, useEffect } from 'react'
-import { login, changePassword } from '../api'
+import { useState, useRef, useEffect } from "react"
+import { login, changePassword, getAuthStatus, setupPassword } from "../api"
 
 interface Props {
   onAuthenticated: () => void
 }
 
 export default function LoginPage({ onAuthenticated }: Props) {
-  const [password, setPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [error, setError] = useState('')
+  const [password, setPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [needsReset, setNeedsReset] = useState(false)
+  const [isFirstTime, setIsFirstTime] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    async function checkConfig() {
+      try {
+        const res = await getAuthStatus()
+        if (!res.configured) {
+          setIsFirstTime(true)
+        }
+      } catch {}
+    }
+    checkConfig()
+  }, [])
+
+  useEffect(() => {
     inputRef.current?.focus()
-  }, [needsReset])
+  }, [needsReset, isFirstTime])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (loading) return
     setLoading(true)
-    setError('')
+    setError("")
     try {
-      if (needsReset) {
+      if (isFirstTime) {
         if (newPassword.length < 8) {
-          setError('New password must be at least 8 characters')
+          setError("New password must be at least 8 characters")
+          setLoading(false)
+          return
+        }
+        const res = await setupPassword(newPassword)
+        if (res.ok) {
+          const loginRes = await login(newPassword)
+          if (loginRes.ok) {
+            onAuthenticated()
+          } else {
+            setError(loginRes.error || "Password was set, but automatic sign in failed.")
+            setIsFirstTime(false)
+          }
+        } else {
+          setError(res.error || "Failed to setup password")
+        }
+      } else if (needsReset) {
+        if (newPassword.length < 8) {
+          setError("New password must be at least 8 characters")
           setLoading(false)
           return
         }
@@ -33,23 +64,23 @@ export default function LoginPage({ onAuthenticated }: Props) {
         if (res.ok) {
           onAuthenticated()
         } else {
-          setError(res.error || 'Failed to change password')
+          setError(res.error || "Failed to change password")
         }
       } else {
         const res = await login(password)
         if (res.ok) {
           if (res.requiresPasswordReset) {
             setNeedsReset(true)
-            setPassword('') // Clear for security
+            setPassword("") // Clear for security
           } else {
             onAuthenticated()
           }
         } else {
-          setError(res.error || 'Invalid password')
+          setError(res.error || "Invalid password")
         }
       }
     } catch {
-      setError('Network error — is the server running?')
+      setError("Network error — is the server running?")
     } finally {
       setLoading(false)
     }
@@ -75,18 +106,18 @@ export default function LoginPage({ onAuthenticated }: Props) {
         gap: 24,
       }}>
         {/* Brand */}
-        <div style={{ textAlign: 'center' }}>
+        <div style={{ textAlign: "center" }}>
           <div style={{
             width: 48,
             height: 48,
             borderRadius: 12,
-            background: needsReset ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, var(--accent), #7c3aed)',
-            margin: '0 auto 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            background: (needsReset || isFirstTime) ? "linear-gradient(135deg, #f59e0b, #d97706)" : "linear-gradient(135deg, var(--accent), #7c3aed)",
+            margin: "0 auto 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}>
-            {needsReset ? (
+            {(needsReset || isFirstTime) ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
@@ -99,56 +130,56 @@ export default function LoginPage({ onAuthenticated }: Props) {
               </svg>
             )}
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-            {needsReset ? 'Action Required' : 'Total Recall'}
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
+            {needsReset ? "Action Required" : isFirstTime ? "Setup Admin Password" : "Total Recall"}
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
-            {needsReset ? 'You must change your temporary password to continue.' : 'Sovereign Brain v3.0'}
+          <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "4px 0 0" }}>
+            {needsReset ? "You must change your temporary password to continue." : isFirstTime ? "Choose a strong password to secure your dashboard." : "Sovereign Brain v3.0"}
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label htmlFor="login-password" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {needsReset ? 'New Password' : 'Password'}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label htmlFor="login-password" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {(needsReset || isFirstTime) ? "New Password" : "Password"}
             </label>
             <input
               id="login-password"
               ref={inputRef}
               type="password"
-              value={needsReset ? newPassword : password}
+              value={(isFirstTime || needsReset) ? newPassword : password}
               onChange={e => {
-                if (needsReset) setNewPassword(e.target.value)
+                if (isFirstTime || needsReset) setNewPassword(e.target.value)
                 else setPassword(e.target.value)
-                setError('')
+                setError("")
               }}
-              placeholder={needsReset ? 'Minimum 8 characters' : 'Enter admin password'}
-              autoComplete={needsReset ? 'new-password' : 'current-password'}
+              placeholder={(isFirstTime || needsReset) ? "Minimum 8 characters" : "Enter admin password"}
+              autoComplete={(isFirstTime || needsReset) ? "new-password" : "current-password"}
               disabled={loading}
               style={{
-                background: 'var(--bg-primary)',
-                border: `1px solid ${error ? '#ef4444' : 'var(--border)'}`,
+                background: "var(--bg-primary)",
+                border: `1px solid ${error ? "#ef4444" : "var(--border)"}`,
                 borderRadius: 8,
-                padding: '10px 14px',
-                color: 'var(--text-primary)',
+                padding: "10px 14px",
+                color: "var(--text-primary)",
                 fontSize: 14,
-                outline: 'none',
-                transition: 'border-color 0.15s',
+                outline: "none",
+                transition: "border-color 0.15s",
               }}
             />
           </div>
 
           {error && (
             <div style={{
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.3)',
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.3)",
               borderRadius: 8,
-              padding: '10px 14px',
+              padding: "10px 14px",
               fontSize: 13,
-              color: '#f87171',
-              display: 'flex',
-              alignItems: 'center',
+              color: "#f87171",
+              display: "flex",
+              alignItems: "center",
               gap: 8,
             }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -161,37 +192,37 @@ export default function LoginPage({ onAuthenticated }: Props) {
           <button
             id="login-submit"
             type="submit"
-            disabled={loading || (needsReset ? !newPassword : !password)}
+            disabled={loading || ((isFirstTime || needsReset) ? !newPassword : !password)}
             style={{
-              background: (loading || (needsReset ? !newPassword : !password)) ? 'var(--bg-tertiary)' : 'var(--accent)',
-              color: (loading || (needsReset ? !newPassword : !password)) ? 'var(--text-tertiary)' : 'white',
-              border: 'none',
+              background: (loading || ((isFirstTime || needsReset) ? !newPassword : !password)) ? "var(--bg-tertiary)" : "var(--accent)",
+              color: (loading || ((isFirstTime || needsReset) ? !newPassword : !password)) ? "var(--text-tertiary)" : "white",
+              border: "none",
               borderRadius: 8,
-              padding: '11px 0',
+              padding: "11px 0",
               fontSize: 14,
               fontWeight: 600,
-              cursor: (loading || (needsReset ? !newPassword : !password)) ? 'not-allowed' : 'pointer',
-              transition: 'background 0.15s, color 0.15s',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              cursor: (loading || ((isFirstTime || needsReset) ? !newPassword : !password)) ? "not-allowed" : "pointer",
+              transition: "background 0.15s, color 0.15s",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               gap: 8,
             }}
           >
             {loading ? (
               <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                 </svg>
-                {needsReset ? 'Saving…' : 'Authenticating…'}
+                {(isFirstTime || needsReset) ? "Saving…" : "Authenticating…"}
               </>
-            ) : (needsReset ? 'Save & Continue' : 'Sign In')}
+            ) : isFirstTime ? "Create Password & Continue" : needsReset ? "Save & Continue" : "Sign In"}
           </button>
         </form>
 
-        {!needsReset && (
-          <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-tertiary)', margin: 0 }}>
-            Set password in <code style={{ color: 'var(--accent)', fontSize: 11 }}>~/.agent/config/security.yml</code>
+        {(!needsReset && !isFirstTime) && (
+          <p style={{ textAlign: "center", fontSize: 11, color: "var(--text-tertiary)", margin: 0 }}>
+            Set password in <code style={{ color: "var(--accent)", fontSize: 11 }}>~/.agent/config/security.yml</code>
           </p>
         )}
       </div>

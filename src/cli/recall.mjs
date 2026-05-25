@@ -1,4 +1,4 @@
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 import { semanticSearch } from '../core/search.mjs';
 import path from 'node:path';
 
@@ -97,8 +97,9 @@ export default async function recall(args) {
   }
 
   const resolvedAgentDir = resolveAgentDir();
-  const vaultDir = path.join(resolvedAgentDir, 'memory-vault');
-  const derivedDir = path.join(resolvedAgentDir, 'memory-derived');
+  const resolvedBrainDir = resolveBrainDir();
+  const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
+  const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
 
   try {
     const results = await semanticSearch(query, {

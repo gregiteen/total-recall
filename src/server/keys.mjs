@@ -10,12 +10,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
-import { agentDir } from '../core/config.mjs';
+import { brainDir } from '../core/config.mjs';
 
-const AGENT_DIR = agentDir;
-const KEYS_FILE = path.join(AGENT_DIR, 'config', 'keys.jsonl');
+const BRAIN_DIR = brainDir;
+const KEYS_FILE = path.join(BRAIN_DIR, 'config', 'keys.jsonl');
 
 export const ALL_SCOPES = '*';
 

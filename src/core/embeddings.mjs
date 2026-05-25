@@ -17,15 +17,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-import { googleApiKey, embedModel, agentDir } from './config.mjs';
+import { googleApiKey, embedModel, brainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
 const DEFAULT_EMBED_MODEL = embedModel;
 const GOOGLE_API_KEY = googleApiKey || process.env.GOOGLE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const AGENT_DIR = agentDir;
-const DERIVED_DIR = path.join(AGENT_DIR, 'memory-derived');
+const BRAIN_DIR = brainDir;
+const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
 const CACHE_PATH = path.join(DERIVED_DIR, 'embeddings-cache.json');
 
 // ─── Query Embedding Cache Helpers ──────────────────────────────────────────

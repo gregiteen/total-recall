@@ -1,9 +1,8 @@
 import path from 'path';
-import os from 'os';
 import { runMigration, testMigration } from '../core/migrate.mjs';
+import { brainDir } from '../core/config.mjs';
 
-const AGENT_DIR = path.join(os.homedir(), '.agent');
-const VAULT_DIR = path.join(AGENT_DIR, 'memory-vault');
+const VAULT_DIR = path.join(brainDir, 'memory-vault');
 
 export default async function migrateCommand(args) {
   if (args[0] === '--help' || args[0] === '-h') {

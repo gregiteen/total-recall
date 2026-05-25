@@ -1,46 +1,48 @@
 Read and follow .agent/skills/total-recall/SKILL.md on every turn.
 
 <!-- BEGIN INJECTED ACTIVE DIRECTIVES: do not edit by hand; rebuilt by total-recall surface -->
-# Invariant Rules
+## Total Recall — Sovereign Memory System (Installed)
 
-These rules are mandatory and must never be violated.
+You have Total Recall installed. Use these CLI commands to remember and recall information.
 
-## Agent Behavior
-- Always reply directly to all user messages without exception.
-- Always be thorough. Do not add placeholders.
-- Check the Interrupts section in SKILL.md at the start of every turn.
+### npx total-recall remember <category> "<content>" [options]
+Save rules, preferences, corrections, and facts to permanent memory.
 
-## Memory Operations
-- All files in this system must conform to the SSSS format. Read `skills/ssss/SKILL.md` before creating or editing any memory node.
-- When you learn a new pattern or receive a correction, write it as an SSSS node to the appropriate file in this skill folder.
-- After modifying memory/knowledge files, trigger a recompile via the REST API.
+**Categories:** invariant, preference, correction, fact, concept, pattern, anti-pattern, decision, lore
 
-## User Rules
-<!-- Add your project-specific invariant rules below this line -->
-- Never run tsc or npm run typecheck directly.
-- Never run tsc directly.
+**Options:**
+  --tags, -t <list>          Comma-separated tags (e.g. "config,server")
+  --importance, -i <1-5>     Importance level (default: 3)
+  --priority, -p <level>     absolute | high | normal | low (default: normal)
+  --modality, -m <type>      must | must_not | should | should_not | descriptive | preference
+  --confidence, -c <0-1>     Confidence level (default: 1.0)
+  --slug <custom-slug>       Custom kebab-case slug
+  --title <custom-title>     Custom human-readable title
+  --status <state>           active | draft | archived (default: active)
+  --related <list>           Comma-separated related slugs
 
-# User Preferences
+**Examples:**
+  npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
+  npx total-recall remember preference "Always use single quotes." --tags "style,js"
+  npx total-recall remember fact "The server runs on port 3000." --importance 4
 
-Learned preferences about how the user likes to work.
+### npx total-recall recall "<query>" [options]
+Semantic search across rules, facts, and session history.
 
-<!-- Add your preferences below as the agent learns them -->
-<!-- Examples:
-- Be concise and direct
-- Use markdown formatting
-- Prefer TypeScript over JavaScript
-- Always use dark mode in UI designs
--->
-- Always use double quotes.
+**Options:**
+  --top-k, -k <number>       Results to return (default: 5, max: 20)
+  --no-sessions, -ns         Exclude session chunks, vault only
+  --format, -f <type>        text (default) or json
+  --category, -cat <name>    Filter by SSSS category
+  --tags, -t <list>          Filter by tags
+  --modality, -m <type>      Filter by modality
+  --importance, -i <1-5>     Filter by minimum importance
 
-# Corrections
+**Examples:**
+  npx total-recall recall "Never run tsc directly"
+  npx total-recall recall "Express server port" --top-k 3
+  npx total-recall recall "tsc" --category invariants --modality must
 
-Mistakes that have been made and must not be repeated.
-
-<!-- The agent adds entries here when it makes a mistake or receives a correction -->
-<!-- Examples:
-- Do NOT hallucinate skills or tools. Only reference things that actually exist.
-- Do NOT create monolithic memory nodes. Keep rules atomic and focused.
-- Do NOT duplicate rules across multiple nodes.
--->
+### npx total-recall --help
+Show all available commands.
 <!-- END INJECTED ACTIVE DIRECTIVES -->

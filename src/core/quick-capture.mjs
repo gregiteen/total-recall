@@ -9,10 +9,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import os from 'node:os';
+import { brainDir, agentDir } from './config.mjs';
+
+function getBrainDir() {
+  // Support test overrides: if _TR_TEST_AGENT_DIR is set, derive brainDir from it
+  const testDir = process.env._TR_TEST_AGENT_DIR;
+  if (testDir && testDir !== agentDir) {
+    return path.join(testDir, 'skills', 'total-recall');
+  }
+  return brainDir;
+}
 
 function inboxDir() {
-  return path.join(os.homedir(), '.agent', 'memory-inbox', 'capture');
+  return path.join(getBrainDir(), 'memory-inbox', 'capture');
 }
 
 // ─── Heuristic classifier ────────────────────────────────────────────────────────

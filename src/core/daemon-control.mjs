@@ -4,13 +4,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.mjs';
-import { agentDir } from './config.mjs';
+import { agentDir, brainDir } from './config.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 
-const PID_FILE = path.join(agentDir, 'logs', 'daemon.pid');
-const LOG_FILE = path.join(agentDir, 'logs', 'daemon.log');
+const PID_FILE = path.join(brainDir, 'logs', 'daemon.pid');
+const LOG_FILE = path.join(brainDir, 'logs', 'daemon.log');
 
 /**
  * Reads the daemon PID file and checks if the process is actually running.

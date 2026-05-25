@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { agentDir as configAgentDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir } from './agent-dir.mjs';
 
@@ -186,6 +186,7 @@ function copyDirRecursive(src, dest) {
 }
 
 function bootstrapAgentDir(agentDir) {
+  const brainDir = path.join(agentDir, 'skills', 'total-recall');
   const vaultCategories = [
     'invariants', 'patterns', 'anti-patterns',
     'preferences', 'decisions', 'concepts'
@@ -193,11 +194,11 @@ function bootstrapAgentDir(agentDir) {
 
   const dirs = [
     path.join(agentDir, 'skills'),
-    path.join(agentDir, 'memory-derived'),
-    path.join(agentDir, 'memory-inbox', 'pending'),
-    path.join(agentDir, 'memory-inbox', 'conflicts'),
-    path.join(agentDir, 'sessions'),
-    ...vaultCategories.map(c => path.join(agentDir, 'memory-vault', c))
+    path.join(brainDir, 'memory-derived'),
+    path.join(brainDir, 'memory-inbox', 'pending'),
+    path.join(brainDir, 'memory-inbox', 'conflicts'),
+    path.join(brainDir, 'sessions'),
+    ...vaultCategories.map(c => path.join(brainDir, 'memory-vault', c))
   ];
 
   for (const dir of dirs) {
@@ -219,7 +220,7 @@ function bootstrapAgentDir(agentDir) {
   for (const skill of skillsToCopy) {
     const skillSrc = path.join(scaffoldSkillsDir, skill);
     const skillDest = path.join(agentDir, 'skills', skill);
-    if (fs.existsSync(skillSrc) && !fs.existsSync(skillDest)) {
+    if (fs.existsSync(skillSrc) && !fs.existsSync(path.join(skillDest, 'SKILL.md'))) {
       copyDirRecursive(skillSrc, skillDest);
     }
   }
@@ -235,9 +236,9 @@ function readInstructions(cwd, agentDir) {
   return fs.readFileSync(found, 'utf8');
 }
 
-function ensureBrainConfig(agentDir, opts) {
+function ensureBrainConfig(brainDir, opts) {
   if (!opts.brain) return null;
-  const configDir = path.join(agentDir, 'config');
+  const configDir = path.join(brainDir, 'config');
   fs.mkdirSync(configDir, { recursive: true });
   const config = { url: opts.brain };
   if (opts.token) config.token = opts.token;
@@ -246,8 +247,8 @@ function ensureBrainConfig(agentDir, opts) {
   return filePath;
 }
 
-function registerClient(agentDir, clientName, preset, projectionPath) {
-  const configDir = path.join(agentDir, 'config');
+function registerClient(brainDir, clientName, preset, projectionPath) {
+  const configDir = path.join(brainDir, 'config');
   fs.mkdirSync(configDir, { recursive: true });
   const registryPath = path.join(configDir, 'clients.json');
   let registry = { clients: {} };
@@ -348,7 +349,8 @@ function writeVaultProjection(agentDir, preset, opts) {
     throw new Error(`Obsidian vault not found: ${vaultPath}`);
   }
 
-  const memoryVault = path.join(agentDir, 'memory-vault');
+  const brainDir = path.join(agentDir, 'skills', 'total-recall');
+  const memoryVault = path.join(brainDir, 'memory-vault');
   if (!fs.existsSync(memoryVault)) {
     throw new Error(`Memory vault not found: ${memoryVault}. Run "total-recall init" first.`);
   }
@@ -575,6 +577,7 @@ export default async function connect(args) {
 
   const cwd = process.cwd();
   const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || configAgentDir;
+  const brainDir = path.join(agentDir, 'skills', 'total-recall');
 
   // Auto-resolve brain URL and token if not explicitly provided
   if (!opts.brain) {
@@ -583,8 +586,8 @@ export default async function connect(args) {
     } else {
       const globalAgentDir = path.join(os.homedir(), '.agent');
       const candidateConfigDirs = [
-        path.join(agentDir, 'config'),
-        path.join(globalAgentDir, 'config')
+        path.join(brainDir, 'config'),
+        path.join(globalAgentDir, 'skills', 'total-recall', 'config')
       ];
 
       for (const dir of candidateConfigDirs) {
@@ -626,8 +629,8 @@ export default async function connect(args) {
     } else {
       const globalAgentDir = path.join(os.homedir(), '.agent');
       const candidateConfigDirs = [
-        path.join(agentDir, 'config'),
-        path.join(globalAgentDir, 'config')
+        path.join(brainDir, 'config'),
+        path.join(globalAgentDir, 'skills', 'total-recall', 'config')
       ];
 
       for (const dir of candidateConfigDirs) {
@@ -655,9 +658,9 @@ export default async function connect(args) {
       bootstrapAgentDir(agentDir);
       const { compileSurface } = await import('../core/surface.mjs');
       const instructionsFile = path.join(cwd, 'INSTRUCTIONS.md');
-      const vaultDir = path.join(agentDir, 'memory-vault');
+      const vaultDir = path.join(brainDir, 'memory-vault');
       const skillsDir = path.join(agentDir, 'skills');
-      const derivedDir = path.join(agentDir, 'memory-derived');
+      const derivedDir = path.join(brainDir, 'memory-derived');
       await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
     } catch {
       // Fallback: seed a clean, basic default SSSS instructions file so connection is never blocked
@@ -667,7 +670,7 @@ export default async function connect(args) {
     }
   }
 
-  const brainConfigPath = ensureBrainConfig(agentDir, opts);
+  const brainConfigPath = ensureBrainConfig(brainDir, opts);
   const details = apiDetails(opts);
   const result = {
     client: opts.client,
@@ -752,7 +755,7 @@ export default async function connect(args) {
     result.projection = writeVaultProjection(agentDir, preset, opts);
     result.notes.push([
       `  Vault linked: ${result.projection.vaultPath}/${preset.folderName}/`,
-      `  → ${path.join(agentDir, 'memory-vault')}`,
+      `  → ${path.join(brainDir, 'memory-vault')}`,
       '',
       `  Open Obsidian and look for the "${preset.folderName}" folder.`,
       '  All SSSS memory nodes are visible in Graph View, Search, and Backlinks.',
@@ -786,7 +789,7 @@ export default async function connect(args) {
   }
 
   // Record this client in the registry so `status` can report freshness
-  registerClient(agentDir, opts.client, preset, result.projection?.targetPath || null);
+  registerClient(brainDir, opts.client, preset, result.projection?.targetPath || null);
 
   if (opts.json) {
     console.log(JSON.stringify(result, null, 2));
