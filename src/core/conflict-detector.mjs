@@ -240,7 +240,7 @@ export function computeFileHash(vaultRoot, vfsPath) {
 function sourceAuthority(node) {
   const src = node.source?.type;
   if (!src) return 'unknown';
-  const userSources = new Set(['chat', 'user', 'correction', 'mcp-client', 'steering']);
+  const userSources = new Set(['chat', 'user', 'correction', 'mcp-client', 'steering', 'remember-cli', 'api-client']);
   const machineSources = new Set(['dream-cycle', 'optimizer', 'kernel', 'auto-distill']);
   if (userSources.has(src)) return 'user';
   if (machineSources.has(src)) return 'machine';
@@ -289,6 +289,17 @@ export function autoResolveConflict(conflict) {
   const existingAuth = sourceAuthority(existingNode);
   const newIsProtected = isProtectedInvariant(newNode);
   const existingIsProtected = isProtectedInvariant(existingNode);
+
+  // Tier 0: New user-created node always wins and auto-supersedes
+  if (newAuth === 'user') {
+    return {
+      resolved: true,
+      action: 'supersede',
+      winner: newNode.slug,
+      loser: existingNode.slug,
+      reason: `User-created candidate node '${newNode.slug}' automatically supersedes existing node '${existingNode.slug}' to keep the developer in the loop within the IDE context.`,
+    };
+  }
 
   // Tier 1: Both are protected invariants — require human review
   if (newIsProtected && existingIsProtected) {
