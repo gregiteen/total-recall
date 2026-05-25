@@ -107,7 +107,7 @@ export default function SettingsPage() {
       security: {
         ...configData.security,
         [section]: {
-          ...configData.security[section],
+          ...(configData.security[section] as Record<string, unknown>),
           [prop]: value
         }
       }
