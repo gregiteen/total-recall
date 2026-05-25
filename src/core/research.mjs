@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import matter from 'gray-matter';
-import { callFrontier, loadFrontierConfig } from './frontier.mjs';
+import { callLocalRuntime } from './runtime.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 import {
@@ -84,17 +84,9 @@ export async function handleProactiveResearch(task, context = {}) {
     draftPaths.push(draftPath);
   }
 
-  // Phase 4: Synthesize with frontier model if available
-  let finalReport = null;
-  try {
-    const configPath = path.join(AGENT_DIR, 'config', 'frontier.yml');
-    const frontierConfig = loadFrontierConfig(configPath);
-    finalReport = await synthesizeWithFrontier(task, draftPaths, frontierConfig);
-    logger.info({ subsystem: 'deep-research', message: 'Phase 4 complete: frontier synthesis done' });
-  } catch (err) {
-    logger.info({ subsystem: 'deep-research', message: `Frontier synthesis skipped: ${err.message} — using local synthesis` });
-    finalReport = await synthesizeLocally(task, flatResults, context.runtimeConfig);
-  }
+  // Phase 4: Synthesize using local runtime (which consists of high-powered CLI agents)
+  logger.info({ subsystem: 'deep-research', message: 'Phase 4: Synthesizing research results...' });
+  const finalReport = await synthesizeLocally(task, flatResults, context.runtimeConfig);
 
   // Phase 5: Also add topic to the Research Agenda for ongoing tracking
   addToAgenda({
@@ -121,31 +113,14 @@ Output ONLY valid JSON: { "queries": ["query 1", "query 2", "query 3"], "source_
   const planPrompt = `Research Objective: ${task.target}\nDetails: ${task.body || ''}\nGenerate 3 targeted search queries targeting active, timely information post-${cutoff}.`;
 
   try {
-    // Try frontier first
-    const configPath = path.join(AGENT_DIR, 'config', 'frontier.yml');
-    const frontierConfig = loadFrontierConfig(configPath);
-    const raw = await callFrontier(planPrompt, planSystem, frontierConfig);
+    const raw = await callLocalRuntime(planPrompt, planSystem, context.runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (match) {
       const plan = JSON.parse(match[0]);
       if (Array.isArray(plan.queries) && plan.queries.length > 0) return plan.queries;
     }
   } catch (err) {
-    logger.debug('research: callFrontier failed, falling back to local runtime', { err: err.message });
-  }
-
-  if (context.runtimeConfig) {
-    try {
-      const { callLocalRuntime } = await import('./runtime.mjs');
-      const raw = await callLocalRuntime(planPrompt, planSystem, context.runtimeConfig);
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) {
-        const plan = JSON.parse(match[0]);
-        if (Array.isArray(plan.queries) && plan.queries.length > 0) return plan.queries;
-      }
-    } catch (err) {
-      logger.debug('research: callLocalRuntime failed during plan generation', { err: err.message });
-    }
+    logger.debug('research: callLocalRuntime failed during plan generation', { err: err.message });
   }
 
   // Final fallback: use the target itself as the query
@@ -308,27 +283,7 @@ function writeDraftBatch(query, results, inboxDir, parentTopic) {
 
 // ─── Synthesis ───────────────────────────────────────────────────────────────────
 
-async function synthesizeWithFrontier(task, draftPaths, frontierConfig) {
-  const today = getLocalizedDateTime();
-  const cutoff = frontierConfig?.training_cutoff || 'January 2025';
-
-  const draftedFacts = draftPaths.map(draftPath => {
-    const raw = fs.readFileSync(draftPath, 'utf8');
-    const { data, content } = matter(raw);
-    return `[Fact: ${data.slug}]\nSources: ${(data.x_sources || []).map(s => s.url).join(', ')}\n${content}`;
-  }).join('\n\n');
-
-  const synthSystem = `You are a Deep Research Synthesizer. Today's date and time is ${today}. The model's training data cutoff is ${cutoff}.
-Synthesize the gathered facts into a comprehensive, cited Markdown report. Every claim MUST have an inline citation [Source: URL]. Prioritize fresh, timely information published after the cutoff. Identify knowledge gaps and contradictions explicitly.`;
-  const synthPrompt = `Research Objective: ${task.target}\n\nGathered Facts:\n${draftedFacts.slice(0, 12000)}\n\nProduce a final synthesized report prioritizing timely, verified information.`;
-
-  return callFrontier(synthPrompt, synthSystem, frontierConfig);
-}
-
 async function synthesizeLocally(task, results, runtimeConfig) {
-  if (!runtimeConfig) return null;
-  const { callLocalRuntime } = await import('./runtime.mjs');
-
   const today = getLocalizedDateTime();
   const cutoff = runtimeConfig?.training_cutoff || 'January 2025';
 
@@ -343,7 +298,7 @@ Synthesize research results into a concise report. Cite sources inline [Source: 
   try {
     return callLocalRuntime(prompt, system, runtimeConfig);
   } catch (err) {
-    logger.debug('research: callLocalRuntime failed during synthesis', { err: err.message });
+    logger.error('research: callLocalRuntime failed during synthesis', { err: err.message });
     return null;
   }
 }

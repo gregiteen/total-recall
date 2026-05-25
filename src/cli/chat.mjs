@@ -1,7 +1,6 @@
 import readline from 'readline';
 import path from 'path';
 import os from 'os';
-import { callFrontier, loadFrontierConfig } from '../core/frontier.mjs';
 import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core/runtime.mjs';
 
 /**
@@ -11,28 +10,19 @@ import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core
 export default async function runChat(args) {
   console.log('🤖 Total Recall CLI Chat initialized. Type "exit" to quit.\n');
 
-  const useFrontier = args.includes('--frontier');
-  
   const configDir = path.join(os.homedir(), '.agent', 'config');
   
   let config;
   let caller;
   
   try {
-    if (useFrontier) {
-      config = loadFrontierConfig(path.join(configDir, 'frontier.yml'));
-      caller = (prompt, system) => callFrontier(prompt, system, config);
-      console.log(`[Config] Connected to Frontier endpoint: ${config.model}\n`);
-    } else {
-      config = loadRuntimeConfig(path.join(configDir, 'runtime.yml'));
-      const health = await checkRuntimeHealth(config);
-      if (health.status === 'degraded') {
-        console.warn(`[!] Local runtime degraded: ${health.reason}`);
-        console.warn(`    Falling back to Frontier if available, or try --frontier flag.\n`);
-      }
-      caller = (prompt, system) => callLocalRuntime(prompt, system, config);
-      console.log(`[Config] Connected to Local Runtime: ${config.runtime} (${config.model})\n`);
+    config = loadRuntimeConfig(path.join(configDir, 'runtime.yml'));
+    const health = await checkRuntimeHealth(config);
+    if (health.status === 'degraded') {
+      console.warn(`[!] Local runtime degraded: ${health.reason}`);
     }
+    caller = (prompt, system) => callLocalRuntime(prompt, system, config);
+    console.log(`[Config] Connected to Local Runtime (${config.agents?.[0]?.name || 'default'})\n`);
   } catch (e) {
     console.error(`[!] Failed to load configuration: ${e.message}`);
     process.exit(1);

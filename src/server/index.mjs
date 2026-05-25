@@ -210,7 +210,7 @@ try {
 } catch (err) {
   // api.mjs may still be in standalone mode — mount it directly
   logger.warn('server', 'API router not exported as middleware, loading standalone routes...');
-  const { callFrontier, loadFrontierConfig } = await import('../core/frontier.mjs');
+  const { callLocalRuntimeRaw, loadRuntimeConfig } = await import('../core/runtime.mjs');
   const os = await import('node:os');
 
   app.post('/v1/chat/completions', async (req, res) => {
@@ -220,18 +220,15 @@ try {
         return res.status(401).json({ error: 'Missing or invalid Authorization header' });
       }
 
-      const configPath = path.join(os.homedir(), '.agent', 'config', 'frontier.yml');
-      const config = loadFrontierConfig(configPath);
+      const configPath = path.join(os.homedir(), '.agent', 'config', 'runtime.yml');
+      const config = loadRuntimeConfig(configPath);
       const { messages, model, temperature } = req.body;
 
       if (!messages || messages.length === 0) {
         return res.status(400).json({ error: 'Messages array is required' });
       }
 
-      const systemMessage = messages.find(m => m.role === 'system')?.content || '';
-      const userPrompt = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n');
-
-      const responseContent = await callFrontier(userPrompt, systemMessage, {
+      const response = await callLocalRuntimeRaw(messages, {
         ...config,
         model: model || config.model,
         temperature: temperature || config.temperature
@@ -241,10 +238,10 @@ try {
         id: `chatcmpl-${Date.now()}`,
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: config.model,
+        model: model || config.model,
         choices: [{
           index: 0,
-          message: { role: 'assistant', content: responseContent },
+          message: response,
           finish_reason: 'stop'
         }]
       });

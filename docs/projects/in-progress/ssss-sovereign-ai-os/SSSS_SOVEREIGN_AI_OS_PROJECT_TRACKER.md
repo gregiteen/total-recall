@@ -16,8 +16,8 @@ gantt
     Agent CLI Dispatch & Google Embeddings    :done,    des1, 2026-05-20, 2026-05-24
     Pointer Shim & Cleanup                    :done,    des2, 2026-05-23, 2026-05-24
     section Phase 2: Safety
-    Usage Watchdog & Token Tracker            :active,  des3, 2026-05-25, 2026-05-28
-    Sandbox Hardening & Isolation             :         des4, 2026-05-27, 2026-05-31
+    Usage Watchdog & Token Tracker            :done,    des3, 2026-05-25, 2026-05-28
+    Sandbox Hardening & Isolation             :active,  des4, 2026-05-27, 2026-05-31
     section Phase 3: Interface
     UI Memory Browser & Graph Updates          :         des5, 2026-06-01, 2026-06-07
     Conflict manual override panel            :         des6, 2026-06-06, 2026-06-10
@@ -36,14 +36,19 @@ gantt
 - [x] Expunge the old `scaffold/` directory (91 files) completely
 - [x] Expunge the old `scratch/` directory (3 files) completely
 - [x] Turn `runtime.yml` into a minimal stub configuration
+- [x] Implement dynamic remember CLI engine to append rules and recompile surfaces in-process
+- [x] Implement robust semantic recall CLI command to search memory vault and session history
 
-### Phase 2: Runtime Usage Limits & Token Tracking (P1 Priority — ACTIVE)
-- [ ] Create `src/core/usage-tracker.mjs` to ingest CLI usage logs
-- [ ] Implement Claude Code `stats-cache.json` parser
-- [ ] Implement Gemini session JSONL token counting logic
-- [ ] Establish daily/weekly maximum dollar budget limits in `config/frontier.yml`
-- [ ] Wire usage watchdog into pre-flight checks of `dispatch.mjs` to block runs when limits are reached
-- [ ] Add active dispatch loop watchdog that halts and kills unresponsive/runaway subagent processes
+### Phase 2: Runtime Usage Limits & Token Tracking (P1 Priority — 100% COMPLETE)
+- [x] Push-Based Rules Projection to Workspace Instruction Shims (Hotfix)
+- [x] Implement universal remember CLI options (tags, importance, priority, modality, confidence, slug, title, status, SPO, related)
+- [x] Implement universal recall CLI filtering options (category, tags, modality, importance, priority)
+- [x] Create `src/core/usage-tracker.mjs` to ingest CLI usage logs
+- [x] Implement Claude Code `stats-cache.json` parser
+- [x] Implement Gemini session JSONL token counting logic
+- [x] Establish daily/weekly maximum dollar budget limits in `config/budget.yml` (Pivot from `frontier.yml`)
+- [x] Wire usage watchdog into pre-flight checks of `runtime.mjs` (Pivot from `dispatch.mjs`) to block runs when limits are reached
+- [x] Add active dispatch loop watchdog that halts and kills unresponsive/runaway subagent processes (spawnSync timeout)
 
 ### Phase 3: Sandbox Hardening & Security (P1 Priority)
 - [ ] Research and implement POSIX namespace isolation for shell calls in `sandbox.mjs`

@@ -1,0 +1,6 @@
+# Sovereign budget limits configuration for daily and weekly spend.
+# Copy to ~/.agent/config/budget.yml or config/budget.yml and customize.
+budget:
+  daily_cap_usd: 5.00
+  weekly_cap_usd: 25.00
+  enabled: true

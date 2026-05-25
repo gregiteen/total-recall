@@ -4,6 +4,7 @@ import yaml from 'yaml';
 import { spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
 import { agentDir } from './config.mjs';
+import { checkBudgetSafety } from './usage-tracker.mjs';
 
 /**
  * Total Recall Runtime — CLI Agent Dispatch
@@ -164,6 +165,9 @@ function resolveAgent(config) {
  * @returns {string} The agent's text response
  */
 export async function callLocalRuntime(prompt, system, config) {
+  // Pre-flight budget watchdog safety check
+  checkBudgetSafety();
+
   const agents = config?.agents || DEFAULT_AGENTS;
   const timeout = (config?.timeout || 300) * 1000;
   const maxRetries = config?.maxRetries ?? 2;

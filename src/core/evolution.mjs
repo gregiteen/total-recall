@@ -1,6 +1,6 @@
-import { escalateToFrontier } from './frontier.mjs';
 import { executeWithEscalation } from './sandbox.mjs';
 import { logger } from './logger.mjs';
+import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';
 
 /**
  * Total Recall Evolution Engine
@@ -25,11 +25,10 @@ Provide a critique and generate a few-shot SSSS pattern node that captures the l
   const system = 'You are the Total Recall SSSS Evaluator. Your goal is to extract reusable patterns from execution outcomes.';
   
   try {
-    const { callFrontier, loadFrontierConfig } = await import('./frontier.mjs');
-    const config = loadFrontierConfig(configPath);
-    const evaluation = await callFrontier(evalPrompt, system, config);
+    const config = loadRuntimeConfig(configPath);
+    const evaluation = await callLocalRuntime(evalPrompt, system, config);
     
-    logger.info('evolution', `Frontier Judge Evaluation Complete:\n${evaluation.slice(0, 200)}...`);
+    logger.info('evolution', `Evaluation Complete:\n${evaluation.slice(0, 200)}...`);
     return { success: true, evaluation };
   } catch (err) {
     logger.error('evolution', `Eval failed: ${err.message}`);
@@ -61,9 +60,8 @@ Return ONLY valid JavaScript code exporting the updated Zod schemas.`;
   const system = 'You are the Total Recall Kernel Architect. You write flawless Zod schemas in pure JS/ESM.';
 
   try {
-    const { callFrontier, loadFrontierConfig } = await import('./frontier.mjs');
-    const config = loadFrontierConfig(configPath);
-    const upgrade = await callFrontier(prompt, system, config);
+    const config = loadRuntimeConfig(configPath);
+    const upgrade = await callLocalRuntime(prompt, system, config);
     
     logger.info('evolution', 'Schema Upgrade Proposed.');
     return { success: true, proposedSchema: upgrade };

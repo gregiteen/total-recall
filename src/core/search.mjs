@@ -32,32 +32,73 @@ import {
  *   // session fields: key, session_id, snippet, chunk, total_chunks
  * }>>}
  */
-export async function semanticSearch(query, { vaultDir, derivedDir, top_k = 5, includeSessions = true } = {}) {
+export async function semanticSearch(query, { 
+  vaultDir, 
+  derivedDir, 
+  top_k = 5, 
+  includeSessions = true,
+  category = null,
+  tags = null,
+  modality = null,
+  importance = null,
+  priority = null
+} = {}) {
   const k = Math.min(Number(top_k) || 5, 20);
   const queryEmbedding = await getEmbedding(String(query));
   const results = [];
+
+  // If metadata filters are active, session log search is automatically bypassed
+  const hasMetaFilters = category || (tags && tags.length > 0) || modality || importance !== null || priority;
+  const activeIncludeSessions = hasMetaFilters ? false : includeSessions;
 
   // ── Vault nodes ────────────────────────────────────────────────────────────
   const vaultIndex = loadEmbeddingsIndex(derivedDir);
   const vaultEntries = Object.entries(vaultIndex);
   if (vaultEntries.length > 0) {
-    const vaultNodes = loadNodes(vaultDir);
+    let filteredNodes = loadNodes(vaultDir);
+
+    if (category) {
+      const catLower = category.toLowerCase();
+      filteredNodes = filteredNodes.filter(n => n.category && n.category.toLowerCase() === catLower);
+    }
+    if (tags && tags.length > 0) {
+      filteredNodes = filteredNodes.filter(n => n.tags && tags.some(t => n.tags.includes(t)));
+    }
+    if (modality) {
+      const modLower = modality.toLowerCase();
+      filteredNodes = filteredNodes.filter(n => n.modality && n.modality.toLowerCase() === modLower);
+    }
+    if (importance !== null && importance !== undefined) {
+      const minImp = parseInt(importance, 10);
+      filteredNodes = filteredNodes.filter(n => {
+        const val = parseInt(n.importance, 10);
+        return !isNaN(val) && val >= minImp;
+      });
+    }
+    if (priority) {
+      const prioLower = priority.toLowerCase();
+      filteredNodes = filteredNodes.filter(n => n.priority && n.priority.toLowerCase() === prioLower);
+    }
+
+    const filteredSlugs = new Set(filteredNodes.map(n => n.slug));
+
     const scored = vaultEntries
+      .filter(([slug]) => filteredSlugs.has(slug))
       .map(([slug, { embedding }]) => ({ slug, score: cosineSimilarity(queryEmbedding, embedding) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, k);
 
     for (const { slug, score } of scored) {
-      const node = vaultNodes.find(n => n.slug === slug);
+      const node = filteredNodes.find(n => n.slug === slug);
       if (node) {
         const { body, ...meta } = node;
-        results.push({ type: 'vault', ...meta, score: Math.round(score * 1000) / 1000 });
+        results.push({ ...meta, type: 'vault', score: Math.round(score * 1000) / 1000 });
       }
     }
   }
 
   // ── Sessions ───────────────────────────────────────────────────────────────
-  if (includeSessions) {
+  if (activeIncludeSessions) {
     const sessionIndex = loadSessionEmbeddingsIndex(derivedDir);
     const sessionEntries = Object.entries(sessionIndex);
     if (sessionEntries.length > 0) {

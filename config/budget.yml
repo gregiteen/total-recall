@@ -1,0 +1,4 @@
+budget:
+  daily_cap_usd: 5.00
+  weekly_cap_usd: 25.00
+  enabled: true

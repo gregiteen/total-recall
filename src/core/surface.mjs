@@ -101,68 +101,100 @@ export function replaceFirstManagedInjectionBlock(raw, injectionBlock) {
   return null;
 }
 
-/**
- * v2 Meta-Skill Architecture: Generate a one-line pointer to SKILL.md.
- * This replaces the old 106KB compiled instruction blocks.
- */
-function buildPointerContent() {
-  return 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
+const DIRECTIVES_BEGIN = '<!-- BEGIN INJECTED ACTIVE DIRECTIVES: do not edit by hand; rebuilt by total-recall surface -->';
+const DIRECTIVES_END = '<!-- END INJECTED ACTIVE DIRECTIVES -->';
+
+function extractRuleContent(filePath) {
+  if (!fs.existsSync(filePath)) return '';
+  const content = fs.readFileSync(filePath, 'utf8');
+  const parts = content.split('---');
+  if (parts.length >= 3) {
+    return parts.slice(2).join('---').trim();
+  }
+  return content.trim();
+}
+
+function buildRulesBlock(skillsDir) {
+  if (!skillsDir) return '';
+  const rulesDir = path.join(skillsDir, 'total-recall', 'rules');
+  const invariants = extractRuleContent(path.join(rulesDir, 'invariants.md'));
+  const preferences = extractRuleContent(path.join(rulesDir, 'preferences.md'));
+  const corrections = extractRuleContent(path.join(rulesDir, 'corrections.md'));
+
+  let combined = '';
+  if (invariants) {
+    combined += `${invariants}\n\n`;
+  }
+  if (preferences) {
+    combined += `${preferences}\n\n`;
+  }
+  if (corrections) {
+    combined += `${corrections}\n\n`;
+  }
+  return combined.trim();
+}
+
+function injectDirectives(fileContent, rulesBlock) {
+  const beginIdx = fileContent.indexOf(DIRECTIVES_BEGIN);
+  const endIdx = fileContent.indexOf(DIRECTIVES_END);
+  
+  if (beginIdx !== -1 && endIdx !== -1 && endIdx > beginIdx) {
+    return fileContent.slice(0, beginIdx) + DIRECTIVES_BEGIN + '\n' + rulesBlock + '\n' + DIRECTIVES_END + fileContent.slice(endIdx + DIRECTIVES_END.length);
+  }
+  
+  let content = fileContent.trimEnd();
+  const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.';
+  if (!content.includes('SKILL.md')) {
+    content = baseline + '\n\n' + content;
+  }
+  
+  return content.trimEnd() + '\n\n' + DIRECTIVES_BEGIN + '\n' + rulesBlock + '\n' + DIRECTIVES_END + '\n';
 }
 
 /**
- * Write or update a platform instruction shim with the one-line pointer.
- * If the file exists with user content, replaces only the managed injection block.
- * If the file exists as a symlink, removes it and writes the pointer.
- * If the file doesn't exist, creates it with the pointer.
+ * Write or update a platform instruction shim with the pointer and active rules.
  */
-function writeShim(shimPath, pointer) {
+function writeShim(shimPath, skillsDir) {
   const shimDir = path.dirname(shimPath);
+  const rulesBlock = buildRulesBlock(skillsDir);
+  const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
+  const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
+
   try {
     if (fs.existsSync(shimPath)) {
       const stat = fs.lstatSync(shimPath);
       if (stat.isSymbolicLink()) {
-        // Remove old symlink, write fresh pointer
         fs.unlinkSync(shimPath);
-        atomicWrite(shimPath, pointer);
+        atomicWrite(shimPath, fullContent);
       } else {
-        // Real file — check for old injection block and replace it
         const raw = fs.readFileSync(shimPath, 'utf8');
+        let cleaned = raw;
         if (raw.includes(INJECTION_BEGIN)) {
-          // Replace old bloated injection with the pointer
-          const replaced = replaceFirstManagedInjectionBlock(raw, pointer.trim());
-          if (replaced !== null) {
-            atomicWrite(shimPath, replaced);
-          } else {
-            // Could not find end marker — append pointer
-            atomicWrite(shimPath, raw.trimEnd() + '\n\n' + pointer);
-          }
-        } else if (!raw.includes('SKILL.md')) {
-          // No injection block and no pointer yet — append
-          atomicWrite(shimPath, raw.trimEnd() + '\n\n' + pointer);
+          const replaced = replaceFirstManagedInjectionBlock(raw, '');
+          if (replaced !== null) cleaned = replaced;
         }
-        // If it already has a SKILL.md pointer, leave it alone
+        
+        const updated = injectDirectives(cleaned, rulesBlock);
+        atomicWrite(shimPath, updated);
       }
     } else {
-      // New file — create parent dirs and write
       if (!fs.existsSync(shimDir)) {
         fs.mkdirSync(shimDir, { recursive: true });
       }
-      atomicWrite(shimPath, pointer);
+      atomicWrite(shimPath, fullContent);
     }
   } catch (err) {
-    // Ignore permission errors etc.
+    // Ignore permission errors
   }
 }
 
 /**
- * Compile the one-line pointer into all platform instruction shims.
+ * Compile pointers with active rules directly into root instruction shims.
  */
-function compilePointers(instructionsFile) {
-  const pointer = buildPointerContent();
+function compilePointers(instructionsFile, skillsDir) {
   const agentDir = path.dirname(instructionsFile);
   const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
 
-  // Write all platform instruction shims (including INSTRUCTIONS.md)
   const shims = [
     'INSTRUCTIONS.md',
     '.cursorrules',
@@ -179,25 +211,18 @@ function compilePointers(instructionsFile) {
   ];
 
   for (const shim of shims) {
-    writeShim(path.join(baseDir, shim), pointer);
+    writeShim(path.join(baseDir, shim), skillsDir);
   }
 }
 
 /**
  * Main surface compilation entry point.
- *
- * v2 Meta-Skill Architecture:
- * - Generates one-line pointer shims (replaces 106KB compiled blocks)
- * - Builds derived indexes for semantic search (graph, layers, embeddings)
- * - Generates Obsidian Canvas
- * - Does NOT inject memory nodes into instruction files
- * - Does NOT do TF-IDF routing into skills
  */
 export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile }) {
   const nodes = loadNodes(vaultDir);
 
-  // 1. Write one-line pointer to all instruction shims
-  compilePointers(instructionsFile);
+  // 1. Write pointer and active rules to all instruction shims
+  compilePointers(instructionsFile, skillsDir);
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {

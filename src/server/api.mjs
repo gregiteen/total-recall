@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { callFrontier, callFrontierRaw, loadFrontierConfig } from '../core/frontier.mjs';
 import { callLocalRuntimeRaw, loadRuntimeConfig, checkRuntimeHealth, cleanAndParseJSON } from '../core/runtime.mjs';
 import { AVAILABLE_TOOLS, handleToolCall } from './tools.mjs';
 import { requireAuth, requireScope, loginHandler, logoutHandler, changePasswordHandler, apiRateLimiter } from './auth.mjs';
@@ -313,7 +312,6 @@ function extractToolCallsFromContent(content) {
 
 apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, res) => {
   try {
-    const frontierConfigPath = path.join(CONFIG_DIR, 'frontier.yml');
     const runtimeConfigPath = path.join(CONFIG_DIR, 'runtime.yml');
     
     const { messages, model, temperature, groundingNodes } = req.body;
@@ -330,37 +328,22 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
     }
     
     let activeConfig = null;
-    let isLocal = false;
 
-    // Determine whether to use local runtime or frontier
     if (fs.existsSync(runtimeConfigPath)) {
       const rtConfig = loadRuntimeConfig(runtimeConfigPath);
       const health = await checkRuntimeHealth(rtConfig);
-      if (health.status === 'healthy') {
-        activeConfig = {
-          ...rtConfig,
-          model: resolveRequestedModel(model, rtConfig),
-          response_model: model || rtConfig.model,
-          temperature: temperature || rtConfig.temperature
-        };
-        isLocal = true;
-      }
-    }
-    
-    if (!isLocal) {
-      const fConfig = loadFrontierConfig(frontierConfigPath);
-      activeConfig = fConfig.local?.endpoint ? {
-        ...fConfig,
-        endpoint: fConfig.local.endpoint,
-        model: resolveRequestedModel(model, { model: fConfig.local.model || fConfig.model }),
-        response_model: model || fConfig.local.model || fConfig.model,
-        temperature: temperature || fConfig.temperature,
-        api_key: null
-      } : {
-        ...fConfig,
-        model: model || fConfig.model,
-        response_model: model || fConfig.model,
-        temperature: temperature || fConfig.temperature
+      activeConfig = {
+        ...rtConfig,
+        model: resolveRequestedModel(model, rtConfig),
+        response_model: model || rtConfig.model,
+        temperature: temperature || rtConfig.temperature
+      };
+    } else {
+      activeConfig = {
+        agents: [],
+        model: model || 'default',
+        response_model: model || 'default',
+        temperature: temperature || 0.2
       };
     }
 
@@ -595,14 +578,12 @@ ${interviewTask}`;
     let useTools = AVAILABLE_TOOLS;
     // Tool loop (up to 5 iterations to prevent infinite loops)
     for (let i = 0; i < 5; i++) {
-      logger.info('api', `Invoking ${isLocal ? 'local' : 'frontier'} model (Iteration ${i + 1})...`);
+      logger.info('api', `Invoking local model (Iteration ${i + 1})...`);
       let message;
       try {
-        message = isLocal 
-          ? await callLocalRuntimeRaw(currentMessages, activeConfig, useTools)
-          : await callFrontierRaw(currentMessages, activeConfig, useTools);
+        message = await callLocalRuntimeRaw(currentMessages, activeConfig, useTools);
       } catch (err) {
-        if (isLocal && useTools && (err.message.includes('does not support tools') || err.message.includes('invalid_request_error') || err.message.includes('400'))) {
+        if (useTools && (err.message.includes('does not support tools') || err.message.includes('invalid_request_error') || err.message.includes('400'))) {
           logger.warn('api', `Local model ${activeConfig.model} does not support native tools. Retrying without tools and with simplified system prompt.`);
           useTools = undefined;
           
