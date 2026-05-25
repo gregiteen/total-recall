@@ -1,22 +1,26 @@
 /**
  * total-recall init
  *
- * Bootstrap Total Recall into an existing project repository.
- * Runs in the current working directory (cwd).
+ * Bootstrap Total Recall with a layered brain architecture.
  *
- * What it does:
- *   1. Creates .agent/memory-vault/<categories>/ directory structure
- *   2. Creates .agent/skills/ and seeds the core SSSS skill
- *   3. Copies default invariant memory nodes from the scaffold
- *   4. Runs compile to inject the Total Recall memory block into any
- *      existing IDE instruction files (GEMINI.md, .cursorrules, CLAUDE.md,
- *      AGENTS.md, .clauderules) non-destructively, or creates INSTRUCTIONS.md
- *      + symlinks if they don't exist yet.
+ * Two modes:
+ *   1. `npx total-recall init` (default) — creates the GLOBAL brain at
+ *      ~/.agent/skills/total-recall/. This holds identity: universal
+ *      preferences, invariants, corrections, coding principles.
+ *
+ *   2. `npx total-recall init --project` — creates a PROJECT brain at
+ *      <cwd>/.agent/skills/total-recall/. This holds project-specific
+ *      knowledge: facts, decisions, architecture patterns.
+ *      Also registers the project in the global brain's project registry.
+ *
+ * Both modes seed core skills, default memory nodes, and compile
+ * IDE instruction files (GEMINI.md, .cursorrules, CLAUDE.md, etc.)
  *
  * Usage:
  *   npx total-recall init [options]
  *
  * Options:
+ *   --project     Create a project-level brain in the current directory
  *   --dry-run     Print what would be done without making changes
  *   --help        Show this help
  */
@@ -69,11 +73,12 @@ function copyDirMerge(src, dest, dryRun) {
 }
 
 function parseArgs(args) {
-  const opts = { dryRun: false, help: false, brain: null, token: null };
+  const opts = { dryRun: false, help: false, brain: null, token: null, project: false };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
+    else if (arg === '--project') opts.project = true;
     else if (arg === '--brain') opts.brain = args[++i];
     else if (arg === '--token') opts.token = args[++i];
   }
@@ -82,28 +87,24 @@ function parseArgs(args) {
 
 function printHelp() {
   console.log(`
-  total-recall init — Bootstrap Total Recall into an existing project repo
-
-  Run this command from inside your project directory.
+  total-recall init — Bootstrap Total Recall with layered brain architecture
 
   Usage: total-recall init [options]
+
+  Modes:
+    (default)     Create the GLOBAL brain at ~/.agent/skills/total-recall/
+                  Holds: universal preferences, invariants, corrections, coding principles
+    --project     Create a PROJECT brain at <cwd>/.agent/skills/total-recall/
+                  Holds: project-specific facts, decisions, architecture patterns
+                  Also registers the project in the global brain's project registry.
 
   Options:
     --dry-run     Print what would be done without making changes
     --help, -h    Show this help
 
-  What it does:
-    1. Creates .agent/memory-vault/ with the full SSSS category directory layout
-    2. Seeds the SSSS skill into .agent/skills/ssss/
-    3. Copies core operating invariant memory nodes from the scaffold
-    4. Runs compile — injects the Total Recall memory block into any existing
-       IDE instruction files (GEMINI.md, .cursorrules, CLAUDE.md, AGENTS.md,
-       .clauderules) without overwriting them. If none exist, creates
-       INSTRUCTIONS.md and the standard IDE symlinks.
-
-  Example:
-    cd ~/my-project
-    npx total-recall init
+  Examples:
+    npx total-recall init              # Global brain (run once)
+    npx total-recall init --project    # Project brain (run per project)
 `);
 }
 
@@ -114,14 +115,21 @@ export default async function init(args) {
   if (opts.help) { printHelp(); return; }
 
   const cwd = process.cwd();
-  const agentDir = path.join(cwd, '.agent');
-  const brainDir = path.join(agentDir, 'skills', 'total-recall');
+  const globalAgentDir = path.join(os.homedir(), '.agent');
+  const globalBrainDir = path.join(globalAgentDir, 'skills', 'total-recall');
+
+  // Determine target based on --project flag
+  const isProject = opts.project;
+  const agentDir = isProject ? path.join(cwd, '.agent') : globalAgentDir;
+  const brainDir = isProject ? path.join(agentDir, 'skills', 'total-recall') : globalBrainDir;
+  const layerLabel = isProject ? 'PROJECT' : 'GLOBAL';
+  const targetPath = isProject ? cwd : os.homedir();
   let passwordMessage = "";
 
   console.error(`
   ┌─────────────────────────────────────────────────────────┐
-  │  Total Recall Init                                       │
-  │  Bootstrapping into: ${cwd.slice(0, 36).padEnd(36)}  │
+  │  Total Recall Init (${layerLabel.padEnd(7)})                         │
+  │  Bootstrapping into: ${targetPath.slice(0, 36).padEnd(36)}  │
   └─────────────────────────────────────────────────────────┘
 `);
 
@@ -231,6 +239,34 @@ export default async function init(args) {
     logSkip('onboarding-interview.md already in queue');
   }
 
+  // ── Restore credentials from backup if present ──
+  let restoredPasswordHash = null;
+  if (!opts.dryRun) {
+    const backupSecretsPath = path.join(agentDir, 'secrets.enc');
+    if (fs.existsSync(backupSecretsPath)) {
+      try {
+        const configDir = path.join(brainDir, 'config');
+        fs.mkdirSync(configDir, { recursive: true });
+        
+        // Copy secrets.enc to brainDir/config/secrets.enc
+        const destSecretsPath = path.join(configDir, 'secrets.enc');
+        fs.copyFileSync(backupSecretsPath, destSecretsPath);
+        
+        // Read to see if password hash is present
+        const secretsObj = JSON.parse(fs.readFileSync(destSecretsPath, 'utf8') || '{}');
+        if (secretsObj.dashboard_password_hash) {
+          restoredPasswordHash = secretsObj.dashboard_password_hash;
+          // Strip password hash from the copied secrets.enc to keep secrets.enc clean
+          delete secretsObj.dashboard_password_hash;
+          fs.writeFileSync(destSecretsPath, JSON.stringify(secretsObj, null, 2), { encoding: 'utf8', mode: 0o600 });
+        }
+        logOk('Restored saved API keys and credentials from persistent backup!');
+      } catch (err) {
+        logWarn(`Failed to restore credentials from backup: ${err.message}`);
+      }
+    }
+  }
+
   // ── Step 3.6: Ensure Default Dashboard Password ──
   if (!opts.dryRun) {
     const configDir = path.join(brainDir, "config");
@@ -254,18 +290,44 @@ export default async function init(args) {
       config.network ??= { require_https: true, public_health: false, allowed_origins: [] };
       config.bind ??= { host: "127.0.0.1", port: 3000, allow_public_bind: false };
 
+      if (restoredPasswordHash && !config.dashboard.password_hash) {
+        config.dashboard.password_hash = restoredPasswordHash;
+      }
+
       if (!config.dashboard.password_hash) {
-        const defaultPassword = "totalrecall";
-        const hash = bcrypt.hashSync(defaultPassword, 12);
-        config.dashboard.password_hash = hash;
-        config.dashboard.force_password_reset = true;
         fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
-        passwordMessage = "\n  🔑 Temporary Login Password: \"totalrecall\"\n     (You will be forced to change it upon first login)";
+        passwordMessage = "\n  🔑 Dashboard Access: Unconfigured\n     (You will be prompted to set your password upon first browser access)";
       } else {
+        fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
         passwordMessage = "\n  🔑 Dashboard credentials preserved (custom password hash already configured)";
       }
     } catch (err) {
       logWarn(`Failed to seed default dashboard credentials: ${err.message}`);
+    }
+  }
+
+  // ── Symlink nested brain skills to top-level .agent/skills/ ──
+  // Skills inside the brain (e.g. .agent/skills/total-recall/skills/ssss/) are
+  // invisible to IDEs because they only scan .agent/skills/<name>/ one level
+  // deep. Create symlinks so they appear as slash commands.
+  const nestedSkillsDir = path.join(brainDir, 'skills');
+  if (fs.existsSync(nestedSkillsDir)) {
+    const topSkillsDir = path.join(agentDir, 'skills');
+    for (const entry of fs.readdirSync(nestedSkillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const target = path.join(topSkillsDir, entry.name);
+      const source = path.join(nestedSkillsDir, entry.name);
+      if (fs.existsSync(target)) continue; // don't clobber existing top-level skills
+      if (!opts.dryRun) {
+        try {
+          fs.symlinkSync(source, target);
+          logOk(`Symlinked nested skill: ${entry.name} → IDE-visible`);
+        } catch (err) {
+          logWarn(`Could not symlink skill "${entry.name}": ${err.message}`);
+        }
+      } else {
+        log(`  Would symlink ${entry.name} → ${target}`);
+      }
     }
   }
 
@@ -285,13 +347,17 @@ export default async function init(args) {
 
   try {
     const { compileSurface } = await import('../core/surface.mjs');
-    const result = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
+    const globalVaultDir = isProject ? path.join(globalBrainDir, 'memory-vault') : undefined;
+    const result = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir });
+    if (result.semanticUnavailable) {
+      logWarn("Semantic index build is temporarily unavailable (missing API credentials or Ollama offline).");
+      logWarn("Please set GOOGLE_API_KEY or OPENAI_API_KEY, or run 'npx total-recall setup' later to enable full semantic search.");
+    }
     logOk(`Compile complete — ${result.nodesProcessed} nodes processed`);
   } catch (err) {
-    logWarn(`Compile failed: ${err.message}`);
-    logWarn('You can run `npx total-recall compile` manually once the issue is resolved.');
+    logWarn(`❌ Initialization aborted due to critical error: ${err.message}`);
+    process.exit(1);
   }
-
 
   // ── Optional: register a remote brain for hybrid mode ──
   if (opts.brain) {
@@ -322,7 +388,7 @@ export default async function init(args) {
 
   if (hasCloudflared) {
     log("Cloudflared detected. Spawning background Quick Tunnel...");
-    const logsDir = path.join(agentDir, "logs");
+    const logsDir = path.join(brainDir, "logs");
     if (!opts.dryRun) {
       fs.mkdirSync(logsDir, { recursive: true });
     }
@@ -365,7 +431,7 @@ export default async function init(args) {
       if (tunnelUrl) {
         logOk(`Cloudflare Quick Tunnel Active: ${tunnelUrl}`);
         
-        const configDir = path.join(os.homedir(), ".agent", "config");
+        const configDir = path.join(brainDir, "config");
         const configFile = path.join(configDir, "wizard-config.json");
         fs.mkdirSync(configDir, { recursive: true });
         
@@ -401,7 +467,7 @@ export default async function init(args) {
 
   // 3. Try ~/.agent/config/wizard-config.json (Cloudflare remote URL)
   if (!dashboardUrl) {
-    const wizardConfigPath = path.join(os.homedir(), ".agent", "config", "wizard-config.json");
+    const wizardConfigPath = path.join(brainDir, "config", "wizard-config.json");
     if (fs.existsSync(wizardConfigPath)) {
       try {
         const wizardCfg = JSON.parse(fs.readFileSync(wizardConfigPath, "utf8"));
@@ -416,9 +482,9 @@ export default async function init(args) {
     }
   }
 
-  // 4. Try ~/.agent/config/brain.json
+  // 4. Try brain config/brain.json
   if (!dashboardUrl) {
-    const brainJsonPath = path.join(agentDir, "config", "brain.json");
+    const brainJsonPath = path.join(brainDir, "config", "brain.json");
     if (fs.existsSync(brainJsonPath)) {
       try {
         const brainCfg = JSON.parse(fs.readFileSync(brainJsonPath, "utf8"));
@@ -447,13 +513,43 @@ export default async function init(args) {
     dashboardUrl += "/";
   }
 
+  // ── Register project brain in global project registry ──
+  if (isProject) {
+    try {
+      const registryDir = path.join(globalBrainDir, 'config');
+      fs.mkdirSync(registryDir, { recursive: true });
+      const registryPath = path.join(registryDir, 'project-registry.json');
+      let registry = [];
+      if (fs.existsSync(registryPath)) {
+        try { registry = JSON.parse(fs.readFileSync(registryPath, 'utf8')); } catch { registry = []; }
+      }
+      const projectName = path.basename(cwd);
+      const existingIdx = registry.findIndex(p => p.path === cwd);
+      const entry = {
+        name: projectName,
+        path: cwd,
+        brainDir: brainDir,
+        registered_at: new Date().toISOString(),
+        last_compiled: new Date().toISOString(),
+      };
+      if (existingIdx >= 0) {
+        registry[existingIdx] = { ...registry[existingIdx], ...entry };
+      } else {
+        registry.push(entry);
+      }
+      fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+      logOk(`Registered project "${projectName}" in global brain registry`);
+    } catch (err) {
+      logWarn(`Failed to register project: ${err.message}`);
+    }
+  }
+
   console.error(`
-  ✅ Total Recall initialized!
+  ✅ Total Recall initialized! (${layerLabel} brain)
   ${passwordMessage}
 
-  Your .agent/ directory is ready. Here is what was set up:
-    .agent/memory-vault/    ← Your SSSS memory vault (Tier 3)
-    .agent/skills/ssss/     ← SSSS schema reference skill (Tier 2)
+  Your ${isProject ? 'project' : 'global'} brain is ready at:
+    ${brainDir}
 
   IDE instruction files have been updated with the Total Recall memory block.
   Existing content in GEMINI.md, .cursorrules, CLAUDE.md etc. was preserved.
@@ -463,9 +559,8 @@ export default async function init(args) {
 
   Next steps:
     1. Run \`npx total-recall compile\` any time to rebuild the memory surface.
-    2. Add memory nodes under .agent/memory-vault/<category>/<slug>.md
-       (Read .agent/skills/ssss/SKILL.md for the exact SSSS schema.)
-    3. Run \`npx total-recall daemon start\` to enable the background Dream Cycle.
+    2. Use \`npx total-recall remember <category> "..."\ to add memories.
+    3. Run \`npx total-recall daemon start\` to enable the background Dream Cycle.${isProject ? '\n    4. Your project brain is registered in the global brain\'s project registry.' : ''}
 `);
 
   // Automatically open the Dashboard UI in the user's browser

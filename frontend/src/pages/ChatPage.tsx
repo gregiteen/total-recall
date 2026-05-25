@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth } from '../api'
 import type { ChatThread } from '../api'
 import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
 import Graph3D from '../components/Graph3D'
@@ -47,6 +47,12 @@ export default function ChatPage() {
   const [nodeSearchQuery, setNodeSearchQuery] = useState('')
   const nodeSelectorRef = useRef<HTMLDivElement>(null)
 
+  // Model Selector state
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   const scrollToBottom = useCallback(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
@@ -76,8 +82,6 @@ export default function ChatPage() {
       })
       .catch(console.error)
 
-
-
     listMemory()
       .then(setAllMemoryNodes)
       .catch(console.error)
@@ -85,20 +89,38 @@ export default function ChatPage() {
     listResearch()
       .then(res => setResearchItems(res.items || []))
       .catch(console.error)
+
+    fetchHealth()
+      .then(health => {
+        if (health.cli_agents && health.cli_agents.length > 0) {
+          setAvailableModels(health.cli_agents)
+          setSelectedModel(health.cli_agents[0])
+        } else {
+          setAvailableModels(['antigravity', 'gemini', 'claude', 'codex'])
+          setSelectedModel('gemini')
+        }
+      })
+      .catch(() => {
+        setAvailableModels(['antigravity', 'gemini', 'claude', 'codex'])
+        setSelectedModel('gemini')
+      })
   }, [])
 
-  // Click outside listener for grounding node selector popover
+  // Click outside listener for grounding node selector popover and model selector dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (nodeSelectorRef.current && !nodeSelectorRef.current.contains(event.target as Node)) {
         setShowNodeSelector(false)
+      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowModelDropdown(false)
       }
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [nodeSelectorRef])
+  }, [nodeSelectorRef, dropdownRef])
 
   // Load chat history when activeThreadId changes
   useEffect(() => {
@@ -233,7 +255,7 @@ export default function ChatPage() {
       }
 
       const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes)
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes, selectedModel)
       const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: getCurrentTimestamp(), versions: [reply], currentVersionIndex: 0 }
       setMessages(prev => [...prev, assistantMsg])
       speak(reply)
@@ -257,7 +279,7 @@ export default function ChatPage() {
     setLoading(true)
     abortControllerRef.current = new AbortController()
     try {
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId)
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId, undefined, selectedModel)
       setMessages(prev => {
         const next = [...prev]
         const target = next[msgIndex]
@@ -369,6 +391,57 @@ export default function ChatPage() {
 
       {/* Main Chat Area */}
       <div className="chat-container">
+        <header className="chat-header animate-fade-in">
+          <div className="chat-header-title">
+            <h2>Chat Session</h2>
+            {activeThreadId && (
+              <span className="badge badge-accent" style={{ textTransform: 'none', letterSpacing: 'normal', fontSize: '11px', padding: '2px 8px' }}>
+                {activeThreadId}
+              </span>
+            )}
+          </div>
+          <div className="chat-header-model-selector" ref={dropdownRef}>
+            <span className="selector-label">Model:</span>
+            <div className="model-selector-dropdown-wrapper">
+              <button 
+                className={`model-selector-dropdown-btn ${showModelDropdown ? 'active' : ''}`}
+                onClick={() => setShowModelDropdown(!showModelDropdown)}
+                title="Select CLI agent model"
+              >
+                <span style={{ textTransform: 'capitalize' }}>{selectedModel || 'Select Model'}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              {showModelDropdown && (
+                <div className="model-selector-menu glass">
+                  {availableModels.map(modelName => (
+                    <div 
+                      key={modelName} 
+                      className={`model-selector-item ${selectedModel === modelName ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedModel(modelName)
+                        setShowModelDropdown(false)
+                      }}
+                    >
+                      <div className="model-selector-item-info">
+                        <span className="model-selector-item-name" style={{ textTransform: 'capitalize' }}>{modelName}</span>
+                        <span className="model-selector-item-desc">
+                          {modelName === 'antigravity' && 'Google Antigravity'}
+                          {modelName === 'gemini' && 'Google Gemini CLI'}
+                          {modelName === 'claude' && 'Anthropic Claude CLI'}
+                          {modelName === 'codex' && 'Codex Coding Agent'}
+                        </span>
+                      </div>
+                      <span className="model-selector-item-badge">CLI</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
         <div className="chat-messages">
           {messages.length === 0 && (
             <Graph3D

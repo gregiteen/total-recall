@@ -48,8 +48,11 @@ describe('cosineSimilarity', () => {
 
 describe('generateEmbedding', () => {
   it('returns null when Ollama is unreachable', async () => {
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
     const result = await generateEmbedding('test', { endpoint: 'http://127.0.0.1:19999' });
     expect(result).toBeNull();
+    global.fetch = origFetch;
   });
 });
 
@@ -83,13 +86,22 @@ describe('loadEmbeddingsIndex', () => {
 
 describe('buildSemanticIndex', () => {
   it('reports unavailable when Ollama is unreachable', async () => {
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
     const nodes = [{ slug: 'n1', title: 'Test', content: 'hello' }];
     const result = await buildSemanticIndex(nodes, tmpDir, { endpoint: 'http://127.0.0.1:19999' });
     expect(result.unavailable).toBe(true);
     expect(result.indexed).toBe(0);
+    global.fetch = origFetch;
   });
 
   it('skips all nodes when index is already complete', async () => {
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embedding: { values: [1, 0] } })
+    });
+
     // Pre-populate the index so there is nothing new to embed
     const text = ['Test', 'hello'].filter(Boolean).join('\n').slice(0, 4096);
     const hash = crypto.createHash('sha256').update(text).digest('hex');
@@ -103,13 +115,20 @@ describe('buildSemanticIndex', () => {
     expect(result.indexed).toBe(0);
     expect(result.skipped).toBe(1);
     expect(result.unavailable).toBe(false);
+    global.fetch = origFetch;
   });
 
   it('re-embeds a node if its body content is modified (hash drift)', async () => {
     // 1. Initial build
     const origFetch = global.fetch;
     let callCount = 0;
-    global.fetch = vi.fn().mockImplementation(async () => {
+    global.fetch = vi.fn().mockImplementation(async (url) => {
+      if (typeof url === 'string' && url.includes('models?key=')) {
+        return {
+          ok: true,
+          json: async () => ({ models: [{ name: 'models/gemini-embedding-2' }] })
+        };
+      }
       callCount++;
       return {
         ok: true,
@@ -133,19 +152,19 @@ describe('buildSemanticIndex', () => {
     const result2 = await buildSemanticIndex(nodes, tmpDir);
     expect(result2.indexed).toBe(0);
     expect(result2.skipped).toBe(1);
-    expect(callCount).toBe(1);
+    expect(callCount).toBe(2);
 
     // 3. Third build with MODIFIED content
     const modifiedNodes = [{ slug: 'n1', title: 'Test', body: 'modified content' }];
     const result3 = await buildSemanticIndex(modifiedNodes, tmpDir);
     expect(result3.indexed).toBe(1);
     expect(result3.skipped).toBe(0);
-    expect(callCount).toBe(2);
+    expect(callCount).toBe(3);
 
     // Verify new hash and embedding is written
     const index3 = loadEmbeddingsIndex(tmpDir);
     const cached3 = index3.get('n1');
-    expect(cached3.embedding).toEqual([2, 0]);
+    expect(cached3.embedding).toEqual([3, 0]);
     expect(cached3.content_sha256).not.toEqual(cached1.content_sha256);
 
     global.fetch = origFetch;
@@ -161,12 +180,15 @@ describe('semanticSearch', () => {
   });
 
   it('returns empty array when Ollama is unreachable even with an index', async () => {
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
     fs.writeFileSync(
       path.join(tmpDir, 'embeddings.jsonl'),
       JSON.stringify({ slug: 'n1', embedding: [1, 0] }) + '\n'
     );
     const results = await semanticSearch('hello', tmpDir, { endpoint: 'http://127.0.0.1:19999' });
     expect(results).toEqual([]);
+    global.fetch = origFetch;
   });
 
   it('ranks nodes by cosine similarity when embeddings are mocked', async () => {

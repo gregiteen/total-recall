@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { writeNode } from '../core/vault.mjs';
 
@@ -40,12 +40,16 @@ function printHelp() {
     npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
     npx total-recall remember preference "Always use single quotes." --tags "style,js" --modality preference
     npx total-recall remember fact "The server runs on port 3000." --tags "config,port" --importance 4
+    npx total-recall remember fact "Uses Drizzle ORM" --project   # Saves to project brain
+    npx total-recall remember invariant "No var" --global          # Saves to global brain
 `);
 }
 
 export default async function remember(args) {
-  const type = args[0];
-  const bodyContent = args[1];
+  // Parse layer flag first
+  const { layer: explicitLayer, remainingArgs: layerArgs } = parseLayerFlag(args);
+  const type = layerArgs[0];
+  const bodyContent = layerArgs[1];
 
   if (!type || !bodyContent || type === '--help' || type === '-h') {
     printHelp();
@@ -71,6 +75,17 @@ export default async function remember(args) {
     process.exit(1);
   }
 
+  // Resolve layer: explicit flag > category heuristic > auto-detect
+  let layer = explicitLayer;
+  if (layer === 'auto') {
+    layer = defaultLayerForCategory(category);
+    // Fall back to global if no project brain exists
+    const project = getBothBrains().project;
+    if (layer === 'project' && !project) {
+      layer = 'global';
+    }
+  }
+
   // Parse Options
   let tags = [];
   let importance = 3;
@@ -85,9 +100,9 @@ export default async function remember(args) {
   let object = 'brain';
   let related = [];
 
-  for (let i = 2; i < args.length; i++) {
-    const arg = args[i];
-    const val = args[i + 1];
+  for (let i = 2; i < layerArgs.length; i++) {
+    const arg = layerArgs[i];
+    const val = layerArgs[i + 1];
 
     if (arg === '--tags' || arg === '-t') {
       if (val) {
@@ -154,12 +169,13 @@ export default async function remember(args) {
     }
   }
 
-  const resolvedAgentDir = resolveAgentDir();
-  const resolvedBrainDir = resolveBrainDir();
+  const resolvedAgentDir = resolveAgentDir(layer);
+  const resolvedBrainDir = resolveBrainDir(layer);
   const skillsDir = path.join(resolvedAgentDir, 'skills');
   const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
   const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
   const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
+  const layerLabel = layer === 'project' ? '[project]' : '[global]';
 
   // Rule sheet mapping (for push rules projection)
   const ruleFiles = {
@@ -233,16 +249,20 @@ export default async function remember(args) {
   }
 
   writeNode(node, vaultDir);
-  console.log(`  ✅ Permanent SSSS memory node created in vault: memory-vault/${category}/${finalSlug}.md`);
+  console.log(`  ✅ Permanent SSSS memory node created ${layerLabel} in vault: memory-vault/${category}/${finalSlug}.md`);
 
   // Instantly recompile instructions and vector indexes in the exact same turn!
   console.log('  ⏳ Recompiling active memory surfaces and indexes...');
   try {
+    // Use merged compilation if both layers exist
+    const brains = getBothBrains();
+    const globalVaultDir = brains.global ? path.join(brains.global.brainDir, 'memory-vault') : undefined;
     const compileResult = await compileSurface({
       vaultDir,
       skillsDir,
       derivedDir,
-      instructionsFile
+      instructionsFile,
+      globalVaultDir: layer === 'project' ? globalVaultDir : undefined
     });
     console.log(`  ✅ Recompilation successful! Processed ${compileResult.nodesProcessed} SSSS nodes.`);
   } catch (err) {

@@ -380,6 +380,27 @@ export async function changePasswordHandler(req, res) {
   config.dashboard.force_password_reset = false;
 
   fs.writeFileSync(CONFIG_FILE, yaml.stringify(config));
+
+  // Dynamically update the backup secrets.enc file to preserve the password hash
+  try {
+    const backupSecretsPath = path.join(agentDir, 'secrets.enc');
+    let secretsObj = {};
+    if (fs.existsSync(backupSecretsPath)) {
+      try {
+        secretsObj = JSON.parse(fs.readFileSync(backupSecretsPath, 'utf8') || '{}');
+      } catch {}
+    }
+    secretsObj.dashboard_password_hash = hash;
+    fs.mkdirSync(path.dirname(backupSecretsPath), { recursive: true });
+    fs.writeFileSync(
+      backupSecretsPath,
+      JSON.stringify(secretsObj, null, 2),
+      { encoding: 'utf8', mode: 0o600 }
+    );
+  } catch (err) {
+    logger.error('auth', `Failed to write password hash to secrets.enc backup: ${err.message}`);
+  }
+
   res.json({ success: true });
 }
 

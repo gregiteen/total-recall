@@ -104,13 +104,10 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   }
 
   // CLI agent availability
-  const { spawnSync } = await import('node:child_process');
+  const { findBinaryInPath } = await import('../core/runtime.mjs');
   const cliAgents = [];
   for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
-    try {
-      const r = spawnSync('which', [bin], { stdio: 'pipe', timeout: 2000 });
-      if (r.status === 0) cliAgents.push(bin);
-    } catch { /* not found */ }
+    if (findBinaryInPath(bin)) cliAgents.push(bin);
   }
 
   const agentDir = configAgentDir;
@@ -153,13 +150,10 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
 // ─── Brain Health Check (MODEL.md contract) ─────────────────────────────────────
 
 app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res) => {
-  const { spawnSync: sp } = await import('node:child_process');
+  const { findBinaryInPath } = await import('../core/runtime.mjs');
   const agents = [];
   for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
-    try {
-      const r = sp('which', [bin], { stdio: 'pipe', timeout: 2000 });
-      if (r.status === 0) agents.push(bin);
-    } catch { /* not found */ }
+    if (findBinaryInPath(bin)) agents.push(bin);
   }
 
   if (agents.length === 0) {
@@ -229,11 +223,23 @@ try {
         return res.status(400).json({ error: 'Messages array is required' });
       }
 
-      const response = await callLocalRuntimeRaw(messages, {
+      const activeConfig = {
         ...config,
         model: model || config.model,
         temperature: temperature || config.temperature
-      });
+      };
+
+      if (model && activeConfig.agents) {
+        const targetAgentName = model.toLowerCase();
+        const idx = activeConfig.agents.findIndex(a => a.name === targetAgentName);
+        if (idx >= 0) {
+          activeConfig.agents = activeConfig.agents.map(a => ({ ...a }));
+          activeConfig.agents[idx].priority = 0;
+          activeConfig.agents.sort((a, b) => a.priority - b.priority);
+        }
+      }
+
+      const response = await callLocalRuntimeRaw(messages, activeConfig);
 
       res.json({
         id: `chatcmpl-${Date.now()}`,

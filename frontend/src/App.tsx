@@ -13,6 +13,11 @@ import TasksPage from './pages/TasksPage'
 import FilesPage from './pages/FilesPage'
 import ApiKeysPage from './pages/ApiKeysPage'
 import IntegrationsPage from './pages/IntegrationsPage'
+import BrainSelector from './components/BrainSelector'
+import AutomationsPage from './pages/AutomationsPage'
+import DeploymentsPage from './pages/DeploymentsPage'
+import SkillsPage from './pages/SkillsPage'
+import UsagePage from './pages/UsagePage'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -42,9 +47,11 @@ function StatusDot({ ok, label }: DotProps) {
 interface SidebarProps {
   onLogout: () => void
   health: HealthData | null
+  activeBrainId: string
+  onBrainChange: (id: string) => void
 }
 
-function Sidebar({ onLogout, health }: SidebarProps) {
+function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -70,6 +77,13 @@ function Sidebar({ onLogout, health }: SidebarProps) {
           </svg>
           Tasks
         </NavLink>
+        <NavLink to="/automations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-automations">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          Automations
+        </NavLink>
         <NavLink to="/files" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-files">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -82,11 +96,27 @@ function Sidebar({ onLogout, health }: SidebarProps) {
           </svg>
           Sandbox
         </NavLink>
+        <NavLink to="/deployments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-deployments">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+            <line x1="6" y1="6" x2="6.01" y2="6" />
+            <line x1="6" y1="18" x2="6.01" y2="18" />
+          </svg>
+          Deployments
+        </NavLink>
         <NavLink to="/health" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-health">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
           Health
+        </NavLink>
+        <NavLink to="/usage" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-usage">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+          </svg>
+          Usage & Costs
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-settings">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -107,8 +137,17 @@ function Sidebar({ onLogout, health }: SidebarProps) {
           </svg>
           Integrations
         </NavLink>
+        <NavLink to="/skills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-skills">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+          Skills Manager
+        </NavLink>
       </nav>
       <div className="sidebar-footer">
+        <div style={{ marginBottom: 8 }}>
+          <BrainSelector activeBrainId={activeBrainId} onBrainChange={onBrainChange} />
+        </div>
         <div style={{ marginBottom: 12 }}>
           <select
             value={getApiBase()}
@@ -246,12 +285,16 @@ function MainContent() {
             <Route path="/" element={<div/>} />
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/automations" element={<AutomationsPage />} />
             <Route path="/files" element={<FilesPage />} />
             <Route path="/sandbox" element={<SandboxPage />} />
+            <Route path="/deployments" element={<DeploymentsPage />} />
             <Route path="/health" element={<HealthPage />} />
+            <Route path="/usage" element={<UsagePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/keys" element={<ApiKeysPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/skills" element={<SkillsPage />} />
           </Routes>
         </div>
       )}
@@ -336,6 +379,7 @@ function EmergencyAlertBanner({ health }: { health: HealthData | null }) {
 function App() {
   const [authState, setAuthState] = useState<AuthState>('loading')
   const [health, setHealth] = useState<HealthData | null>(null)
+  const [activeBrainId, setActiveBrainId] = useState('global')
 
   // Register 401 interceptor so any API call that gets a 401 flips us to unauthed
   useEffect(() => {
@@ -401,7 +445,7 @@ function App() {
     <BrowserRouter>
       <EmergencyAlertBanner health={health} />
       <div className="app-layout">
-        <Sidebar onLogout={handleLogout} health={health} />
+        <Sidebar onLogout={handleLogout} health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
         <MainContent />
       </div>
     </BrowserRouter>

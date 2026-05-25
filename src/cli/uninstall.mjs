@@ -6,6 +6,23 @@
  *
  * Usage:
  *   npx total-recall uninstall
+ *
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  ⛔⛔⛔  CRITICAL WARNING — DO NOT IMPLEMENT --no-backup FLAG  ⛔⛔⛔  ║
+ * ║                                                                        ║
+ * ║  There must NEVER be a --no-backup, --skip-backup, or ANY flag that    ║
+ * ║  allows skipping the backup step before uninstallation.                ║
+ * ║                                                                        ║
+ * ║  A --no-backup flag was previously implemented by an AI agent and      ║
+ * ║  caused CATASTROPHIC, IRRECOVERABLE DATA LOSS of the user's entire    ║
+ * ║  brain (memory vault). This must NEVER happen again.                   ║
+ * ║                                                                        ║
+ * ║  The backup step is MANDATORY and NON-NEGOTIABLE. If the backup       ║
+ * ║  fails, the uninstall MUST abort. There are NO exceptions.            ║
+ * ║                                                                        ║
+ * ║  DO NOT ADD: --no-backup, --skip-backup, --force, noBackup,           ║
+ * ║  skipBackup, or ANY variation that bypasses the backup.               ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
 import fs from 'node:fs';
@@ -13,6 +30,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import backup from './backup.mjs';
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  FORBIDDEN FLAGS — These patterns must NEVER be accepted as arguments  ║
+// ║  See top-of-file warning for full context on the data loss incident.   ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+const FORBIDDEN_FLAGS = [
+  '--no-backup', '--nobackup', '--skip-backup', '--skipbackup',
+  '--no_backup', '--skip_backup',
+];
 
 // ─── Logging Helpers ────────────────────────────────────────────────────────
 function log(msg)      { console.error(`  ${msg}`); }
@@ -50,6 +76,20 @@ function hasSystemd() {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 export default async function uninstall(args = []) {
+
+  // ⛔ RUNTIME GUARD: Reject any forbidden flags that skip backup.
+  // This guard exists because a --no-backup flag was previously added by an
+  // AI agent and caused catastrophic data loss. It must NEVER be bypassed.
+  for (const arg of args) {
+    const normalized = arg.toLowerCase().replace(/_/g, '-');
+    if (FORBIDDEN_FLAGS.includes(normalized)) {
+      console.error(`\n  ⛔ FATAL: The "${arg}" flag is PERMANENTLY FORBIDDEN.`);
+      console.error(`  Backups are MANDATORY before uninstall. This flag was removed`);
+      console.error(`  after it caused catastrophic data loss. Aborting.\n`);
+      process.exit(1);
+    }
+  }
+
   const HOME = os.homedir();
   console.error(`
   ┌─────────────────────────────────────────────────────────┐
@@ -119,6 +159,27 @@ export default async function uninstall(args = []) {
       logWarn('Teardown aborted to protect your brain. Resolve backup issues and try again.');
       return;
     }
+  } else if (fs.existsSync(localAgentDir) || fs.existsSync(globalAgentDir)) {
+    // ⛔ SAFETY NET: No skill dir found, but .agent/ directories exist with
+    // potential data (memory-vault, config, secrets, etc.). Back up the raw
+    // directory before proceeding so we never silently delete user data.
+    const agentDirToBackup = fs.existsSync(localAgentDir) ? localAgentDir : globalAgentDir;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fallbackTarball = path.join(HOME, `total-recall-backup-${stamp}.tar.gz`);
+    logStep('0/4', `No skill dir found but .agent/ exists — creating safety backup of ${agentDirToBackup}`);
+    try {
+      const parentDir = path.dirname(agentDirToBackup);
+      const baseName = path.basename(agentDirToBackup);
+      const result = spawnSync('tar', ['-czf', fallbackTarball, '-C', parentDir, baseName], { stdio: 'pipe' });
+      if (result.status !== 0) {
+        throw new Error(`tar exited with status ${result.status}`);
+      }
+      logOk(`Safety backup created: ${fallbackTarball}`);
+    } catch (err) {
+      logWarn(`Safety backup failed: ${err.message}`);
+      logWarn('Teardown aborted to protect your data. Resolve backup issues and try again.');
+      return;
+    }
   }
 
   // ── Step 1: Stop and disable background services ──
@@ -176,7 +237,8 @@ export default async function uninstall(args = []) {
     // Check system services
     const rootServices = [
       'total-recall-daemon.service',
-      'total-recall-server.service'
+      'total-recall-server.service',
+      'searxng.service'
     ];
     let reloadedRootSystemd = false;
     for (const svc of rootServices) {
@@ -220,6 +282,48 @@ export default async function uninstall(args = []) {
 
   // ── Step 2: Stop detached background Node.js processes ──
   logStep('2/4', 'Stopping any standalone background processes');
+
+  // Stop SearXNG background processes if running via nohup/direct python command
+  try {
+    const listProc = spawnSync('ps', ['ax'], { encoding: 'utf8' });
+    if (listProc.status === 0) {
+      const lines = listProc.stdout.split('\n');
+      for (const line of lines) {
+        if (line.includes('searx.webapp') && !line.includes('grep')) {
+          const parts = line.trim().split(/\s+/);
+          const pid = parseInt(parts[0], 10);
+          if (!isNaN(pid)) {
+            log(`Stopping background SearXNG process (PID ${pid})...`);
+            process.kill(pid, 'SIGTERM');
+            logOk(`Stopped SearXNG background process (PID ${pid})`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // Non-fatal
+  }
+
+  // Stop Cloudflare quick tunnels spawned by deploy/init
+  try {
+    const listProc = spawnSync('ps', ['ax'], { encoding: 'utf8' });
+    if (listProc.status === 0) {
+      const lines = listProc.stdout.split('\n');
+      for (const line of lines) {
+        if (line.includes('cloudflared tunnel --url') && !line.includes('grep')) {
+          const parts = line.trim().split(/\s+/);
+          const pid = parseInt(parts[0], 10);
+          if (!isNaN(pid)) {
+            log(`Stopping background cloudflared quick tunnel (PID ${pid})...`);
+            process.kill(pid, 'SIGTERM');
+            logOk(`Stopped cloudflared quick tunnel (PID ${pid})`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // Non-fatal
+  }
 
   const dirsToScan = [
     path.join(globalAgentDir, 'skills', 'total-recall'),
@@ -303,29 +407,41 @@ export default async function uninstall(args = []) {
       } else {
         // Normal file
         let content = fs.readFileSync(filePath, 'utf8');
-        const startTag = '<!-- BEGIN INJECTED MEMORY -->';
-        const endTag = '<!-- END INJECTED MEMORY -->';
+        const INJECT_PATTERNS = [
+          /<!-- BEGIN INJECTED MEMORY:.*?-->[\s\S]*?<!-- END INJECTED MEMORY -->\n?/g,
+          /<!-- BEGIN INJECTED ACTIVE DIRECTIVES:.*?-->[\s\S]*?<!-- END INJECTED ACTIVE DIRECTIVES -->\n?/g,
+          /<!-- BEGIN INJECTED MEMORY -->[\s\S]*?<!-- END INJECTED MEMORY -->\n?/g,
+          /<!-- BEGIN INJECTED ACTIVE DIRECTIVES -->[\s\S]*?<!-- END INJECTED ACTIVE DIRECTIVES -->\n?/g,
+        ];
 
-        if (content.includes(startTag) && content.includes(endTag)) {
-          const startIndex = content.indexOf(startTag);
-          const endIndex = content.indexOf(endTag) + endTag.length;
-          
-          let cleanedContent = content.slice(0, startIndex) + content.slice(endIndex);
-          cleanedContent = cleanedContent.trim();
-
-          // Also remove "Tier 1 Invariants" headers if injected by total-recall init/compile
-          if (cleanedContent.startsWith('# Tier 1 Invariants (Total Recall Hot Memory)')) {
-            const nextHeading = cleanedContent.indexOf('\n#', 40);
-            if (nextHeading !== -1) {
-              cleanedContent = cleanedContent.slice(nextHeading).trim();
-            } else {
-              cleanedContent = '';
-            }
+        let cleanedContent = content;
+        let changed = false;
+        for (const pat of INJECT_PATTERNS) {
+          const replaced = cleanedContent.replace(pat, '');
+          if (replaced !== cleanedContent) {
+            cleanedContent = replaced;
+            changed = true;
           }
+        }
 
-          if (cleanedContent === '' || cleanedContent === '<!-- END INJECTED MEMORY -->') {
+        cleanedContent = cleanedContent.trim();
+        
+        // Also remove "Tier 1 Invariants" headers if injected by total-recall init/compile
+        if (cleanedContent.startsWith('# Tier 1 Invariants (Total Recall Hot Memory)')) {
+          const nextHeading = cleanedContent.indexOf('\n#', 40);
+          if (nextHeading !== -1) {
+            cleanedContent = cleanedContent.slice(nextHeading).trim();
+          } else {
+            cleanedContent = '';
+          }
+          changed = true;
+        }
+
+        const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.';
+        if (changed) {
+          if (cleanedContent === '' || cleanedContent === baseline) {
             fs.unlinkSync(filePath);
-            logOk(`Removed fully empty rule file: ${file}`);
+            logOk(`Removed fully empty or baseline-only rule file: ${file}`);
           } else {
             fs.writeFileSync(filePath, cleanedContent, 'utf8');
             logOk(`Cleaned injected Total Recall block from: ${file}`);
@@ -346,6 +462,38 @@ export default async function uninstall(args = []) {
   // ── Step 4: Purge Total Recall data ──
   logStep('4/4', 'Removing Total Recall brain and runtime artifacts');
 
+  // ── Unregister project brain from global project registry ──
+  try {
+    const globalBrainDir = path.join(HOME, '.agent', 'skills', 'total-recall');
+    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
+    if (fs.existsSync(registryPath)) {
+      let registry = [];
+      try { registry = JSON.parse(fs.readFileSync(registryPath, 'utf8')); } catch { registry = []; }
+      const initialLen = registry.length;
+      registry = registry.filter(p => p.path !== process.cwd());
+      if (registry.length < initialLen) {
+        fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
+        logOk(`Unregistered project "${path.basename(process.cwd())}" from global brain registry`);
+      }
+    }
+  } catch (err) {
+    logWarn(`Failed to unregister project: ${err.message}`);
+  }
+
+  // Purge optional SearXNG directories if --purge is specified
+  if (purge) {
+    log('Purging optional systems (SearXNG directories)...');
+    try {
+      if (fs.existsSync('/opt/searxng') || fs.existsSync('/etc/searxng')) {
+        log('Removing SearXNG configuration and install directories (requires sudo)...');
+        spawnSync('sudo', ['rm', '-rf', '/opt/searxng', '/etc/searxng'], { stdio: 'inherit' });
+        logOk('Removed SearXNG system directories (/opt/searxng and /etc/searxng)');
+      }
+    } catch (err) {
+      logWarn(`Failed to purge SearXNG system directories: ${err.message}`);
+    }
+  }
+
   // What we remove:
   //   .agent/skills/total-recall/  — the brain (already backed up)
   //   .agent/INSTRUCTIONS.md, AGENTS.md, etc. — compiled shims
@@ -354,6 +502,46 @@ export default async function uninstall(args = []) {
   //   .agent/skills/               — always stays (user may have other skills)
   //   .agent/skills/<other>/       — other user skills, never ours to delete
 
+  // ── Preserve credentials before purge ──
+  for (const agentDir of [globalAgentDir, localAgentDir]) {
+    if (!fs.existsSync(agentDir)) continue;
+    try {
+      const brainPath = path.join(agentDir, 'skills', 'total-recall');
+      const secretsPath = path.join(brainPath, 'config', 'secrets.enc');
+      const securityPath = path.join(brainPath, 'config', 'security.yml');
+      
+      let secretsObj = {};
+      if (fs.existsSync(secretsPath)) {
+        try {
+          secretsObj = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}');
+        } catch {}
+      }
+      
+      if (fs.existsSync(securityPath)) {
+        try {
+          const { default: yaml } = await import('yaml');
+          const securityObj = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
+          if (securityObj.dashboard?.password_hash) {
+            secretsObj.dashboard_password_hash = securityObj.dashboard.password_hash;
+          }
+        } catch {}
+      }
+      
+      if (Object.keys(secretsObj).length > 0) {
+        fs.mkdirSync(agentDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(agentDir, 'secrets.enc'),
+          JSON.stringify(secretsObj, null, 2),
+          { encoding: 'utf8', mode: 0o600 }
+        );
+        const label = agentDir === globalAgentDir ? 'Global' : 'Local';
+        logOk(`${label}: Preserved credentials to ${path.relative(process.cwd(), path.join(agentDir, 'secrets.enc'))}`);
+      }
+    } catch (err) {
+      logWarn(`Failed to preserve credentials for ${agentDir}: ${err.message}`);
+    }
+  }
+
   for (const agentDir of [globalAgentDir, localAgentDir]) {
     if (!fs.existsSync(agentDir)) {
       logSkip(`${agentDir === globalAgentDir ? 'Global' : 'Local'} .agent VFS is not present`);
@@ -361,6 +549,7 @@ export default async function uninstall(args = []) {
     }
     const label = agentDir === globalAgentDir ? 'Global' : 'Local';
     log(`Cleaning ${label} .agent at ${agentDir}...`);
+
 
     // 1. Remove the brain: .agent/skills/total-recall/
     const brainPath = path.join(agentDir, 'skills', 'total-recall');
@@ -382,6 +571,8 @@ export default async function uninstall(args = []) {
     const INJECT_PATTERNS = [
       /<!-- BEGIN INJECTED MEMORY:.*?-->[\s\S]*?<!-- END INJECTED MEMORY -->\n?/g,
       /<!-- BEGIN INJECTED ACTIVE DIRECTIVES:.*?-->[\s\S]*?<!-- END INJECTED ACTIVE DIRECTIVES -->\n?/g,
+      /<!-- BEGIN INJECTED MEMORY -->[\s\S]*?<!-- END INJECTED MEMORY -->\n?/g,
+      /<!-- BEGIN INJECTED ACTIVE DIRECTIVES -->[\s\S]*?<!-- END INJECTED ACTIVE DIRECTIVES -->\n?/g,
     ];
     // Check both .agent/ level and project root
     const shimDirs = [agentDir, agentDir === localAgentDir ? path.dirname(localAgentDir) : null].filter(Boolean);
@@ -397,8 +588,10 @@ export default async function uninstall(args = []) {
             if (cleaned !== content) { content = cleaned; changed = true; }
           }
           if (changed) {
-            // If only whitespace remains after stripping, delete the file
-            if (content.trim().length === 0) {
+            const trimmed = content.trim();
+            const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.';
+            // If only whitespace or the baseline pointer remains, delete the file completely
+            if (trimmed.length === 0 || trimmed === baseline) {
               fs.rmSync(p, { force: true });
             } else {
               fs.writeFileSync(p, content, 'utf8');

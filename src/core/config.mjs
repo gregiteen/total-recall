@@ -1,6 +1,39 @@
 import { z } from 'zod';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
+
+// ─── Robust PATH-Expansion for LaunchAgents & background processes ─────────────
+try {
+  const HOME = os.homedir();
+  const commonPaths = [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    path.join(HOME, '.local/bin'),
+    path.join(HOME, '.nvm/versions/node/v24.12.0/bin'),
+    path.join(HOME, '.npm-global/bin'),
+    path.join(HOME, 'bin'),
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ];
+
+  const nvmVersionsDir = path.join(HOME, '.nvm', 'versions', 'node');
+  if (fs.existsSync(nvmVersionsDir)) {
+    const versions = fs.readdirSync(nvmVersionsDir);
+    for (const v of versions) {
+      commonPaths.unshift(path.join(nvmVersionsDir, v, 'bin'));
+    }
+  }
+
+  const activePaths = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
+  const uniquePaths = Array.from(new Set([...activePaths, ...commonPaths])).filter(p => fs.existsSync(p));
+  process.env.PATH = uniquePaths.join(path.delimiter);
+} catch (e) {
+  // Silent fallback
+}
+
 
 /**
  * Central Configuration Schema
@@ -15,7 +48,7 @@ const configSchema = z.object({
   cliModel: z.string().optional(),
   cliTimeout: z.preprocess((val) => val === undefined || val === '' ? 300 : parseInt(String(val), 10), z.number().int().default(300)),
   googleApiKey: z.string().optional(),
-  embedModel: z.string().default('text-embedding-004'),
+  embedModel: z.string().default('gemini-embedding-2'),
   searxngBaseUrl: z.string().optional(),
   braveApiKey: z.string().optional(),
   braveSearchApiKey: z.string().optional(),
@@ -39,21 +72,66 @@ const configSchema = z.object({
   )
 });
 
-// Capture raw configuration values from process.env
+// Resolve brainDir paths
+const resolvedAgentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
+const tempGlobalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+
+// Auto-detect project brain if any
+let projectBrainDir = null;
+if (!process.env._TR_TEST_AGENT_DIR) {
+  let dir = process.cwd();
+  const homeDir = os.homedir();
+  while (dir !== path.dirname(dir)) {
+    if (dir === homeDir) break;
+    const candidate = path.join(dir, '.agent', 'skills', 'total-recall');
+    if (fs.existsSync(path.join(candidate, 'SKILL.md'))) {
+      projectBrainDir = candidate;
+      break;
+    }
+    dir = path.dirname(dir);
+  }
+}
+
+// Load secrets from project or global
+let secrets = {};
+try {
+  const pathsToCheck = [];
+  if (projectBrainDir) {
+    pathsToCheck.push(path.join(projectBrainDir, 'config', 'secrets.enc'));
+  }
+  pathsToCheck.push(path.join(tempGlobalBrainDir, 'config', 'secrets.enc'));
+  pathsToCheck.push(path.join(resolvedAgentDir, 'skills', 'total-recall', 'config', 'secrets.enc'));
+
+  for (const p of pathsToCheck) {
+    if (fs.existsSync(p)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(p, 'utf8') || '{}');
+        if (Object.keys(parsed).length > 0) {
+          secrets = parsed;
+          break; // Found valid secrets!
+        }
+      } catch {}
+    }
+  }
+} catch (e) {
+  // Ignore
+}
+
+// Capture raw configuration values from process.env and secrets.enc
 const rawConfig = {
   agentDir: process.env.AGENT_DIR,
   cliAgent: process.env.TR_CLI_AGENT,
   cliModel: process.env.TR_CLI_MODEL,
   cliTimeout: process.env.TR_CLI_TIMEOUT,
-  googleApiKey: process.env.GOOGLE_API_KEY,
+  googleApiKey: process.env.GOOGLE_API_KEY || secrets.google_api_key,
   embedModel: process.env.TR_EMBED_MODEL,
   searxngBaseUrl: process.env.SEARXNG_BASE_URL,
-  braveApiKey: process.env.BRAVE_API_KEY,
-  braveSearchApiKey: process.env.BRAVE_SEARCH_API_KEY,
-  exaApiKey: process.env.EXA_API_KEY,
-  githubToken: process.env.GITHUB_TOKEN,
-  serperApiKey: process.env.SERPER_API_KEY,
-  tavilyApiKey: process.env.TAVILY_API_KEY,
+  braveApiKey: process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || secrets.brave_api_key,
+  braveSearchApiKey: process.env.BRAVE_SEARCH_API_KEY || secrets.brave_api_key,
+  exaApiKey: process.env.EXA_API_KEY || secrets.exa_api_key,
+  githubToken: process.env.GITHUB_TOKEN || secrets.github_token,
+  serperApiKey: process.env.SERPER_API_KEY || secrets.serper_api_key,
+  tavilyApiKey: process.env.TAVILY_API_KEY || secrets.tavily_api_key,
   dailySearchLimit: process.env.TR_DAILY_SEARCH_LIMIT,
   researchCooldownMs: process.env.RESEARCH_COOLDOWN_MS,
   sessionSecret: process.env.SESSION_SECRET,
@@ -119,8 +197,6 @@ export function getEnvVar(name) {
 }
 
 // ─── Layered Brain Resolution ───────────────────────────────────────────────
-
-import fs from 'fs';
 
 /**
  * Global brain — always at ~/.agent/skills/total-recall/

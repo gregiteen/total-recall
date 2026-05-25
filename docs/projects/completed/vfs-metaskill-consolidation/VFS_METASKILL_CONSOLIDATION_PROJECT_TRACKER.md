@@ -1,8 +1,9 @@
 # VFS Meta-Skill Consolidation — Project Tracker
 
-> **Status**: In-Progress  
+> **Status**: ✅ Complete  
 > **Last Updated**: May 25, 2026  
 > **Priority**: P0-critical (Data Safety & VFS Integrity)  
+> **Completed**: May 25, 2026
 
 ---
 
@@ -50,30 +51,30 @@ Move ALL user data directories from `.agent/` siblings into `.agent/skills/total
 ## 📋 Task Checklist
 
 ### Phase 1: Path Foundation
-- [ ] Add `brainDir` export to `src/core/config.mjs` pointing to `agentDir + '/skills/total-recall'`
-- [ ] Update all path references in `src/core/` to use `brainDir` for user data dirs
-- [ ] Update all path references in `src/server/rest.mjs` to use `brainDir`
-- [ ] Update all path references in `src/cli/` to use `brainDir`
+- [x] Add `brainDir` export to `src/core/config.mjs` pointing to `agentDir + '/skills/total-recall'`
+- [x] Update all path references in `src/core/` to use `brainDir` for user data dirs
+- [x] Update all path references in `src/server/rest.mjs` to use `brainDir`
+- [x] Update all path references in `src/cli/` to use `brainDir`
 
 ### Phase 2: Init & Scaffold
-- [ ] Update `src/cli/init.mjs` to create data directories inside the meta-skill
-- [ ] Update `.gitignore` entries to reflect new paths
-- [ ] Ensure `backup.mjs` correctly targets the meta-skill (already does)
-- [ ] Update `uninstall.mjs` to reference new paths
+- [x] Update `src/cli/init.mjs` to create data directories inside the meta-skill
+- [x] Update `.gitignore` entries to reflect new paths
+- [x] Ensure `backup.mjs` correctly targets the meta-skill (already does)
+- [x] Update `uninstall.mjs` to reference new paths
 
 ### Phase 3: Frontend & API
-- [ ] Verify frontend API calls don't hardcode paths (they use REST, should be fine)
-- [ ] Update any server-side path resolution for dashboard file serving
+- [x] Verify frontend API calls don't hardcode paths (they use REST, should be fine)
+- [x] Update any server-side path resolution for dashboard file serving
 
 ### Phase 4: Tests & Verification
-- [ ] Update all test fixtures and mocks referencing old paths
-- [ ] Run full test suite (296 tests must pass)
-- [ ] Run TypeScript checker (0 errors)
-- [ ] Run lint checker
-- [ ] Verify uninstall → init round-trip with backup
+- [x] Update all test fixtures and mocks referencing old paths
+- [x] Run full test suite (322 tests must pass)
+- [x] Run TypeScript checker (0 errors)
+- [x] Run lint checker
+- [x] Verify uninstall → init round-trip with backup
 
 ### Phase 5: Documentation
-- [ ] Update repo-expert SKILL.md directory layout diagram
-- [ ] Update project-management skill references
-- [ ] Update total-recall SKILL.md
-- [ ] Update SSSS PRD and Development Plan
+- [x] Update repo-expert SKILL.md directory layout diagram
+- [x] Update project-management skill references
+- [x] Update total-recall SKILL.md
+- [x] Update SSSS PRD and Development Plan

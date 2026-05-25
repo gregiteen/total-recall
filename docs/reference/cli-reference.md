@@ -266,6 +266,47 @@ Manage the background session sync relay daemon.
 
 ---
 
+### `config`
+
+Read, write, and manage dashboard, security, and budget settings dynamically in-process.
+
+- **What it does**: Direct command-line utility to query or update system configurations (such as YOLO mode, daily/weekly USD caps, and allowed origins) in the brain layer's YAML files. Hot-reloads values dynamically.
+- **Usage**:
+  ```bash
+  npx total-recall config get <key>
+  npx total-recall config set <key> <value>
+  ```
+- **Examples**:
+  ```bash
+  npx total-recall config get yolo_mode
+  npx total-recall config set daily_cap_usd 15.0
+  npx total-recall config set allowed_origins http://localhost:5173,http://localhost:8080
+  ```
+
+---
+
+### `skill`
+
+Browse, install, security audit, list, and remove portable agent capabilities from the skills.sh registry.
+
+- **What it does**: Complete command-line integration with the skills.sh cloud registry. Automatically intercepts package downloads, executes static analysis scans (quarantining dynamic shell injections and network risks), scaffolds Spec v2.0 directories, and hot-recompiles active workspace shims.
+- **Commands**:
+  - `find <query>`: Search skills.sh registry sorted by absolute installs rating.
+  - `install <package>`: Download a skill, run static security scan, scaffold directories, and compile shims.
+  - `scan <skill-name>`: Run static security audit on a local skill folder.
+  - `list` (or `ls`): List all active local parent skills and nested sub-skills.
+  - `remove <skill-name>` (or `rm`): Safely delete a local skill and re-compile workspace shims.
+- **Usage**:
+  ```bash
+  npx total-recall skill find git
+  npx total-recall skill install github/awesome-copilot@git-commit
+  npx total-recall skill scan total-recall
+  npx total-recall skill list
+  npx total-recall skill remove git-commit
+  ```
+
+---
+
 ### `uninstall`
 
 Completely stop, disable, and clean up Total Recall services and active directories from the system.
@@ -292,3 +333,63 @@ These commands appeared in earlier documentation but have been removed:
 | `import` | Use `restore` |
 | `finetune` | Removed — use Unsloth directly on your vault data |
 | `upgrade` | Use `ollama pull <model>` then update `runtime.yml` |
+
+---
+
+## Configuration & Environment Variables Reference
+
+Total Recall is completely customized and overridden through environment variables and local YAML/JSON configuration files.
+
+### 1. ⚙️ Environment Variables (Env overrides)
+
+| Env Variable | Type | Default | Description |
+|--------------|------|---------|-------------|
+| `AGENT_DIR` | String | `~/.agent` | Root workspace directory holding IDE shims and skills VFS. |
+| `TR_CLI_AGENT` | String | `antigravity` | Preferred CLI reasoning agent (`antigravity`, `gemini`, `claude`, `codex`). |
+| `TR_CLI_MODEL` | String | `null` | Explicit model identifier string override passed to the active CLI agent. |
+| `TR_CLI_TIMEOUT` | Integer | `300` | Subprocess command execution timeout in seconds. |
+| `GOOGLE_API_KEY` | String | `null` | Primary API key for Gemini embeddings (`gemini-embedding-2`). |
+| `TR_EMBED_MODEL`| String | `gemini-embedding-2` | Standard embedding model name used for vector checks. |
+| `SEARXNG_BASE_URL`| String | `null` | Base URL for SearXNG web searches (e.g. `http://127.0.0.1:8888`). |
+| `BRAVE_SEARCH_API_KEY` | String | `null` | Brave search key used as a fallback for web searches. |
+| `EXA_API_KEY` | String | `null` | Exa.ai API key for neural searching. |
+| `GITHUB_TOKEN` | String | `null` | GitHub token used for dynamic SSSS repository actions. |
+| `SERPER_API_KEY`| String | `null` | Google Search API key fallback. |
+| `TAVILY_API_KEY`| String | `null` | Tavily Search API key fallback. |
+| `TR_DAILY_SEARCH_LIMIT` | Integer | `50` | Maximum allowed web search actions per day. |
+| `RESEARCH_COOLDOWN_MS` | Integer | `3600000` | Cooldown period between background research queue executions (1hr). |
+| `SESSION_SECRET`| String | `null` | Cryptographic secret used to sign admin cookies. |
+| `NODE_ENV` | String | `production` | Active runtime Node environment (`development` / `production`). |
+| `PORT` | Integer | `3000` | Rest server port binding. |
+| `HOST` | String | `127.0.0.1` | Rest server host address binding. |
+| `DISPLAY` | String | `null` | X11 display pointer for computer use screenshots. |
+| `TOTAL_RECALL_TOKEN` | String | `null` | Secret token to authenticate headless client commands. |
+| `TR_BRAIN` | String | `null` | Overrides the detected workspace project brain path. |
+| `TR_PAT` | String | `null` | Injects your Personal Access Token directly to authenticate connections. |
+
+### 2. 📁 Configuration Files (YAML / JSON)
+All file parameters live under `.agent/config/` (or `.agent/skills/total-recall/config/`):
+
+#### **`budget.yml`** (Cost Control)
+* `daily_cap_usd`: Strict daily dollar cap threshold for API costs (default: `5.00`).
+* `weekly_cap_usd`: Strict weekly dollar cap threshold for API costs (default: `25.00`).
+
+#### **`security.yml`** (Admin Access & Network)
+* `dashboard.password_hash`: Secure bcrypt password hash for dashboard login.
+* `dashboard.session_timeout_seconds`: Inactive user session timeout (default: `86400`).
+* `network.allowed_origins`: Allowed CORS origins for external API access.
+* `network.bind_address`: Binding address for interface routing.
+
+#### **`agents.yml`** (CLI Agents Registry)
+Exposes the prioritized CLI execution pipeline:
+* `agents`: A list of registered reasoning agents:
+  * `name`: Custom unique identifier.
+  * `binary`: Command-line executable matching PATH.
+  * `enabled`: Set to `false` to prevent dispatching to this agent.
+  * `priority`: Integer weighting (lower value takes priority).
+  * `flags`: Standard CLI options appended to reasoning invocations.
+  * `exec`: Dispatch pattern (`flag` or `subcommand`).
+
+#### **`secrets.enc`** (GPG Encrypted Credentials)
+* Holds raw tokens (`github_token`, `google_api_key`, `openai_api_key`) to prevent plaintext exposure, GPG sym-encrypted during installation.
+

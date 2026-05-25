@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "react-router-dom"
-import { listMemory, searchMemory, readMemory, fetchConflicts, resolveConflict, saveMemory, createMemory, deleteMemory } from "../api"
+import { listMemory, searchMemory, readMemory, fetchConflicts, resolveConflict, saveMemory, createMemory, deleteMemory, fetchSessions, deleteSession } from "../api"
 import type { MemoryNode } from "../types"
+import type { SessionSummary } from "../api"
 
 const CATEGORIES = [
   "all", "invariants", "preferences", "anti-patterns", "patterns",
@@ -108,13 +109,18 @@ export default function MemoryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const urlSlug = searchParams.get("slug")
 
-  const [activeTab, setActiveTab] = useState<"vault" | "conflicts">("vault")
+  const [activeTab, setActiveTab] = useState<"vault" | "conflicts" | "sessions">("vault")
   const [nodes, setNodes] = useState<MemoryNode[]>([])
   const [selected, setSelected] = useState<MemoryNode | null>(null)
   const [category, setCategory] = useState("all")
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // Sessions state
+  const [sessionsList, setSessionsList] = useState<SessionSummary[]>([])
+  const [sessionsTotal, setSessionsTotal] = useState(0)
+  const [sessionsLoading, setSessionsLoading] = useState(false)
 
   // Conflicts state
   const [conflicts, setConflicts] = useState<any[]>([])
@@ -297,8 +303,33 @@ export default function MemoryPage() {
   useEffect(() => {
     if (activeTab === "conflicts") {
       fetchConflictsList()
+    } else if (activeTab === "sessions") {
+      loadSessions()
     }
   }, [activeTab, fetchConflictsList])
+
+  const loadSessions = async () => {
+    setSessionsLoading(true)
+    try {
+      const data = await fetchSessions(100)
+      setSessionsList(data.sessions)
+      setSessionsTotal(data.total)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSessionsLoading(false)
+    }
+  }
+
+  const handleDeleteSession = async (id: string) => {
+    if (!window.confirm(`Delete session "${id}"?`)) return
+    try {
+      await deleteSession(id)
+      loadSessions()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
 
   useEffect(() => {
     if (urlSlug) {
@@ -604,6 +635,18 @@ export default function MemoryPage() {
             {conflicts.length > 0 && (
               <span style={{ background: "#ef4444", color: "#fff", fontSize: 9, padding: "1px 5px", borderRadius: 10, fontWeight: 700 }}>
                 {conflicts.length}
+              </span>
+            )}
+          </button>
+          <button 
+            className={`btn btn-sm ${activeTab === "sessions" ? "btn-purple" : "btn-ghost"}`}
+            onClick={() => { setActiveTab("sessions"); setSelected(null); setSearchParams({}); }}
+            style={{ borderRadius: 6, fontSize: 12, padding: "6px 12px" }}
+          >
+            📝 Sessions
+            {sessionsTotal > 0 && (
+              <span style={{ background: "rgba(139,92,246,0.3)", color: "#a78bfa", fontSize: 9, padding: "1px 5px", borderRadius: 10, fontWeight: 700, marginLeft: 4 }}>
+                {sessionsTotal}
               </span>
             )}
           </button>
@@ -1052,6 +1095,89 @@ export default function MemoryPage() {
                 )
               })}
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "sessions" && (
+        <div className="health-log" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h2 style={{ margin: 0, color: "#fff", fontSize: 16 }}>📝 IDE Sessions ({sessionsTotal})</h2>
+            <button className="btn btn-ghost btn-sm" onClick={loadSessions} style={{ fontSize: 12 }}>🔄 Refresh</button>
+          </div>
+
+          {sessionsLoading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 56 }} />)}
+            </div>
+          ) : sessionsList.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>
+              <span style={{ fontSize: 32, display: "block", marginBottom: 8 }}>📝</span>
+              No sessions ingested yet. Sessions appear here when the relay ships IDE conversation data.
+            </div>
+          ) : (
+            <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", color: "var(--text-tertiary)", fontSize: 12, fontWeight: 600 }}>Title</th>
+                  <th style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", color: "var(--text-tertiary)", fontSize: 12, fontWeight: 600 }}>Date</th>
+                  <th style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", color: "var(--text-tertiary)", fontSize: 12, fontWeight: 600 }}>Source</th>
+                  <th style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", color: "var(--text-tertiary)", fontSize: 12, fontWeight: 600 }}>Messages</th>
+                  <th style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", color: "var(--text-tertiary)", fontSize: 12, fontWeight: 600, width: 60 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessionsList.map(s => {
+                  const sourceColors: Record<string, string> = {
+                    antigravity: "#8b5cf6",
+                    "claude-code": "#f59e0b",
+                    codex: "#10b981",
+                    vscode: "#3b82f6",
+                    cursor: "#06b6d4",
+                    "gemini-cli": "#ec4899",
+                  }
+                  const color = sourceColors[s.source || ""] || "var(--text-secondary)"
+                  return (
+                    <tr key={s.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <td style={{ padding: "10px 12px", color: "#fff", fontSize: 13, maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.title || s.id}
+                      </td>
+                      <td style={{ padding: "10px 12px", color: "var(--text-secondary)", fontSize: 12, whiteSpace: "nowrap" }}>
+                        {s.date ? new Date(s.date).toLocaleString() : "-"}
+                      </td>
+                      <td style={{ padding: "10px 12px" }}>
+                        {s.source && (
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            background: `${color}20`,
+                            color,
+                            border: `1px solid ${color}40`,
+                          }}>
+                            {s.source}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "10px 12px", color: "var(--text-secondary)", fontSize: 12 }}>
+                        {s.count}
+                      </td>
+                      <td style={{ padding: "10px 12px" }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => handleDeleteSession(s.id)}
+                          style={{ fontSize: 10, padding: "2px 6px", color: "#fca5a5", borderColor: "rgba(239,68,68,0.2)" }}
+                        >
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       )}

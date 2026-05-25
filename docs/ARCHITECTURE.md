@@ -7,7 +7,7 @@
 
 ## The One-Sentence Version
 
-Total Recall is a **background relay + brain** system: a lightweight daemon runs on your workstation, silently ships your IDE conversation logs to a remote brain server, and the brain's specialized CLI dispatch engine and enterprise-grade semantic search (Google `text-embedding-004`) process everything — extracting memory, building knowledge, and compiling a **5-line pointer shim** that any AI session picks up automatically, progressively disclosing deep domain rules through tailored `SKILL.md` packages.
+Total Recall is a **background relay + brain** system: a lightweight daemon runs on your workstation, silently ships your IDE conversation logs to a remote brain server, and the brain's specialized CLI dispatch engine and enterprise-grade semantic search (Google `gemini-embedding-2`) process everything — extracting memory, building knowledge, and compiling a **5-line pointer shim** that any AI session picks up automatically, progressively disclosing deep domain rules through tailored `SKILL.md` packages.
 
 ---
 
@@ -27,7 +27,7 @@ YOUR WORKSTATION                                 YOUR BRAIN SERVER
 │  ~/Library/.../chatSessions/ │    only)         │  runs post-mortems, dream cycles, │
 │                              │                  │  research via spawnSync           │
 │  npx total-recall relay      │                  │                                   │
-│  (launchd/systemd service)   │  ◄─────────────  │  Google text-embedding-004        │
+│  (launchd/systemd service)   │  ◄─────────────  │  Google gemini-embedding-2        │
 │                              │   INSTRUCTIONS.  │  (and OpenAI fallback) handles    │
 │  CLAUDE.md                   │   md pulled      │  semantic search & indexing       │
 │  MEMORY.md (5-line shim)     │   (connect)      │                                   │
@@ -76,8 +76,8 @@ Config lives at `~/.agent/config/brain.json`:
 
 The brain is a Node.js server + autonomous AI daemon that:
 1. **Deduplicates Session Ingestion:** Collapses duplicate chat transcripts using a content-hash SHA-256 fingerprinting pipeline.
-2. **Enterprise-Grade Semantic Search**: Generates high-fidelity vector representations utilizing Google's `text-embedding-004` (featuring OpenAI fallback) via `GOOGLE_API_KEY`. Flat JSONL files store indices locally (`embeddings.json` / `session-embeddings.json`) and an active local query cache (`embeddings-cache.json`) delivers blistering-fast query times (<50ms) without database overhead.
-3. **Headless CLI Agent Dispatch**: Completely replaces local Ollama/Gemma models. The brain dispatches cognitive tasks (post-mortems, steering, dream cycle consolidation, and fact-seeking) to headlessly spawned CLI agents (`Antigravity/Gemini`, `Claude Code`, `Codex CLI`) using `spawnSync` from the central registry in `.agent/skills/total-recall/skills/cli-agents/agents.yml`.
+2. **Enterprise-Grade Semantic Search**: Generates high-fidelity vector representations utilizing dynamically resolved embedding models (primary `gemini-embedding-2`, falling back through the active API registry preferences, featuring OpenAI fallback). Flat JSONL files store indices locally (`embeddings.jsonl` / `session-embeddings.json`) and an active local query cache (`embeddings-cache.json`) delivers blistering-fast query times (<50ms) without database overhead. It features **Auto-Healing Dimension Mismatch Re-embedding**: switching between different embedding models (e.g. Ollama's 384/1024/4096-dim models vs Google's 768-dim models) automatically triggers a dimension-mismatch purge of obsolete cached index files and rebuilds all embeddings cleanly from scratch.
+3. **Headless CLI Agent Dispatch**: Completely replaces local Ollama/Gemma models. The brain dispatches cognitive tasks (post-mortems, steering, dream cycle consolidation, and fact-seeking) to headlessly spawned CLI agents (`Antigravity/Gemini`, `Claude Code`, `Codex CLI`) using `spawnSync` from the central registry in `.agent/skills/total-recall/skills/cli-agents/agents.yml`. All dispatches use the **Dynamic Model Selector (`resolveGenerativeModel`)** to query the active API models registry on the fly, translating general aliases (`flash`, `pro`) to optimal frontier models and ensuring zero hardcoded model versions in default configurations.
 4. **Progressive Disclosure Surface Compilation**: Rebuilds instructions into an optimized **5-line pointer shim** that references the meta-skill `SKILL.md` system. This avoids prompt bloat by keeping Tier 1 contexts under 1,000 tokens while dynamically injecting the top-7 relevant memory nodes (Tier 2) into domain-specific skill manifests on demand.
 5. **Encrypted & Git-Pushed Backups**: Creates scheduled daily backups (macOS LaunchAgent or Linux cron) that are AES-256 encrypted and automatically pushed to a private git remote (`npx total-recall backup --push-git`).
 
@@ -133,7 +133,7 @@ All cognitive engines are run through headlessly spawned CLI subagents that exec
 
 Runs every 20 task ticks. Three phases:
 
-- **Light Sleep** — Scan vault for modified files, refresh `text-embedding-004` vectors, update derived indexes.
+- **Light Sleep** — Scan vault for modified files, dynamically resolve active embedding models, check for dimension mismatches to trigger auto-healing re-embedding, refresh embedding vectors, and update derived indexes.
 - **REM** — Score memories, perform semantic clustering, promote active cards, and decay stale confidence indexes.
 - **Deep Sleep** — Recompile instruction files. Write a highly compact **5-line pointer shim** pointing to `SKILL.md` to prevent prompt bloat.
 
@@ -160,7 +160,7 @@ Everything lives in plain Markdown files. No database. No lock-in.
 │   ├── pending/                 ← New observations awaiting promotion
 │   └── conflicts/               ← Needs human resolution
 ├── memory-derived/              ← Ephemeral JSONL indexes (rebuilt by reindex/dream)
-│   ├── embeddings.json          ← Local text-embedding-004 vector index
+│   ├── embeddings.json          ← Local gemini-embedding-2 vector index
 │   └── embeddings-cache.json    ← High-speed cosine query cache
 ├── sessions/                    ← Ingested IDE conversation files
 ├── scheduler/queue/             ← Autonomous task queue (type: task markdown files)
@@ -226,7 +226,7 @@ Dispatches are triggered via the `dispatch.mjs` script using non-interactive she
 │  │  REST API (Caddy TLS → Node.js)                                    │ │
 │  │  POST /api/sessions/ingest  ← receives from relay                 │ │
 │  │  GET  /api/instructions     ← serves pointer shim to clients       │ │
-│  │  POST /api/search           ← Google text-embedding-004 endpoint  │ │
+│  │  POST /api/search           ← Google gemini-embedding-2 endpoint  │ │
 │  │  Dashboard (React Glass)    ← browser-based memory explorer        │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
 │                                                                          │

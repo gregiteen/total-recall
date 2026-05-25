@@ -47,7 +47,7 @@
 - [x] `getActiveBrains()` — returns `{ global, project }`
 - [x] `resolveBrainLayer(layer, category)` — auto-detect with category heuristic
 
-## Phase 2: Init Command
+## Phase 2: Init Command ✅
 
 Modify `src/cli/init.mjs`:
 
@@ -63,7 +63,7 @@ Modify `src/cli/init.mjs`:
 
 3. **Auto-detect on repeat runs**: if global brain exists and no `--project`, skip global init and just compile shims
 
-## Phase 3: Merged Vault Compilation
+## Phase 3: Merged Vault Compilation ✅
 
 Modify `src/core/vault.mjs` and `src/core/surface.mjs`:
 
@@ -77,7 +77,7 @@ Modify `src/core/vault.mjs` and `src/core/surface.mjs`:
 3. Update `buildRulesBlock()` to use merged nodes
 4. Project-level `rules/` (invariants.md, preferences.md, corrections.md) merge with global
 
-## Phase 4: Remember / Recall CLI
+## Phase 4: Remember / Recall CLI ✅
 
 Modify `src/cli/remember.mjs` and `src/cli/recall.mjs`:
 
@@ -88,7 +88,7 @@ Modify `src/cli/remember.mjs` and `src/cli/recall.mjs`:
 3. `recall` searches both layers by default, results tagged with layer
 4. `recall --global` / `--project` filters to single layer
 
-## Phase 5: Research at Both Layers
+## Phase 5: Research at Both Layers ✅
 
 Modify `src/core/research.mjs` and `src/core/research-queue.mjs`:
 
@@ -97,7 +97,7 @@ Modify `src/core/research.mjs` and `src/core/research-queue.mjs`:
 3. Daemon processes both queues
 4. Results land in the appropriate brain's memory-inbox
 
-## Phase 6: Backup / Restore
+## Phase 6: Backup / Restore ✅
 
 Modify `src/cli/backup.mjs` and `src/cli/restore.mjs`:
 
@@ -105,7 +105,7 @@ Modify `src/cli/backup.mjs` and `src/cli/restore.mjs`:
 2. `--global` / `--project` flags on backup/restore
 3. Default: backs up whichever layer matches CWD context
 
-## Phase 7: Connect / Uninstall
+## Phase 7: Connect / Rebuild / Snapshot ✅
 
 Modify `src/cli/connect.mjs` and `src/cli/uninstall.mjs`:
 
@@ -114,11 +114,11 @@ Modify `src/cli/connect.mjs` and `src/cli/uninstall.mjs`:
 3. `--global` removes global brain (with confirmation)
 4. `--all` removes everything
 
-## Phase 8: CLI Quickstart Update
+## Phase 8: CLI Quickstart Update ✅
 
 Update the injected directives block in `surface.mjs` to document `--global`/`--project` flags.
 
-## Phase 9: Tests
+## Phase 9: Tests ✅
 
 1. Config: test `detectProjectBrain()`, `getActiveBrains()`, `resolveBrainLayer()`
 2. Vault: test `loadMergedNodes()` with slug conflicts
@@ -126,7 +126,7 @@ Update the injected directives block in `surface.mjs` to document `--global`/`--
 4. Surface: test merged compilation output
 5. Full regression: all 296+ tests pass
 
-## Phase 10: Dashboard Brain Selector
+## Phase 10: Dashboard Brain Selector ✅
 
 1. Add `config/project-registry.json` to global brain
 2. REST API: `GET /api/brains` — list all known brains with state

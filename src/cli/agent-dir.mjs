@@ -1,34 +1,107 @@
 /**
- * Shared `.agent/` directory resolver for CLI commands that operate on
- * a vault. Workspace-local wins over the user's global brain when
- * `./.agent/memory-vault/` exists, so `cd my-project && total-recall <cmd>`
- * targets the project's vault rather than the personal one.
+ * Shared `.agent/` directory resolver for CLI commands.
  *
- * Commands that legitimately target the host-global brain (deploy, daemon
- * start/stop, upgrade, sync — which uses its own brain.json) bypass this
- * helper.
+ * Supports two brain layers:
+ *   - Global brain:  ~/.agent/skills/total-recall/  (identity, universal rules)
+ *   - Project brain: <cwd>/.agent/skills/total-recall/  (project-specific knowledge)
+ *
+ * The `--global` / `--project` flags let users explicitly target a layer.
+ * Without flags, workspace-local wins over global when a project brain exists.
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export function resolveAgentDir() {
-  if (process.env.AGENT_DIR) {
-    return process.env.AGENT_DIR;
+/**
+ * Parse --global / --project layer flags from CLI args.
+ * Returns { layer: 'global' | 'project' | 'auto', remainingArgs: string[] }
+ */
+export function parseLayerFlag(args) {
+  let layer = 'auto';
+  const remainingArgs = [];
+  for (const arg of args) {
+    if (arg === '--global') layer = 'global';
+    else if (arg === '--project') layer = 'project';
+    else remainingArgs.push(arg);
   }
-  const localDir = path.join(process.cwd(), '.agent');
-  if (fs.existsSync(path.join(localDir, 'skills', 'total-recall', 'memory-vault'))) {
-    return localDir;
-  }
-  return path.join(os.homedir(), '.agent');
+  return { layer, remainingArgs };
+}
+
+/** Global agent directory — always at ~/.agent/ */
+export function getGlobalAgentDir() {
+  return process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+}
+
+/** Global brain directory — ~/.agent/skills/total-recall/ */
+export function getGlobalBrainDir() {
+  return path.join(getGlobalAgentDir(), 'skills', 'total-recall');
 }
 
 /**
- * Resolve the brain directory — the Total Recall meta-skill that contains
- * ALL user data (memory-vault, memory-derived, memory-inbox, sessions,
- * scheduler, config, logs, .backups).
+ * Detect a project-level brain by checking <cwd>/.agent/skills/total-recall/.
+ * Returns { agentDir, brainDir } or null.
  */
-export function resolveBrainDir() {
-  return path.join(resolveAgentDir(), 'skills', 'total-recall');
+export function detectProjectBrain() {
+  if (process.env._TR_TEST_AGENT_DIR) return null;
+  const cwd = process.cwd();
+  const homeDir = os.homedir();
+  if (cwd === homeDir) return null; // don't detect global as project
+  const localAgentDir = path.join(cwd, '.agent');
+  const localBrainDir = path.join(localAgentDir, 'skills', 'total-recall');
+  if (fs.existsSync(path.join(localBrainDir, 'memory-vault'))) {
+    return { agentDir: localAgentDir, brainDir: localBrainDir };
+  }
+  return null;
+}
+
+/**
+ * Resolve agent dir based on explicit layer or auto-detect.
+ * @param {'global' | 'project' | 'auto'} [layer='auto']
+ */
+export function resolveAgentDir(layer = 'auto') {
+  if (process.env.AGENT_DIR) {
+    return process.env.AGENT_DIR;
+  }
+  if (layer === 'global') return getGlobalAgentDir();
+  if (layer === 'project') {
+    const project = detectProjectBrain();
+    if (!project) throw new Error('No project brain found. Run `npx total-recall init --project` to create one.');
+    return project.agentDir;
+  }
+  // Auto: project-local wins if it exists
+  const project = detectProjectBrain();
+  return project ? project.agentDir : getGlobalAgentDir();
+}
+
+/**
+ * Resolve the brain directory for a specific layer.
+ * @param {'global' | 'project' | 'auto'} [layer='auto']
+ */
+export function resolveBrainDir(layer = 'auto') {
+  return path.join(resolveAgentDir(layer), 'skills', 'total-recall');
+}
+
+/**
+ * Get both brain layers for the current context.
+ * @returns {{ global: { agentDir: string, brainDir: string }, project: { agentDir: string, brainDir: string } | null }}
+ */
+export function getBothBrains() {
+  const globalAgentDir = getGlobalAgentDir();
+  const globalBrainDir = getGlobalBrainDir();
+  const project = detectProjectBrain();
+  return {
+    global: { agentDir: globalAgentDir, brainDir: globalBrainDir },
+    project,
+  };
+}
+
+/**
+ * Determine the default layer for a memory category.
+ * Global-default: invariant, preference, correction, lore
+ * Project-default: fact, concept, pattern, anti-pattern, decision
+ */
+export function defaultLayerForCategory(category) {
+  const globalCategories = new Set(['invariants', 'preferences', 'anti-patterns', 'lore']);
+  return globalCategories.has(category) ? 'global' : 'project';
 }

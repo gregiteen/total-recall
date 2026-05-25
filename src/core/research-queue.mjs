@@ -18,8 +18,9 @@ import { brainDir } from './config.mjs';
 
 const getBrainDir = () => process.env._TR_TEST_AGENT_DIR || brainDir;
 
-function getQueueFile() {
-  return path.join(getBrainDir(), 'research-queue.jsonl');
+function getQueueFile(overrideBrainDir) {
+  const dir = overrideBrainDir || getBrainDir();
+  return path.join(dir, 'research-queue.jsonl');
 }
 
 const STATUS_RANK = { pending: 0, in_progress: 1, done: 2, failed: 3 };
@@ -202,8 +203,9 @@ export function syncResearchProjectNode(item) {
 
 // ─── I/O ───────────────────────────────────────────────────────────────────────
 
-export function loadQueue() {
-  const queueFile = getQueueFile();
+export function loadQueue(overrideBrainDir) {
+  const queueFile = getQueueFile(overrideBrainDir);
+  const effectiveBrainDir = overrideBrainDir || getBrainDir();
   if (!fs.existsSync(queueFile)) return [];
   const items = fs.readFileSync(queueFile, 'utf8')
     .split('\n').filter(Boolean)
@@ -212,7 +214,7 @@ export function loadQueue() {
 
   // Dynamic self-healing: ensure every research item has a summary enqueued
   let changed = false;
-  const vaultDir = path.join(getBrainDir(), 'memory-vault');
+  const vaultDir = path.join(effectiveBrainDir, 'memory-vault');
 
   for (const item of items) {
     if (!item.summary) {
@@ -222,7 +224,7 @@ export function loadQueue() {
           const nodes = loadNodes(vaultDir);
           node = nodes.find(n => n.slug === item.node_slug);
           if (!node) {
-            const inboxFile = path.join(getBrainDir(), 'memory-inbox', 'pending', `${item.node_slug}.md`);
+            const inboxFile = path.join(effectiveBrainDir, 'memory-inbox', 'pending', `${item.node_slug}.md`);
             if (fs.existsSync(inboxFile)) {
               const raw = fs.readFileSync(inboxFile, 'utf8');
               const { data, content } = matter(raw);
@@ -246,15 +248,15 @@ export function loadQueue() {
 
   if (changed) {
     try {
-      saveQueue(items);
+      saveQueue(items, overrideBrainDir);
     } catch {}
   }
 
   return items;
 }
 
-export function saveQueue(items) {
-  const queueFile = getQueueFile();
+export function saveQueue(items, overrideBrainDir) {
+  const queueFile = getQueueFile(overrideBrainDir);
   fs.mkdirSync(path.dirname(queueFile), { recursive: true });
   fs.writeFileSync(queueFile, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
@@ -268,8 +270,8 @@ export function saveQueue(items) {
  * @param {{ status?: string, query?: string, limit?: number, offset?: number }} [opts]
  * @returns {{ counts: object, total: number, items: object[] }}
  */
-export function listQueue({ status, query, limit = 100, offset = 0 } = {}) {
-  const all = loadQueue();
+export function listQueue({ status, query, limit = 100, offset = 0, brainDir: overrideBrainDir } = {}) {
+  const all = loadQueue(overrideBrainDir);
   const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
   all.forEach(i => { if (counts[i.status] !== undefined) counts[i.status]++; });
 
@@ -300,7 +302,7 @@ export function listQueue({ status, query, limit = 100, offset = 0 } = {}) {
  * @param {{ topic: string, priority?: string, notes?: string }} opts
  * @returns {object} The created item
  */
-export function addToQueue({ topic, priority = 'medium', notes } = {}) {
+export function addToQueue({ topic, priority = 'medium', notes, brainDir: overrideBrainDir } = {}) {
   if (!topic) throw new Error('topic is required');
   const item = {
     id:           crypto.randomUUID(),
@@ -315,9 +317,9 @@ export function addToQueue({ topic, priority = 'medium', notes } = {}) {
     completed_at: null,
   };
   item.summary = compileResearchProjectSummary(item, null);
-  const items = loadQueue();
+  const items = loadQueue(overrideBrainDir);
   items.unshift(item);
-  saveQueue(items);
+  saveQueue(items, overrideBrainDir);
 
   // Sync initial pending project summary node to the vault
   try {
@@ -334,8 +336,8 @@ export function addToQueue({ topic, priority = 'medium', notes } = {}) {
  * @param {{ status?: string, notes?: string, node_slug?: string, priority?: string, research_phase?: string }} patch
  * @returns {object} The updated item
  */
-export function updateQueueItem(id, patch = {}) {
-  const items = loadQueue();
+export function updateQueueItem(id, patch = {}, overrideBrainDir) {
+  const items = loadQueue(overrideBrainDir);
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) throw Object.assign(new Error(`Research project not found: ${id}`), { status: 404 });
 
@@ -357,7 +359,7 @@ export function updateQueueItem(id, patch = {}) {
   }
 
   // Load the latest node (from vault or inbox pending) to compile summary
-  const localBrainDir = getBrainDir();
+  const localBrainDir = overrideBrainDir || getBrainDir();
   const vaultDir = path.join(localBrainDir, 'memory-vault');
   let node = null;
   if (item.node_slug) {
@@ -366,7 +368,7 @@ export function updateQueueItem(id, patch = {}) {
       node = nodes.find(n => n.slug === item.node_slug);
       
       if (!node) {
-        const inboxFile = path.join(getBrainDir(), 'memory-inbox', 'pending', `${item.node_slug}.md`);
+        const inboxFile = path.join(localBrainDir, 'memory-inbox', 'pending', `${item.node_slug}.md`);
         if (fs.existsSync(inboxFile)) {
           const raw = fs.readFileSync(inboxFile, 'utf8');
           const { data, content } = matter(raw);
@@ -380,7 +382,7 @@ export function updateQueueItem(id, patch = {}) {
   item.summary = compileResearchProjectSummary(item, node);
 
   items[idx] = item;
-  saveQueue(items);
+  saveQueue(items, overrideBrainDir);
 
   // Sync updated research project summary node to the vault
   try {
@@ -396,16 +398,16 @@ export function updateQueueItem(id, patch = {}) {
  * @param {string} id
  * @returns {{ deleted: boolean, id: string, topic: string }}
  */
-export function removeFromQueue(id) {
-  const items = loadQueue();
+export function removeFromQueue(id, overrideBrainDir) {
+  const items = loadQueue(overrideBrainDir);
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) throw Object.assign(new Error(`Research project not found: ${id}`), { status: 404 });
   const [removed] = items.splice(idx, 1);
-  saveQueue(items);
+  saveQueue(items, overrideBrainDir);
 
   // Delete the corresponding summary node from the vault
   try {
-    const vaultDir = path.join(getBrainDir(), 'memory-vault');
+    const vaultDir = path.join(overrideBrainDir || getBrainDir(), 'memory-vault');
     deleteNode(`research-project-${id}`, vaultDir);
   } catch {}
 

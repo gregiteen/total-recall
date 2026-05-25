@@ -142,3 +142,39 @@ Upgrade the SSSS initialization sequence and frontend dashboard to offer a highl
 - [x] **Split-Screen HTML Markdown Editor**: Refactor `MemoryPage.tsx` detail panel to enable full frontmatter property editing alongside a side-by-side split screen raw textarea editor and live HTML rendering container.
 - [x] **Interactive Scripts Console & Runner**: Engineer a `"Scripts"` tab in `FilesPage.tsx` featuring inline script files editing, saving, and an execution terminal emulator displaying dynamic process streams.
 
+---
+
+## Phase 8: Modular Skill Discovery, Auditing & Quarantine Manager (Completed)
+
+Integrate npm's `skills` CLI with a local security auditor and hot-recompilation pipeline to safely search, install, audit, and activate modular skills from `skills.sh`.
+
+### Target Architecture
+```
+[npx total-recall skill install <package>]
+                     │
+                     ▼
+       [npx skills add <package> -y]
+                     │
+                     ▼
+         [Run Static Security Scan]
+        (scripts/scan-skill.mjs Target)
+                     │
+         ┌───────────┴───────────┐
+         ▼ (Criticals found)     ▼ (Safe or only warnings)
+      [Quarantine & Purge]    [Conformity Check & Scaffold]
+    (rmSync installed files)  (scripts, references, evals, subagents)
+         │                               │
+         ▼                               ▼
+  [Report & Terminate]        [Hot-Recompile Brain Shims]
+                            (npx total-recall compile)
+```
+
+### Tasks
+- [x] **Dynamic installs/ratings parser**: Create `.agent/skills/skill/scripts/find-skills.mjs` to query `skills.sh` registry, extract install counts via Regex, convert `K`/`M` suffixes to integers, and sort search results in descending order.
+- [x] **Static security scan auditor**: Create `.agent/skills/skill/scripts/scan-skill.mjs` to dynamically parse code scripts for dynamic shell command execution (`exec`, `eval`), unvalidated network egress (`fetch`, `curl`), and path traversals.
+- [x] **Quarantine pipeline**: Create `.agent/skills/skill/scripts/install-skill.mjs` which installs packages, executes the security scan, and purges the directory immediately if critical warnings are detected.
+- [x] **Universal Spec conformity**: Automatically scaffold missing `scripts/`, `references/`, `evals/`, `subagents/` directories and seed default `evals.json` success assertions for all newly added skills.
+- [x] **Command CLI integration**: Create `src/cli/skill.mjs` and register it inside `bin/total-recall.mjs` to support all subcommands: `find`, `install`, `scan`, `list`, and `remove`.
+- [x] **Test suite coverage**: Author comprehensive tests in `src/cli/skill.spec.mjs` covering installations parsing, CLI output parsing, static security scanning, and verify 100% test suite success.
+
+

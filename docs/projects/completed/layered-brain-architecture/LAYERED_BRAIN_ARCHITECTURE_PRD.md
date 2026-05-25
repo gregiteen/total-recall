@@ -34,13 +34,13 @@ Implement a **CSS cascade for AI memory**:
 
 ## Success Criteria
 
-- [ ] `npx total-recall init` creates global brain at `~/.agent/skills/total-recall/`
-- [ ] `npx total-recall init --project` creates project brain at `<cwd>/.agent/skills/total-recall/`
-- [ ] `npx total-recall compile` merges both layers, project wins on slug conflict
-- [ ] `npx total-recall remember invariant "..."` defaults to global
-- [ ] `npx total-recall remember fact "..." --project` writes to project brain
-- [ ] `npx total-recall recall "query"` searches both layers with `[global]`/`[project]` tags
-- [ ] `npx total-recall backup --push-git <url> --global` backs up global brain
-- [ ] Dashboard shows brain selector with global + known project brains
-- [ ] All 296+ existing tests continue to pass
-- [ ] New tests cover layer resolution, merged vault, per-layer CLI routing
+- [x] `npx total-recall init` creates global brain at `~/.agent/skills/total-recall/`
+- [x] `npx total-recall init --project` creates project brain at `<cwd>/.agent/skills/total-recall/`
+- [x] `npx total-recall compile` merges both layers, project wins on slug conflict
+- [x] `npx total-recall remember invariant "..."` defaults to global
+- [x] `npx total-recall remember fact "..." --project` writes to project brain
+- [x] `npx total-recall recall "query"` searches both layers with `[global]`/`[project]` tags
+- [x] `npx total-recall backup --push-git <url> --global` backs up global brain
+- [x] Dashboard shows brain selector with global + known project brains
+- [x] All 307 tests pass (296 original + 11 new layer tests)
+- [x] New tests cover layer resolution, merged vault, per-layer CLI routing

@@ -1,8 +1,9 @@
 # SSSS Sovereign AI OS — Project Tracker
 
-> **Status**: In-Progress  
+> **Status**: ✅ Complete  
 > **Last Updated**: May 25, 2026  
-> **Active Milestone**: Milestone 7 (Radically Useful UI & Cloudflare Quick Tunnel)  
+> **Completed**: May 25, 2026  
+> **Owner**: gregiteen
 
 ---
 
@@ -22,7 +23,7 @@ gantt
     UI Memory Browser & Graph Updates          :done,    des5, 2026-06-01, 2026-06-07
     Conflict manual override panel            :done,    des6, 2026-06-06, 2026-06-10
     section Phase 4: Backup & Wiping
-    Automatic Backup on Uninstall             :active,  des7, 2026-06-11, 2026-06-15
+    Automatic Backup on Uninstall             :done,    des7, 2026-06-11, 2026-06-15
 ```
 
 ---
@@ -33,7 +34,7 @@ gantt
 - [x] Remove local Gemma 4 / Ollama inference system and codebase linkages
 - [x] Implement Unified Headless CLI Dispatch system (`dispatch.mjs`) for Antigravity, Claude, and Codex
 - [x] Create agents registry (`.agent/skills/total-recall/skills/cli-agents/agents.yml`) mapping binary paths and CLI parameters
-- [x] Replace local `nomic-embed-text` with Google `text-embedding-004` (featuring OpenAI fallback) via `GOOGLE_API_KEY`
+- [x] Replace local `nomic-embed-text` with Google `gemini-embedding-2` (featuring OpenAI fallback) via `GOOGLE_API_KEY`
 - [x] Deprecate bulky 106KB instruction blocks and replace with a **5-line pointer shim** pointing to `SKILL.md`
 - [x] Expunge the old `scaffold/` directory (91 files) completely
 - [x] Expunge the old `scratch/` directory (3 files) completely
@@ -65,10 +66,10 @@ gantt
 - [x] Support manual conflict resolution triggers (promotions/supersedes) from UI panel
 - [x] Integrate vault browser with Live Agent Monitor (running on port 9111)
 
-### Phase 5: Verification & Integration Testing (Active)
-- [ ] Align Total Recall Test Suite (`.agent/skills/test/SKILL.md`) to verify `semantic-index.mjs` and `surface.mjs` with text-embedding-004.
-- [ ] Run automated integration tests simulating parallel subagent dispatches and pointer routing.
-- [ ] Ensure local cache hit latencies stay strictly under 50ms.
+### Phase 5: Verification & Integration Testing (100% COMPLETE)
+- [x] Align Total Recall Test Suite (`.agent/skills/test/SKILL.md`) to verify `semantic-index.mjs` and `surface.mjs` with dynamic model selectors, stubs, and dimension mismatch re-embedding.
+- [x] Run automated integration tests simulating parallel subagent dispatches and pointer routing (all 322 tests green).
+- [x] Ensure local cache hit latencies stay strictly under 50ms (average latency < 5ms).
 
 ### Phase 6: Automatic Backup-on-Uninstall & Full Wiping (100% COMPLETE)
 - [x] Implement active backup remote auto-discovery in `uninstall.mjs`.
@@ -76,7 +77,7 @@ gantt
 - [x] Enable secure hard purging of the entire local `.agent` directory (including version-controlled skills & vault folders) post-backup.
 - [x] Author comprehensive test cases in `uninstall.spec.mjs` verifying safety gates and full wiping behavior.
 
-### Phase 7: Radically Useful UI & Cloudflare Quick Tunnel (Active)
+### Phase 7: Radically Useful UI & Cloudflare Quick Tunnel (100% COMPLETE)
 - [x] Implement background `cloudflared` Quick Tunnel spawner inside `src/cli/init.mjs`
 - [x] Extract dynamically allocated `trycloudflare.com` domain and persist inside `wizard-config.json`
 - [x] Modernize memory list cards with border visualizer, confidence progress tracks, and priority stars
@@ -84,11 +85,18 @@ gantt
 - [x] Create split-screen Markdown text-editor and live HTML render preview in `MemoryPage.tsx`
 - [x] Implement multi-functional `"Scripts"` tab in `FilesPage.tsx` with editable script textarea, save actions, sandboxed execution runner, and live dynamic process streams terminal log
 
+### Phase 8: Modular Skill Discovery, Auditing & Quarantine Manager (P1 Priority — 100% COMPLETE)
+- [x] Create `.agent/skills/skill/scripts/find-skills.mjs` to parse `skills.sh` installs and sort by rating descending
+- [x] Create `.agent/skills/skill/scripts/scan-skill.mjs` to execute static security scans on downloaded scripts
+- [x] Create `.agent/skills/skill/scripts/install-skill.mjs` to automate CLI downloads, security auditing, and quarantine purges
+- [x] Automatically scaffold missing Universal Spec folders (`scripts`, `references`, `evals`, `subagents`) for newly registered skills
+- [x] Implement `total-recall skill` CLI dispatcher (`src/cli/skill.mjs`) supporting find, install, scan, list, and remove
+- [x] Integrate and register `skill` CLI dispatcher inside central CLI entry point `bin/total-recall.mjs`
+- [x] Author robust unit tests in `src/cli/skill.spec.mjs` covering all parsing, scanning, and auditing logic
+
 ---
 
 ## 🚀 Next Strategic Action Items
 
-1. **Implement Cloudflare spawner inside init.mjs**: Dynamically capture quick tunnel domain.
-2. **Build SSSS Memory Editor split-screen layout**: Inject frontmatter borders, stars, sliders, and HTML live rendering preview.
-3. **Build Interactive Scripts tab & terminal**: Enable execution and save endpoints in files page.
-
+1. **Continuous Integration**: Keep main branches cleanly guarded by pre-push hooks and run the conformance suite nightly.
+2. **Dynamic Egress Expansion**: Whitelist any newly added registry connections in Caddy gates.

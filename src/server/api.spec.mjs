@@ -54,7 +54,7 @@ const { restRouter } = await import('./rest.mjs');
 const AGENT_DIR = TEST_AGENT_DIR;
 const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
-const SSSS_FILE = path.join(AGENT_DIR, 'skills', 'ssss', 'SKILL.md');
+const SSSS_FILE = path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'ssss', 'SKILL.md');
 
 const FIXTURE_INSTRUCTIONS = '# Test Instructions Marker\n\nTOTAL_RECALL_INSTRUCTIONS_FIXTURE_TOKEN\n';
 const FIXTURE_SSSS = '# SSSS Test Marker\n\nTOTAL_RECALL_SSSS_FIXTURE_TOKEN\n';

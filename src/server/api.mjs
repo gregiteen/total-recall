@@ -19,8 +19,8 @@ import fs from 'fs';
 import matter from 'gray-matter';
 import { agentDir, brainDir } from '../core/config.mjs';
 
-const AGENT_DIR = agentDir;
-const BRAIN_DIR = brainDir;
+const AGENT_DIR = process.env.AGENT_DIR || agentDir;
+const BRAIN_DIR = process.env.TR_BRAIN || path.join(AGENT_DIR, 'skills', 'total-recall');
 const VAULT_DIR = path.join(BRAIN_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
@@ -140,7 +140,7 @@ function resolveRequestedModel(requestedModel, runtimeConfig) {
 }
 
 function ssssReferenceDir() {
-  return path.join(SKILLS_DIR, 'ssss', 'references');
+  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'references');
 }
 
 function listSsssReferences(req) {
@@ -328,24 +328,25 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
       return res.status(400).json({ error: 'Messages array is required' });
     }
     
-    let activeConfig = null;
+    const rtConfig = loadRuntimeConfig();
+    const activeConfig = {
+      ...rtConfig,
+      model: resolveRequestedModel(model, rtConfig),
+      response_model: model || rtConfig.model,
+      temperature: temperature || rtConfig.temperature
+    };
 
-    if (fs.existsSync(runtimeConfigPath)) {
-      const rtConfig = loadRuntimeConfig(runtimeConfigPath);
-      const health = await checkRuntimeHealth(rtConfig);
-      activeConfig = {
-        ...rtConfig,
-        model: resolveRequestedModel(model, rtConfig),
-        response_model: model || rtConfig.model,
-        temperature: temperature || rtConfig.temperature
-      };
-    } else {
-      activeConfig = {
-        agents: [],
-        model: model || 'default',
-        response_model: model || 'default',
-        temperature: temperature || 0.2
-      };
+    // If the requested model matches one of our CLI agents, elevate that agent to highest priority
+    if (model && activeConfig.agents) {
+      const targetAgentName = model.toLowerCase();
+      const idx = activeConfig.agents.findIndex(a => a.name === targetAgentName);
+      if (idx >= 0) {
+        // Deep copy the agents list so we don't mutate the cached config
+        activeConfig.agents = activeConfig.agents.map(a => ({ ...a }));
+        activeConfig.agents[idx].priority = 0;
+        activeConfig.agents.sort((a, b) => a.priority - b.priority);
+        logger.info('api', `Elevated priority of agent "${targetAgentName}" to 0 based on model request.`);
+      }
     }
 
 
@@ -459,7 +460,7 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
         baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${compressInstructions(instructions)}`;
       }
 
-      const ssssPath = path.join(AGENT_DIR, 'skills', 'ssss', 'SKILL.md');
+      const ssssPath = path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'ssss', 'SKILL.md');
       if (fs.existsSync(ssssPath)) {
         const ssssContent = fs.readFileSync(ssssPath, 'utf8');
         baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nYou are the orchestrator of this system. Here is the architectural specification:\n${compressSsssSkill(ssssContent)}`;

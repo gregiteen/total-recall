@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir } from './agent-dir.mjs';
+import { resolveAgentDir, getBothBrains, getGlobalBrainDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
@@ -207,7 +207,7 @@ function bootstrapAgentDir(agentDir) {
     }
   }
 
-  const scaffoldSkillsDir = path.join(TEMPLATES_DIR, '..', '.agent', 'skills');
+  const scaffoldSkillsDir = path.join(TEMPLATES_DIR, '..', 'scaffold', '.agent', 'skills');
   let skillsToCopy = ['total-recall'];
   if (fs.existsSync(scaffoldSkillsDir)) {
     try {
@@ -661,7 +661,8 @@ export default async function connect(args) {
       const vaultDir = path.join(brainDir, 'memory-vault');
       const skillsDir = path.join(agentDir, 'skills');
       const derivedDir = path.join(brainDir, 'memory-derived');
-      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
+      const globalVaultDir = path.join(getGlobalBrainDir(), 'memory-vault');
+      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir });
     } catch {
       // Fallback: seed a clean, basic default SSSS instructions file so connection is never blocked
       const instructionsFile = path.join(cwd, 'INSTRUCTIONS.md');

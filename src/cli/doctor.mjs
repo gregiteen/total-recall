@@ -199,7 +199,7 @@ export default async function doctor() {
     logOk('OPENAI_API_KEY environment variable is configured (Fallback Embeddings)');
   } else {
     logWarn('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is configured in the environment.');
-    log('     Tip: Configure GOOGLE_API_KEY to use text-embedding-004 (free tier).');
+    log('     Tip: Configure GOOGLE_API_KEY to use gemini-embedding-2 (free tier).');
     warnings++;
   }
 

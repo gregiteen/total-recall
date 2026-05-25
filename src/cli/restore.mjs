@@ -18,15 +18,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 
-import { agentDir } from '../core/config.mjs';
-
-function getAgentDir() {
-  return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
-}
+import { resolveAgentDir, parseLayerFlag } from './agent-dir.mjs';
 
 /** Parent of the skill dir — where the tarball gets extracted to */
-function getExtractDir() {
-  return path.join(getAgentDir(), 'skills');
+function getExtractDir(layer = 'auto') {
+  return path.join(resolveAgentDir(layer), 'skills');
 }
 
 function commandExists(cmd) {
@@ -40,10 +36,11 @@ function commandExists(cmd) {
 }
 
 function parseArgs(args) {
-  const opts = { from: null, yes: false, help: false };
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case '--from': opts.from = args[++i]; break;
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  const opts = { from: null, yes: false, help: false, layer };
+  for (let i = 0; i < remainingArgs.length; i++) {
+    switch (remainingArgs[i]) {
+      case '--from': opts.from = remainingArgs[++i]; break;
       case '--yes': case '-y': opts.yes = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
@@ -87,7 +84,7 @@ export default async function restore(args) {
   }
 
   const isEncrypted = opts.from.endsWith('.gpg');
-  const extractDir = getExtractDir();
+  const extractDir = getExtractDir(opts.layer);
 
   if (!opts.yes) {
     console.error(`\n  ⚠️  This will overwrite .agent/skills/total-recall/ with the contents of:`);
