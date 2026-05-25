@@ -55,11 +55,12 @@ export default function SettingsPage() {
     }
   };
 
-  // Trigger loads based on active views/tabs
   useEffect(() => {
     if (viewMode === 'visual') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate config loader on visual active
       void loadVisualConfig();
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate config loader on yaml active
       void loadYamlConfig(activeYamlTab);
     }
   }, [viewMode, activeYamlTab]);

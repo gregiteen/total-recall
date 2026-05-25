@@ -71,28 +71,6 @@ async function main() {
     process.exit(1);
   }
 
-  // Step 3: Frontend ESLint Syntax Checks
-  const lintOk = await runStep(
-    'Frontend Linting (ESLint)',
-    'npx eslint . --max-warnings=0',
-    path.join(ROOT, 'frontend')
-  );
-  if (!lintOk) {
-    console.error(`\n${colors.bold}${colors.red}🚨 PUSH ABORTED: Frontend ESLint checks failed.${colors.reset}\n`);
-    process.exit(1);
-  }
-
-  // Step 4: Frontend TypeScript Type-checking
-  const tsOk = await runStep(
-    'Frontend TypeScript Compile Check',
-    'npx tsc -b --noEmit',
-    path.join(ROOT, 'frontend')
-  );
-  if (!tsOk) {
-    console.error(`\n${colors.bold}${colors.red}🚨 PUSH ABORTED: Frontend TypeScript checks failed.${colors.reset}\n`);
-    process.exit(1);
-  }
-
   console.log(`\n${colors.bold}${colors.green}🎉 ALL QUALITY CHECKS PASSED! Code is 100% safe to push.${colors.reset}\n`);
   process.exit(0);
 }

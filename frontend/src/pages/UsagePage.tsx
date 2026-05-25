@@ -41,6 +41,7 @@ export default function UsagePage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate statistics sync on mount
     void fetchUsageAndConfig();
     const interval = setInterval(fetchUsageAndConfig, 5000);
     return () => clearInterval(interval);

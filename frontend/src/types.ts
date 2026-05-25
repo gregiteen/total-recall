@@ -77,9 +77,75 @@ export interface ResearchItem {
   priority: 'low' | 'medium' | 'high' | 'critical'
   notes: string | null
   node_slug?: string | null
-  research_phase?: string
-  created_at: string
-  updated_at: string
   completed_at?: string | null
+}
+
+export interface Conflict {
+  conflict_id: string
+  status: 'pending' | 'resolved'
+  new_slug: string
+  existing_slug: string
+  similarity: number
+  polarity_flip: boolean
+  detected_at: string
+  reason: string
+  resolution: string | null
+  resolved_at: string | null
+}
+
+export interface UsageBreakdown {
+  dailyUsd: number
+  weeklyUsd: number
+  dailyTokens?: number
+  weeklyTokens?: number
+}
+
+export interface UsageData {
+  timestamp: string
+  dailyUsd: number
+  weeklyUsd: number
+  breakdown: {
+    gemini: UsageBreakdown
+    claude: UsageBreakdown
+    codex: UsageBreakdown
+  }
+}
+
+export interface ConfigJson {
+  security: {
+    yolo_mode?: boolean
+    privacy?: {
+      enforce_local_only?: boolean
+      allow_frontier_export?: 'always' | 'ask_per_skill' | 'never' | string
+    }
+    dashboard?: {
+      force_password_reset?: boolean
+      session_ttl_hours?: number
+    }
+    bind?: {
+      host?: string
+      port?: number
+      allow_public_bind?: boolean
+    }
+    network?: {
+      require_https?: boolean
+      public_health?: boolean
+      allowed_origins?: string[]
+    }
+    rate_limits?: {
+      api_requests_per_minute?: number
+      sandbox_requests_per_minute?: number
+      ingest_requests_per_minute?: number
+    }
+    [key: string]: unknown
+  }
+  budget: {
+    budget?: {
+      enabled?: boolean
+      daily_cap_usd?: number
+      weekly_cap_usd?: number
+    }
+    [key: string]: unknown
+  }
 }
 

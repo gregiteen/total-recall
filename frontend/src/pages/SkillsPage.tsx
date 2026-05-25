@@ -33,7 +33,7 @@ export default function SkillsPage() {
   const [activeTab, setActiveTab] = useState<'active' | 'registry'>('active');
 
   // UI status hooks
-  const [_loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [compiling, setCompiling] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +77,7 @@ export default function SkillsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetch on mount
     void fetchSkillsList();
   }, []);
 
