@@ -10,13 +10,13 @@ Total Recall separates core intelligence into two distinct virtual file system (
 
 ```
 ~ (User Home)
-└── .agent/                       <-- GLOBAL BRAIN LAYER
+└── .agent/skills/total-recall/    <-- GLOBAL BRAIN LAYER
     ├── config/brain.json          # Master configuration & API keys
     ├── memory-vault/              # Broad user preferences & SOUL.md
     └── memory-derived/            # disposable global caches
 
 /Users/greg/Github/total-recall/   <-- LOCAL PROJECT BRAIN LAYER
-└── .agent/
+└── .agent/skills/total-recall/
     ├── memory-vault/              # Project-specific facts & patterns
     └── memory-derived/            # Unified project-local compiled index
 ```
@@ -29,8 +29,8 @@ When the OS rebuilder compiles the vault, it executes the unified compilation lo
 
 ```mermaid
 graph TD
-    GVault["Global Vault (~/.agent/memory-vault)"] -->|Read Nodes| Merger["Unified Memory Compiler"]
-    PVault["Project Vault (<repo>/.agent/memory-vault)"] -->|Read Nodes| Merger
+    GVault["Global Vault (~/.agent/skills/total-recall/memory-vault)"] -->|Read Nodes| Merger["Unified Memory Compiler"]
+    PVault["Project Vault (<repo>/.agent/skills/total-recall/memory-vault)"] -->|Read Nodes| Merger
     
     Merger -->|1. Deduplicate by Slug| Precedence{"Overlap Check"}
     Precedence -->|Conflict exists| PVWins["Project Node Overrides Global Node"]
@@ -44,7 +44,7 @@ graph TD
 
 ### Precedence Rules:
 1. **Local Vault Dominance**: If a memory node with the same `slug` exists in both the global vault and the project vault, the **project vault version is treated as the source of truth** and overrides the global version.
-2. **Unified Indexing**: The compiler reads all files from both directories and outputs a single, combined `graph-index.jsonl` cache under the project's `.agent/memory-derived/` directory.
+2. **Unified Indexing**: The compiler reads all files from both directories and outputs a single, combined `graph-index.jsonl` cache under the project's `.agent/skills/total-recall/memory-derived/` directory.
 3. **Instruction Injection**: Absolute invariants (`priority: absolute` and `modality: must|must_not`) from both layers are injected directly into the active prompt keeper (`INSTRUCTIONS.md` / `.cursorrules`).
 
 ---
@@ -67,5 +67,5 @@ When new rules are learned or memories are saved, they go through the **Steering
 
 ### The Quarantine State Machine:
 1. **Clash Detection**: The engine scans incoming frontmatter modalities and semantic targets against existing active nodes.
-2. **Invariant Quarantine**: If a new rule contradicts an existing `priority: absolute` invariant, the engine aborts automated ingestion, logs a conflict record under `memory-inbox/conflicts/`, and flags it for **Human Quarantine Review** to protect memory integrity.
+2. **Invariant Quarantine**: If a new rule contradicts an existing `priority: absolute` invariant, the engine aborts automated ingestion, logs a conflict record under `.agent/skills/total-recall/memory-inbox/conflicts/`, and flags it for **Human Quarantine Review** to protect memory integrity.
 3. **Auto-Resolution (Human vs. Machine)**: If a newly saved human-created node conflicts with an older, machine-generated research node, the engine automatically resolves the conflict in favor of the human, applying `superseded` status to the machine node and compiling the vault immediately without interrupting the developer.

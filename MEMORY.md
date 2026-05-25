@@ -1,147 +1,77 @@
-# Tier 1 Invariants (Total Recall Hot Memory)
-> This file is compiled automatically. Do not edit directly.
-## ⚡ Before You Respond
+Read and follow .agent/skills/total-recall/SKILL.md on every turn.
 
-1. You **MUST** have read every rule below. Violations are tracked and rules that are violated repeatedly are automatically escalated.
-2. If your task involves a specific domain, **READ the matching SKILL.md first** (see routing table below).
-3. **Search `.agent/memory-vault/`** for relevant past decisions before proposing new approaches.
-4. When you learn a new pattern or receive a correction, **write it to the memory vault** and run `npx total-recall compile`.
-5. **CHECK INTERRUPTS FIRST:** Read `/root/.agent/interrupts/pending.md`. If it has content, incorporate those insights into your response naturally (as if you just recalled them). Then immediately overwrite the file with an empty string to clear it. This is how Total Recall's background engine delivers new conclusions into active conversations.
+<!-- BEGIN INJECTED ACTIVE DIRECTIVES: do not edit by hand; rebuilt by total-recall surface -->
+## Total Recall — Sovereign Memory System (Installed)
 
-## 🧠 Total Recall System
+You have Total Recall installed. Use these CLI commands to remember and recall information.
 
-**What it is:** Total Recall is a Sovereign AI OS — a local, filesystem-native memory and reasoning kernel that runs alongside your IDE. It maintains a structured semantic memory vault (SSSS v2 nodes), compiles rules into IDE instruction files, and runs background research and embedding daemons.
+### npx total-recall remember <category> "<content>" [options]
+Save rules, preferences, corrections, and facts to permanent memory.
 
-**Brain URL:** `http://localhost:3000`  (REST API base; also the MCP server endpoint)
+**Categories:** invariant, preference, correction, fact, concept, pattern, anti-pattern, decision, lore
 
-### 🔧 MCP Tools (13 total)
+**Options:**
+  --tags, -t <list>          Comma-separated tags (e.g. "config,server")
+  --importance, -i <1-5>     Importance level (default: 3)
+  --priority, -p <level>     absolute | high | normal | low (default: normal)
+  --modality, -m <type>      must | must_not | should | should_not | descriptive | preference
+  --confidence, -c <0-1>     Confidence level (default: 1.0)
+  --slug <custom-slug>       Custom kebab-case slug
+  --title <custom-title>     Custom human-readable title
+  --status <state>           active | draft | archived (default: active)
+  --related <list>           Comma-separated related slugs
+  --global                   Save to global brain (identity layer)
+  --project                  Save to project brain (context layer)
 
-| Tool | Purpose |
-|------|---------|
-| `semantic_search` | Vector search across vault nodes and session history |
-| `recall_node` | Fetch a single memory node by slug |
-| `list_nodes` | List vault nodes filtered by category/status/priority |
-| `write_node` | Create or update a memory node (SSSS v2) |
-| `delete_node` | Archive a memory node (sets status → archived) |
-| `queue_research` | Add a topic to the autonomous research agenda |
-| `list_research_queue` | Check status of queued topics + read daemon findings |
-| `recompile_surface` | Rebuild INSTRUCTIONS.md + skill routes + embeddings |
-| `get_health` | Vault stats, Ollama reachability, embedding counts |
-| `list_skills` | Enumerate available agent skills and their descriptions |
-| `read_skill` | Read the full SKILL.md for a specific skill |
-| `list_inbox` | List pending inbox items (draft research, conflicts) |
-| `resolve_inbox` | Promote, reject, or modify an inbox item |
+**Examples:**
+  npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
+  npx total-recall remember preference "Always use single quotes." --tags "style,js"
+  npx total-recall remember fact "The server runs on port 3000." --importance 4
+  npx total-recall remember fact "Uses Drizzle ORM" --project
 
-### 🌐 REST API Reference
+### npx total-recall recall "<query>" [options]
+Semantic search across rules, facts, and session history.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `http://localhost:3000/health` | System health (vault count, embeddings, Ollama status) |
-| GET | `http://localhost:3000/api/vault/status` | Vault stats summary |
-| GET | `http://localhost:3000/api/nodes` | List all nodes (query: category, status, priority) |
-| GET | `http://localhost:3000/api/nodes/:slug` | Fetch a single node by slug |
-| POST | `http://localhost:3000/api/nodes` | Create or upsert a memory node |
-| DELETE | `http://localhost:3000/api/nodes/:slug` | Archive a node |
-| POST | `http://localhost:3000/api/search` | Semantic search (body: { query, top_k }) |
-| GET | `http://localhost:3000/api/research/queue` | List research agenda |
-| POST | `http://localhost:3000/api/research/queue` | Queue a research topic |
-| POST | `http://localhost:3000/api/compile` | Trigger surface recompile |
-| GET | `http://localhost:3000/api/import/rules` | Detect importable rule files in repo |
-| POST | `http://localhost:3000/api/import/rules` | Import detected rule files into vault |
+**Options:**
+  --top-k, -k <number>       Results to return (default: 5, max: 20)
+  --no-sessions, -ns         Exclude session chunks, vault only
+  --format, -f <type>        text (default) or json
+  --category, -cat <name>    Filter by SSSS category
+  --tags, -t <list>          Filter by tags
+  --modality, -m <type>      Filter by modality
+  --importance, -i <1-5>     Filter by minimum importance
+  --global                   Search global brain only
+  --project                  Search project brain only
 
-### 📦 SSSS v2 Memory Node Fields
+**Examples:**
+  npx total-recall recall "Never run tsc directly"
+  npx total-recall recall "Express server port" --top-k 3
+  npx total-recall recall "tsc" --category invariants --modality must
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `slug` | string | Unique ID, kebab-case |
-| `title` | string | Human-readable title |
-| `category` | string | `facts` / `patterns` / `concepts` / `preferences` / `corrections` |
-| `status` | string | `active` / `draft` / `archived` |
-| `priority` | string | `absolute` / `high` / `normal` / `low` |
-| `modality` | string | `must` / `must_not` / `should` / `should_not` / `neutral` |
-| `confidence` | number | 0.0–1.0 (daemon-managed for research nodes) |
-| `importance` | string | `critical` / `high` / `normal` / `low` |
-| `tags` | string[] | Freeform tags for routing and search |
-| `body` | string | Full markdown content; supports `[[wikilinks]]` |
-| `related` | string[] | Slugs of related nodes (graph edges) |
-| `sources` | object[] | Citations: `{ url, title, retrieved_at }` |
+### npx total-recall help <topic>
+Query interactive local documentation, VFS specifications, and command references.
 
-### 🔍 Semantic Search Examples
+**Options:**
+  --json, -j               Emit machine-readable JSON (ideal for programmatic retrieval)
 
-**Via MCP:**
-```json
-{ "tool": "semantic_search", "arguments": { "query": "how to handle rate limiting", "top_k": 5 } }
-```
+**Examples:**
+  npx total-recall help connect
+  npx total-recall help architecture
+  npx total-recall help ssss
 
-**Via REST:** `POST http://localhost:3000/api/search`
-```json
-{ "query": "authentication patterns", "top_k": 3 }
-```
+### npx total-recall --help
+Show all available commands.
 
-### 🔬 Research System (Autonomous Background Daemon)
 
-The research system runs as a **background daemon** — not something you trigger manually.
-Your job as an agent is to **queue topics** and **read results**. The daemon does everything else.
+## Invariant Rules
 
-**How it works:**
-1. Topics sit on a prioritized Research Agenda (`~/.agent/research-agenda.jsonl`).
-   Topics are added by: session inference (daemon reads sessions post-mortem), direct agent queuing, self-diagnosis, or as follow-up gaps from prior research.
-2. Each daemon cycle pulls the highest-priority `pending` or `partially-covered` topic.
-3. It gathers from **all available real sources in parallel:**
-   - Web search (Brave → Serper fallback)
-   - DuckDuckGo Instant Answers
-   - Wikipedia
-   - arXiv (for academic/ML topics)
-   - npm registry (for JS/Node topics)
-   - GitHub repositories (for code/library topics)
-   - Deep page crawl of the top result (Playwright or plain fetch)
-4. A local LLM synthesizes all results into: summary, key facts with inline citations, confidence score, temporal context, contradictions found, and **further research gaps**.
-5. **Confidence routing:**
-   - ≥0.7 → written directly to vault as `active` node + INSTRUCTIONS.md recompiled immediately
-   - <0.7 → written as `draft` to inbox for validation before promotion
-6. **Self-multiplication:** gaps identified during synthesis are automatically added back to the agenda as follow-up topics with slightly lower priority.
-7. **Topic status** is never binary done/not-done: `pending` → `partially-covered` → `well-covered`. Well-covered topics have a 60-day decay half-life and are automatically re-queued as knowledge goes stale.
-8. When the agenda is empty, the daemon runs **self-diagnosis** — audits vault coverage, ages, and source diversity, then auto-queues new topics for weak areas.
-
-**What you as an agent should do:**
-- `queue_research({ topic, priority, notes })` — add a topic (post-cutoff fact, uncertain claim, knowledge gap)
-- `list_research_queue()` — check status of queued topics and read completed findings
-- `semantic_search({ query })` — search vault for facts already researched by the daemon
-
-**What you should NOT do:**
-- Do not manually run web searches and call that "research done"
-- Do not mark research complete — the daemon manages status based on coverage scores across multiple sources
-- Do not write speculative facts to the vault — that's what the inbox validation path is for
-
-## 📋 Topic → Skill Routing
-If your task involves any of these topics, you MUST read the matching SKILL.md BEFORE responding:
-
-| Topic | Skill File |
-|-------|-----------|
-| ssss | .agent/skills/ssss/SKILL.md |
-<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @tier: 1, generated_at: 2026-05-21T01:23:27.985Z -->
-
-## ⚠️ MANDATORY: Always reply directly to all user messages without exception
-# Always Reply Directly to All User Messages
-
-You must prioritize addressing all the messages the user sends. You must NEVER ignore any user messages under any circumstances, and you must explicitly and directly reply to all of them.
-
-This invariant represents the user's absolute directive and must be strictly adhered to across all conversation turns and environments.
-
-## ⚠️ MANDATORY: Inviolable IDE Instruction: # Temporary Cursor Rules for testing
-# Temporary Cursor Rules for testing
-- Always be thorough.
-- Do not add placeholders.
-
-## ⚠️ MANDATORY: Total Recall Core Operating Protocol
-# Total Recall Operating Protocol
+- # Total Recall Operating Protocol
 
 You are operating within the **Total Recall Sovereign OS**. Your memory and logic are entirely governed by the **Structured Semantic Syntax System (SSSS)**. There is no external database. The filesystem is your brain.
 
 ## 1. Memory Architecture
 Your memory is strictly localized to the `.agent/memory-vault/` directory.
-- You do not use `mcp_config.json` or relational databases.
+- You do not use external databases or third-party persistence stores.
 - Every memory, rule, concept, or workflow is a standalone Markdown (`.md`) file with YAML frontmatter.
 
 ## 2. Reading Memory
@@ -163,4 +93,10 @@ Any time you create, edit, or delete a file in the memory vault, the system inde
 ## 5. Execution Mandate
 You must operate autonomously. Do not ask for permission to save memories or compile the vault. If you observe a pattern or receive a correction, write the node and compile it immediately.
 
-<!-- END INJECTED MEMORY -->
+## 6. Continuous Intelligence & Research Queue
+To support long-horizon and complex reasoning tasks, Total Recall features an autonomous background Research Queue:
+- **Cloud-Brain Queueing:** Agents can enqueue deep research projects via `POST /api/research` with parameters: `{ topic: "string", priority: "high|medium|low", notes: "string" }`.
+- **Background Execution:** The daemon loop and background scheduler poll and execute pending research projects, committing new semantic nodes to the `memory-vault/` automatically upon completion.
+- **Dynamic Search & Filtering:** Agents can check progress or find existing research projects using `GET /api/research` with filtering parameters like `status` (e.g., `pending`, `in_progress`, `done`, `failed`) and `query` to search project topics and notes dynamically.
+- **Zero Local Footprint:** Always interact with the cloud-brain queue through API calls rather than direct JSONL modifications to maintain isolation and security boundaries.
+<!-- END INJECTED ACTIVE DIRECTIVES -->

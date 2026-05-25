@@ -1,188 +1,220 @@
-# Total Recall REST API & Gateway Reference
+# Total Recall — REST API Specification
 
-- **Plane**: Reference
-- **Status**: Active
-- **Summary**: Complete specification of the Total Recall REST API endpoints, Personal Access Tokens (PATs) system, and scopes.
+Comprehensive guide to all secure REST endpoints, Personal Access Token (PAT) authentication schemas, scopes, and parameters.
 
 ---
 
-## 🔒 Authentication & Access Control
+## 🔒 Security & Bearer Authentication
 
-All API endpoints (except public discovery and health checks) require bearer authentication via a **Personal Access Token (PAT)**.
+All inbound requests (with the exception of public health checks and setup wizards) must include the secure Personal Access Token (PAT) in the HTTP headers:
 
-- **Header Format**: `Authorization: Bearer tr_<token>`
-- **Token Generation**: Use the CLI to issue tokens with specific labels and granular scopes:
+- **Format**: `Authorization: Bearer tr_<token>`
+- **Token Creation**: Tokens are issued via the CLI using labels and granular scopes to restrict access permissions (e.g. read-only dashboard visualizations vs. write-capable IDE agents):
   ```bash
-  npx total-recall generate-pat --scopes "chat:write,memory:read" --label "my-editor-plugin"
+  npx total-recall generate-pat --scopes "memory:read,chat:write" --label "my-editor-plugin"
   ```
 
-### API Scopes
+### API Access Scopes
 
-Total Recall implements role-based granular scopes to enforce security boundaries (e.g., separating read-only visualization dashboard clients from write-capable IDE agents).
-
-| Scope | Description |
-|-------|-------------|
-| `*` | Full system access |
-| `chat:read` | Retrieve model listings |
-| `chat:write` | Request streaming or blocking chat completions |
-| `memory:read` | Read memory nodes, SSSS graphs, statistics, and ingested sessions |
-| `memory:write` | Create, modify, or delete memory nodes and ingested session trees |
-| `memory:recompile` | Trigger surface compilation (rebuilding `INSTRUCTIONS.md` from raw vault nodes) |
-| `keys:read` | Enumerate active personal access tokens (removes raw secrets) |
-| `keys:write` | Issue new access keys or revoke existing keys |
-| `sandbox:run` | Execute untrusted script components within the hardened local VFS sandbox |
-| `config:read` | Inspect sanitized system and model runtime configs |
-| `health:read` | Basic system check (disk, vault stats, Ollama status) |
+| Scope | Allowed Operations / Subsystem Access |
+| :--- | :--- |
+| `*` | Full system access. |
+| `chat:read` | Retrieve model listings. |
+| `chat:write` | Stream or post chat completions. |
+| `memory:read` | Read SSSS memory nodes, graphs, metrics, and session logs. |
+| `memory:write` | Create, modify, and delete memory nodes and ingested sessions. |
+| `memory:recompile`| Re-compile rule surfaces and rebuild shims (`INSTRUCTIONS.md`). |
+| `keys:read` | Inspect token registries (excludes raw tokens). |
+| `keys:write` | Provision or revoke Personal Access Tokens. |
+| `sandbox:run` | Execute sandboxed scripts in the hardened sandbox context. |
+| `config:read` | Inspect system parameters and model mappings. |
+| `health:read` | Check VFS stats and daemon health indicators. |
 
 ---
 
-## 🚀 Endpoint Reference
+## 🚀 Endpoint Catalog
 
-### 🧠 Memory Node Management
+### 🧠 1. Memory Node CRUD
 
-These endpoints allow remote clients to query, create, update, or archive SSSS markdown memory nodes.
+For creating, reading, updating, and deleting SSSS Markdown nodes inside your active brains.
 
 #### `GET /api/memory`
-List memory nodes. Supports query parameters for fuzzy searching and filtering.
-- **Scope required**: `memory:read`
+List memory nodes.
+- **Scope**: `memory:read`
 - **Query Parameters**:
   - `q`: Search query string (fuzzy content matching).
-  - `category`: Filter by category (`facts`, `patterns`, `concepts`, `preferences`, `corrections`).
-  - `tag`: Filter by tag name.
+  - `category`: Filter by SSSS folder (`facts`, `patterns`, `concepts`, `preferences`, etc.).
+  - `tag`: Filter by tag list.
   - `limit`: Maximum results to return (default: 50).
-  - `offset`: Pagination offset.
-
-#### `GET /api/memory/stats`
-Retrieve a high-level summary of node counts grouped by their SSSS categories.
-- **Scope required**: `memory:read`
 
 #### `GET /api/memory/:slug`
-Fetch a single SSSS markdown node by its unique kebab-case slug.
-- **Scope required**: `memory:read`
+Fetch a single SSSS Markdown node by its kebab-case slug name.
+- **Scope**: `memory:read`
 
 #### `POST /api/memory`
-Create a new SSSS memory node. Writes a physical `.md` file to the vault with valid SSSS frontmatter.
-- **Scope required**: `memory:write`
-- **Request Body** (JSON):
+Create a new SSSS memory node, writing a `.md` file to the target vault directory.
+- **Scope**: `memory:write`
+- **Request Body (JSON)**:
   ```json
   {
-    "slug": "git-commit-convention",
-    "title": "Git Commit Convention",
-    "category": "preferences",
+    "slug": "atomic-writes",
+    "title": "Use Atomic Writes",
+    "category": "patterns",
     "priority": "normal",
-    "body": "Always format git commits with semantic prefixes like `feat:`, `fix:`, or `docs:`."
+    "body": "Always write to a temp file and rename it to target path."
   }
   ```
 
 #### `PUT /api/memory/:slug`
-Fully replace the SSSS node at the specified slug.
-- **Scope required**: `memory:write`
+Completely overwrite an existing SSSS memory node.
+- **Scope**: `memory:write`
 
 #### `PATCH /api/memory/:slug`
-Partially update specific metadata or body attributes of an existing node.
-- **Scope required**: `memory:write`
+Partially update metadata or content of a memory node.
+- **Scope**: `memory:write`
 
 #### `DELETE /api/memory/:slug`
-Archive or permanently delete the SSSS memory node matching the slug.
-- **Scope required**: `memory:write`
+Archive or permanently remove the memory node matching the slug.
+- **Scope**: `memory:write`
 
 ---
 
-### 🔍 Memory Intelligence
+### 🔍 2. Brain Layer & Configuration Services
 
-#### `POST /api/memory/search/semantic`
-Perform vector-based semantic search across your entire memory vault.
-- **Scope required**: `memory:read`
-- **Requirement**: Local Ollama server must be reachable with the embedding model loaded.
-- **Request Body**:
+For managing the global and local project brain cascade.
+
+#### `GET /api/brains`
+Retrieve all registered brain layers with active path indicators and node counts.
+- **Scope**: `memory:read`
+- **Response Shape (JSON)**:
   ```json
-  {
-    "query": "how should I handle error logging in TypeScript?",
-    "top_k": 5
-  }
+  [
+    {
+      "id": "global",
+      "name": "Global Brain Layer",
+      "path": "/Users/username/.agent/skills/total-recall",
+      "nodeCount": 32,
+      "lastCompiled": "2026-05-25T12:00:00Z"
+    },
+    {
+      "id": "project",
+      "name": "total-recall",
+      "path": "/Users/username/Github/total-recall/.agent/skills/total-recall",
+      "nodeCount": 15,
+      "lastCompiled": "2026-05-25T14:02:00Z"
+    }
+  ]
   ```
-- **Response**: Returns a similarity-ranked array of SSSS nodes with cosine similarity scores.
 
----
-
-### ⚙️ Vault Compilation
+#### `GET /api/brains/:id/nodes`
+List memory nodes belonging exclusively to the specified brain layer.
+- **Scope**: `memory:read`
 
 #### `POST /api/vault/compile`
-Triggers an immediate re-compilation of the SSSS memory vault surface. Resolves wiki-links, weights, and generates the compiled system instruction shim (`INSTRUCTIONS.md`).
-- **Scope required**: `memory:recompile`
+Triggers an immediate re-compilation of SSSS rule surfaces and hot shims.
+- **Scope**: `memory:recompile`
 
 #### `GET /api/vault/status`
-Returns high-level statistics about the active compilation target, such as the total count of active nodes, skill templates, and the timestamp of the last compilation.
-- **Scope required**: `memory:read`
+Returns compilation metrics (node counts, skill routing logs, compilation time).
+- **Scope**: `memory:read`
 
 ---
 
-### 🔑 Token Management (Keys API)
+### 🔬 3. Background Research Queue
 
-Allows programmatic token management for applications.
+Interacts with the autonomous web search and research queue.
 
-#### `GET /api/keys`
-List active PAT metadata (does not reveal raw secret tokens for security).
-- **Scope required**: `keys:read`
+#### `GET /api/research`
+Enumerate active research agenda tasks, enqueued topics, and execution statuses.
+- **Scope**: `memory:read`
+- **Query Parameters**:
+  - `status`: Filter by research status (`pending`, `in_progress`, `done`, `failed`).
+  - `query`: Fuzzy query search across topics and research notes.
 
-#### `POST /api/keys`
-Issue a new Personal Access Token.
-- **Scope required**: `keys:write`
-- **Request Body**:
+#### `POST /api/research`
+Queue a new topic for deep background research.
+- **Scope**: `memory:write`
+- **Request Body (JSON)**:
   ```json
   {
-    "label": "Obsidian Mirror Client",
-    "scopes": ["memory:read"],
-    "expires_at": "2026-12-31T23:59:59.000Z"
+    "topic": "Vite 6 configuration changes",
+    "priority": "high",
+    "notes": "Verify default CSS loaders."
   }
   ```
-- **Response**: Returns the newly generated raw token `tr_<secret>`. *This token is only shown once.*
 
-#### `DELETE /api/keys/:id`
-Revoke and permanently delete a Personal Access Token.
-- **Scope required**: `keys:write`
+#### `DELETE /api/research/:id`
+Cancel and cancel/delete a pending or running research topic.
+- **Scope**: `memory:write`
 
 ---
 
-### 🔄 Ingest Fabric (Session Sync)
+### 🔄 4. Local Ingest Fabric (Session Sync)
 
-Allows local relay daemons and workspace environments to upload conversation traces, ensuring the Dream Cycle can continuously extract fresh memories from daily workflows.
+Receives conversation files from background workstation Relays.
 
 #### `GET /api/sessions`
 List all ingested conversation sessions.
-- **Scope required**: `memory:read`
-
-#### `GET /api/sessions/:id`
-Retrieve the full message logs and metadata for a specific ingested conversation session.
-- **Scope required**: `memory:read`
+- **Scope**: `memory:read`
 
 #### `POST /api/sessions/ingest`
-Upload a new conversation session to the ingest fabric. Deduplicates automatically based on message content SHA-256 fingerprints.
-- **Scope required**: `memory:write`
-- **Request Body**:
+Upload conversation history log traces. The system **automatically deduplicates** logs based on a SHA-256 content-hash fingerprint of message sequences to prevent redundant storage.
+- **Scope**: `memory:write`
+- **Request Body (JSON)**:
   ```json
   {
-    "id": "conv-uuid-1234",
+    "id": "session-uuid-1234",
     "source": "claude-code",
     "messages": [
-      { "role": "user", "content": "Let's use absolute imports in TypeScript.", "timestamp": "2026-05-19T22:00:00Z" },
-      { "role": "assistant", "content": "Got it, I will update tsconfig.json to support absolute paths.", "timestamp": "2026-05-19T22:00:15Z" }
+      {
+        "role": "user",
+        "content": "Let's use absolute imports in TypeScript.",
+        "timestamp": "2026-05-25T14:00:00Z"
+      },
+      {
+        "role": "assistant",
+        "content": "Updated tsconfig.json to map path aliases.",
+        "timestamp": "2026-05-25T14:00:10Z"
+      }
     ]
   }
   ```
 
-#### `DELETE /api/sessions/:id`
-Delete an ingested session.
-- **Scope required**: `memory:write`
+---
+
+### 🔑 5. PAT Token Management (Keys API)
+
+Allows programmatic Personal Access Token operations.
+
+#### `GET /api/keys`
+List active PAT token metadata (excludes raw cryptographic secret strings for security).
+- **Scope**: `keys:read`
+
+#### `POST /api/keys`
+Issue a new Personal Access Token. *Raw secret string `tr_...` is only shown once in the response.*
+- **Scope**: `keys:write`
+- **Request Body (JSON)**:
+  ```json
+  {
+    "label": "My Editor Hook",
+    "scopes": ["memory:read"],
+    "expires_at": "2026-12-31T23:59:59Z"
+  }
+  ```
+
+#### `DELETE /api/keys/:id`
+Revoke and permanently delete the specified Personal Access Token.
+- **Scope**: `keys:write`
 
 ---
 
-### 🗃 Hardened Sandbox
+### 🗃️ 6.硬 Hardened Sandbox
 
 #### `POST /api/sandbox`
-Safely execute arbitrary Node.js scripts inside a secure, localized VFS sandbox context.
-- **Scope required**: `sandbox:run`
-- **Request Body**:
+Run arbitrary script modules inside a secure POSIX-isolated sandbox.
+- **Scope**: `sandbox:run`
+- **Requirement**: Hardened sandbox must be explicitly enabled (`security.yml.sandbox.enabled: true`). Returns 403 Forbidden otherwise.
+- **Request Body (JSON)**:
   ```json
   {
     "code": "const fs = require('fs'); console.log(fs.readdirSync('.'));"
@@ -191,125 +223,36 @@ Safely execute arbitrary Node.js scripts inside a secure, localized VFS sandbox 
 
 ---
 
-### 💬 Chat Completions (OpenAI Compatible)
+### 💬 7. Chat Completions (OpenAI Compatible)
 
-Enables third-party applications (like UltraChat or customized frontends) to query your server as a standard LLM backend.
+Exposes endpoints for chat clients (such as UltraChat or customized dashboard interfaces) to communicate with the brain.
 
 #### `GET /v1/models`
-Returns list of available models running locally on Ollama.
-- **Scope required**: `chat:read` or Localhost bypass.
+Returns list of registered active generative models available on the server.
+- **Scope**: `chat:read` or Local loopback bypass.
 
 #### `POST /v1/chat/completions`
-Send a chat prompt to the local LLM. The system **automatically injects the compiled `INSTRUCTIONS.md` system prompt** on the fly, making your agent instantly self-aware of all personal preferences and facts.
-- **Scope required**: `chat:write`
-- **Supports**: Server-Sent Events (SSE) streaming (`stream: true`), temperature, top_p, and stop configurations.
+Send a chat completions prompt. The server **automatically injects the compiled `INSTRUCTIONS.md` system prompt** on the fly, rendering the model instantly self-aware of all invariants and preferences.
+- **Scope**: `chat:write`
+- **Supports**: Server-Sent Events (SSE) stream (`stream: true`), temperature, top_p, and stop configurations.
 
 ---
 
-### 🔬 Research Queue
-
-Enables agents to query or add topics to the autonomous research daemon.
-
-#### `GET /api/research`
-Enumerate active research agenda tasks, findings, and statuses.
-- **Scope required**: `memory:read`
-
-#### `POST /api/research`
-Queue a new research topic.
-- **Scope required**: `memory:write`
-- **Request Body**:
-  ```json
-  {
-    "topic": "Tailwind v4 alpha configuration best practices",
-    "priority": "high",
-    "notes": "Analyze standard CSS entrypoints."
-  }
-  ```
-
-#### `DELETE /api/research/:id`
-Cancel or remove a research topic.
-- **Scope required**: `memory:write`
-
----
-
-### 🌐 Discovery & System Health
+### 🌐 8. Discovery & Health Diagnostics
 
 #### `GET /.well-known/total-recall.json`
-Public manifest allowing client auto-configuration.
+Public configuration manifest detailing system endpoints, versions, allowed scopes, and rate limits.
 - **Authentication**: None required.
-- **Response**: Emits base URLs, API versions, supported scopes, and rates limits.
 
 #### `GET /health`
-Verify system status.
+Diagnostics check showing server status.
 - **Authentication**: None required.
-- **Response**: Emits disk availability, SSSS vault size, Ollama connectivity status, and background daemon health states.
-
----
-
-### 📦 Skills & Registry Manager
-
-Allows client applications and the dashboard to search the `skills.sh` registry, run static security audits, install new skills, and manage local rules sheets.
-
-#### `GET /api/skills`
-Enumerate all active local parent skills and nested sub-skills.
-- **Scope required**: `files:read` or `ssss:read`
-- **Response**: List of skill descriptors with sizes, modified dates, and dynamic sub-skills.
-
-#### `GET /api/skills/search`
-Query the `skills.sh` cloud registry sorted in descending order of installs/rating.
-- **Scope required**: `files:read` or `ssss:read`
-- **Query parameters**: `q` (search query, required).
-- **Response**: Array of sorted packages with names, installs, and repository URLs.
-
-#### `POST /api/skills/install`
-Download a skill package, execute a static security audit scan, quarantine/purge vulnerabilities, and recompile brain shims.
-- **Scope required**: `files:write` or `ssss:write`
-- **Request Body**:
+- **Response Shape (JSON)**:
   ```json
   {
-    "pkg": "github/awesome-copilot@git-commit"
+    "status": "healthy",
+    "disk": { "available": "42GB", "usedPercent": "45%" },
+    "vault": { "nodeCount": 47 },
+    "daemon": { "isRunning": true, "lastDreamCycle": "2026-05-25T13:40:00Z" }
   }
   ```
-- **Response**: Installation success indicator and target folder path, or a quarantine purge alert.
-
-#### `GET /api/skills/:name`
-Read the `SKILL.md` rules sheet of a local skill.
-- **Scope required**: `files:read` or `ssss:read`
-
-#### `PUT /api/skills/:name`
-Write/update the `SKILL.md` rules sheet of a local skill.
-- **Scope required**: `files:write` or `ssss:write`
-
-#### `DELETE /api/skills/:name`
-Safely delete a local skill package and hot-recompile active shims.
-- **Scope required**: `files:write` or `ssss:write`
-
----
-
-### 🛡️ SSSS Specs & Metadata
-
-Exposes Structured Semantic Syntax System (SSSS) core specifications, instruction files, and references.
-
-#### `GET /api/ssss`
-Emits metadata on SSSS schema versions, instructions, SSSS skill file hashes, and reference documents.
-- **Scope required**: `ssss:read`
-
-#### `GET /api/ssss/instructions`
-Send the raw local workspace `INSTRUCTIONS.md` shim file.
-- **Scope required**: `ssss:read` or `instructions:read`
-
-#### `GET /api/ssss/skill/ssss`
-Send the SSSS manager's `SKILL.md` instruction file.
-- **Scope required**: `ssss:read`
-
-#### `GET /api/ssss/spec`
-Send the official SSSS VFS schema specification document.
-- **Scope required**: `ssss:read`
-
-#### `GET /api/ssss/references`
-List all SSSS-related reference sheets available on disk.
-- **Scope required**: `ssss:read`
-
-#### `GET /api/ssss/references/:name`
-Send a specific SSSS reference markdown document.
-- **Scope required**: `ssss:read`

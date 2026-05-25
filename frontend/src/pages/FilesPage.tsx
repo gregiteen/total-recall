@@ -61,7 +61,6 @@ export default function FilesPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate file fetch on activeTab change
       void fetchFilesData()
     } else if (activeTab === "scripts") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate file fetch on activeTab change
       void fetchScriptsList()
     }
   }, [activeTab, fetchFilesData, fetchScriptsList])

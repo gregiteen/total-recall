@@ -46,6 +46,37 @@ import { BCRYPT_COST } from '../server/auth.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ─── Robust PATH-Expansion for LaunchAgents & background processes ─────────────
+try {
+  const HOME = os.homedir();
+  const commonPaths = [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    path.join(HOME, '.local/bin'),
+    path.join(HOME, '.nvm/versions/node/v24.12.0/bin'),
+    path.join(HOME, '.npm-global/bin'),
+    path.join(HOME, 'bin'),
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ];
+
+  const nvmVersionsDir = path.join(HOME, '.nvm', 'versions', 'node');
+  if (fs.existsSync(nvmVersionsDir)) {
+    const versions = fs.readdirSync(nvmVersionsDir);
+    for (const v of versions) {
+      commonPaths.unshift(path.join(nvmVersionsDir, v, 'bin'));
+    }
+  }
+
+  const activePaths = process.env.PATH ? process.env.PATH.split(path.delimiter) : [];
+  const uniquePaths = Array.from(new Set([...activePaths, ...commonPaths])).filter(p => fs.existsSync(p));
+  process.env.PATH = uniquePaths.join(path.delimiter);
+} catch (e) {
+  // Silent fallback
+}
 const ROOT = path.join(__dirname, '..', '..');
 const AGENT_DIR = path.join(os.homedir(), '.agent');
 const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
@@ -244,8 +275,8 @@ function scaffoldVfs(opts) {
   logOk('VFS scaffolded');
 
   // ── Step 5.5: Pull brain from git repo if specified ──
-  // Also check if this project's .agent/memory-vault has nodes (in-repo brain)
-  const inRepoVault = path.join(ROOT, '.agent', 'memory-vault');
+  // Also check if this project's .agent/skills/total-recall/memory-vault has nodes (in-repo brain)
+  const inRepoVault = path.join(ROOT, '.agent', 'skills', 'total-recall', 'memory-vault');
   if (opts.brainRepo) {
     logStep('6.5/12', `Pulling brain vault from ${opts.brainRepo}`);
     if (dryRun) {
@@ -438,60 +469,593 @@ export default async function deploy(args) {
 
         const check = spawnSync('ssh', [
           '-o', 'StrictHostKeyChecking=accept-new',
-          '-o', 'ConnectTimeout=5',
+          '-o', 'ConnectTimeout=20',
           `${user}@${ip}`,
           'echo "OK"'
         ], { encoding: 'utf8' });
 
         if (check.status !== 0) {
           logWarn(`Failed to connect to ${user}@${ip} via SSH.`);
-          throw new Error(`Failed to connect to ${user}@${ip} via SSH. Please ensure Remote Login is enabled on that computer and your SSH key is authorized.`);
+          throw new Error(`Failed to connect to ${user}@${ip} via SSH. Please ensure SSH / Remote Login is enabled on that computer and your SSH key is authorized.`);
         }
         logOk(`Connected to ${user}@${ip}`);
 
         logStep('2/3', 'Installing Node.js and dependencies on remote host...');
+        const cmdPrefix = 'export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"; export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh";';
         spawnSync('ssh', [
           '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
-          'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o nvm_install.sh && bash nvm_install.sh && rm nvm_install.sh && ' +
-          'source ~/.bashrc && nvm install 20 2>/dev/null || ' +
-          '(curl -fsSL https://deb.nodesource.com/setup_20.x -o node_setup.sh && bash node_setup.sh && apt-get install -y nodejs && rm node_setup.sh)'
+          `${cmdPrefix} which node || (curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o nvm_install.sh && bash nvm_install.sh && rm nvm_install.sh && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install 20)`
         ], { stdio: 'inherit' });
+
+        // Copy API Keys/secrets.enc to remote VM
+        try {
+          log('🔒 Persisting Google/OpenAI credentials on remote host...');
+          const configDir = `~/.agent/skills/total-recall/config`;
+          const secretsContent = JSON.stringify({
+            google_api_key: wizardOpts.googleApiKey || '',
+            openai_api_key: wizardOpts.openaiApiKey || ''
+          });
+          spawnSync('ssh', [
+            '-o', 'StrictHostKeyChecking=accept-new',
+            `${user}@${ip}`,
+            `mkdir -p ${configDir} && echo '${secretsContent}' > ${configDir}/secrets.enc && chmod 600 ${configDir}/secrets.enc`
+          ]);
+          logOk('Credentials written remotely.');
+        } catch (err) {
+          logWarn(`Could not save credentials remotely: ${err.message}`);
+        }
 
         logStep('3/3', 'Deploying Total Recall remotely...');
         let deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
         if (wizardOpts.dashboardPassword) {
           deployCmd += ` --dashboard-password "${wizardOpts.dashboardPassword}"`;
         }
+        if (wizardOpts.httpsMethod === 'cloudflare-quick') {
+          deployCmd += ` --cloudflare-quick`;
+        }
         spawnSync('ssh', [
           '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
-          `export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && ${deployCmd}`
+          `${cmdPrefix} ${deployCmd}`
         ], { stdio: 'inherit' });
 
-        logStep('Done', 'Generating access token...');
+        logStep('Done', 'Generating access token & discovering endpoints...');
         const pat = spawnSync('ssh', [
           '-o', 'StrictHostKeyChecking=accept-new',
           `${user}@${ip}`,
-          'export NVM_DIR="$HOME/.nvm" && source "$NVM_DIR/nvm.sh" && npx total-recall generate-pat --quiet'
+          `${cmdPrefix} npx total-recall generate-pat --quiet`
         ], { encoding: 'utf8' }).stdout?.toString().trim();
 
-        logOk(`Remote setup complete! Brain is running on http://${ip}:3000`);
+        let publicUrl = `http://${ip}:3000`;
+        if (wizardOpts.httpsMethod === 'cloudflare-quick') {
+          log('  Fetching remote Cloudflare Quick Tunnel URL...');
+          // Let's poll remote cloudflared log file via SSH to extract the URL
+          for (let attempt = 1; attempt <= 12; attempt++) {
+            const urlOut = spawnSync('ssh', [
+              '-o', 'StrictHostKeyChecking=accept-new',
+              `${user}@${ip}`,
+              `${cmdPrefix} grep -oE "https://[a-zA-Z0-9-]+\\.trycloudflare\\.com" ~/.agent/skills/total-recall/logs/cloudflared.log 2>/dev/null | tail -n 1`
+            ], { encoding: 'utf8' }).stdout?.toString().trim();
+            if (urlOut && urlOut.startsWith('https://')) {
+              publicUrl = urlOut;
+              logOk(`Remote Quick Tunnel URL discovered: ${publicUrl}`);
+              break;
+            }
+            log(`  Waiting for remote quick tunnel to boot (attempt ${attempt}/6)...`);
+            spawnSync('sleep', ['2']);
+          }
+        }
+
+        logOk(`Remote setup complete! Brain is running.`);
         if (pat) {
           logOk(`Access token generated successfully.`);
         }
 
         const { finishDeployUI: finishUI } = await import('./deploy-ui.mjs');
         finishUI({
-          apiUrl: `http://${ip}:3000`,
-          dashUrl: `http://${ip}:3000/dashboard`,
-          healthUrl: `http://${ip}:3000/health`
+          apiUrl: publicUrl,
+          dashUrl: `${publicUrl}/dashboard`,
+          healthUrl: `${publicUrl}/health`
+        });
+
+        return;
+      }
+
+      if (wizardOpts.deployTarget === 'agent-cloud') {
+        const rawProvider = (wizardOpts.cloudProvider || '').toLowerCase().trim();
+        const token = wizardOpts.cloudToken;
+        const rawRegion = (wizardOpts.cloudRegion || '').toLowerCase().trim();
+
+        logStep('1/6', 'Spawning local CLI provisioning agent...');
+
+        let provider = 'digitalocean';
+        if (rawProvider.includes('hetzner') || rawProvider === 'hcloud') {
+          provider = 'hetzner';
+        } else if (rawProvider.includes('linode') || rawProvider.includes('akamai')) {
+          provider = 'linode';
+        } else if (rawProvider.includes('vultr')) {
+          provider = 'vultr';
+        } else if (rawProvider.includes('digital') || rawProvider === 'do') {
+          provider = 'digitalocean';
+        } else {
+          // Unrecognized — perform dynamic detection or fallbacks
+          logWarn(`Unrecognized provider "${wizardOpts.cloudProvider}". Attempting token-based detection...`);
+          if (token.startsWith('dop_v1_')) {
+            provider = 'digitalocean';
+            log('🔎 Token matches DigitalOcean pattern.');
+          } else if (token.length === 64 && /^[0-9a-fA-F]+$/.test(token)) {
+            provider = 'hetzner';
+            log('🔎 Token matches Hetzner Cloud pattern.');
+          } else if (token.length === 64) {
+            provider = 'linode';
+            log('🔎 Token looks like a Linode Personal Access Token.');
+          } else {
+            provider = 'digitalocean';
+            log('🔎 Defaulting to DigitalOcean provisioning.');
+          }
+        }
+
+        logStep('2/6', 'Checking / generating secure SSH key pair...');
+        const sshDir = path.join(os.homedir(), '.ssh');
+        let privateKeyPath = path.join(sshDir, 'id_total_recall');
+        let publicKeyPath = path.join(sshDir, 'id_total_recall.pub');
+
+        if (!fs.existsSync(sshDir)) {
+          fs.mkdirSync(sshDir, { recursive: true, mode: 0o700 });
+        }
+
+        if (!fs.existsSync(privateKeyPath) || !fs.existsSync(publicKeyPath)) {
+          log('🔑 Generating Ed25519 SSH key pair at ~/.ssh/id_total_recall...');
+          const gen = spawnSync('ssh-keygen', ['-t', 'ed25519', '-f', privateKeyPath, '-N', ''], { encoding: 'utf8' });
+          if (gen.status !== 0) {
+            logWarn('Failed to generate Ed25519 key, falling back to RSA...');
+            privateKeyPath = path.join(sshDir, 'id_rsa');
+            publicKeyPath = path.join(sshDir, 'id_rsa.pub');
+            if (!fs.existsSync(privateKeyPath) || !fs.existsSync(publicKeyPath)) {
+              spawnSync('ssh-keygen', ['-t', 'rsa', '-b', '4096', '-f', privateKeyPath, '-N', ''], { encoding: 'utf8' });
+            }
+          }
+        }
+
+        const publicKeyContent = fs.readFileSync(publicKeyPath, 'utf8').trim();
+        logOk('SSH key pair ready');
+
+        logStep('3/6', `Uploading SSH key and provisioning VPS instance on ${provider === 'digitalocean' ? 'DigitalOcean' : provider === 'hetzner' ? 'Hetzner' : provider === 'linode' ? 'Linode' : 'Vultr'}...`);
+
+        let ip = null;
+        if (provider === 'digitalocean') {
+          log('☁️ Checking for existing SSH key on DigitalOcean...');
+          const listRes = await fetch('https://api.digitalocean.com/v2/account/keys', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!listRes.ok) {
+            throw new Error(`DigitalOcean API access failed (status ${listRes.status}): ${await listRes.text()}`);
+          }
+          const keysData = await listRes.json();
+          let sshKeyId = (keysData.ssh_keys || []).find(k => k.public_key.trim() === publicKeyContent.trim())?.id;
+
+          if (!sshKeyId) {
+            log('☁️ Uploading public SSH key to DigitalOcean...');
+            const regRes = await fetch('https://api.digitalocean.com/v2/account/keys', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ name: `Total Recall Key (${os.hostname()})`, public_key: publicKeyContent })
+            });
+            if (!regRes.ok) {
+              throw new Error(`Failed to upload SSH key to DigitalOcean: ${await regRes.text()}`);
+            }
+            const regData = await regRes.json();
+            sshKeyId = regData.ssh_key.id;
+          }
+          logOk(`SSH key registered (ID: ${sshKeyId})`);
+
+          log('☁️ Creating Droplet (Ubuntu 24.04, $6/mo shared-CPU) on DigitalOcean...');
+          const createRes = await fetch('https://api.digitalocean.com/v2/droplets', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: 'total-recall-brain',
+              region: rawRegion || 'nyc3',
+              size: 's-1vcpu-1gb',
+              image: 'ubuntu-24-04-x64',
+              ssh_keys: [ sshKeyId ],
+              backups: false,
+              ipv6: false
+            })
+          });
+          if (!createRes.ok) {
+            throw new Error(`Failed to create DigitalOcean droplet: ${await createRes.text()}`);
+          }
+          const createData = await createRes.json();
+          const dropletId = createData.droplet.id;
+          logOk(`Droplet created successfully (ID: ${dropletId})`);
+
+          logStep('4/6', 'Waiting for droplet to boot and allocate public IP...');
+          for (let attempt = 1; attempt <= 40; attempt++) {
+            await new Promise(r => setTimeout(r, 6000));
+            const statusRes = await fetch(`https://api.digitalocean.com/v2/droplets/${dropletId}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const droplet = statusData.droplet;
+              const state = droplet.status;
+              log(`⏳ Droplet status: ${state}...`);
+              if (state === 'active') {
+                const ipv4 = droplet.networks.v4.find(net => net.type === 'public')?.ip_address;
+                if (ipv4) {
+                  ip = ipv4;
+                  logOk(`Droplet public IP allocated: ${ip}`);
+                  break;
+                }
+              }
+            }
+          }
+        } else if (provider === 'hetzner') {
+          log('☁️ Checking for existing SSH key on Hetzner Cloud...');
+          const listRes = await fetch('https://api.hetzner.cloud/v1/ssh_keys', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!listRes.ok) {
+            throw new Error(`Hetzner Cloud API access failed (status ${listRes.status}): ${await listRes.text()}`);
+          }
+          const keysData = await listRes.json();
+          let sshKeyId = (keysData.ssh_keys || []).find(k => k.public_key.trim() === publicKeyContent.trim())?.id;
+
+          if (!sshKeyId) {
+            log('☁️ Uploading public SSH key to Hetzner Cloud...');
+            const regRes = await fetch('https://api.hetzner.cloud/v1/ssh_keys', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ name: `Total Recall Key (${os.hostname()})`, public_key: publicKeyContent })
+            });
+            if (!regRes.ok) {
+              throw new Error(`Failed to upload SSH key to Hetzner: ${await regRes.text()}`);
+            }
+            const regData = await regRes.json();
+            sshKeyId = regData.ssh_key.id;
+          }
+          logOk(`SSH key registered (ID: ${sshKeyId})`);
+
+          log('☁️ Creating Server (Ubuntu 24.04, low-cost cx22) on Hetzner...');
+          const createRes = await fetch('https://api.hetzner.cloud/v1/servers', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: 'total-recall-brain',
+              server_type: 'cx22',
+              image: 'ubuntu-24.04',
+              location: rawRegion || 'nbg1',
+              ssh_keys: [ sshKeyId ],
+              start_after_create: true
+            })
+          });
+          if (!createRes.ok) {
+            throw new Error(`Failed to create Hetzner server: ${await createRes.text()}`);
+          }
+          const createData = await createRes.json();
+          const serverId = createData.server.id;
+          logOk(`Server created successfully (ID: ${serverId})`);
+
+          logStep('4/6', 'Waiting for server to boot and allocate public IP...');
+          for (let attempt = 1; attempt <= 40; attempt++) {
+            await new Promise(r => setTimeout(r, 6000));
+            const statusRes = await fetch(`https://api.hetzner.cloud/v1/servers/${serverId}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const server = statusData.server;
+              const state = server.status;
+              log(`⏳ Server status: ${state}...`);
+              if (state === 'running') {
+                const ipv4 = server.public_net?.ipv4?.ip;
+                if (ipv4) {
+                  ip = ipv4;
+                  logOk(`Server public IP allocated: ${ip}`);
+                  break;
+                }
+              }
+            }
+          }
+        } else if (provider === 'linode') {
+          log('☁️ Checking for existing SSH key on Linode...');
+          const listRes = await fetch('https://api.linode.com/v4/profile/sshkeys', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!listRes.ok) {
+            throw new Error(`Linode API access failed (status ${listRes.status}): ${await listRes.text()}`);
+          }
+          const keysData = await listRes.json();
+          let sshKeyRegistered = (keysData.data || []).some(k => k.ssh_key.trim() === publicKeyContent.trim());
+
+          if (!sshKeyRegistered) {
+            log('☁️ Uploading public SSH key to Linode...');
+            const regRes = await fetch('https://api.linode.com/v4/profile/sshkeys', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ label: `Total Recall Key (${os.hostname()})`, ssh_key: publicKeyContent })
+            });
+            if (!regRes.ok) {
+              throw new Error(`Failed to upload SSH key to Linode: ${await regRes.text()}`);
+            }
+          }
+          logOk('SSH key ready on Linode');
+
+          log('☁️ Creating Linode VPS (Ubuntu 24.04, low-cost Nanode) on Akamai/Linode...');
+          const createRes = await fetch('https://api.linode.com/v4/linode/instances', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              type: 'g6-nanode-1',
+              region: rawRegion || 'us-east',
+              image: 'linode/ubuntu24.04',
+              authorized_keys: [ publicKeyContent ],
+              booted: true
+            })
+          });
+          if (!createRes.ok) {
+            throw new Error(`Failed to create Linode instance: ${await createRes.text()}`);
+          }
+          const createData = await createRes.json();
+          const linodeId = createData.id;
+          logOk(`Linode instance created successfully (ID: ${linodeId})`);
+
+          logStep('4/6', 'Waiting for Linode to boot and allocate public IP...');
+          for (let attempt = 1; attempt <= 40; attempt++) {
+            await new Promise(r => setTimeout(r, 6000));
+            const statusRes = await fetch(`https://api.linode.com/v4/linode/instances/${linodeId}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (statusRes.ok) {
+              const linode = await statusRes.json();
+              const state = linode.status;
+              log(`⏳ Linode status: ${state}...`);
+              if (state === 'running') {
+                const ipv4 = linode.ipv4?.[0];
+                if (ipv4) {
+                  ip = ipv4;
+                  logOk(`Linode public IP allocated: ${ip}`);
+                  break;
+                }
+              }
+            }
+          }
+        } else if (provider === 'vultr') {
+          log('☁️ Checking for existing SSH key on Vultr...');
+          const listRes = await fetch('https://api.vultr.com/v2/ssh-keys', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!listRes.ok) {
+            throw new Error(`Vultr API access failed (status ${listRes.status}): ${await listRes.text()}`);
+          }
+          const keysData = await listRes.json();
+          let sshKeyId = (keysData.ssh_keys || []).find(k => k.ssh_key.trim() === publicKeyContent.trim())?.id;
+
+          if (!sshKeyId) {
+            log('☁️ Uploading public SSH key to Vultr...');
+            const regRes = await fetch('https://api.vultr.com/v2/ssh-keys', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ name: `Total Recall Key (${os.hostname()})`, ssh_key: publicKeyContent })
+            });
+            if (!regRes.ok) {
+              throw new Error(`Failed to upload SSH key to Vultr: ${await regRes.text()}`);
+            }
+            const regData = await regRes.json();
+            sshKeyId = regData.ssh_key.id;
+          }
+          logOk(`SSH key registered on Vultr (ID: ${sshKeyId})`);
+
+          log('☁️ Creating Instance (Ubuntu 24.04, low-cost vc2-1c-1gb) on Vultr...');
+          const createRes = await fetch('https://api.vultr.com/v2/instances', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              region: rawRegion || 'ewr',
+              plan: 'vc2-1c-1gb',
+              os_id: 2284,
+              sshkey_ids: [ sshKeyId ],
+              enable_ipv6: false
+            })
+          });
+          if (!createRes.ok) {
+            throw new Error(`Failed to create Vultr instance: ${await createRes.text()}`);
+          }
+          const createData = await createRes.json();
+          const instanceId = createData.instance.id;
+          logOk(`Vultr instance created successfully (ID: ${instanceId})`);
+
+          logStep('4/6', 'Waiting for server to boot and allocate public IP...');
+          for (let attempt = 1; attempt <= 40; attempt++) {
+            await new Promise(r => setTimeout(r, 6000));
+            const statusRes = await fetch(`https://api.vultr.com/v2/instances/${instanceId}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const inst = statusData.instance;
+              const state = inst.status;
+              log(`⏳ Vultr status: ${state}...`);
+              if (state === 'active') {
+                const ipv4 = inst.main_ip;
+                if (ipv4 && ipv4 !== '0.0.0.0') {
+                  ip = ipv4;
+                  logOk(`Vultr public IP allocated: ${ip}`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (!ip) {
+          throw new Error('Timeout waiting for public IP allocation from cloud provider.');
+        }
+
+        logStep('5/6', 'SSH Bootstrapping & deploying Total Recall remotely...');
+        log('⏳ Waiting for remote SSH port 22 to become reachable...');
+
+        const sshArgs = [
+          '-i', privateKeyPath,
+          '-o', 'StrictHostKeyChecking=accept-new',
+          '-o', 'ConnectTimeout=8',
+          `root@${ip}`
+        ];
+
+        let sshConnected = false;
+        for (let attempt = 1; attempt <= 30; attempt++) {
+          const check = spawnSync('ssh', [...sshArgs, 'echo "OK"'], { encoding: 'utf8', timeout: 8000 });
+          if (check.status === 0 && check.stdout?.trim() === 'OK') {
+            sshConnected = true;
+            break;
+          }
+          log(`⏳ Waiting for SSH service to start (attempt ${attempt}/30)...`);
+          await new Promise(r => setTimeout(r, 5000));
+        }
+
+        if (!sshConnected) {
+          throw new Error(`Failed to establish SSH connection to root@${ip} after 2.5 minutes.`);
+        }
+        logOk('SSH connection established successfully');
+
+        log('🛠️ Installing Node.js & system dependencies on remote host...');
+        const installResult = spawnSync('ssh', [
+          ...sshArgs,
+          'apt-get update && apt-get install -y -qq curl git sudo && ' +
+          'curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o nvm_install.sh && bash nvm_install.sh && rm nvm_install.sh && ' +
+          'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && nvm install 20 2>/dev/null'
+        ], { stdio: 'inherit' });
+
+        if (installResult.status !== 0) {
+          throw new Error('Failed to install Node.js / nvm on remote VM.');
+        }
+        logOk('Node.js and nvm installed remotely');
+
+        // Copy API Keys/secrets.enc to remote VM
+        try {
+          log('🔒 Persisting Google/OpenAI credentials on remote host...');
+          const configDir = `~/.agent/skills/total-recall/config`;
+          const secretsContent = JSON.stringify({
+            google_api_key: wizardOpts.googleApiKey || '',
+            openai_api_key: wizardOpts.openaiApiKey || ''
+          });
+          spawnSync('ssh', [
+            ...sshArgs,
+            `mkdir -p ${configDir} && echo '${secretsContent}' > ${configDir}/secrets.enc && chmod 600 ${configDir}/secrets.enc`
+          ]);
+          logOk('Credentials written remotely.');
+        } catch (err) {
+          logWarn(`Could not save credentials remotely: ${err.message}`);
+        }
+
+        log('🧠 Running Total Recall deploy remotely...');
+        let deployCmd = `npx --yes total-recall deploy --domain ${wizardOpts.domain || 'localhost'}`;
+        if (wizardOpts.dashboardPassword) {
+          deployCmd += ` --dashboard-password "${wizardOpts.dashboardPassword}"`;
+        }
+        deployCmd += ` --cloudflare-quick`;
+
+        const remoteDeployResult = spawnSync('ssh', [
+          ...sshArgs,
+          `export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && ${deployCmd}`
+        ], { stdio: 'inherit' });
+
+        if (remoteDeployResult.status !== 0) {
+          throw new Error('Remote Total Recall deployment failed.');
+        }
+
+        logStep('6/6', 'Activating Cloudflare Quick Tunnel and secure HTTPS links...');
+
+        let pat = spawnSync('ssh', [
+          ...sshArgs,
+          'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \\. "$NVM_DIR/nvm.sh" && npx total-recall generate-pat --quiet'
+        ], { encoding: 'utf8' }).stdout?.toString().trim();
+
+        let publicUrl = `http://${ip}:3000`;
+        log('⏳ Fetching remote Cloudflare Quick Tunnel URL...');
+
+        for (let attempt = 1; attempt <= 12; attempt++) {
+          const urlOut = spawnSync('ssh', [
+            ...sshArgs,
+            'grep -oE "https://[a-zA-Z0-9-]+\\.trycloudflare\\.com" ~/.agent/skills/total-recall/logs/cloudflared.log 2>/dev/null | tail -n 1'
+          ], { encoding: 'utf8' }).stdout?.toString().trim();
+          if (urlOut && urlOut.startsWith('https://')) {
+            publicUrl = urlOut;
+            logOk(`Remote Quick Tunnel URL discovered: ${publicUrl}`);
+            break;
+          }
+          log(`  Waiting for remote quick tunnel to boot (attempt ${attempt}/12)...`);
+          await new Promise(r => setTimeout(r, 4000));
+        }
+
+        logOk(`Cloud VM provisioning and deployment complete!`);
+        if (pat) {
+          logOk(`Access token generated successfully.`);
+        }
+
+        // Persist to local wizard-config.json
+        try {
+          const configDir = path.join(_brainDir(), 'config');
+          const configFile = path.join(configDir, 'wizard-config.json');
+          fs.mkdirSync(configDir, { recursive: true });
+          let current = {};
+          if (fs.existsSync(configFile)) {
+            try { current = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}'); } catch {}
+          }
+          current.deployTarget = 'agent-cloud';
+          current['cfg-domain'] = publicUrl.replace('https://', '');
+          current['cfg-api-url'] = publicUrl;
+          current['cfg-dash-url'] = `${publicUrl}/dashboard`;
+          current['cfg-health-url'] = `${publicUrl}/health`;
+          if (wizardOpts.dashboardPassword) {
+            current['cfg-dashboard-password'] = wizardOpts.dashboardPassword;
+          }
+          fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+        } catch (e) {
+          console.error('Failed to auto-persist cloud install options on disk:', e);
+        }
+
+        const { finishDeployUI: finishUI } = await import('./deploy-ui.mjs');
+        finishUI({
+          apiUrl: publicUrl,
+          dashUrl: `${publicUrl}/dashboard`,
+          healthUrl: `${publicUrl}/health`
         });
 
         return;
       }
     } catch (e) {
-      console.error(`  ⚠️  Could not start deploy UI: ${e.message}`);
+      console.error(`  ⚠️  Deployment failed: ${e.message}`);
+      if (_uiEmit) {
+        _uiEmit('error', e.message);
+      }
+      return;
     }
   }
 
@@ -524,45 +1088,17 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   // ── Step 1: Detect architecture ──
   logStep('1/12', `Architecture detected: ${arch} (${platform})`);
 
-  // ── Step 2: Install Ollama ──
-  logStep('2/12', 'Ollama installation');
-  if (opts.skipOllama) {
-    logSkip('Skipped (--skip-ollama)');
-  } else if (commandExists('ollama')) {
-    logOk('Ollama already installed');
-  } else {
-    if (opts.dryRun) {
-      log('  Would install Ollama via curl -fsSL https://ollama.com/install.sh -o install.sh && sh install.sh && rm install.sh');
-    } else {
-      log('Installing Ollama...');
-      run('curl -fsSL https://ollama.com/install.sh -o install.sh && sh install.sh && rm install.sh');
-      logOk('Ollama installed');
-    }
-  }
+  // ── Step 2: Install Ollama (DEPRECATED) ──
+  logStep('2/12', 'Ollama installation (Deprecated)');
+  logSkip('Skipped: Local GPU-heavy LLM model hosting via Ollama is fully deprecated in Total Recall.');
 
-  // ── Step 3: Pull Gemma 4 model ──
-  logStep('3/12', 'Pulling Gemma 4 26B model');
-  if (opts.skipModels) {
-    logSkip('Skipped (--skip-models)');
-  } else if (!commandExists('ollama')) {
-    logWarn('Ollama not found — cannot pull models');
-  } else {
-    if (opts.dryRun) {
-      log('  Would run: ollama pull gemma4:26b');
-      log('  Would run: ollama pull nomic-embed-text');
-    } else {
-      log('  Running: ollama pull gemma4:26b (this will take a while...)');
-      run('ollama pull gemma4:26b', { timeout: 3600_000 }); // 1hr timeout
-      logOk('Gemma 4 model pulled');
-      log('  Running: ollama pull nomic-embed-text (274MB, used for semantic vault search)');
-      run('ollama pull nomic-embed-text', { timeout: 300_000 }); // 5min timeout
-      logOk('nomic-embed-text embedding model pulled');
-    }
-  }
+  // ── Step 3: Pull Gemma 4 model (DEPRECATED) ──
+  logStep('3/12', 'Pulling Gemma 4 26B model (Deprecated)');
+  logSkip('Skipped: Cognitive processing has transitioned exclusively to specialized, headlessly dispatched CLI agents.');
 
-  // ── Step 4: Kokoro voice model (skipped by default — model name unverified on Ollama Hub) ──
-  logStep('4/12', 'Kokoro-82M voice model');
-  logSkip('Skipped by default (voice not yet in scope). To enable: ollama pull hf.co/hexgrad/Kokoro-82M and wire TTS in src/server/)');
+  // ── Step 4: Kokoro voice model (DEPRECATED) ──
+  logStep('4/12', 'Kokoro-82M voice model (Deprecated)');
+  logSkip('Skipped: Local text-to-speech rendering is deprecated.');
 
   // ── Step 4.5: Install SearXNG (native Python, no Docker required) ──
   logStep('5/12', 'Deploying SearXNG');
@@ -692,10 +1228,15 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   // ── Step 7: Install Reverse Proxy / Tunnel ──
   if (opts.cloudflareToken || opts.cloudflareQuick) {
     logStep('8/12', 'Cloudflare Zero Trust Tunnel installation');
+    let cloudflaredBin = 'cloudflared';
     if (commandExists('cloudflared')) {
       logOk('cloudflared already installed');
     } else {
-      if (opts.dryRun) {
+      const localBin = path.join(BRAIN_DIR, 'bin', 'cloudflared');
+      if (fs.existsSync(localBin)) {
+        cloudflaredBin = localBin;
+        logOk(`cloudflared found in VFS: ${localBin}`);
+      } else if (opts.dryRun) {
         log('  Would install cloudflared and route traffic via Zero Trust');
       } else {
         if (platform === 'linux') {
@@ -704,7 +1245,21 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
           run('rm cloudflared.deb');
           logOk('cloudflared binary installed');
         } else if (platform === 'macos') {
-          run('brew install cloudflare/cloudflare/cloudflared');
+          try {
+            log('  Installing cloudflared via Homebrew...');
+            run('brew install cloudflare/cloudflare/cloudflared');
+          } catch (brewErr) {
+            logWarn(`Homebrew install failed: ${brewErr.message}`);
+            log('  Downloading standalone cloudflared binary as fallback...');
+            run(`mkdir -p ${BRAIN_DIR}/bin`);
+            const cloudflaredArch = (arch === 'aarch64' || arch === 'arm64' || os.arch() === 'arm64') ? 'arm64' : 'amd64';
+            run(`curl -L -s https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-${cloudflaredArch}.tgz -o ${BRAIN_DIR}/bin/cloudflared.tgz`);
+            run(`tar -xzf ${BRAIN_DIR}/bin/cloudflared.tgz -C ${BRAIN_DIR}/bin/`);
+            run(`chmod +x ${localBin}`);
+            run(`rm ${BRAIN_DIR}/bin/cloudflared.tgz`);
+            cloudflaredBin = localBin;
+            logOk(`Standalone cloudflared binary (${cloudflaredArch}) downloaded and configured!`);
+          }
         }
       }
     }
@@ -716,7 +1271,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
       } else if (opts.cloudflareQuick) {
         log('  Starting Zero-Config Quick Tunnel (trycloudflare.com)...');
         run(`mkdir -p ${BRAIN_DIR}/logs`);
-        run(`nohup cloudflared tunnel --url http://localhost:3000 > ${BRAIN_DIR}/logs/cloudflared.log 2>&1 &`);
+        run(`nohup ${cloudflaredBin} tunnel --url http://localhost:3000 > ${BRAIN_DIR}/logs/cloudflared.log 2>&1 &`);
         run('sleep 4');
         try {
           const url = run(`grep -o "https://.*\\.trycloudflare\\.com" ${BRAIN_DIR}/logs/cloudflared.log | head -1`);
@@ -1089,6 +1644,15 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
         }
       } catch (err) {
         logWarn(`Cron setup failed: ${err.message}`);
+      }
+
+      // Globally link total-recall package so the CLI is immediately available
+      try {
+        log('Registering total-recall CLI command globally...');
+        run('npm link', { cwd: ROOT, silent: true });
+        logOk('total-recall CLI registered globally! Run "total-recall" anywhere in your terminal.');
+      } catch (err) {
+        logWarn(`Could not link CLI globally: ${err.message}`);
       }
     }
   }

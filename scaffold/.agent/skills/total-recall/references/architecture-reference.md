@@ -10,32 +10,35 @@ Total Recall relies on a strict, database-free directory layout under `.agent/` 
 
 ```
 .agent/
-├── config/                    # System configurations
-│   ├── brain.json             # Loaded brain URL and optional PAT token
-│   └── clients.json           # Connected IDE clients registry
-├── memory-vault/              # TIER 3: Local Sovereign Vault (Git-versioned)
-│   ├── invariants/            # Absolute invariants (modality: must/must_not)
-│   ├── patterns/              # Best practices and structural workflows
-│   ├── anti-patterns/         # Taboos and coding patterns to avoid
-│   ├── preferences/           # Custom style and project-specific preferences
-│   ├── decisions/             # Permanent structural/architectural decisions
-│   ├── concepts/              # Domain-specific terminology and definitions
-│   └── facts/                 # Verified facts and deep research outputs
-├── memory-derived/            # Ephemeral compiled indexes (Disposable)
-│   ├── graph-index.jsonl      # Flat cache of active memory nodes
-│   ├── memory-layers.jsonl    # Surfaced cognitive layers per node
-│   ├── skill-routes.jsonl     # Output mapping of nodes routed to skills
-│   └── semantic.index         # Dense vector embeddings binary file
-├── memory-inbox/              # Inbox & Staging area
-│   ├── pending/               # Raw captured memories awaiting checking
-│   └── conflicts/             # Quarantined contradicting node pairs
-├── sessions/                  # Branching JSONL conversation trees
-├── skills/                    # TIER 2: Active Domain Skill Packages
-│   ├── ssss/                  # SSSS protocol management skill
-│   ├── project-management/    # Issues, sprint planning, and tracking skill
-│   └── total-recall/          # Master control skill (this skill package)
-└── interrupts/                # Event-driven messaging loop
-    └── pending.md             # Active interrupts injected into next user turn
+├── secrets.enc                # AES-encrypted API credentials (if remote/cloud target)
+└── skills/                    # TIER 2: Active Domain Skill Packages
+    ├── ssss/                  # SSSS protocol management skill
+    ├── project-management/    # Issues, sprint planning, and tracking skill
+    └── total-recall/          # Master control skill (META-SKILL / BRAIN LAYER)
+        ├── config/            # Loaded brain configuration
+        │   ├── brain.json     # Brain URL and PAT token
+        │   └── clients.json   # Connected IDE clients registry
+        ├── memory-vault/      # TIER 3: Local Sovereign Vault (Git-versioned)
+        │   ├── invariants/    # Absolute invariants (modality: must/must_not)
+        │   ├── patterns/      # Best practices and structural workflows
+        │   ├── anti-patterns/ # Taboos and coding patterns to avoid
+        │   ├── preferences/   # Custom style and project-specific preferences
+        │   ├── decisions/     # Permanent structural/architectural decisions
+        │   ├── concepts/      # Domain-specific terminology and definitions
+        │   └── facts/         # Verified facts and deep research outputs
+        ├── memory-derived/    # Ephemeral compiled indexes (Disposable)
+        │   ├── graph-index.jsonl # Flat cache of active memory nodes
+        │   ├── memory-layers.jsonl # Surfaced cognitive layers per node
+        │   ├── skill-routes.jsonl # Output mapping of nodes routed to skills
+        │   └── semantic.index # Dense vector embeddings binary file
+        ├── memory-inbox/      # Inbox & Staging area
+        │   ├── pending/       # Raw captured memories awaiting checking
+        │   └── conflicts/     # Quarantined contradicting node pairs
+        ├── sessions/          # Branching conversation trees (SSSS Markdown format)
+        ├── scheduler/         # Background agent queue
+        │   └── queue/         # Task triggers
+        └── interrupts/        # Event-driven messaging loop
+            └── pending.md     # Active interrupts injected into next user turn
 ```
 
 ---

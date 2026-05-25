@@ -20,4 +20,4 @@ Total Recall requires a Sovereign Virtual File System (VFS) to function securely
 Once the instance is running and the `.agent/` directory is scaffolded, the data is encrypted at the block level natively by OCI. No application-level filesystem encryption is needed for the VFS files themselves, preserving Gemma 4's zero-parser semantic access speed while maintaining strict physical security.
 
 ### 4. Handling `secrets.enc`
-Even with block-volume encryption, Total Recall uses an application-level `secrets.enc` file secured by Argon2id and AES-256-GCM (see `src/core/crypto.mjs`). This ensures that even if a snapshot of the block volume is taken, the third-party API keys and session secrets cannot be extracted without the master password.
+Even with block-volume encryption, Total Recall uses an application-level `secrets.enc` file secured by scrypt (using OWASP parameters) and AES-256-GCM (see `src/core/crypto.mjs`). This ensures that even if a snapshot of the block volume is taken, the third-party API keys and session secrets cannot be extracted without the master password.

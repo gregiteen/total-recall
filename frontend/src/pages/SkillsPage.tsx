@@ -58,7 +58,7 @@ export default function SkillsPage() {
     setLoading(true);
     setError(null);
     try {
-      const list = await listSkills();
+      const list = await listSkills() as unknown as SkillItem[];
       setSkills(list || []);
       
       if (list && list.length > 0) {
@@ -185,7 +185,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     setError(null);
     setQuarantineAlert(null);
     try {
-      const results = await searchSkillsRegistry(searchQuery.trim());
+      const results = await searchSkillsRegistry(searchQuery.trim()) as RegistrySkill[];
       setRegistryResults(results || []);
     } catch (err: unknown) {
       setError((err as Error).message || 'Registry query failed. Is the server connected?');

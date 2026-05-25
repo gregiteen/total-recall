@@ -21,7 +21,9 @@ export default function LoginPage({ onAuthenticated }: Props) {
         if (!res.configured) {
           setIsFirstTime(true)
         }
-      } catch {}
+      } catch {
+        // ignore network error
+      }
     }
     checkConfig()
   }, [])

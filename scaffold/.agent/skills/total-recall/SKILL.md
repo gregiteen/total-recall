@@ -68,6 +68,17 @@ node .agent/skills/total-recall/scripts/sync-repo.mjs
 ```
 This utility fetches standard skill and invariant definitions from the upstream repository, merges them non-destructively preserving custom user nodes, and auto-recompiles the workspace.
 
+### 5. Premium Browser Setup Wizard Onboarding
+For first-time system installations, migrations, or editor reconnections, launch the visual onboarding setup wizard:
+```bash
+npx total-recall deploy --ui
+```
+This spins up a secure local Express server (port 3000, increments dynamically if occupied) and automatically launches the graphical installation dashboard in your macOS or Linux browser, providing:
+*   **Deployment Scoping**: Seamless visual provisioning for local machine brains, remote network computers (SSH), rented GPU cloud servers (Vast.ai), or custom VPS droplets.
+*   **Credential Restoration**: Automatically parses, protects, and restores AES-encrypted API tokens and bcrypt cost-12 dashboard passwords from `.agent/secrets.enc` so you never lose credentials.
+*   **Automated SSL & Tunnels**: Automatically deploys free, encrypted Cloudflare Quick Tunnels (`*.trycloudflare.com`) or permanent Zero Trust domains over secure HTTPS/Caddy TLS.
+*   **Omni-Channel Integration Checklists**: Multi-select and configure your active editors (Claude Code, Cursor, Codex, Gemini, VS Code, Obsidian) with live terminal logs in the browser.
+
 ---
 
 ## 🌐 DIRECT REST API REFERENCE
@@ -81,7 +92,7 @@ All requests to the Total Recall REST API must include the Bearer token in the `
 
 | Method | Route | Description |
 |---|---|---|
-| `GET` | `/health` | Check system health (vault count, embeddings, Ollama status) |
+| `GET` | `/health` | Check system health (vault count, embeddings, CLI agents availability) |
 | `GET` | `/api/vault/status` | Vault stats summary |
 | `GET` | `/api/memory` | List all SSSS memory nodes |
 | `GET` | `/api/memory/:slug` | Fetch a single SSSS memory node by its slug |

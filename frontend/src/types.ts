@@ -77,6 +77,9 @@ export interface ResearchItem {
   priority: 'low' | 'medium' | 'high' | 'critical'
   notes: string | null
   node_slug?: string | null
+  research_phase?: string
+  created_at: string
+  updated_at: string
   completed_at?: string | null
 }
 
@@ -91,6 +94,8 @@ export interface Conflict {
   reason: string
   resolution: string | null
   resolved_at: string | null
+  _existing_node?: MemoryNode
+  _new_node?: MemoryNode
 }
 
 export interface UsageBreakdown {

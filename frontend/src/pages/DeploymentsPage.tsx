@@ -31,6 +31,7 @@ export default function DeploymentsPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate metrics polling on mount
     void fetchSystemData();
     const interval = setInterval(fetchSystemData, 4000);
     return () => clearInterval(interval);

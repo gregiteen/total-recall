@@ -157,6 +157,7 @@ export default function MemoryPage() {
     if ((isEditing || isCreating) && editorRef.current) {
       editorRef.current.innerHTML = markdownToHtml(editContent)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync editor HTML on toggle edit/create
   }, [isEditing, isCreating])
 
   const fetchNodes = useCallback(async () => {
@@ -178,9 +179,10 @@ export default function MemoryPage() {
     }
   }, [category, query])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate form state binding on selected node change
+   
   useEffect(() => {
     if (selected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate form synchronization
       setEditSlug(selected.slug || "")
       setEditTitle(selected.title || "")
       setEditCategory(selected.category || "invariants")
@@ -313,9 +315,10 @@ export default function MemoryPage() {
     }
   }, [])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetching on tab change
+   
   useEffect(() => {
     if (activeTab === "conflicts") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate tab data synchronization
       fetchConflictsList()
     } else if (activeTab === "sessions") {
       loadSessions()
@@ -332,7 +335,7 @@ export default function MemoryPage() {
     }
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetch on url slug change
+   
   useEffect(() => {
     if (urlSlug) {
       const loadUrlSlug = async () => {
@@ -350,6 +353,7 @@ export default function MemoryPage() {
       }
       loadUrlSlug()
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate reset on url change
       setSelected(null)
     }
   }, [urlSlug])
@@ -1000,7 +1004,7 @@ export default function MemoryPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {conflicts.map((c) => {
-                const isQuarantined = c.status === "pending" || c.status === "quarantined";
+                const isQuarantined = c.status === "pending";
                 
                 return (
                   <div 
@@ -1090,7 +1094,7 @@ export default function MemoryPage() {
                     ) : (
                       <div style={{ fontSize: 12, color: "#22c55e", background: "rgba(34,197,94,0.06)", padding: "10px 14px", borderRadius: 6, border: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span>✓ Resolved successfully. Choice: <strong>{c.resolution}</strong></span>
-                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Resolved at: {new Date(c.resolved_at).toLocaleString()}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Resolved at: {c.resolved_at ? new Date(c.resolved_at).toLocaleString() : ""}</span>
                       </div>
                     )}
                   </div>

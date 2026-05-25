@@ -1,255 +1,251 @@
-# Total Recall — Architecture
+# Total Recall — System Architecture
 
-> Verified against source code: `relay.mjs`, `session-watcher.mjs`, `daemon-loop.mjs`, `surface.mjs`, `scheduler.mjs`, `embeddings.mjs`, `dispatch.mjs`.
-> Last Updated: May 24, 2026
-
----
-
-## The One-Sentence Version
-
-Total Recall is a **background relay + brain** system: a lightweight daemon runs on your workstation, silently ships your IDE conversation logs to a remote brain server, and the brain's specialized CLI dispatch engine and enterprise-grade semantic search (Google `gemini-embedding-2`) process everything — extracting memory, building knowledge, and compiling a **5-line pointer shim** that any AI session picks up automatically, progressively disclosing deep domain rules through tailored `SKILL.md` packages.
+> Verified against codebase: `relay.mjs`, `session-watcher.mjs`, `daemon-loop.mjs`, `surface.mjs`, `scheduler.mjs`, `embeddings.mjs`, `dispatch.mjs`, `vault-cache.mjs`, `config.mjs`, `sandbox.mjs`.
+> Last Updated: May 25, 2026
 
 ---
 
-## Two-Component Architecture
+## ⚡ The One-Sentence Summary
+
+Total Recall is a **database-free, local background session relay + remote intelligence brain** system: a lightweight relay daemon watches local IDE conversation files and ships updates to your remote brain server, which employs high-fidelity vector semantic search (Google `gemini-embedding-2` with OpenAI fallback), structured cost-limiting controls, and a headless CLI agent execution framework to ingest history, resolve rules, and recompile a **5-line progressive disclosure pointer shim** that all IDEs inherit automatically.
+
+---
+
+## 🏗️ Two-Component Topology
 
 ```
 YOUR WORKSTATION                                 YOUR BRAIN SERVER
-(any machine you use IDEs on)                    (Mac Mini, Vast.ai GPU, VPS, etc.)
+(any machine you write code on)                  (Mac Mini, Vast.ai VPS, local host, etc.)
 
 ┌─────────────────────────────┐                  ┌──────────────────────────────────┐
-│  IDE Session Files           │                  │  Total Recall Brain               │
-│                              │                  │                                   │
-│  ~/.claude/projects/         │     relay        │  POST /api/sessions/ingest        │
-│  ~/.cursor/projects/         │  ─────────────►  │                                   │
-│  ~/.codex/sessions/          │   (every 60s,    │  Headless CLI Agent Dispatch      │
-│  ~/.gemini/antigravity/      │    new files     │  (Antigravity/Claude Code/Codex)  │
-│  ~/Library/.../chatSessions/ │    only)         │  runs post-mortems, dream cycles, │
-│                              │                  │  research via spawnSync           │
-│  npx total-recall relay      │                  │                                   │
-│  (launchd/systemd service)   │  ◄─────────────  │  Google gemini-embedding-2        │
-│                              │   INSTRUCTIONS.  │  (and OpenAI fallback) handles    │
-│  CLAUDE.md                   │   md pulled      │  semantic search & indexing       │
-│  MEMORY.md (5-line shim)     │   (connect)      │                                   │
-│  .cursor/rules/              │                  │  .agent/                          │
-└─────────────────────────────┘                  │  ├── INSTRUCTIONS.md (5-line shim)│
-                                                 │  ├── memory-vault/               │
-                                                 │  └── skills/ (capsule injection) │
-                                                 └──────────────────────────────────┘
+│  IDE Session Logs           │                  │  Total Recall REST Server        │
+│                             │                  │                                  │
+│  ~/.claude/projects/        │     relay        │  POST /api/sessions/ingest       │
+│  ~/.cursor/projects/        │  ─────────────►  │                                  │
+│  ~/.codex/sessions/         │   (every 60s,    │  Headless CLI Agent Dispatch     │
+│  ~/.gemini/antigravity/     │    new files     │  (spawns subagents from registry │
+│  ~/Library/.../chatSessions/│    only)         │  to run dream & research tasks)  │
+│                             │                  │                                  │
+│  npx total-recall relay     │  ◄─────────────  │  Google gemini-embedding-2       │
+│  (launchd/systemd service)  │   INSTRUCTIONS.  │  (and OpenAI fallback) handles   │
+│                             │   md pulled      │  semantic search & indexing      │
+│  CLAUDE.md                  │   (connect)      │                                  │
+│  MEMORY.md (5-line shim)    │                  │ VFS (.agent/skills/total-recall/)│
+│  .cursor/rules/             │                  │ ├── INSTRUCTIONS.md (shim)       │
+│  GEMINI.md                  │                  │ └── memory-vault/                │
+└─────────────────────────────┘                  └──────────────────────────────────┘
 ```
 
-### Component 1: The Relay (runs on YOUR machine)
+### Component 1: The Session Relay (Workstation client)
 
 **File:** `src/cli/relay.mjs`
 
-The relay is a tiny Node.js daemon that:
-1. Watches known IDE log directories for new/updated session files.
-2. Ships changed files to the brain via `POST /api/sessions/ingest`.
-3. Tracks what it has already sent using efficient mtime-based deduplication.
-4. Runs as a macOS launchd or Linux systemd service — starts on boot, runs silently forever.
+The session relay is a silent Node.js daemon that:
+1. Watches active IDE log folders for changes to active conversation files.
+2. Ingests modified lines and pushes them to the brain's REST API (`POST /api/sessions/ingest`).
+3. Employs filesystem `mtime` modification timestamps to prevent redundant network transmissions.
+4. Standardized as macOS launchd plists or Linux systemd user services that run on startup.
 
-```bash
-npx total-recall relay install   # installs as system service (starts on boot)
-npx total-recall relay start     # start manually
-npx total-recall relay status    # check what's being watched
-npx total-recall relay once      # single scan, for testing
-```
+**Watched Locations:**
 
-**What it watches:**
-
-| Source | Directory |
-|--------|-----------|
-| Claude Code | `~/.claude/projects/` |
-| Codex | `~/.codex/sessions/` |
-| Cursor | `~/.cursor/projects/` |
-| VS Code Copilot | `~/Library/Application Support/Code/User/workspaceStorage/*/chatSessions/` |
-| Antigravity | `~/.gemini/antigravity/brain/` |
-
-Config lives at `~/.agent/config/brain.json`:
-```json
-{ "url": "https://yourbrain.duckdns.org", "token": "tr_abc123..." }
-```
-
-### Component 2: The Brain (runs on YOUR server)
-
-**Files:** `daemon-loop.mjs`, `dream.mjs`, `surface.mjs`, `session-watcher.mjs`, `scheduler.mjs`, `semantic-index.mjs`, `backup.mjs`, `dispatch.mjs`, `embeddings.mjs`
-
-The brain is a Node.js server + autonomous AI daemon that:
-1. **Deduplicates Session Ingestion:** Collapses duplicate chat transcripts using a content-hash SHA-256 fingerprinting pipeline.
-2. **Enterprise-Grade Semantic Search**: Generates high-fidelity vector representations utilizing dynamically resolved embedding models (primary `gemini-embedding-2`, falling back through the active API registry preferences, featuring OpenAI fallback). Flat JSONL files store indices locally (`embeddings.jsonl` / `session-embeddings.json`) and an active local query cache (`embeddings-cache.json`) delivers blistering-fast query times (<50ms) without database overhead. It features **Auto-Healing Dimension Mismatch Re-embedding**: switching between different embedding models (e.g. Ollama's 384/1024/4096-dim models vs Google's 768-dim models) automatically triggers a dimension-mismatch purge of obsolete cached index files and rebuilds all embeddings cleanly from scratch.
-3. **Headless CLI Agent Dispatch**: Completely replaces local Ollama/Gemma models. The brain dispatches cognitive tasks (post-mortems, steering, dream cycle consolidation, and fact-seeking) to headlessly spawned CLI agents (`Antigravity/Gemini`, `Claude Code`, `Codex CLI`) using `spawnSync` from the central registry in `.agent/skills/total-recall/skills/cli-agents/agents.yml`. All dispatches use the **Dynamic Model Selector (`resolveGenerativeModel`)** to query the active API models registry on the fly, translating general aliases (`flash`, `pro`) to optimal frontier models and ensuring zero hardcoded model versions in default configurations.
-4. **Progressive Disclosure Surface Compilation**: Rebuilds instructions into an optimized **5-line pointer shim** that references the meta-skill `SKILL.md` system. This avoids prompt bloat by keeping Tier 1 contexts under 1,000 tokens while dynamically injecting the top-7 relevant memory nodes (Tier 2) into domain-specific skill manifests on demand.
-5. **Encrypted & Git-Pushed Backups**: Creates scheduled daily backups (macOS LaunchAgent or Linux cron) that are AES-256 encrypted and automatically pushed to a private git remote (`npx total-recall backup --push-git`).
+| Client / Editor | Directory Path | Log Format |
+| :--- | :--- | :--- |
+| **Claude Code** | `~/.claude/projects/` | Line-delimited JSONL |
+| **Codex CLI** | `~/.codex/sessions/` | JSON log sequences |
+| **Cursor** | `~/.cursor/projects/` | SQLite/JSON logs |
+| **VS Code Copilot** | `~/Library/Application Support/Code/User/workspaceStorage/*/chatSessions/` | JSON delta sequences |
+| **Antigravity** | `~/.gemini/antigravity/brain/` | JSONL history logs |
 
 ---
 
-## The Daemon Loop (inside the brain)
+### Component 2: The Sovereign Brain Server
 
-The brain runs a continuous intelligence loop, utilizing high-performance CLI agents to process cognitive tasks.
-
-```
-Boot → scan existing sessions → start main loop:
-
-  Every tick:
-  ┌─────────────────────────────────────────────┐
-  │ 1. Check for new ingested sessions           │
-  │ 2. Pick next task from priority queue        │
-  │ 3. Dispatch headlessly to CLI Agent Registry │
-  │ 4. Write results to memory-inbox/pending/    │
-  │                                              │
-  │ Every 20 ticks: run Dream Cycle              │
-  │   Light Sleep → REM → Deep Sleep            │
-  │   → recompile 5-line pointer shims           │
-  └─────────────────────────────────────────────┘
-```
-
-### Priority Queue
-
-| Priority | Work |
-|----------|------|
-| P0 | Real-time requests (chat, dashboard) |
-| P1 | Memory maintenance (dream cycle, conflict resolution) |
-| P2 | Skill engineering (auto-draft SKILL.md files) |
-| P3 | Proactive research (web search, knowledge refresh) |
-| P4 | Self-evaluation (frontier eval loop) |
-| P5 | Exploration (speculative background work) |
-
-### Cognitive Engines (CLI-Dispatched)
-
-All cognitive engines are run through headlessly spawned CLI subagents that execute specialized instruction scripts:
-
-| Engine | Operation Mode |
-|--------|----------------|
-| `post-mortem.mjs` | Spawns headless Claude/Gemini to extract patterns, facts, and skill gaps from ingested logs |
-| `inference-engine.mjs` | Dispatches Codex/Claude to combine vault nodes and write new logical conclusions |
-| `fact-seeker.mjs` | Initiates autonomous web-search dispatches, crawling references and acquiring cited facts |
-| `conflict-detector.mjs` | Evaluates new nodes against SSSS v2 ontology, auto-resolving or quarantining conflicts |
-| `dream.mjs` | Conducts memory pruning, promotes active facts, decays disused nodes, and compiles instruction shims |
-| `steering.mjs` | Handles direct memory promotion/demotion and human overrides |
+The brain server runs the primary REST API, compiles instructions, runs the background daemons, and maintains the Virtual File System (VFS).
 
 ---
 
-## The Dream Cycle
+### Component 3: The Setup Web Wizard (Graphical Browser Installer)
 
-Runs every 20 task ticks. Three phases:
+**Files:** `src/cli/deploy-ui.mjs`, `src/cli/wizard.html`
 
-- **Light Sleep** — Scan vault for modified files, dynamically resolve active embedding models, check for dimension mismatches to trigger auto-healing re-embedding, refresh embedding vectors, and update derived indexes.
-- **REM** — Score memories, perform semantic clustering, promote active cards, and decay stale confidence indexes.
-- **Deep Sleep** — Recompile instruction files. Write a highly compact **5-line pointer shim** pointing to `SKILL.md` to prevent prompt bloat.
+The Setup Web Wizard is served by a local Express instance during installation/deployment (`npx total-recall deploy --ui` or `setup`) and provides a premium, graphical onboarding dashboard that opens automatically in your default macOS/Linux web browser:
+1. **Interactive Provisioning Phases**: Steps through deployment targets (Local, network SSH computer, renting a GPU in the cloud via Vast.ai credentials, or your own VPS), SSL auto-TLS configurations, and dashboard admin password hashing.
+2. **One-Click Automated Installer**: Spawns an internal Server-Sent Events (SSE) progress pipeline, emitting live terminal compilation, model download, and installation logs directly to the browser screen.
+3. **Omni-Channel Integration Selector**: A multi-select visual panel to wire up Claude Code, Codex, Cursor, VS Code Copilot, Gemini CLI, Aider, and Obsidian, plus installing launchd/systemd background relays.
+4. **Credential Restoration**: Integrates with local persistent fallbacks, automatically identifying and restoring AES-encrypted tokens and bcrypt password hashes from `~/.agent/secrets.enc` or `.agent/secrets.enc` to avoid credential resets on fresh setups.
 
 ---
 
-## Virtual File System (.agent/)
+#### 1. ⚡ High-Speed Semantic Vector Indexing
+- **Primary Model**: Google `gemini-embedding-2` (768 dimensions), with fallback vectors configured in the active API models registry (e.g., OpenAI `text-embedding-3-small`).
+- **File-Native Indexes**: Vector indexes are written directly to plain JSONL (`embeddings.jsonl`) under the meta-skill's `memory-derived/` directory, backed by a high-speed cosine memory cache (`embeddings-cache.json`) for <50ms lookup times.
+- **Auto-Healing Dimension Mismatch Purging**: If you switch embedding models (e.g. from a 384-dim Ollama model to the 768-dim Google API), the engine detects the dimension length mismatch, automatically clears out the obsolete cache files, and indexes the entire vault cleanly from scratch.
 
-Everything lives in plain Markdown files. No database. No lock-in.
+#### 2. 🤖 Headless CLI Agent Dispatch Framework
+Total Recall completely eliminates heavy local GPU hardware overhead (Ollama and local VM models are fully deprecated). Instead, cognitive tasks (post-mortems, web research crawls, and dream cycle updates) are routed to specialized, headlessly spawned CLI agents running via non-interactive subshells (`spawnSync`):
+
+- **Antigravity CLI** (`antigravity`): Ingests massive token context bounds for broad log post-mortems and repository-wide gap discovery.
+- **Claude Code** (`claude`): Resolves complex logical rules, verifies integration tests, and performs precise SSSS ontology checking.
+- **Codex CLI** (`codex`): Executes sandboxed test suites and automated file writes.
+
+All dispatches are configured via the prioritized execution registry in `~/.agent/skills/total-recall/skills/cli-agents/agents.yml` and utilize the **Dynamic Model Selector (`resolveGenerativeModel`)** to dynamically translate general aliases (`flash`, `pro`, `default`) into the active, optimal model endpoints.
+
+#### 3. 📂 Progressive Disclosure Surface Compiler
+- Avoids prompt bloat by keeping active system prompts under 1,000 tokens.
+- **Tier 1 (Hot Invariants)**: Absolutely binding rules (`priority: absolute` and `modality: must|must_not`) are compiled into a tiny, **5-line progressive pointer shim** that references the meta-skill `SKILL.md` system.
+- **Tier 2 (Contextual Skills)**: The hybrid BM25 + TF-IDF router (`surface.mjs`) dynamically injects only the top-7 relevant memory nodes into domain-specific skill manifests on demand.
+
+#### 4. 🗄️ Unified Merged Vault Caching (`vault-cache.mjs`)
+- To eliminate expensive per-request disk scanning operations, `vault-cache.mjs` starts a persistent `fs.watch` file watcher over the SSSS memory directories, caching nodes in-memory.
+- Standard read requests resolve instantly against the memory cache.
+- In-process writes (POST, PUT, PATCH, DELETE) automatically call `invalidate()` to guarantee real-time updates are reflected instantly without waiting for disk watcher polls.
+
+---
+
+## 🧠 The Dual-Layer Brain Cascade
+
+Total Recall partitions your sovereign brain memory into two virtual directories:
+
+```
+~ (User Home)
+└── .agent/skills/total-recall/                 <-- GLOBAL BRAIN LAYER
+    ├── config/brain.json                       # Master PAT credentials
+    ├── memory-vault/                           # General user preferences
+    └── memory-derived/                         # Ephemeral caches
+
+/Users/greg/Github/total-recall/                <-- LOCAL PROJECT BRAIN LAYER
+└── .agent/skills/total-recall/
+    ├── memory-vault/                           # Project-specific facts
+    └── memory-derived/                         # Unified project-local compiled index
+```
+
+### Cascade Precedence Rules:
+1. **Local Dominance**: If a memory node with the same `slug` exists in both the global vault and the project vault, the **project vault version overrides the global node** on compilation.
+2. **Category Defaulting**: CLI writes default target layers based on memory taxonomy:
+   - **Global**: `invariants`, `preferences`, and `lore`.
+   - **Project**: `facts`, `concepts`, `patterns`, and `decisions`.
+3. **Drift Detection**: The `drift-detector.mjs` continuously validates compiled `graph-index.jsonl` entries against both the local and global canonical `.md` vaults, preventing "ghost records" or missing index entries.
+
+---
+
+## 🌀 The Daemon Loop & Priority Task Scheduler
+
+The background daemon (`dream.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](file:///Users/greg/Github/total-recall/src/core/scheduler.mjs)) and task execution loops:
+
+### 1. Priority-Driven Queue Mechanics
+Tasks are enqueued dynamically as standard Markdown files (`type: task`) located in your vault's `scheduler/queue/` directory. The scheduler resolves an **Effective Priority** by multiplying the task's base `priority` (10 to 100) by a strictly-regulated **layer weight** (`LAYER_WEIGHTS`), prioritizing critical correctness and active developer guidance over passive exploration:
+- `conscious-enforcement` (Conscious Layer): **1.0** (layer weight)
+- `cutoff-audit` (Training drift validation): **0.9**
+- `system2-deliberation` (Slow System 2 reasoning): **0.8**
+- `memory-maintenance` (Hygiene, decay pruning): **0.6**
+- `skill-engineering` (Scaffolding new capability rules): **0.5**
+- `proactive-research` / `research-acquisition` (Deep crawls): **0.4**
+- `self-evaluation` (Frontier validation benchmarks): **0.3**
+- `exploration` (Speculative tangents): **0.2**
+
+### 2. The Dream Cycle Consolidation
+Every 20 task ticks, the background daemon conducts the **Dream Cycle**:
+- **Light Sleep**: Scans for modified files, updates vector embeddings, and purges/re-indexes caches upon detecting embedding model dimension mismatches.
+- **REM**: Conducts clustering, prunes low-confidence nodes, and decays confidence scores on disused cards.
+- **Deep Sleep**: Re-compiles rules and shims, and writes a daily summary note (`daily/YYYY-MM-DD.md`).
+
+### 3. Continuous Idle Self-Improvement Loops (The Queue is NEVER Empty)
+When the active developer queues are empty, the scheduler **automatically auto-generates idle tasks** to drive continuous optimization at $0 hardware cost. To maintain absolute security and zero local network footprint, it skips internet searches during idle, deploying a round-robin of **clean local strategies**:
+- **Inference Task**: Scans tag clusters of related memory nodes to draw high-level SSSS ontological decisions or flag subtle rule contradictions.
+- **Post-Mortem Task**: Reads and parses the most recent session history log to extract newly observed user preferences, style patterns, and identify subagent skill gaps.
+- **Clarity Review Task**: Selects a random active memory node to audit its JSDoc annotations, title actionability, and Zod schema compliance.
+
+---
+
+## 🏃 hard Task Execution
+
+Pending priority tasks are executed by the **Task Runner** ([src/core/task_runner.mjs](file:///Users/greg/Github/total-recall/src/core/task_runner.mjs)):
+- **State Machine Updates**: Tasks transition transparently through states: `pending` → `in_progress` → `done` or `failed` (logging full exceptions to disk).
+- **Subagent Routing**: Routes tasks to specialized subagents depending on category:
+  - `proactive-research`: Spawns autonomous web crawls and gathers cited research reports (`research.mjs`).
+  - `system2-deliberation`: Executes slow-deliberation inference engines (`inference-engine.mjs`) to consolidate vault data.
+  - `memory-maintenance`: Triggers memory optimization and garbage-collection loops (`optimizer.mjs`).
+
+---
+
+## 🛡️ Sandbox Isolation, Costs, & Firewalls
+
+### 1. Hardened Sandbox Environment
+The sandbox execution layer (`sandbox.mjs`) utilizes strict OS security constraints:
+- **POSIX Namespaces**: Scopes execution boundaries using platform isolation (`sandbox-exec` under macOS, `unshare` under Linux).
+- **Default Offline**: Completely disables outbound network routing unless explicit whitelisted API targets (like the Google Gemini endpoint) are accessed.
+- **Resource Constraints**: Imposes a 512MB RAM utilization threshold and a 60-second execution timeout.
+- **Default Disabled**: Set to `security.yml.sandbox.enabled: false` by default, requiring high-privilege `sandbox:run` token scopes to execute.
+
+### 2. Cost Control watchdog
+- Evaluates cost logging on every subagent dispatch call.
+- Tracks daily and weekly USD costs against threshold limits in `config/budget.yml`.
+- If caps are exceeded, the cost supervisor dynamically aborts outbound dispatches and alerts the developer.
+
+---
+
+## 📂 Consolidated VFS Directory Hierarchy
+
+Total Recall consolidates all data folders under the meta-skill `skills/total-recall/` directory, ensuring simple diff-based git backups and robust security:
 
 ```
 .agent/
-├── INSTRUCTIONS.md              ← TIER 1: Compiled 5-line pointer shim (auto-loaded in IDEs)
-├── memory-vault/                ← TIER 3: Permanent vault (source of truth)
-│   ├── invariants/              ← priority: absolute → compiles to pointer shims
-│   ├── preferences/
-│   ├── anti-patterns/           ← "Never do X"
-│   ├── patterns/                ← "Always do X"
-│   ├── decisions/               ← Architectural reasoning
-│   ├── concepts/                ← Domain knowledge
-│   └── facts/                   ← Verified assertions
-├── skills/                      ← TIER 2: Progressive disclosure
-│   └── <skill-name>/SKILL.md   ← Dynamic capsule injected with top-7 semantic nodes
-├── memory-inbox/
-│   ├── pending/                 ← New observations awaiting promotion
-│   └── conflicts/               ← Needs human resolution
-├── memory-derived/              ← Ephemeral JSONL indexes (rebuilt by reindex/dream)
-│   ├── embeddings.json          ← Local gemini-embedding-2 vector index
-│   └── embeddings-cache.json    ← High-speed cosine query cache
-├── sessions/                    ← Ingested IDE conversation files
-├── scheduler/queue/             ← Autonomous task queue (type: task markdown files)
-├── config/
-│   ├── brain.json               ← Brain URL + PAT (relay reads this)
-│   ├── budget.yml               ← Daily/weekly budget caps config
-│   ├── auth.yml                 ← API auth config
-│   └── secrets.enc              ← AES-256 encrypted secrets
-└── .backups/                    ← Nightly tar.gpg archives
+└── skills/
+    ├── code-quality/                  # Development skill (not backed up)
+    ├── repo-expert/                   # Development skill (not backed up)
+    └── total-recall/                  # THE BRAIN (Consolidated User Data VFS)
+        ├── SKILL.md                   # Master total-recall capability manifest
+        ├── memory-vault/              # SSSS Canonical Markdown Vault
+        │   ├── invariants/            # priority: absolute → Tier 1 (INSTRUCTIONS.md)
+        │   ├── patterns/              # "Always do X" rules
+        │   ├── anti-patterns/         # "Never do X" rules
+        │   ├── preferences/           # Style preferences
+        │   ├── decisions/             # Architectural history
+        │   ├── concepts/              # High-level domain concepts
+        │   └── facts/                 # Verified facts and evidence
+        ├── memory-derived/            # Ephemeral cached indexes (disposable)
+        │   ├── graph-index.jsonl      # Merged memory index manifest
+        │   ├── embeddings.jsonl       # Vector index coordinates
+        │   └── embeddings-cache.json  # Vector similarity cache
+        ├── memory-inbox/              # Staging area for new nodes
+        │   ├── pending/               # Awaiting ingestion check
+        │   └── conflicts/             # Quarantined rule clashes
+        ├── sessions/                  # Ingested IDE logs and conversation DAGs
+        ├── scheduler/                 # Scheduler metadata
+        │   └── queue/                 # Priority task markdown files
+        ├── config/                    # Config files
+        │   ├── brain.json             # Remote brain URLs and token registries
+        │   ├── budget.yml             # Cost control thresholds
+        │   └── secrets.enc            # AES-256 scrypt-encrypted master API keys
+        ├── logs/                      # JSONL subsystem logs
+        └── .backups/                  # Local encrypted backup snapshots
+
+---
+
+## 💬 Interactive CLI Agent Chat REPL
+
+Total Recall features a native terminal-based chat REPL (`npx total-recall chat`) running [src/cli/chat.mjs](file:///Users/greg/Github/total-recall/src/cli/chat.mjs) that enables direct, conversational access to your active brain kernel from the terminal:
+
+- **CLI-Agent Execution**: Conversation turns are dispatched dynamically to your prioritized **Unified Headless CLI Agents Registry** (`antigravity`, `gemini`, `claude`, `codex`) via `spawnSync`.
+- **Pre-flight Health Routing**: Upon starting, `chat` checks agent binary availability, selecting the highest-priority active subagent found in your `$PATH`.
+- **System Prompts & Context Cascades**: The REPL automatically injects baseline instructions ("Keep responses concise and direct") and formats chat session history sequences cleanly, allowing you to debug rules, steer preferences, and prompt the kernel in real time.
+
+---
+
+## 🔒 Session Security & Token Management
+
+Total Recall implements role-based granular authorization schemas to protect your sovereign brain while maintaining 100% database-free isolation.
+
+### 1. Local Dashboard Session Management (JWT-based)
+For web dashboard access, Total Recall strictly avoids external third-party OAuth provider dependencies (e.g. Google, GitHub, Auth0) to protect your privacy and ensure standalone local operation:
+- **Local Password Authentication**: Submitting a password to `/api/login` verifies it against a high-cost `dashboard.password_hash` (`bcrypt-cost: 12`) stored in `security.yml` and securely mirrored in `secrets.enc`.
+- **Rest-Persistent JWT Cookies**: Upon successful login, the server signs a secure JSON Web Token (`sessionToken`) with a randomly generated 256-bit cryptographic secret (`session-secret`) persisted directly to `config/session-secret` so that logged-in dashboard sessions cleanly survive daemon restarts.
+- **TLS Protection**: The daemon blocks non-secure remote connections, requiring active HTTPS TLS layers (automated via Caddy proxying) for all production traffic.
+
+### 2. Personal Access Token (PAT) Key Lifecycle Manager
+Headless tools, IDE editors, and session Relays authenticate via standard HTTP Bearer headers (`Authorization: Bearer tr_<token>`), managed by the **Keys Lifecycle Manager** ([src/server/keys.mjs](file:///Users/greg/Github/total-recall/src/server/keys.mjs)):
+- **SHA-256 Hash Preservation**: To eliminate credential exposure risk, the server **never writes tokens to disk in plaintext**. It persists only a timing-safe SHA-256 hash (`token_hash`) and a short identifying prefix (`token_prefix`) inside the owner-exclusive `config/keys.jsonl` file (written with `0o600` access modes). Diffs are cleanly git-versioned.
+- **Timing-Attack Protection**: Inbound Bearer PAT tokens are verified using cryptographically secure timing-safe comparisons (`crypto.timingSafeEqual`) on SHA-256 hashes, eliminating timing vector leaks.
+- **Role-Based Granular Scopes**: Validated PAT keys carry granular permission scopes (e.g., `chat:write`, `memory:read`, `sandbox:run`), permitting fine-grained access control boundaries for different editors.
+
 ```
-
----
-
-## Intelligence & Dispatch Model
-
-Total Recall completely eliminates local hardware overhead (Ollama and local LLMs are fully removed) in favor of high-fidelity, high-speed remote dispatches and headless CLI agent orchestrations.
-
-### The Headless Agent Registry (`agents.yml`)
-
-The system routes cognitive tasks to specialized CLI agents operating headlessly:
-
-| Agent Binary | Target Model | Context Focus | Use Case |
-|--------------|--------------|---------------|----------|
-| **Gemini CLI** | `gemini-3.5-flash` | 1M+ token context | Heavy-lifting, bulk logs ingestion, repo-wide post-mortems |
-| **Claude Code** | `claude-opus-4-7` | Frontier SWE capability | Hard logic, complex reasoning, code review, precise steering |
-| **Codex CLI** | `gpt-5.5` | Sandboxed automation | Ephemeral TDD scripts, test suite execution, isolated files |
-
-Dispatches are triggered via the `dispatch.mjs` script using non-interactive shells (`spawnSync`) and automatically notify the developer's macOS environment upon completion.
-
----
-
-## Security & Privacy
-
-- **Your conversations never leave your control**: The relay ships logs from your laptop to YOUR server (not third-party SaaS platforms).
-- **Redaction of sensitive memory**: Memory nodes marked with `privacy: local_only` are systematically redacted before any external CLI agent dispatch or frontier API call.
-- **Sandboxed Execution**: Subagents run inside an isolated sandbox wrapper (`sandbox.mjs`) featuring strict POSIX namespaces, RAM/CPU allocation caps, restricted directory access, and command-execution whitelists.
-- **Secrets**: Argon2id master password → AES-256-GCM `secrets.enc`. No plaintext keys on disk.
-- **Backups**: Nightly AES-256 + GPG encrypted tarballs, automatically pushed to your private Git repo.
-
----
-
-## Full System Diagram
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  YOUR WORKSTATION (or any machine with IDEs)                            │
-│                                                                          │
-│  Claude Code → ~/.claude/projects/*.jsonl ──┐                           │
-│  Cursor      → ~/.cursor/projects/*.jsonl ──┤                           │
-│  Codex       → ~/.codex/sessions/*.jsonl  ──┼──► relay daemon           │
-│  VS Copilot  → workspaceStorage/...       ──┤    (launchd/systemd)      │
-│  Antigravity → ~/.gemini/antigravity/...  ──┘    ships new files        │
-│                                                   every 60 seconds       │
-│  CLAUDE.md / MEMORY.md / .cursorrules/                                  │
-│    → symlinked to compiled 5-line pointer shim                          │
-└──────────────────────┬────────────────────────────────────────────────--┘
-                       │ POST /api/sessions/ingest
-                       ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  YOUR BRAIN SERVER (Mac Mini / Vast.ai / VPS)                           │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  REST API (Caddy TLS → Node.js)                                    │ │
-│  │  POST /api/sessions/ingest  ← receives from relay                 │ │
-│  │  GET  /api/instructions     ← serves pointer shim to clients       │ │
-│  │  POST /api/search           ← Google gemini-embedding-2 endpoint  │ │
-│  │  Dashboard (React Glass)    ← browser-based memory explorer        │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  Background Intelligence Daemon                                    │ │
-│  │                                                                    │ │
-│  │  session-watcher → post-mortem → memory-inbox/pending/            │ │
-│  │  dream cycle     → conflict resolution → memory-vault/            │ │
-│  │  scheduler       → dispatches headless agents via spawnSync        │ │
-│  │  surface.mjs     → compile 5-line pointer shims                    │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  Headless CLI Agent Registry (Antigravity/Claude Code/Codex CLI)   │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## What This Is NOT
-
-- ❌ **Not a proxy** — it does NOT intercept or sit in the network path of Cursor/Claude/GPT.
-- ❌ **Not a heavy IDE plugin** — IDEs don't need configuration, just a lightweight pointer shim.
-- ❌ **Not a local GPU resource hog** — Ollama and local LLMs are completely removed, avoiding memory constraints and keeping local workstations lightning-fast.
-- ❌ **Not sending raw data to the cloud** — Redacts sensitive `local_only` vault nodes before any API or CLI agent dispatch.

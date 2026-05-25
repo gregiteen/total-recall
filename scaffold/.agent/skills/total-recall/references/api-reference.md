@@ -33,9 +33,18 @@ Returns the status of the vault, embeddings index, and LLM reachability.
       "version": "3.0.0",
       "uptime_seconds": 123,
       "timestamp": "2026-05-21T03:50:00.000Z",
-      "ollama": "online",
-      "ollama_models": ["gemma4:26b"],
-      "vfs": { "exists": true, "path": "/Users/greg/.agent" }
+      "disk": {
+        "free": 85899345920,
+        "total": 107374182400
+      },
+      "cli_agents": ["antigravity", "gemini", "claude", "codex"],
+      "daemon": "running",
+      "emergency_alerts": null,
+      "vfs": {
+        "exists": true,
+        "skill_exists": true,
+        "path": "/Users/greg/.agent"
+      }
     }
     ```
 

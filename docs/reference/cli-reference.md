@@ -1,395 +1,343 @@
-# CLI Reference Guide
+# Total Recall — CLI Reference Guide
 
-- **Plane**: Reference
-- **Last Updated**: 2026-05-18
-- **Summary**: Comprehensive reference for all `npx total-recall` commands available in the Sovereign OS.
+Comprehensive reference manual for all `npx total-recall` commands, parameters, environment overrides, and configuration files in the Sovereign OS.
 
 ---
 
-## Global Options
+## 🌐 Global Options
 
-- `--help, -h`: Print command-specific usage and flags.
-- `--version, -v`: Print the installed version of the CLI.
+- `--help, -h`: Print command-specific usage guides and available flags.
+- `--version, -v`: Display the installed version of the Total Recall CLI.
 
 ---
 
-## Command List
+## 🛠️ CLI Command Catalog
 
 ### `init`
-
-Initialize the `~/.agent/` vault and `INSTRUCTIONS.md` in the current directory.
-
-- **What it does**: Creates the vault directory structure, seeds the SSSS schema skill, and writes an initial `INSTRUCTIONS.md` compilation target.
-- **Usage**: `npx total-recall init`
+Configure and provision the initial sovereign virtual file system schemas.
+- **What it does**: Prompts for model preferences, issues authorized Bearer PAT tokens, builds setup configs, and copies master control skills into place.
+- **Usage**:
+  ```bash
+  npx total-recall init [options]
+  ```
+- **Options**:
+  - `--project`: Initialize a project-local brain layer inside your active repository (`<repo>/.agent/skills/total-recall/`) instead of the default global layer.
 
 ---
 
 ### `setup`
-
-Interactive wizard for first-time deployment.
-
-- **What it does**: Asks which cloud provider you want, scrapes provider docs, collects your API key (masked input, never logged), provisions the server, installs Ollama + the default model, then asks which IDEs and chat apps to connect.
-- **Usage**: `npx total-recall setup`
-
----
-
-### `connect`
-
-Wire an IDE or external system to your brain.
-
-- **Usage**: `npx total-recall connect <client> [options]`
-- **Clients**: `cursor`, `claude-code`, `codex`, `antigravity`, `gemini`, `windsurf`, `aider`, `ultrachat`, `obsidian`, `generic`
-
-**Options:**
-
-| Flag | Description |
-|------|-------------|
-| `--brain <url>` | Remote brain base URL (for API/MCP clients) |
-| `--token <token>` | Bearer PAT to embed in generated config snippets |
-| `--vault <path>` | Obsidian vault path (auto-detected on macOS if omitted) |
-| `--force` | Overwrite existing projection files |
-| `--json` | Emit machine-readable JSON output |
-
-**Examples:**
-
-```bash
-# Local IDE (symlink only)
-npx total-recall connect claude-code
-npx total-recall connect codex
-npx total-recall connect obsidian
-
-# Remote brain
-npx total-recall connect claude-code --brain https://brain.example.com --token sk-...
-npx total-recall connect ultrachat --brain https://brain.example.com --token sk-...
-```
-
-**File-mode clients** (cursor, windsurf, aider) write a rendered file from your current `INSTRUCTIONS.md`. Run `compile` first if your vault is out of date.
-
-**Symlink-mode clients** (claude-code, codex, antigravity, gemini) create a symlink from the expected filename to `INSTRUCTIONS.md`.
-
-**Vault-mode** (obsidian) symlinks `~/.agent/memory-vault/` into your Obsidian vault and installs Dataview query dashboards.
+Interactive terminal-based setup wizard.
+- **What it does**: Welcomes the developer, guides you through provider authentication keys (AES encrypted), configures domain and port variables, and registers IDE integrations and first-time security tokens interactively in the terminal.
+- **Usage**:
+  ```bash
+  npx total-recall setup
+  ```
+- **Note**: For a premium graphical browser-based installation experience, use the `deploy --ui` command instead.
 
 ---
 
 ### `deploy`
+Deploy and configure system service layers, platform autostart files, or launch the Browser Setup Wizard.
+- **What it does**: Registers daemon startup plists (macOS launchd) or services (Linux systemd), configures Caddy for auto-managed Let's Encrypt TLS, structures the VFS folders, and schedules backups. If `--ui` is specified, it bypasses terminal prompt loops and starts a local Express server to host the graphical HTML Setup Wizard.
+- **Usage**:
+  ```bash
+  npx total-recall deploy [options]
+  ```
+- **Options**:
+  - `--backup-repo <git-url>`: Configures an automatic daily remote backup git URL.
+  - `--ui`: Launches the premium **Browser Setup Wizard** (`wizard.html` served by `deploy-ui.mjs`). This serves a visual dashboard at `http://localhost:3000` (or next free port) and automatically opens it in your default macOS/Linux web browser. Features a glassmorphic multi-phase setup for deployment locations (Local, Network, Vast.ai GPU Cloud, VPS), SSL, PAT keys management, automatic private GitHub backup configurations, and checkboxes for Claude Code, Cursor, Codex, etc., with live logs.
+  - `--ui-port <number>`: Manually specify the port for hosting the browser setup wizard server (default: 3000, increments dynamically if occupied).
 
-Provision a server to run the full Sovereign OS stack.
+---
 
-- **What it does**: Installs Ollama, pulls the configured model (default: `gemma4:26b`), scaffolds the VFS, configures Caddy for auto-TLS, and sets up a cron trigger for the Cloud Agent.
-- **Usage**: `npx total-recall deploy`
+### `connect`
+Wire an IDE editor or client application to your remote brain.
+- **Usage**:
+  ```bash
+  npx total-recall connect <client> [options]
+  ```
+- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `aider`, `ultrachat`, `obsidian`, `generic`
+- **Options**:
+  - `--brain <url>`: remote brain API base URL.
+  - `--token <pat>`: Personal Access Token to embed in generated config targets.
+  - `--vault <path>`: Obsidian vault target directory path.
+  - `--force`: Overwrite existing projection and rules files.
+
+*Symlink clients (`claude-code`, `codex`, `antigravity`, `gemini`) create a platform symlink linking editor shims (like `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md`) to the compiled rules. File-based clients (`cursor`, `aider`) write standard rule files directly.*
+
+---
+
+### `remember`
+Autonomously learn and save a new memory node to the vault.
+- **What it does**: Accepts facts or instructions and writes a canonical SSSS Markdown file with semantic Zod-conforming frontmatter. Re-compiles shims automatically.
+- **Usage**:
+  ```bash
+  npx total-recall remember <category> "<content>" [options]
+  ```
+- **Categories**: `invariant`, `preference`, `anti-pattern`, `pattern`, `decision`, `concept`, `fact`, `lore`
+- **Options**:
+  - `--global`: Force-write to the global brain layer vault (`~/.agent/skills/total-recall/`).
+  - `--project`: Force-write to the project brain layer vault (`<repo>/.agent/skills/total-recall/`).
+  - `--tags, -t <list>`: Comma-separated list of tags.
+  - `--importance, -i <1-5>`: Weighting score (default: 3).
+  - `--priority <normal|high|absolute>`: Rule priority level (default: normal).
+  - `--modality <must|must_not|should|should_not>`: Rule enforcement modality.
+  - `--confidence <0.0-1.0>`: Initial confidence value.
+  - `--slug <name>`: Custom kebab-case slug descriptor.
+
+*If no layer flag is provided, the CLI auto-detects resolution targeting based on the category (e.g. invariants and preferences map globally; facts and decisions map locally to active projects).*
+
+---
+
+### `recall`
+Perform Vector Semantic Search or exact keyword queries across memory layers.
+- **What it does**: Queries the local semantic vector embedding files, prints cosine-similarity rankings, and resolves session history traces.
+- **Usage**:
+  ```bash
+  npx total-recall recall "<query>" [options]
+  ```
+- **Options**:
+  - `--global`: Query the global layer only.
+  - `--project`: Query the local project layer only.
+  - `--top-k, -k <number>`: Number of results to return (default: 5).
+  - `--no-sessions, -ns`: Exclude ingested session archives from search results.
+  - `--category <name>`: Filter results by SSSS category.
+  - `--tags <list>`: Filter by comma-separated tags list.
 
 ---
 
 ### `compile`
-
-Rebuild `INSTRUCTIONS.md` from vault nodes.
-
-- **What it does**: Scans `~/.agent/memory-vault/`, resolves `[[wikilinks]]` to markdown links, renders the injection block, and writes `INSTRUCTIONS.md`. Also regenerates `memory-vault/graph.canvas` for Obsidian Canvas view.
+Re-compile vault memory nodes into active instruction shims.
+- **What it does**: Reads and merges both global and project SSSS vaults, runs deduplication on slug conflicts (project wins), and compiles the compact **5-line pointer shim** inside `INSTRUCTIONS.md`. Also rebuilds custom Obsidian dashboards and graphs.
 - **Alias**: `rebuild`
-- **Usage**: `npx total-recall compile`
+- **Usage**:
+  ```bash
+  npx total-recall compile [options]
+  ```
+- **Options**:
+  - `--force`: Force overwrite immutable invariants and shims.
 
 ---
 
 ### `dream`
-
-Manually trigger a Dream Cycle.
-
-- **What it does**: Runs the Light → REM → Deep sleep consolidation pass: extracts patterns, flags duplicates, decays confidence scores, and writes a daily note to `memory-vault/daily/YYYY-MM-DD.md`.
-- **Usage**: `npx total-recall dream`
+Trigger an immediate execution of the background consolidation Dream Cycle.
+- **What it does**: Performs garbage-collection on confidence scores, indexes recent relays, resolves pending conflicts, and generates a daily summary journal in your vault (`daily/YYYY-MM-DD.md`).
+- **Usage**:
+  ```bash
+  npx total-recall dream
+  ```
 
 ---
 
 ### `research`
-
-Manage, query, or queue ongoing autonomous research projects.
-
-- **What it does**: Interacts directly with the Sovereign AI OS research engine queue. It supports viewing a color-coded agenda, enqueuing new topics, checking task phases, showing updated conclusions/ongoing directions, reading full raw report documents, and cancelling pending/running tasks.
-- **Usage**: `npx total-recall research <command> [options]`
+Manage, query, or queue autonomous background research projects.
+- **Usage**:
+  ```bash
+  npx total-recall research <command> [options]
+  ```
 - **Commands**:
-  - `list` (default): Stunning, color-coded, border-framed terminal dashboard of active, pending, completed, and failed research tasks.
-  - `add "<topic>"`: Enqueues a new topic for research.
+  - `list`: Render a color-coded terminal dashboard of pending, active, completed, and failed research tasks.
+  - `add "<topic>"`: Queue a new topic for the research daemon.
   - `status`: Clean summary count of all states and phases.
-  - `show <id-or-topic>`: Beautiful, detailed dashboard showing conclusions, active phase, gaps, and ongoing directions for a project.
-  - `report <id-or-topic>`: Read the full raw Markdown report directly from the vault (supports staged and promoted facts).
-  - `cancel <id>`: Cancel and remove a project.
-
-**Options:**
-
-| Flag | Description |
-|------|-------------|
-| `--priority <low|medium|high>` | Priority for newly added research (default: medium) |
-| `--notes "<text>"` | Initialization notes for the topic |
-| `--status <status>` | Filter the list command by status (pending, in_progress, done, failed) |
-| `--query "<text>"` | Filter list items by matching text query |
-
-**Examples:**
-
-```bash
-# List all ongoing research
-npx total-recall research list
-
-# Queue a new topic
-npx total-recall research add "Ollama performance tuning for gemma2" --priority high
-
-# View a project's conclusions & directions
-npx total-recall research show "gemma2"
-
-# Read the full raw markdown report
-npx total-recall research report "gemma2"
-```
+  - `show <id-or-topic>`: Detailed dashboard showing conclusions, active phase, gaps, and ongoing directions for a project.
+  - `report <id-or-topic>`: Read the full raw Markdown report directly from the vault.
+  - `cancel <id>`: Cancel and remove a task.
+- **Options**:
+  - `--global`: Query/add to the global research queue.
+  - `--project`: Query/add to the project research queue.
+  - `--priority <low|medium|high>`: Priority weighting (default: medium).
+  - `--notes "<text>"`: Contextual notes for the research engine.
 
 ---
 
 ### `lint`
-
-Validate all vault nodes against the SSSS v2 schema.
-
-- **Usage**: `npx total-recall lint`
+Validate all vault Markdown nodes against SSSS v2 Zod schema constraints.
+- **Usage**:
+  ```bash
+  npx total-recall lint
+  ```
 
 ---
 
 ### `backup`
-
-Create a local archive snapshot, push a git-based vault diff, or sync with an Obsidian vault.
-
-- **What it does**: Compresses, encrypts, or git-commits the local `~/.agent/` VFS based on your parameters.
-- **Usage**: `npx total-recall backup [options]`
-
-**Options:**
-
-| Flag | Description |
-|------|-------------|
-| `--output, -o <path>` | Destination archive path (defaults to a timestamped file in your home folder) |
-| `--no-encrypt` | Compresses the VFS without password-based symmetric GPG encryption (.tar.gz) |
-| `--push-git <remote>` | Commits the entire SSSS vault to a git remote repository and pushes it (diff-based, sovereign backup pattern) |
-| `--obsidian <path>` | Performs an incremental `rsync` sync of your `memory-vault/` directly into an Obsidian vault folder for automatic cloud backup (e.g. via iCloud/Obsidian Sync) |
-
-**Examples:**
-
-```bash
-# Encrypted tarball
-npx total-recall backup
-
-# Git-based push to custom repository
-npx total-recall backup --push-git git@github.com:username/total-recall-brain.git
-
-# Obsidian vault sync
-npx total-recall backup --obsidian "~/Documents/Obsidian Vault"
-```
+Create local encrypted archives or push diffs to a remote private git repository.
+- **Usage**:
+  ```bash
+  npx total-recall backup [options]
+  ```
+- **Options**:
+  - `--global`: Back up global brain layer.
+  - `--project`: Back up project brain layer.
+  - `--push-git <remote-url>`: Initiates a secure diff git commit and pushes to the designated repository remote.
+  - `--obsidian <path>`: Runs rsync mirroring memory vault directly to your Obsidian directory.
+  - `--no-encrypt`: Skips GPG symmetric password encryption (saves as standard `.tar.gz` instead of `.tar.gpg`).
 
 ---
 
 ### `restore`
-
-Restore from an encrypted backup.
-
-- **Usage**: `npx total-recall restore <path-to-tarball>`
+Restore your virtual file system from a password-encrypted tarball backup.
+- **Usage**:
+  ```bash
+  npx total-recall restore <path-to-archive>
+  ```
 
 ---
 
 ### `sync`
-
-Pull compiled instructions from a remote brain.
-
-- **Usage**: `npx total-recall sync --brain https://your-server.com --token YOUR_PAT`
+Pull compiled instruction shims and master files from a remote brain.
+- **Usage**:
+  ```bash
+  npx total-recall sync --brain <url> --token <pat>
+  ```
 
 ---
 
 ### `status`
-
-Show brain health summary.
-
-- **What it does**: Reports vault node count, last dream cycle time, connected clients (from `~/.agent/config/clients.json`), and whether the daemon is running.
-- **Usage**: `npx total-recall status`
+Verify system health, connected clients registry, and daemon loops.
+- **Usage**:
+  ```bash
+  npx total-recall status [options]
+  ```
+- **Options**:
+  - `--json`: Emit machine-readable system metrics.
 
 ---
 
 ### `generate-pat`
-
-Create a Bearer Personal Access Token for API and IDE authentication.
-
-- **Usage**: `npx total-recall generate-pat`
-
----
-
-### `hash-password`
-
-Hash a password using Argon2id (for manual `secrets.enc` setup).
-
-- **Usage**: `npx total-recall hash-password`
+Issue labels and grant scoped Bearer Personal Access Tokens.
+- **Usage**:
+  ```bash
+  npx total-recall generate-pat [options]
+  ```
+- **Options**:
+  - `--scopes "<list>"`: Comma-separated scopes (e.g. `memory:read,chat:write`).
+  - `--label "<name>"`: Context label descriptor.
 
 ---
 
 ### `daemon`
-
-Manage the background Dream Cycle daemon.
-
-- **Commands**: `start`, `stop`, `status`
-- **Usage**: `npx total-recall daemon status`
-
----
-
-### `friction`
-
-Analyze watchdog logs for workflow bottlenecks.
-
-- **What it does**: Parses JSONL logs and generates a health report highlighting tasks with high failure rates or slow latencies.
-- **Usage**: `npx total-recall friction`
-
----
-
-### `chat`
-
-Interactive terminal REPL connected to the brain.
-
-- **Usage**: `npx total-recall chat`
+Manage the background Dream Cycle service.
+- **Usage**:
+  ```bash
+  npx total-recall daemon <start|stop|status>
+  ```
 
 ---
 
 ### `relay`
-
-Manage the background session sync relay daemon.
-
-- **What it does**: Runs on the user's local machine, watching active IDE session storage directories (Claude Code, Codex, Antigravity, VS Code Copilot, Cursor). Whenever new chat sessions or history changes are detected, they are automatically shipped to the remote brain API to be compiled and digested into SSSS memory nodes.
-- **Commands**:
-  - `start`: Start the local relay daemon in the background.
-  - `stop`: Stop the local relay daemon.
-  - `status`: Show relay status, process ID, and last sync timestamps.
-  - `once`: Execute a single one-shot scan and sync pass (useful for testing or CI pipelines).
-  - `install`: Register and load the relay service to start automatically (macOS LaunchAgent or Linux systemd --user service).
-  - `uninstall`: Unload and remove the auto-start service registration.
+Manage the background local workstation session watch relay.
 - **Usage**:
   ```bash
-  npx total-recall relay status
-  npx total-recall relay start
+  npx total-recall relay <start|stop|status|once|install|uninstall>
   ```
+- **Commands**:
+  - `start`/`stop`: Run or kill the process manually.
+  - `status`: Show process IDs and last sync execution timestamps.
+  - `once`: Perform a single session scan and push pass.
+  - `install`/`uninstall`: Register or remove launchd plist auto-start entries.
 
 ---
 
 ### `config`
-
-Read, write, and manage dashboard, security, and budget settings dynamically in-process.
-
-- **What it does**: Direct command-line utility to query or update system configurations (such as YOLO mode, daily/weekly USD caps, and allowed origins) in the brain layer's YAML files. Hot-reloads values dynamically.
+Read, write, or hot-reload configurations dynamically in-process.
 - **Usage**:
   ```bash
-  npx total-recall config get <key>
-  npx total-recall config set <key> <value>
+  npx total-recall config <get|set> <key> [value]
   ```
 - **Examples**:
   ```bash
+  npx total-recall config set daily_cap_usd 10.0
   npx total-recall config get yolo_mode
-  npx total-recall config set daily_cap_usd 15.0
-  npx total-recall config set allowed_origins http://localhost:5173,http://localhost:8080
   ```
 
 ---
 
 ### `skill`
-
-Browse, install, security audit, list, and remove portable agent capabilities from the skills.sh registry.
-
-- **What it does**: Complete command-line integration with the skills.sh cloud registry. Automatically intercepts package downloads, executes static analysis scans (quarantining dynamic shell injections and network risks), scaffolds Spec v2.0 directories, and hot-recompiles active workspace shims.
-- **Commands**:
-  - `find <query>`: Search skills.sh registry sorted by absolute installs rating.
-  - `install <package>`: Download a skill, run static security scan, scaffold directories, and compile shims.
-  - `scan <skill-name>`: Run static security audit on a local skill folder.
-  - `list` (or `ls`): List all active local parent skills and nested sub-skills.
-  - `remove <skill-name>` (or `rm`): Safely delete a local skill and re-compile workspace shims.
+Search, install, security audit, and remove packages from the skills.sh registry.
 - **Usage**:
   ```bash
-  npx total-recall skill find git
-  npx total-recall skill install github/awesome-copilot@git-commit
-  npx total-recall skill scan total-recall
-  npx total-recall skill list
-  npx total-recall skill remove git-commit
+  npx total-recall skill <command> [options]
   ```
+- **Commands**:
+  - `find <query>`: Query skills.sh sorted by installs rating.
+  - `install <pkg>`: Download a skill, run static security analysis, and scaffold directories.
+  - `scan <skill-name>`: Trigger a static security vulnerability audit.
+  - `list` (or `ls`): Enumerate all active parent skills and sub-skills.
+  - `remove <name>` (or `rm`): Safely delete a skill and re-compile rules.
 
 ---
 
 ### `uninstall`
-
-Completely stop, disable, and clean up Total Recall services and active directories from the system.
-
-- **What it does**:
-  1. Stops all running background Node.js processes (`daemon`, `relay`, etc.).
-  2. Unloads and deletes background startup agents from the operating system (macOS launchd plists and Linux systemd services).
-  3. Cleanly purges local IDE configuration rules, symlinks, and shims (`.clauderules`, `CLAUDE.md`, `.cursorrules`, `GEMINI.md`, `INSTRUCTIONS.md`) without affecting non-Total Recall settings.
-  4. Purges transient cache, sessions, and log subfolders in local workspaces.
-  5. Purges the global configuration directory (`~/.agent/`).
-  6. **Safe for Dev Workspaces**: Preserves version-controlled `.agent/skills/` and `.agent/memory-vault/` files within active git project repositories to prevent any data loss of your custom instructions and memories.
-- **Usage**: `npx total-recall uninstall`
+Completely purge background services, configurations, and shims.
+- **What it does**: Stops background Relays and Daemons, unregisters macOS launchd plists/Linux systemd user units, removes editor shims, and deletes global configs.
+- **Usage**:
+  ```bash
+  npx total-recall uninstall
+  ```
+> [!IMPORTANT]
+> **Git Preservation Boundaries:**
+> The uninstaller **preserves** local `.agent/skills/` and `.agent/memory-vault/` directories inside active git-tracked repositories to prevent instructional memory loss.
 
 ---
 
-## Removed Commands
+## ⚙️ Environment Variables (Env Overrides)
 
-These commands appeared in earlier documentation but have been removed:
-
-| Command | Replacement |
-|---------|-------------|
-| `reindex` | Use `compile` (alias: `rebuild`) |
-| `export` | Use `backup` |
-| `import` | Use `restore` |
-| `finetune` | Removed — use Unsloth directly on your vault data |
-| `upgrade` | Use `ollama pull <model>` then update `runtime.yml` |
-
----
-
-## Configuration & Environment Variables Reference
-
-Total Recall is completely customized and overridden through environment variables and local YAML/JSON configuration files.
-
-### 1. ⚙️ Environment Variables (Env overrides)
-
-| Env Variable | Type | Default | Description |
-|--------------|------|---------|-------------|
-| `AGENT_DIR` | String | `~/.agent` | Root workspace directory holding IDE shims and skills VFS. |
+| Env Variable | Type | Default | Subsystem / Purpose |
+| :--- | :--- | :--- | :--- |
+| `AGENT_DIR` | String | `~/.agent` | Scaffolding directory root holding IDE shims and skills. |
 | `TR_CLI_AGENT` | String | `antigravity` | Preferred CLI reasoning agent (`antigravity`, `gemini`, `claude`, `codex`). |
-| `TR_CLI_MODEL` | String | `null` | Explicit model identifier string override passed to the active CLI agent. |
-| `TR_CLI_TIMEOUT` | Integer | `300` | Subprocess command execution timeout in seconds. |
-| `GOOGLE_API_KEY` | String | `null` | Primary API key for Gemini embeddings (`gemini-embedding-2`). |
-| `TR_EMBED_MODEL`| String | `gemini-embedding-2` | Standard embedding model name used for vector checks. |
-| `SEARXNG_BASE_URL`| String | `null` | Base URL for SearXNG web searches (e.g. `http://127.0.0.1:8888`). |
-| `BRAVE_SEARCH_API_KEY` | String | `null` | Brave search key used as a fallback for web searches. |
-| `EXA_API_KEY` | String | `null` | Exa.ai API key for neural searching. |
-| `GITHUB_TOKEN` | String | `null` | GitHub token used for dynamic SSSS repository actions. |
-| `SERPER_API_KEY`| String | `null` | Google Search API key fallback. |
-| `TAVILY_API_KEY`| String | `null` | Tavily Search API key fallback. |
-| `TR_DAILY_SEARCH_LIMIT` | Integer | `50` | Maximum allowed web search actions per day. |
-| `RESEARCH_COOLDOWN_MS` | Integer | `3600000` | Cooldown period between background research queue executions (1hr). |
-| `SESSION_SECRET`| String | `null` | Cryptographic secret used to sign admin cookies. |
-| `NODE_ENV` | String | `production` | Active runtime Node environment (`development` / `production`). |
-| `PORT` | Integer | `3000` | Rest server port binding. |
-| `HOST` | String | `127.0.0.1` | Rest server host address binding. |
-| `DISPLAY` | String | `null` | X11 display pointer for computer use screenshots. |
-| `TOTAL_RECALL_TOKEN` | String | `null` | Secret token to authenticate headless client commands. |
-| `TR_BRAIN` | String | `null` | Overrides the detected workspace project brain path. |
-| `TR_PAT` | String | `null` | Injects your Personal Access Token directly to authenticate connections. |
+| `TR_CLI_MODEL` | String | `null` | Explicit model string override passed to the dispatched subagent. |
+| `TR_CLI_TIMEOUT` | Integer | `300` | Process execution timeout threshold in seconds. |
+| `GOOGLE_API_KEY` | String | `null` | Key for high-fidelity Gemini embedding generations. |
+| `TR_EMBED_MODEL` | String | `gemini-embedding-2` | Preferred embedding model target. |
+| `SESSION_SECRET` | String | `null` | Secret utilized to sign admin authentication cookies. |
+| `PORT` | Integer | `3000` | Binding port for the Express REST server. |
+| `HOST` | String | `127.0.0.1` | Loopback bind address configuration. |
+| `TR_BRAIN` | String | `null` | Overrides active project local brain path detection. |
+| `TR_PAT` | String | `null` | Authenticates remote REST commands directly. |
+| `TR_DAILY_SEARCH_LIMIT`| Integer | `50` | Maximum daily outbound Google/Brave web search limit. |
+| `XDG_CONFIG_HOME` | String | `~/.config` | Alternative configuration path pointer. |
 
-### 2. 📁 Configuration Files (YAML / JSON)
-All file parameters live under `.agent/config/` (or `.agent/skills/total-recall/config/`):
+---
 
-#### **`budget.yml`** (Cost Control)
-* `daily_cap_usd`: Strict daily dollar cap threshold for API costs (default: `5.00`).
-* `weekly_cap_usd`: Strict weekly dollar cap threshold for API costs (default: `25.00`).
+## 📁 System Configuration Files
 
-#### **`security.yml`** (Admin Access & Network)
-* `dashboard.password_hash`: Secure bcrypt password hash for dashboard login.
-* `dashboard.session_timeout_seconds`: Inactive user session timeout (default: `86400`).
-* `network.allowed_origins`: Allowed CORS origins for external API access.
-* `network.bind_address`: Binding address for interface routing.
+All JSON and YAML files reside securely under the consolidated meta-skill config path:  
+`~/.agent/skills/total-recall/config/` (Global) or `<repo>/.agent/skills/total-recall/config/` (Project).
 
-#### **`agents.yml`** (CLI Agents Registry)
-Exposes the prioritized CLI execution pipeline:
-* `agents`: A list of registered reasoning agents:
-  * `name`: Custom unique identifier.
-  * `binary`: Command-line executable matching PATH.
-  * `enabled`: Set to `false` to prevent dispatching to this agent.
-  * `priority`: Integer weighting (lower value takes priority).
-  * `flags`: Standard CLI options appended to reasoning invocations.
-  * `exec`: Dispatch pattern (`flag` or `subcommand`).
+### `budget.yml` (USD Cost Caps)
+Enforces outbound token caps. Updates reload dynamically:
+```yaml
+daily_cap_usd: 5.00     # Daily USD spending limit
+weekly_cap_usd: 25.00   # Weekly USD spending limit
+```
 
-#### **`secrets.enc`** (GPG Encrypted Credentials)
-* Holds raw tokens (`github_token`, `google_api_key`, `openai_api_key`) to prevent plaintext exposure, GPG sym-encrypted during installation.
+### `security.yml` (Sandbox & Access Control)
+```yaml
+dashboard:
+  password_hash: $2b$12$R9...   # bcrypt-cost: 12 password hash
+  session_timeout_seconds: 86400
+sandbox:
+  enabled: false                 # Hardened Sandbox defaults off for maximum safety
+network:
+  allowed_origins:
+    - http://localhost:5173
+```
 
+### `agents.yml` (Prioritized CLI Agents Registry)
+Defines the headless cognitive execution pipeline:
+```yaml
+agents:
+  - name: gemini
+    binary: gemini-cli
+    enabled: true
+    priority: 10
+    flags: ["--non-interactive"]
+  - name: claude
+    binary: claude-code
+    enabled: true
+    priority: 20
+```
+
+### `secrets.enc` (AES Encrypted Credentials)
+- Secure, GPG symmetrically password-encrypted binary container enclosing environment tokens (`google_api_key`, `github_token`, `openai_api_key`) with owner-only `0o600` access modes. Plaintext keys are never written to disk.

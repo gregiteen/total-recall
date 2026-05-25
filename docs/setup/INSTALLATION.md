@@ -16,7 +16,7 @@ The wizard automates the provisioning of both the **Global Brain Layer** and the
 
 ### Interactive Steps:
 1. **Model Endpoint Configuration**: Configures local reasoning paths (Ollama/Gemma 4) and credentials for optional frontier fallbacks (OpenAI, Anthropic).
-2. **Personal Access Token (PAT) Generation**: Provisions the Bearer token required for all REST API operations (stored in `.agent/config/brain.json`).
+2. **Personal Access Token (PAT) Generation**: Provisions the Bearer token required for all REST API operations (stored in `.agent/skills/total-recall/config/brain.json`).
 3. **Selectable Deployment Location**: Prompts you to select your public UI and server access layout.
 
 ---
