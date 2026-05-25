@@ -21,6 +21,9 @@ export async function runRebuild(options = {}) {
   const derivedDir = path.join(brainDir, 'memory-derived');
   const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
 
+  const brains = getBothBrains();
+  const globalVaultDir = brains.global ? path.join(brains.global.brainDir, 'memory-vault') : undefined;
+
   console.log('🔄 SSSS Projection Rebuild');
   console.log('==========================');
   console.log(`Vault:    ${vaultDir}`);
@@ -29,7 +32,7 @@ export async function runRebuild(options = {}) {
 
   if (options.check) {
     console.log('Detecting drift...');
-    const drift = detectIndexDrift(vaultDir, derivedDir);
+    const drift = detectIndexDrift(vaultDir, derivedDir, globalVaultDir);
     if (!drift.drifted) {
       console.log('✅ Indexes are fully synchronized. No drift detected.');
       return 0;
@@ -57,15 +60,13 @@ export async function runRebuild(options = {}) {
 
   console.log('🏗️  Recompiling surface from canonical vault...');
   try {
-    const brains = getBothBrains();
-    const globalVaultDir = brains.global ? path.join(brains.global.brainDir, 'memory-vault') : undefined;
     const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir });
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
     console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);
     
     // Verify
-    const drift = detectIndexDrift(vaultDir, derivedDir);
+    const drift = detectIndexDrift(vaultDir, derivedDir, globalVaultDir);
     if (!drift.drifted) {
       console.log('✅ Post-build verification passed: 0 drift.');
       logger.info('rebuild', `Rebuild completed successfully. Processed ${stats.nodesProcessed} nodes.`);
