@@ -172,10 +172,9 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
             {(() => {
-              const ollamaOk = health?.ollama === 'online'
-              const hasModel = ollamaOk && (health?.ollama_models?.length ?? 0) > 0
               const daemonOk = health?.daemon === 'running'
-              const allGood = ollamaOk && hasModel && daemonOk
+              const serverOk = health && health.status !== 'unreachable'
+              const allGood = daemonOk && serverOk
 
               if (!health) return <div style={{ color: 'var(--text-tertiary)' }}>Checking…</div>
 
@@ -188,8 +187,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
                     </div>
                   ) : (
                     <>
-                      <StatusDot ok={ollamaOk} label={ollamaOk ? 'Ollama' : 'Ollama offline'} />
-                      <StatusDot ok={hasModel} label={hasModel ? (health?.ollama_models?.[0] ?? 'Model') : 'No model'} />
+                      <StatusDot ok={!!serverOk} label={serverOk ? 'Server online' : 'Server offline'} />
                       <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon' : 'Daemon ' + (health?.daemon ?? 'unknown')} />
                     </>
                   )}
@@ -320,12 +318,6 @@ function EmergencyAlertBanner({ health }: { health: HealthData | null }) {
   }
   if (health.daemon === 'not_started') {
     issues.push('⏸️ Daemon has never been started — run: node bin/total-recall.mjs daemon start')
-  }
-  if (health.ollama === 'offline') {
-    issues.push('🔴 Ollama is offline — the brain cannot think. Start Ollama.')
-  }
-  if (health.ollama === 'online' && health.ollama_models && health.ollama_models.length === 0) {
-    issues.push('⚠️ No models pulled in Ollama — run: ollama pull gemma4:26b')
   }
   if (health.emergency_alerts) {
     issues.push(health.emergency_alerts.replace(/<!--[^>]*-->/g, '').trim())
