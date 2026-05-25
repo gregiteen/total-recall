@@ -53,6 +53,9 @@ const COMMANDS = {
   friction: 'friction.mjs',
   chat:     'chat.mjs',
   status:   'status.mjs',
+  remember: 'remember.mjs',
+  recall:   'recall.mjs',
+  search:   'recall.mjs',
   research: 'research.mjs',
   'generate-pat': 'generate-pat.mjs',
   'hash-password': 'hash-password.mjs',
@@ -90,6 +93,8 @@ function printHelp() {
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
     status              Show brain connection and sync state
+    remember            Remember new rules, preferences, or corrections in real time
+    recall              Recall semantic memory or search existing knowledge/rules/session-history
     research <command>  Manage/query ongoing autonomous research agenda (list, add, show, report, cancel)
     generate-pat        Issue a PAT; stores only a hash in keys.jsonl
     hash-password       Generate a bcrypt dashboard password hash

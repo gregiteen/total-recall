@@ -6,20 +6,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// Capture every message array that the API hands to the frontier so we can
+// Capture every message array that the API hands to the local runtime so we can
 // assert that the SSSS + INSTRUCTIONS.md content was injected into the system
 // prompt before forwarding.
-const callFrontierRawSpy = vi.fn();
 const callLocalRuntimeRawSpy = vi.fn();
 const TEST_AGENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'total-recall-api-'));
 const OLD_AGENT_DIR = process.env.AGENT_DIR;
 process.env.AGENT_DIR = TEST_AGENT_DIR;
-
-vi.mock('../core/frontier.mjs', () => ({
-  callFrontier: vi.fn(async () => 'ok'),
-  callFrontierRaw: (...args) => callFrontierRawSpy(...args),
-  loadFrontierConfig: () => ({ endpoint: 'http://x', model: 'test-model', temperature: 0.7, local: null })
-}));
 
 vi.mock('../core/runtime.mjs', () => ({
   callLocalRuntimeRaw: (...args) => callLocalRuntimeRawSpy(...args),
@@ -82,7 +75,7 @@ describe('API Proxy', () => {
   });
 
   it('returns 400 for missing messages array', async () => {
-    callFrontierRawSpy.mockReset();
+    callLocalRuntimeRawSpy.mockReset();
     const res = await request(buildApp())
       .post('/v1/chat/completions')
       .send({});
@@ -105,7 +98,6 @@ describe('API Proxy', () => {
     afterEach(() => {
       fs.rmSync(TEST_AGENT_DIR, { recursive: true, force: true });
       fs.mkdirSync(TEST_AGENT_DIR, { recursive: true });
-      callFrontierRawSpy.mockReset();
       callLocalRuntimeRawSpy.mockReset();
     });
 
@@ -181,10 +173,10 @@ describe('API Proxy', () => {
     let savedSsss = null;
 
     beforeEach(() => {
-      callFrontierRawSpy.mockReset();
-      callFrontierRawSpy.mockResolvedValue({
+      callLocalRuntimeRawSpy.mockReset();
+      callLocalRuntimeRawSpy.mockResolvedValue({
         role: 'assistant',
-        content: 'mocked frontier response',
+        content: 'mocked local response',
         tool_calls: undefined
       });
 
@@ -217,15 +209,15 @@ describe('API Proxy', () => {
       }
     });
 
-    it('injects INSTRUCTIONS.md and SSSS SKILL.md into the system prompt before forwarding to frontier', async () => {
+    it('injects INSTRUCTIONS.md and SSSS SKILL.md into the system prompt before forwarding to local runtime', async () => {
       const res = await request(buildApp())
         .post('/v1/chat/completions')
         .send({ messages: [{ role: 'user', content: 'Hello brain' }] });
 
       expect(res.status).toBe(200);
-      expect(callFrontierRawSpy).toHaveBeenCalledTimes(1);
+      expect(callLocalRuntimeRawSpy).toHaveBeenCalledTimes(1);
 
-      const [messages] = callFrontierRawSpy.mock.calls[0];
+      const [messages] = callLocalRuntimeRawSpy.mock.calls[0];
       const systemMsg = messages.find(m => m.role === 'system');
       expect(systemMsg, 'expected a system message to be prepended').toBeTruthy();
 
@@ -249,7 +241,7 @@ describe('API Proxy', () => {
         });
       expect(res.status).toBe(200);
 
-      const [messages] = callFrontierRawSpy.mock.calls[0];
+      const [messages] = callLocalRuntimeRawSpy.mock.calls[0];
       const systemMsg = messages.find(m => m.role === 'system');
       expect(systemMsg.content).toContain('user-supplied-system-marker');
       expect(systemMsg.content).toContain('TOTAL_RECALL_INSTRUCTIONS_FIXTURE_TOKEN');
@@ -362,8 +354,8 @@ describe('API Proxy', () => {
 
     beforeEach(() => {
       fs.mkdirSync(vaultDir, { recursive: true });
-      callFrontierRawSpy.mockReset();
-      callFrontierRawSpy.mockResolvedValue({
+      callLocalRuntimeRawSpy.mockReset();
+      callLocalRuntimeRawSpy.mockResolvedValue({
         role: 'assistant',
         content: 'grounded mock response',
         tool_calls: undefined
@@ -374,7 +366,7 @@ describe('API Proxy', () => {
       fs.rmSync(vaultDir, { recursive: true, force: true });
     });
 
-    it('injects grounding nodes into the system prompt before forwarding to frontier', async () => {
+    it('injects grounding nodes into the system prompt before forwarding to local runtime', async () => {
       const { writeNode } = await import('../core/vault.mjs');
       writeNode({
         slug: 'my-project-recall',
@@ -393,9 +385,9 @@ describe('API Proxy', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(callFrontierRawSpy).toHaveBeenCalledTimes(1);
+      expect(callLocalRuntimeRawSpy).toHaveBeenCalledTimes(1);
 
-      const [messages] = callFrontierRawSpy.mock.calls[0];
+      const [messages] = callLocalRuntimeRawSpy.mock.calls[0];
       const systemMsg = messages.find(m => m.role === 'system');
       expect(systemMsg).toBeTruthy();
       expect(systemMsg.content).toContain('=== ACTIVE GROUNDING BRAIN NODES ===');

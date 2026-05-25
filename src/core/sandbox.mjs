@@ -1,6 +1,5 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import { escalateToFrontier } from './frontier.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -69,13 +68,6 @@ export async function executeWithEscalation(task, scriptPath, maxRetries = 3, co
     failureContext += `Attempt ${i + 1}:\n${result.output}\n\n`;
   }
 
-  // Threshold exceeded, escalate to Frontier
-  logger.info('sandbox', 'Max retries exceeded. Escalating to Frontier Intelligence...');
-  try {
-    const frontierResponse = await escalateToFrontier(task, failureContext, configPath);
-    return { success: true, output: frontierResponse, escalated: true };
-  } catch (err) {
-    logger.error('sandbox', `Frontier Escalation Failed: ${err.message}`);
-    return { success: false, output: err.message, escalated: true };
-  }
+  logger.error('sandbox', `Max retries exceeded. Execution failed in sandbox.`);
+  return { success: false, output: failureContext, escalated: false };
 }

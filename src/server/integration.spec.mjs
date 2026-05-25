@@ -21,11 +21,6 @@ const OLD_AGENT_DIR = process.env.AGENT_DIR;
 process.env.AGENT_DIR = TEST_AGENT_DIR;
 
 // Mock the heavy deps that api.mjs pulls in
-vi.mock('../core/frontier.mjs', () => ({
-  callFrontier: vi.fn(async () => 'ok'),
-  callFrontierRaw: vi.fn(async () => ({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] })),
-  loadFrontierConfig: () => ({ endpoint: 'http://x', model: 'test', temperature: 0.7, local: null })
-}));
 vi.mock('../core/runtime.mjs', () => ({
   callLocalRuntimeRaw: vi.fn(async () => ({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] })),
   loadRuntimeConfig: () => ({ runtime: 'ollama', endpoint: 'http://local/v1/chat/completions', model: 'gemma4:26b', temperature: 0.2 }),

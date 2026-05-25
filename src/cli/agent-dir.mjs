@@ -14,6 +14,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 export function resolveAgentDir() {
+  if (process.env.AGENT_DIR) {
+    return process.env.AGENT_DIR;
+  }
   const localDir = path.join(process.cwd(), '.agent');
   if (fs.existsSync(path.join(localDir, 'memory-vault'))) {
     return localDir;
