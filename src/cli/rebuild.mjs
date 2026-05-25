@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { compileSurface } from '../core/surface.mjs';
 import { detectIndexDrift } from '../core/drift-detector.mjs';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, getBothBrains } from './agent-dir.mjs';
 import { logger } from '../core/logger.mjs';
 
 /**
@@ -57,7 +57,9 @@ export async function runRebuild(options = {}) {
 
   console.log('🏗️  Recompiling surface from canonical vault...');
   try {
-    const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
+    const brains = getBothBrains();
+    const globalVaultDir = brains.global ? path.join(brains.global.brainDir, 'memory-vault') : undefined;
+    const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir });
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
     console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);

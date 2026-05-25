@@ -110,7 +110,7 @@ describe('remember and recall CLI commands', () => {
       JSON.stringify({
         'invariant-rules': {
           embedding: [1, 0, 0],
-          model: 'text-embedding-004',
+          model: 'gemini-embedding-2',
           generated_at: new Date().toISOString()
         }
       }),

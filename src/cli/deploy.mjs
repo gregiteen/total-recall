@@ -373,17 +373,7 @@ function hardenSecurityConfig(dryRun, dashboardPassword = null) {
     config.dashboard.password_hash = bcrypt.hashSync(dashboardPassword, BCRYPT_COST);
     config.dashboard.force_password_reset = isDefault;
   } else if (!config.dashboard.password_hash) {
-    // Generate secure temporary password
-    const tempPassword = crypto.randomBytes(16).toString('hex');
-    log(`  🔑 No password provided. Generating a secure temporary dashboard password...`);
-    console.error(`\n  ┌────────────────────────────────────────────────────────┐`);
-    console.error(`  │  ⚠️  TEMPORARY DASHBOARD ADMIN PASSWORD:                │`);
-    console.error(`  │  ${tempPassword.padEnd(52)}  │`);
-    console.error(`  │  Please save this password! You will be forced to      │`);
-    console.error(`  │  change it on your first dashboard access.             │`);
-    console.error(`  └────────────────────────────────────────────────────────┘\n`);
-    config.dashboard.password_hash = bcrypt.hashSync(tempPassword, BCRYPT_COST);
-    config.dashboard.force_password_reset = true;
+    log('  🔑 Dashboard credentials left unconfigured. You will set your admin password on first dashboard access.');
   }
 
   fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });

@@ -1,11 +1,35 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
+import os from 'os';
 import { spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
 import { agentDir } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
 import { validateCommand } from './sandbox.mjs';
+
+/**
+ * Find the absolute path to a binary in process.env.PATH.
+ * Bulletproof pure-JS replacement for the external 'which' command.
+ */
+export function findBinaryInPath(binaryName) {
+  const pathEnv = process.env.PATH || '';
+  const dirs = pathEnv.split(path.delimiter);
+  for (const dir of dirs) {
+    const fullPath = path.join(dir, binaryName);
+    try {
+      const stats = fs.statSync(fullPath);
+      const isExecutable = stats.isFile() && (os.platform() === 'win32' || (stats.mode & 0o111) !== 0);
+      if (isExecutable) {
+        return fullPath;
+      }
+    } catch {
+      // Ignored
+    }
+  }
+  return null;
+}
+
 
 /**
  * Total Recall Runtime — CLI Agent Dispatch
@@ -18,9 +42,10 @@ import { validateCommand } from './sandbox.mjs';
 // ─── Default agent registry (used when agents.yml doesn't exist) ─────────────
 
 const DEFAULT_AGENTS = [
-  { name: 'gemini',  binary: 'gemini',  flags: '--sandbox=false --yolo -o json', priority: 1, enabled: true, exec: 'flag' },
-  { name: 'claude',  binary: 'claude',  flags: '--output-format json --permission-mode bypassPermissions', priority: 2, enabled: true, exec: 'flag' },
-  { name: 'codex',   binary: 'codex',   flags: '--full-auto --json', priority: 3, enabled: true, exec: 'subcommand' },
+  { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 1, enabled: true, exec: 'flag' },
+  { name: 'gemini',      binary: 'gemini',      flags: '--sandbox=false --yolo -o json', priority: 2, enabled: true, exec: 'flag' },
+  { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions', priority: 3, enabled: true, exec: 'flag' },
+  { name: 'codex',       binary: 'codex',       flags: '--full-auto --json', priority: 4, enabled: true, exec: 'subcommand' },
 ];
 
 /**
@@ -106,11 +131,11 @@ export async function checkRuntimeHealth(config) {
 
   for (const agent of agents) {
     if (!agent.enabled) continue;
-    const result = spawnSync('which', [agent.binary], { stdio: 'pipe' });
-    if (result.status === 0) {
+    const binaryPath = findBinaryInPath(agent.binary);
+    if (binaryPath) {
       available.push({
         name: agent.name,
-        binary: result.stdout.toString().trim(),
+        binary: binaryPath,
         priority: agent.priority,
       });
     }
@@ -119,7 +144,7 @@ export async function checkRuntimeHealth(config) {
   if (available.length === 0) {
     return {
       status: 'degraded',
-      reason: 'No CLI agents found. Install gemini, claude, or codex.',
+      reason: 'No CLI agents found. Install antigravity, claude, or codex.',
       available: [],
     };
   }
@@ -142,11 +167,11 @@ function resolveAgent(config) {
 
   for (const agent of agents.sort((a, b) => a.priority - b.priority)) {
     if (!agent.enabled) continue;
-    const check = spawnSync('which', [agent.binary], { stdio: 'pipe' });
-    if (check.status === 0) {
+    const binaryPath = findBinaryInPath(agent.binary);
+    if (binaryPath) {
       return {
         ...agent,
-        binaryPath: check.stdout.toString().trim(),
+        binaryPath,
       };
     }
   }
@@ -188,7 +213,7 @@ export async function callLocalRuntime(prompt, system, config) {
     });
 
     if (!agent) {
-      throw new Error('No CLI agents available. Install gemini, claude, or codex.');
+      throw new Error('No CLI agents available. Install antigravity, claude, or codex.');
     }
 
     const modelFlag = agent.model ? `-m ${agent.model}` : '';

@@ -6,7 +6,7 @@
  * Index file: .agent/memory-derived/embeddings.json
  *   { [slug]: { embedding: number[], model: string, generated_at: string } }
  *
- * Embedding model: text-embedding-004 (Google, 768 dims, free tier)
+ * Embedding model: gemini-embedding-2 (Google, 768 dims, free tier)
  *   Auth: GOOGLE_API_KEY env var
  *
  * Fallback: If GOOGLE_API_KEY is not set, tries OpenAI's text-embedding-3-small
@@ -67,20 +67,58 @@ function saveCache() {
 // ─── Embedding generation ────────────────────────────────────────────────────
 
 /**
- * Get an embedding from Google's text-embedding-004 API.
+ * Resolve the embedding model dynamically from the active API registry list.
  */
-async function getGoogleEmbedding(text, model = 'text-embedding-004') {
+async function resolveEmbeddingModel(selectedModel = embedModel) {
+  if (selectedModel !== 'gemini-embedding-2' && selectedModel !== 'default') {
+    return selectedModel;
+  }
+
+  if (!GOOGLE_API_KEY) {
+    return 'gemini-embedding-2';
+  }
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GOOGLE_API_KEY}`, {
+      signal: AbortSignal.timeout(5000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const models = data.models || [];
+      const preferences = [
+        'gemini-embedding-2',
+        'gemini-embedding-2-preview',
+        'gemini-embedding-001',
+        'text-embedding-004'
+      ];
+      for (const p of preferences) {
+        if (models.some(m => m.name === `models/${p}`)) {
+          return p;
+        }
+      }
+    }
+  } catch {
+    // Silent failover
+  }
+  return 'gemini-embedding-2';
+}
+
+/**
+ * Get an embedding from Google's embedding API.
+ */
+async function getGoogleEmbedding(text, model) {
   if (!GOOGLE_API_KEY) {
     throw new Error('GOOGLE_API_KEY not set. Cannot generate embeddings.');
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${GOOGLE_API_KEY}`;
+  const resolved = await resolveEmbeddingModel(model);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolved}:embedContent?key=${GOOGLE_API_KEY}`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: `models/${model}`,
+      model: `models/${resolved}`,
       content: { parts: [{ text }] },
     }),
     signal: AbortSignal.timeout(30000),
@@ -405,7 +443,38 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
   const files = fs.readdirSync(sessionsDir)
     .filter(f => f.endsWith('.jsonl') || f.endsWith('.json'));
 
-  const existing = force ? {} : loadSessionEmbeddingsIndex(derivedDir);
+  if (files.length === 0) return { indexed: 0, skipped: 0, failed: 0, chunks: 0 };
+
+  let existing = force ? {} : loadSessionEmbeddingsIndex(derivedDir);
+
+  // Probe resolved model embedding dimension
+  let newDim = 0;
+  try {
+    const probe = await getEmbedding("test probe", undefined, model);
+    newDim = probe.length;
+  } catch (err) {
+    // If the probe fails, we cannot resolve/access the API, so skip gracefully
+    return { indexed: 0, skipped: files.length, failed: files.length, chunks: 0 };
+  }
+
+  // Check for dimension mismatch against existing cached session embeddings
+  if (Object.keys(existing).length > 0) {
+    const firstKey = Object.keys(existing)[0];
+    const firstVal = existing[firstKey];
+    const existingDim = firstVal && Array.isArray(firstVal.embedding) ? firstVal.embedding.length : 0;
+
+    if (existingDim > 0 && existingDim !== newDim) {
+      // Dimension mismatch detected! Wipe the old index to re-embed everything
+      existing = {};
+      try {
+        const file = sessionIndexPath(derivedDir);
+        if (fs.existsSync(file)) {
+          fs.unlinkSync(file);
+        }
+      } catch {}
+    }
+  }
+
   const index = { ...existing };
   let indexed = 0, skipped = 0, failed = 0, totalChunks = 0;
 

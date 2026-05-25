@@ -41,6 +41,7 @@ export interface HealthData {
   disk?: { free: number, total: number }
   ollama?: string
   ollama_models?: string[]
+  cli_agents?: string[]
   daemon?: string
   emergency_alerts?: string | null
 }

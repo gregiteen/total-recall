@@ -21,15 +21,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { agentDir } from '../core/config.mjs';
-
-function getAgentDir() {
-  return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
-}
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 
 /** The meta-skill folder — this is what gets backed up */
-function getSkillDir() {
-  return path.join(getAgentDir(), 'skills', 'total-recall');
+function getSkillDir(layer = 'auto') {
+  return resolveBrainDir(layer);
 }
 
 function commandExists(cmd) {
@@ -38,21 +34,23 @@ function commandExists(cmd) {
 }
 
 function parseArgs(args) {
-  const opts = { output: null, encrypt: true, pushGit: null, obsidian: null, help: false };
-  for (let i = 0; i < args.length; i++) {
-    switch (args[i]) {
+  // Parse layer flag first
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  const opts = { output: null, encrypt: true, pushGit: null, obsidian: null, help: false, layer };
+  for (let i = 0; i < remainingArgs.length; i++) {
+    switch (remainingArgs[i]) {
       case '--output':
       case '-o':
-        opts.output = args[++i];
+        opts.output = remainingArgs[++i];
         break;
       case '--no-encrypt':
         opts.encrypt = false;
         break;
       case '--push-git':
-        opts.pushGit = args[++i];
+        opts.pushGit = remainingArgs[++i];
         break;
       case '--obsidian':
-        opts.obsidian = args[++i];
+        opts.obsidian = remainingArgs[++i];
         break;
       case '--help':
       case '-h':
@@ -115,8 +113,8 @@ function printHelp() {
 `);
 }
 
-async function pushGitBackup(remote) {
-  const SKILL_DIR = getSkillDir();
+async function pushGitBackup(remote, layer = 'auto') {
+  const SKILL_DIR = getSkillDir(layer);
   if (!commandExists('git')) {
     console.error('  ❌ git not found — cannot push backup');
     process.exit(1);
@@ -139,14 +137,28 @@ async function pushGitBackup(remote) {
     }
   }
 
-  // Add or update the backup remote
-  const remoteCheck = git(SKILL_DIR, 'remote', 'get-url', 'backup');
-  if (!remoteCheck.ok) {
-    git(SKILL_DIR, 'remote', 'add', 'backup', remote);
-    console.error(`  🔗 Remote "backup" added → ${remote}`);
-  } else if (remoteCheck.stdout !== remote) {
-    git(SKILL_DIR, 'remote', 'set-url', 'backup', remote);
-    console.error(`  🔗 Remote "backup" updated → ${remote}`);
+  // Resolve the remote: if the argument is an existing remote name, use its URL.
+  // Otherwise treat it as a URL and configure the 'backup' remote to point there.
+  const remoteCheck = git(SKILL_DIR, 'remote', 'get-url', remote);
+  if (remoteCheck.ok) {
+    // Argument is an existing remote name — use it as-is, don't overwrite
+    console.error(`  🔗 Using existing remote "${remote}" → ${remoteCheck.stdout}`);
+  } else if (remote.includes('/') || remote.includes(':')) {
+    // Argument looks like a URL — add or update the 'backup' remote
+    const backupCheck = git(SKILL_DIR, 'remote', 'get-url', 'backup');
+    if (!backupCheck.ok) {
+      git(SKILL_DIR, 'remote', 'add', 'backup', remote);
+      console.error(`  🔗 Remote "backup" added → ${remote}`);
+    } else if (backupCheck.stdout !== remote) {
+      git(SKILL_DIR, 'remote', 'set-url', 'backup', remote);
+      console.error(`  🔗 Remote "backup" updated → ${remote}`);
+    }
+    // Push to the 'backup' remote name, not the raw URL
+    remote = 'backup';
+  } else {
+    console.error(`  ❌ "${remote}" is not a configured git remote and doesn't look like a URL.`);
+    console.error('  Use a remote name (e.g. "backup") or a full URL (e.g. "https://github.com/user/repo.git")');
+    process.exit(1);
   }
 
   // Stage all changes
@@ -182,8 +194,8 @@ async function pushGitBackup(remote) {
   console.error(`  ✅ Brain pushed to ${remote} (${stamp})`);
 }
 
-function obsidianBackup(vaultPath) {
-  const SKILL_DIR = getSkillDir();
+function obsidianBackup(vaultPath, layer = 'auto') {
+  const SKILL_DIR = getSkillDir(layer);
   if (!commandExists('rsync')) {
     console.error('  ❌ rsync not found — install it or use --push-git instead');
     process.exit(1);
@@ -205,6 +217,19 @@ function obsidianBackup(vaultPath) {
 
   const dest = path.join(expanded, 'Total Recall');
   const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+  // Remove stale symlinks (e.g. from a prior install that used the wrong path)
+  // so rsync can create the real directory
+  try {
+    const stat = fs.lstatSync(dest);
+    if (stat.isSymbolicLink()) {
+      console.error(`  ⚠️  Removing stale symlink at ${dest}`);
+      fs.unlinkSync(dest);
+    }
+  } catch {
+    // dest doesn't exist yet — that's fine
+  }
+
   console.error(`  📓 Syncing brain → ${dest} (${stamp})`);
 
   // rsync with delete so removed files don't linger in Obsidian
@@ -222,8 +247,8 @@ function obsidianBackup(vaultPath) {
 }
 
 export default async function backup(args) {
-  const SKILL_DIR = getSkillDir();
   const opts = parseArgs(args);
+  const SKILL_DIR = getSkillDir(opts.layer);
   if (opts.help) {
     printHelp();
     return;
@@ -237,13 +262,13 @@ export default async function backup(args) {
 
   // Git-push mode: sovereign diff-based backup
   if (opts.pushGit) {
-    await pushGitBackup(opts.pushGit);
+    await pushGitBackup(opts.pushGit, opts.layer);
     return;
   }
 
   // Obsidian rsync mode
   if (opts.obsidian) {
-    obsidianBackup(opts.obsidian);
+    obsidianBackup(opts.obsidian, opts.layer);
     return;
   }
 

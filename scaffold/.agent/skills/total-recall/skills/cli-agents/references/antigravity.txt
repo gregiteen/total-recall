@@ -1,0 +1,20 @@
+Antigravity CLI Agent Wrapper — Headless Zero-Dependency Cognitive Agent
+
+Usage:
+  antigravity [options] [prompt]
+  antigravity -p "prompt"
+
+Options:
+  -p, --prompt    The text prompt to generate content for
+  -m, --model     Gemini API model identifier or alias (default: gemini-3.5-flash)
+                  Supported aliases:
+                    - flash / gemini-flash / 3.5-flash -> gemini-3.5-flash (Frontier default)
+                    - pro / gemini-pro / 3.1-pro       -> gemini-3.1-pro-preview (Frontier Pro)
+  -o, --json      Output dynamic JSON response payload (choices: stream/json/default)
+  --json          Output dynamic JSON response payload
+  -h, --help      Show this help information
+
+Examples:
+  antigravity "Say hello"
+  antigravity -p "Write an essay about AI" -m pro
+  antigravity -p "Get system stats" --json

@@ -12,11 +12,20 @@
 
 import express from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
 import { writeNode, createMemoryNode, walkMd } from '../../core/vault.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
+import { compileSurface } from '../../core/surface.mjs';
+import { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } from '../../core/embeddings.mjs';
+import { detectAndResolve } from '../../core/conflict-detector.mjs';
 import {
+  BRAIN_DIR,
   VAULT_DIR,
+  SKILLS_DIR,
+  DERIVED_DIR,
+  SESSIONS_DIR,
+  INSTRUCTIONS,
   notFound,
   badRequest,
   serverError,
@@ -28,6 +37,47 @@ const router = express.Router();
 function nodes() {
   return getNodes(VAULT_DIR);
 }
+
+/**
+ * Trigger background SSSS semantic conflict resolution, surface compile, and embedding build.
+ * Auto-mutates the brain in real time when any fact is written, updated, or deleted!
+ */
+async function triggerMutation(node) {
+  try {
+    // 1. Semantic conflict detection & auto-resolution (Sovereign OS Intelligence)
+    try {
+      const existing = nodes();
+      if (node && node.type === 'memory') {
+        detectAndResolve(node, existing, {
+          vaultDir: VAULT_DIR,
+          inboxDir: path.join(BRAIN_DIR, 'memory-inbox'),
+        });
+      }
+    } catch (conflictErr) {
+      // Non-fatal fallback
+    }
+
+    // 2. Recompile instructions surface
+    await compileSurface({
+      vaultDir:        VAULT_DIR,
+      skillsDir:       SKILLS_DIR,
+      derivedDir:      DERIVED_DIR,
+      instructionsFile: INSTRUCTIONS,
+    });
+
+    // 3. Rebuild dense embeddings index incrementally in background
+    try {
+      const vaultNodes = nodes();
+      await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
+      await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
+    } catch (embedErr) {
+      // Ollama/embeddings offline non-fatal
+    }
+  } catch (err) {
+    // Non-fatal background log
+  }
+}
+
 
 // SSSS v2 frontmatter fields we pass through verbatim from request bodies.
 const PASSTHROUGH_FIELDS = ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources'];
@@ -101,6 +151,7 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
 
     writeNode(node, VAULT_DIR);
     invalidate();
+    triggerMutation(node);
     res.status(201).json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -123,6 +174,7 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
 
     writeNode(node, VAULT_DIR);
     invalidate();
+    triggerMutation(node);
     res.json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -154,6 +206,7 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
 
     writeNode(updated, VAULT_DIR);
     invalidate();
+    triggerMutation(updated);
     res.json(sanitizeNode(updated));
   } catch (err) {
     serverError(res, err);
@@ -178,6 +231,7 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
       }
     }
     invalidate();
+    triggerMutation(null);
     res.json({ deleted: true, slug: req.params.slug });
   } catch (err) {
     serverError(res, err);

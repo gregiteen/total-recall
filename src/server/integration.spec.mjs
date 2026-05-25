@@ -143,11 +143,24 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.id).toBe('uc-2026-test');
+    // New format: slug is date-prefixed with source and title
+    expect(res.body.id).toMatch(/^\d{4}-\d{2}-\d{2}-ultrachat-what-is-total-recall-/);
+    expect(res.body.filename).toMatch(/\.md$/);
 
-    const file = path.join(SESSIONS_DIR, 'uc-2026-test.jsonl');
+    const file = path.join(SESSIONS_DIR, res.body.filename);
     expect(fs.existsSync(file)).toBe(true);
-    const written = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+    const raw = fs.readFileSync(file, 'utf8');
+    // Verify SSSS frontmatter
+    expect(raw.startsWith('---')).toBe(true);
+    expect(raw).toContain('type: session');
+    expect(raw).toContain('source: ultrachat');
+    expect(raw).toContain('schema_version: 2');
+    expect(raw).toContain('title:');
+    expect(raw).toContain('date:');
+    // Verify body contains the session JSON
+    const bodyStart = raw.indexOf('---', 3);
+    const body = raw.slice(bodyStart + 3).trim();
+    const written = JSON.parse(body);
     expect(written.source).toBe('ultrachat');
     expect(written.messages).toHaveLength(2);
   });
@@ -185,11 +198,21 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.id).toBe('ag-2026-test');
+    // New format: slug is date-prefixed with source and title
+    expect(res.body.id).toMatch(/^\d{4}-\d{2}-\d{2}-antigravity-user-hello-world-/);
+    expect(res.body.filename).toMatch(/\.md$/);
 
-    const file = path.join(SESSIONS_DIR, 'ag-2026-test.jsonl');
+    const file = path.join(SESSIONS_DIR, res.body.filename);
     expect(fs.existsSync(file)).toBe(true);
-    const written = JSON.parse(fs.readFileSync(file, 'utf8').trim());
+    const raw = fs.readFileSync(file, 'utf8');
+    // Verify SSSS frontmatter
+    expect(raw.startsWith('---')).toBe(true);
+    expect(raw).toContain('type: session');
+    expect(raw).toContain('source: antigravity');
+    // Parse body
+    const bodyStart = raw.indexOf('---', 3);
+    const body = raw.slice(bodyStart + 3).trim();
+    const written = JSON.parse(body);
     expect(written.source).toBe('antigravity');
     expect(written.messages).toHaveLength(4);
     expect(written.messages[0].role).toBe('user');

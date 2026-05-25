@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { agentDir as configAgentDir, brainDir as configBrainDir } from '../core/config.mjs';
+import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import {
   listQueue,
   addToQueue,
@@ -97,8 +97,8 @@ function printUsage() {
 `);
 }
 
-function findProject(idOrTopic) {
-  const queue = loadQueue();
+function findProject(idOrTopic, resolvedBrainDir) {
+  const queue = loadQueue(resolvedBrainDir);
   // Try ID prefix match first
   let match = queue.find(p => p.id.startsWith(idOrTopic));
   if (!match) {
@@ -109,11 +109,10 @@ function findProject(idOrTopic) {
   return match;
 }
 
-function getReportContent(nodeSlug) {
+function getReportContent(nodeSlug, resolvedBrainDir) {
   if (!nodeSlug) return null;
-  const brainDir = configBrainDir;
-  const vaultFile = path.join(brainDir, 'memory-vault', 'facts', `${nodeSlug}.md`);
-  const inboxFile = path.join(brainDir, 'memory-inbox', 'pending', `${nodeSlug}.md`);
+  const vaultFile = path.join(resolvedBrainDir, 'memory-vault', 'facts', `${nodeSlug}.md`);
+  const inboxFile = path.join(resolvedBrainDir, 'memory-inbox', 'pending', `${nodeSlug}.md`);
 
   if (fs.existsSync(vaultFile)) {
     return { path: vaultFile, content: fs.readFileSync(vaultFile, 'utf8'), promoted: true };
@@ -125,7 +124,7 @@ function getReportContent(nodeSlug) {
 
 // ─── Command Handlers ────────────────────────────────────────────────────────
 
-function handleList(args) {
+function handleList(args, resolvedBrainDir) {
   let status = 'all';
   let query = '';
 
@@ -134,7 +133,7 @@ function handleList(args) {
     else if (args[i] === '--query') query = args[++i];
   }
 
-  const { items, total } = listQueue({ status, query });
+  const { items, total } = listQueue({ status, query, brainDir: resolvedBrainDir });
 
   printHeader();
   if (items.length === 0) {
@@ -158,7 +157,7 @@ function handleList(args) {
   }
 }
 
-function handleAdd(args) {
+function handleAdd(args, resolvedBrainDir) {
   const topic = args[0];
   if (!topic || topic.startsWith('--')) {
     console.error(red('  Error: topic string is required.'));
@@ -175,7 +174,7 @@ function handleAdd(args) {
   }
 
   try {
-    const item = addToQueue({ topic, priority, notes });
+    const item = addToQueue({ topic, priority, notes, brainDir: resolvedBrainDir });
     console.log();
     console.log(`  ${green('✅ Successfully enqueued research project:')}`);
     console.log(`  ${bold('Topic:')}    "${item.topic}"`);
@@ -188,8 +187,8 @@ function handleAdd(args) {
   }
 }
 
-function handleStatus() {
-  const queue = loadQueue();
+function handleStatus(resolvedBrainDir) {
+  const queue = loadQueue(resolvedBrainDir);
   const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 };
   const phaseCounts = { acquisition: 0, deliberation: 0, improvement: 0, monitoring: 0, expansion: 0 };
 
@@ -215,7 +214,7 @@ function handleStatus() {
   console.log();
 }
 
-function handleShow(args) {
+function handleShow(args, resolvedBrainDir) {
   const query = args[0];
   if (!query) {
     console.error(red('  Error: project ID or topic string required.'));
@@ -223,7 +222,7 @@ function handleShow(args) {
     process.exit(1);
   }
 
-  const project = findProject(query);
+  const project = findProject(query, resolvedBrainDir);
   if (!project) {
     console.error(red(`  Error: no research project found for query: "${query}"`));
     process.exit(1);
@@ -278,7 +277,7 @@ function handleShow(args) {
   console.log();
 }
 
-function handleReport(args) {
+function handleReport(args, resolvedBrainDir) {
   const query = args[0];
   if (!query) {
     console.error(red('  Error: project ID or topic string required.'));
@@ -286,7 +285,7 @@ function handleReport(args) {
     process.exit(1);
   }
 
-  const project = findProject(query);
+  const project = findProject(query, resolvedBrainDir);
   if (!project) {
     console.error(red(`  Error: no research project found for query: "${query}"`));
     process.exit(1);
@@ -297,7 +296,7 @@ function handleReport(args) {
     process.exit(1);
   }
 
-  const report = getReportContent(project.node_slug);
+  const report = getReportContent(project.node_slug, resolvedBrainDir);
   if (!report) {
     console.error(red(`  Error: report file not found for slug [[${project.node_slug}]].`));
     process.exit(1);
@@ -313,7 +312,7 @@ function handleReport(args) {
   console.log();
 }
 
-function handleCancel(args) {
+function handleCancel(args, resolvedBrainDir) {
   const id = args[0];
   if (!id) {
     console.error(red('  Error: project ID is required.'));
@@ -322,7 +321,7 @@ function handleCancel(args) {
   }
 
   try {
-    const result = removeFromQueue(id);
+    const result = removeFromQueue(id, resolvedBrainDir);
     console.log();
     console.log(`  ${green('✅ Successfully cancelled and removed research project:')}`);
     console.log(`  ${bold('Topic:')} "${result.topic}"`);
@@ -337,7 +336,10 @@ function handleCancel(args) {
 // ─── CLI Entrypoint ──────────────────────────────────────────────────────────
 
 export default async function research(args) {
-  const cmd = args[0] || 'list';
+  // Parse layer flag from args
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  const resolvedBrainDir = resolveBrainDir(layer);
+  const cmd = remainingArgs[0] || 'list';
 
   if (cmd === '--help' || cmd === '-h' || cmd === 'help') {
     printHeader();
@@ -345,32 +347,31 @@ export default async function research(args) {
     return;
   }
 
-  const subArgs = args.slice(1);
+  const subArgs = remainingArgs.slice(1);
 
   switch (cmd) {
     case 'list':
-      handleList(subArgs);
+      handleList(subArgs, resolvedBrainDir);
       break;
     case 'add':
-      handleAdd(subArgs);
+      handleAdd(subArgs, resolvedBrainDir);
       break;
     case 'status':
-      handleStatus();
+      handleStatus(resolvedBrainDir);
       break;
     case 'show':
-      handleShow(subArgs);
+      handleShow(subArgs, resolvedBrainDir);
       break;
     case 'report':
-      handleReport(subArgs);
+      handleReport(subArgs, resolvedBrainDir);
       break;
     case 'cancel':
-      handleCancel(subArgs);
+      handleCancel(subArgs, resolvedBrainDir);
       break;
     default:
-      // Fallback: if first arg is not a command, treat it as "show <query>" if it matches something
-      const matched = findProject(cmd);
+      const matched = findProject(cmd, resolvedBrainDir);
       if (matched) {
-        handleShow([cmd, ...subArgs]);
+        handleShow([cmd, ...subArgs], resolvedBrainDir);
       } else {
         console.error(red(`  Error: unknown research subcommand: "${cmd}"`));
         printUsage();

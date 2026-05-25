@@ -128,8 +128,41 @@ function writeEmbeddingsIndex(derivedDir, index) {
  * @returns {Promise<{ indexed: number, skipped: number, unavailable: boolean }>}
  */
 export async function buildSemanticIndex(nodes, derivedDir, opts = {}) {
+  if (nodes.length === 0) {
+    return { indexed: 0, skipped: 0, unavailable: false };
+  }
+
   const existing = loadEmbeddingsIndex(derivedDir);
   
+  // Probe availability and get current model dimension using the first node
+  const firstText = [nodes[0].title, nodes[0].body || nodes[0].content].filter(Boolean).join('\n').slice(0, 4096);
+  const probe = await generateEmbedding(firstText, opts);
+  if (!probe) {
+    return { indexed: 0, skipped: nodes.length, unavailable: true };
+  }
+
+  const newDim = probe.length;
+
+  // Check for dimension mismatch against existing cached embeddings
+  if (existing.size > 0) {
+    const firstVal = existing.values().next().value;
+    const existingDim = Array.isArray(firstVal)
+      ? firstVal.length
+      : (firstVal && Array.isArray(firstVal.embedding) ? firstVal.embedding.length : 0);
+
+    if (existingDim > 0 && existingDim !== newDim) {
+      // Dimension mismatch detected! Wipe the old index to re-embed everything
+      existing.clear();
+      try {
+        const file = path.join(derivedDir, EMBEDDINGS_FILE);
+        if (fs.existsSync(file)) {
+          fs.unlinkSync(file);
+        }
+      } catch {}
+    }
+  }
+
+  // Filter nodes that need embedding
   const toEmbed = nodes.filter(n => {
     const cached = existing.get(n.slug);
     if (!cached) return true;
@@ -144,30 +177,29 @@ export async function buildSemanticIndex(nodes, derivedDir, opts = {}) {
     return { indexed: 0, skipped: nodes.length, unavailable: false };
   }
 
-  // Probe Ollama availability with the first node's full text
-  const firstText = [toEmbed[0].title, toEmbed[0].body || toEmbed[0].content].filter(Boolean).join('\n').slice(0, 4096);
-  const probe = await generateEmbedding(firstText, opts);
-  if (!probe) {
-    return { indexed: 0, skipped: nodes.length, unavailable: true };
+  // Save the probe result we already generated for the first node if it is in toEmbed
+  const firstNode = toEmbed.find(n => n.slug === nodes[0].slug);
+  if (firstNode) {
+    const firstHash = crypto.createHash('sha256').update(firstText).digest('hex');
+    const firstVec = probe;
+    Object.defineProperty(firstVec, 'embedding', {
+      get() { return this; },
+      enumerable: false,
+      configurable: true
+    });
+    Object.defineProperty(firstVec, 'content_sha256', {
+      value: firstHash,
+      writable: true,
+      enumerable: false,
+      configurable: true
+    });
+    existing.set(firstNode.slug, firstVec);
   }
-  
-  const firstHash = crypto.createHash('sha256').update(firstText).digest('hex');
-  const firstVec = probe;
-  Object.defineProperty(firstVec, 'embedding', {
-    get() { return this; },
-    enumerable: false,
-    configurable: true
-  });
-  Object.defineProperty(firstVec, 'content_sha256', {
-    value: firstHash,
-    writable: true,
-    enumerable: false,
-    configurable: true
-  });
-  existing.set(toEmbed[0].slug, firstVec);
 
   // Embed the remaining nodes
-  for (const node of toEmbed.slice(1)) {
+  for (const node of toEmbed) {
+    if (node.slug === nodes[0].slug) continue; // already saved probe
+
     const text = [node.title, node.body || node.content].filter(Boolean).join('\n').slice(0, 4096);
     const vec = await generateEmbedding(text, opts);
     if (vec) {

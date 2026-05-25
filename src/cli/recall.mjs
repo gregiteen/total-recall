@@ -1,4 +1,4 @@
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
 import { semanticSearch } from '../core/search.mjs';
 import path from 'node:path';
 
@@ -25,11 +25,15 @@ function printHelp() {
     npx total-recall recall "Chromium sandbox bypass" --no-sessions
     npx total-recall recall "tsc" --category invariants --modality must
     npx total-recall recall "port" --tags config,port --importance 4
+    npx total-recall recall "ORM choice" --project    # Search project brain only
+    npx total-recall recall "coding style" --global    # Search global brain only
 `);
 }
 
 export default async function recall(args) {
-  const query = args[0];
+  // Parse layer flag first
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  const query = remainingArgs[0];
 
   if (!query || query === '--help' || query === '-h') {
     printHelp();
@@ -46,10 +50,10 @@ export default async function recall(args) {
   let importance = null;
   let priority = null;
 
-  for (let i = 1; i < args.length; i++) {
-    const arg = args[i];
+  for (let i = 1; i < remainingArgs.length; i++) {
+    const arg = remainingArgs[i];
     if (arg === '--top-k' || arg === '-k') {
-      const val = parseInt(args[i + 1], 10);
+      const val = parseInt(remainingArgs[i + 1], 10);
       if (!isNaN(val)) {
         top_k = val;
         i++;
@@ -57,38 +61,38 @@ export default async function recall(args) {
     } else if (arg === '--no-sessions' || arg === '-ns') {
       includeSessions = false;
     } else if (arg === '--format' || arg === '-f') {
-      const val = args[i + 1];
+      const val = remainingArgs[i + 1];
       if (val === 'text' || val === 'json') {
         format = val;
         i++;
       }
     } else if (arg === '--category' || arg === '-cat') {
-      const val = args[i + 1];
+      const val = remainingArgs[i + 1];
       if (val) {
         category = val.trim();
         i++;
       }
     } else if (arg === '--tags' || arg === '-t') {
-      const val = args[i + 1];
+      const val = remainingArgs[i + 1];
       if (val) {
         tags = val.split(',').map(t => t.trim());
         i++;
       }
     } else if (arg === '--modality' || arg === '-m') {
-      const val = args[i + 1];
+      const val = remainingArgs[i + 1];
       if (val) {
         modality = val.toLowerCase();
         i++;
       }
     } else if (arg === '--importance' || arg === '-i') {
-      const val = args[i + 1];
+      const val = remainingArgs[i + 1];
       if (val) {
         const num = parseInt(val, 10);
         if (!isNaN(num)) importance = num;
         i++;
       }
     } else if (arg === '--priority' || arg === '-p') {
-      const val = args[i + 1];
+      const val = remainingArgs[i + 1];
       if (val) {
         priority = val.toLowerCase();
         i++;
@@ -96,56 +100,114 @@ export default async function recall(args) {
     }
   }
 
-  const resolvedAgentDir = resolveAgentDir();
-  const resolvedBrainDir = resolveBrainDir();
-  const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
-  const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
+  // Determine which brains to search
+  const brains = getBothBrains();
+  const searchTargets = [];
+
+  if (layer === 'global' || layer === 'auto') {
+    if (brains.global) {
+      searchTargets.push({ label: 'global', brainDir: brains.global.brainDir });
+    }
+  }
+  if (layer === 'project' || layer === 'auto') {
+    if (brains.project) {
+      searchTargets.push({ label: 'project', brainDir: brains.project.brainDir });
+    }
+  }
+
+  if (searchTargets.length === 0) {
+    console.error('No brain found. Run `npx total-recall init` to create one.');
+    process.exit(1);
+  }
 
   try {
-    const results = await semanticSearch(query, {
-      vaultDir,
-      derivedDir,
-      top_k,
-      includeSessions,
-      category,
-      tags,
-      modality,
-      importance,
-      priority
-    });
+    // Search all target brains and merge results
+    let allResults = [];
+
+    for (const target of searchTargets) {
+      const vaultDir = path.join(target.brainDir, 'memory-vault');
+      const derivedDir = path.join(target.brainDir, 'memory-derived');
+
+      try {
+        const results = await semanticSearch(query, {
+          vaultDir,
+          derivedDir,
+          top_k,
+          includeSessions: includeSessions && target.label !== 'global', // sessions only in project/local
+          category,
+          tags,
+          modality,
+          importance,
+          priority
+        });
+        // Tag each result with its layer
+        for (const r of results) {
+          r._layer = target.label;
+        }
+        allResults = allResults.concat(results);
+      } catch {
+        // Skip brains that can't be searched (no embeddings, etc.)
+      }
+    }
+
+    // Sort by score descending, limit to top_k
+    allResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+    allResults = allResults.slice(0, top_k);
 
     if (format === 'json') {
-      console.log(JSON.stringify(results, null, 2));
+      console.log(JSON.stringify(allResults, null, 2));
       return;
     }
 
-    if (results.length === 0) {
+    if (allResults.length === 0) {
       console.log('\n  🔍 No matching memory nodes found.');
       return;
     }
-
-    console.log(`\n  🔍 Semantic search results for "${query}":\n`);
-    for (let i = 0; i < results.length; i++) {
-      const match = results[i];
+    if (allResults.degradedTextSearch) {
+      console.log('\n  ⚠️  WARNING: Embedding API unreachable or unconfigured. Cos-similarity vector search is disabled.');
+      console.log('              Running basic text keyword search instead. Configure GOOGLE_API_KEY or OPENAI_API_KEY.');
+    }
+    const layerSuffix = searchTargets.length > 1 ? ' (merged)' : ` (${searchTargets[0].label})`;
+    console.log(`\n  🔍 Semantic search results for "${query}"${layerSuffix}:\n`);
+    for (let i = 0; i < allResults.length; i++) {
+      const match = allResults[i];
       const rank = i + 1;
       const score = Math.round(match.score * 100) + '%';
+      const layerTag = searchTargets.length > 1 ? ` [${match._layer}]` : '';
 
       if (match.type === 'vault') {
-        console.log(`  [${rank}] Vault Match (${score}) - Category: ${match.category}`);
-        console.log(`      Title: ${match.title}`);
-        console.log(`      Slug:  ${match.slug}`);
+        const modalityTag = match.modality ? ` [${match.modality.toUpperCase()}]` : '';
+        const priorityTag = match.priority && match.priority !== 'normal' ? ` [${match.priority.toUpperCase()}]` : '';
+        const importanceVal = parseInt(match.importance, 10) || 3;
+        const stars = '⭐'.repeat(Math.max(1, Math.min(5, importanceVal))) + '☆'.repeat(Math.max(0, 5 - importanceVal));
+        const confVal = match.confidence !== undefined ? ` (conf: ${Math.round(match.confidence * 100)}%)` : '';
+
+        console.log(`  [${rank}] Vault Match (${score})${layerTag} - Category: ${match.category}${modalityTag}${priorityTag}`);
+        console.log(`      Title:      ${match.title}`);
+        console.log(`      Slug:       ${match.slug}`);
+        console.log(`      Importance: ${stars}${confVal}`);
         if (match.tags && match.tags.length > 0) {
-          console.log(`      Tags:  ${match.tags.join(', ')}`);
+          console.log(`      Tags:       ${match.tags.join(', ')}`);
+        }
+        if (match.related && match.related.length > 0) {
+          console.log(`      Related:    ${match.related.join(', ')}`);
+        }
+        if (match.body) {
+          console.log(`      Body:`);
+          const bodyLines = match.body.trim().split('\n');
+          for (const line of bodyLines) {
+            console.log(`        │ ${line}`);
+          }
         }
       } else if (match.type === 'session') {
         const sessionId = match.session_id ? String(match.session_id).slice(0, 12) + '...' : 'unknown';
-        console.log(`  [${rank}] Session Match (${score}) - Session ID: ${sessionId}`);
+        console.log(`  [${rank}] Session Match (${score})${layerTag} - Session ID: ${sessionId}`);
         if (match.snippet) {
           console.log(`      Snippet: "${match.snippet.trim().replace(/\n/g, ' ')}"`);
         }
         console.log(`      Chunk:   ${match.chunk} / ${match.total_chunks}`);
       } else {
-        console.log(`  [${rank}] Match (${score}) - Type: ${match.type}`);
+        console.log(`  [${rank}] Match (${score})${layerTag} - Type: ${match.type}`);
         console.log(`      Slug:  ${match.slug || 'unknown'}`);
       }
       console.log('');

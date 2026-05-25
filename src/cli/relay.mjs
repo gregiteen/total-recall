@@ -141,10 +141,24 @@ async function shipFile(filePath, sourceName, brainBaseUrl, headers) {
   try { content = fs.readFileSync(filePath, 'utf8'); } catch { return false; }
   if (!content.trim()) return false;
 
+  // Detect project name from the file path by looking for a parent git repo
+  let project = null;
+  try {
+    let dir = path.dirname(filePath);
+    for (let i = 0; i < 8 && dir !== path.dirname(dir); i++) {
+      if (fs.existsSync(path.join(dir, '.git'))) {
+        project = path.basename(dir);
+        break;
+      }
+      dir = path.dirname(dir);
+    }
+  } catch { /* non-fatal */ }
+
   const payload = {
     id: crypto.createHash('sha256').update(filePath).digest('hex').slice(0, 12),
     source: sourceName,
     path: filePath,
+    project,
     content: content.slice(0, 40_000_000), // cap at 40MB to stay well under the server's 50MB JSON body limit
     sha256: crypto.createHash('sha256').update(content).digest('hex'),
   };

@@ -12,8 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { agentDir, brainDir } from '../../core/config.mjs';
 import { logger } from '../../core/logger.mjs';
 
-export const AGENT_DIR    = agentDir;
-export const BRAIN_DIR    = brainDir;
+export const AGENT_DIR    = process.env.AGENT_DIR || agentDir;
+export const BRAIN_DIR    = process.env.TR_BRAIN || path.join(AGENT_DIR, 'skills', 'total-recall');
 export const VAULT_DIR    = path.join(BRAIN_DIR, 'memory-vault');
 export const SKILLS_DIR   = path.join(AGENT_DIR, 'skills');
 export const DERIVED_DIR  = path.join(BRAIN_DIR, 'memory-derived');

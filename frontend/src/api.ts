@@ -119,7 +119,8 @@ export async function sendChat(
   messages: { role: string; content: string }[],
   signal?: AbortSignal,
   sessionId?: string,
-  groundingNodes?: string[]
+  groundingNodes?: string[],
+  model?: string
 ): Promise<string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (sessionId) {
@@ -129,7 +130,7 @@ export async function sendChat(
     method: 'POST',
     signal,
     headers,
-    body: JSON.stringify({ messages, groundingNodes }),
+    body: JSON.stringify({ messages, groundingNodes, model }),
   })
   if (!res.ok) throw new Error(`Chat API error: ${res.status}`)
   const data = await res.json()
@@ -268,9 +269,67 @@ export async function listFiles(): Promise<import('./types').FileNode[]> {
   return res.json()
 }
 
-export async function listSkills(): Promise<import('./types').FileNode[]> {
+export async function listSkills(): Promise<any[]> {
   const res = await apiFetch(API_BASE + '/api/skills')
   if (!res.ok) throw new Error(`Skills API error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchSkill(name: string): Promise<{ name: string; content: string }> {
+  const res = await apiFetch(`${API_BASE}/api/skills/${name}`)
+  if (!res.ok) throw new Error(`Skill fetch API error: ${res.status}`)
+  return res.json()
+}
+
+export async function saveSkill(name: string, content: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/skills/${name}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) throw new Error(`Skill save API error: ${res.status}`)
+}
+
+export async function deleteSkill(name: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/skills/${name}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) throw new Error(`Skill delete API error: ${res.status}`)
+}
+
+/**
+ * Queries the skills.sh registry sorted by absolute installs rating.
+ *
+ * @param query - The keyword or package name search term to locate in the registry.
+ * @returns A promise resolving to an array of matching registry skill records.
+ */
+export async function searchSkillsRegistry(query: string): Promise<any[]> {
+  const params = new URLSearchParams({ q: query })
+  const res = await apiFetch(`${API_BASE}/api/skills/search?${params}`)
+  if (!res.ok) throw new Error(`Registry search API error: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * Automates downloading a package from skills.sh, executing static security checks,
+ * quarantining vulnerable files, and hot-recompiling the active brain shims.
+ *
+ * @param pkg - The package name format (e.g. "owner/repo@skill" or "owner/repo").
+ * @returns A promise resolving to the status result containing success indicators and logs.
+ */
+export async function installRegistrySkill(pkg: string): Promise<{ success: boolean; reason?: string; skillName?: string; path?: string }> {
+  const res = await apiFetch(`${API_BASE}/api/skills/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pkg }),
+  })
+  if (!res.ok) throw new Error(`Registry installation API error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchUsageStats(): Promise<any> {
+  const res = await apiFetch(`${API_BASE}/api/usage`)
+  if (!res.ok) throw new Error(`Usage API error: ${res.status}`)
   return res.json()
 }
 
@@ -290,6 +349,26 @@ export async function saveConfig(name: string, content: string): Promise<void> {
     body: JSON.stringify({ content }),
   })
   if (!res.ok) throw new Error(`Config API error: ${res.status}`)
+}
+
+export interface ConfigJson {
+  security: any
+  budget: any
+}
+
+export async function fetchConfigJson(): Promise<ConfigJson> {
+  const res = await apiFetch(`${API_BASE}/api/config-json`)
+  if (!res.ok) throw new Error(`Config JSON API error: ${res.status}`)
+  return res.json()
+}
+
+export async function saveConfigJson(config: ConfigJson): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/config-json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  if (!res.ok) throw new Error(`Config JSON API error: ${res.status}`)
 }
 
 // ─── API Key Lifecycle ──────────────────────────────────────────────────────────
@@ -394,6 +473,12 @@ export async function triggerRecompile(): Promise<{ success: boolean; message: s
   return res.json()
 }
 
+export async function triggerDream(): Promise<{ success: boolean; status: string }> {
+  const res = await apiFetch(`${API_BASE}/api/dream`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Dream Cycle API error: ${res.status}`)
+  return res.json()
+}
+
 export async function fetchGraph(): Promise<{ nodes: any[]; routes: any[] }> {
   const res = await apiFetch(`${API_BASE}/api/graph`)
   if (!res.ok) throw new Error(`Graph API error: ${res.status}`)
@@ -490,3 +575,28 @@ export async function runScript(name: string): Promise<{ success: boolean; outpu
   return res.json()
 }
 
+// ─── Sessions APIs ─────────────────────────────────────────────────────────────
+
+export interface SessionSummary {
+  id: string
+  filename: string
+  title: string
+  date: string
+  source: string | null
+  project: string | null
+  count: number
+  modified: string
+  size: number
+}
+
+export async function fetchSessions(limit = 50, offset = 0): Promise<{ total: number; sessions: SessionSummary[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  const res = await apiFetch(`${API_BASE}/api/sessions?${params}`)
+  if (!res.ok) throw new Error(`Sessions API error: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Failed to delete session: ${res.status}`)
+}

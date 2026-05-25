@@ -97,6 +97,39 @@ export function loadNodes(vaultDir) {
 }
 
 /**
+ * Load merged memory nodes from both global and project vaults.
+ * Project nodes override global nodes with the same slug.
+ * Each node is tagged with `_layer: 'global' | 'project'`.
+ *
+ * @param {string} globalVaultDir - Path to global memory-vault/
+ * @param {string|null} projectVaultDir - Path to project memory-vault/ (null if no project brain)
+ * @returns {object[]} Merged array of nodes
+ */
+export function loadMergedNodes(globalVaultDir, projectVaultDir) {
+  // Load global nodes
+  const globalNodes = loadNodes(globalVaultDir).map(n => ({ ...n, _layer: 'global' }));
+
+  if (!projectVaultDir || !fs.existsSync(projectVaultDir)) {
+    return globalNodes;
+  }
+
+  // Load project nodes
+  const projectNodes = loadNodes(projectVaultDir).map(n => ({ ...n, _layer: 'project' }));
+
+  // Merge: project wins on slug conflict
+  const nodeMap = new Map();
+  for (const node of globalNodes) {
+    nodeMap.set(node.slug, node);
+  }
+  for (const node of projectNodes) {
+    nodeMap.set(node.slug, node); // project overrides global
+  }
+
+  return Array.from(nodeMap.values());
+}
+
+
+/**
  * Write a memory node to the vault.
  */
 const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;

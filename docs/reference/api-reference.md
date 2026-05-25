@@ -243,3 +243,73 @@ Public manifest allowing client auto-configuration.
 Verify system status.
 - **Authentication**: None required.
 - **Response**: Emits disk availability, SSSS vault size, Ollama connectivity status, and background daemon health states.
+
+---
+
+### 📦 Skills & Registry Manager
+
+Allows client applications and the dashboard to search the `skills.sh` registry, run static security audits, install new skills, and manage local rules sheets.
+
+#### `GET /api/skills`
+Enumerate all active local parent skills and nested sub-skills.
+- **Scope required**: `files:read` or `ssss:read`
+- **Response**: List of skill descriptors with sizes, modified dates, and dynamic sub-skills.
+
+#### `GET /api/skills/search`
+Query the `skills.sh` cloud registry sorted in descending order of installs/rating.
+- **Scope required**: `files:read` or `ssss:read`
+- **Query parameters**: `q` (search query, required).
+- **Response**: Array of sorted packages with names, installs, and repository URLs.
+
+#### `POST /api/skills/install`
+Download a skill package, execute a static security audit scan, quarantine/purge vulnerabilities, and recompile brain shims.
+- **Scope required**: `files:write` or `ssss:write`
+- **Request Body**:
+  ```json
+  {
+    "pkg": "github/awesome-copilot@git-commit"
+  }
+  ```
+- **Response**: Installation success indicator and target folder path, or a quarantine purge alert.
+
+#### `GET /api/skills/:name`
+Read the `SKILL.md` rules sheet of a local skill.
+- **Scope required**: `files:read` or `ssss:read`
+
+#### `PUT /api/skills/:name`
+Write/update the `SKILL.md` rules sheet of a local skill.
+- **Scope required**: `files:write` or `ssss:write`
+
+#### `DELETE /api/skills/:name`
+Safely delete a local skill package and hot-recompile active shims.
+- **Scope required**: `files:write` or `ssss:write`
+
+---
+
+### 🛡️ SSSS Specs & Metadata
+
+Exposes Structured Semantic Syntax System (SSSS) core specifications, instruction files, and references.
+
+#### `GET /api/ssss`
+Emits metadata on SSSS schema versions, instructions, SSSS skill file hashes, and reference documents.
+- **Scope required**: `ssss:read`
+
+#### `GET /api/ssss/instructions`
+Send the raw local workspace `INSTRUCTIONS.md` shim file.
+- **Scope required**: `ssss:read` or `instructions:read`
+
+#### `GET /api/ssss/skill/ssss`
+Send the SSSS manager's `SKILL.md` instruction file.
+- **Scope required**: `ssss:read`
+
+#### `GET /api/ssss/spec`
+Send the official SSSS VFS schema specification document.
+- **Scope required**: `ssss:read`
+
+#### `GET /api/ssss/references`
+List all SSSS-related reference sheets available on disk.
+- **Scope required**: `ssss:read`
+
+#### `GET /api/ssss/references/:name`
+Send a specific SSSS reference markdown document.
+- **Scope required**: `ssss:read`

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { loadNodes, loadSkills, atomicWrite } from './vault.mjs';
+import { loadNodes, loadMergedNodes, loadSkills, atomicWrite } from './vault.mjs';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
@@ -114,7 +114,7 @@ function extractRuleContent(filePath) {
   return content.trim();
 }
 
-function buildRulesBlock(skillsDir) {
+function buildRulesBlock(skillsDir, nodes = []) {
   // CLI quickstart is always included so agents know TR is installed
   let combined = `## Total Recall — Sovereign Memory System (Installed)
 
@@ -135,11 +135,14 @@ Save rules, preferences, corrections, and facts to permanent memory.
   --title <custom-title>     Custom human-readable title
   --status <state>           active | draft | archived (default: active)
   --related <list>           Comma-separated related slugs
+  --global                   Save to global brain (identity layer)
+  --project                  Save to project brain (context layer)
 
 **Examples:**
   npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
   npx total-recall remember preference "Always use single quotes." --tags "style,js"
   npx total-recall remember fact "The server runs on port 3000." --importance 4
+  npx total-recall remember fact "Uses Drizzle ORM" --project
 
 ### npx total-recall recall "<query>" [options]
 Semantic search across rules, facts, and session history.
@@ -152,31 +155,71 @@ Semantic search across rules, facts, and session history.
   --tags, -t <list>          Filter by tags
   --modality, -m <type>      Filter by modality
   --importance, -i <1-5>     Filter by minimum importance
+  --global                   Search global brain only
+  --project                  Search project brain only
 
 **Examples:**
   npx total-recall recall "Never run tsc directly"
   npx total-recall recall "Express server port" --top-k 3
   npx total-recall recall "tsc" --category invariants --modality must
 
+### npx total-recall help <topic>
+Query interactive local documentation, VFS specifications, and command references.
+
+**Options:**
+  --json, -j               Emit machine-readable JSON (ideal for programmatic retrieval)
+
+**Examples:**
+  npx total-recall help connect
+  npx total-recall help architecture
+  npx total-recall help ssss
+
 ### npx total-recall --help
 Show all available commands.
 `;
 
-  if (!skillsDir) return combined.trim();
-  const rulesDir = path.join(skillsDir, 'total-recall', 'rules');
-  const invariants = extractRuleContent(path.join(rulesDir, 'invariants.md'));
-  const preferences = extractRuleContent(path.join(rulesDir, 'preferences.md'));
-  const corrections = extractRuleContent(path.join(rulesDir, 'corrections.md'));
+  // 1. Group active rules from SSSS vault nodes
+  const invariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active');
+  const preferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active');
+  const corrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active');
 
-  if (invariants) {
-    combined += `\n${invariants}\n\n`;
+  const formatNodes = (list) => {
+    return list.map(n => {
+      const text = n.body || n.content || '';
+      return text.startsWith('-') ? text : `- ${text}`;
+    }).join('\n');
+  };
+
+  if (invariants.length > 0) {
+    combined += `\n\n## Invariant Rules\n\n${formatNodes(invariants)}`;
   }
-  if (preferences) {
-    combined += `\n${preferences}\n\n`;
+
+  if (preferences.length > 0) {
+    combined += `\n\n## User Preferences\n\n${formatNodes(preferences)}`;
   }
-  if (corrections) {
-    combined += `\n${corrections}\n\n`;
+
+  if (corrections.length > 0) {
+    combined += `\n\n## Corrections\n\n${formatNodes(corrections)}`;
   }
+
+  // 2. Append legacy rule sheet files if they exist
+  if (skillsDir) {
+    const rulesDir = path.join(skillsDir, 'total-recall', 'rules');
+    const legacyInvariants = extractRuleContent(path.join(rulesDir, 'invariants.md'));
+    const legacyPreferences = extractRuleContent(path.join(rulesDir, 'preferences.md'));
+    const legacyCorrections = extractRuleContent(path.join(rulesDir, 'corrections.md'));
+
+    if (legacyInvariants) {
+      combined += `\n\n${legacyInvariants}`;
+    }
+    if (legacyPreferences) {
+      combined += `\n\n${legacyPreferences}`;
+    }
+    if (legacyCorrections) {
+      combined += `\n\n${legacyCorrections}`;
+    }
+  }
+
   return combined.trim();
 }
 
@@ -200,9 +243,9 @@ function injectDirectives(fileContent, rulesBlock) {
 /**
  * Write or update a platform instruction shim with the pointer and active rules.
  */
-function writeShim(shimPath, skillsDir) {
+function writeShim(shimPath, skillsDir, nodes = []) {
   const shimDir = path.dirname(shimPath);
-  const rulesBlock = buildRulesBlock(skillsDir);
+  const rulesBlock = buildRulesBlock(skillsDir, nodes);
   const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
   const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
@@ -241,7 +284,7 @@ function writeShim(shimPath, skillsDir) {
  * content between the <!-- BEGIN/END INJECTED ACTIVE DIRECTIVES --> markers,
  * preserving any user-written content outside the markers.
  */
-function compilePointers(instructionsFile, skillsDir) {
+function compilePointers(instructionsFile, skillsDir, nodes = []) {
   const agentDir = path.dirname(instructionsFile);
   const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
 
@@ -261,18 +304,24 @@ function compilePointers(instructionsFile, skillsDir) {
   ];
 
   for (const shim of shims) {
-    writeShim(path.join(baseDir, shim), skillsDir);
+    writeShim(path.join(baseDir, shim), skillsDir, nodes);
   }
 }
 
 /**
  * Main surface compilation entry point.
  */
-export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile }) {
-  const nodes = loadNodes(vaultDir);
+export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir }) {
+  // Load nodes (supports global + project merged compilation)
+  let nodes;
+  if (globalVaultDir && fs.existsSync(globalVaultDir)) {
+    nodes = loadMergedNodes(globalVaultDir, vaultDir);
+  } else {
+    nodes = loadNodes(vaultDir);
+  }
 
   // 1. Write pointer and active rules to all instruction shims
-  compilePointers(instructionsFile, skillsDir);
+  compilePointers(instructionsFile, skillsDir, nodes);
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
@@ -312,7 +361,6 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     semanticUnavailable: semanticResult.unavailable
   };
 }
-
 // ─── Legacy exports (kept for backward compatibility) ───
 export function routeNodesToSkills() { return []; }
 export function injectSkills() {}

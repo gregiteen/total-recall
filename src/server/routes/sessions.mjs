@@ -42,7 +42,7 @@ async function drainActiveEmbeddings() {
 function listSessionFiles() {
   if (!fs.existsSync(SESSIONS_DIR)) return [];
   return fs.readdirSync(SESSIONS_DIR)
-    .filter(f => f.endsWith('.jsonl') || f.endsWith('.json'))
+    .filter(f => f.endsWith('.jsonl') || f.endsWith('.json') || f.endsWith('.md'))
     .sort()
     .reverse();
 }
@@ -51,12 +51,30 @@ function readSessionFile(filename) {
   const filePath = path.join(SESSIONS_DIR, filename);
   if (!fs.existsSync(filePath)) return null;
   const raw = fs.readFileSync(filePath, 'utf8').trim();
-  const lines = raw.split('\n').filter(Boolean);
+
+  const id = filename.replace(/\.(jsonl|json|md)$/, '');
+  let meta = {};
+
+  // Parse SSSS frontmatter from .md files
+  let body = raw;
+  if (filename.endsWith('.md') && raw.startsWith('---')) {
+    const endIdx = raw.indexOf('---', 3);
+    if (endIdx !== -1) {
+      const frontmatter = raw.slice(3, endIdx).trim();
+      body = raw.slice(endIdx + 3).trim();
+      // Simple YAML parser for known fields
+      for (const line of frontmatter.split('\n')) {
+        const match = line.match(/^(\w+):\s*"?(.+?)"?\s*$/);
+        if (match) meta[match[1]] = match[2];
+      }
+    }
+  }
+
+  const lines = body.split('\n').filter(Boolean);
   const entries = lines.map(l => {
     try { return JSON.parse(l); } catch { return null; }
   }).filter(Boolean);
 
-  const id = filename.replace(/\.(jsonl|json)$/, '');
   let exchanges = entries;
   if (entries.length === 1 && entries[0] && Array.isArray(entries[0].messages)) {
     exchanges = entries[0].messages.map(m => ({
@@ -73,6 +91,10 @@ function readSessionFile(filename) {
   return {
     id,
     filename,
+    title: meta.title || id,
+    date: meta.date || null,
+    source: meta.source || null,
+    project: meta.project || null,
     entries,
     exchanges,
     count: exchanges.length
@@ -154,6 +176,10 @@ router.get('/api/sessions', requireAuth, requireScope('memory:read'), (req, res)
       return {
         id: data?.id,
         filename: f,
+        title: data?.title || data?.id,
+        date: data?.date || stat.mtime.toISOString(),
+        source: data?.source || null,
+        project: data?.project || null,
         count: data?.count || 0,
         modified: stat.mtime.toISOString(),
         size: stat.size
@@ -211,24 +237,58 @@ router.post('/api/sessions/ingest', ingestRateLimiter(), requireAuth, requireSco
       fs.appendFileSync(hashIndex, JSON.stringify({ sha256: body.sha256, ts: new Date().toISOString(), source }) + '\n');
     }
 
-    const rawSessionId = body.id || `relay-${source}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-    const sessionId = rawSessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename  = `${sessionId}.jsonl`;
+    // Extract title from first user message
+    const firstUserMsg = messages.find(m => m.role === 'user');
+    const rawTitle = firstUserMsg?.content?.slice(0, 120)?.split('\n')[0]?.trim() || 'untitled session';
+    const cleanTitle = rawTitle
+      .replace(/<[^>]+>/g, '')          // strip XML/HTML tags
+      .replace(/[^a-zA-Z0-9\s-]/g, '')  // keep only alphanumeric, spaces, hyphens
+      .trim()
+      .slice(0, 80);
+
+    // Generate date-prefixed slug
+    const now = new Date();
+    const datePrefix = now.toISOString().slice(0, 10); // 2026-05-25
+    const titleSlug = cleanTitle.toLowerCase().replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'untitled';
+    const uniqueSuffix = crypto.randomBytes(3).toString('hex');
+    const slug = `${datePrefix}-${source}-${titleSlug}-${uniqueSuffix}`;
+    const filename = `${slug}.md`;
+
     fs.mkdirSync(SESSIONS_DIR, { recursive: true });
     const filePath = path.join(SESSIONS_DIR, filename);
 
+    // Detect project from relay metadata or path
+    const project = body.project || (body.path ? path.basename(path.resolve(body.path, '..', '..', '..')) : null);
+
+    // Build SSSS frontmatter
+    const frontmatter = [
+      '---',
+      'type: session',
+      `slug: ${slug}`,
+      `title: "${cleanTitle || 'Untitled session'}"`,
+      `source: ${source}`,
+      `date: ${now.toISOString()}`,
+      project ? `project: ${project}` : null,
+      'category: sessions',
+      'schema_version: 2',
+      `message_count: ${messages.length}`,
+      '---',
+    ].filter(Boolean).join('\n');
+
+    // Build session body as JSONL
     const sessionObj = {
-      id: sessionId,
+      id: slug,
       source,
       messages: messages.map(m => ({
         role:       m.role,
         content:    m.content,
         source,
-        session_id: sessionId,
-        timestamp:  m.timestamp || new Date().toISOString(),
+        session_id: slug,
+        timestamp:  m.timestamp || now.toISOString(),
       }))
     };
-    fs.writeFileSync(filePath, JSON.stringify(sessionObj) + '\n', 'utf8');
+
+    fs.writeFileSync(filePath, frontmatter + '\n' + JSON.stringify(sessionObj) + '\n', 'utf8');
 
     // Best-effort: embed session immediately so it's searchable right away
     const promise = (async () => {
@@ -238,7 +298,7 @@ router.post('/api/sessions/ingest', ingestRateLimiter(), requireAuth, requireSco
         const chunks = sessionToEmbedChunks(msgs);
         for (let i = 0; i < chunks.length; i++) {
           if (process.isShuttingDown) return;
-          const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
+          const key = chunks.length === 1 ? slug : `${slug}:chunk-${i}`;
           const embedding = await getEmbedding(chunks[i]);
           if (process.isShuttingDown) return;
           saveSessionEmbeddingToIndex(DERIVED_DIR, key, chunks[i], embedding);
@@ -253,7 +313,7 @@ router.post('/api/sessions/ingest', ingestRateLimiter(), requireAuth, requireSco
       activeEmbeddings.delete(promise);
     });
 
-    res.status(200).json({ ok: true, ingested: true, id: sessionId, count: messages.length });
+    res.status(200).json({ ok: true, ingested: true, id: slug, filename, count: messages.length });
   } catch (err) {
     serverError(res, err);
   }

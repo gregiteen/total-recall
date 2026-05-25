@@ -4,7 +4,8 @@
   "description": "Sovereign AI system — database-free, SSSS-powered personal intelligence engine deployable to any POSIX host.",
   "type": "module",
   "bin": {
-    "total-recall": "./bin/total-recall.mjs"
+    "total-recall": "./bin/total-recall.mjs",
+    "antigravity": "./bin/antigravity.mjs"
   },
   "files": [
     "bin/",
@@ -15,24 +16,6 @@
     "scaffold/",
     "docs/ARCHITECTURE.md",
     "docs/IDE_INTEGRATION.md",
-    ".agent/INSTRUCTIONS.md",
-    ".agent/AGENTS.md",
-    ".agent/CLAUDE.md",
-    ".agent/GEMINI.md",
-    ".agent/SOUL.md",
-    ".agent/USER.md",
-    ".agent/IDENTITY.md",
-    ".agent/.clauderules",
-    ".agent/.cursorrules",
-    ".agent/skills/total-recall/",
-    ".agent/skills/research/",
-    ".agent/skills/code-quality/",
-    ".agent/skills/code-mode/",
-    ".agent/skills/mcp-expert/",
-    ".agent/skills/instruction-keeper/",
-    ".agent/skills/skill/",
-    ".agent/skills/repo-expert/",
-    ".agent/skills/test/",
     "README.md",
     "LICENSE",
     "package.json"
@@ -66,7 +49,6 @@
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
     "bcrypt": "^6.0.0",
-
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "express": "^5.2.1",
@@ -78,6 +60,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "skills": "^1.5.7",
     "supertest": "^7.2.2",
     "vitest": "^4.1.6"
   },

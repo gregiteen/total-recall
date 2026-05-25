@@ -70,8 +70,12 @@ const COMMANDS = {
   sync:     'sync.mjs',
   relay:    'relay.mjs',
   uninstall: 'uninstall.mjs',
+  map:      'map.mjs',
+  brain:    'brain.mjs',
+  config:   'config.mjs',
+  skill:    'skill.mjs',
+  help:     'help.mjs',
 };
-
 function printHelp() {
   console.log(`
   total-recall — Sovereign AI System CLI
@@ -92,10 +96,13 @@ function printHelp() {
     upgrade --model <n> Swap the kernel model (e.g., gemma5-32b)
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
-    status              Show brain connection and sync state
     remember            Remember new rules, preferences, or corrections in real time
     recall              Recall semantic memory or search existing knowledge/rules/session-history
+    map                 Visualize memory vault category trees and link relationships
+    brain <cmd>         Manage registered brains and context resolution (list, status, register, unregister)
     research <command>  Manage/query ongoing autonomous research agenda (list, add, show, report, cancel)
+    config <get|set>    Read, write, and toggle UI, security, and budget settings
+    skill <command>     Manage AI agent skills: find, install, scan, list, remove
     generate-pat        Issue a PAT; stores only a hash in keys.jsonl
     hash-password       Generate a bcrypt dashboard password hash
     reset-password      Reset the dashboard admin password and force a change on login
@@ -111,6 +118,8 @@ function printHelp() {
     relay <cmd>         Local background relay: ship IDE sessions to remote brain
                         Commands: start | stop | status | once | install | uninstall
     uninstall           Completely uninstall all services, launchd agents, VFS, and shims
+    help <topic>        Interactive offline documentation, SSSS reference, and system help
+
 
 
   Autonomous operations (sync, compile, backup) are now handled by the

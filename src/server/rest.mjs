@@ -230,6 +230,28 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
 });
 
 /**
+ * POST /api/dream
+ */
+router.post('/api/dream', requireAuth, requireScope('memory:recompile'), async (req, res) => {
+  try {
+    const { runDreamCycle } = await import('../core/dream.mjs');
+    const conflictsDir = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
+    
+    const result = await runDreamCycle({
+      vaultDir: VAULT_DIR,
+      skillsDir: SKILLS_DIR,
+      derivedDir: DERIVED_DIR,
+      conflictsDir,
+      instructionsFile: INSTRUCTIONS,
+    });
+
+    res.json({ success: true, status: result.status });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
  * GET /api/vault/status
  */
 router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async (req, res) => {
@@ -249,12 +271,10 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
       ? Object.keys(JSON.parse(fs.readFileSync(path.join(DERIVED_DIR, 'session-embeddings.json'), 'utf8') || '{}')).length : 0;
 
     // CLI agent availability (best-effort)
+    const { findBinaryInPath } = await import('../core/runtime.mjs');
     let cliAgents = [];
     for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
-      try {
-        const r = spawnSync('which', [bin], { stdio: 'pipe', timeout: 2000 });
-        if (r.status === 0) cliAgents.push(bin);
-      } catch { /* not found */ }
+      if (findBinaryInPath(bin)) cliAgents.push(bin);
     }
 
     res.json({
@@ -831,14 +851,50 @@ router.get('/api/skills', requireAuth, requireScope('files:read', 'ssss:read'), 
     const skills = fs.readdirSync(SKILLS_DIR).map(dir => {
       const dirPath = path.join(SKILLS_DIR, dir);
       const stats = fs.statSync(dirPath);
+      
+      let subSkills = [];
+      const subSkillsPath = path.join(dirPath, 'skills');
+      if (fs.existsSync(subSkillsPath) && fs.statSync(subSkillsPath).isDirectory()) {
+        try {
+          subSkills = fs.readdirSync(subSkillsPath).filter(sd => 
+            fs.statSync(path.join(subSkillsPath, sd)).isDirectory()
+          );
+        } catch (e) {}
+      }
+
       return {
         name: dir,
         size: stats.size,
         modified: stats.mtime,
-        isDirectory: stats.isDirectory()
+        isDirectory: stats.isDirectory(),
+        subSkills
       };
     });
     res.json(skills);
+  } catch (err) { serverError(res, err); }
+});
+
+router.get('/api/skills/search', requireAuth, requireScope('files:read', 'ssss:read'), async (req, res) => {
+  try {
+    const q = req.query.q || '';
+    if (!q) {
+      return res.status(400).json({ error: 'Missing search query parameter `q`.' });
+    }
+    const { searchAndSort } = await import('../../.agent/skills/total-recall/skills/skill/scripts/find-skills.mjs');
+    const results = searchAndSort(q);
+    res.json(results);
+  } catch (err) { serverError(res, err); }
+});
+
+router.post('/api/skills/install', requireAuth, requireScope('files:write', 'ssss:write'), async (req, res) => {
+  try {
+    const { pkg } = req.body;
+    if (!pkg) {
+      return res.status(400).json({ error: 'Missing required `pkg` body parameter.' });
+    }
+    const { installSkill } = await import('../../.agent/skills/total-recall/skills/skill/scripts/install-skill.mjs');
+    const result = installSkill(pkg);
+    res.json(result);
   } catch (err) { serverError(res, err); }
 });
 
@@ -1075,6 +1131,57 @@ function safeConfigName(name) {
   return path.join(CONFIG_DIR, name);
 }
 
+router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, res) => {
+  try {
+    const securityPath = path.join(CONFIG_DIR, 'security.yml');
+    const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
+
+    let security = {};
+    let budget = {};
+
+    if (fs.existsSync(securityPath)) {
+      try {
+        security = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
+      } catch {}
+    }
+    if (fs.existsSync(budgetPath)) {
+      try {
+        budget = yaml.parse(fs.readFileSync(budgetPath, 'utf8')) || {};
+      } catch {}
+    }
+
+    res.json({ security, budget });
+  } catch (err) { serverError(res, err); }
+});
+
+router.post('/api/config-json', requireAuth, requireScope('config:write'), (req, res) => {
+  try {
+    const { security, budget } = req.body;
+    const securityPath = path.join(CONFIG_DIR, 'security.yml');
+    const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
+
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+
+    if (security) {
+      fs.writeFileSync(securityPath, yaml.stringify(security), { encoding: 'utf8', mode: 0o600 });
+    }
+    if (budget) {
+      fs.writeFileSync(budgetPath, yaml.stringify(budget), { encoding: 'utf8', mode: 0o600 });
+    }
+
+    res.json({ success: true });
+  } catch (err) { serverError(res, err); }
+});
+
+router.get('/api/usage', requireAuth, async (req, res) => {
+  try {
+    const { calculateCurrentCost } = await import('../core/usage-tracker.mjs');
+    res.json(calculateCurrentCost());
+  } catch (err) { serverError(res, err); }
+});
+
 router.get('/api/config/:name', requireAuth, requireScope('config:read'), (req, res) => {
   try {
     const filePath = safeConfigName(req.params.name);
@@ -1235,7 +1342,7 @@ function absoluteUrl(req, routePath) {
 }
 
 function ssssReferenceDir() {
-  return path.join(SKILLS_DIR, 'ssss', 'references');
+  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'references');
 }
 
 function listSsssReferences(req) {
@@ -1276,7 +1383,7 @@ router.get('/api/ssss', requireAuth, requireScope('ssss:read'), (req, res) => {
       name: 'ssss-skill',
       url: absoluteUrl(req, '/api/ssss/skill/ssss'),
       ...(() => {
-        const r = readTextResource(path.join(SKILLS_DIR, 'ssss', 'SKILL.md'), 'ssss-skill');
+        const r = readTextResource(path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'SKILL.md'), 'ssss-skill');
         return r ? { sha256: r.sha256, bytes: r.bytes, modified: r.modified } : { sha256: null, bytes: 0, modified: null };
       })()
     },
@@ -1303,7 +1410,7 @@ router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'ins
 });
 
 router.get('/api/ssss/skill/ssss', requireAuth, requireScope('ssss:read'), (_req, res) => {
-  return sendTextResource(res, path.join(SKILLS_DIR, 'ssss', 'SKILL.md'), 'ssss-skill');
+  return sendTextResource(res, path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'SKILL.md'), 'ssss-skill');
 });
 
 router.get('/api/ssss/spec', requireAuth, requireScope('ssss:read'), (_req, res) => {
@@ -1319,5 +1426,137 @@ router.get('/api/ssss/references/:name', requireAuth, requireScope('ssss:read'),
   if (!filePath) return res.status(400).json({ error: 'Invalid reference name' });
   return sendTextResource(res, filePath, req.params.name);
 });
+
+// ─── Brain Layer Management ────────────────────────────────────────────────
+
+/**
+ * GET /api/brains
+ * List all known brains (global + registered projects) with state metadata.
+ * The global brain reads project brain frontmatter for state display.
+ */
+router.get('/api/brains', requireAuth, requireScope('ssss:read'), (req, res) => {
+  try {
+    const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+    const brains = [];
+
+    // Global brain
+    const globalVaultDir = path.join(globalBrainDir, 'memory-vault');
+    let globalNodeCount = 0;
+    if (fs.existsSync(globalVaultDir)) {
+      try {
+        globalNodeCount = loadNodes(globalVaultDir).length;
+      } catch {
+        // Count .md files manually
+        const countMd = (dir) => {
+          if (!fs.existsSync(dir)) return 0;
+          let count = 0;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory()) count += countMd(path.join(dir, entry.name));
+            else if (entry.name.endsWith('.md')) count++;
+          }
+          return count;
+        };
+        globalNodeCount = countMd(globalVaultDir);
+      }
+    }
+
+    brains.push({
+      id: 'global',
+      name: 'Global Brain',
+      layer: 'global',
+      path: globalBrainDir,
+      exists: fs.existsSync(globalBrainDir),
+      node_count: globalNodeCount,
+      last_compiled: getLastModified(path.join(globalBrainDir, 'memory-derived', 'graph-index.jsonl')),
+    });
+
+    // Project brains from registry
+    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
+    if (fs.existsSync(registryPath)) {
+      try {
+        const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+        for (const project of registry) {
+          const projectVaultDir = path.join(project.brainDir, 'memory-vault');
+          let nodeCount = 0;
+          const exists = fs.existsSync(project.brainDir);
+
+          if (exists && fs.existsSync(projectVaultDir)) {
+            const countMd = (dir) => {
+              if (!fs.existsSync(dir)) return 0;
+              let count = 0;
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (entry.isDirectory()) count += countMd(path.join(dir, entry.name));
+                else if (entry.name.endsWith('.md')) count++;
+              }
+              return count;
+            };
+            nodeCount = countMd(projectVaultDir);
+          }
+
+          brains.push({
+            id: `project:${project.name}`,
+            name: project.name,
+            layer: 'project',
+            path: project.brainDir,
+            project_root: project.path,
+            exists,
+            node_count: nodeCount,
+            registered_at: project.registered_at,
+            last_compiled: project.last_compiled || getLastModified(path.join(project.brainDir, 'memory-derived', 'graph-index.jsonl')),
+          });
+        }
+      } catch { /* ignore registry parse errors */ }
+    }
+
+    res.json({ brains });
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * GET /api/brains/:id/nodes
+ * List all memory nodes for a specific brain.
+ */
+router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memory:read'), (req, res) => {
+  try {
+    const brainId = req.params.id;
+    let brainDir;
+
+    if (brainId === 'global') {
+      brainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+    } else if (brainId.startsWith('project:')) {
+      const projectName = brainId.slice('project:'.length);
+      const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+      const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
+      if (!fs.existsSync(registryPath)) {
+        return res.status(404).json({ error: 'Project registry not found' });
+      }
+      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      const project = registry.find(p => p.name === projectName);
+      if (!project) {
+        return res.status(404).json({ error: `Project \"${projectName}\" not found in registry` });
+      }
+      brainDir = project.brainDir;
+    } else {
+      return res.status(400).json({ error: 'Invalid brain ID. Use \"global\" or \"project:<name>\"' });
+    }
+
+    const vaultDir = path.join(brainDir, 'memory-vault');
+    if (!fs.existsSync(vaultDir)) {
+      return res.json({ nodes: [], brain_id: brainId });
+    }
+
+    const nodes = loadNodes(vaultDir);
+    res.json({ nodes, brain_id: brainId, count: nodes.length });
+  } catch (err) { serverError(res, err); }
+});
+
+function getLastModified(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      return fs.statSync(filePath).mtime.toISOString();
+    }
+  } catch {}
+  return null;
+}
 
 export { router as restRouter };
