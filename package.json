@@ -28,7 +28,8 @@
   "scripts": {
     "dev": "node src/server/index.mjs",
     "start": "node src/server/index.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "clean": "rm -rf scratch/* .remember/* *.log"
   },
   "repository": {
     "type": "git",
