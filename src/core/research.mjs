@@ -76,17 +76,20 @@ export async function handleProactiveResearch(task, context = {}) {
     return null;
   }
 
-  // Phase 3: Write draft nodes for each result batch
-  const draftPaths = [];
+  // Phase 3: Write and integrate findings into a single consolidated main draft node
   for (const [i, results] of allResults.entries()) {
     if (results.length === 0) continue;
-    const draftPath = writeDraftBatch(queries[i], results, inboxDir, task.target);
-    draftPaths.push(draftPath);
+    writeOrUpdateConsolidatedDraft(task.target, queries[i], results, inboxDir);
   }
 
   // Phase 4: Synthesize using local runtime (which consists of high-powered CLI agents)
   logger.info({ subsystem: 'deep-research', message: 'Phase 4: Synthesizing research results...' });
   const finalReport = await synthesizeLocally(task, flatResults, context.runtimeConfig);
+
+  // Save the beautiful synthesized executive summary at the top of our main consolidated document
+  if (finalReport) {
+    saveSynthesizedReportToDraft(task.target, finalReport, inboxDir);
+  }
 
   // Phase 5: Also add topic to the Research Agenda for ongoing tracking
   addToAgenda({
@@ -192,28 +195,41 @@ async function gatherForQuery(query, researchConfig, availability) {
 
 // ─── Draft Node Writing ──────────────────────────────────────────────────────────
 
-function writeDraftBatch(query, results, inboxDir, parentTopic) {
-  const slug = `research-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+function slugify(text) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-');
+}
+
+export function writeOrUpdateConsolidatedDraft(parentTopic, query, results, inboxDir) {
+  const slug = `research-report-${slugify(parentTopic)}`;
+  const filePath = path.join(inboxDir, `${slug}.md`);
   const now = new Date().toISOString();
 
-  let latestPublished = null;
-  const citations = results.map(r => {
-    const published = r.published || now;
-    if (r.published) {
-      if (!latestPublished || new Date(r.published) > new Date(latestPublished)) {
-        latestPublished = r.published;
-      }
-    }
-    return {
-      source: r.source || 'web',
-      title: r.title || 'Untitled Source',
-      url: r.url || '',
-      published,
-      relevance: 1.0,
-      accessed: now
-    };
-  });
-  const temporalContext = latestPublished || now;
+  let existingFrontmatter = null;
+  let existingBody = '';
+
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const { data, content } = matter(raw);
+      existingFrontmatter = data;
+      existingBody = content.trim();
+    } catch {}
+  }
+
+  const newCitations = results.map(r => ({
+    source: r.source || 'web',
+    title: r.title || 'Untitled Source',
+    url: r.url || '',
+    published: r.published || now,
+    relevance: 1.0,
+    accessed: now
+  }));
 
   const formatFriendly = (isoString) => {
     try {
@@ -225,60 +241,189 @@ function writeDraftBatch(query, results, inboxDir, parentTopic) {
     }
   };
 
-  const temporalFriendly = formatFriendly(temporalContext);
-  const temporalCallout = `> [!NOTE]\n> **Temporal Context**: Information published/current as of ${temporalFriendly}.`;
+  const citations = existingFrontmatter?.x_citations 
+    ? [...existingFrontmatter.x_citations, ...newCitations] 
+    : newCitations;
 
-  const bodyLines = [
-    temporalCallout,
-    '',
-    `Research query: "${query}"`,
-    '',
-    '## Sources',
-    ...results.map(r => `- [${r.source}] **${r.title}** — ${r.url}${r.published ? ` (${r.published})` : ''}\n  ${r.snippet?.slice(0, 200) || ''}`),
-  ];
+  const uniqueCitationsMap = new Map();
+  for (const c of citations) {
+    uniqueCitationsMap.set(c.url || c.title, c);
+  }
+  const mergedCitations = Array.from(uniqueCitationsMap.values());
+
+  const sourcesList = results.map(r => ({ source: r.source, url: r.url, published: r.published }));
+  const mergedSources = existingFrontmatter?.x_sources
+    ? [...existingFrontmatter.x_sources, ...sourcesList]
+    : sourcesList;
+
+  const uniqueSourcesMap = new Map();
+  for (const s of mergedSources) {
+    uniqueSourcesMap.set(s.url || s.source, s);
+  }
+  const mergedSourcesUnique = Array.from(uniqueSourcesMap.values());
+
+  const bodyLines = [];
+  if (existingBody) {
+    bodyLines.push(existingBody);
+    bodyLines.push('');
+    bodyLines.push('---');
+    bodyLines.push(`### Research Query: "${query}"`);
+    bodyLines.push('');
+    bodyLines.push('#### Integrated Sources');
+    results.forEach(r => {
+      bodyLines.push(`- [${r.source}] **${r.title}** — ${r.url}${r.published ? ` (${r.published})` : ''}`);
+      if (r.snippet) bodyLines.push(`  ${r.snippet.slice(0, 200)}`);
+    });
+  } else {
+    const temporalFriendly = formatFriendly(now);
+    bodyLines.push(`> [!NOTE]`);
+    bodyLines.push(`> **Temporal Context**: Consolidated research current as of ${temporalFriendly}.`);
+    bodyLines.push('');
+    bodyLines.push(`# Consolidated Research: ${parentTopic}`);
+    bodyLines.push('');
+    bodyLines.push(`### Research Query: "${query}"`);
+    bodyLines.push('');
+    bodyLines.push('#### Integrated Sources');
+    results.forEach(r => {
+      bodyLines.push(`- [${r.source}] **${r.title}** — ${r.url}${r.published ? ` (${r.published})` : ''}`);
+      if (r.snippet) bodyLines.push(`  ${r.snippet.slice(0, 200)}`);
+    });
+  }
 
   const frontmatter = {
     type: 'memory',
     slug,
     category: 'facts',
-    title: `Research: ${query}`,
+    title: `Consolidated Research: ${parentTopic}`,
     status: 'draft',
-    confidence: Math.min(0.8, 0.4 + results.length * 0.1),
+    confidence: 0.8,
     importance: 4,
-    created: now,
+    created: existingFrontmatter?.created || now,
     updated: now,
     last_accessed: now,
     source: {
       type: 'knowledge-acquisition',
-      session_id: `deep-research-${Date.now().toString(36)}`,
+      session_id: existingFrontmatter?.source?.session_id || `deep-research-${Date.now().toString(36)}`,
       agent: 'deep-research-engine',
-      evidence_count: results.length,
+      evidence_count: mergedCitations.length,
       parent_topic: parentTopic,
     },
-    supersedes: [],
+    supersedes: existingFrontmatter?.supersedes || [],
     superseded_by: null,
-    contradicts: [],
-    tags: ['research', 'deep-research', 'auto-fetched', 'cited'],
-    related: [],
+    contradicts: existingFrontmatter?.contradicts || [],
+    tags: ['research', 'deep-research', 'consolidated-report', 'cited'],
+    related: existingFrontmatter?.related || [],
     routes_to_skills: [],
     sentiment_polarity: 'descriptive',
     sentiment_target: 'external-knowledge',
     modality: 'should',
     subject: 'agent',
     predicate: 'know',
-    object: query,
-    decay: { half_life_days: 45, access_count: 1 },
+    object: parentTopic,
+    decay: { half_life_days: 60, access_count: 1 },
     schema_version: 2,
     x_memory_layer: 'research',
-    x_query: query,
-    x_temporal_context: temporalContext,
-    x_citations: citations,
-    x_sources: results.map(r => ({ source: r.source, url: r.url, published: r.published })),
+    x_temporal_context: now,
+    x_citations: mergedCitations,
+    x_sources: mergedSourcesUnique,
   };
 
-  const draftPath = path.join(inboxDir, `${slug}.md`);
-  atomicWrite(draftPath, safeStringify(bodyLines.join('\n'), frontmatter));
-  return draftPath;
+  atomicWrite(filePath, safeStringify(bodyLines.join('\n'), frontmatter));
+  return filePath;
+}
+
+export function saveSynthesizedReportToDraft(parentTopic, finalReport, inboxDir) {
+  const slug = `research-report-${slugify(parentTopic)}`;
+  const filePath = path.join(inboxDir, `${slug}.md`);
+  const now = new Date().toISOString();
+
+  let existingFrontmatter = null;
+  let existingBody = '';
+
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const { data, content } = matter(raw);
+      existingFrontmatter = data;
+      existingBody = content.trim();
+    } catch {}
+  }
+
+  let sourcesSection = '';
+  if (existingBody) {
+    const idx = existingBody.indexOf('### Research Query:');
+    if (idx !== -1) {
+      sourcesSection = existingBody.slice(idx);
+    } else {
+      sourcesSection = existingBody;
+    }
+  }
+
+  const formatFriendly = (isoString) => {
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    } catch {
+      return isoString;
+    }
+  };
+
+  const temporalFriendly = formatFriendly(now);
+  const temporalCallout = `> [!NOTE]\n> **Temporal Context**: Integrated research current as of ${temporalFriendly}.`;
+
+  const bodyLines = [
+    temporalCallout,
+    '',
+    `# Consolidated Research Report: ${parentTopic}`,
+    '',
+    finalReport,
+    '',
+    '## Appendix: Gathered Search Batches & Sources',
+    '',
+    sourcesSection
+  ];
+
+  const frontmatter = {
+    type: 'memory',
+    slug,
+    category: 'facts',
+    title: `Consolidated Research Report: ${parentTopic}`,
+    status: 'draft',
+    confidence: 0.9,
+    importance: 4,
+    created: existingFrontmatter?.created || now,
+    updated: now,
+    last_accessed: now,
+    source: {
+      type: 'knowledge-acquisition',
+      session_id: existingFrontmatter?.source?.session_id || `deep-research-${Date.now().toString(36)}`,
+      agent: 'deep-research-engine',
+      evidence_count: existingFrontmatter?.source?.evidence_count || 0,
+      parent_topic: parentTopic,
+    },
+    supersedes: existingFrontmatter?.supersedes || [],
+    superseded_by: null,
+    contradicts: existingFrontmatter?.contradicts || [],
+    tags: ['research', 'deep-research', 'consolidated-report', 'cited', 'master-artifact'],
+    related: existingFrontmatter?.related || [],
+    routes_to_skills: [],
+    sentiment_polarity: 'descriptive',
+    sentiment_target: 'external-knowledge',
+    modality: 'should',
+    subject: 'agent',
+    predicate: 'know',
+    object: parentTopic,
+    decay: { half_life_days: 60, access_count: 1 },
+    schema_version: 2,
+    x_memory_layer: 'research',
+    x_temporal_context: now,
+    x_citations: existingFrontmatter?.x_citations || [],
+    x_sources: existingFrontmatter?.x_sources || [],
+  };
+
+  atomicWrite(filePath, safeStringify(bodyLines.join('\n'), frontmatter));
+  return filePath;
 }
 
 // ─── Synthesis ───────────────────────────────────────────────────────────────────
