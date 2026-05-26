@@ -1068,6 +1068,97 @@ export function startDeployUI(port = 3001) {
         return;
       }
 
+      // ── POST /api/install-cli ──
+      if (url === '/api/install-cli' && req.method === 'POST') {
+        let body = '';
+        req.on('data', d => { body += d; });
+        req.on('end', async () => {
+          try {
+            const { agent } = JSON.parse(body || '{}');
+            if (!agent) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing agent parameter' }));
+              return;
+            }
+
+            console.log(`[Wizard] Triggering installation for CLI agent: ${agent}`);
+            
+            let cmd = '';
+            if (agent === 'claude-code') {
+              cmd = 'npm install -g @anthropic-ai/claude-code';
+            } else if (agent === 'antigravity') {
+              cmd = 'npm link';
+            } else if (agent === 'codex') {
+              cmd = 'npm install -g @openai/codex || true';
+            } else {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Unknown agent: ${agent}` }));
+              return;
+            }
+
+            // Run locally or remotely depending on deployTarget
+            syncInstallOptionsFromDisk();
+            if (_installOptions && (_installOptions.deployTarget === 'vastai' || _installOptions.deployTarget === 'localnet')) {
+              let host = '';
+              let port = '';
+              let user = 'root';
+              let cmdPrefix = 'export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH";';
+
+              if (_installOptions.deployTarget === 'vastai') {
+                host = _installOptions.vastSshHost;
+                port = _installOptions.vastSshPort;
+                user = 'root';
+              } else {
+                host = _installOptions.localnetHost;
+                user = _installOptions.localnetUser || 'root';
+              }
+
+              if (host) {
+                const sshArgs = [];
+                if (port) sshArgs.push('-p', String(port));
+                sshArgs.push('-o', 'StrictHostKeyChecking=no');
+                sshArgs.push('-o', 'ConnectTimeout=10');
+                sshArgs.push(`${user}@${host}`);
+
+                // Execute the command remotely
+                const remoteCmd = `${cmdPrefix} cd /Users/gregoryiteen/github/total-recall && ${cmd}`;
+                sshArgs.push(remoteCmd);
+
+                console.log(`[Proxy install-cli] Remote SSH command: ssh ${sshArgs.join(' ')}`);
+                const { spawnSync: sp } = await import('node:child_process');
+                const r = sp('ssh', sshArgs, { encoding: 'utf8', timeout: 60000 });
+
+                if (r.status === 0) {
+                  res.writeHead(200, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ ok: true, output: r.stdout }));
+                } else {
+                  res.writeHead(500, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: r.stderr || r.stdout || 'Remote installation failed' }));
+                }
+                return;
+              }
+            }
+
+            // Local installation
+            const { spawnSync: sp } = await import('node:child_process');
+            console.log(`[Wizard] Running local command: ${cmd}`);
+            const r = sp('sh', ['-c', cmd], { encoding: 'utf8', timeout: 60000, cwd: process.cwd() });
+
+            if (r.status === 0) {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ok: true, output: r.stdout }));
+            } else {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: r.stderr || r.stdout || 'Local installation failed' }));
+            }
+          } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
       // ── Serve wizard HTML for everything else ──
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(HTML);
