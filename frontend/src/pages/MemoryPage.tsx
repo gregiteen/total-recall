@@ -105,7 +105,7 @@ function htmlToMarkdown(html: string): string {
   return md.trim();
 }
 
-export default function MemoryPage() {
+export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const urlSlug = searchParams.get("slug")
 
@@ -168,7 +168,7 @@ export default function MemoryPage() {
         const results = await searchMemory(query, category === "all" ? undefined : category)
         setNodes(results)
       } else {
-        const results = await listMemory(category === "all" ? undefined : category)
+        const results = await listMemory(activeBrainId, category === "all" ? undefined : category)
         setNodes(results)
       }
     } catch (e) {
@@ -177,7 +177,7 @@ export default function MemoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [category, query])
+  }, [category, query, activeBrainId])
 
    
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels } from '../api'
 import type { ChatThread } from '../api'
 import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
 import Graph3D from '../components/Graph3D'
@@ -22,7 +22,7 @@ function formatRelativeTime(timestamp: number): string {
   return `${diffDays}d ago`
 }
 
-export default function ChatPage() {
+export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -51,7 +51,7 @@ export default function ChatPage() {
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [selectedSubModel, setSelectedSubModel] = useState<string>('')
-  const [customSubModel, setCustomSubModel] = useState<string>('')
+  const [geminiModels, setGeminiModels] = useState<{ id: string; displayName: string }[]>([])
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -73,7 +73,7 @@ export default function ChatPage() {
       .catch(console.error)
   }, [])
 
-  // Load threads list, suggestions, and memory nodes on mount
+  // Load threads list, suggestions, and health on mount
   useEffect(() => {
     fetchChatThreads()
       .then(list => {
@@ -82,10 +82,6 @@ export default function ChatPage() {
           setActiveThreadId(list[0].id)
         }
       })
-      .catch(console.error)
-
-    listMemory()
-      .then(setAllMemoryNodes)
       .catch(console.error)
 
     listResearch()
@@ -106,7 +102,23 @@ export default function ChatPage() {
         setAvailableModels(['antigravity', 'gemini', 'claude', 'codex'])
         setSelectedModel('gemini')
       })
+
+    fetchGeminiModels()
+      .then(models => {
+        setGeminiModels(models)
+        if (models && models.length > 0) {
+          setSelectedSubModel(models[0].id)
+        }
+      })
+      .catch(console.error)
   }, [])
+
+  // Reload memory nodes when active selected brain changes
+  useEffect(() => {
+    listMemory(activeBrainId)
+      .then(setAllMemoryNodes)
+      .catch(console.error)
+  }, [activeBrainId])
 
   // Click outside listener for grounding node selector popover and model selector dropdown
   useEffect(() => {
@@ -256,8 +268,8 @@ export default function ChatPage() {
         return;
       }
 
-      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel)
-        ? (selectedSubModel === 'custom' ? (customSubModel ? `${selectedModel}:${customSubModel}` : selectedModel) : (selectedSubModel ? `${selectedModel}:${selectedSubModel}` : selectedModel))
+      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel) && selectedSubModel
+        ? `${selectedModel}:${selectedSubModel}`
         : selectedModel
 
       const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
@@ -285,8 +297,8 @@ export default function ChatPage() {
     setLoading(true)
     abortControllerRef.current = new AbortController()
     try {
-      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel)
-        ? (selectedSubModel === 'custom' ? (customSubModel ? `${selectedModel}:${customSubModel}` : selectedModel) : (selectedSubModel ? `${selectedModel}:${selectedSubModel}` : selectedModel))
+      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel) && selectedSubModel
+        ? `${selectedModel}:${selectedSubModel}`
         : selectedModel
 
       const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId, undefined, modelWithSubModel)
@@ -432,7 +444,6 @@ export default function ChatPage() {
                       onClick={() => {
                         setSelectedModel(modelName)
                         setSelectedSubModel('')
-                        setCustomSubModel('')
                         setShowModelDropdown(false)
                       }}
                     >
@@ -451,17 +462,12 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
-            {['gemini', 'antigravity'].includes(selectedModel) && (
+            {['gemini', 'antigravity'].includes(selectedModel) && geminiModels.length > 0 && (
               <div className="chat-header-submodel-selector" style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
                 <span className="selector-label" style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>Base:</span>
                 <select
                   value={selectedSubModel}
-                  onChange={(e) => {
-                    setSelectedSubModel(e.target.value)
-                    if (e.target.value !== 'custom') {
-                      setCustomSubModel('')
-                    }
-                  }}
+                  onChange={(e) => setSelectedSubModel(e.target.value)}
                   className="submodel-select"
                   style={{
                     background: 'rgba(255, 255, 255, 0.04)',
@@ -476,33 +482,10 @@ export default function ChatPage() {
                     transition: 'all var(--transition-fast)'
                   }}
                 >
-                  <option value="" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Default Model</option>
-                  <option value="gemini-2.5-flash" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 2.5 Flash</option>
-                  <option value="gemini-2.5-pro" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 2.5 Pro</option>
-                  <option value="gemini-1.5-pro" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 1.5 Pro</option>
-                  <option value="gemini-1.5-flash" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Gemini 1.5 Flash</option>
-                  <option value="custom" style={{ background: '#12121a', color: 'var(--text-secondary)' }}>Custom Model...</option>
+                  {geminiModels.map(m => (
+                    <option key={m.id} value={m.id} style={{ background: '#12121a', color: 'var(--text-secondary)' }}>{m.displayName}</option>
+                  ))}
                 </select>
-                {selectedSubModel === 'custom' && (
-                  <input
-                    type="text"
-                    placeholder="Enter model name..."
-                    value={customSubModel}
-                    onChange={(e) => setCustomSubModel(e.target.value)}
-                    className="custom-submodel-input"
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      color: 'var(--text-primary)',
-                      padding: '6px 10px',
-                      fontSize: '12px',
-                      width: '150px',
-                      outline: 'none',
-                      transition: 'all var(--transition-fast)'
-                    }}
-                  />
-                )}
               </div>
             )}
           </div>
