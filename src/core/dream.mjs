@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir } from './config.mjs';
+import { loadQueue } from './research-queue.mjs';
 
 /**
  * Write a daily dream-cycle summary to memory-vault/daily/YYYY-MM-DD.md.
@@ -79,16 +81,31 @@ import { compileSurface } from './surface.mjs';
  * Keeps the VFS local directories clean of old logs, draft files,
  * expired proposals, and temporary IDE session transcripts.
  */
-function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
-  const sessionsDir = path.join(brainDir, 'sessions');
+export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
   const logsDir = path.join(brainDir, 'logs');
   const proposalsDir = path.join(vaultDir, 'proposals');
   const inboxDir = path.join(brainDir, 'memory-inbox');
 
-  const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // Keep last 7 days
+  const logMaxAgeMs = 3 * 24 * 60 * 60 * 1000;      // Keep logs and proposals for 3 days
+  const draftMaxAgeMs = 24 * 60 * 60 * 1000;        // Aggressively clear background drafts (like RLHF files) after 24 hours
   const now = Date.now();
 
-  const pruneDir = (dir) => {
+  // Retrieve node slugs of active research projects so we never prune their drafts in progress
+  const activeResearchSlugs = new Set();
+  try {
+    const queue = loadQueue();
+    for (const item of queue) {
+      if (item.status === 'pending' || item.status === 'in_progress') {
+        if (item.node_slug) {
+          activeResearchSlugs.add(item.node_slug);
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn('dream', `Failed to load active research queue during pruning: ${err.message}`);
+  }
+
+  const pruneDir = (dir, maxAge) => {
     if (!fs.existsSync(dir)) return;
     try {
       const files = fs.readdirSync(dir);
@@ -96,11 +113,16 @@ function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
         const fullPath = path.join(dir, file);
         const stat = fs.statSync(fullPath);
         if (stat.isFile()) {
-          if (now - stat.mtimeMs > maxAgeMs) {
+          // Exempt active research drafts from pruning
+          const baseName = path.basename(file, '.md');
+          if (activeResearchSlugs.has(baseName)) {
+            continue;
+          }
+          if (now - stat.mtimeMs > maxAge) {
             fs.unlinkSync(fullPath);
           }
         } else if (stat.isDirectory()) {
-          pruneDir(fullPath);
+          pruneDir(fullPath, maxAge);
           if (fs.readdirSync(fullPath).length === 0) {
             fs.rmdirSync(fullPath);
           }
@@ -109,11 +131,40 @@ function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
     } catch {}
   };
 
-  pruneDir(sessionsDir);
-  pruneDir(logsDir);
-  pruneDir(proposalsDir);
-  pruneDir(inboxDir);
-  if (conflictsDir) pruneDir(conflictsDir);
+  pruneDir(logsDir, logMaxAgeMs);
+  pruneDir(proposalsDir, logMaxAgeMs);
+  pruneDir(inboxDir, draftMaxAgeMs); // Keeps the local dev inbox fully clean of automatic research noise
+  if (conflictsDir) pruneDir(conflictsDir, draftMaxAgeMs);
+
+  // Automatically prune transient planning files in every active/historical conversation folder,
+  // while permanently preserving the conversations/threads themselves (.system_generated)
+  try {
+    const homeDir = process.env._TR_TEST_HOME_DIR || os.homedir();
+    const agAppDir = path.join(homeDir, '.gemini', 'antigravity');
+    const agBrainDir = path.join(agAppDir, 'brain');
+    if (fs.existsSync(agBrainDir)) {
+      const convs = fs.readdirSync(agBrainDir);
+      for (const convId of convs) {
+        const convPath = path.join(agBrainDir, convId);
+        const convStat = fs.statSync(convPath);
+        if (convStat.isDirectory()) {
+          const rootFiles = fs.readdirSync(convPath);
+          for (const item of rootFiles) {
+            const itemPath = path.join(convPath, item);
+            const itemStat = fs.statSync(itemPath);
+            if (itemStat.isFile()) {
+              const isTransientFile = item.endsWith('.md') || item.endsWith('.json');
+              if (isTransientFile && now - itemStat.mtimeMs > draftMaxAgeMs) {
+                fs.unlinkSync(itemPath);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn('dream', `Failed to prune Antigravity transient conversation folders: ${err.message}`);
+  }
 }
 
 import { 
