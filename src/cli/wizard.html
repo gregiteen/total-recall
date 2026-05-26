@@ -1149,6 +1149,51 @@
       </div>
 
       <div class="card">
+        <h3 style="margin-bottom:10px">🛠️ CLI Agents Setup & Installer</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Install globally and initialize your selected CLI coding agents on the target computer in one click.</p>
+        
+        <div style="display:grid;gap:12px">
+          <!-- Claude Code -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px">
+            <div>
+              <strong style="color:var(--text)">Claude Code</strong>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Official Anthropic CLI agent package (<code>@anthropic-ai/claude-code</code>)</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px" onclick="installCliAgent('claude-code', this)">Install Globally</button>
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;border-color:rgba(88,166,255,0.4);color:var(--blue)" onclick="runCliAuth('claude')">🔑 Login</button>
+            </div>
+          </div>
+
+          <!-- Antigravity -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px">
+            <div>
+              <strong style="color:var(--text)">Antigravity CLI</strong>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">Sovereign OS agent — links local repository binary globally (<code>npm link</code>)</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px" onclick="installCliAgent('antigravity', this)">Link Package</button>
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;border-color:rgba(88,166,255,0.4);color:var(--blue)" onclick="runCliAuth('antigravity')">🔑 Login</button>
+            </div>
+          </div>
+
+          <!-- Codex -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px">
+            <div>
+              <strong style="color:var(--text)">Codex CLI</strong>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">OpenAI's coding agent executable binary (<code>@openai/codex</code>)</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px" onclick="installCliAgent('codex', this)">Install Globally</button>
+              <button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;border-color:rgba(88,166,255,0.4);color:var(--blue)" onclick="runCliAuth('codex')">🔑 Login</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="cli-install-result" style="display:none;margin-top:14px;padding:10px;background:rgba(0,0,0,0.2);border-radius:6px;font-size:12px;font-family:monospace;white-space:pre-wrap;color:var(--muted)"></div>
+      </div>
+
+      <div class="card">
         <h3 style="margin-bottom:10px">🔄 Relay Daemon</h3>
         <p style="color:var(--muted);font-size:13px;margin-bottom:14px">The relay watches your IDE session files and ships them to your brain every 60 seconds automatically — no manual steps needed.</p>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
@@ -2797,6 +2842,59 @@
       document.getElementById('btn-connect-ides').textContent = 'Retry';
       document.getElementById('btn-connect-ides').disabled = false;
     });
+  };
+
+  // Install CLI agent globally via POST /api/install-cli
+  window.installCliAgent = function(agent, btn) {
+    var originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Installing...';
+    
+    var resultEl = document.getElementById('cli-install-result');
+    resultEl.style.display = 'none';
+    resultEl.textContent = '';
+
+    fetch('/api/install-cli', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent: agent })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      resultEl.style.display = '';
+      if (data.ok) {
+        btn.textContent = 'Installed ✓';
+        btn.style.borderColor = 'var(--green)';
+        btn.style.color = 'var(--green)';
+        resultEl.style.color = 'var(--green)';
+        resultEl.textContent = '✅ Success! CLI agent successfully installed on target machine.\n' + (data.output || '');
+      } else {
+        resultEl.style.color = 'var(--red)';
+        resultEl.textContent = '❌ Installation failed: ' + (data.error || 'Unknown error');
+      }
+    })
+    .catch(function(err) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      resultEl.style.display = '';
+      resultEl.style.color = 'var(--red)';
+      resultEl.textContent = '❌ Request failed: ' + err.message;
+    });
+  };
+
+  window.runCliAuth = function(agent) {
+    var resultEl = document.getElementById('cli-install-result');
+    resultEl.style.display = '';
+    resultEl.style.color = 'var(--blue)';
+    if (agent === 'claude') {
+      resultEl.textContent = '🔑 Claude Code Authorization:\nTo complete authorization on the Mac Mini, open a terminal on the host machine and run:\n   claude login';
+    } else if (agent === 'antigravity') {
+      resultEl.textContent = '🔑 Google Antigravity Authorization:\nTo authorize Antigravity CLI on the Mac Mini, run:\n   antigravity login';
+    } else if (agent === 'codex') {
+      resultEl.textContent = '🔑 Codex Authorization:\nConfigure your OpenAI credentials by running:\n   codex login';
+    }
   };
 
 
