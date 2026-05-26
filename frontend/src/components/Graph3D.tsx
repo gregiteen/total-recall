@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from "react"
 import type { MemoryNode, ResearchItem } from "../types"
 import type { ChatThread } from "../api"
+import { renderMarkdown } from "./MarkdownUtils"
 
 interface Graph3DProps {
   threads: ChatThread[]
@@ -56,6 +57,12 @@ export default function Graph3D({
   const [selectedNode, setSelectedNode] = useState<VisualNode | null>(null)
   const [hoveredNode, setHoveredNode] = useState<VisualNode | null>(null)
   const [dragging, setDragging] = useState<boolean>(false)
+  const [visibleTypes, setVisibleTypes] = useState({
+    research: true,
+    observations: true,
+    rules: false,
+    threads: false,
+  })
 
   // Dragging and orbital rotation state (stored in refs for high frame rate access)
   const angleX = useRef<number>(0.3)
@@ -70,22 +77,32 @@ export default function Graph3D({
     const list: VisualNode[] = []
 
     // 1. Thread nodes
-    threads.forEach((t) => {
-      list.push({
-        id: `thread-${t.id}`,
-        type: 'thread',
-        title: t.title || 'Untitled Thread',
-        subtitle: `${t.turns} ${t.turns === 1 ? 'turn' : 'turns'}`,
-        excerpt: `Conversation thread last updated ${new Date(t.lastUpdated).toLocaleDateString()}`,
-        originalData: t,
-        x: 0,
-        y: 0,
-        z: 0,
+    if (visibleTypes.threads) {
+      threads.forEach((t) => {
+        list.push({
+          id: `thread-${t.id}`,
+          type: 'thread',
+          title: t.title || 'Untitled Thread',
+          subtitle: `${t.turns} ${t.turns === 1 ? 'turn' : 'turns'}`,
+          excerpt: `Conversation thread last updated ${new Date(t.lastUpdated).toLocaleDateString()}`,
+          originalData: t,
+          x: 0,
+          y: 0,
+          z: 0,
+        })
       })
-    })
+    }
 
     // 2. Memory nodes
     memoryNodes.forEach((m) => {
+      const category = (m.category || 'general').toLowerCase()
+      const isRule = ['invariants', 'preferences', 'patterns', 'anti-patterns'].includes(category)
+      if (isRule) {
+        if (!visibleTypes.rules) return
+      } else {
+        if (!visibleTypes.observations) return
+      }
+
       list.push({
         id: `memory-${m.slug}`,
         type: 'memory',
@@ -101,20 +118,22 @@ export default function Graph3D({
     })
 
     // 3. Research nodes
-    researchItems.forEach((r) => {
-      list.push({
-        id: `research-${r.id}`,
-        type: 'research',
-        title: r.topic,
-        subtitle: `Research Topic • ${r.priority} priority`,
-        status: r.status,
-        excerpt: r.notes || `Research task currently ${r.status}. Created on ${new Date(r.created_at).toLocaleDateString()}`,
-        originalData: r,
-        x: 0,
-        y: 0,
-        z: 0,
+    if (visibleTypes.research) {
+      researchItems.forEach((r) => {
+        list.push({
+          id: `research-${r.id}`,
+          type: 'research',
+          title: r.topic,
+          subtitle: `Research Topic • ${r.priority} priority`,
+          status: r.status,
+          excerpt: r.notes || `Research task currently ${r.status}. Created on ${new Date(r.created_at).toLocaleDateString()}`,
+          originalData: r,
+          x: 0,
+          y: 0,
+          z: 0,
+        })
       })
-    })
+    }
 
     // Apply Fibonacci Sphere algorithm for beautiful uniform distribution
     const N = list.length
@@ -140,7 +159,7 @@ export default function Graph3D({
     }
 
     return list
-  }, [threads, memoryNodes, researchItems])
+  }, [threads, memoryNodes, researchItems, visibleTypes])
 
   // Establish links/connections between related items
   const links = useMemo(() => {
@@ -379,9 +398,17 @@ export default function Graph3D({
           size * (isHovered || isSelected ? 2.5 : 1.5)
         )
 
-        let color = "#8b5cf6" // memory nodes (purple)
+        let color = "#8b5cf6" // memory observations (purple)
         let glowColor = "rgba(139, 92, 246, 0.2)"
-        if (node.type === "thread") {
+        
+        if (node.type === "memory") {
+          const category = ((node.originalData as MemoryNode).category || 'general').toLowerCase()
+          const isRule = ['invariants', 'preferences', 'patterns', 'anti-patterns'].includes(category)
+          if (isRule) {
+            color = "#6366f1" // developer rules (indigo)
+            glowColor = "rgba(99, 102, 241, 0.2)"
+          }
+        } else if (node.type === "thread") {
           color = "#06b6d4" // thread nodes (cyan)
           glowColor = "rgba(6, 182, 212, 0.2)"
         } else if (node.type === "research") {
@@ -622,15 +649,92 @@ export default function Graph3D({
         </button>
       </div>
 
-      <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 12, fontSize: 11, background: 'rgba(15,23,42,0.65)', padding: '6px 12px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.08)', pointerEvents: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.8)' }}>
-          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6' }} /> Memory ({memoryNodes.length})
+      {/* Floating Filter Panel (Top Right) */}
+      <div 
+        className="glass"
+        style={{ 
+          position: 'absolute', 
+          top: 20, 
+          right: 20, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: 10, 
+          background: 'rgba(10, 15, 30, 0.75)', 
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          padding: '12px 16px', 
+          borderRadius: 12, 
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          width: 220,
+          zIndex: 90,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 1 }}>
+            Constellation Filters
+          </span>
+          <span style={{ fontSize: 9, background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, color: 'var(--text-secondary)' }}>
+            {nodes.length} visible
+          </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.8)' }}>
-          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#06b6d4' }} /> Threads ({threads.length})
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.8)' }}>
-          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} /> Research ({researchItems.length})
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* 1. Research Projects */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+            <input 
+              type="checkbox" 
+              checked={visibleTypes.research} 
+              onChange={() => setVisibleTypes(prev => ({ ...prev, research: !prev.research }))}
+              style={{ accentColor: '#f59e0b', cursor: 'pointer' }}
+            />
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
+            <span style={{ flex: 1 }}>Research Projects</span>
+            <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>({researchItems.length})</span>
+          </label>
+
+          {/* 2. Observations & Facts */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+            <input 
+              type="checkbox" 
+              checked={visibleTypes.observations} 
+              onChange={() => setVisibleTypes(prev => ({ ...prev, observations: !prev.observations }))}
+              style={{ accentColor: '#8b5cf6', cursor: 'pointer' }}
+            />
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6' }} />
+            <span style={{ flex: 1 }}>Observations</span>
+            <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
+              ({memoryNodes.filter(m => !['invariants', 'preferences', 'patterns', 'anti-patterns'].includes((m.category || 'general').toLowerCase())).length})
+            </span>
+          </label>
+
+          {/* 3. Developer Rules */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+            <input 
+              type="checkbox" 
+              checked={visibleTypes.rules} 
+              onChange={() => setVisibleTypes(prev => ({ ...prev, rules: !prev.rules }))}
+              style={{ accentColor: '#6366f1', cursor: 'pointer' }}
+            />
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#6366f1' }} />
+            <span style={{ flex: 1 }}>Developer Rules</span>
+            <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
+              ({memoryNodes.filter(m => ['invariants', 'preferences', 'patterns', 'anti-patterns'].includes((m.category || 'general').toLowerCase())).length})
+            </span>
+          </label>
+
+          {/* 4. Chat Threads */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
+            <input 
+              type="checkbox" 
+              checked={visibleTypes.threads} 
+              onChange={() => setVisibleTypes(prev => ({ ...prev, threads: !prev.threads }))}
+              style={{ accentColor: '#06b6d4', cursor: 'pointer' }}
+            />
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#06b6d4' }} />
+            <span style={{ flex: 1 }}>Conversations</span>
+            <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>({threads.length})</span>
+          </label>
         </div>
       </div>
 
@@ -691,7 +795,23 @@ export default function Graph3D({
               </div>
             )}
 
-            <p className="drawer-excerpt" style={{ whiteSpace: "pre-wrap" }}>{selectedNode.excerpt}</p>
+            {selectedNode.type === "memory" ? (
+              <div 
+                className="drawer-markdown-content" 
+                style={{ 
+                  marginTop: 12, 
+                  borderTop: '1px solid rgba(255,255,255,0.06)', 
+                  paddingTop: 12,
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: '1.6',
+                }}
+              >
+                {renderMarkdown((selectedNode.originalData as any).content || (selectedNode.originalData as any).body || selectedNode.excerpt || 'No content details available.')}
+              </div>
+            ) : (
+              <p className="drawer-excerpt" style={{ whiteSpace: "pre-wrap" }}>{selectedNode.excerpt}</p>
+            )}
           </div>
           <div className="drawer-footer">
             {selectedNode.type === "thread" && (

@@ -231,7 +231,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
 
 // ─── Main content (routes) ────────────────────────────────────────────────────
 
-function MainContent() {
+function MainContent({ activeBrainId }: { activeBrainId: string }) {
   const location = useLocation();
   const isChat = location.pathname === '/';
   const [floatingChat, setFloatingChat] = useState(false);
@@ -275,13 +275,13 @@ function MainContent() {
             <button onClick={() => setFloatingChat(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>✖</button>
           </div>
         )}
-        <ChatPage />
+        <ChatPage activeBrainId={activeBrainId} />
       </div>
       {(!isChat || floatingChat) && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <Routes>
             <Route path="/" element={<div/>} />
-            <Route path="/memory" element={<MemoryPage />} />
+            <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/automations" element={<AutomationsPage />} />
             <Route path="/files" element={<FilesPage />} />
@@ -300,71 +300,6 @@ function MainContent() {
   );
 }
 
-// ─── Emergency Alert Banner ───────────────────────────────────────────────────
-// Polls /health every 10s and shows a loud, pulsing red banner when anything
-// is critically wrong: daemon dead, Ollama offline, model missing, etc.
-
-function EmergencyAlertBanner({ health }: { health: HealthData | null }) {
-
-  if (!health) return null
-
-  const issues: string[] = []
-
-  if (health.status === 'unreachable') {
-    issues.push('🔌 Brain server is unreachable — is it running?')
-  }
-  if (health.daemon === 'dead') {
-    issues.push('💀 Active Intelligence Daemon is DEAD — no background research or inference is running. Restart: node bin/total-recall.mjs daemon start')
-  }
-  if (health.daemon === 'not_started') {
-    issues.push('⏸️ Daemon has never been started — run: node bin/total-recall.mjs daemon start')
-  }
-  if (health.emergency_alerts) {
-    issues.push(health.emergency_alerts.replace(/<!--[^>]*-->/g, '').trim())
-  }
-
-  if (issues.length === 0) return null
-
-  return (
-    <div id="emergency-alert-banner" style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 99999,
-      background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 50%, #dc2626 100%)',
-      backgroundSize: '200% 200%',
-      animation: 'alertPulse 2s ease-in-out infinite',
-      color: '#fff',
-      padding: '12px 24px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      fontSize: 14,
-      fontWeight: 600,
-      boxShadow: '0 4px 20px rgba(220, 38, 38, 0.5)',
-      borderBottom: '2px solid #fca5a5',
-    }}>
-      <style>{`
-        @keyframes alertPulse {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-      `}</style>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, maxWidth: 1200, margin: '0 auto' }}>
-        <span style={{ fontSize: 22, lineHeight: '1' }}>🚨</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Critical System Failure
-          </div>
-          {issues.map((issue, i) => (
-            <div key={i} style={{ fontSize: 13, fontWeight: 400, opacity: 0.95, marginTop: 2, whiteSpace: 'pre-wrap' }}>
-              {issue}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Root App with auth gate ──────────────────────────────────────────────────
 
@@ -432,13 +367,12 @@ function App() {
     return <LoginPage onAuthenticated={handleAuthenticated} />
   }
 
-  // Authed — render full dashboard with emergency alert banner
+  // Authed — render full dashboard
   return (
     <BrowserRouter>
-      <EmergencyAlertBanner health={health} />
       <div className="app-layout">
         <Sidebar onLogout={handleLogout} health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
-        <MainContent />
+        <MainContent activeBrainId={activeBrainId} />
       </div>
     </BrowserRouter>
   )

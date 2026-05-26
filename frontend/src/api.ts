@@ -199,16 +199,55 @@ export async function fetchHealth(): Promise<HealthData> {
   return res.json()
 }
 
-// ─── Memory REST API ───────────────────────────────────────────────────────────
-
-export async function listMemory(category?: string, status?: string): Promise<MemoryNode[]> {
+export async function listMemory(brainId?: string, category?: string, status?: string): Promise<MemoryNode[]> {
   const params = new URLSearchParams()
   if (category) params.set('category', category)
   if (status) params.set('status', status)
-  const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
-  if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.nodes || [])
+  
+  if (!brainId) {
+    const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+    if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
+    const data = await res.json()
+    return Array.isArray(data) ? data : (data.nodes || [])
+  }
+  
+  const ids = brainId.split(',')
+  const fetchPromises = ids.map(async (id) => {
+    const url = id === 'global'
+      ? `${API_BASE}/api/memory?${params}`
+      : `${API_BASE}/api/brains/${id}/nodes?${params}`
+    try {
+      const res = await apiFetch(url)
+      if (!res.ok) return []
+      const data = await res.json()
+      return Array.isArray(data) ? data : (data.nodes || [])
+    } catch {
+      return []
+    }
+  })
+  
+  const results = await Promise.all(fetchPromises)
+  const merged: MemoryNode[] = []
+  const seenSlugs = new Set<string>()
+  
+  // Project brains override Global brain nodes on slug collisions
+  const sortedResults = results.map((nodes, index) => ({ nodes, id: ids[index] }))
+    .sort((a, b) => {
+      if (a.id === 'global') return 1
+      if (b.id === 'global') return -1
+      return 0
+    })
+    
+  for (const { nodes } of sortedResults) {
+    for (const node of nodes) {
+      if (!seenSlugs.has(node.slug)) {
+        seenSlugs.add(node.slug)
+        merged.push(node)
+      }
+    }
+  }
+  
+  return merged
 }
 
 export async function searchMemory(query: string, category?: string): Promise<MemoryNode[]> {
@@ -595,3 +634,18 @@ export async function deleteSession(id: string): Promise<void> {
   const res = await apiFetch(`${API_BASE}/api/sessions/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`Failed to delete session: ${res.status}`)
 }
+
+// ─── Gemini Models APIs ─────────────────────────────────────────────────────────
+
+export interface GeminiModelInfo {
+  id: string
+  displayName: string
+}
+
+export async function fetchGeminiModels(): Promise<GeminiModelInfo[]> {
+  const res = await apiFetch(`${API_BASE}/api/gemini-models`)
+  if (!res.ok) throw new Error(`Gemini models API error: ${res.status}`)
+  const data = await res.json()
+  return data.models ?? []
+}
+
