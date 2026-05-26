@@ -89,3 +89,8 @@ build/
 *.key
 *.p12
 *.pfx
+
+# Scratch folder and local secrets
+scratch/
+.agent/secrets.enc
+

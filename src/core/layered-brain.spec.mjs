@@ -159,12 +159,12 @@ describe('Layered Brain: parseLayerFlag', () => {
   });
 
   it('defaultLayerForCategory maps categories correctly', () => {
-    expect(defaultLayerForCategory('invariants')).toBe('global');
-    expect(defaultLayerForCategory('preferences')).toBe('global');
-    expect(defaultLayerForCategory('anti-patterns')).toBe('global');
+    expect(defaultLayerForCategory('invariants')).toBe('project');
+    expect(defaultLayerForCategory('preferences')).toBe('project');
+    expect(defaultLayerForCategory('anti-patterns')).toBe('project');
     expect(defaultLayerForCategory('facts')).toBe('project');
     expect(defaultLayerForCategory('decisions')).toBe('project');
-    expect(defaultLayerForCategory('lore')).toBe('global');
+    expect(defaultLayerForCategory('lore')).toBe('project');
     expect(defaultLayerForCategory('patterns')).toBe('project');
     expect(defaultLayerForCategory('concepts')).toBe('project');
   });

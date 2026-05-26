@@ -121,6 +121,59 @@ export default async function statusCmd(args) {
   const brainUrl = opts.brain || brainConfig?.url || null;
   const token = opts.token || brainConfig?.token || totalRecallToken || null;
 
+  const wizardConfigPath = path.join(brainDir, 'config', 'wizard-config.json');
+  let deployMode = 'unknown';
+  let dashboardUrl = null;
+  let tunnelPid = null;
+  let tunnelAlive = false;
+
+  if (fs.existsSync(wizardConfigPath)) {
+    try {
+      const wizardCfg = JSON.parse(fs.readFileSync(wizardConfigPath, 'utf8'));
+      deployMode = wizardCfg['deploy-mode'] || 'local';
+      dashboardUrl = wizardCfg['cfg-dash-url'] || null;
+    } catch {}
+  }
+
+  const logsDir = path.join(brainDir, 'logs');
+  const cfPidPath = path.join(logsDir, 'cloudflared.pid');
+  if (fs.existsSync(cfPidPath)) {
+    try {
+      const pid = parseInt(fs.readFileSync(cfPidPath, 'utf8').trim(), 10);
+      if (pid) {
+        tunnelPid = pid;
+        process.kill(pid, 0);
+        tunnelAlive = true;
+      }
+    } catch {
+      tunnelAlive = false;
+    }
+  }
+
+  // Live server /health check
+  let serverHealth = 'offline';
+  let serverUptime = null;
+  try {
+    let healthPort = 3000;
+    try {
+      const { default: cfg } = await import('../core/config.mjs');
+      if (cfg.port) healthPort = cfg.port;
+    } catch {}
+    const res = await fetch(`http://localhost:${healthPort}/health`, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      const hData = await res.json();
+      serverHealth = hData.status || 'healthy';
+      serverUptime = hData.uptime_seconds || null;
+    }
+  } catch {}
+
+  // Daemon status
+  let daemonStatus = 'unknown';
+  try {
+    const { getDaemonStatus } = await import('../core/daemon-control.mjs');
+    daemonStatus = getDaemonStatus();
+  } catch {}
+
   let localInstructions = null;
   if (fs.existsSync(INSTRUCTIONS_FILE)) {
     const buf = fs.readFileSync(INSTRUCTIONS_FILE);
@@ -147,6 +200,17 @@ export default async function statusCmd(args) {
   const clientProjections = projectionsStatus(clientsRegistry, instructionsMtime);
 
   const report = {
+    server: {
+      status: serverHealth,
+      uptime_seconds: serverUptime
+    },
+    deploy: {
+      mode: deployMode,
+      dashboard_url: dashboardUrl,
+      tunnel_pid: tunnelPid,
+      tunnel_alive: tunnelAlive
+    },
+    daemon: daemonStatus,
     brain: {
       url: brainUrl,
       configured: !!brainConfig,
@@ -189,7 +253,12 @@ export default async function statusCmd(args) {
   }
 
   console.log('\n  Total Recall — Status\n');
-  console.log(`  Brain URL:        ${report.brain.url || '(not configured)'}`);
+  console.log(`  Brain Server:     ${serverHealth === 'offline' ? '🔴 Offline' : `🟢 Online (${serverUptime ? `${Math.floor(serverUptime / 60)}m uptime` : 'healthy'})`}`);
+  console.log(`  Deploy Mode:      ${deployMode}`);
+  console.log(`  Dashboard UI:     ${dashboardUrl || '(not resolved)'}`);
+  console.log(`  Remote Brain:     ${report.brain.url || '(none)'}`);
+  console.log(`  Tunnel Process:   ${tunnelPid ? (tunnelAlive ? `🟢 Active (PID ${tunnelPid})` : '🔴 Stale PID file') : '⚪ Inactive'}`);
+  console.log(`  Daemon Status:    ${daemonStatus === 'running' ? '🟢 Running' : daemonStatus === 'dead' ? '🔴 Dead' : '⚪ Not Running'}`);
   console.log(`  Reachable:        ${report.brain.reachable ? 'yes' : 'no'}${report.brain.error ? `  (${report.brain.error})` : ''}`);
   console.log(`  Local INSTR.:     ${localInstructions ? `${localInstructions.bytes} bytes, sha=${localInstructions.sha256.slice(0, 12)}…` : '(not compiled)'}`);
   if (remote?.instructions_sha256) {

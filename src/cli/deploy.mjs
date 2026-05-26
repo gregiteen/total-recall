@@ -453,6 +453,8 @@ export default async function deploy(args) {
       if (wizardOpts.skipCompile) opts.skipCompile  = true;
       if (wizardOpts.skipModels)  opts.skipModels   = true;
       if (wizardOpts.dashboardPassword) opts.dashboardPassword = wizardOpts.dashboardPassword;
+      if (wizardOpts.installGlobal !== undefined) opts.installGlobal = wizardOpts.installGlobal;
+      if (wizardOpts.projectPaths) opts.projectPaths = wizardOpts.projectPaths;
 
       console.error(`  ✅ Wizard config received — domain: ${opts.domain}`);
 
@@ -1653,6 +1655,39 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
         logOk('total-recall CLI registered globally! Run "total-recall" anywhere in your terminal.');
       } catch (err) {
         logWarn(`Could not link CLI globally: ${err.message}`);
+      }
+    }
+  }
+
+  // ── Step 12.5: Provision selected project brains ──
+  if (opts.projectPaths && opts.projectPaths.length > 0) {
+    logStep('12.5/12', `Provisioning ${opts.projectPaths.length} project brain(s)...`);
+    const initMjs = path.join(ROOT, 'bin', 'total-recall.mjs');
+    for (const projPath of opts.projectPaths) {
+      if (!fs.existsSync(projPath)) {
+        logWarn(`Skipping ${projPath} — directory does not exist`);
+        continue;
+      }
+      const projBrainDir = path.join(projPath, '.agent', 'skills', 'total-recall');
+      if (fs.existsSync(path.join(projBrainDir, 'memory-vault'))) {
+        logSkip(`${path.basename(projPath)} (brain already exists)`);
+        continue;
+      }
+      try {
+        log(`  📂 Initializing project brain in ${projPath}...`);
+        const r = spawnSync(process.execPath, [initMjs, 'init', '--project'], {
+          cwd: projPath,
+          encoding: 'utf8',
+          timeout: 30000,
+          env: { ...process.env, FORCE_COLOR: '0' }
+        });
+        if (r.status === 0) {
+          logOk(`${path.basename(projPath)} — project brain provisioned`);
+        } else {
+          logWarn(`${path.basename(projPath)} — init failed: ${(r.stderr || '').slice(0, 120)}`);
+        }
+      } catch (err) {
+        logWarn(`${path.basename(projPath)} — init error: ${err.message}`);
       }
     }
   }

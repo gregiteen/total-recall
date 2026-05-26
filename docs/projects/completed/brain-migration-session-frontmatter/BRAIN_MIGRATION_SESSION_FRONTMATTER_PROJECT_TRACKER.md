@@ -44,12 +44,13 @@
 
 ---
 
-## ⏳ Phase 4: Testing & Verification
+## ✅ Phase 4: Testing & Verification
 
-- [/] Run full test suite — all tests pass
+- [x] Run full test suite — all tests pass
 - [x] Verify global brain has only identity nodes
 - [x] Verify project brain has research facts + research queue
-- [ ] Ship a test session via relay — verify SSSS frontmatter
-- [ ] Verify session appears in UI with proper title and date
-- [ ] Run Obsidian backup — verify project brain syncs
-- [ ] Run GitHub backup — verify global brain pushes
+- [x] Ship a test session via relay — verify SSSS frontmatter
+- [x] Verify session appears in UI with proper title and date
+- [x] Run Obsidian backup — verify project brain syncs
+- [x] Run GitHub backup — verify global brain pushes
+

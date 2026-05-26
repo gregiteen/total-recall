@@ -125,6 +125,16 @@ describe('API Proxy', () => {
       expect(gemma.metadata.runtime_model).toBe('gemma4:26b');
     });
 
+    it('lists available Gemini models through /api/gemini-models', async () => {
+      const res = await request(buildApp()).get('/api/gemini-models');
+
+      expect(res.status).toBe(200);
+      expect(res.body.models).toBeInstanceOf(Array);
+      expect(res.body.models.length).toBeGreaterThan(0);
+      const ids = res.body.models.map(m => m.id);
+      expect(ids).toContain('gemini-3.5-flash');
+    });
+
     it('serves SSSS resource manifest and individual resources', async () => {
       const manifest = await request(buildApp()).get('/api/ssss');
       expect(manifest.status).toBe(200);

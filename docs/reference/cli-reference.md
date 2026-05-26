@@ -45,7 +45,7 @@ Deploy and configure system service layers, platform autostart files, or launch 
   ```
 - **Options**:
   - `--backup-repo <git-url>`: Configures an automatic daily remote backup git URL.
-  - `--ui`: Launches the premium **Browser Setup Wizard** (`wizard.html` served by `deploy-ui.mjs`). This serves a visual dashboard at `http://localhost:3000` (or next free port) and automatically opens it in your default macOS/Linux web browser. Features a glassmorphic multi-phase setup for deployment locations (Local, Network, Vast.ai GPU Cloud, VPS), SSL, PAT keys management, automatic private GitHub backup configurations, and checkboxes for Claude Code, Cursor, Codex, etc., with live logs.
+  - `--ui`: Launches the premium **Browser Setup Wizard** (`wizard.html` served by `deploy-ui.mjs`). This serves a visual dashboard at `http://localhost:3000` (or next free port) and automatically opens it in your default macOS/Linux web browser. Features a glassmorphic multi-phase setup for deployment locations (Local, Network, Vast.ai GPU Cloud, VPS), SSL, PAT keys management, automatic private GitHub backup configurations, and checkboxes for Claude Code, Cursor, Codex, etc., with live logs. Now includes an integrated **CLI Agents Setup & Installer** card supporting dynamic local/remote programmatic agent installations and linking (`npm install -g`, `npm link`, and OAuth credentials onboarding) via secure `/api/install-cli` API dispatches. To ensure absolute reliability, the wizard integrates **resilient dual-layer state persistence** (saving to browser `safeStorage` and syncing securely to server disk in `wizard-config.json` via `/api/save-wizard-config`), a **floating persistent status bar** (`#persistent-install-bar`) with dynamic SSE log reconnection, and **fully interactive clickable sidebar step navigation** (`#step-nav li`).
   - `--ui-port <number>`: Manually specify the port for hosting the browser setup wizard server (default: 3000, increments dynamically if occupied).
 
 ---
@@ -286,7 +286,7 @@ Completely purge background services, configurations, and shims.
 | :--- | :--- | :--- | :--- |
 | `AGENT_DIR` | String | `~/.agent` | Scaffolding directory root holding IDE shims and skills. |
 | `TR_CLI_AGENT` | String | `antigravity` | Preferred CLI reasoning agent (`antigravity`, `gemini`, `claude`, `codex`). |
-| `TR_CLI_MODEL` | String | `null` | Explicit model string override passed to the dispatched subagent. |
+| `TR_CLI_MODEL` | String | `null` | Explicit model string override passed to the dispatched subagent. Supports `agent:submodel` format (e.g. `gemini:gemini-3.5-flash`) to specify both the agent and model dynamically. |
 | `TR_CLI_TIMEOUT` | Integer | `300` | Process execution timeout threshold in seconds. |
 | `GOOGLE_API_KEY` | String | `null` | Key for high-fidelity Gemini embedding generations. |
 | `TR_EMBED_MODEL` | String | `gemini-embedding-2` | Preferred embedding model target. |
