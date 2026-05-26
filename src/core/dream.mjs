@@ -73,6 +73,49 @@ function writeDailyNote(vaultDir, summaryLines) {
 }
 import { detectConflicts, quarantineConflict } from './steering.mjs';
 import { compileSurface } from './surface.mjs';
+
+/**
+ * Phase 5: Automatic Storage & Memory Pruning.
+ * Keeps the VFS local directories clean of old logs, draft files,
+ * expired proposals, and temporary IDE session transcripts.
+ */
+function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
+  const sessionsDir = path.join(brainDir, 'sessions');
+  const logsDir = path.join(brainDir, 'logs');
+  const proposalsDir = path.join(vaultDir, 'proposals');
+  const inboxDir = path.join(brainDir, 'memory-inbox');
+
+  const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // Keep last 7 days
+  const now = Date.now();
+
+  const pruneDir = (dir) => {
+    if (!fs.existsSync(dir)) return;
+    try {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          if (now - stat.mtimeMs > maxAgeMs) {
+            fs.unlinkSync(fullPath);
+          }
+        } else if (stat.isDirectory()) {
+          pruneDir(fullPath);
+          if (fs.readdirSync(fullPath).length === 0) {
+            fs.rmdirSync(fullPath);
+          }
+        }
+      }
+    } catch {}
+  };
+
+  pruneDir(sessionsDir);
+  pruneDir(logsDir);
+  pruneDir(proposalsDir);
+  pruneDir(inboxDir);
+  if (conflictsDir) pruneDir(conflictsDir);
+}
+
 import { 
   generateMemoryCleanupProposals, 
   generateStaleKnowledgeRefreshProposals,
@@ -208,6 +251,14 @@ export async function runDreamCycle({
     ]);
   } catch (err) {
     logger.error('dream', `Daily note write failed: ${err.message}`);
+  }
+
+  logger.info('dream', 'PHASE 5 — Automatic Storage & Memory Pruning');
+  try {
+    autoPruneStorage(brainDir, vaultDir, conflictsDir);
+    logger.info('dream', 'Automated VFS storage pruning completed successfully');
+  } catch (err) {
+    logger.error('dream', `Storage pruning failed: ${err.message}`);
   }
 
   return { status: 'success' };
