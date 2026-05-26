@@ -98,10 +98,8 @@ export function getBothBrains() {
 
 /**
  * Determine the default layer for a memory category.
- * Global-default: invariant, preference, correction, lore
- * Project-default: fact, concept, pattern, anti-pattern, decision
+ * Always defaults to project brain. Use --global to explicitly target global.
  */
-export function defaultLayerForCategory(category) {
-  const globalCategories = new Set(['invariants', 'preferences', 'anti-patterns', 'lore']);
-  return globalCategories.has(category) ? 'global' : 'project';
+export function defaultLayerForCategory(_category) {
+  return 'project';
 }

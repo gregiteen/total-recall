@@ -40,6 +40,8 @@ const ROOT = path.join(__dirname, '..', '..');
 import { attachLogMonitor } from '../core/watchdog.mjs';
 attachLogMonitor();
 
+let tunnelProcess = null;
+
 // ─── App ────────────────────────────────────────────────────────────────────────
 
 const app = express();
@@ -701,6 +703,117 @@ const server = app.listen(PORT, HOST, () => {
     // Unref the interval so it doesn't block process shutdown
     daemonWatchdogInterval.unref();
   }
+
+  // ─── Cloudflare Tunnel Auto-Start ───
+  (async () => {
+    try {
+      const configDir = path.join(configBrainDir, 'config');
+      const configFile = path.join(configDir, 'wizard-config.json');
+      if (!fs.existsSync(configFile)) return;
+
+      const wizardCfg = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}');
+      const deployMode = wizardCfg['deploy-mode'];
+      const autoStart = wizardCfg['tunnel-auto-start'];
+
+      if (!['quick-tunnel', 'named-tunnel'].includes(deployMode) || autoStart === false) {
+        return;
+      }
+
+      const logsDir = path.join(configBrainDir, 'logs');
+      fs.mkdirSync(logsDir, { recursive: true });
+      const cfLogPath = path.join(logsDir, 'cloudflared.log');
+      const cfPidPath = path.join(logsDir, 'cloudflared.pid');
+
+      // Check if another process is already alive on that PID
+      if (fs.existsSync(cfPidPath)) {
+        try {
+          const oldPid = parseInt(fs.readFileSync(cfPidPath, 'utf8').trim(), 10);
+          if (oldPid) {
+            process.kill(oldPid, 0);
+            logger.info('server', `Tunnel process is already running on PID ${oldPid}. Skipping spawn.`);
+            return;
+          }
+        } catch {
+          // PID is stale, proceed with spawn
+        }
+      }
+
+      try {
+        if (fs.existsSync(cfLogPath)) {
+          fs.unlinkSync(cfLogPath);
+        }
+      } catch {}
+
+      const logStream = fs.openSync(cfLogPath, 'w');
+      let args = [];
+      if (deployMode === 'quick-tunnel') {
+        args = ['tunnel', '--url', `http://localhost:${PORT}`];
+      } else {
+        const tunnelName = wizardCfg['cfg-cloudflare-tunnel-name'];
+        const credPath = wizardCfg['cfg-cloudflare-tunnel-credentials'];
+        if (!tunnelName || !credPath) {
+          logger.warn('server', 'Named tunnel config is incomplete. Missing name or credentials.');
+          return;
+        }
+        args = ['tunnel', '--credentials-file', credPath, 'run', tunnelName];
+      }
+
+      logger.info('server', `Spawning Cloudflare Tunnel (${deployMode}) with arguments: ${args.join(' ')}`);
+      
+      const { spawn } = await import('node:child_process');
+      tunnelProcess = spawn('cloudflared', args, {
+        detached: true,
+        stdio: ['ignore', logStream, logStream]
+      });
+
+      fs.writeFileSync(cfPidPath, String(tunnelProcess.pid), 'utf8');
+      tunnelProcess.unref();
+
+      tunnelProcess.on('exit', (code) => {
+        logger.warn('server', `Cloudflare Tunnel process (PID ${tunnelProcess?.pid}) exited with code ${code}`);
+        tunnelProcess = null;
+        try {
+          fs.unlinkSync(cfPidPath);
+        } catch {}
+      });
+
+      if (deployMode === 'quick-tunnel') {
+        logger.info('server', 'Waiting for Cloudflare Quick Tunnel URL allocation...');
+        let tunnelUrl = '';
+        for (let attempt = 0; attempt < 20; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (fs.existsSync(cfLogPath)) {
+            const logs = fs.readFileSync(cfLogPath, 'utf8');
+            const match = logs.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+            if (match) {
+              tunnelUrl = match[0];
+              break;
+            }
+          }
+        }
+
+        if (tunnelUrl) {
+          logger.info('server', `Cloudflare Quick Tunnel allocated successfully: ${tunnelUrl}`);
+          
+          // Update wizard-config.json
+          wizardCfg['cfg-domain'] = tunnelUrl.replace('https://', '');
+          wizardCfg['cfg-api-url'] = tunnelUrl;
+          wizardCfg['cfg-dash-url'] = `${tunnelUrl}/dashboard`;
+          wizardCfg['cfg-health-url'] = `${tunnelUrl}/health`;
+
+          fs.writeFileSync(configFile, JSON.stringify(wizardCfg, null, 2), { encoding: 'utf8', mode: 0o600 });
+          logger.info('server', `Updated wizard-config.json with active Quick Tunnel URL: ${tunnelUrl}`);
+        } else {
+          logger.warn('server', 'Could not allocate Quick Tunnel URL. Please check logs in brainDir/logs/cloudflared.log');
+        }
+      } else {
+        const hostname = wizardCfg['cfg-domain'] || 'configured domain';
+        logger.info('server', `Cloudflare Named Tunnel is active. Dashboard is accessible via: https://${hostname}`);
+      }
+    } catch (err) {
+      logger.error('server', `Failed to auto-start Cloudflare Tunnel: ${err.message}`);
+    }
+  })();
 });
 
 let shutdownInProgress = false;
@@ -711,6 +824,15 @@ async function handleShutdown(signal) {
   process.isShuttingDown = true;
 
   logger.info('server', `Received ${signal}. Starting graceful shutdown...`);
+
+  if (tunnelProcess) {
+    logger.info('server', `Terminating active Cloudflare Tunnel process (PID ${tunnelProcess.pid})...`);
+    try {
+      tunnelProcess.kill('SIGTERM');
+    } catch (e) {
+      logger.error('server', `Error terminating Cloudflare Tunnel: ${e.message}`);
+    }
+  }
 
   // 10s fallback hard-exit
   const forceExitTimeout = setTimeout(() => {

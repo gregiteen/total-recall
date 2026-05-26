@@ -73,7 +73,18 @@ function copyDirMerge(src, dest, dryRun) {
 }
 
 function parseArgs(args) {
-  const opts = { dryRun: false, help: false, brain: null, token: null, project: false };
+  const opts = {
+    dryRun: false,
+    help: false,
+    brain: null,
+    token: null,
+    project: false,
+    deployMode: null,
+    domain: null,
+    tunnelName: null,
+    tunnelCredentials: null,
+    yes: false
+  };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--dry-run') opts.dryRun = true;
@@ -81,6 +92,11 @@ function parseArgs(args) {
     else if (arg === '--project') opts.project = true;
     else if (arg === '--brain') opts.brain = args[++i];
     else if (arg === '--token') opts.token = args[++i];
+    else if (arg === '--deploy-mode') opts.deployMode = args[++i];
+    else if (arg === '--domain') opts.domain = args[++i];
+    else if (arg === '--tunnel-name') opts.tunnelName = args[++i];
+    else if (arg === '--tunnel-credentials') opts.tunnelCredentials = args[++i];
+    else if (arg === '--yes' || arg === '-y') opts.yes = true;
   }
   return opts;
 }
@@ -99,8 +115,13 @@ function printHelp() {
                   Also registers the project in the global brain's project registry.
 
   Options:
-    --dry-run     Print what would be done without making changes
-    --help, -h    Show this help
+    --deploy-mode <mode>  Set the UI deploy mode (local | quick-tunnel | named-tunnel | custom-domain)
+    --domain <domain>     Domain for custom-domain/named-tunnel mode
+    --tunnel-name <name>  Name of the Cloudflare tunnel for named-tunnel mode
+    --tunnel-credentials <path> Path to credentials JSON for named-tunnel mode
+    --yes, -y             Skip interactive prompts and use defaults
+    --dry-run             Print what would be done without making changes
+    --help, -h            Show this help
 
   Examples:
     npx total-recall init              # Global brain (run once)
@@ -298,12 +319,158 @@ export default async function init(args) {
         fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
         passwordMessage = "\n  🔑 Dashboard Access: Unconfigured\n     (You will be prompted to set your password upon first browser access)";
       } else {
-        fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
-        passwordMessage = "\n  🔑 Dashboard credentials preserved (custom password hash already configured)";
+        fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+        passwordMessage = '\n  🔑 Dashboard credentials preserved (custom password hash already configured)';
       }
     } catch (err) {
       logWarn(`Failed to seed default dashboard credentials: ${err.message}`);
     }
+  }
+
+  // ── Step 3.7: Select UI Deploy Location ──
+  let deployMode = opts.deployMode;
+  let domain = opts.domain;
+  let tunnelName = opts.tunnelName;
+  let tunnelCredentials = opts.tunnelCredentials;
+
+  const isInteractive = process.stdin.isTTY && !opts.yes && !opts.dryRun;
+
+  if (isInteractive && !deployMode) {
+    const rl = (await import('node:readline')).createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    const ask = (query) => new Promise(resolve => rl.question(query, resolve));
+
+    console.error('\n  [3.7] How would you like to access your dashboard?');
+    console.error('    1. Local only (http://localhost:3000)');
+    console.error('    2. Cloudflare Quick Tunnel (random public URL, changes on restart)');
+    console.error('    3. Cloudflare Named Tunnel (permanent subdomain, requires cloudflare auth)');
+    console.error('    4. Custom domain (you provide the domain, uses Caddy for TLS)');
+
+    let choice = '';
+    while (true) {
+      const answer = (await ask('\n  Choice [1]: ')).trim();
+      if (!answer) {
+        choice = '1';
+        break;
+      }
+      if (['1', '2', '3', '4'].includes(answer)) {
+        choice = answer;
+        break;
+      }
+      console.error('  Invalid choice. Please enter 1, 2, 3, or 4.');
+    }
+
+    if (choice === '1') {
+      deployMode = 'local';
+    } else if (choice === '2') {
+      deployMode = 'quick-tunnel';
+    } else if (choice === '3') {
+      deployMode = 'named-tunnel';
+      while (!tunnelName) {
+        tunnelName = (await ask('  Enter Cloudflare Tunnel Name: ')).trim();
+      }
+      while (!tunnelCredentials) {
+        tunnelCredentials = (await ask('  Enter Cloudflare Tunnel Credentials Path: ')).trim();
+      }
+      while (!domain) {
+        domain = (await ask('  Enter Public Domain mapped to this tunnel: ')).trim();
+      }
+    } else if (choice === '4') {
+      deployMode = 'custom-domain';
+      while (!domain) {
+        domain = (await ask('  Enter Custom Domain (e.g. brain.mydomain.com): ')).trim();
+      }
+    }
+    rl.close();
+  } else if (!deployMode) {
+    deployMode = 'local';
+  }
+
+  // Verify cloudflared binary dependency if a tunnel mode is selected
+  if (['quick-tunnel', 'named-tunnel'].includes(deployMode)) {
+    let hasCf = false;
+    try {
+      const whichCf = spawnSync('which', ['cloudflared'], { encoding: 'utf8' });
+      if (whichCf.status === 0 && whichCf.stdout?.trim()) {
+        hasCf = true;
+      } else if (fs.existsSync('/usr/local/bin/cloudflared')) {
+        hasCf = true;
+      }
+    } catch {
+      if (fs.existsSync('/usr/local/bin/cloudflared')) {
+        hasCf = true;
+      }
+    }
+
+    if (!hasCf) {
+      logWarn('Cloudflare Tunnel mode selected, but `cloudflared` was not found in your PATH.');
+      if (process.platform === 'darwin') {
+        console.error('\n  To install via Homebrew, run:');
+        console.error('    brew install cloudflare/cloudflare/cloudflared\n');
+      } else {
+        console.error('\n  To install, please refer to Cloudflare\'s guide:');
+        console.error('    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/\n');
+      }
+
+      if (isInteractive) {
+        const rl = (await import('node:readline')).createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        const ask = (query) => new Promise(resolve => rl.question(query, resolve));
+        const proceed = (await ask('  Proceed anyway? (y/N): ')).trim().toLowerCase();
+        rl.close();
+        if (proceed !== 'y' && proceed !== 'yes') {
+          console.error('  Aborting setup.');
+          process.exit(1);
+        }
+      } else {
+        logWarn('Proceeding in non-interactive mode. Tunnels will fail to spawn until cloudflared is installed.');
+      }
+    }
+  }
+
+  // Persist UI deploy settings to wizard-config.json
+  if (!opts.dryRun) {
+    const configDir = path.join(brainDir, 'config');
+    const configFile = path.join(configDir, 'wizard-config.json');
+    fs.mkdirSync(configDir, { recursive: true });
+
+    let current = {};
+    if (fs.existsSync(configFile)) {
+      try {
+        current = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}');
+      } catch {}
+    }
+
+    current['deploy-mode'] = deployMode;
+    current['tunnel-auto-start'] = ['quick-tunnel', 'named-tunnel'].includes(deployMode);
+
+    if (deployMode === 'named-tunnel') {
+      current['cfg-cloudflare-tunnel-name'] = tunnelName;
+      current['cfg-cloudflare-tunnel-credentials'] = tunnelCredentials;
+      if (domain) {
+        current['cfg-domain'] = domain;
+        current['cfg-api-url'] = `https://${domain}`;
+        current['cfg-dash-url'] = `https://${domain}/dashboard`;
+        current['cfg-health-url'] = `https://${domain}/health`;
+      }
+    } else if (deployMode === 'custom-domain') {
+      current['cfg-domain'] = domain;
+      current['cfg-api-url'] = `https://${domain}`;
+      current['cfg-dash-url'] = `https://${domain}/dashboard`;
+      current['cfg-health-url'] = `https://${domain}/health`;
+    } else if (deployMode === 'local') {
+      current['cfg-domain'] = 'localhost';
+      current['cfg-api-url'] = 'http://localhost:3000';
+      current['cfg-dash-url'] = 'http://localhost:3000/dashboard';
+      current['cfg-health-url'] = 'http://localhost:3000/health';
+    }
+
+    fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+    logOk('UI deploy configuration persisted to wizard-config.json!');
   }
 
   // ── Symlink nested brain skills to top-level .agent/skills/ ──
@@ -369,148 +536,146 @@ export default async function init(args) {
     logOk(`Registered brain at ${opts.brain}. Run \`npx total-recall sync\` to pull instructions.`);
   }
 
-  let dashboardUrl = "";
+  let dashboardUrl = '';
 
   // ── Automatic Cloudflare Quick Tunnel Spawner ──
-  let hasCloudflared = false;
-  try {
-    const whichCf = spawnSync("which", ["cloudflared"], { encoding: "utf8" });
-    if (whichCf.status === 0 && whichCf.stdout?.trim()) {
-      hasCloudflared = true;
-    } else if (fs.existsSync("/usr/local/bin/cloudflared")) {
-      hasCloudflared = true;
+  if (deployMode === 'quick-tunnel') {
+    let hasCloudflared = false;
+    try {
+      const whichCf = spawnSync('which', ['cloudflared'], { encoding: 'utf8' });
+      if (whichCf.status === 0 && whichCf.stdout?.trim()) {
+        hasCloudflared = true;
+      } else if (fs.existsSync('/usr/local/bin/cloudflared')) {
+        hasCloudflared = true;
+      }
+    } catch {
+      if (fs.existsSync('/usr/local/bin/cloudflared')) {
+        hasCloudflared = true;
+      }
     }
-  } catch {
-    if (fs.existsSync("/usr/local/bin/cloudflared")) {
-      hasCloudflared = true;
-    }
-  }
 
-  if (hasCloudflared) {
-    log("Cloudflared detected. Spawning background Quick Tunnel...");
-    const logsDir = path.join(brainDir, "logs");
-    if (!opts.dryRun) {
-      fs.mkdirSync(logsDir, { recursive: true });
-    }
-    const cfLogPath = path.join(logsDir, "cloudflared.log");
-    
-    if (!opts.dryRun) {
-      try {
-        if (fs.existsSync(cfLogPath)) {
-          fs.unlinkSync(cfLogPath);
-        }
-      } catch {}
+    if (hasCloudflared) {
+      log('Cloudflared detected. Spawning background Quick Tunnel...');
+      const logsDir = path.join(brainDir, 'logs');
+      if (!opts.dryRun) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+      const cfLogPath = path.join(logsDir, 'cloudflared.log');
       
-      const logStream = fs.openSync(cfLogPath, "w");
-      let port = 3000;
-      try {
-        const { default: cfg } = await import("../core/config.mjs");
-        if (cfg.port) port = cfg.port;
-      } catch {}
+      if (!opts.dryRun) {
+        try {
+          if (fs.existsSync(cfLogPath)) {
+            fs.unlinkSync(cfLogPath);
+          }
+        } catch {}
+        
+        const logStream = fs.openSync(cfLogPath, 'w');
+        let port = 3000;
+        try {
+          const { default: cfg } = await import('../core/config.mjs');
+          if (cfg.port) port = cfg.port;
+        } catch {}
 
-      const cfProcess = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${port}`], {
-        detached: true,
-        stdio: ["ignore", logStream, logStream]
-      });
-      cfProcess.unref();
+        const cfProcess = spawn('cloudflared', ['tunnel', '--url', `http://localhost:${port}`], {
+          detached: true,
+          stdio: ['ignore', logStream, logStream]
+        });
 
-      log("Waiting for Cloudflare Quick Tunnel URL allocation...");
-      let tunnelUrl = "";
-      for (let attempt = 0; attempt < 20; attempt++) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        if (fs.existsSync(cfLogPath)) {
-          const logs = fs.readFileSync(cfLogPath, "utf8");
-          const match = logs.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
-          if (match) {
-            tunnelUrl = match[0];
-            break;
+        const cfPidPath = path.join(logsDir, 'cloudflared.pid');
+        fs.writeFileSync(cfPidPath, String(cfProcess.pid), 'utf8');
+
+        cfProcess.unref();
+
+        log('Waiting for Cloudflare Quick Tunnel URL allocation...');
+        let tunnelUrl = '';
+        for (let attempt = 0; attempt < 20; attempt++) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          if (fs.existsSync(cfLogPath)) {
+            const logs = fs.readFileSync(cfLogPath, 'utf8');
+            const match = logs.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
+            if (match) {
+              tunnelUrl = match[0];
+              break;
+            }
           }
         }
-      }
 
-      if (tunnelUrl) {
-        logOk(`Cloudflare Quick Tunnel Active: ${tunnelUrl}`);
-        
-        const configDir = path.join(brainDir, "config");
-        const configFile = path.join(configDir, "wizard-config.json");
-        fs.mkdirSync(configDir, { recursive: true });
-        
-        let current = {};
-        if (fs.existsSync(configFile)) {
-          try {
-            current = JSON.parse(fs.readFileSync(configFile, "utf8") || "{}");
-          } catch {}
+        if (tunnelUrl) {
+          logOk(`Cloudflare Quick Tunnel Active: ${tunnelUrl}`);
+          
+          const configDir = path.join(brainDir, 'config');
+          const configFile = path.join(configDir, 'wizard-config.json');
+          fs.mkdirSync(configDir, { recursive: true });
+          
+          let current = {};
+          if (fs.existsSync(configFile)) {
+            try {
+              current = JSON.parse(fs.readFileSync(configFile, 'utf8') || '{}');
+            } catch {}
+          }
+          current['cfg-domain'] = tunnelUrl.replace('https://', '');
+          current['cfg-api-url'] = tunnelUrl;
+          current['cfg-dash-url'] = `${tunnelUrl}/dashboard`;
+          current['cfg-health-url'] = `${tunnelUrl}/health`;
+          
+          fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+          logOk('Registered Quick Tunnel URL in wizard-config.json!');
+          dashboardUrl = `${tunnelUrl}/`;
+        } else {
+          logWarn('Could not extract Cloudflare Quick Tunnel URL. Falling back to local configuration.');
         }
-        current["cfg-domain"] = tunnelUrl.replace("https://", "");
-        current["cfg-api-url"] = tunnelUrl;
-        current["cfg-dash-url"] = `${tunnelUrl}/dashboard`;
-        current["cfg-health-url"] = `${tunnelUrl}/health`;
-        
-        fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: "utf8", mode: 0o600 });
-        logOk("Registered Quick Tunnel URL in wizard-config.json!");
-        dashboardUrl = `${tunnelUrl}/`;
-      } else {
-        logWarn("Could not extract Cloudflare Quick Tunnel URL. Falling back to local configuration.");
       }
     }
   }
 
-  // 1. Try opts.brain
-  if (!dashboardUrl && opts.brain) {
-    dashboardUrl = opts.brain;
-  }
-
-  // 2. Try process.env.TR_BRAIN
-  if (!dashboardUrl && process.env.TR_BRAIN) {
-    dashboardUrl = process.env.TR_BRAIN;
-  }
-
-  // 3. Try ~/.agent/config/wizard-config.json (Cloudflare remote URL)
+  // Resolve dashboard URL based on deployMode preference
   if (!dashboardUrl) {
-    const wizardConfigPath = path.join(brainDir, "config", "wizard-config.json");
-    if (fs.existsSync(wizardConfigPath)) {
-      try {
-        const wizardCfg = JSON.parse(fs.readFileSync(wizardConfigPath, "utf8"));
-        if (wizardCfg["cfg-dash-url"]) {
-          dashboardUrl = wizardCfg["cfg-dash-url"];
-        } else if (wizardCfg["cfg-api-url"]) {
-          dashboardUrl = wizardCfg["cfg-api-url"];
-        }
-      } catch {
-        // Ignored
+    if ((deployMode === 'custom-domain' || deployMode === 'named-tunnel') && domain) {
+      dashboardUrl = `https://${domain}/`;
+    } else if (opts.brain) {
+      dashboardUrl = opts.brain;
+    } else if (process.env.TR_BRAIN) {
+      dashboardUrl = process.env.TR_BRAIN;
+    } else {
+      const wizardConfigPath = path.join(brainDir, 'config', 'wizard-config.json');
+      if (fs.existsSync(wizardConfigPath)) {
+        try {
+          const wizardCfg = JSON.parse(fs.readFileSync(wizardConfigPath, 'utf8'));
+          if (wizardCfg['cfg-dash-url']) {
+            dashboardUrl = wizardCfg['cfg-dash-url'];
+          } else if (wizardCfg['cfg-api-url']) {
+            dashboardUrl = wizardCfg['cfg-api-url'];
+          }
+        } catch {}
       }
     }
   }
 
-  // 4. Try brain config/brain.json
   if (!dashboardUrl) {
-    const brainJsonPath = path.join(brainDir, "config", "brain.json");
+    const brainJsonPath = path.join(brainDir, 'config', 'brain.json');
     if (fs.existsSync(brainJsonPath)) {
       try {
-        const brainCfg = JSON.parse(fs.readFileSync(brainJsonPath, "utf8"));
+        const brainCfg = JSON.parse(fs.readFileSync(brainJsonPath, 'utf8'));
         if (brainCfg.url) {
           dashboardUrl = brainCfg.url;
         }
-      } catch {
-        // Ignored
-      }
+      } catch {}
     }
   }
 
-  // 5. Fallback to localhost:port
   if (!dashboardUrl) {
     try {
-      const { default: cfg } = await import("../core/config.mjs");
-      const displayHost = cfg.host === "127.0.0.1" || cfg.host === "0.0.0.0" ? "localhost" : cfg.host;
+      const { default: cfg } = await import('../core/config.mjs');
+      const displayHost = cfg.host === '127.0.0.1' || cfg.host === '0.0.0.0' ? 'localhost' : cfg.host;
       dashboardUrl = `http://${displayHost}:${cfg.port}/`;
     } catch {
-      dashboardUrl = "http://localhost:3000/";
+      dashboardUrl = 'http://localhost:3000/';
     }
   }
 
   // Normalize dashboardUrl
-  if (dashboardUrl && !dashboardUrl.endsWith("/")) {
-    dashboardUrl += "/";
+  if (dashboardUrl && !dashboardUrl.endsWith('/')) {
+    dashboardUrl += '/';
   }
 
   // ── Register project brain in global project registry ──

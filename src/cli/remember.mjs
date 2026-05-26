@@ -265,6 +265,45 @@ export default async function remember(args) {
       globalVaultDir: layer === 'project' ? globalVaultDir : undefined
     });
     console.log(`  ✅ Recompilation successful! Processed ${compileResult.nodesProcessed} SSSS nodes.`);
+
+    // When saving to the global brain, also recompile all registered project
+    // brains so they inherit the new global invariants/preferences/corrections.
+    if (layer === 'global' && brains.global) {
+      const registryPath = path.join(brains.global.brainDir, 'config', 'project-registry.json');
+      if (fs.existsSync(registryPath)) {
+        try {
+          const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+          const globalVault = path.join(brains.global.brainDir, 'memory-vault');
+          let recompiled = 0;
+          for (const project of registry) {
+            if (!project.brainDir || !fs.existsSync(project.brainDir)) continue;
+            const projVaultDir = path.join(project.brainDir, 'memory-vault');
+            const projDerivedDir = path.join(project.brainDir, 'memory-derived');
+            const projAgentDir = path.dirname(path.dirname(project.brainDir));
+            const projSkillsDir = path.join(projAgentDir, 'skills');
+            const projInstructionsFile = path.join(projAgentDir, 'INSTRUCTIONS.md');
+            // Determine the project root (one level above .agent/)
+            const projRoot = path.dirname(projAgentDir);
+            const projInstructions = path.join(projRoot, '.agent', 'INSTRUCTIONS.md');
+            try {
+              await compileSurface({
+                vaultDir: projVaultDir,
+                skillsDir: projSkillsDir,
+                derivedDir: projDerivedDir,
+                instructionsFile: fs.existsSync(projInstructions) ? projInstructions : projInstructionsFile,
+                globalVaultDir: globalVault
+              });
+              recompiled++;
+            } catch (e) {
+              // Non-fatal: skip projects that fail to recompile
+            }
+          }
+          if (recompiled > 0) {
+            console.log(`  ✅ Propagated to ${recompiled} registered project brain${recompiled === 1 ? '' : 's'}.`);
+          }
+        } catch { /* ignore registry parse errors */ }
+      }
+    }
   } catch (err) {
     console.warn(`  ⚠️  Memory saved, but surface recompilation failed: ${err.message}`);
   }

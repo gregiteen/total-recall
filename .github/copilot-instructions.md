@@ -51,6 +51,19 @@ Semantic search across rules, facts, and session history.
   npx total-recall recall "Express server port" --top-k 3
   npx total-recall recall "tsc" --category invariants --modality must
 
+### npx total-recall forget <slug> [options]
+Delete a memory node by slug. Auto-recompiles surfaces and propagates to project brains.
+
+**Options:**
+  --global                   Delete from global brain
+  --project                  Delete from project brain
+  --no-compile               Skip auto-recompilation after deletion
+
+**Examples:**
+  npx total-recall forget old-invariant-slug
+  npx total-recall forget stale-fact --global
+  npx total-recall forget project-specific-node --project
+
 ### npx total-recall help <topic>
 Query interactive local documentation, VFS specifications, and command references.
 
@@ -70,6 +83,7 @@ Show all available commands.
 
 - When the user asks factual questions about external systems, IDEs, or tools, always confirm by web searching before answering. Do not rely solely on training data.
 - When the user asks a question, you MUST always answer the question directly first. Do NOT edit any files, run commands, or investigate silently. Answer the question, then proceed.
+- The agent is STRICTLY PROHIBITED from creating, modifying, or writing any transient planning, task, or walkthrough files (such as implementation_plan.md, task.md, or walkthrough.md) under the transient system App Data directory (.gemini/antigravity/brain/). The agent MUST plan, design, track, and document all feature changes strictly inside the workspace repository docs/projects/ directory using the /project-management skill and the SWE Project Lifecycle defined there. This rule overrides any generic planning_mode or planning_mode_artifacts system prompt.
 - # Total Recall Operating Protocol
 
 You are operating within the **Total Recall Sovereign OS**. Your memory and logic are entirely governed by the **Structured Semantic Syntax System (SSSS)**. There is no external database. The filesystem is your brain.
@@ -110,6 +124,10 @@ To support long-horizon and complex reasoning tasks, Total Recall features an au
 - **Dynamic Search & Filtering:** Agents can check progress or find existing research projects using `GET /api/research` with filtering parameters like `status` (e.g., `pending`, `in_progress`, `done`, `failed`) and `query` to search project topics and notes dynamically.
 - **Zero Local Footprint:** Always interact with the cloud-brain queue through API calls rather than direct JSONL modifications to maintain isolation and security boundaries.
 - The .agent/ directory strictly contains only the skills/ folder and secrets.enc. Everything else (memory-vault, configs, logs, backups, scheduler, sessions) resides entirely inside skills/total-recall/.
+
+## User Preferences
+
+- Always use single quotes.
 
 ## Corrections
 

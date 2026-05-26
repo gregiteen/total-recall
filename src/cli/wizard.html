@@ -152,6 +152,7 @@
   .phase { display: none; animation: fadeIn 0.2s ease; }
   .phase.active { display: block; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .phase-header { margin-bottom: 28px; }
   .phase-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
@@ -788,6 +789,57 @@
             <label>Preferred Region / Zone (Optional)</label>
             <input type="text" id="cfg-cloud-region" placeholder="e.g. nyc3, fra1, us-east-1 (or leave empty for auto)" style="width:100%;padding:8px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit">
           </div>
+        </div>
+      </div>
+
+      <!-- Project Brain Selector -->
+      <div class="card" id="project-brain-card">
+        <h3>📂 Install Location — Select Brains to Provision</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+          Choose where to install Total Recall memory brains. Select <strong>Global</strong> for universal identity rules and preferences, and/or individual <strong>project folders</strong> for project-specific knowledge.
+        </p>
+
+        <!-- Global toggle -->
+        <label class="checkbox-item" style="padding:10px 14px;background:var(--panel2);border:2px solid var(--green);border-radius:8px;margin-bottom:12px;gap:12px">
+          <input type="checkbox" id="brain-global" checked style="width:16px;height:16px;accent-color:var(--green)">
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:13px">🌐 Global Brain <span style="font-weight:400;color:var(--green);font-size:11px;margin-left:6px">Recommended</span></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">~/.agent/ — Universal identity, preferences, invariants. Shared across all projects.</div>
+          </div>
+        </label>
+
+        <!-- Detected projects list -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">Detected Projects</span>
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:11px" onclick="loadDetectedProjects()">⟳ Refresh</button>
+          </div>
+          <div id="project-list-container" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+            <div id="project-list-loading" style="text-align:center;padding:20px;color:var(--muted);font-size:12px">
+              <span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:6px"></span>
+              Scanning for code projects...
+            </div>
+            <div id="project-list" style="display:none"></div>
+            <div id="project-list-empty" style="display:none;text-align:center;padding:16px;color:var(--muted);font-size:12px">
+              No projects detected. Use "Browse" to add project folders manually.
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom path / Browse -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">
+          <div style="display:flex;gap:8px;align-items:flex-end">
+            <div class="form-group" style="flex:1;margin-bottom:0">
+              <label style="margin-bottom:4px">Add Custom Project Path</label>
+              <input type="text" id="custom-project-path" placeholder="/path/to/your/project" autocomplete="off" spellcheck="false">
+            </div>
+            <button class="btn btn-secondary" style="padding:9px 14px;font-size:12px;white-space:nowrap" onclick="addCustomProject()">+ Add</button>
+          </div>
+        </div>
+
+        <!-- Selection summary -->
+        <div id="brain-selection-summary" style="margin-top:14px;padding:10px 14px;background:rgba(35,134,54,0.08);border:1px solid rgba(35,134,54,0.2);border-radius:6px;font-size:12px;color:var(--green);display:none">
+          <strong>Selected:</strong> <span id="brain-selection-count">0</span> brain(s) will be provisioned.
         </div>
       </div>
 
@@ -1756,6 +1808,7 @@
     saveWizardState({ phase: n });
     syncPersistentBarVisibility();
 
+    if (n === 1) loadDetectedProjects();
     if (n === 2) {
       startSSE();
     }
@@ -1798,6 +1851,147 @@
       W.deployTarget = val;
     });
   });
+
+  // ── Phase 1: Project Brain Selector ──
+  var _detectedProjects = [];
+  var _customProjects = [];
+  var _projectsLoaded = false;
+
+  window.loadDetectedProjects = function () {
+    if (_projectsLoaded) return;
+    var listEl = document.getElementById('project-list');
+    var loadingEl = document.getElementById('project-list-loading');
+    var emptyEl = document.getElementById('project-list-empty');
+    if (loadingEl) loadingEl.style.display = '';
+    if (listEl) listEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    fetch('/api/detect-projects')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _detectedProjects = data.projects || [];
+        _projectsLoaded = true;
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (_detectedProjects.length === 0) {
+          if (emptyEl) emptyEl.style.display = '';
+          return;
+        }
+        if (listEl) {
+          listEl.style.display = 'flex';
+          listEl.style.flexDirection = 'column';
+          listEl.style.gap = '6px';
+          listEl.innerHTML = '';
+          _detectedProjects.forEach(function (proj) {
+            listEl.appendChild(createProjectRow(proj));
+          });
+        }
+        updateBrainSummary();
+      })
+      .catch(function () {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (emptyEl) {
+          emptyEl.textContent = 'Failed to scan projects. Use "Add" to enter paths manually.';
+          emptyEl.style.display = '';
+        }
+      });
+  };
+
+  function createProjectRow(proj) {
+    var row = document.createElement('label');
+    row.className = 'checkbox-item';
+    row.style.cssText = 'padding:8px 12px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;gap:10px;transition:border-color 0.15s';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.style.cssText = 'width:15px;height:15px;accent-color:var(--blue);flex-shrink:0';
+    cb.dataset.projectPath = proj.path;
+    cb.addEventListener('change', function () {
+      row.style.borderColor = cb.checked ? 'var(--blue)' : 'var(--border)';
+      updateBrainSummary();
+    });
+    var info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0';
+    var nameRow = document.createElement('div');
+    nameRow.style.cssText = 'font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px';
+    nameRow.textContent = proj.name;
+    if (proj.hasBrain) {
+      var badge = document.createElement('span');
+      badge.style.cssText = 'font-size:10px;font-weight:500;padding:1px 6px;border-radius:4px;background:rgba(35,134,54,0.15);color:var(--green)';
+      badge.textContent = '✓ Brain installed';
+      nameRow.appendChild(badge);
+    }
+    var pathRow = document.createElement('div');
+    pathRow.style.cssText = 'font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    pathRow.textContent = proj.path;
+    info.appendChild(nameRow);
+    info.appendChild(pathRow);
+    row.appendChild(cb);
+    row.appendChild(info);
+    return row;
+  }
+
+  window.addCustomProject = function () {
+    var input = document.getElementById('custom-project-path');
+    var val = (input ? input.value : '').trim();
+    if (!val) return;
+    if (!val.startsWith('/')) {
+      alert('Please enter an absolute path (starting with /).');
+      return;
+    }
+    // Check for duplicates
+    var allPaths = _detectedProjects.map(function (p) { return p.path; }).concat(_customProjects.map(function (p) { return p.path; }));
+    if (allPaths.indexOf(val) !== -1) {
+      alert('This project is already in the list.');
+      return;
+    }
+    var proj = { name: val.split('/').pop(), path: val, hasGit: false, hasBrain: false, custom: true };
+    _customProjects.push(proj);
+    var listEl = document.getElementById('project-list');
+    var emptyEl = document.getElementById('project-list-empty');
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (listEl) {
+      listEl.style.display = 'flex';
+      listEl.style.flexDirection = 'column';
+      listEl.style.gap = '6px';
+      var row = createProjectRow(proj);
+      // Auto-check custom additions
+      var cb = row.querySelector('input[type=checkbox]');
+      if (cb) {
+        cb.checked = true;
+        row.style.borderColor = 'var(--blue)';
+      }
+      listEl.appendChild(row);
+    }
+    if (input) input.value = '';
+    updateBrainSummary();
+  };
+
+  function updateBrainSummary() {
+    var globalChecked = document.getElementById('brain-global') && document.getElementById('brain-global').checked;
+    var projectCheckboxes = document.querySelectorAll('#project-list input[type=checkbox]:checked');
+    var total = (globalChecked ? 1 : 0) + projectCheckboxes.length;
+    var summaryEl = document.getElementById('brain-selection-summary');
+    var countEl = document.getElementById('brain-selection-count');
+    if (summaryEl && countEl) {
+      if (total > 0) {
+        countEl.textContent = total;
+        summaryEl.style.display = '';
+      } else {
+        summaryEl.style.display = 'none';
+      }
+    }
+  }
+
+  // Wire global checkbox
+  var globalCb = document.getElementById('brain-global');
+  if (globalCb) {
+    globalCb.addEventListener('change', function () {
+      var parentLabel = globalCb.closest('.checkbox-item');
+      if (parentLabel) {
+        parentLabel.style.borderColor = globalCb.checked ? 'var(--green)' : 'var(--border)';
+      }
+      updateBrainSummary();
+    });
+  }
 
   // ── Phase 1: Install on another computer on the network ──
   window.installOnNetwork = function () {
@@ -2120,7 +2314,9 @@
       deployTarget: deployTarget,
       dashboardPassword: pass,
       googleApiKey: googleApiKey,
-      openaiApiKey: openaiApiKey
+      openaiApiKey: openaiApiKey,
+      installGlobal: !!(document.getElementById('brain-global') && document.getElementById('brain-global').checked),
+      projectPaths: Array.from(document.querySelectorAll('#project-list input[type=checkbox]:checked')).map(function (cb) { return cb.dataset.projectPath; })
     };
 
     if (deployTarget === 'localnet') {

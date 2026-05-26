@@ -54,6 +54,7 @@ const COMMANDS = {
   chat:     'chat.mjs',
   status:   'status.mjs',
   remember: 'remember.mjs',
+  forget:   'forget.mjs',
   recall:   'recall.mjs',
   search:   'recall.mjs',
   research: 'research.mjs',
@@ -91,12 +92,14 @@ function printHelp() {
     dream               Manually trigger a dream cycle (Light → REM → Deep)
     lint                Validate all vault nodes against SSSS schema v2
     daemon <start|stop|status>  Manage the background daemon
+    status              Show server health, active deploy mode, dashboard URL, tunnel PID, and daemon state
     backup [options]    Create encrypted VFS tarball, push git backup, or Obsidian sync
     restore <path>      Restore from an encrypted backup
     upgrade --model <n> Swap the kernel model (e.g., gemma5-32b)
     friction            Analyze logs to detect workflow bottlenecks
     chat                Interactive terminal chat with the Sovereign OS
     remember            Remember new rules, preferences, or corrections in real time
+    forget <slug>       Delete a memory node by slug (with auto-recompile)
     recall              Recall semantic memory or search existing knowledge/rules/session-history
     map                 Visualize memory vault category trees and link relationships
     brain <cmd>         Manage registered brains and context resolution (list, status, register, unregister)

@@ -163,6 +163,19 @@ Semantic search across rules, facts, and session history.
   npx total-recall recall "Express server port" --top-k 3
   npx total-recall recall "tsc" --category invariants --modality must
 
+### npx total-recall forget <slug> [options]
+Delete a memory node by slug. Auto-recompiles surfaces and propagates to project brains.
+
+**Options:**
+  --global                   Delete from global brain
+  --project                  Delete from project brain
+  --no-compile               Skip auto-recompilation after deletion
+
+**Examples:**
+  npx total-recall forget old-invariant-slug
+  npx total-recall forget stale-fact --global
+  npx total-recall forget project-specific-node --project
+
 ### npx total-recall help <topic>
 Query interactive local documentation, VFS specifications, and command references.
 

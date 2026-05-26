@@ -1550,6 +1550,83 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
   } catch (err) { serverError(res, err); }
 });
 
+/**
+ * GET /api/gemini-models
+ * Dynamically fetches the list of available Gemini models using the user's GOOGLE_API_KEY.
+ * Falls back to a modern list of Gemini models if GOOGLE_API_KEY is not set or the fetch fails.
+ */
+router.get('/api/gemini-models', requireAuth, async (req, res) => {
+  try {
+    let apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      // Find GOOGLE_API_KEY in upwards .env files
+      try {
+        let dir = process.cwd();
+        while (dir !== path.dirname(dir)) {
+          const envPath = path.join(dir, '.env');
+          if (fs.existsSync(envPath)) {
+            const content = fs.readFileSync(envPath, 'utf8');
+            for (const line of content.split('\n')) {
+              const match = line.match(/^\s*GOOGLE_API_KEY\s*=\s*(["']?)(.*?)\1\s*$/);
+              if (match) {
+                apiKey = match[2];
+                break;
+              }
+            }
+          }
+          if (apiKey) break;
+          dir = path.dirname(dir);
+        }
+      } catch {}
+    }
+
+    const fallbackModels = [
+      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
+      { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+      { id: 'gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' },
+      { id: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash' },
+      { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' },
+      { id: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' },
+      { id: 'gemini-2.0-flash-lite', displayName: 'Gemini 2.0 Flash Lite' },
+      { id: 'gemini-pro-latest', displayName: 'Gemini Pro Latest' }
+    ];
+
+    if (!apiKey) {
+      return res.json({ models: fallbackModels, source: 'fallback' });
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const models = (data.models || [])
+          .filter(m => m.name.startsWith('models/gemini-') || m.name.startsWith('models/gemini'))
+          .map(m => {
+            const id = m.name.replace(/^models\//, '');
+            // Create nice display name e.g., "gemini-3.5-flash" -> "Gemini 3.5 Flash"
+            const parts = id.split('-');
+            const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+            return { id, displayName };
+          });
+        if (models.length > 0) {
+          return res.json({ models, source: 'dynamic' });
+        }
+      }
+    } catch {}
+
+    res.json({ models: fallbackModels, source: 'fallback_error' });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+
 function getLastModified(filePath) {
   try {
     if (fs.existsSync(filePath)) {

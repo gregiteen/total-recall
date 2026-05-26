@@ -172,6 +172,8 @@ export function startDeployUI(port = 3001) {
               if (opts.cloudProvider) current['cfg-cloud-provider'] = opts.cloudProvider;
               if (opts.cloudToken) current['cfg-cloud-token'] = opts.cloudToken;
               if (opts.cloudRegion) current['cfg-cloud-region'] = opts.cloudRegion;
+              if (opts.installGlobal !== undefined) current['installGlobal'] = opts.installGlobal;
+              if (opts.projectPaths) current['projectPaths'] = opts.projectPaths;
               fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
 
             } catch (e) {
@@ -619,6 +621,60 @@ export function startDeployUI(port = 3001) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: e.message }));
         }
+        return;
+      }
+
+      // ── GET /api/detect-projects — scan common code dirs for git repos ──
+      if (url === '/api/detect-projects' && req.method === 'GET') {
+        const HOME = os.homedir();
+        const codeDirs = [
+          path.join(HOME, 'Github'),
+          path.join(HOME, 'github'),
+          path.join(HOME, 'Projects'),
+          path.join(HOME, 'projects'),
+          path.join(HOME, 'Developer'),
+          path.join(HOME, 'developer'),
+          path.join(HOME, 'Code'),
+          path.join(HOME, 'code'),
+          path.join(HOME, 'repos'),
+          path.join(HOME, 'Repos'),
+          path.join(HOME, 'src'),
+          path.join(HOME, 'workspace'),
+          path.join(HOME, 'Workspace'),
+          path.join(HOME, 'dev'),
+          path.join(HOME, 'Dev'),
+          path.join(HOME, 'Desktop'),
+        ];
+        const projects = [];
+        const seen = new Set();
+        for (const dir of codeDirs) {
+          try {
+            if (!fs.existsSync(dir)) continue;
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (!entry.isDirectory()) continue;
+              if (entry.name.startsWith('.')) continue;
+              const fullPath = path.join(dir, entry.name);
+              if (seen.has(fullPath)) continue;
+              // Check if it's a git repo or has package.json (code project)
+              const hasGit = fs.existsSync(path.join(fullPath, '.git'));
+              const hasPkg = fs.existsSync(path.join(fullPath, 'package.json'));
+              const hasCargo = fs.existsSync(path.join(fullPath, 'Cargo.toml'));
+              const hasPyproject = fs.existsSync(path.join(fullPath, 'pyproject.toml'));
+              const hasGoMod = fs.existsSync(path.join(fullPath, 'go.mod'));
+              if (hasGit || hasPkg || hasCargo || hasPyproject || hasGoMod) {
+                seen.add(fullPath);
+                // Check if already has a Total Recall project brain
+                const hasBrain = fs.existsSync(path.join(fullPath, '.agent', 'skills', 'total-recall'));
+                projects.push({ name: entry.name, path: fullPath, hasGit, hasBrain });
+              }
+            }
+          } catch { /* skip unreadable dirs */ }
+        }
+        // Sort alphabetically by name
+        projects.sort((a, b) => a.name.localeCompare(b.name));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ projects }));
         return;
       }
 
