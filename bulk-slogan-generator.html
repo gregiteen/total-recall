@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulk Slogan + Graphic Generator — POD Suite</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Anton&family=Archivo+Black&family=Oswald:wght@400;600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=Abril+Fatface&family=DM+Serif+Display:ital@0;1&family=Bungee&family=Space+Grotesk:wght@600;700&family=Permanent+Marker&family=Caveat:wght@700&family=Fraunces:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#FAF7F0;
+  --rust:#B84A1F;
+  --mustard:#D4A017;
+  --cream:#F5E6D3;
+  --blk:#111111;
+  --border:2.5px solid #111;
+  --pad:14px;
+  --ui:'Space Grotesk',sans-serif;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);font-family:var(--ui);color:var(--blk);font-size:13px;display:flex;flex-direction:column}
+
+/* HEADER */
+header{flex-shrink:0;padding:10px 18px;border-bottom:var(--border);display:flex;align-items:center;gap:10px;background:var(--bg)}
+header h1{font-family:'Archivo Black',sans-serif;font-size:19px;letter-spacing:-.3px}
+.badge{background:var(--rust);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;text-transform:uppercase;letter-spacing:1px}
+
+/* LAYOUT */
+.app-body{flex:1;display:grid;grid-template-columns:270px 288px 1fr;overflow:hidden;min-height:0}
+.panel{border-right:var(--border);overflow-y:auto;padding:var(--pad);display:flex;flex-direction:column;gap:12px}
+.panel:last-child{border-right:none}
+.panel::-webkit-scrollbar{width:5px}
+.panel::-webkit-scrollbar-thumb{background:#ccc}
+
+/* TYPOGRAPHY */
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;color:#777;border-bottom:1px solid #e0d8cc;padding-bottom:5px}
+.lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:3px}
+
+/* FORM ELEMENTS */
+input[type=text],select,textarea{border:var(--border);background:#fff;padding:6px 8px;font-family:var(--ui);font-size:13px;outline:none;width:100%;color:var(--blk)}
+input[type=color]{border:var(--border);background:#fff;padding:2px;height:30px;cursor:pointer;outline:none}
+textarea{resize:vertical;min-height:110px;line-height:1.5}
+input[type=range]{width:100%;accent-color:var(--rust);cursor:pointer}
+.field{display:flex;flex-direction:column;gap:3px}
+
+/* RANGE ROW */
+.range-row{display:flex;align-items:center;gap:6px}
+.range-row input{flex:1}
+.rval{font-size:11px;font-weight:700;min-width:38px;text-align:right;color:#555}
+
+/* BUTTON GROUPS */
+.btn-grp{display:flex}
+.btn-grp button{flex:1;border:var(--border);border-right:none;background:#fff;padding:6px 4px;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.4px;font-family:var(--ui)}
+.btn-grp button:last-child{border-right:var(--border)}
+.btn-grp button.on{background:var(--blk);color:#fff}
+
+/* BUTTONS */
+.btn-primary{background:var(--rust);color:#fff;border:var(--border);padding:10px;font-family:var(--ui);font-size:13px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:1px;width:100%}
+.btn-primary:hover{background:#9d3d16}
+.btn-primary:disabled{background:#bbb;cursor:not-allowed}
+.btn-sec{background:#fff;color:var(--blk);border:var(--border);padding:7px 12px;font-family:var(--ui);font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.7px}
+.btn-sec:hover{background:var(--cream)}
+.btn-suc{background:var(--mustard);color:var(--blk);border:var(--border);padding:7px 12px;font-family:var(--ui);font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.7px}
+.btn-suc:hover{background:#b88c12}
+.btn-suc:disabled{background:#bbb;cursor:not-allowed}
+
+/* UPLOAD ZONE */
+.upload-zone{border:2.5px dashed #111;padding:18px 12px;text-align:center;cursor:pointer;background:#fff;transition:background .15s;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.upload-zone:hover,.upload-zone.over{background:var(--cream)}
+.upload-zone .ico{font-size:26px}
+.upload-zone p{font-size:10px;color:#888;line-height:1.5}
+.upload-zone img{max-width:100%;max-height:90px;border:var(--border);object-fit:contain}
+
+/* COLOR PRESETS */
+.color-row{display:flex;align-items:center;gap:8px}
+.c-presets{display:flex;gap:5px;flex-wrap:wrap}
+.c-dot{width:20px;height:20px;border:var(--border);cursor:pointer;flex-shrink:0;transition:transform .1s}
+.c-dot:hover{transform:scale(1.2)}
+.c-dot.on{outline:2px solid var(--rust);outline-offset:2px}
+
+/* PRESETS */
+.presets-wrap{display:flex;flex-wrap:wrap;gap:5px}
+.p-chip{background:#fff;border:var(--border);padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px}
+.p-chip:hover{background:var(--cream)}
+.p-chip .x{color:var(--rust);font-size:14px;line-height:1;font-weight:900}
+
+/* COLLAPSIBLE */
+.coll-hdr{display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:5px 0;border-bottom:1px solid #e0d8cc}
+.coll-hdr .coll-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#555}
+.coll-body{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.coll-body.hidden{display:none}
+
+/* BG TOGGLE */
+.bg-tgl{display:flex}
+.bg-tgl button{flex:1;border:var(--border);border-right:none;background:#fff;padding:5px 3px;font-size:10px;font-weight:700;cursor:pointer;text-transform:uppercase;font-family:var(--ui)}
+.bg-tgl button:last-child{border-right:var(--border)}
+.bg-tgl button.on{background:var(--blk);color:#fff}
+
+/* PREVIEW GRID */
+.right-panel{overflow-y:auto;padding:var(--pad);display:flex;flex-direction:column;gap:12px}
+.grid-bar{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.p-card{border:var(--border);background:#fff;overflow:hidden}
+.p-card-cvs{display:flex;position:relative}
+.p-card-cvs canvas{width:100%;height:auto;display:block;cursor:zoom-in}
+.checker{background-image:repeating-conic-gradient(#ddd 0% 25%,#fff 0% 50%);background-size:14px 14px}
+.white-shirt{background:#f0f0f0}
+.black-shirt{background:#1a1a1a}
+.p-card-actions{display:flex;align-items:center;gap:5px;padding:5px 6px;border-top:var(--border);background:var(--bg)}
+.p-card-actions .slabel{flex:1;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#666}
+.p-card-actions button{background:#fff;border:var(--border);padding:3px 7px;font-size:9px;font-weight:700;cursor:pointer;text-transform:uppercase;font-family:var(--ui);white-space:nowrap}
+.p-card-actions button:hover{background:var(--cream)}
+
+/* PROGRESS */
+.progress{width:100%;height:5px;background:#e0d8cc;display:none;border:1px solid #ccc}
+.progress.vis{display:block}
+.progress-fill{height:100%;background:var(--rust);transition:width .15s}
+
+/* EMPTY STATE */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;color:#bbb;font-size:13px;gap:8px;grid-column:1/-1;text-align:center}
+.empty span:first-child{font-size:36px}
+
+/* LIGHTBOX */
+#lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9000;align-items:center;justify-content:center}
+#lb.open{display:flex}
+#lb-inner{position:relative;max-width:88vw;max-height:88vh}
+#lb-inner img{max-width:100%;max-height:88vh;display:block;border:3px solid #fff}
+#lb-close{position:absolute;top:-13px;right:-13px;width:26px;height:26px;background:var(--rust);color:#fff;border:none;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* RENDERING SPINNER */
+.rendering-dot{font-size:10px;color:#999;padding:4px 0;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bulk Slogan + Graphic Generator</h1>
+  <span class="badge">POD Suite</span>
+</header>
+
+<div class="app-body">
+
+<!-- ═══════════════════════ LEFT PANEL ═══════════════════════ -->
+<aside class="panel">
+  <div class="sec-title">Graphic &amp; Slogans</div>
+
+  <div class="field">
+    <label class="lbl">Upload Graphic</label>
+    <div class="upload-zone" id="uploadZone">
+      <div class="ico">📁</div>
+      <p>Drag &amp; drop PNG / JPG / WebP<br>or click to browse<br><strong>PNG with transparency preferred</strong></p>
+    </div>
+    <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp" style="display:none">
+  </div>
+
+  <div class="field">
+    <label class="lbl">Graphic Size</label>
+    <div class="range-row"><input type="range" id="gSize" min="10" max="90" value="55"><span class="rval" id="gSizeV">55%</span></div>
+  </div>
+  <div class="field">
+    <label class="lbl">Vertical Position</label>
+    <div class="range-row"><input type="range" id="gVPos" min="5" max="90" value="45"><span class="rval" id="gVPosV">45%</span></div>
+  </div>
+  <div class="field">
+    <label class="lbl">Horizontal Alignment</label>
+    <div class="btn-grp" id="hAlignGrp">
+      <button data-v="left">Left</button>
+      <button data-v="center" class="on">Center</button>
+      <button data-v="right">Right</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="lbl">Slogans — one per line</label>
+    <textarea id="slogansInput" placeholder="Enter slogans…"></textarea>
+  </div>
+
+  <div class="field">
+    <label class="lbl">Static Sub-text (optional)</label>
+    <input type="text" id="subText" placeholder="e.g. EST. 2024  ·  NASHVILLE, TN">
+  </div>
+
+  <div class="field">
+    <label class="lbl">Saved Presets</label>
+    <div class="presets-wrap" id="presetsRow"><span style="font-size:11px;color:#aaa">No presets yet.</span></div>
+  </div>
+  <button class="btn-sec" id="savePresetBtn">Save as Preset</button>
+
+  <button class="btn-primary" id="genBtn">Generate Designs</button>
+  <div class="progress" id="progress"><div class="progress-fill" id="progressFill" style="width:0"></div></div>
+</aside>
+
+<!-- ═══════════════════════ MIDDLE PANEL ═════════════════════ -->
+<section class="panel">
+  <div class="sec-title">Design Controls</div>
+
+  <div class="field">
+    <label class="lbl">Layout Preset</label>
+    <select id="layoutPreset">
+      <option value="vintage-athletic">Vintage Athletic</option>
+      <option value="minimalist-stack">Minimalist Stack</option>
+      <option value="circle-badge">Circle Badge</option>
+      <option value="simple-below">Simple Below</option>
+      <option value="custom">Custom</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="lbl">Slogan Position</label>
+    <div class="btn-grp" id="sPosGrp">
+      <button data-v="above" class="on">Above Graphic</button>
+      <button data-v="below">Below Graphic</button>
+    </div>
+  </div>
+
+  <div class="sec-title" style="margin-top:4px">Main Slogan</div>
+
+  <div class="field">
+    <label class="lbl">Font</label>
+    <select id="sFont"></select>
+  </div>
+  <div class="field">
+    <label class="lbl">Color</label>
+    <div class="color-row">
+      <input type="color" id="sColor" value="#111111">
+      <div class="c-presets" id="sColorPres"></div>
+    </div>
+  </div>
+  <div class="field">
+    <label class="lbl">Font Size</label>
+    <div class="range-row"><input type="range" id="sFontSize" min="60" max="420" value="180"><span class="rval" id="sFontSizeV">180</span></div>
+  </div>
+  <div class="field">
+    <label class="lbl">Letter Spacing</label>
+    <div class="range-row"><input type="range" id="sSpacing" min="-2" max="15" step="0.5" value="2"><span class="rval" id="sSpacingV">2px</span></div>
+  </div>
+  <div class="field">
+    <label class="lbl">Text Transform</label>
+    <select id="sTransform">
+      <option value="none">None</option>
+      <option value="upper" selected>UPPERCASE</option>
+      <option value="lower">lowercase</option>
+    </select>
+  </div>
+  <div class="field">
+    <label class="lbl">Text Effect</label>
+    <select id="sEffect">
+      <option value="straight">Straight</option>
+      <option value="arch-up" selected>Arch Up</option>
+      <option value="arch-down">Arch Down</option>
+      <option value="circle">Circle</option>
+      <option value="wave">Wave</option>
+    </select>
+  </div>
+  <div class="field" id="sCurveField">
+    <label class="lbl">Curve Intensity</label>
+    <div class="range-row"><input type="range" id="sCurve" min="0" max="100" value="55"><span class="rval" id="sCurveV">55%</span></div>
+  </div>
+
+  <!-- Sub-text collapsible -->
+  <div class="coll-hdr" id="subToggle">
+    <span class="coll-title">Sub-text Controls</span>
+    <span id="subArr">▼</span>
+  </div>
+  <div class="coll-body hidden" id="subControls">
+    <div class="field">
+      <label class="lbl">Font</label>
+      <select id="stFont"></select>
+    </div>
+    <div class="field">
+      <label class="lbl">Color</label>
+      <div class="color-row">
+        <input type="color" id="stColor" value="#111111">
+        <div class="c-presets" id="stColorPres"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label class="lbl">Font Size</label>
+      <div class="range-row"><input type="range" id="stFontSize" min="40" max="260" value="90"><span class="rval" id="stFontSizeV">90</span></div>
+    </div>
+    <div class="field">
+      <label class="lbl">Letter Spacing</label>
+      <div class="range-row"><input type="range" id="stSpacing" min="-2" max="15" step="0.5" value="4"><span class="rval" id="stSpacingV">4px</span></div>
+    </div>
+    <div class="field">
+      <label class="lbl">Text Transform</label>
+      <select id="stTransform">
+        <option value="none">None</option>
+        <option value="upper" selected>UPPERCASE</option>
+        <option value="lower">lowercase</option>
+      </select>
+    </div>
+    <div class="field">
+      <label class="lbl">Text Effect</label>
+      <select id="stEffect">
+        <option value="straight">Straight</option>
+        <option value="arch-up">Arch Up</option>
+        <option value="arch-down" selected>Arch Down</option>
+        <option value="circle">Circle</option>
+        <option value="wave">Wave</option>
+      </select>
+    </div>
+    <div class="field" id="stCurveField">
+      <label class="lbl">Curve Intensity</label>
+      <div class="range-row"><input type="range" id="stCurve" min="0" max="100" value="50"><span class="rval" id="stCurveV">50%</span></div>
+    </div>
+  </div>
+
+  <!-- BG Preview Toggle (stays at bottom via margin-top:auto) -->
+  <div class="field" style="margin-top:auto">
+    <label class="lbl">Background Preview</label>
+    <div class="bg-tgl" id="bgTgl">
+      <button data-v="checker" class="on">Transparent</button>
+      <button data-v="white-shirt">White</button>
+      <button data-v="black-shirt">Black</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ RIGHT PANEL ══════════════════════ -->
+<section class="right-panel">
+  <div class="grid-bar">
+    <div class="sec-title" style="border:none;padding:0;margin:0">Preview Grid</div>
+    <button class="btn-suc" id="dlAllBtn" style="margin-left:auto">Download All (ZIP)</button>
+  </div>
+  <div class="preview-grid" id="previewGrid">
+    <div class="empty">
+      <span>🖼️</span>
+      <span>Upload a graphic &amp; enter slogans,<br>then click Generate.</span>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<!-- Lightbox -->
+<div id="lb">
+  <div id="lb-inner">
+    <button id="lb-close">✕</button>
+    <img id="lb-img" src="" alt="">
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────
+const CW = 4500, CH = 5400;
+
+const FONTS = [
+  'Bebas Neue','Anton','Archivo Black','Oswald','Playfair Display',
+  'Abril Fatface','DM Serif Display','Bungee','Space Grotesk',
+  'Permanent Marker','Caveat','Fraunces',
+];
+
+const COLORS = [
+  {l:'Black',  v:'#111111'},
+  {l:'White',  v:'#ffffff'},
+  {l:'Cream',  v:'#F5E6D3'},
+  {l:'Rust',   v:'#B84A1F'},
+  {l:'Forest', v:'#2D4F3F'},
+  {l:'Mustard',v:'#D4A017'},
+];
+
+const SAMPLE = `Raised on sweet tea and Jesus
+Born to be wild, forced to work
+Just a girl who loves horses
+Small town girl, big city dreams
+Coffee and cowboy boots
+Life is better on the back of a horse
+Tennessee whiskey and wildflowers
+Blessed and obsessed with this life
+Boots, bibles, and butterflies
+Y'all means all`;
+
+const LAYOUT_PRESETS = {
+  'vintage-athletic':  {sPos:'above', sEffect:'arch-up',   sCurve:62,  stEffect:'arch-down', stCurve:62,  sFont:'Bebas Neue',   sFontSize:200, sSpacing:8,  sTransform:'upper', stFont:'Bebas Neue',   stFontSize:100, stSpacing:10, stTransform:'upper'},
+  'minimalist-stack':  {sPos:'above', sEffect:'straight',  sCurve:0,   stEffect:'straight',  stCurve:0,   sFont:'Oswald',       sFontSize:160, sSpacing:5,  sTransform:'upper', stFont:'Space Grotesk', stFontSize:80,  stSpacing:8,  stTransform:'upper'},
+  'circle-badge':      {sPos:'above', sEffect:'circle',    sCurve:100, stEffect:'straight',  stCurve:0,   sFont:'Bebas Neue',   sFontSize:155, sSpacing:10, sTransform:'upper', stFont:'Space Grotesk', stFontSize:80,  stSpacing:6,  stTransform:'upper'},
+  'simple-below':      {sPos:'below', sEffect:'straight',  sCurve:0,   stEffect:'straight',  stCurve:0,   sFont:'Anton',        sFontSize:170, sSpacing:4,  sTransform:'upper', stFont:'Space Grotesk', stFontSize:80,  stSpacing:6,  stTransform:'upper'},
+};
+
+// ── State ──────────────────────────────────────────────────────
+const S = {
+  imgDataUrl: null,
+  imgNatW: 1, imgNatH: 1,   // natural dimensions of loaded image
+  hAlign: 'center',
+  sPos:   'above',
+  bgMode: 'checker',
+  designs: [],   // [{slogan, settings}]
+  slogans: [],
+};
+
+// ── Helpers ────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const vf = id => $(id).value;
+const nf = id => +$(id).value;
+
+function txform(t, m){ return m==='upper'?t.toUpperCase():m==='lower'?t.toLowerCase():t; }
+
+function slugify(s){
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-').trim()||'design';
+}
+
+function loadImg(src){
+  return new Promise((res,rej)=>{
+    const i=new Image();
+    i.onload=()=>res(i);
+    i.onerror=rej;
+    i.src=src;
+  });
+}
+
+function getSettings(){
+  return {
+    gSize:      nf('gSize'),
+    gVPos:      nf('gVPos'),
+    hAlign:     S.hAlign,
+    sPos:       S.sPos,
+    sFont:      vf('sFont'),
+    sColor:     vf('sColor'),
+    sFontSize:  nf('sFontSize'),
+    sSpacing:   nf('sSpacing'),
+    sTransform: vf('sTransform'),
+    sEffect:    vf('sEffect'),
+    sCurve:     nf('sCurve'),
+    subText:    vf('subText').trim(),
+    stFont:     vf('stFont'),
+    stColor:    vf('stColor'),
+    stFontSize: nf('stFontSize'),
+    stSpacing:  nf('stSpacing'),
+    stTransform:vf('stTransform'),
+    stEffect:   vf('stEffect'),
+    stCurve:    nf('stCurve'),
+  };
+}
+
+// ── Path Math ──────────────────────────────────────────────────
+function qbez(t,p0,p1,p2){ const m=1-t; return m*m*p0+2*m*t*p1+t*t*p2; }
+
+// Returns array of {x,y,angle} sampled from a parametric fn
+function samplePath(fn, N=1000){
+  const pts=[];
+  for(let i=0;i<=N;i++){ const t=i/N; pts.push(fn(t)); }
+  // add angle
+  return pts.map((p,i)=>{
+    let ax,ay;
+    if(i<pts.length-1){ ax=pts[i+1].x-p.x; ay=pts[i+1].y-p.y; }
+    else { ax=p.x-pts[i-1].x; ay=p.y-pts[i-1].y; }
+    return {...p, angle:Math.atan2(ay,ax)};
+  });
+}
+
+function arcLen(pts){
+  let l=0;
+  for(let i=1;i<pts.length;i++){
+    const dx=pts[i].x-pts[i-1].x, dy=pts[i].y-pts[i-1].y;
+    l+=Math.sqrt(dx*dx+dy*dy);
+  }
+  return l;
+}
+
+function ptAt(pts, d){
+  let acc=0;
+  for(let i=1;i<pts.length;i++){
+    const dx=pts[i].x-pts[i-1].x, dy=pts[i].y-pts[i-1].y;
+    const seg=Math.sqrt(dx*dx+dy*dy);
+    if(acc+seg>=d){
+      const f=(d-acc)/seg;
+      return { x:pts[i-1].x+dx*f, y:pts[i-1].y+dy*f, angle:pts[i-1].angle };
+    }
+    acc+=seg;
+  }
+  return pts[pts.length-1];
+}
+
+function pathFn(effect, curve, cx, cy, radius){
+  const d=curve/100;
+  if(effect==='arch-up'){
+    const x0=cx-radius,x1=cx+radius,cpy=cy-radius*d*0.85;
+    return t=>({x:qbez(t,x0,cx,x1), y:qbez(t,cy,cpy,cy)});
+  }
+  if(effect==='arch-down'){
+    const x0=cx-radius,x1=cx+radius,cpy=cy+radius*d*0.85;
+    return t=>({x:qbez(t,x0,cx,x1), y:qbez(t,cy,cpy,cy)});
+  }
+  if(effect==='circle'){
+    const r=radius*(0.5+d*0.5);
+    return t=>({x:cx+r*Math.cos(-Math.PI/2+2*Math.PI*t), y:cy+r*Math.sin(-Math.PI/2+2*Math.PI*t)});
+  }
+  if(effect==='wave'){
+    const x0=cx-radius,span=2*radius,amp=radius*0.1*d;
+    return t=>({x:x0+span*t, y:cy+amp*Math.sin(2*Math.PI*t)});
+  }
+  // straight
+  return t=>({x:cx-radius+2*radius*t, y:cy});
+}
+
+// ── Canvas Text Rendering ──────────────────────────────────────
+function drawTextPath(ctx, text, fn, spacing, color, fontStr){
+  ctx.save();
+  ctx.font=fontStr; ctx.fillStyle=color; ctx.textBaseline='alphabetic';
+
+  const pts=samplePath(fn,1400);
+  const total=arcLen(pts);
+
+  const chars=[...text];
+  const widths=chars.map(c=>ctx.measureText(c).width+spacing);
+  const textLen=widths.reduce((a,b)=>a+b,0)-spacing;
+
+  let d=Math.max(0,(total-textLen)/2);
+  chars.forEach((ch,i)=>{
+    const hw=widths[i]/2;
+    const pt=ptAt(pts,d+hw);
+    ctx.save();
+    ctx.translate(pt.x,pt.y);
+    ctx.rotate(pt.angle);
+    ctx.fillText(ch,-(widths[i]-spacing)/2,0);
+    ctx.restore();
+    d+=widths[i];
+  });
+  ctx.restore();
+}
+
+function drawTextStraight(ctx, text, cx, cy, spacing, color, fontStr){
+  ctx.save();
+  ctx.font=fontStr; ctx.fillStyle=color; ctx.textBaseline='alphabetic';
+  const chars=[...text];
+  const widths=chars.map(c=>ctx.measureText(c).width);
+  const totalW=widths.reduce((a,b)=>a+b,0)+spacing*(chars.length-1);
+  let x=cx-totalW/2;
+  chars.forEach((ch,i)=>{ ctx.fillText(ch,x,cy); x+=widths[i]+spacing; });
+  ctx.restore();
+}
+
+// ── Render Design to Canvas (export-quality) ───────────────────
+async function renderDesign(slogan, settings){
+  await document.fonts.ready;
+
+  const {gSize,gVPos,hAlign,sPos,
+    sFont,sColor,sFontSize,sSpacing,sTransform,sEffect,sCurve,
+    subText,stFont,stColor,stFontSize,stSpacing,stTransform,stEffect,stCurve} = settings;
+
+  const canvas=document.createElement('canvas');
+  canvas.width=CW; canvas.height=CH;
+  const ctx=canvas.getContext('2d');
+
+  // ── Image ────────────────────────────────────────────────
+  let imgTop=CH*0.1, imgBot=CH*0.9;  // fallback when no image
+  if(S.imgDataUrl){
+    const img=await loadImg(S.imgDataUrl);
+    const iW=CW*(gSize/100);
+    const iH=iW*(img.naturalHeight/img.naturalWidth);
+    const gCY=CH*(gVPos/100);
+    let iX;
+    if(hAlign==='left')       iX=CW*0.05;
+    else if(hAlign==='right') iX=CW*0.95-iW;
+    else                      iX=(CW-iW)/2;
+    const iY=gCY-iH/2;
+    ctx.drawImage(img,iX,iY,iW,iH);
+    imgTop=iY; imgBot=iY+iH;
+  }
+
+  // ── Text positions ───────────────────────────────────────
+  const cx=CW/2, r=CW*0.44;
+  let sCY, stCY;
+  if(sPos==='above'){
+    sCY  = Math.max(sFontSize*1.05, imgTop - sFontSize*0.85);
+    stCY = Math.min(CH-stFontSize*0.5, imgBot + stFontSize*1.15);
+  } else {
+    sCY  = Math.min(CH-sFontSize*0.5, imgBot + sFontSize*1.05);
+    stCY = Math.max(stFontSize*1.05, imgTop - stFontSize*0.8);
+  }
+
+  // ── Main slogan ──────────────────────────────────────────
+  const sText=txform(slogan, sTransform);
+  const sFStr=`${sFontSize}px "${sFont}",sans-serif`;
+
+  if(sEffect==='straight'){
+    drawTextStraight(ctx, sText, cx, sCY, sSpacing, sColor, sFStr);
+  } else {
+    drawTextPath(ctx, sText, pathFn(sEffect,sCurve,cx,sCY,r), sSpacing, sColor, sFStr);
+  }
+
+  // ── Sub-text ─────────────────────────────────────────────
+  if(subText){
+    const stText=txform(subText, stTransform);
+    const stFStr=`${stFontSize}px "${stFont}",sans-serif`;
+    if(stEffect==='straight'){
+      drawTextStraight(ctx, stText, cx, stCY, stSpacing, stColor, stFStr);
+    } else {
+      drawTextPath(ctx, stText, pathFn(stEffect,stCurve,cx,stCY,r*0.82), stSpacing, stColor, stFStr);
+    }
+  }
+
+  return canvas;
+}
+
+// ── Build Preview Card ─────────────────────────────────────────
+function makeCard(slogan, settings){
+  const card=document.createElement('div');
+  card.className='p-card';
+
+  const wrap=document.createElement('div');
+  wrap.className=`p-card-cvs ${S.bgMode}`;
+
+  const PREV_W=450, PREV_H=Math.round(450*(CH/CW));
+  const cvs=document.createElement('canvas');
+  cvs.width=PREV_W; cvs.height=PREV_H;
+  cvs.style.width='100%'; cvs.style.cursor='zoom-in';
+  cvs.addEventListener('click',()=>openLightbox(slogan,settings));
+  wrap.appendChild(cvs);
+  card.appendChild(wrap);
+
+  // Async render
+  (async ()=>{
+    try {
+      const full=await renderDesign(slogan,settings);
+      const ctx=cvs.getContext('2d');
+      ctx.clearRect(0,0,PREV_W,PREV_H);
+      ctx.drawImage(full,0,0,PREV_W,PREV_H);
+    } catch(e){ console.warn(e); }
+  })();
+
+  const actions=document.createElement('div');
+  actions.className='p-card-actions';
+  const lbl=document.createElement('span');
+  lbl.className='slabel'; lbl.textContent=slogan;
+  const zBtn=document.createElement('button');
+  zBtn.textContent='⊕ Zoom';
+  zBtn.addEventListener('click',()=>openLightbox(slogan,settings));
+  const dlBtn=document.createElement('button');
+  dlBtn.textContent='↓ PNG';
+  dlBtn.addEventListener('click',()=>downloadOne(slogan,settings));
+  actions.appendChild(lbl); actions.appendChild(zBtn); actions.appendChild(dlBtn);
+  card.appendChild(actions);
+
+  return card;
+}
+
+// ── Generate / Refresh ────────────────────────────────────────
+function renderGrid(slogans){
+  const grid=$('previewGrid'), settings=getSettings();
+  grid.innerHTML='';
+  S.designs=[];
+  slogans.forEach(sl=>{
+    S.designs.push({slogan:sl, settings});
+    grid.appendChild(makeCard(sl,settings));
+  });
+}
+
+let rTimer=null;
+function scheduleRefresh(){
+  clearTimeout(rTimer);
+  rTimer=setTimeout(()=>{ if(S.slogans.length) renderGrid(S.slogans); },150);
+}
+
+// ── BG Mode ────────────────────────────────────────────────────
+function updateBgMode(){
+  document.querySelectorAll('.p-card-cvs').forEach(el=>{
+    el.className=`p-card-cvs ${S.bgMode}`;
+  });
+}
+
+// ── Lightbox ───────────────────────────────────────────────────
+async function openLightbox(slogan,settings){
+  const canvas=await renderDesign(slogan,settings);
+  $('lb-img').src=canvas.toDataURL('image/png');
+  $('lb').classList.add('open');
+}
+function closeLb(){ $('lb').classList.remove('open'); $('lb-img').src=''; }
+
+// ── Export ─────────────────────────────────────────────────────
+async function downloadOne(slogan,settings){
+  try {
+    const c=await renderDesign(slogan,settings);
+    c.toBlob(b=>{
+      const u=URL.createObjectURL(b), a=document.createElement('a');
+      a.href=u; a.download=slugify(slogan)+'.png'; a.click(); URL.revokeObjectURL(u);
+    },'image/png');
+  } catch(e){ alert('Export failed: '+e.message); }
+}
+
+async function downloadAll(){
+  if(!S.designs.length){ alert('Generate designs first.'); return; }
+  const btn=$('dlAllBtn');
+  btn.textContent='Preparing…'; btn.disabled=true;
+  const prog=$('progress'), fill=$('progressFill');
+  prog.classList.add('vis');
+  try {
+    const zip=new JSZip();
+    for(let i=0;i<S.designs.length;i++){
+      const {slogan,settings}=S.designs[i];
+      const c=await renderDesign(slogan,settings);
+      const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+      zip.file(slugify(slogan)+'.png',blob);
+      fill.style.width=Math.round((i+1)/S.designs.length*100)+'%';
+    }
+    const content=await zip.generateAsync({type:'blob'});
+    const u=URL.createObjectURL(content), a=document.createElement('a');
+    a.href=u; a.download='slogan-designs.zip'; a.click(); URL.revokeObjectURL(u);
+  } catch(e){ alert('ZIP failed: '+e.message); }
+  finally {
+    btn.textContent='Download All (ZIP)'; btn.disabled=false;
+    prog.classList.remove('vis'); fill.style.width='0';
+  }
+}
+
+// ── Presets ────────────────────────────────────────────────────
+function getPresets(){ try{ return JSON.parse(localStorage.getItem('ssg_presets')||'[]'); }catch{return[];} }
+
+function savePreset(){
+  const name=prompt('Preset name:'); if(!name) return;
+  const p=getPresets();
+  p.push({name, settings:getSettings(), img:S.imgDataUrl, sub:$('subText').value});
+  try{ localStorage.setItem('ssg_presets',JSON.stringify(p)); }catch{}
+  renderPresets();
+}
+
+function loadPreset(i){
+  const p=getPresets()[i]; if(!p) return;
+  if(p.img){ S.imgDataUrl=p.img; showThumb(); }
+  if(p.sub!=null) $('subText').value=p.sub;
+  if(p.settings){
+    const s=p.settings;
+    ['sFont','sColor','sFontSize','sSpacing','sTransform','sEffect','sCurve',
+     'stFont','stColor','stFontSize','stSpacing','stTransform','stEffect','stCurve',
+     'gSize','gVPos','subText'].forEach(k=>{ const e=$(k); if(e) e.value=s[k]??e.value; });
+    if(s.hAlign){ S.hAlign=s.hAlign; $('hAlignGrp').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.hAlign)); }
+    if(s.sPos){   S.sPos=s.sPos;     $('sPosGrp').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===s.sPos)); }
+  }
+  syncRangeDisplays();
+  updateCurveFields();
+  scheduleRefresh();
+}
+
+function deletePreset(i){ const p=getPresets(); p.splice(i,1); try{ localStorage.setItem('ssg_presets',JSON.stringify(p)); }catch{} renderPresets(); }
+
+function renderPresets(){
+  const row=$('presetsRow'), p=getPresets();
+  row.innerHTML='';
+  if(!p.length){ row.innerHTML='<span style="font-size:11px;color:#aaa">No presets yet.</span>'; return; }
+  p.forEach((pr,i)=>{
+    const c=document.createElement('div'); c.className='p-chip';
+    c.innerHTML=`<span>${pr.name}</span><span class="x" title="Delete">×</span>`;
+    c.querySelector('span:first-child').addEventListener('click',()=>loadPreset(i));
+    c.querySelector('.x').addEventListener('click',e=>{ e.stopPropagation(); deletePreset(i); });
+    row.appendChild(c);
+  });
+}
+
+// ── Upload ─────────────────────────────────────────────────────
+function bindUploadZone(){
+  const zone=$('uploadZone'), inp=$('fileInput');
+  zone.addEventListener('click',()=>inp.click());
+  inp.addEventListener('change',e=>{ if(e.target.files[0]) readFile(e.target.files[0]); });
+  zone.addEventListener('dragover',e=>{ e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave',()=>zone.classList.remove('over'));
+  zone.addEventListener('drop',e=>{
+    e.preventDefault(); zone.classList.remove('over');
+    const f=e.dataTransfer.files[0];
+    if(f&&f.type.startsWith('image/')) readFile(f);
+  });
+}
+
+function readFile(file){
+  const r=new FileReader();
+  r.onload=async e=>{
+    S.imgDataUrl=e.target.result;
+    const img=await loadImg(S.imgDataUrl);
+    S.imgNatW=img.naturalWidth; S.imgNatH=img.naturalHeight;
+    showThumb();
+    scheduleRefresh();
+    try{ localStorage.setItem('ssg_img',S.imgDataUrl); }catch{}
+  };
+  r.readAsDataURL(file);
+}
+
+function showThumb(){
+  // Only update visual — the click/drag handlers on zone persist across innerHTML changes
+  $('uploadZone').innerHTML=
+    `<img src="${S.imgDataUrl}" alt="graphic preview"><p style="font-size:10px;color:#888">Click to replace</p>`;
+}
+
+// ── Range Displays ─────────────────────────────────────────────
+const RANGE_DEFS = [
+  ['gSize','gSizeV',v=>v+'%'],
+  ['gVPos','gVPosV',v=>v+'%'],
+  ['sFontSize','sFontSizeV',v=>v],
+  ['sSpacing','sSpacingV',v=>v+'px'],
+  ['sCurve','sCurveV',v=>v+'%'],
+  ['stFontSize','stFontSizeV',v=>v],
+  ['stSpacing','stSpacingV',v=>v+'px'],
+  ['stCurve','stCurveV',v=>v+'%'],
+];
+
+function syncRangeDisplays(){
+  RANGE_DEFS.forEach(([id,vid,fmt])=>{
+    const e=$(id), dv=$(vid);
+    if(e&&dv) dv.textContent=fmt(e.value);
+  });
+}
+
+function bindRanges(){
+  RANGE_DEFS.forEach(([id,,])=>{
+    $(id)?.addEventListener('input',()=>{ syncRangeDisplays(); scheduleRefresh(); });
+  });
+}
+
+// ── Curve field enable/disable ─────────────────────────────────
+function updateCurveFields(){
+  const se=$('sEffect').value, ste=$('stEffect').value;
+  $('sCurveField').style.opacity  = se==='straight'  ? '0.4':'1';
+  $('stCurveField').style.opacity = ste==='straight' ? '0.4':'1';
+  $('sCurve').disabled  = se==='straight';
+  $('stCurve').disabled = ste==='straight';
+}
+
+// ── Font Selects ───────────────────────────────────────────────
+function buildFontSelects(){
+  ['sFont','stFont'].forEach(id=>{
+    const sel=$(id);
+    FONTS.forEach(f=>{
+      const opt=document.createElement('option');
+      opt.value=f; opt.textContent=f; opt.style.fontFamily=f;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ── Color Presets ──────────────────────────────────────────────
+function buildColorPresets(){
+  [['sColor','sColorPres'],['stColor','stColorPres']].forEach(([inId,presId])=>{
+    const inp=$(inId), pres=$(presId);
+    COLORS.forEach(c=>{
+      const d=document.createElement('div');
+      d.className='c-dot'; d.style.background=c.v; d.title=c.l; d.dataset.c=c.v;
+      d.addEventListener('click',()=>{
+        inp.value=c.v;
+        pres.querySelectorAll('.c-dot').forEach(x=>x.classList.remove('on'));
+        d.classList.add('on');
+        scheduleRefresh();
+      });
+      pres.appendChild(d);
+    });
+    inp.addEventListener('input',()=>{
+      pres.querySelectorAll('.c-dot').forEach(x=>x.classList.toggle('on',x.dataset.c===inp.value.toLowerCase()));
+      scheduleRefresh();
+    });
+    pres.querySelector('[data-c="#111111"]')?.classList.add('on');
+  });
+}
+
+// ── Wire Everything Up ─────────────────────────────────────────
+function init(){
+  buildFontSelects();
+  buildColorPresets();
+  bindRanges();
+  bindUploadZone();
+
+  // Button groups
+  $('hAlignGrp').addEventListener('click',e=>{
+    const b=e.target.closest('[data-v]'); if(!b) return;
+    $('hAlignGrp').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); S.hAlign=b.dataset.v; scheduleRefresh();
+  });
+  $('sPosGrp').addEventListener('click',e=>{
+    const b=e.target.closest('[data-v]'); if(!b) return;
+    $('sPosGrp').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); S.sPos=b.dataset.v; scheduleRefresh();
+  });
+  $('bgTgl').addEventListener('click',e=>{
+    const b=e.target.closest('[data-v]'); if(!b) return;
+    $('bgTgl').querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); S.bgMode=b.dataset.v; updateBgMode();
+  });
+
+  // Layout preset
+  $('layoutPreset').addEventListener('change',e=>{
+    const p=LAYOUT_PRESETS[e.target.value]; if(!p) return;
+    Object.entries(p).forEach(([k,v])=>{
+      if(k==='sPos'){ S.sPos=v; $('sPosGrp').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); return; }
+      const el=$(k); if(el) el.value=v;
+    });
+    syncRangeDisplays(); updateCurveFields(); scheduleRefresh();
+  });
+
+  // Effect selects
+  ['sEffect','stEffect','sTransform','stTransform','sFont','stFont'].forEach(id=>{
+    $(id)?.addEventListener('change',()=>{ updateCurveFields(); scheduleRefresh(); });
+  });
+  $('subText').addEventListener('input',()=>{ scheduleRefresh(); });
+
+  // Sub-text collapsible
+  let subOpen=false;
+  $('subToggle').addEventListener('click',()=>{
+    subOpen=!subOpen;
+    $('subControls').classList.toggle('hidden',!subOpen);
+    $('subArr').textContent=subOpen?'▲':'▼';
+  });
+  $('subText').addEventListener('input',e=>{
+    if(e.target.value&&!subOpen){
+      subOpen=true; $('subControls').classList.remove('hidden'); $('subArr').textContent='▲';
+    }
+  });
+
+  // Generate button
+  $('genBtn').addEventListener('click',()=>{
+    const lines=$('slogansInput').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(!lines.length){ alert('Enter at least one slogan.'); return; }
+    S.slogans=lines; renderGrid(lines);
+  });
+
+  // Download all
+  $('dlAllBtn').addEventListener('click',downloadAll);
+
+  // Presets
+  $('savePresetBtn').addEventListener('click',savePreset);
+  renderPresets();
+
+  // Lightbox
+  $('lb-close').addEventListener('click',closeLb);
+  $('lb').addEventListener('click',e=>{ if(e.target===$('lb')) closeLb(); });
+
+  // Sample slogans
+  $('slogansInput').value=SAMPLE;
+
+  // Load saved state
+  updateCurveFields();
+  syncRangeDisplays();
+  const saved=localStorage.getItem('ssg_img');
+  if(saved){ S.imgDataUrl=saved; showThumb(); }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
