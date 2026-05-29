@@ -380,6 +380,7 @@ export default function TasksPage() {
           handleToggleExpand={handleToggleExpand}
           loadedDiscoveries={loadedDiscoveries}
           loadingNodeSlugs={loadingNodeSlugs}
+          refreshResearch={fetchResearch}
         />
       )}
 

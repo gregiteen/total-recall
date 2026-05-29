@@ -106,6 +106,7 @@ export interface ChatThread {
   title: string
   turns: number
   lastUpdated: number
+  brainId: string
 }
 
 export interface ChatSuggestion {
@@ -120,7 +121,8 @@ export async function sendChat(
   signal?: AbortSignal,
   sessionId?: string,
   groundingNodes?: string[],
-  model?: string
+  model?: string,
+  brainId?: string
 ): Promise<string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (sessionId) {
@@ -130,7 +132,7 @@ export async function sendChat(
     method: 'POST',
     signal,
     headers,
-    body: JSON.stringify({ messages, groundingNodes, model }),
+    body: JSON.stringify({ messages, groundingNodes, model, brainId }),
   })
   if (!res.ok) throw new Error(`Chat API error: ${res.status}`)
   const data = await res.json()
@@ -495,6 +497,21 @@ export async function createResearch(topic: string, priority?: string, notes?: s
   return res.json()
 }
 
+export async function patchResearch(id: string, updates: Record<string, unknown>): Promise<unknown> {
+  const res = await apiFetch(`${API_BASE}/api/research/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+  if (!res.ok) throw new Error(`Research PATCH error: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteResearch(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/research/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Research DELETE error: ${res.status}`)
+}
+
 export async function fetchLogs(type: 'server' | 'daemon'): Promise<{ content: string }> {
   const res = await apiFetch(`${API_BASE}/api/logs/${type}`)
   if (!res.ok) throw new Error(`Logs API error: ${res.status}`)
@@ -647,5 +664,17 @@ export async function fetchGeminiModels(): Promise<GeminiModelInfo[]> {
   if (!res.ok) throw new Error(`Gemini models API error: ${res.status}`)
   const data = await res.json()
   return data.models ?? []
+}
+
+// ─── Share API ──────────────────────────────────────────────────────────────────
+
+export async function shareToApi(payload: { url: string; action: string; title?: string; tags?: string[] }): Promise<{ success: boolean; message?: string }> {
+  const res = await apiFetch(`${API_BASE}/api/share`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`Share API error: ${res.status}`)
+  return res.json()
 }
 

@@ -1,0 +1,16 @@
+/* Total Recall — Content Script Styles
+ * The floating pill uses Shadow DOM for style isolation,
+ * so this file only contains the host-level positioning.
+ * Keeping it minimal to avoid conflicts with host pages. */
+
+#total-recall-pill-host {
+  /* Position is handled inline via Shadow DOM :host styles.
+   * This rule serves as a fallback and ensures the element
+   * doesn't inherit unintended styles from the host page. */
+  all: initial;
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}

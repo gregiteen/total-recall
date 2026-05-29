@@ -1,5 +1,5 @@
 /**
- * Quick Capture — ingest Slack/Discord messages as SSSS inbox nodes
+ * Quick Capture — ingest messages from external sources as SSSS inbox nodes
  *
  * Classifies incoming message text and writes a draft SSSS memory node
  * to ~/.agent/memory-inbox/ for Dream Cycle synthesis on the next pass.
@@ -87,6 +87,18 @@ function buildInboxNode({ text, author, channel, source, ts }) {
   };
 }
 
+// ─── Source validation ───────────────────────────────────────────────────────────
+
+/**
+ * Validate a capture source identifier.
+ * Accepts any lowercase alphanumeric kebab-case string up to 50 characters.
+ * @param {string} source
+ * @returns {boolean}
+ */
+export function isValidSource(source) {
+  return typeof source === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(source) && source.length <= 50;
+}
+
 // ─── Capture entry point ─────────────────────────────────────────────────────────
 
 /**
@@ -96,13 +108,13 @@ function buildInboxNode({ text, author, channel, source, ts }) {
  * @param {string} opts.text     Message text content
  * @param {string} [opts.author] Author username / user id
  * @param {string} [opts.channel] Channel name or id
- * @param {string} opts.source   'slack' | 'discord'
+ * @param {string} opts.source   Kebab-case source identifier (e.g. 'slack', 'chrome-extension', 'google-takeout')
  * @param {string} [opts.ts]     ISO timestamp (defaults to now)
  * @returns {{ slug: string, file: string }}
  */
 export function captureMessage({ text, author, channel, source, ts }) {
   if (!text || !text.trim()) throw new Error('text is required and must not be empty');
-  if (!['slack', 'discord'].includes(source)) throw new Error('source must be "slack" or "discord"');
+  if (!isValidSource(source)) throw new Error('source must be a lowercase alphanumeric kebab-case string (max 50 chars)');
 
   const node = buildInboxNode({ text: text.trim(), author, channel, source, ts });
 

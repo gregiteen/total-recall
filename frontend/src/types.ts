@@ -77,7 +77,7 @@ export interface FileNode {
 export interface ResearchItem {
   id: string
   topic: string
-  status: 'pending' | 'in_progress' | 'done' | 'failed'
+  status: 'pending' | 'in_progress' | 'done' | 'failed' | 'paused'
   priority: 'low' | 'medium' | 'high' | 'critical'
   notes: string | null
   node_slug?: string | null
@@ -155,6 +155,9 @@ export interface ConfigJson {
       weekly_cap_usd?: number
     }
     [key: string]: unknown
+  }
+  brain?: {
+    preferred_agent?: string
   }
 }
 

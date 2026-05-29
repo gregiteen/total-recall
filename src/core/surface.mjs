@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { loadNodes, loadMergedNodes, loadSkills, atomicWrite } from './vault.mjs';
+import { loadNodes, loadSkills, atomicWrite } from './vault.mjs';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
@@ -114,9 +114,15 @@ function extractRuleContent(filePath) {
   return content.trim();
 }
 
-function buildRulesBlock(skillsDir, nodes = []) {
-  // CLI quickstart is always included so agents know TR is installed
-  let combined = `## Total Recall — Sovereign Memory System (Installed)
+export function buildRulesBlock(skillsDir, nodes = [], { vaultDir, consumer = 'ide' } = {}) {
+  let combined;
+
+  if (consumer === 'api') {
+    // API consumers don't need CLI quickstart docs
+    combined = `## Total Recall — Active Memory Context\n\nYour memories and rules are loaded from the active brain vault.\n`;
+  } else {
+    // CLI quickstart is always included so agents know TR is installed
+    combined = `## Total Recall — Sovereign Memory System (Installed)
 
 You have Total Recall installed. Use these CLI commands to remember and recall information.
 
@@ -190,11 +196,32 @@ Query interactive local documentation, VFS specifications, and command reference
 ### npx total-recall --help
 Show all available commands.
 `;
+  }
 
-  // 1. Group active rules from SSSS vault nodes
-  const invariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active');
-  const preferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active');
-  const corrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active');
+  // 1. Filter expired rules and auto-archive them
+  const now = new Date();
+  const isExpired = (n) => n.expires_at && new Date(n.expires_at) <= now;
+
+  const expiredNodes = nodes.filter(n => n.status === 'active' && isExpired(n));
+  for (const expired of expiredNodes) {
+    expired.status = 'deprecated';
+    console.error(`⏰ Auto-archived expired rule: ${expired.slug}`);
+    if (vaultDir) {
+      try {
+        const nodePath = path.join(vaultDir, expired.category, `${expired.slug}.md`);
+        if (fs.existsSync(nodePath)) {
+          let content = fs.readFileSync(nodePath, 'utf8');
+          content = content.replace(/^status:\s*active$/m, 'status: deprecated');
+          atomicWrite(nodePath, content);
+        }
+      } catch { /* non-fatal: archive is best-effort */ }
+    }
+  }
+
+  // 2. Group active (non-expired) rules from SSSS vault nodes
+  const invariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active' && !isExpired(n));
+  const preferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active' && !isExpired(n));
+  const corrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n));
 
   const formatNodes = (list) => {
     return list.map(n => {
@@ -256,9 +283,9 @@ function injectDirectives(fileContent, rulesBlock) {
 /**
  * Write or update a platform instruction shim with the pointer and active rules.
  */
-function writeShim(shimPath, skillsDir, nodes = []) {
+function writeShim(shimPath, skillsDir, nodes = [], { vaultDir } = {}) {
   const shimDir = path.dirname(shimPath);
-  const rulesBlock = buildRulesBlock(skillsDir, nodes);
+  const rulesBlock = buildRulesBlock(skillsDir, nodes, { vaultDir });
   const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
   const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
@@ -291,50 +318,87 @@ function writeShim(shimPath, skillsDir, nodes = []) {
 }
 
 /**
+ * Map of client names → shim file paths they require.
+ */
+const CLIENT_SHIMS = {
+  cursor:        ['.cursorrules'],
+  'claude-code': ['CLAUDE.md', '.clauderules'],
+  antigravity:   ['AGENTS.md'],
+  gemini:        ['GEMINI.md'],
+  codex:         ['CODEX.md', '.codexrules'],
+  vscode:        ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
+  pi:            ['AGENTS.md'],
+  aider:         ['.aider.rules.md'],
+  windsurf:      ['.windsurfrules', 'WINDSURF.md'],
+};
+
+/**
+ * Read the set of connected IDE clients from config/clients.json.
+ * Returns a Set of client name strings, or null if the file is
+ * missing / empty / malformed (null signals "write all shims").
+ */
+function readConnectedClients(clientsPath) {
+  try {
+    if (!fs.existsSync(clientsPath)) return null;
+    const raw = fs.readFileSync(clientsPath, 'utf8').trim();
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return new Set(parsed.map(String));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Compile pointers with active rules directly into root instruction shims.
  *
  * ALL files (including INSTRUCTIONS.md) are user-owned. TR only injects
  * content between the <!-- BEGIN/END INJECTED ACTIVE DIRECTIVES --> markers,
  * preserving any user-written content outside the markers.
+ *
+ * Only shims for connected clients (per config/clients.json) are written.
+ * If clients.json is absent or unreadable, ALL shims are written (backward compat).
+ * INSTRUCTIONS.md is always written as the canonical source.
  */
-function compilePointers(instructionsFile, skillsDir, nodes = []) {
+function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir } = {}) {
   const agentDir = path.dirname(instructionsFile);
   const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
 
-  const shims = [
-    'INSTRUCTIONS.md',
-    '.cursorrules',
-    'CLAUDE.md',
-    '.clauderules',
-    'AGENTS.md',
-    'GEMINI.md',
-    '.github/copilot-instructions.md',
-    '.vscode/copilot-instructions.md',
-    '.windsurfrules',
-    'WINDSURF.md',
-    'CODEX.md',
-    '.codexrules'
-  ];
+  // Always write the canonical INSTRUCTIONS.md
+  writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir });
 
-  for (const shim of shims) {
-    writeShim(path.join(baseDir, shim), skillsDir, nodes);
+  // Determine which client shims to write
+  const clientsPath = path.join(baseDir, '.agent', 'config', 'clients.json');
+  const connectedClients = readConnectedClients(clientsPath);
+
+  if (connectedClients === null) {
+    // No clients.json → backward compat: write ALL client shims
+    for (const files of Object.values(CLIENT_SHIMS)) {
+      for (const file of files) {
+        writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir });
+      }
+    }
+  } else {
+    // Only write shims for connected clients
+    for (const client of connectedClients) {
+      const files = CLIENT_SHIMS[client];
+      if (!files) continue;
+      for (const file of files) {
+        writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir });
+      }
+    }
   }
 }
 
 /**
  * Main surface compilation entry point.
  */
-export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir }) {
-  // Load nodes (supports global + project merged compilation)
-  let nodes;
-  if (globalVaultDir && fs.existsSync(globalVaultDir)) {
-    nodes = loadMergedNodes(globalVaultDir, vaultDir);
-  } else {
-    nodes = loadNodes(vaultDir);
-  }
+export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile }) {
+  const nodes = loadNodes(vaultDir);
 
   // 1. Write pointer and active rules to all instruction shims
-  compilePointers(instructionsFile, skillsDir, nodes);
+  compilePointers(instructionsFile, skillsDir, nodes, { vaultDir });
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {

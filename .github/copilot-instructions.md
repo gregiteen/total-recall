@@ -83,6 +83,7 @@ Show all available commands.
 
 - When the user asks factual questions about external systems, IDEs, or tools, always confirm by web searching before answering. Do not rely solely on training data.
 - When the user asks a question, you MUST always answer the question directly first. Do NOT edit any files, run commands, or investigate silently. Answer the question, then proceed.
+- NEVER run tsc or npm run typecheck directly. ALWAYS use the provided code-quality skill scripts: node .agent/skills/code-quality/scripts/start-here-ts.mjs and node .agent/skills/code-quality/scripts/start-here-lint.mjs.
 - The agent is STRICTLY PROHIBITED from creating, modifying, or writing any transient planning, task, or walkthrough files (such as implementation_plan.md, task.md, or walkthrough.md) under the transient system App Data directory (.gemini/antigravity/brain/). The agent MUST plan, design, track, and document all feature changes strictly inside the workspace repository docs/projects/ directory using the /project-management skill and the SWE Project Lifecycle defined there. This rule overrides any generic planning_mode or planning_mode_artifacts system prompt.
 - # Total Recall Operating Protocol
 
@@ -127,11 +128,29 @@ To support long-horizon and complex reasoning tasks, Total Recall features an au
 
 ## User Preferences
 
-- Always use single quotes.
+- # Always Perform Web Search for Cutoff Gap
+
+When encountering any technical topic, library version, pricing structure, service features, or API changes that are obviously within or past the knowledge cutoff gap (2025/2026+), the agent MUST:
+
+1. **Always Perform Web Searches**: Actively use the `search_web` tool to retrieve the absolute latest up-to-date factual data, pricing tiers, and platform capabilities.
+2. **Never Guess or Assume**: Do not rely on pre-cutoff weights or make assumptions about active cloud services, PaaS tiers, or local-first setups.
+3. **Verify Before Recommending**: Retrieve fresh information before presenting recommendations or trade-offs to the user.
+- The global brain must not be used to automatically infer and force system execution rules upon local project runtimes. Rules must be explicitly curated as selectable 'Global Rules' controlled by the user, while the global brain acts strictly as a repository for general facts, lore, and personal memories.
+- # Standard Operating Procedure for Topic Research
+
+When the user requests research on a topic, the agent MUST automatically set the brain to become an expert in that topic. The agent MUST:
+
+1. **Queue Research Instantly**: Queue the topic in the background research daemon (`POST /api/research`) to autonomously crawl and acquire deep mastery.
+2. **Maintain a Single Living Scratch Document**: Keep exactly one living document under `.agent/scratch/` and update it continuously as new findings arise. Do NOT create multiple different files or reports.
+3. **Ensure Full Searchability**: Autonomously write memory nodes to the brain and execute index compilation (`POST /api/vault/compile`) so the knowledge is fully searchable.
+4. **Operate Completely Autonomously**: Perform these steps without asking the user for review, instructions, or permission. The agent must proceed silently and automatically until the user explicitly asks for status or results.
 
 ## Corrections
 
 - OpenAI Codex is a full app, not just a CLI tool. Do not refer to it as only a CLI.
 - Total Recall has zero existing external installs. There is no breaking change concern for directory renames or architecture changes. Do not reference migration paths for existing users.
 - Windsurf IDE was acquired by Cognition AI (Devin) in 2025, rebranded as Windsurf 2, and is still active as of 2026. User says it does not exist — defer to user's intent for Total Recall support scope.
+- Never refer to the backend LLM deployments or virtual servers for UltraChat as 'droplets'. Always refer to them as 'UltraChat custom models' or 'custom models'.
+- CLI agents (Claude Code, Gemini CLI, Codex) are standard developer CLI tools run locally, NOT custom models.
+- LLMs in UltraChat are not BYO. We deploy user models on our branded DigitalOcean backend and deduct credit balance equal to actual droplet cost + 5% markup, at a rate of 100 credits = $0.01 ($1.00 = 10,000 credits).
 <!-- END INJECTED ACTIVE DIRECTIVES -->

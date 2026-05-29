@@ -79,14 +79,14 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
       ? '0 0 6px rgba(99,102,241,0.5)'
       : '0 0 6px rgba(16,185,129,0.5)';
 
-  const handleToggle = (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleToggle = (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (selectedIds.includes(id)) {
-      if (selectedIds.length > 1) {
-        const nextIds = selectedIds.filter(x => x !== id);
-        onBrainChange(nextIds.join(','));
-      }
+      const nextIds = selectedIds.filter(x => x !== id);
+      onBrainChange(nextIds.join(','));
     } else {
       const nextIds = [...selectedIds, id];
       onBrainChange(nextIds.join(','));
@@ -201,16 +201,13 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                 <input
                   type="checkbox"
                   checked={isSelected}
-                  readOnly
-                  disabled={!brain.exists || (isSelected && selectedIds.length === 1)}
+                  disabled={!brain.exists}
                   style={{
                     accentColor: 'var(--accent)',
                     cursor: brain.exists ? 'pointer' : 'not-allowed',
                     marginRight: 4,
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
+                  onChange={() => handleToggle(brain.id)}
                 />
                 <span style={{
                   width: 8, height: 8, borderRadius: '50%',
@@ -247,6 +244,21 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Empty state when zero brains are selected */}
+      {selectedIds.length === 0 && !expanded && (
+        <div style={{
+          marginTop: 6,
+          padding: '8px 10px',
+          background: 'var(--bg-tertiary)',
+          borderRadius: 8,
+          fontSize: 11,
+          color: 'var(--text-tertiary)',
+          textAlign: 'center',
+        }}>
+          No brain selected. Select a brain to view its memories.
         </div>
       )}
     </div>

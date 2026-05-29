@@ -72,5 +72,6 @@
   { "method": "POST", "path": "/api/scripts/:name/run" },
   { "method": "GET", "path": "/api/brains" },
   { "method": "GET", "path": "/api/brains/:id/nodes" },
-  { "method": "GET", "path": "/api/gemini-models" }
+  { "method": "GET", "path": "/api/gemini-models" },
+  { "method": "POST", "path": "/api/share" }
 ]

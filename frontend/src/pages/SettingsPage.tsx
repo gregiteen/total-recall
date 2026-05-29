@@ -33,6 +33,8 @@ export default function SettingsPage() {
       if (!data.security.rate_limits) data.security.rate_limits = { api_requests_per_minute: 60, sandbox_requests_per_minute: 10, ingest_requests_per_minute: 120 };
       if (!data.budget) data.budget = {};
       if (!data.budget.budget) data.budget.budget = { daily_cap_usd: 5.0, weekly_cap_usd: 25.0, enabled: true };
+      if (!data.brain) data.brain = {};
+      if (!data.brain.preferred_agent) data.brain.preferred_agent = 'auto';
       
       setConfigData(data);
     } catch (err: unknown) {
@@ -135,6 +137,17 @@ export default function SettingsPage() {
           ...configData.budget.budget,
           [prop]: value
         }
+      }
+    });
+  };
+
+  const updateBrainProp = (prop: string, value: unknown) => {
+    if (!configData) return;
+    setConfigData({
+      ...configData,
+      brain: {
+        ...configData.brain,
+        [prop]: value as string
       }
     });
   };
@@ -259,6 +272,32 @@ export default function SettingsPage() {
                 <option value="ask_per_skill">Ask Per Skill Trigger</option>
                 <option value="never">Never Route (Fully Air-Gapped)</option>
               </select>
+            </div>
+
+            {/* Preferred CLI Agent Selector */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor="preferred_agent" style={{ fontSize: 13, fontWeight: 500 }}>Preferred CLI Agent</label>
+              <select
+                id="preferred_agent"
+                value={configData.brain?.preferred_agent || 'auto'}
+                onChange={(e) => updateBrainProp('preferred_agent', e.target.value)}
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  outline: 'none',
+                  fontSize: 13
+                }}
+              >
+                <option value="auto">Auto (Smart Routing / System Default)</option>
+                <option value="claude">Claude Code (Anthropic CLI Agent)</option>
+                <option value="gemini">Gemini CLI (Google Developer Agent)</option>
+                <option value="codex">OpenAI Codex (OpenAI Workspace Suite)</option>
+                <option value="antigravity">Antigravity (Local Sovereign Agent)</option>
+              </select>
+              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Elevates selected agent as the active primary for all dispatches</span>
             </div>
           </div>
 

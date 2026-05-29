@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { cleanAndParseJSON } from './runtime.mjs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanAndParseJSON, loadRuntimeConfig } from './runtime.mjs';
+import fs from 'fs';
 
 describe('cleanAndParseJSON', () => {
   it('parses standard clean JSON', () => {
@@ -122,5 +123,81 @@ describe('cleanAndParseJSON', () => {
       { name: 'John' },
       { name: 'Doe' }
     ]);
+  });
+});
+
+describe('loadRuntimeConfig', () => {
+  const originalEnv = process.env;
+  const originalArgv = process.argv;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    process.argv = [...originalArgv];
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    process.argv = originalArgv;
+  });
+
+  it('prioritizes CLI argument --agent=name over everything', () => {
+    process.argv = ['node', 'cli.js', '--agent=claude'];
+    process.env.TR_CLI_AGENT = 'gemini';
+
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const config = loadRuntimeConfig();
+    expect(config.agents[0].name).toBe('claude');
+  });
+
+  it('falls back to TR_CLI_AGENT environment variable when no CLI arg is specified', () => {
+    process.argv = ['node', 'cli.js'];
+    process.env.TR_CLI_AGENT = 'gemini';
+
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+    const config = loadRuntimeConfig();
+    expect(config.agents[0].name).toBe('gemini');
+  });
+
+  it('falls back to brain.json preferred_agent when no CLI arg or Env var is specified', () => {
+    process.argv = ['node', 'cli.js'];
+    delete process.env.TR_CLI_AGENT;
+
+    vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
+      if (p.endsWith('brain.json')) return true;
+      return false;
+    });
+
+    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+      if (p.endsWith('brain.json')) {
+        return JSON.stringify({ preferred_agent: 'codex' });
+      }
+      return '';
+    });
+
+    const config = loadRuntimeConfig();
+    expect(config.agents[0].name).toBe('codex');
+  });
+
+  it('falls back to SSSS Compiled Memory Preference Surface (INSTRUCTIONS.md) when lower tiers are not present', () => {
+    process.argv = ['node', 'cli.js'];
+    delete process.env.TR_CLI_AGENT;
+
+    vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
+      if (p.endsWith('INSTRUCTIONS.md')) return true;
+      return false;
+    });
+
+    vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+      if (p.endsWith('INSTRUCTIONS.md')) {
+        return 'Some content\nMy preferred CLI agent is gemini\nMore content';
+      }
+      return '';
+    });
+
+    const config = loadRuntimeConfig();
+    expect(config.agents[0].name).toBe('gemini');
   });
 });
