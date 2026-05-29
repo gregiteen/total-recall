@@ -576,8 +576,7 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                                         <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: 8 }}>Sources & Citations</div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                           {extractSources(node.content || node.body).map((src, idx) => {
-                                            let domain = ''
-                                            try { domain = new URL(src.url).hostname.replace(/^www\./, '') } catch { domain = src.url }
+                                            const domain = (() => { try { return new URL(src.url).hostname.replace(/^www\./, '') } catch { return src.url } })()
                                             return (
                                               <div
                                                 key={idx}
