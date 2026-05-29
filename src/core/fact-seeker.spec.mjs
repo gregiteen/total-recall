@@ -186,6 +186,7 @@ describe('multi-note wiki-graph architecture', () => {
     
     const originalAgentDir = process.env.AGENT_DIR;
     process.env.AGENT_DIR = tempAgentDir;
+    process.env._TR_TEST_AGENT_DIR = path.join(tempAgentDir, 'skills', 'total-recall');
     
     try {
       // Create a target node to deliberate on
@@ -300,6 +301,7 @@ describe('multi-note wiki-graph architecture', () => {
     } finally {
       fs.rmSync(tempVaultDir, { recursive: true, force: true });
       fs.rmSync(tempAgentDir, { recursive: true, force: true });
+      delete process.env._TR_TEST_AGENT_DIR;
       if (originalAgentDir) {
         process.env.AGENT_DIR = originalAgentDir;
       } else {
@@ -317,6 +319,7 @@ describe('multi-note wiki-graph architecture', () => {
     
     const originalAgentDir = process.env.AGENT_DIR;
     process.env.AGENT_DIR = tempAgentDir;
+    process.env._TR_TEST_AGENT_DIR = path.join(tempAgentDir, 'skills', 'total-recall');
     
     try {
       const targetSlug = 'fact-master-expand-test';
@@ -383,6 +386,7 @@ describe('multi-note wiki-graph architecture', () => {
     } finally {
       fs.rmSync(tempVaultDir, { recursive: true, force: true });
       fs.rmSync(tempAgentDir, { recursive: true, force: true });
+      delete process.env._TR_TEST_AGENT_DIR;
       if (originalAgentDir) {
         process.env.AGENT_DIR = originalAgentDir;
       } else {
@@ -477,6 +481,7 @@ describe('multi-note wiki-graph architecture', () => {
 
     const originalAgentDir = process.env.AGENT_DIR;
     process.env.AGENT_DIR = tempAgentDir;
+    process.env._TR_TEST_AGENT_DIR = path.join(tempAgentDir, 'skills', 'total-recall');
 
     try {
       // 1. Create the older node that is going to be superseded
@@ -555,6 +560,7 @@ describe('multi-note wiki-graph architecture', () => {
     } finally {
       fs.rmSync(tempVaultDir, { recursive: true, force: true });
       fs.rmSync(tempAgentDir, { recursive: true, force: true });
+      delete process.env._TR_TEST_AGENT_DIR;
       if (originalAgentDir) {
         process.env.AGENT_DIR = originalAgentDir;
       } else {

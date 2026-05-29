@@ -16,7 +16,11 @@ import matter from 'gray-matter';
 import { loadNodes, writeNode, deleteNode } from './vault.mjs';
 import { brainDir } from './config.mjs';
 
-const getBrainDir = () => process.env._TR_TEST_AGENT_DIR || brainDir;
+const getBrainDir = () => {
+  if (process.env._TR_TEST_AGENT_DIR) return process.env._TR_TEST_AGENT_DIR;
+  if (process.env.AGENT_DIR) return path.join(process.env.AGENT_DIR, 'skills', 'total-recall');
+  return brainDir;
+};
 
 function getQueueFile(overrideBrainDir) {
   const dir = overrideBrainDir || getBrainDir();

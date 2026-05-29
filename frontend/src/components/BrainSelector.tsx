@@ -79,9 +79,14 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
       ? '0 0 6px rgba(99,102,241,0.5)'
       : '0 0 6px rgba(16,185,129,0.5)';
 
-  const handleToggle = (id: string, e?: React.MouseEvent) => {
+  const handleRowClick = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onBrainChange(id);
+  };
+
+  const handleToggle = (id: string, e?: React.SyntheticEvent) => {
     if (e) {
-      e.preventDefault();
       e.stopPropagation();
     }
     if (selectedIds.includes(id)) {
@@ -178,7 +183,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
             return (
               <button
                 key={brain.id}
-                onClick={(e) => handleToggle(brain.id, e)}
+                onClick={(e) => handleRowClick(brain.id, e)}
                 style={{
                   width: '100%',
                   padding: '8px 10px',
@@ -207,7 +212,8 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                     cursor: brain.exists ? 'pointer' : 'not-allowed',
                     marginRight: 4,
                   }}
-                  onChange={() => handleToggle(brain.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => handleToggle(brain.id, e)}
                 />
                 <span style={{
                   width: 8, height: 8, borderRadius: '50%',
