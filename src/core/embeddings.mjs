@@ -28,6 +28,29 @@ const BRAIN_DIR = brainDir;
 const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
 const CACHE_DIR = path.join(DERIVED_DIR, 'embeddings-cache');
 
+// ─── Hot process-level in-memory cache Map (max size 500) ────────────────────
+const IN_MEMORY_CACHE = new Map();
+const MAX_IN_MEMORY_SIZE = 500;
+
+function getInMemory(key) {
+  if (!IN_MEMORY_CACHE.has(key)) return null;
+  const value = IN_MEMORY_CACHE.get(key);
+  // Refresh position for LRU
+  IN_MEMORY_CACHE.delete(key);
+  IN_MEMORY_CACHE.set(key, value);
+  return value;
+}
+
+function setInMemory(key, embedding) {
+  if (IN_MEMORY_CACHE.has(key)) {
+    IN_MEMORY_CACHE.delete(key);
+  } else if (IN_MEMORY_CACHE.size >= MAX_IN_MEMORY_SIZE) {
+    const oldestKey = IN_MEMORY_CACHE.keys().next().value;
+    IN_MEMORY_CACHE.delete(oldestKey);
+  }
+  IN_MEMORY_CACHE.set(key, embedding);
+}
+
 // ─── Query Embedding Cache Helpers (Partitioned 256-Dir Layout) ──────────────
 
 function sha256(text) {
@@ -45,25 +68,76 @@ function getCachePartitionPath(key) {
   };
 }
 
-function getCachedEmbedding(key) {
-  if (process.env.NODE_ENV === 'test') return null;
+export function getCachedEmbedding(key) {
+  if (process.env.NODE_ENV === 'test' && !global.__TEST_CACHE_OVERRIDE__) return null;
+  // Tier 1: Hot In-Memory LRU Cache
+  const hit = getInMemory(key);
+  if (hit) return hit;
+
+  // Tier 2: Partitioned Disk Cache
   try {
     const { file, hash } = getCachePartitionPath(key);
     if (fs.existsSync(file)) {
       const partition = JSON.parse(fs.readFileSync(file, 'utf8') || '{}');
-      return partition[hash] || null;
+      const entry = partition[hash];
+      if (!entry) return null;
+
+      let embedding;
+      if (Array.isArray(entry)) {
+        embedding = entry;
+      } else if (entry && typeof entry === 'object' && Array.isArray(entry.embedding)) {
+        embedding = entry.embedding;
+        // Non-destructively update lastUsed time
+        entry.lastUsed = Date.now();
+        fs.writeFileSync(file, JSON.stringify(partition), 'utf8');
+      }
+
+      if (embedding) {
+        setInMemory(key, embedding);
+        return embedding;
+      }
     }
   } catch {}
   return null;
 }
 
-function saveCachedEmbedding(key, embedding) {
-  if (process.env.NODE_ENV === 'test') return;
+export function saveCachedEmbedding(key, embedding) {
+  if (process.env.NODE_ENV === 'test' && !global.__TEST_CACHE_OVERRIDE__) return;
+  // Tier 1 sync
+  setInMemory(key, embedding);
+
+  // Tier 2 sync
   try {
     const { dir, file, hash } = getCachePartitionPath(key);
     fs.mkdirSync(dir, { recursive: true });
     const partition = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8') || '{}') : {};
-    partition[hash] = embedding;
+    
+    // Save in upgraded object format non-destructively
+    partition[hash] = {
+      embedding,
+      lastUsed: Date.now()
+    };
+
+    // Partition Cache Auto-Pruning
+    const keys = Object.keys(partition);
+    if (keys.length > 500) {
+      const entries = keys.map(k => {
+        const entry = partition[k];
+        let lastUsed = 0;
+        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+          lastUsed = entry.lastUsed || 0;
+        }
+        return { k, lastUsed };
+      });
+      // Sort oldest first
+      entries.sort((a, b) => a.lastUsed - b.lastUsed);
+      // Evict oldest, keeping 400 keys
+      const toPrune = entries.slice(0, keys.length - 400);
+      for (const p of toPrune) {
+        delete partition[p.k];
+      }
+    }
+
     fs.writeFileSync(file, JSON.stringify(partition), 'utf8');
   } catch {}
 }
@@ -249,6 +323,10 @@ function indexPath(derivedDir) {
   return path.join(derivedDir, 'embeddings.json');
 }
 
+let cachedIndex = null;
+let cachedIndexPath = null;
+let cachedIndexMtime = 0;
+
 /**
  * Load the full embeddings index from disk.
  * Returns {} if the file doesn't exist or is corrupt.
@@ -259,7 +337,17 @@ function indexPath(derivedDir) {
 export function loadEmbeddingsIndex(derivedDir) {
   const p = indexPath(derivedDir);
   if (!fs.existsSync(p)) return {};
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+  try {
+    const stat = fs.statSync(p);
+    if (cachedIndex && cachedIndexPath === p && cachedIndexMtime === stat.mtimeMs) {
+      return cachedIndex;
+    }
+    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    cachedIndex = data;
+    cachedIndexPath = p;
+    cachedIndexMtime = stat.mtimeMs;
+    return data;
+  }
   catch { return {}; }
 }
 
@@ -330,6 +418,15 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
 
   const existing = force ? {} : loadEmbeddingsIndex(derivedDir);
   const index = { ...existing };
+
+  // Remove any stale keys in the index that are not present in nodes (stale clean-up)
+  const activeSlugs = new Set(nodes.map(n => n.slug));
+  for (const slug of Object.keys(index)) {
+    if (!activeSlugs.has(slug)) {
+      delete index[slug];
+    }
+  }
+
   let built = 0, skipped = 0, failed = 0;
 
   for (const node of nodes) {
@@ -362,10 +459,24 @@ function sessionIndexPath(derivedDir) {
   return path.join(derivedDir, SESSION_INDEX_FILE);
 }
 
+let cachedSessionIndex = null;
+let cachedSessionIndexPath = null;
+let cachedSessionIndexMtime = 0;
+
 export function loadSessionEmbeddingsIndex(derivedDir) {
   const p = sessionIndexPath(derivedDir);
   if (!fs.existsSync(p)) return {};
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+  try {
+    const stat = fs.statSync(p);
+    if (cachedSessionIndex && cachedSessionIndexPath === p && cachedSessionIndexMtime === stat.mtimeMs) {
+      return cachedSessionIndex;
+    }
+    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    cachedSessionIndex = data;
+    cachedSessionIndexPath = p;
+    cachedSessionIndexMtime = stat.mtimeMs;
+    return data;
+  }
   catch { return {}; }
 }
 

@@ -113,6 +113,22 @@ function writeEmbeddingsIndex(derivedDir, index) {
   fs.writeFileSync(path.join(derivedDir, EMBEDDINGS_FILE), lines.join('\n') + '\n', 'utf8');
 }
 
+async function throttledMap(items, limit, fn) {
+  const results = [];
+  const executing = new Set();
+  for (const item of items) {
+    const p = Promise.resolve().then(() => fn(item));
+    results.push(p);
+    executing.add(p);
+    const clean = () => executing.delete(p);
+    p.then(clean, clean);
+    if (executing.size >= limit) {
+      await Promise.race(executing);
+    }
+  }
+  return Promise.all(results);
+}
+
 // ─── Index builder ───────────────────────────────────────────────────────────────
 
 /**
@@ -196,10 +212,9 @@ export async function buildSemanticIndex(nodes, derivedDir, opts = {}) {
     existing.set(firstNode.slug, firstVec);
   }
 
-  // Embed the remaining nodes
-  for (const node of toEmbed) {
-    if (node.slug === nodes[0].slug) continue; // already saved probe
-
+  // Embed the remaining nodes concurrently
+  const remainingToEmbed = toEmbed.filter(n => n.slug !== nodes[0].slug);
+  await throttledMap(remainingToEmbed, 6, async (node) => {
     const text = [node.title, node.body || node.content].filter(Boolean).join('\n').slice(0, 4096);
     const vec = await generateEmbedding(text, opts);
     if (vec) {
@@ -218,7 +233,7 @@ export async function buildSemanticIndex(nodes, derivedDir, opts = {}) {
       });
       existing.set(node.slug, vecWithHash);
     }
-  }
+  });
 
   writeEmbeddingsIndex(derivedDir, existing);
   const indexed = toEmbed.filter(n => existing.has(n.slug)).length;

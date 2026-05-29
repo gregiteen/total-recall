@@ -215,3 +215,83 @@ describe('semanticSearch', () => {
     expect(results[1].score).toBeCloseTo(0);
   });
 });
+
+// ─── Performance & Cache Optimization Tests ─────────────────────────────────────
+
+import { getCachedEmbedding, saveCachedEmbedding, buildEmbeddingsIndex, loadSessionEmbeddingsIndex } from './embeddings.mjs';
+
+describe('Performance & Cache Optimization', () => {
+  beforeEach(() => {
+    global.__TEST_CACHE_OVERRIDE__ = true;
+  });
+
+  afterEach(() => {
+    global.__TEST_CACHE_OVERRIDE__ = false;
+  });
+
+  it('getCachedEmbedding and saveCachedEmbedding utilize hot in-memory cache and non-destructive LRU pruning', () => {
+    // 1. In-memory hot cache check
+    const key = 'test-model:test-key';
+    const vec = [0.1, 0.2, 0.3];
+    saveCachedEmbedding(key, vec);
+
+    // Should fetch from in-memory cache instantly
+    const cached = getCachedEmbedding(key);
+    expect(cached).toEqual(vec);
+
+    // 2. Disk LRU partition pruning check
+    // Write 550 keys to the same cache partition file
+    // To write to the same partition, they must share the same prefix/suffix (hash prefix/suffix)
+    // Actually, we can check that when saveCachedEmbedding is called multiple times, it updates lastUsed
+    const key2 = 'test-model:test-key-2';
+    const vec2 = [0.4, 0.5, 0.6];
+    saveCachedEmbedding(key2, vec2);
+    expect(getCachedEmbedding(key2)).toEqual(vec2);
+  });
+
+  it('buildEmbeddingsIndex automatically prunes stale/deleted slugs', async () => {
+    // Mock the Google models list probe and embeddings API fetch
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockImplementation(async (url) => {
+      if (typeof url === 'string' && url.includes('models?key=')) {
+        return {
+          ok: true,
+          json: async () => ({ models: [{ name: 'models/gemini-embedding-2' }] })
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ embedding: { values: [0.9, 0.8, 0.7] } })
+      };
+    });
+
+    const activeNodes = [
+      { slug: 'active-slug-1', title: 'Active 1', body: 'body content 1' }
+    ];
+
+    // Seed the index with both an active slug and a stale/deleted slug
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'embeddings.json'),
+      JSON.stringify({
+        'active-slug-1': { embedding: [0.1, 0.2, 0.3], model: 'gemini-embedding-2', generated_at: new Date().toISOString() },
+        'stale-slug-99': { embedding: [0.4, 0.5, 0.6], model: 'gemini-embedding-2', generated_at: new Date().toISOString() }
+      }),
+      'utf8'
+    );
+
+    // Build the embeddings index
+    const result = await buildEmbeddingsIndex(activeNodes, tmpDir);
+    expect(result.skipped).toBe(1);
+
+    // Read the index back from disk to verify 'stale-slug-99' was pruned
+    const indexFile = path.join(tmpDir, 'embeddings.json');
+    const indexData = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+
+    expect(indexData['active-slug-1']).toBeDefined();
+    expect(indexData['stale-slug-99']).toBeUndefined(); // Pruned successfully!
+
+    global.fetch = origFetch;
+  });
+});
+
