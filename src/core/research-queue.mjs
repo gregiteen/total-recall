@@ -111,6 +111,16 @@ export function syncResearchProjectNode(item) {
   if (!item) return;
   const vaultDir = path.join(getBrainDir(), 'memory-vault');
 
+  // ONLY create/sync the vault memory node if the project's status is 'done'!
+  // If it is pending, in_progress, or failed, we do NOT want it in our memory-vault/facts directory
+  // as it does not contain real completed memory yet.
+  if (item.status !== 'done') {
+    try {
+      deleteNode(`research-project-${item.id}`, vaultDir);
+    } catch {}
+    return;
+  }
+
   // Build a beautiful markdown body for the summary node
   const lines = [];
   lines.push(`# Research Project Summary: ${item.topic}`);
@@ -238,10 +248,16 @@ export function loadQueue(overrideBrainDir) {
     }
 
     // Dynamic self-healing: ensure a corresponding markdown summary node is in the vault
-    const summaryPath = path.join(vaultDir, 'facts', `research-project-${item.id}.md`);
-    if (!fs.existsSync(summaryPath)) {
+    if (item.status === 'done') {
+      const summaryPath = path.join(vaultDir, 'facts', `research-project-${item.id}.md`);
+      if (!fs.existsSync(summaryPath)) {
+        try {
+          syncResearchProjectNode(item);
+        } catch {}
+      }
+    } else {
       try {
-        syncResearchProjectNode(item);
+        deleteNode(`research-project-${item.id}`, vaultDir);
       } catch {}
     }
   }
