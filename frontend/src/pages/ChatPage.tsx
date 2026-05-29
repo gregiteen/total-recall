@@ -117,6 +117,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
         }
       })
       .catch(console.error)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- onBrainChange is stable from parent
   }, [])
 
   // Reload memory nodes when active selected brain changes
