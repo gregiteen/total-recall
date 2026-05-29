@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.0] — 2026-05-29
+
+### 🧠 Brain Architecture Overhaul
+- **Decoupled Brain Layers**: Removed blind global-to-project merge from `compileSurface()`. Global and project brains are now fully independent vaults.
+- **Client-Aware Surface Compiler**: `compilePointers()` reads `config/clients.json` and only writes shim files for connected IDE clients (backward compatible — writes all if no config).
+- **Temporal Rules Engine**: New `expires_at` schema field, `--expires <duration>` CLI flag (e.g. `7d`, `2w`), and auto-archive of expired rules during compilation.
+- **Brain-Scoped API Routes**: All `/api/memory` endpoints and chat completions accept `?brain=<id>` query param or `brainId` body field. Defaults to global brain.
+- **Thread-Brain Binding**: Chat threads now carry `brainId` — switching threads auto-switches the active brain context in the dashboard.
+- **Environment-Aware Surfaces**: `buildRulesBlock()` accepts `{ consumer }` option; API consumers get a minimal header instead of full CLI quickstart docs.
+
+### 🔌 Chrome Extension (MV3)
+- **Context Menus**: Right-click "Send to Brain", "Remember This" (selected text), "Research This"
+- **Side Panel**: Semantic memory search, quick actions (Remember/Research/Quick Note), live research feed
+- **Popup**: Quick note, URL share (auto-filled), passive tracking toggle, connection status
+- **Content Script**: Shadow DOM floating pill showing related memory count per page
+- **Options Page**: Brain URL, PAT token, domain blocklist, capture granularity settings
+
+### 📥 Ingestion Pipeline
+- **Share-to-Brain API**: `POST /api/share` endpoint with auto-routing heuristic (URL → research, text → remember) + `npx total-recall share` CLI command
+- **Google Takeout Parser**: `npx total-recall ingest google-takeout <path>` with parsers for Search History, Chrome Bookmarks, Google Keep, YouTube History. Supports `--dry-run`, `--types`, `--max-age`.
+- **SSSS Schema Extensions**: Added `x_location`, `x_media_refs`, `x_browser_context` optional fields
+- **Open Source Whitelist**: `quick-capture.mjs` now accepts any valid kebab-case source (not just `slack`/`discord`)
+
+### 🔬 Research UI Enhancements
+- **Lifecycle Controls**: Pause, Resume, Re-run, Steer, Conclude, Cancel buttons on research items
+- **Steer Modal**: Direct research with custom direction notes
+- **Expand/Collapse Reports**: Gradient fade at 500px with toggle (replaces fixed 350px cap)
+- **Rich Citation Cards**: Favicons, domain names, "Research deeper" button
+- **URL Detection in Chat**: Auto-detects URLs in chat input, shows [🔬 Research] [📌 Remember] action bar
+
+### 🐛 Bug Fixes
+- **BrainSelector**: Fixed checkbox `readOnly`/`onClick` swallowing clicks, removed deselect guard, added empty state
+- **localStorage Persistence**: `activeBrainId` survives page reload
+- **Route Manifest**: Updated for new `/api/share` endpoint
+
+### 📊 Testing
+- **335 tests** across 45 test files — all passing
+- 0 TypeScript errors, 0 lint issues
+
+
 ## [1.0.0] — 2026-05-01
 
 ### 🎉 Initial Release
