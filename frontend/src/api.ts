@@ -678,3 +678,11 @@ export async function shareToApi(payload: { url: string; action: string; title?:
   return res.json()
 }
 
+// ─── Extension Status ──────────────────────────────────────────────────────────
+
+export async function fetchExtensionStatus(): Promise<{ available: boolean; connected: boolean }> {
+  const res = await apiFetch(`${API_BASE}/api/extension/status`)
+  if (!res.ok) return { available: false, connected: false }
+  return res.json()
+}
+

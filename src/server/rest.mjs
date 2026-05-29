@@ -726,6 +726,59 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
   } catch (err) { serverError(res, err); }
 });
 
+// ─── Chrome Extension Download ───────────────────────────────────────────────
+
+/**
+ * GET /api/extension/download
+ * Streams the Chrome extension directory as a .zip file for easy installation.
+ * No auth required — the extension itself is not sensitive.
+ */
+router.get('/api/extension/download', async (_req, res) => {
+  try {
+    // Extension lives at <package-root>/extension/
+    const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
+    if (!fs.existsSync(extDir) || !fs.existsSync(path.join(extDir, 'manifest.json'))) {
+      return res.status(404).json({ error: 'Chrome extension not found in this installation.' });
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.zip"');
+
+    // Use zip if available, fall back to tar
+    const zip = spawn('zip', ['-r', '-', '.'], { cwd: extDir, stdio: ['ignore', 'pipe', 'ignore'] });
+    zip.stdout.pipe(res);
+    zip.on('error', () => {
+      // zip not available — try tar
+      if (!res.headersSent) {
+        res.setHeader('Content-Type', 'application/gzip');
+        res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.tar.gz"');
+        const tar = spawn('tar', ['czf', '-', '-C', path.dirname(extDir), 'extension'], { stdio: ['ignore', 'pipe', 'ignore'] });
+        tar.stdout.pipe(res);
+        tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
+        tar.on('close', () => { if (!res.writableEnded) res.end(); });
+      }
+    });
+    zip.on('close', code => { if (code !== 0 && !res.writableEnded) res.end(); });
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * GET /api/extension/status
+ * Returns whether the extension is available (packaged) and connected (has sent captures).
+ */
+router.get('/api/extension/status', async (_req, res) => {
+  try {
+    const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
+    const available = fs.existsSync(path.join(extDir, 'manifest.json'));
+
+    // Check if extension has ever connected by looking for the marker file
+    const markerPath = path.join(BRAIN_DIR, 'config', '.extension-connected');
+    const connected = fs.existsSync(markerPath);
+
+    res.json({ available, connected });
+  } catch (err) { serverError(res, err); }
+});
+
 // ─── Dashboard Intelligence Endpoints (feature-flagged) ──────────────────────────
 // Feature flag: presence of ~/.agent/memory-vault/preferences/dashboard-enhanced.md
 

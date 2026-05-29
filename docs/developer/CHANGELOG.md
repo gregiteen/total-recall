@@ -33,6 +33,9 @@ All notable changes to this project will be documented in this file.
 - **URL Detection in Chat**: Auto-detects URLs in chat input, shows [🔬 Research] [📌 Remember] action bar
 
 ### 🐛 Bug Fixes
+- **CLI agent spawning environment**: Fixed environment variable propagation inside `spawnSync` when spawning local CLI agents headlessly by injecting config-loaded API keys (such as `GOOGLE_API_KEY`, `TAVILY_API_KEY`, etc.) directly from `secrets.enc` into the spawned environment.
+- **POST /api/share syntax error**: Made the Express route handler callback `async` to resolve dynamic import syntax errors.
+- **Route Manifest Validation**: Added `GET /api/extension/status` to `route-manifest.json` to align with the live API routes and pass testing.
 - **BrainSelector**: Fixed checkbox `readOnly`/`onClick` swallowing clicks, removed deselect guard, added empty state
 - **localStorage Persistence**: `activeBrainId` survives page reload
 - **Route Manifest**: Updated for new `/api/share` endpoint

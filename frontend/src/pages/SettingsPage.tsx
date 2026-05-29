@@ -595,6 +595,51 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* CHROME EXTENSION */}
+      <div style={{
+        marginTop: 24,
+        padding: 20,
+        background: 'linear-gradient(135deg, rgba(108, 92, 231, 0.08), rgba(99, 179, 237, 0.08))',
+        border: '1px solid rgba(108, 92, 231, 0.25)',
+        borderRadius: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <span style={{ fontSize: 24 }}>🧩</span>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Chrome Extension</h3>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+              Browse with your brain — contextual memory, quick capture, and research from any page
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <a
+            href="/api/extension/download"
+            download
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              background: 'linear-gradient(135deg, #6c5ce7, #a29bfe)',
+              color: '#fff',
+              borderRadius: 8,
+              fontWeight: 500,
+              fontSize: 13,
+              textDecoration: 'none',
+              transition: 'opacity 0.2s'
+            }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
+            onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+          >
+            ⬇ Download Extension
+          </a>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+            Unzip → chrome://extensions → Developer mode → Load unpacked
+          </span>
+        </div>
+      </div>
+
       {/* FOOTER ACTIONS */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16, flexShrink: 0 }}>
         <button 

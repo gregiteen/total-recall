@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels, shareToApi } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels, shareToApi, fetchExtensionStatus } from '../api'
 import type { ChatThread } from '../api'
 import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
 import Graph3D from '../components/Graph3D'
@@ -36,6 +36,12 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
   const [deepResearchMode, setDeepResearchMode] = useState(false)
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null)
   const [urlToast, setUrlToast] = useState<string | null>(null)
+
+  // Extension banner state
+  const [extensionStatus, setExtensionStatus] = useState<{ available: boolean; connected: boolean } | null>(null)
+  const [extensionBannerDismissed, setExtensionBannerDismissed] = useState(
+    () => localStorage.getItem('tr-ext-banner-dismissed') === 'true'
+  )
 
   // Threads listing & session control state
   const [threads, setThreads] = useState<ChatThread[]>([])
@@ -167,6 +173,13 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
     if (!voiceMode || kokoroEnabled !== null) return
     fetchTtsStatus().then(s => setKokoroEnabled(s.enabled)).catch(() => setKokoroEnabled(false))
   }, [voiceMode, kokoroEnabled])
+
+  // Check Chrome extension availability (once on mount)
+  useEffect(() => {
+    if (!extensionBannerDismissed) {
+      fetchExtensionStatus().then(setExtensionStatus).catch(() => {})
+    }
+  }, [extensionBannerDismissed])
 
   const speakBrowser = (text: string) => {
     if (!('speechSynthesis' in window)) return
@@ -522,6 +535,65 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
             )}
           </div>
         </header>
+
+        {/* Chrome Extension Banner — shows when available but not connected */}
+        {extensionStatus?.available && !extensionStatus.connected && !extensionBannerDismissed && (
+          <div style={{
+            margin: '0 16px 0',
+            padding: '12px 16px',
+            background: 'linear-gradient(135deg, rgba(108, 92, 231, 0.12), rgba(99, 179, 237, 0.12))',
+            border: '1px solid rgba(108, 92, 231, 0.3)',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            animation: 'fadeIn 0.3s ease'
+          }}>
+            <span style={{ fontSize: 22, flexShrink: 0 }}>🧩</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 2 }}>
+                Chrome Extension Available
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                Browse with your brain — contextual memory, quick capture, and research from any page
+              </div>
+            </div>
+            <a
+              href="/api/extension/download"
+              download
+              style={{
+                flexShrink: 0,
+                padding: '6px 14px',
+                background: 'linear-gradient(135deg, #6c5ce7, #a29bfe)',
+                color: '#fff',
+                borderRadius: 6,
+                fontWeight: 500,
+                fontSize: 12,
+                textDecoration: 'none',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              ⬇ Download
+            </a>
+            <button
+              onClick={() => {
+                setExtensionBannerDismissed(true)
+                localStorage.setItem('tr-ext-banner-dismissed', 'true')
+              }}
+              style={{
+                flexShrink: 0,
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                cursor: 'pointer',
+                fontSize: 16,
+                padding: '0 2px',
+                lineHeight: 1
+              }}
+              title="Dismiss"
+            >✕</button>
+          </div>
+        )}
 
         <div className="chat-messages">
           {messages.length === 0 && (

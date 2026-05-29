@@ -60,7 +60,7 @@ function resolveAction({ url, excerpt, action }) {
  * POST /api/share
  * Body: { url, title, excerpt, source, action, brainId, tags }
  */
-router.post('/api/share', requireAuth, requireScope('memory:write'), (req, res) => {
+router.post('/api/share', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const { url, title, excerpt, source, action: rawAction, tags } = req.body || {};
 
@@ -123,6 +123,18 @@ router.post('/api/share', requireAuth, requireScope('memory:write'), (req, res) 
 
     writeNode(node, vaultDir);
     invalidate();
+
+    // Mark extension as connected when share comes from the extension
+    if (source && source.includes('extension')) {
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+      const configDir = path.join(vaultDir, '..', 'config');
+      const markerPath = path.join(configDir, '.extension-connected');
+      if (!fs.existsSync(markerPath)) {
+        try { fs.mkdirSync(configDir, { recursive: true }); } catch { /* ok */ }
+        fs.writeFileSync(markerPath, new Date().toISOString());
+      }
+    }
 
     return res.status(201).json({
       action_taken: 'remember',
