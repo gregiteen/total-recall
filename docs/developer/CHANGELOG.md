@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.1.0] — 2026-05-29
+## [3.1.1] — 2026-05-29
 
 ### 🧠 Brain Architecture Overhaul
 - **Decoupled Brain Layers**: Removed blind global-to-project merge from `compileSurface()`. Global and project brains are now fully independent vaults.
