@@ -105,6 +105,11 @@ export default async function lint(args) {
         continue;
       }
 
+      if (data.type === 'query') {
+        valid++;
+        continue;
+      }
+
       const schema = schemaMap[data.type];
       if (!schema) {
         if (opts.json) {
