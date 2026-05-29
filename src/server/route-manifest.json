@@ -73,5 +73,7 @@
   { "method": "GET", "path": "/api/brains" },
   { "method": "GET", "path": "/api/brains/:id/nodes" },
   { "method": "GET", "path": "/api/gemini-models" },
-  { "method": "POST", "path": "/api/share" }
+  { "method": "POST", "path": "/api/share" },
+  { "method": "GET", "path": "/api/extension/download" },
+  { "method": "GET", "path": "/api/extension/status" }
 ]

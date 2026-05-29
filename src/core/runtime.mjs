@@ -4,7 +4,7 @@ import yaml from 'yaml';
 import os from 'os';
 import { spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
-import { agentDir, brainDir } from './config.mjs';
+import { agentDir, brainDir, googleApiKey, tavilyApiKey, braveApiKey, exaApiKey, serperApiKey, githubToken } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
 import { validateCommand } from './sandbox.mjs';
 
@@ -288,7 +288,15 @@ export async function callLocalRuntime(prompt, system, config) {
       encoding: 'utf8',
       timeout,
       maxBuffer: 10 * 1024 * 1024,
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || googleApiKey,
+        TAVILY_API_KEY: process.env.TAVILY_API_KEY || tavilyApiKey,
+        BRAVE_API_KEY: process.env.BRAVE_API_KEY || braveApiKey,
+        EXA_API_KEY: process.env.EXA_API_KEY || exaApiKey,
+        SERPER_API_KEY: process.env.SERPER_API_KEY || serperApiKey,
+        GITHUB_TOKEN: process.env.GITHUB_TOKEN || githubToken,
+      },
       cwd: process.cwd(),
     });
 
