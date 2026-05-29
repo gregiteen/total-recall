@@ -35,6 +35,7 @@ function printHelp() {
     --predicate <string>      SPO Predicate (default: remembers_fact)
     --object <string>         SPO Object (default: brain)
     --related <list>          Comma-separated list of related slugs
+    --expires <duration>       TTL for temporary rules (e.g. "7d", "2w", "30d", "6h", "3m")
 
   Examples:
     npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
@@ -43,6 +44,32 @@ function printHelp() {
     npx total-recall remember fact "Uses Drizzle ORM" --project   # Saves to project brain
     npx total-recall remember invariant "No var" --global          # Saves to global brain
 `);
+}
+
+/**
+ * Parse a human-friendly duration string and return a Date in the future.
+ * Supported units: h (hours), d (days), w (weeks), m (months).
+ * E.g. "7d" → 7 days from now, "2w" → 14 days from now.
+ */
+function parseDuration(str) {
+  if (!str || typeof str !== 'string') {
+    throw new Error(`Invalid duration: "${str}". Expected format like "7d", "2w", "30d", "6h", "3m".`);
+  }
+  const match = str.trim().match(/^(\d+)([hdwm])$/i);
+  if (!match) {
+    throw new Error(`Invalid duration: "${str}". Expected format like "7d", "2w", "30d", "6h", "3m".`);
+  }
+  const amount = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const date = new Date();
+  switch (unit) {
+    case 'h': date.setHours(date.getHours() + amount); break;
+    case 'd': date.setDate(date.getDate() + amount); break;
+    case 'w': date.setDate(date.getDate() + amount * 7); break;
+    case 'm': date.setMonth(date.getMonth() + amount); break;
+    default: throw new Error(`Unknown duration unit: "${unit}".`);
+  }
+  return date;
 }
 
 export default async function remember(args) {
@@ -99,6 +126,7 @@ export default async function remember(args) {
   let predicate = 'remembers_fact';
   let object = 'brain';
   let related = [];
+  let expiresAt = null;
 
   for (let i = 2; i < layerArgs.length; i++) {
     const arg = layerArgs[i];
@@ -164,6 +192,16 @@ export default async function remember(args) {
     } else if (arg === '--related') {
       if (val) {
         related = val.split(',').map(r => r.trim());
+        i++;
+      }
+    } else if (arg === '--expires') {
+      if (val) {
+        try {
+          expiresAt = parseDuration(val).toISOString();
+        } catch (err) {
+          console.error(`❌ ${err.message}`);
+          process.exit(1);
+        }
         i++;
       }
     }
@@ -238,6 +276,7 @@ export default async function remember(args) {
       access_count: 1
     },
     schema_version: 2,
+    ...(expiresAt ? { expires_at: expiresAt } : {}),
     x_temporal_context: now,
     body: bodyContent
   };
@@ -254,56 +293,13 @@ export default async function remember(args) {
   // Instantly recompile instructions and vector indexes in the exact same turn!
   console.log('  ⏳ Recompiling active memory surfaces and indexes...');
   try {
-    // Use merged compilation if both layers exist
-    const brains = getBothBrains();
-    const globalVaultDir = brains.global ? path.join(brains.global.brainDir, 'memory-vault') : undefined;
     const compileResult = await compileSurface({
       vaultDir,
       skillsDir,
       derivedDir,
-      instructionsFile,
-      globalVaultDir: layer === 'project' ? globalVaultDir : undefined
+      instructionsFile
     });
     console.log(`  ✅ Recompilation successful! Processed ${compileResult.nodesProcessed} SSSS nodes.`);
-
-    // When saving to the global brain, also recompile all registered project
-    // brains so they inherit the new global invariants/preferences/corrections.
-    if (layer === 'global' && brains.global) {
-      const registryPath = path.join(brains.global.brainDir, 'config', 'project-registry.json');
-      if (fs.existsSync(registryPath)) {
-        try {
-          const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-          const globalVault = path.join(brains.global.brainDir, 'memory-vault');
-          let recompiled = 0;
-          for (const project of registry) {
-            if (!project.brainDir || !fs.existsSync(project.brainDir)) continue;
-            const projVaultDir = path.join(project.brainDir, 'memory-vault');
-            const projDerivedDir = path.join(project.brainDir, 'memory-derived');
-            const projAgentDir = path.dirname(path.dirname(project.brainDir));
-            const projSkillsDir = path.join(projAgentDir, 'skills');
-            const projInstructionsFile = path.join(projAgentDir, 'INSTRUCTIONS.md');
-            // Determine the project root (one level above .agent/)
-            const projRoot = path.dirname(projAgentDir);
-            const projInstructions = path.join(projRoot, '.agent', 'INSTRUCTIONS.md');
-            try {
-              await compileSurface({
-                vaultDir: projVaultDir,
-                skillsDir: projSkillsDir,
-                derivedDir: projDerivedDir,
-                instructionsFile: fs.existsSync(projInstructions) ? projInstructions : projInstructionsFile,
-                globalVaultDir: globalVault
-              });
-              recompiled++;
-            } catch (e) {
-              // Non-fatal: skip projects that fail to recompile
-            }
-          }
-          if (recompiled > 0) {
-            console.log(`  ✅ Propagated to ${recompiled} registered project brain${recompiled === 1 ? '' : 's'}.`);
-          }
-        } catch { /* ignore registry parse errors */ }
-      }
-    }
   } catch (err) {
     console.warn(`  ⚠️  Memory saved, but surface recompilation failed: ${err.message}`);
   }

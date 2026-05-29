@@ -231,7 +231,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
 
 // ─── Main content (routes) ────────────────────────────────────────────────────
 
-function MainContent({ activeBrainId }: { activeBrainId: string }) {
+function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; onBrainChange: (id: string) => void }) {
   const location = useLocation();
   const isChat = location.pathname === '/';
   const [floatingChat, setFloatingChat] = useState(false);
@@ -275,7 +275,7 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
             <button onClick={() => setFloatingChat(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)' }}>✖</button>
           </div>
         )}
-        <ChatPage activeBrainId={activeBrainId} />
+        <ChatPage activeBrainId={activeBrainId} onBrainChange={onBrainChange} />
       </div>
       {(!isChat || floatingChat) && (
         <div style={{ flex: 1, overflow: 'auto' }}>
@@ -303,10 +303,19 @@ function MainContent({ activeBrainId }: { activeBrainId: string }) {
 
 // ─── Root App with auth gate ──────────────────────────────────────────────────
 
+const BRAIN_STORAGE_KEY = 'total-recall-active-brain'
+
 function App() {
   const [authState, setAuthState] = useState<AuthState>('loading')
   const [health, setHealth] = useState<HealthData | null>(null)
-  const [activeBrainId, setActiveBrainId] = useState('global')
+  const [activeBrainId, setActiveBrainId] = useState(
+    () => localStorage.getItem(BRAIN_STORAGE_KEY) || 'global'
+  )
+
+  // Persist activeBrainId to localStorage on change
+  useEffect(() => {
+    localStorage.setItem(BRAIN_STORAGE_KEY, activeBrainId)
+  }, [activeBrainId])
 
   // Register 401 interceptor so any API call that gets a 401 flips us to unauthed
   useEffect(() => {
@@ -372,7 +381,7 @@ function App() {
     <BrowserRouter>
       <div className="app-layout">
         <Sidebar onLogout={handleLogout} health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
-        <MainContent activeBrainId={activeBrainId} />
+        <MainContent activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
       </div>
     </BrowserRouter>
   )

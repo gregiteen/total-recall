@@ -33,18 +33,25 @@ function parseArgs(args) {
 
 function printHelp() {
   console.log(`
-  total-recall ingest — Ingest IDE agent conversation logs
+  total-recall ingest — Ingest data into Total Recall
 
-  Scans known local directories for conversation history from:
-    • Claude Code   (~/.claude/projects/)
-    • OpenAI Codex  (~/.codex/sessions/)
-    • Gemini CLI    (~/.gemini/tmp/)
-    • Antigravity   (~/.gemini/antigravity/brain/)
-    • Cursor        (~/.cursor/projects/)
+  Subcommands:
+    google-takeout <path>  Ingest Google Takeout export data
+                           Use 'total-recall ingest google-takeout --help' for details
 
-  Ingested sessions are written as JSONL to .agent/skills/total-recall/sessions/
+  IDE Session Ingest:
+    Scans known local directories for conversation history from:
+      • Claude Code   (~/.claude/projects/)
+      • OpenAI Codex  (~/.codex/sessions/)
+      • Gemini CLI    (~/.gemini/tmp/)
+      • Antigravity   (~/.gemini/antigravity/brain/)
+      • Cursor        (~/.cursor/projects/)
 
-  Usage: total-recall ingest [options]
+    Ingested sessions are written as JSONL to .agent/skills/total-recall/sessions/
+
+  Usage:
+    total-recall ingest [options]
+    total-recall ingest google-takeout <path> [options]
 
   Options:
     --sources <list>   Comma-separated source filter (e.g. claude-code,codex)
@@ -54,6 +61,13 @@ function printHelp() {
 }
 
 export default async function ingest(args) {
+  // Route subcommands to specialized ingest modules
+  if (args[0] === 'google-takeout') {
+    const { runGoogleTakeout } = await import('./ingest/index.mjs');
+    await runGoogleTakeout(args.slice(1));
+    return;
+  }
+
   const opts = parseArgs(args);
   if (opts.help) { printHelp(); return; }
 

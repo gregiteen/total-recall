@@ -64,6 +64,27 @@ export const MemoryNodeSchema = z.object({
       accessed: z.preprocess((val) => (val instanceof Date ? val.toISOString() : val), z.string()).optional(),
     })
   ).optional(),
+  x_location: z.object({
+    lat: z.number(),
+    lon: z.number(),
+    label: z.string().optional(),
+    accuracy: z.number().optional(),
+  }).optional().nullable(),
+  x_media_refs: z.array(z.object({
+    path: z.string(),
+    type: z.enum(['image', 'audio', 'video', 'document']),
+    description: z.string().optional(),
+    size_bytes: z.number().optional(),
+  })).optional().nullable(),
+  x_browser_context: z.object({
+    url: z.string(),
+    domain: z.string().optional(),
+    title: z.string().optional(),
+    tab_group: z.string().optional(),
+    visit_count: z.number().optional(),
+  }).optional().nullable(),
+  // Temporal rule expiration
+  expires_at: ssssDatetimeNullable().optional(),
   // Absolute Invariant Extensions
   priority: z.literal('absolute').optional(),
   immutable: z.boolean().optional()

@@ -32,6 +32,41 @@ const CONFIG_DIR = path.join(BRAIN_DIR, 'config');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
 
+/**
+ * Resolve a brain-specific vault directory from a brain ID string.
+ *
+ * @param {string|undefined} brainId - 'global', 'project:<name>', or undefined
+ * @returns {string} Absolute path to the memory-vault directory
+ */
+function resolveVaultDir(brainId) {
+  if (!brainId || brainId === 'global') {
+    return VAULT_DIR;
+  }
+
+  if (brainId.startsWith('project:')) {
+    const projectName = brainId.slice('project:'.length);
+    const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
+
+    if (fs.existsSync(registryPath)) {
+      try {
+        const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+        const project = registry.find(p => p.name === projectName);
+        if (project) {
+          const projectVaultDir = path.join(project.brainDir, 'memory-vault');
+          if (fs.existsSync(projectVaultDir)) {
+            return projectVaultDir;
+          }
+        }
+      } catch {
+        // Registry parse error — fall through to default
+      }
+    }
+  }
+
+  return VAULT_DIR;
+}
+
 function sha256(content) {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
@@ -315,7 +350,7 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
   try {
     const runtimeConfigPath = path.join(CONFIG_DIR, 'runtime.yml');
     
-    const { messages, model, temperature, groundingNodes } = req.body;
+    const { messages, model, temperature, groundingNodes, brainId } = req.body;
     
     logger.info('api', '=== NEW CHAT REQUEST ===');
     logger.info('api', `Messages count: ${messages?.length || 0}`);
@@ -563,7 +598,8 @@ ${interviewTask}`;
     // Support topical grounding context
     if (Array.isArray(groundingNodes) && groundingNodes.length > 0) {
       try {
-        const allNodes = loadNodes(VAULT_DIR);
+        const groundingVaultDir = resolveVaultDir(brainId);
+        const allNodes = loadNodes(groundingVaultDir);
         let groundingPrompt = '\n\n=== ACTIVE GROUNDING BRAIN NODES ===\nThe user has explicitly selected the following brain memory nodes as context for this conversation. Integrate their contents into your knowledge base and refer to them to inform your answers:';
         let groundedAny = false;
         for (const slug of groundingNodes) {
@@ -678,7 +714,8 @@ You are operating in a lightweight text-only mode. Answer the user's questions d
       latency_ms: elapsedMs,
       messages: currentMessages,
       response: finalMessage,
-      tokens: promptTokens + completionTokens
+      tokens: promptTokens + completionTokens,
+      brain_id: brainId || 'global'
     });
     // Emit latency + tokens so the watchdog log monitor can react to anomalies.
     logger.info('api', 'chat exchange completed', {
@@ -782,7 +819,8 @@ apiRouter.get('/v1/chat/threads', requireAuth, requireScope('chat:read'), (req, 
           id: file.replace(/\.jsonl$/, ''),
           title,
           turns,
-          lastUpdated
+          lastUpdated,
+          brainId: firstRecord.brain_id || 'global'
         });
       } catch (err) {
         logger.error('api', `Error reading session file ${file}`, { error: err.message });
@@ -825,7 +863,8 @@ apiRouter.delete('/v1/chat/threads/:id', requireAuth, requireScope('chat:write')
 
 apiRouter.get('/v1/chat/suggestions', requireAuth, requireScope('chat:read'), (req, res) => {
   try {
-    const allNodes = loadNodes(VAULT_DIR);
+    const suggestionsVaultDir = resolveVaultDir(req.query?.brain);
+    const allNodes = loadNodes(suggestionsVaultDir);
     // Find active or draft memory nodes that represent facts, concepts, or research
     const candidates = allNodes.filter(n => n.status !== 'archived' && n.category !== 'preferences');
 

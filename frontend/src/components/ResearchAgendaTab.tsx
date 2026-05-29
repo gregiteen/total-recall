@@ -1,11 +1,12 @@
-import React, { Fragment } from 'react'
+import React, { Fragment, useState, useRef } from 'react'
 import { renderMarkdown, extractSources } from './MarkdownUtils'
 import type { MemoryNode } from '../types'
+import { patchResearch, deleteResearch, shareToApi } from '../api'
 
 export interface ResearchItem {
   id: string
   topic: string
-  status: 'pending' | 'in_progress' | 'done' | 'failed'
+  status: 'pending' | 'in_progress' | 'done' | 'failed' | 'paused'
   priority: 'low' | 'medium' | 'high' | 'critical'
   notes: string | null
   node_slug?: string | null
@@ -31,6 +32,7 @@ interface ResearchAgendaTabProps {
   handleToggleExpand: (item: ResearchItem) => void
   loadedDiscoveries: Record<string, MemoryNode | null>
   loadingNodeSlugs: Record<string, boolean>
+  refreshResearch?: () => void
 }
 
 export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
@@ -51,7 +53,45 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
     handleToggleExpand,
     loadedDiscoveries,
     loadingNodeSlugs,
+    refreshResearch,
   } = props
+
+  const [steerTarget, setSteerTarget] = useState<string | null>(null)
+  const steerRef = useRef<HTMLTextAreaElement>(null)
+  const [expandedReports, setExpandedReports] = useState<Record<string, boolean>>({})
+
+  const handlePatch = async (id: string, updates: Record<string, unknown>) => {
+    try {
+      await patchResearch(id, updates)
+      refreshResearch?.()
+    } catch (err) {
+      console.error('Failed to update research:', err)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Cancel this research project?')) return
+    try {
+      await deleteResearch(id)
+      refreshResearch?.()
+    } catch (err) {
+      console.error('Failed to delete research:', err)
+    }
+  }
+
+  const handleSteerSubmit = async () => {
+    if (!steerTarget || !steerRef.current) return
+    const direction = steerRef.current.value.trim()
+    if (!direction) return
+    try {
+      await patchResearch(steerTarget, { notes: direction })
+      setSteerTarget(null)
+      refreshResearch?.()
+    } catch (err) {
+      console.error('Failed to steer research:', err)
+    }
+  }
+
 
   return (
     <div>
@@ -397,6 +437,24 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
 
                             <hr style={{ border: 'none', borderTop: '1px solid rgba(255, 255, 255, 0.06)', margin: '20px 0' }} />
 
+                            {/* Lifecycle Control Buttons */}
+                            <div style={{ display: 'flex', gap: '8px', padding: '0 0 16px', flexWrap: 'wrap' }}>
+                              {item.status === 'in_progress' && (
+                                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); handlePatch(item.id, { status: 'paused' }) }}>⏸ Pause</button>
+                              )}
+                              {(item.status === 'paused' || item.status === 'failed') && (
+                                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); handlePatch(item.id, { status: 'pending' }) }}>▶️ Resume</button>
+                              )}
+                              {item.status === 'done' && (
+                                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); handlePatch(item.id, { status: 'pending', research_phase: 'acquisition' }) }}>🔄 Re-run</button>
+                              )}
+                              <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setSteerTarget(item.id) }}>🎯 Steer</button>
+                              {item.status !== 'done' && (
+                                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); handlePatch(item.id, { status: 'done' }) }}>✅ Conclude</button>
+                              )}
+                              <button className="btn btn-sm" style={{ borderColor: 'var(--error)', color: 'var(--error)' }} onClick={(e) => { e.stopPropagation(); handleDelete(item.id) }}>❌ Cancel</button>
+                            </div>
+
                             {item.node_slug ? (
                               <>
                                 {isNodeLoading ? (
@@ -477,48 +535,98 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                                       </div>
                                     </div>
 
-                                    <div style={{ maxHeight: 350, overflowY: 'auto', paddingRight: 8 }}>
-                                      <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                                        {renderMarkdown(node.content || node.body || '')}
+                                    <div style={{ position: 'relative' }}>
+                                      <div style={{
+                                        maxHeight: expandedReports[item.id] ? 'none' : 500,
+                                        overflow: 'hidden',
+                                        paddingRight: 8,
+                                        transition: 'max-height 0.3s ease',
+                                      }}>
+                                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                                          {renderMarkdown(node.content || node.body || '')}
+                                        </div>
                                       </div>
+                                      {!expandedReports[item.id] && (node.content || node.body || '').length > 800 && (
+                                        <div style={{
+                                          position: 'absolute',
+                                          bottom: 0,
+                                          left: 0,
+                                          right: 0,
+                                          height: 80,
+                                          background: 'linear-gradient(transparent, rgba(10, 10, 15, 0.95))',
+                                          pointerEvents: 'none',
+                                        }} />
+                                      )}
                                     </div>
+                                    {(node.content || node.body || '').length > 800 && (
+                                      <button
+                                        className="btn btn-sm btn-ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setExpandedReports(prev => ({ ...prev, [item.id]: !prev[item.id] }))
+                                        }}
+                                        style={{ alignSelf: 'flex-start', marginTop: 8, fontSize: 12, color: 'var(--accent)' }}
+                                      >
+                                        {expandedReports[item.id] ? '▲ Show less' : '▼ Show more'}
+                                      </button>
+                                    )}
 
                                     {extractSources(node.content || node.body).length > 0 && (
                                       <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: 12 }}>
                                         <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600, marginBottom: 8 }}>Sources & Citations</div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                          {extractSources(node.content || node.body).map((src, idx) => (
-                                            <a 
-                                              key={idx} 
-                                              href={src.url} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer"
-                                              style={{
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: 6,
-                                                background: 'rgba(108, 92, 231, 0.08)',
-                                                border: '1px solid rgba(108, 92, 231, 0.25)',
-                                                borderRadius: 20,
-                                                padding: '4px 12px',
-                                                fontSize: 12,
-                                                color: 'var(--accent)',
-                                                transition: 'all 0.2s',
-                                                cursor: 'pointer'
-                                              }}
-                                              onMouseOver={e => {
-                                                e.currentTarget.style.background = 'rgba(108, 92, 231, 0.15)'
-                                                e.currentTarget.style.borderColor = 'rgba(108, 92, 231, 0.4)'
-                                              }}
-                                              onMouseOut={e => {
-                                                e.currentTarget.style.background = 'rgba(108, 92, 231, 0.08)'
-                                                e.currentTarget.style.borderColor = 'rgba(108, 92, 231, 0.25)'
-                                              }}
-                                            >
-                                              <span>🔗</span>
-                                              <span style={{ fontWeight: 500 }}>{src.text}</span>
-                                            </a>
-                                          ))}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                          {extractSources(node.content || node.body).map((src, idx) => {
+                                            let domain = ''
+                                            try { domain = new URL(src.url).hostname.replace(/^www\./, '') } catch { domain = src.url }
+                                            return (
+                                              <div
+                                                key={idx}
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: 10,
+                                                  background: 'rgba(108, 92, 231, 0.06)',
+                                                  border: '1px solid rgba(108, 92, 231, 0.2)',
+                                                  borderRadius: 10,
+                                                  padding: '8px 14px',
+                                                  fontSize: 12,
+                                                  transition: 'all 0.2s',
+                                                }}
+                                              >
+                                                <img
+                                                  src={`https://www.google.com/s2/favicons?domain=${domain}&sz=16`}
+                                                  width={16}
+                                                  height={16}
+                                                  alt=""
+                                                  style={{ borderRadius: 2, flexShrink: 0 }}
+                                                />
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                                                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{src.text}</span>
+                                                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{domain}</span>
+                                                </div>
+                                                <a
+                                                  href={src.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="btn btn-sm"
+                                                  style={{ fontSize: 11, padding: '3px 10px', textDecoration: 'none', flexShrink: 0 }}
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  Open
+                                                </a>
+                                                <button
+                                                  className="btn btn-sm"
+                                                  style={{ fontSize: 11, padding: '3px 10px', flexShrink: 0 }}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    shareToApi({ url: src.url, action: 'research', title: src.text }).catch(console.error)
+                                                  }}
+                                                >
+                                                  🔬 Research deeper
+                                                </button>
+                                              </div>
+                                            )
+                                          })}
                                         </div>
                                       </div>
                                     )}
@@ -577,6 +685,24 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
           </tbody>
         </table>
       </div>
+
+      {/* Steer Modal Overlay */}
+      {steerTarget && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--bg-secondary, #1e1e2e)', borderRadius: '12px', padding: '24px', maxWidth: '500px', width: '90%', border: '1px solid var(--border)' }}>
+            <h3 style={{ margin: '0 0 12px' }}>🎯 Steer Research</h3>
+            <textarea
+              ref={steerRef}
+              placeholder="Add direction... e.g. 'Focus more on pricing comparisons'"
+              style={{ width: '100%', minHeight: '100px', borderRadius: '8px', padding: '12px', background: 'var(--bg-primary, #11111b)', color: 'inherit', border: '1px solid var(--border, #333)', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px', justifyContent: 'flex-end' }}>
+              <button className="btn btn-sm btn-ghost" onClick={() => setSteerTarget(null)}>Cancel</button>
+              <button className="btn btn-sm btn-primary" onClick={handleSteerSubmit}>Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

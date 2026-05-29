@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Total Recall</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <h1>🧠 Total Recall</h1>
+      <div id="connection-dot" class="dot"></div>
+    </header>
+
+    <div class="field-group">
+      <label for="url-input">Page URL</label>
+      <input type="text" id="url-input" readonly />
+    </div>
+
+    <div class="field-group">
+      <label for="note-input">Quick Note</label>
+      <textarea id="note-input" placeholder="Add a note about this page…" rows="3"></textarea>
+    </div>
+
+    <div class="button-row">
+      <button id="btn-remember" class="btn primary">📌 Remember</button>
+      <button id="btn-research" class="btn secondary">🔬 Research</button>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Passive tracking</span>
+      <label class="switch">
+        <input type="checkbox" id="tracking-toggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div id="status-msg" class="status-msg hidden"></div>
+  </div>
+
+  <script src="../lib/brain-client.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir, getBothBrains, getGlobalBrainDir, detectProjectBrain } from './agent-dir.mjs';
+import { resolveAgentDir, getBothBrains, detectProjectBrain } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
@@ -716,8 +716,7 @@ export default async function connect(args) {
       const vaultDir = path.join(brainDir, 'memory-vault');
       const skillsDir = path.join(agentDir, 'skills');
       const derivedDir = path.join(brainDir, 'memory-derived');
-      const globalVaultDir = path.join(getGlobalBrainDir(), 'memory-vault');
-      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, globalVaultDir });
+      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
     } catch {
       // Fallback: seed a clean, basic default SSSS instructions file so connection is never blocked
       const instructionsFile = path.join(cwd, 'INSTRUCTIONS.md');

@@ -49,7 +49,7 @@ describe('captureMessage', () => {
   });
 
   it('throws on invalid source', () => {
-    expect(() => captureMessage({ text: 'hi', source: 'telegram' })).toThrow('source must be');
+    expect(() => captureMessage({ text: 'hi', source: 'INVALID SOURCE!' })).toThrow('source must be');
   });
 });
 

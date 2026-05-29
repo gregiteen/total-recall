@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Total Recall</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="panel">
+    <header class="panel-header">
+      <h1>🧠 Total Recall</h1>
+      <div id="connection-dot" class="dot"></div>
+    </header>
+    <div class="search-box">
+      <input type="text" id="search-input" placeholder="Search your brain..." />
+    </div>
+    <div id="memories-list" class="memories-list"></div>
+    <div class="quick-actions">
+      <button id="btn-remember" class="action-btn">📌 Remember Page</button>
+      <button id="btn-research" class="action-btn">🔬 Research Page</button>
+      <button id="btn-note" class="action-btn">📝 Quick Note</button>
+    </div>
+    <div id="note-area" class="note-area hidden">
+      <textarea id="note-input" placeholder="Type your note..."></textarea>
+      <div class="note-actions">
+        <button id="btn-save-note" class="action-btn accent">Save Note</button>
+        <button id="btn-cancel-note" class="action-btn">Cancel</button>
+      </div>
+    </div>
+    <div id="research-feed" class="research-feed">
+      <h3>Active Research</h3>
+      <div id="research-list"></div>
+    </div>
+  </div>
+  <script src="../lib/brain-client.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

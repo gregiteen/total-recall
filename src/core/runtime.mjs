@@ -4,7 +4,7 @@ import yaml from 'yaml';
 import os from 'os';
 import { spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
-import { agentDir } from './config.mjs';
+import { agentDir, brainDir } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
 import { validateCommand } from './sandbox.mjs';
 
@@ -76,7 +76,7 @@ export function loadRuntimeConfig(_configPath) {
   }
 
   // Parse agents registry
-  let agents = DEFAULT_AGENTS;
+  let agents = DEFAULT_AGENTS.map(a => ({ ...a }));
   if (Array.isArray(agentConfig.agents)) {
     agents = agentConfig.agents
       .filter(a => a.enabled !== false)
@@ -99,13 +99,63 @@ export function loadRuntimeConfig(_configPath) {
     embedding:  agentConfig.embedding ?? { provider: 'google', model: 'text-embedding-004' },
   };
 
-  // Env overrides
-  if (process.env.TR_CLI_AGENT) {
-    const name = process.env.TR_CLI_AGENT;
-    const idx = config.agents.findIndex(a => a.name === name);
+  // Dynamic Priority Resolution (No Hardcoding)
+  let preferredAgent = null;
+
+  // Tier A: Check CLI Arg Overrides (--agent=name)
+  if (Array.isArray(process.argv)) {
+    const agentArg = process.argv.find(arg => arg.startsWith('--agent='));
+    if (agentArg) {
+      preferredAgent = agentArg.split('=')[1];
+    }
+  }
+
+  // Tier B: Check Environment Variable Overrides
+  if (!preferredAgent && process.env.TR_CLI_AGENT) {
+    preferredAgent = process.env.TR_CLI_AGENT;
+  }
+
+  // Tier C: Check Central config (brain.json preferred_agent)
+  if (!preferredAgent) {
+    try {
+      const brainJsonPath = path.join(brainDir, 'config', 'brain.json');
+      if (fs.existsSync(brainJsonPath)) {
+        const brainConfig = JSON.parse(fs.readFileSync(brainJsonPath, 'utf8'));
+        if (brainConfig.preferred_agent) {
+          preferredAgent = brainConfig.preferred_agent;
+        }
+      }
+    } catch {}
+  }
+
+  // Tier D: Check SSSS Compiled Memory Preference Surface
+  if (!preferredAgent) {
+    try {
+      const checkPaths = [
+        path.join(brainDir, 'INSTRUCTIONS.md'),
+        path.join(brainDir, 'GEMINI.md'),
+        path.join(brainDir, 'AGENTS.md')
+      ];
+      for (const p of checkPaths) {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf8');
+          const prefMatch = content.match(/preferred\s+CLI\s+agent\s+is\s+([a-zA-Z0-9_-]+)/i) || content.match(/preferred_cli_agent:\s*([a-zA-Z0-9_-]+)/i);
+          if (prefMatch) {
+            preferredAgent = prefMatch[1].toLowerCase();
+            break;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Apply the dynamic preference
+  if (preferredAgent) {
+    const idx = config.agents.findIndex(a => a.name === preferredAgent);
     if (idx >= 0) {
       config.agents[idx].priority = 0;
       config.agents.sort((a, b) => a.priority - b.priority);
+      logger.info({ subsystem: 'runtime', message: `Dynamically prioritized user preferred agent: ${preferredAgent}` });
     }
   }
   if (process.env.TR_CLI_MODEL) {

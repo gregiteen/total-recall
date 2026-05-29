@@ -81,6 +81,7 @@ import { logger } from '../core/logger.mjs';
 import { memoryRouter }   from './routes/memory.mjs';
 import { keysRouter }     from './routes/keys.mjs';
 import { sessionsRouter } from './routes/sessions.mjs';
+import { shareRouter }    from './routes/share.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -156,6 +157,7 @@ const router = express.Router();
 router.use(memoryRouter);
 router.use(keysRouter);
 router.use(sessionsRouter);
+router.use(shareRouter);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1135,9 +1137,11 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
   try {
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
+    const brainPath = path.join(CONFIG_DIR, 'brain.json');
 
     let security = {};
     let budget = {};
+    let brain = {};
 
     if (fs.existsSync(securityPath)) {
       try {
@@ -1149,16 +1153,22 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
         budget = yaml.parse(fs.readFileSync(budgetPath, 'utf8')) || {};
       } catch {}
     }
+    if (fs.existsSync(brainPath)) {
+      try {
+        brain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {};
+      } catch {}
+    }
 
-    res.json({ security, budget });
+    res.json({ security, budget, brain });
   } catch (err) { serverError(res, err); }
 });
 
 router.post('/api/config-json', requireAuth, requireScope('config:write'), (req, res) => {
   try {
-    const { security, budget } = req.body;
+    const { security, budget, brain } = req.body;
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
+    const brainPath = path.join(CONFIG_DIR, 'brain.json');
 
     if (!fs.existsSync(CONFIG_DIR)) {
       fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -1169,6 +1179,9 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), (req,
     }
     if (budget) {
       fs.writeFileSync(budgetPath, yaml.stringify(budget), { encoding: 'utf8', mode: 0o600 });
+    }
+    if (brain) {
+      fs.writeFileSync(brainPath, JSON.stringify(brain, null, 2), { encoding: 'utf8', mode: 0o600 });
     }
 
     res.json({ success: true });

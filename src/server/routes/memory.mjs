@@ -30,26 +30,27 @@ import {
   badRequest,
   serverError,
   sanitizeNode,
+  resolveVaultFromQuery,
 } from './_shared.mjs';
 
 const router = express.Router();
 
-function nodes() {
-  return getNodes(VAULT_DIR);
+function nodes(vaultDir = VAULT_DIR) {
+  return getNodes(vaultDir);
 }
 
 /**
  * Trigger background SSSS semantic conflict resolution, surface compile, and embedding build.
  * Auto-mutates the brain in real time when any fact is written, updated, or deleted!
  */
-async function triggerMutation(node) {
+async function triggerMutation(node, vaultDir = VAULT_DIR) {
   try {
     // 1. Semantic conflict detection & auto-resolution (Sovereign OS Intelligence)
     try {
-      const existing = nodes();
+      const existing = nodes(vaultDir);
       if (node && node.type === 'memory') {
         detectAndResolve(node, existing, {
-          vaultDir: VAULT_DIR,
+          vaultDir,
           inboxDir: path.join(BRAIN_DIR, 'memory-inbox'),
         });
       }
@@ -59,7 +60,7 @@ async function triggerMutation(node) {
 
     // 2. Recompile instructions surface
     await compileSurface({
-      vaultDir:        VAULT_DIR,
+      vaultDir,
       skillsDir:       SKILLS_DIR,
       derivedDir:      DERIVED_DIR,
       instructionsFile: INSTRUCTIONS,
@@ -67,7 +68,7 @@ async function triggerMutation(node) {
 
     // 3. Rebuild dense embeddings index incrementally in background
     try {
-      const vaultNodes = nodes();
+      const vaultNodes = nodes(vaultDir);
       await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
       await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
     } catch (embedErr) {
@@ -84,7 +85,8 @@ const PASSTHROUGH_FIELDS = ['priority', 'modality', 'confidence', 'importance', 
 
 router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    let list = nodes();
+    const vaultDir = resolveVaultFromQuery(req);
+    let list = nodes(vaultDir);
 
     const { q, category, tag, limit = '200', offset = '0' } = req.query;
 
@@ -111,7 +113,8 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
 
 router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const list = nodes();
+    const vaultDir = resolveVaultFromQuery(req);
+    const list = nodes(vaultDir);
     const byCategory = {};
     for (const n of list) {
       byCategory[n.category] = (byCategory[n.category] || 0) + 1;
@@ -124,7 +127,8 @@ router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, 
 
 router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const node = nodes().find(n => n.slug === req.params.slug);
+    const vaultDir = resolveVaultFromQuery(req);
+    const node = nodes(vaultDir).find(n => n.slug === req.params.slug);
     if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
     res.json(sanitizeNode(node));
   } catch (err) {
@@ -134,12 +138,13 @@ router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, 
 
 router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
+    const vaultDir = resolveVaultFromQuery(req);
     const { slug, title, category, content, body, tags } = req.body || {};
     const actualContent = content || body;
     if (!slug || !title || !category || !actualContent) {
       return badRequest(res, 'Required fields: slug, title, category, content (or body)');
     }
-    if (nodes().find(n => n.slug === slug)) {
+    if (nodes(vaultDir).find(n => n.slug === slug)) {
       return res.status(409).json({ error: `Node already exists: ${slug}. Use PUT to update.` });
     }
     const node = createMemoryNode({ slug, title, category, content: actualContent });
@@ -149,9 +154,9 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    writeNode(node, VAULT_DIR);
+    writeNode(node, vaultDir);
     invalidate();
-    triggerMutation(node);
+    triggerMutation(node, vaultDir);
     res.status(201).json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -160,6 +165,7 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
 
 router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
+    const vaultDir = resolveVaultFromQuery(req);
     const { title, category, content, body, tags } = req.body || {};
     const actualContent = content || body;
     if (!title || !category || !actualContent) {
@@ -172,9 +178,9 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    writeNode(node, VAULT_DIR);
+    writeNode(node, vaultDir);
     invalidate();
-    triggerMutation(node);
+    triggerMutation(node, vaultDir);
     res.json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -183,7 +189,8 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
 
 router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const existing = nodes().find(n => n.slug === req.params.slug);
+    const vaultDir = resolveVaultFromQuery(req);
+    const existing = nodes(vaultDir).find(n => n.slug === req.params.slug);
     if (!existing) return notFound(res, `Memory node not found: ${req.params.slug}`);
 
     const { title, category, content, body, tags } = req.body || {};
@@ -204,9 +211,9 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
       if (req.body[key] !== undefined) updated[key] = req.body[key];
     }
 
-    writeNode(updated, VAULT_DIR);
+    writeNode(updated, vaultDir);
     invalidate();
-    triggerMutation(updated);
+    triggerMutation(updated, vaultDir);
     res.json(sanitizeNode(updated));
   } catch (err) {
     serverError(res, err);
@@ -215,14 +222,15 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
 
 router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const list = nodes();
+    const vaultDir = resolveVaultFromQuery(req);
+    const list = nodes(vaultDir);
     const node = list.find(n => n.slug === req.params.slug);
     if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
 
     if (node._filePath && fs.existsSync(node._filePath)) {
       fs.unlinkSync(node._filePath);
     } else {
-      for (const file of walkMd(VAULT_DIR)) {
+      for (const file of walkMd(vaultDir)) {
         const raw = fs.readFileSync(file, 'utf8');
         if (raw.includes(`slug: ${req.params.slug}`)) {
           fs.unlinkSync(file);
@@ -231,7 +239,7 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
       }
     }
     invalidate();
-    triggerMutation(null);
+    triggerMutation(null, vaultDir);
     res.json({ deleted: true, slug: req.params.slug });
   } catch (err) {
     serverError(res, err);

@@ -7,6 +7,7 @@
  */
 
 import path from 'node:path';
+import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { agentDir, brainDir } from '../../core/config.mjs';
@@ -25,6 +26,53 @@ export const CONFIG_DIR   = path.join(BRAIN_DIR, 'config');
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
+
+/**
+ * Resolve a brain-specific vault directory from the request.
+ *
+ * Reads `req.query.brain` (query param) or `req.body?.brainId` (body field).
+ * - If the value is `'global'` or missing, returns the default VAULT_DIR.
+ * - If it starts with `'project:'`, looks up the project brain in the
+ *   project-registry.json (same resolution logic as GET /api/brains/:id/nodes).
+ * - Falls back to VAULT_DIR if the resolved path doesn't exist.
+ *
+ * @param {import('express').Request} req
+ * @returns {string} Absolute path to the memory-vault directory
+ */
+export function resolveVaultFromQuery(req) {
+  const brainId = req.query?.brain || req.body?.brainId;
+
+  // No brain specified or explicitly global → default vault
+  if (!brainId || brainId === 'global') {
+    return VAULT_DIR;
+  }
+
+  if (brainId.startsWith('project:')) {
+    const projectName = brainId.slice('project:'.length);
+    const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+    const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
+
+    if (!fs.existsSync(registryPath)) {
+      return VAULT_DIR;
+    }
+
+    try {
+      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      const project = registry.find(p => p.name === projectName);
+      if (project) {
+        const projectVaultDir = path.join(project.brainDir, 'memory-vault');
+        if (fs.existsSync(projectVaultDir)) {
+          return projectVaultDir;
+        }
+      }
+    } catch {
+      // Registry parse error — fall through to default
+    }
+  }
+
+  // Unknown brain ID format or resolution failed → default vault
+  return VAULT_DIR;
+}
 
 export function notFound(res, msg) {
   return res.status(404).json({ error: msg || 'Not found' });

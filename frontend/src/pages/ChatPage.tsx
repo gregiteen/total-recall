@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels } from '../api'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels, shareToApi } from '../api'
 import type { ChatThread } from '../api'
 import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
 import Graph3D from '../components/Graph3D'
@@ -22,7 +22,7 @@ function formatRelativeTime(timestamp: number): string {
   return `${diffDays}d ago`
 }
 
-export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) {
+export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrainId?: string; onBrainChange?: (id: string) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -34,6 +34,8 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
   const [voiceMode, setVoiceMode] = useState(false)
   const [kokoroEnabled, setKokoroEnabled] = useState<boolean | null>(null)
   const [deepResearchMode, setDeepResearchMode] = useState(false)
+  const [detectedUrl, setDetectedUrl] = useState<string | null>(null)
+  const [urlToast, setUrlToast] = useState<string | null>(null)
 
   // Threads listing & session control state
   const [threads, setThreads] = useState<ChatThread[]>([])
@@ -80,6 +82,10 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
         setThreads(list)
         if (list.length > 0) {
           setActiveThreadId(list[0].id)
+          // Auto-switch brain to the most recent thread's brain
+          if (list[0].brainId && onBrainChange) {
+            onBrainChange(list[0].brainId)
+          }
         }
       })
       .catch(console.error)
@@ -273,7 +279,7 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
         : selectedModel
 
       const historyToSend = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes, modelWithSubModel)
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, sessionId, selectedGroundingNodes, modelWithSubModel, activeBrainId)
       const assistantMsg: ChatMessage = { id: String(++msgId), role: 'assistant', content: reply, timestamp: getCurrentTimestamp(), versions: [reply], currentVersionIndex: 0 }
       setMessages(prev => [...prev, assistantMsg])
       speak(reply)
@@ -301,7 +307,7 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
         ? `${selectedModel}:${selectedSubModel}`
         : selectedModel
 
-      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId, undefined, modelWithSubModel)
+      const reply = await sendChat(historyToSend, abortControllerRef.current.signal, activeThreadId, undefined, modelWithSubModel, activeBrainId)
       setMessages(prev => {
         const next = [...prev]
         const target = next[msgIndex]
@@ -354,10 +360,29 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
   }
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
+    const value = e.target.value
+    setInput(value)
     const ta = e.target
     ta.style.height = '44px'
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+
+    // Detect URLs
+    const urlMatch = value.match(/https?:\/\/[^\s]+/)
+    setDetectedUrl(urlMatch ? urlMatch[0] : null)
+  }
+
+  const handleUrlAction = async (action: string) => {
+    if (!detectedUrl) return
+    try {
+      await shareToApi({ url: detectedUrl, action })
+      setUrlToast(`✅ URL sent to ${action}`)
+      setDetectedUrl(null)
+      setTimeout(() => setUrlToast(null), 3000)
+    } catch (err) {
+      console.error('Share API error:', err)
+      setUrlToast('⚠️ Failed to process URL')
+      setTimeout(() => setUrlToast(null), 3000)
+    }
   }
 
   const filteredNodes = allMemoryNodes.filter(node => 
@@ -384,7 +409,13 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
             <div 
               key={t.id} 
               className={`thread-item ${activeThreadId === t.id ? 'active' : ''}`}
-              onClick={() => setActiveThreadId(t.id)}
+              onClick={() => {
+                setActiveThreadId(t.id)
+                // Auto-switch brain context when selecting a thread
+                if (t.brainId && onBrainChange) {
+                  onBrainChange(t.brainId)
+                }
+              }}
             >
               <div className="thread-info">
                 <div className="thread-title" title={t.title}>{t.title}</div>
@@ -683,6 +714,18 @@ export default function ChatPage({ activeBrainId }: { activeBrainId?: string }) 
               </button>
             )}
           </div>
+          {detectedUrl && (
+            <div style={{ display: 'flex', gap: '8px', padding: '8px 12px', background: 'var(--bg-secondary, #1e1e2e)', borderRadius: '8px', alignItems: 'center', fontSize: '0.85rem', marginTop: 4 }}>
+              <span style={{ color: 'var(--text-secondary)' }}>🔗 URL detected</span>
+              <button className="btn btn-sm" onClick={() => handleUrlAction('research')}>🔬 Research</button>
+              <button className="btn btn-sm" onClick={() => handleUrlAction('remember')}>📌 Remember</button>
+            </div>
+          )}
+          {urlToast && (
+            <div style={{ padding: '6px 12px', background: 'rgba(46, 204, 113, 0.1)', border: '1px solid rgba(46, 204, 113, 0.3)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--success)', marginTop: 4, textAlign: 'center' }}>
+              {urlToast}
+            </div>
+          )}
         </div>
       </div>
     </div>

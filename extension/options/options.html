@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Total Recall — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-page">
+    <header class="options-header">
+      <h1>🧠 Total Recall — Settings</h1>
+    </header>
+
+    <section class="section">
+      <h2>Connection</h2>
+
+      <div class="field-group">
+        <label for="brain-url">Brain URL</label>
+        <input type="text" id="brain-url" placeholder="http://127.0.0.1:3000" />
+      </div>
+
+      <div class="field-group">
+        <label for="pat-token">PAT Token</label>
+        <input type="password" id="pat-token" placeholder="Enter your personal access token" />
+      </div>
+
+      <div class="connection-row">
+        <button id="btn-test" class="btn secondary">Test Connection</button>
+        <div id="connection-status" class="connection-status"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Privacy</h2>
+
+      <div class="field-group">
+        <label for="blocklist">Domain Blocklist <span class="hint">(one per line)</span></label>
+        <textarea id="blocklist" rows="5" placeholder="example.com&#10;private.internal.io"></textarea>
+      </div>
+
+      <div class="field-group">
+        <label>Capture Granularity</label>
+        <div class="radio-group">
+          <label class="radio-label">
+            <input type="radio" name="granularity" value="off" />
+            <span class="radio-text">Off</span>
+            <span class="radio-desc">No passive tracking</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="granularity" value="minimal" />
+            <span class="radio-text">Minimal</span>
+            <span class="radio-desc">URL and title only</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="granularity" value="full" />
+            <span class="radio-text">Full</span>
+            <span class="radio-desc">URL, title, and page metadata</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button id="btn-save" class="btn primary">Save Settings</button>
+      <span id="save-status" class="save-status"></span>
+    </div>
+  </div>
+
+  <script src="../lib/brain-client.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

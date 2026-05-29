@@ -13,7 +13,7 @@
  *   npx total-recall import          Import existing rule files into the vault
  *   npx total-recall compile         Rebuild indexes + INSTRUCTIONS.md (alias: rebuild)
  *   npx total-recall dream           Trigger a dream cycle
- *   npx total-recall ingest          Ingest IDE conversation logs
+ *   npx total-recall ingest          Ingest IDE conversation logs or Google Takeout data
  *   npx total-recall connect         Configure an IDE or external system
  *   npx total-recall sync            Pull remote brain instructions into workspace
  *   npx total-recall lint            Validate vault nodes against schema v2
@@ -29,6 +29,7 @@
  *   npx total-recall friction        Analyze logs for workflow bottlenecks
  *   npx total-recall upgrade         Swap kernel model
  *   npx total-recall research <cmd>  Manage/query ongoing autonomous research agenda
+ *   npx total-recall share [url]     Share a URL or text snippet to the brain
  *   npx total-recall --help          Show this help
  */
 
@@ -58,6 +59,7 @@ const COMMANDS = {
   recall:   'recall.mjs',
   search:   'recall.mjs',
   research: 'research.mjs',
+  share:    'share.mjs',
   'generate-pat': 'generate-pat.mjs',
   'hash-password': 'hash-password.mjs',
   'reset-password': 'reset-password.mjs',
@@ -104,6 +106,7 @@ function printHelp() {
     map                 Visualize memory vault category trees and link relationships
     brain <cmd>         Manage registered brains and context resolution (list, status, register, unregister)
     research <command>  Manage/query ongoing autonomous research agenda (list, add, show, report, cancel)
+    share [url]         Share a URL or text snippet to the brain (auto-routes to remember or research)
     config <get|set>    Read, write, and toggle UI, security, and budget settings
     skill <command>     Manage AI agent skills: find, install, scan, list, remove
     generate-pat        Issue a PAT; stores only a hash in keys.jsonl
@@ -116,6 +119,7 @@ function printHelp() {
     import [--dir <path>] [--force]   Import existing AGENTS.md, .cursorrules, CLAUDE.md, etc.
                                      into the vault (run before compile on first install)
     ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
+    ingest google-takeout <path>  Ingest Google Takeout export data
     connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, Gemini, etc.
     sync [--watch]      Pull remote brain instructions into the current workspace
     relay <cmd>         Local background relay: ship IDE sessions to remote brain
