@@ -26,42 +26,46 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const BRAIN_DIR = brainDir;
 const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
-const CACHE_PATH = path.join(DERIVED_DIR, 'embeddings-cache.json');
+const CACHE_DIR = path.join(DERIVED_DIR, 'embeddings-cache');
 
-// ─── Query Embedding Cache Helpers ──────────────────────────────────────────
-
-let embeddingCache = null;
+// ─── Query Embedding Cache Helpers (Partitioned 256-Dir Layout) ──────────────
 
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-function loadCache() {
-  if (process.env.NODE_ENV === 'test') {
-    return {};
-  }
-  if (embeddingCache) return embeddingCache;
-  try {
-    if (fs.existsSync(CACHE_PATH)) {
-      embeddingCache = JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
-    } else {
-      embeddingCache = {};
-    }
-  } catch (err) {
-    embeddingCache = {};
-  }
-  return embeddingCache;
+function getCachePartitionPath(key) {
+  const hash = sha256(key);
+  const prefix = hash.slice(0, 2);
+  const suffix = hash.slice(2, 4);
+  return {
+    dir: path.join(CACHE_DIR, prefix),
+    file: path.join(CACHE_DIR, prefix, `${suffix}.json`),
+    hash
+  };
 }
 
-function saveCache() {
-  if (process.env.NODE_ENV === 'test') return;
-  if (!embeddingCache) return;
+function getCachedEmbedding(key) {
+  if (process.env.NODE_ENV === 'test') return null;
   try {
-    fs.mkdirSync(DERIVED_DIR, { recursive: true });
-    fs.writeFileSync(CACHE_PATH, JSON.stringify(embeddingCache), 'utf8');
-  } catch (err) {
-    // Ignore cache persistence errors gracefully
-  }
+    const { file, hash } = getCachePartitionPath(key);
+    if (fs.existsSync(file)) {
+      const partition = JSON.parse(fs.readFileSync(file, 'utf8') || '{}');
+      return partition[hash] || null;
+    }
+  } catch {}
+  return null;
+}
+
+function saveCachedEmbedding(key, embedding) {
+  if (process.env.NODE_ENV === 'test') return;
+  try {
+    const { dir, file, hash } = getCachePartitionPath(key);
+    fs.mkdirSync(dir, { recursive: true });
+    const partition = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8') || '{}') : {};
+    partition[hash] = embedding;
+    fs.writeFileSync(file, JSON.stringify(partition), 'utf8');
+  } catch {}
 }
 
 // ─── Embedding generation ────────────────────────────────────────────────────
@@ -180,10 +184,10 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
 export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   const input = String(text).slice(0, 8000); // cap at 8k chars
 
-  const cache = loadCache();
   const cacheKey = `${model}:${sha256(input)}`;
-  if (cache[cacheKey]) {
-    return cache[cacheKey];
+  const cached = getCachedEmbedding(cacheKey);
+  if (cached) {
+    return cached;
   }
 
   let embedding;
@@ -212,8 +216,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   }
 
   // Save to cache
-  cache[cacheKey] = embedding;
-  saveCache();
+  saveCachedEmbedding(cacheKey, embedding);
 
   return embedding;
 }

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir, getBothBrains, getGlobalBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, getBothBrains, getGlobalBrainDir, detectProjectBrain } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
@@ -355,9 +355,26 @@ function writeVaultProjection(agentDir, preset, opts) {
     throw new Error(`Memory vault not found: ${memoryVault}. Run "total-recall init" first.`);
   }
 
-  const linkPath = path.join(vaultPath, preset.folderName);
+  const cwd = process.cwd();
+  const isHome = cwd === os.homedir();
+  let folderName = preset.folderName;
+  if (!isHome) {
+    const base = path.basename(cwd);
+    if (base.toLowerCase() === 'ultrachat-ai-powered' || base.toLowerCase() === 'ultrachat') {
+      folderName = 'UltraChat';
+    } else if (base.toLowerCase() === 'total-recall') {
+      folderName = 'Total Recall';
+    } else {
+      folderName = base
+        .split(/[-_]/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+  }
+
+  const linkPath = path.join(vaultPath, folderName);
   if (pathExists(linkPath)) {
-    if (!opts.force) return { targetPath: linkPath, vaultPath, action: 'exists' };
+    if (!opts.force) return { targetPath: linkPath, vaultPath, action: 'exists', folderName };
     try {
       fs.unlinkSync(linkPath);
     } catch {
@@ -380,7 +397,7 @@ function writeVaultProjection(agentDir, preset, opts) {
     }
   }
 
-  return { targetPath: linkPath, vaultPath, action: 'symlinked' };
+  return { targetPath: linkPath, vaultPath, action: 'symlinked', folderName };
 }
 
 function printApiSnippet(client, details) {
@@ -448,6 +465,30 @@ Commands (pass as argument):
   compile            — POST ${base}/api/vault/compile  to rebuild INSTRUCTIONS.md
   nodes              — GET  ${base}/api/vault/nodes    to list all SSSS nodes
   surface            — GET  ${base}/api/vault/surface  to read compiled surface
+
+$ARGUMENTS`
+    },
+    {
+      file: 'ssss.md',
+      description: 'Explore the SSSS cognitive graph, backlinks, and topological structure',
+      body: `Explore and manage your SSSS cognitive graph, Obsidian canvas, and backlinks.
+
+Brain URL: ${base}
+Auth header: ${authHeader}
+
+Commands (pass as argument):
+  help                 — Learn SSSS categories, frontmatter rules, and schema specs.
+  stats                — Get deep network topology metrics (Total links, unlinked Orphans, connected Hubs).
+  map <slug>           — Render bidirectional incoming/outgoing graph connections for a slug.
+  compile              — Recompiles derived indices and regenerates the high-fidelity Obsidian Canvas.
+
+Examples:
+  /ssss stats
+  /ssss map atomic-writes
+  /ssss compile
+
+If the argument is "compile", perform a POST to \`${base}/api/vault/compile\`.
+Otherwise, run \`npx total-recall map --relations\` or execute curl queries to list network metrics.
 
 $ARGUMENTS`
     },
@@ -520,6 +561,19 @@ Instructions:
 2. If the argument is "nodes", send a GET request to \`${base}/api/memory\` with Authorization: Bearer ${token}.
 3. Summarize the changes and verify rule propagation across the workspace.`
     },
+    'ssss.toml': {
+      description: 'Explore SSSS cognitive graph, backlinks, and network statistics',
+      prompt: `You are Antigravity, an AI assistant with the Total Recall SSSS v2 memory vault.
+Explore the SSSS cognitive graph, backlinks, and network topology using the query:
+{{args}}
+
+Instructions:
+1. Parse the arguments.
+2. If "stats", run \`npx total-recall map --relations\` to retrieve and summarize cognitive graph metrics, Highly Connected Hubs, and unlinked Orphans.
+3. If "map <slug>", print the inbound backlinks and outbound relations for the specified memory node slug using \`npx total-recall map --relations\`.
+4. If "compile", send a POST request to \`${base}/api/vault/compile\` with Authorization: Bearer ${token} or run \`npx total-recall compile\`.
+5. If "help", explain the SSSS v2 specification, categories (invariants, preferences, anti-patterns, patterns, decisions, concepts, facts, lore) and the bidirectional backlink structure.`
+    },
     'recall.toml': {
       description: 'Ask Total Recall brain a question or run a specialized agent task',
       prompt: `Send a direct conversational query or task instruction to the Total Recall local brain.
@@ -576,7 +630,8 @@ export default async function connect(args) {
 
 
   const cwd = process.cwd();
-  const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || configAgentDir;
+  const isHome = cwd === os.homedir();
+  const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || (isHome ? configAgentDir : path.join(cwd, '.agent'));
   const brainDir = path.join(agentDir, 'skills', 'total-recall');
 
   // Auto-resolve brain URL and token if not explicitly provided
@@ -754,11 +809,12 @@ export default async function connect(args) {
     result.notes.push(`  OpenClaw AGENTS.md → INSTRUCTIONS.md`);
   } else if (preset.mode === 'vault') {
     result.projection = writeVaultProjection(agentDir, preset, opts);
+    const folderName = result.projection.folderName || preset.folderName;
     result.notes.push([
-      `  Vault linked: ${result.projection.vaultPath}/${preset.folderName}/`,
+      `  Vault linked: ${result.projection.vaultPath}/${folderName}/`,
       `  → ${path.join(brainDir, 'memory-vault')}`,
       '',
-      `  Open Obsidian and look for the "${preset.folderName}" folder.`,
+      `  Open Obsidian and look for the "${folderName}" folder.`,
       '  All SSSS memory nodes are visible in Graph View, Search, and Backlinks.',
       '',
       '  To back up via Obsidian Sync or iCloud, enable sync in Obsidian — the',
