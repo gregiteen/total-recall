@@ -117,7 +117,7 @@ export default async function remember(args) {
   let tags = [];
   let importance = 3;
   let priority = 'normal';
-  let modality = 'descriptive';
+  let modality = 'should';
   let confidence = 1.0;
   let slug = null;
   let title = null;
