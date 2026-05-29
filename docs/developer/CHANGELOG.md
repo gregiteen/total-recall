@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.0] — 2026-05-29
+
+### ✨ Features
+- **Chrome Extension Download from Dashboard**: New `GET /api/extension/download` endpoint streams the extension directory as a `.zip`. Dismissible banner on the Chat home page prompts install when extension is available but not yet connected.
+- **Extension Connection Detection**: `GET /api/extension/status` returns `{ available, connected }`. The share endpoint writes a `.extension-connected` marker when the extension first phones home.
+- **Settings Extension Card**: Permanent download card with installation instructions in the Settings page.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.2.0`.
+
 ## [3.1.2] — 2026-05-29
 
 ### 🐛 Bug Fixes & Refinement
