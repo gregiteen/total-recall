@@ -102,11 +102,11 @@
 
 - [x] Full test suite passes: `npm test` — **45 files, 335 tests, ALL PASSED**
 - [x] TypeScript check: 0 errors (verified by all 7 agents individually)
-- [ ] Lint check: `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
-- [ ] Smoke: `remember --global` does NOT recompile project brains
-- [ ] Smoke: `remember invariant "test" --expires 7d` sets `expires_at`
-- [ ] Smoke: BrainSelector toggles correctly, persists across reload
-- [ ] Smoke: Thread brain context follows thread switching
-- [ ] Smoke: Global brain deselectable, empty state renders
-- [ ] Smoke: API routes accept `?brain=` parameter
+- [x] Lint check: `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
+- [x] Smoke: `remember --global` does NOT recompile project brains
+- [x] Smoke: `remember invariant "test" --expires 7d` sets `expires_at`
+- [x] Smoke: BrainSelector toggles correctly, persists across reload
+- [x] Smoke: Thread brain context follows thread switching
+- [x] Smoke: Global brain deselectable, empty state renders
+- [x] Smoke: API routes accept `?brain=` parameter
 
