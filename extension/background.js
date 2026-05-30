@@ -1,7 +1,7 @@
 // Total Recall — Background Service Worker
 // Handles context menus, message routing, and passive browsing buffer.
 
-importScripts('lib/brain-client.js');
+importScripts('lib/preconfigured.js', 'lib/brain-client.js');
 
 // Destructure for convenience after importScripts populates self.BrainClient
 const { share, search, healthCheck } = self.BrainClient;

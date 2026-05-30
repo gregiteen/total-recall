@@ -728,17 +728,47 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
 
 // ─── Chrome Extension Download ───────────────────────────────────────────────
 
-/**
- * GET /api/extension/download
- * Streams the Chrome extension directory as a .zip file for easy installation.
- * No auth required — the extension itself is not sensitive.
- */
 router.get('/api/extension/download', async (_req, res) => {
+  let preconfiguredPath = '';
+  let originalContent = '';
+  const cleanup = () => {
+    if (preconfiguredPath && originalContent) {
+      try {
+        fs.writeFileSync(preconfiguredPath, originalContent, 'utf8');
+      } catch {}
+    }
+  };
+
   try {
     // Extension lives at <package-root>/extension/
     const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
     if (!fs.existsSync(extDir) || !fs.existsSync(path.join(extDir, 'manifest.json'))) {
       return res.status(404).json({ error: 'Chrome extension not found in this installation.' });
+    }
+
+    // Read local brain configuration to get active URL and token
+    const brainPath = path.join(CONFIG_DIR, 'brain.json');
+    let brainUrl = '';
+    let patToken = '';
+    if (fs.existsSync(brainPath)) {
+      try {
+        const brain = JSON.parse(fs.readFileSync(brainPath, 'utf8'));
+        brainUrl = brain.url || '';
+        patToken = brain.token || '';
+      } catch {}
+    }
+
+    // Overwrite preconfigured.js temporarily with injected values
+    preconfiguredPath = path.join(extDir, 'lib', 'preconfigured.js');
+    if (fs.existsSync(preconfiguredPath)) {
+      originalContent = fs.readFileSync(preconfiguredPath, 'utf8');
+      const injectedContent = `// Exposes default configuration dynamically injected by the server
+self.PreConfigured = {
+  brainUrl: "${brainUrl}",
+  pat: "${patToken}"
+};
+`;
+      fs.writeFileSync(preconfiguredPath, injectedContent, 'utf8');
     }
 
     res.setHeader('Content-Type', 'application/zip');
@@ -754,12 +784,20 @@ router.get('/api/extension/download', async (_req, res) => {
         res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.tar.gz"');
         const tar = spawn('tar', ['czf', '-', '-C', path.dirname(extDir), 'extension'], { stdio: ['ignore', 'pipe', 'ignore'] });
         tar.stdout.pipe(res);
-        tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
-        tar.on('close', () => { if (!res.writableEnded) res.end(); });
+        tar.on('error', err => { cleanup(); if (!res.headersSent) serverError(res, err); });
+        tar.on('close', () => { cleanup(); if (!res.writableEnded) res.end(); });
+      } else {
+        cleanup();
       }
     });
-    zip.on('close', code => { if (code !== 0 && !res.writableEnded) res.end(); });
-  } catch (err) { serverError(res, err); }
+    zip.on('close', code => {
+      cleanup();
+      if (code !== 0 && !res.writableEnded) res.end();
+    });
+  } catch (err) {
+    cleanup();
+    serverError(res, err);
+  }
 });
 
 /**

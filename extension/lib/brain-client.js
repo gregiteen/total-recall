@@ -7,9 +7,10 @@
 
   async function getConfig() {
     const config = await chrome.storage.sync.get(['brainUrl', 'pat']);
+    const pre = self.PreConfigured || {};
     return {
-      brainUrl: config.brainUrl || DEFAULT_BRAIN_URL,
-      pat: config.pat || ''
+      brainUrl: config.brainUrl || pre.brainUrl || DEFAULT_BRAIN_URL,
+      pat: config.pat || pre.pat || ''
     };
   }
 
