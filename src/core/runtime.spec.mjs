@@ -153,12 +153,12 @@ describe('loadRuntimeConfig', () => {
 
   it('falls back to TR_CLI_AGENT environment variable when no CLI arg is specified', () => {
     process.argv = ['node', 'cli.js'];
-    process.env.TR_CLI_AGENT = 'gemini';
+    process.env.TR_CLI_AGENT = 'claude';
 
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     const config = loadRuntimeConfig();
-    expect(config.agents[0].name).toBe('gemini');
+    expect(config.agents[0].name).toBe('claude');
   });
 
   it('falls back to brain.json preferred_agent when no CLI arg or Env var is specified', () => {
@@ -192,12 +192,12 @@ describe('loadRuntimeConfig', () => {
 
     vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
       if (p.endsWith('INSTRUCTIONS.md')) {
-        return 'Some content\nMy preferred CLI agent is gemini\nMore content';
+        return 'Some content\nMy preferred CLI agent is claude\nMore content';
       }
       return '';
     });
 
     const config = loadRuntimeConfig();
-    expect(config.agents[0].name).toBe('gemini');
+    expect(config.agents[0].name).toBe('claude');
   });
 });
