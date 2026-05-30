@@ -96,6 +96,12 @@ if (!process.env._TR_TEST_AGENT_DIR) {
 let secrets = {};
 try {
   const pathsToCheck = [];
+  // 1. Prioritize workspace-local root secrets
+  pathsToCheck.push(path.join(process.cwd(), '.agent', 'secrets.enc'));
+  if (resolvedAgentDir) {
+    pathsToCheck.push(path.join(resolvedAgentDir, 'secrets.enc'));
+  }
+  // 2. Fallbacks
   if (projectBrainDir) {
     pathsToCheck.push(path.join(projectBrainDir, 'config', 'secrets.enc'));
   }
