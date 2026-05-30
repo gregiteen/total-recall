@@ -67,6 +67,20 @@
     return res.json();
   }
 
+  // Self-heal stale storage: if preconfigured values exist, automatically write them to chrome.storage.sync
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+      chrome.storage.sync.get(['brainUrl', 'pat']).then((config) => {
+        const pre = self.PreConfigured || {};
+        if (pre.pat && (!config.pat || config.pat !== pre.pat)) {
+          chrome.storage.sync.set({ brainUrl: pre.brainUrl, pat: pre.pat });
+        }
+      });
+    }
+  } catch (e) {
+    // Ignore in contexts where storage sync isn't available
+  }
+
   // Expose as a global namespace for non-module contexts (service worker, popup, etc.)
   self.BrainClient = { getConfig, brainFetch, share, search, healthCheck, chat };
 })();
