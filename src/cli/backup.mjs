@@ -36,7 +36,7 @@ function commandExists(cmd) {
 function parseArgs(args) {
   // Parse layer flag first
   const { layer, remainingArgs } = parseLayerFlag(args);
-  const opts = { output: null, encrypt: true, pushGit: null, obsidian: null, help: false, layer };
+  const opts = { output: null, encrypt: true, pushGit: null, obsidian: null, install: false, help: false, layer };
   for (let i = 0; i < remainingArgs.length; i++) {
     switch (remainingArgs[i]) {
       case '--output':
@@ -51,6 +51,9 @@ function parseArgs(args) {
         break;
       case '--obsidian':
         opts.obsidian = remainingArgs[++i];
+        break;
+      case '--install':
+        opts.install = true;
         break;
       case '--help':
       case '-h':
@@ -246,6 +249,168 @@ function obsidianBackup(vaultPath, layer = 'auto') {
   console.error(`  ✅ Brain synced to Obsidian (${stamp})`);
 }
 
+/**
+ * --install: Full automatic backup setup.
+ *   1. Creates a private GitHub repo via `gh` CLI
+ *   2. Writes .gitignore for derived/cache files
+ *   3. Inits git, does first push
+ *   4. Installs a daily launchd plist (macOS) or cron job (Linux)
+ */
+async function installBackup(layer = 'auto') {
+  const SKILL_DIR = getSkillDir(layer);
+  if (!fs.existsSync(SKILL_DIR)) {
+    console.error(`  ❌ Meta-skill not found: ${SKILL_DIR}`);
+    console.error('  Run: npx total-recall init');
+    process.exit(1);
+  }
+
+  if (!commandExists('gh')) {
+    console.error('  ❌ GitHub CLI (gh) not found. Install: brew install gh');
+    process.exit(1);
+  }
+
+  // Determine a repo name from the project directory
+  const projectDir = process.cwd();
+  const projectName = path.basename(projectDir).replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+  const isGlobal = SKILL_DIR.startsWith(os.homedir() + '/.agent');
+  const repoName = isGlobal ? 'global-brain-backup' : `${projectName}-brain-backup`;
+
+  // Get GitHub username
+  const whoami = spawnSync('gh', ['api', 'user', '--jq', '.login'], { stdio: 'pipe' });
+  if (whoami.status !== 0) {
+    console.error('  ❌ Not authenticated with GitHub CLI. Run: gh auth login');
+    process.exit(1);
+  }
+  const ghUser = whoami.stdout.toString().trim();
+  const remoteUrl = `git@github.com:${ghUser}/${repoName}.git`;
+
+  console.error(`\n  🧠 Installing automatic backup for brain at:`);
+  console.error(`     ${SKILL_DIR}`);
+  console.error(`     → ${ghUser}/${repoName} (private)\n`);
+
+  // 1. Create GitHub repo (skip if exists)
+  const checkRepo = spawnSync('gh', ['repo', 'view', `${ghUser}/${repoName}`, '--json', 'name'], { stdio: 'pipe' });
+  if (checkRepo.status !== 0) {
+    console.error('  📦 Creating private GitHub repo...');
+    const create = spawnSync('gh', ['repo', 'create', `${ghUser}/${repoName}`, '--private', '--description', `Auto-backup: ${isGlobal ? 'Global brain (identity layer)' : projectName + ' project brain'}`], { stdio: 'pipe' });
+    if (create.status !== 0) {
+      console.error(`  ❌ Failed to create repo: ${create.stderr?.toString()}`);
+      process.exit(1);
+    }
+    console.error(`  ✅ Created ${ghUser}/${repoName}`);
+  } else {
+    console.error(`  ✅ Repo ${ghUser}/${repoName} already exists`);
+  }
+
+  // 2. Write .gitignore for derived/cache files
+  const gitignorePath = path.join(SKILL_DIR, '.gitignore');
+  const gitignoreEntries = ['memory-derived/', 'sessions/', '*.backup', 'logs/', 'node_modules/'];
+  let existingIgnore = '';
+  if (fs.existsSync(gitignorePath)) {
+    existingIgnore = fs.readFileSync(gitignorePath, 'utf8');
+  }
+  const missing = gitignoreEntries.filter(e => !existingIgnore.includes(e));
+  if (missing.length > 0) {
+    fs.appendFileSync(gitignorePath, '\n# Auto-added by total-recall backup --install\n' + missing.join('\n') + '\n');
+    console.error(`  ✅ Updated .gitignore (added ${missing.length} entries)`);
+  }
+
+  // 3. Init git + first push
+  await pushGitBackup(remoteUrl, layer);
+
+  // 4. Install scheduled backup
+  const platform = os.platform();
+  const nodeBin = process.execPath;
+  const trBin = path.join(path.dirname(nodeBin), 'total-recall');
+  const label = isGlobal ? 'com.totalrecall.backup.global' : `com.totalrecall.backup.${projectName}`;
+
+  if (platform === 'darwin') {
+    // macOS: launchd plist
+    const plistDir = path.join(os.homedir(), 'Library', 'LaunchAgents');
+    fs.mkdirSync(plistDir, { recursive: true });
+    const logName = isGlobal ? 'backup-global.log' : `backup-${projectName}.log`;
+    const logsDir = path.join(os.homedir(), '.agent', 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+
+    // Stagger times: global=2:30, projects get 2:00 + hash-based offset
+    const minute = isGlobal ? 30 : (projectName.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 30);
+
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${label}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${nodeBin}</string>
+    <string>${trBin}</string>
+    <string>backup</string>
+    <string>--push-git</string>
+    <string>${remoteUrl}</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>${projectDir}</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>${minute}</integer>
+  </dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>${os.homedir()}</string>
+    <key>PATH</key>
+    <string>${path.dirname(nodeBin)}:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>${path.join(logsDir, logName)}</string>
+  <key>StandardErrorPath</key>
+  <string>${path.join(logsDir, logName)}</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>`;
+
+    const plistPath = path.join(plistDir, `${label}.plist`);
+    fs.writeFileSync(plistPath, plist);
+
+    // Unload if exists, then load
+    spawnSync('launchctl', ['remove', label], { stdio: 'pipe' });
+    const load = spawnSync('launchctl', ['load', '-w', plistPath], { stdio: 'pipe' });
+    if (load.status === 0) {
+      console.error(`  ✅ Installed daily backup (2:${String(minute).padStart(2, '0')} AM)`);
+    } else {
+      console.error(`  ⚠️  launchctl load returned ${load.status} — plist saved, may need manual load`);
+    }
+
+  } else if (platform === 'linux') {
+    // Linux: cron job
+    const cronLine = `0 2 * * * ${nodeBin} ${trBin} backup --push-git ${remoteUrl} >> ${path.join(os.homedir(), '.agent', 'logs', 'backup.log')} 2>&1`;
+    const existing = spawnSync('crontab', ['-l'], { stdio: 'pipe' });
+    const currentCron = existing.stdout?.toString() || '';
+    if (!currentCron.includes(repoName)) {
+      const newCron = currentCron.trimEnd() + '\n' + cronLine + '\n';
+      const install = spawnSync('crontab', ['-'], { input: newCron, stdio: 'pipe' });
+      if (install.status === 0) {
+        console.error('  ✅ Installed daily cron job (2:00 AM)');
+      } else {
+        console.error('  ⚠️  Could not install cron job — add manually:');
+        console.error(`     ${cronLine}`);
+      }
+    } else {
+      console.error('  ✅ Cron job already exists');
+    }
+  }
+
+  console.error(`\n  🎉 Backup fully installed!`);
+  console.error(`     Repo:     github.com/${ghUser}/${repoName}`);
+  console.error(`     Schedule: Daily at 2:${platform === 'darwin' ? 'XX' : '00'} AM`);
+  console.error(`     Manual:   total-recall backup --push-git ${remoteUrl}`);
+}
+
 export default async function backup(args) {
   const opts = parseArgs(args);
   const SKILL_DIR = getSkillDir(opts.layer);
@@ -258,6 +423,12 @@ export default async function backup(args) {
     console.error(`  ❌ Meta-skill not found: ${SKILL_DIR}`);
     console.error('  Run: npx total-recall init');
     process.exit(1);
+  }
+
+  // Install mode: full automatic setup
+  if (opts.install) {
+    await installBackup(opts.layer);
+    return;
   }
 
   // Git-push mode: sovereign diff-based backup

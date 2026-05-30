@@ -1623,6 +1623,45 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
  */
 router.get('/api/gemini-models', requireAuth, async (req, res) => {
   try {
+    // 1. Dynamically fetch available models from the antigravity CLI at runtime
+    try {
+      const { findBinaryInPath } = await import('../core/runtime.mjs');
+      const antigravityPath = findBinaryInPath('antigravity');
+      if (antigravityPath) {
+        const result = spawnSync(antigravityPath, ['--help'], { encoding: 'utf8', timeout: 3000 });
+        if (result.status === 0 && result.stdout) {
+          const output = result.stdout;
+          const discovered = [];
+
+          // Match standard gemini-X.Y-Z names
+          const modelRegex = /gemini-\d+\.\d+(?:-\w+)?/g;
+          const matches = output.match(modelRegex) || [];
+          for (const m of matches) {
+            discovered.push(m);
+          }
+
+          // Match version-style models like X.Y-pro or X.Y-flash and prefix with gemini-
+          const versionRegex = /\b(\d+\.\d+-\w+)\b/g;
+          const versionMatches = output.match(versionRegex) || [];
+          for (const vm of versionMatches) {
+            discovered.push(`gemini-${vm}`);
+          }
+
+          const uniqueModels = [...new Set(discovered)];
+          if (uniqueModels.length > 0) {
+            const cliModels = uniqueModels.map(modelId => {
+              const parts = modelId.split('-');
+              const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+              return { id: modelId, displayName };
+            });
+            return res.json({ models: cliModels, source: 'cli' });
+          }
+        }
+      }
+    } catch (e) {
+      // Fail silently and fall back
+    }
+
     let apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) {
       // Find GOOGLE_API_KEY in upwards .env files
@@ -1647,14 +1686,9 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
     }
 
     const fallbackModels = [
-      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-      { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
-      { id: 'gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' },
-      { id: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash' },
       { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' },
-      { id: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' },
-      { id: 'gemini-2.0-flash-lite', displayName: 'Gemini 2.0 Flash Lite' },
-      { id: 'gemini-pro-latest', displayName: 'Gemini Pro Latest' }
+      { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview' },
+      { id: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' }
     ];
 
     if (!apiKey) {
@@ -1679,6 +1713,21 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
             const parts = id.split('-');
             const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
             return { id, displayName };
+          })
+          .filter(m => {
+            // Only keep Gemini 3.1 and newer models
+            const match = m.id.match(/^gemini-(\d+)\.(\d+)/);
+            if (match) {
+              const major = parseInt(match[1], 10);
+              const minor = parseInt(match[2], 10);
+              return major > 3 || (major === 3 && minor >= 1);
+            }
+            const majorMatch = m.id.match(/^gemini-(\d+)/);
+            if (majorMatch) {
+              const major = parseInt(majorMatch[1], 10);
+              return major >= 3;
+            }
+            return false;
           });
         if (models.length > 0) {
           return res.json({ models, source: 'dynamic' });
