@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.3.0] — 2026-05-30
+
+### ✨ Features
+- **Permanent Chrome Extension Card**: Added a permanent, visually premium Chrome Extension Card to the Integrations page with a direct dynamic zip download button (`/api/extension/download`).
+- **Defensive JavaScript Hardening**: Hardened popup and sidepanel quick-action buttons to query tabs defensively, preventing API errors on invalid webpage tabs (like system pages).
+
+### 🐛 Bug Fixes & Refinement
+- **Chrome Extension Tabs Permission**: Added the `"tabs"` permission to MV3 `manifest.json`, granting the extension direct access to active tab URLs/titles for seamless "Remember Page" and "Research Page" capabilities.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.3.0`.
+
 ## [3.2.3] — 2026-05-29
 
 ### ✨ Features
