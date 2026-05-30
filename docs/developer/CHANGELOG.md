@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.2.2] — 2026-05-29
+## [3.2.3] — 2026-05-29
 
 ### ✨ Features
 - **Chrome Extension Side Panel Redesign**: Overhauled the side panel layout with a modern tab navigation system (`Memories`, `Chat`, `Research`, `Settings`).
@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 - **Sovereign Settings Shortcuts**: Added direct controls inside the settings tab for selecting active project brain layers, fast domain blocklisting, and manual index recompilation.
 
 ### 📦 Publishing
-- Published to npm as `total-recall-brain@3.2.2`.
+- Published to npm as `total-recall-brain@3.2.3`.
 
 ## [3.2.0] — 2026-05-29
 
