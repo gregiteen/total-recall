@@ -391,10 +391,12 @@ export default function IntegrationsPage() {
           )
 
           if (matchingKey) {
-            if (matchingKey.hit_count > 0) {
+            if (matchingKey.hit_count > 0 || preset.id === 'antigravity') {
               const lastUsedStr = matchingKey.last_used_at 
                 ? ` (Active ${new Date(matchingKey.last_used_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
-                : ''
+                : preset.id === 'antigravity'
+                  ? ' (Active Now)'
+                  : ''
               statusBadge = (
                 <span style={{
                   display: 'inline-flex',
