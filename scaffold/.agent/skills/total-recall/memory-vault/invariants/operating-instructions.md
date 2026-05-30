@@ -2,10 +2,10 @@
 type: memory
 slug: operating-instructions
 category: invariants
-title: "Total Recall Core Operating Protocol"
+title: Total Recall Core Operating Protocol
 schema_version: 2
 status: active
-confidence: 1.0
+confidence: 1
 importance: 5
 priority: absolute
 immutable: true
@@ -13,9 +13,9 @@ modality: must
 subject: agent
 predicate: operate
 object: memory_system
-created: 2026-05-01T00:00:00Z
-updated: 2026-05-15T00:00:00Z
-last_accessed: 2026-05-15T00:00:00Z
+created: 2026-05-01T00:00:00.000Z
+updated: 2026-05-15T00:00:00.000Z
+last_accessed: 2026-05-15T00:00:00.000Z
 source:
   type: scaffold
   session_id: scaffold-seed
@@ -24,16 +24,21 @@ source:
 supersedes: []
 superseded_by: null
 contradicts: []
-tags: [ssss, sovereignty, memory, protocol]
+tags:
+  - ssss
+  - sovereignty
+  - memory
+  - protocol
 related: []
-routes_to_skills: [ssss]
+routes_to_skills:
+  - ssss
 sentiment_polarity: directive_must
 sentiment_target: memory_system
 decay:
   half_life_days: 365
   access_count: 1
+x_temporal_context: 2026-05-26T23:05:06.525Z
 ---
-
 # Total Recall Operating Protocol
 
 You are operating within the **Total Recall Sovereign OS**. Your memory and logic are entirely governed by the **Structured Semantic Syntax System (SSSS)**. There is no external database. The filesystem is your brain.
