@@ -183,9 +183,15 @@
     btnRemember.classList.add('loading');
     try {
       const tab = await getCurrentTab();
+      if (!tab || !tab.url) {
+        throw new Error('No active webpage found to capture. Make sure you are on a webpage tab.');
+      }
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
+        throw new Error('Cannot capture system pages.');
+      }
       await sendShare({
         url: tab.url,
-        title: tab.title,
+        title: tab.title || 'Untitled Page',
         action: 'remember',
         source: 'chrome-extension-sidepanel'
       });
@@ -208,9 +214,15 @@
     btnResearch.classList.add('loading');
     try {
       const tab = await getCurrentTab();
+      if (!tab || !tab.url) {
+        throw new Error('No active webpage found to capture. Make sure you are on a webpage tab.');
+      }
+      if (tab.url.startsWith('chrome://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
+        throw new Error('Cannot capture system pages.');
+      }
       await sendShare({
         url: tab.url,
-        title: tab.title,
+        title: tab.title || 'Untitled Page',
         action: 'research',
         source: 'chrome-extension-sidepanel'
       });
@@ -245,13 +257,19 @@
     btnSaveNote.disabled = true;
     btnSaveNote.classList.add('loading');
     try {
-      const tab = await getCurrentTab();
+      let tab = null;
+      try {
+        tab = await getCurrentTab();
+      } catch {
+        // ignore
+      }
+      const hasValidUrl = tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome-extension://');
       await sendShare({
-        url: tab.url,
-        title: `Note: ${text.slice(0, 50)}`,
+        url: hasValidUrl ? tab.url : undefined,
+        title: hasValidUrl ? `Note: ${text.slice(0, 50)}` : undefined,
         excerpt: text,
         action: 'remember',
-        category: 'fact',
+        category: 'facts',
         source: 'chrome-extension-sidepanel'
       });
       noteInput.value = '';

@@ -59,14 +59,27 @@
     btnRemember.classList.add('loading');
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const note = noteInput.value.trim();
+      const targetUrl = tab?.url || urlInput.value || '';
+      
+      // If we don't have a URL, we must have a note/excerpt
+      if (!targetUrl && !note) {
+        throw new Error('Please enter a note or browse to a webpage to remember.');
+      }
+      if (targetUrl && (targetUrl.startsWith('chrome://') || targetUrl.startsWith('about:') || targetUrl.startsWith('chrome-extension://'))) {
+        if (!note) {
+          throw new Error('Cannot capture system pages. Please enter a note to save.');
+        }
+      }
+
       const payload = {
-        url: tab?.url || urlInput.value,
+        url: targetUrl && !targetUrl.startsWith('chrome://') && !targetUrl.startsWith('about:') && !targetUrl.startsWith('chrome-extension://') ? targetUrl : undefined,
         title: tab?.title || '',
         action: 'remember',
         source: 'chrome-extension-popup'
       };
-      const note = noteInput.value.trim();
       if (note) payload.excerpt = note;
+
       await sendShare(payload);
       showStatus('Page remembered!');
       noteInput.value = '';
@@ -88,14 +101,26 @@
     btnResearch.classList.add('loading');
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const note = noteInput.value.trim();
+      const targetUrl = tab?.url || urlInput.value || '';
+
+      if (!targetUrl && !note) {
+        throw new Error('Please enter research notes or browse to a webpage to queue research.');
+      }
+      if (targetUrl && (targetUrl.startsWith('chrome://') || targetUrl.startsWith('about:') || targetUrl.startsWith('chrome-extension://'))) {
+        if (!note) {
+          throw new Error('Cannot research system pages. Please enter research notes.');
+        }
+      }
+
       const payload = {
-        url: tab?.url || urlInput.value,
+        url: targetUrl && !targetUrl.startsWith('chrome://') && !targetUrl.startsWith('about:') && !targetUrl.startsWith('chrome-extension://') ? targetUrl : undefined,
         title: tab?.title || '',
         action: 'research',
         source: 'chrome-extension-popup'
       };
-      const note = noteInput.value.trim();
       if (note) payload.excerpt = note;
+
       await sendShare(payload);
       showStatus('Research queued!');
       noteInput.value = '';
