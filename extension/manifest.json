@@ -3,7 +3,7 @@
   "name": "Total Recall — Brain Extension",
   "version": "0.1.0",
   "description": "Contextual memory overlay, Share-to-Brain, and passive browsing context for Total Recall",
-  "permissions": ["activeTab", "contextMenus", "sidePanel", "storage"],
+  "permissions": ["activeTab", "contextMenus", "sidePanel", "storage", "tabs"],
   "optional_permissions": ["history", "webNavigation"],
   "host_permissions": ["http://127.0.0.1:*/*", "http://localhost:*/*"],
   "background": {

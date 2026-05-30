@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { getApiBase, listApiKeys, connectClient, fetchActiveIntegrations } from '../api'
+import { getApiBase, listApiKeys, connectClient, fetchActiveIntegrations, fetchExtensionStatus } from '../api'
 import type { ApiKey } from '../api'
 
 type Preset = {
@@ -68,6 +68,7 @@ export default function IntegrationsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [activeIdes, setActiveIdes] = useState<string[]>([])
+  const [extStatus, setExtStatus] = useState<{ available: boolean; connected: boolean } | null>(null)
 
   const baseUrl = useMemo(() => {
     const configured = getApiBase()
@@ -88,6 +89,12 @@ export default function IntegrationsPage() {
         if (active && res.success && Array.isArray(res.active)) {
           setActiveIdes(res.active)
         }
+      })
+      .catch(() => {})
+
+    fetchExtensionStatus()
+      .then(res => {
+        if (active) setExtStatus(res)
       })
       .catch(() => {})
 
@@ -221,6 +228,138 @@ export default function IntegrationsPage() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: 16,
       }}>
+        {/* Chrome Extension Integration Card */}
+        <div style={{
+          border: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+          borderRadius: 12,
+          padding: 18,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          position: 'relative',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px' }}>Chrome Extension</h3>
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>Browser Overlay Panel & Capture</div>
+            </div>
+            {extStatus ? (
+              extStatus.connected ? (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  fontSize: 12,
+                  color: '#34d399',
+                  fontWeight: 500,
+                }}>
+                  <span style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#10b981',
+                    boxShadow: '0 0 8px #10b981',
+                  }} />
+                  Connected
+                </span>
+              ) : (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  fontSize: 12,
+                  color: '#fbbf24',
+                  fontWeight: 500,
+                }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
+                  Not Connected
+                </span>
+              )
+            ) : (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 8px',
+                borderRadius: 6,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                fontSize: 12,
+                color: 'var(--text-tertiary)'
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#94a3b8' }} />
+                Checking...
+              </span>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            Scopes utilized: <code>chat:write, memory:read, memory:write</code>
+          </div>
+
+          <div style={{
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 10,
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+            lineHeight: '1.4'
+          }}>
+            Install the Total Recall extension to passively capture context, store quick notes, and access the active brain search overlay inside any Chrome tab.
+          </div>
+
+          <div style={{
+            background: 'var(--bg-primary)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: 10,
+            fontFamily: 'monospace',
+            fontSize: 11,
+            whiteSpace: 'pre-wrap',
+            color: 'var(--text-tertiary)',
+          }}>
+            1. Download zip & unzip locally.{"\n"}
+            2. Go to chrome://extensions in browser.{"\n"}
+            3. Enable "Developer mode" (top right).{"\n"}
+            4. Click "Load unpacked" & select unzipped folder.
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 'auto', paddingTop: 8 }}>
+            <a
+              href={`${baseUrl}/api/extension/download`}
+              download
+              className="btn btn-sm btn-primary"
+              style={{
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                border: 'none',
+                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                color: '#fff',
+                fontSize: '12px'
+              }}
+            >
+              ⬇ Download Extension Zip
+            </a>
+          </div>
+        </div>
+
         {filteredPresets.map(preset => {
           const snippet = preset.snippet(baseUrl)
           
