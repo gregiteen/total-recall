@@ -57,7 +57,10 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
 
   // Model Selector state
   const [availableModels, setAvailableModels] = useState<string[]>([])
-  const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('selectedModel') || '')
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    const saved = localStorage.getItem('selectedModel');
+    return (saved && saved !== 'gemini') ? saved : 'antigravity';
+  })
   const [selectedSubModel, setSelectedSubModel] = useState<string>(() => localStorage.getItem('selectedSubModel') || '')
   const [geminiModels, setGeminiModels] = useState<{ id: string; displayName: string }[]>([])
   const [showModelDropdown, setShowModelDropdown] = useState(false)
@@ -104,27 +107,27 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
       .then(health => {
         const agents = health.cli_agents && health.cli_agents.length > 0
           ? health.cli_agents
-          : ['antigravity', 'gemini', 'claude', 'codex'];
+          : ['antigravity', 'claude', 'codex'];
         setAvailableModels(agents);
         
         const saved = localStorage.getItem('selectedModel');
         if (saved && agents.includes(saved)) {
           setSelectedModel(saved);
         } else {
-          const defaultAgent = agents.includes('gemini') ? 'gemini' : agents[0];
+          const defaultAgent = agents.includes('antigravity') ? 'antigravity' : agents[0];
           setSelectedModel(defaultAgent);
           localStorage.setItem('selectedModel', defaultAgent);
         }
       })
       .catch(() => {
-        const agents = ['antigravity', 'gemini', 'claude', 'codex'];
+        const agents = ['antigravity', 'claude', 'codex'];
         setAvailableModels(agents);
         const saved = localStorage.getItem('selectedModel');
         if (saved && agents.includes(saved)) {
           setSelectedModel(saved);
         } else {
-          setSelectedModel('gemini');
-          localStorage.setItem('selectedModel', 'gemini');
+          setSelectedModel('antigravity');
+          localStorage.setItem('selectedModel', 'antigravity');
         }
       })
 
