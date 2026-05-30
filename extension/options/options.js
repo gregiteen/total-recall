@@ -20,8 +20,9 @@
       'captureGranularity'
     ]);
 
-    brainUrlInput.value = settings.brainUrl || 'http://127.0.0.1:3000';
-    patInput.value = settings.pat || '';
+    const pre = self.PreConfigured || {};
+    brainUrlInput.value = settings.brainUrl || pre.brainUrl || 'http://127.0.0.1:3000';
+    patInput.value = settings.pat || pre.pat || '';
 
     // Blocklist: stored as array, displayed one per line
     if (Array.isArray(settings.blocklist)) {
