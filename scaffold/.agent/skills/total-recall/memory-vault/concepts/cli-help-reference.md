@@ -2,18 +2,45 @@
 type: memory
 slug: cli-help-reference
 category: concepts
-title: "Total Recall Command & Architecture Help Reference"
+title: Total Recall Command & Architecture Help Reference
 schema_version: 2
 status: active
-confidence: 1.0
+confidence: 1
 importance: 5
-priority: high
-modality: descriptive
-tags: [cli, help, commands, VFS, integrations, scheduler, daemon, budget, sandbox, watchdog]
-created: 2026-05-25T00:51:00Z
-updated: 2026-05-25T00:56:00Z
+modality: should
+tags:
+  - cli
+  - help
+  - commands
+  - VFS
+  - integrations
+  - scheduler
+  - daemon
+  - budget
+  - sandbox
+  - watchdog
+created: 2026-05-25T00:51:00.000Z
+updated: 2026-05-25T00:56:00.000Z
+sentiment_polarity: descriptive
+last_accessed: 2026-05-26T23:03:03.507Z
+source:
+  type: manual
+  session_id: migration-repair
+  evidence_count: 1
+supersedes: []
+contradicts: []
+related: []
+routes_to_skills: []
+superseded_by: null
+sentiment_target: system
+subject: system
+predicate: remembers
+object: Total Recall Command & Architecture Help Reference
+decay:
+  half_life_days: 180
+  access_count: 1
+x_temporal_context: 2026-05-26T23:05:06.474Z
 ---
-
 # Total Recall Command & Architecture Help Reference
 
 To guarantee perfect system awareness and eliminate unexpected retrieval latency, this semantic node documents the entire layout, core commands, internal features, and the interactive help subsystems of the **Total Recall Sovereign OS**.
