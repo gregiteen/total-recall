@@ -541,8 +541,17 @@ export default async function setup(args) {
       ], { stdio: 'inherit' });
       if (result.status !== 0) throw new Error('Local deploy failed');
       ok('Local deploy complete!');
+
+      // Auto-issue a local developer key for zero-config extension / IDE connection
+      try {
+        const { issueKey } = await import('../server/keys.mjs');
+        const keyData = issueKey('Default Local Developer Key', { scopes: ['*'] });
+        pat = keyData.token;
+      } catch (err) {
+        warn(`Could not auto-generate local developer key: ${err.message}`);
+      }
     }
-    brainUrl = 'http://127.0.0.1:3000';
+    brainUrl = 'http://localhost:3000';
   }
 
   // ── Step 3: Domain (optional) ────────────────────────────────────────────────

@@ -533,6 +533,36 @@ export default async function init(args) {
     if (opts.token) brainCfg.token = opts.token;
     fs.writeFileSync(path.join(cfgDir, 'brain.json'), JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
     logOk(`Registered brain at ${opts.brain}. Run \`npx total-recall sync\` to pull instructions.`);
+  } else {
+    // Zero-config bootstrap: auto-generate localhost brain.json and valid Developer PAT out-of-the-box
+    const cfgDir = path.join(brainDir, 'config');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    const brainJsonPath = path.join(cfgDir, 'brain.json');
+    let needsBootstrap = false;
+    let brainCfg = {};
+    if (fs.existsSync(brainJsonPath)) {
+      try {
+        brainCfg = JSON.parse(fs.readFileSync(brainJsonPath, 'utf8'));
+        if (!brainCfg.url || !brainCfg.token) needsBootstrap = true;
+      } catch {
+        needsBootstrap = true;
+      }
+    } else {
+      needsBootstrap = true;
+    }
+
+    if (needsBootstrap) {
+      try {
+        const { issueKey } = await import('../server/keys.mjs');
+        const keyData = issueKey('Default Local Developer Key', { scopes: ['*'] });
+        brainCfg.url = brainCfg.url || 'http://localhost:3000';
+        brainCfg.token = brainCfg.token || keyData.token;
+        fs.writeFileSync(brainJsonPath, JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
+        logOk(`Bootstrap configuration successfully generated and pre-authorized at ${brainCfg.url}`);
+      } catch (err) {
+        logWarn(`Could not auto-generate bootstrap developer key: ${err.message}`);
+      }
+    }
   }
 
   let dashboardUrl = '';
