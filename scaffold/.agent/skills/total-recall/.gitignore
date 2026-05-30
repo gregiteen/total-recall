@@ -1,0 +1,7 @@
+
+# Auto-added by total-recall backup --install
+memory-derived/
+sessions/
+*.backup
+logs/
+node_modules/
