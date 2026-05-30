@@ -83,6 +83,7 @@ Show all available commands.
 
 - The .agent/ directory strictly contains only the skills/ folder and secrets.enc. Everything else (memory-vault, configs, logs, backups, scheduler, sessions) resides entirely inside skills/total-recall/.
 - When the user asks a question, NEVER edit any files or perform modifying actions until you have fully answered their question.
+- Never use system documents (like task.md or walkthrough.md in the artifacts directory) for project management. Always manage the project status and check off checklists strictly within the repository-canonical files under docs/projects/.
 - Never refer to the chat interface or AI companion as 'Co-Pilot'. Always refer to it simply as 'Chat'.
 - # Total Recall Operating Protocol
 
