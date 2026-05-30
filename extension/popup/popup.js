@@ -52,6 +52,11 @@
 
   // ---- Remember ----
   btnRemember.addEventListener('click', async () => {
+    if (btnRemember.disabled) return;
+    const originalText = btnRemember.innerHTML;
+    btnRemember.innerHTML = '⏳ Remembering...';
+    btnRemember.disabled = true;
+    btnRemember.classList.add('loading');
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const payload = {
@@ -67,11 +72,20 @@
       noteInput.value = '';
     } catch (err) {
       showStatus('Error: ' + err.message, true);
+    } finally {
+      btnRemember.innerHTML = originalText;
+      btnRemember.disabled = false;
+      btnRemember.classList.remove('loading');
     }
   });
 
   // ---- Research ----
   btnResearch.addEventListener('click', async () => {
+    if (btnResearch.disabled) return;
+    const originalText = btnResearch.innerHTML;
+    btnResearch.innerHTML = '⏳ Researching...';
+    btnResearch.disabled = true;
+    btnResearch.classList.add('loading');
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const payload = {
@@ -87,6 +101,10 @@
       noteInput.value = '';
     } catch (err) {
       showStatus('Error: ' + err.message, true);
+    } finally {
+      btnResearch.innerHTML = originalText;
+      btnResearch.disabled = false;
+      btnResearch.classList.remove('loading');
     }
   });
 

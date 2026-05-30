@@ -115,6 +115,12 @@ body {
   transform: scale(0.97);
 }
 
+.btn:disabled, .btn.loading {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
 .btn.primary {
   background: #89b4fa;
   color: #11111b;

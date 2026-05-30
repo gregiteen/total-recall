@@ -7,29 +7,127 @@
 </head>
 <body>
   <div class="panel">
+    <!-- Header -->
     <header class="panel-header">
       <h1>🧠 Total Recall</h1>
-      <div id="connection-dot" class="dot"></div>
-    </header>
-    <div class="search-box">
-      <input type="text" id="search-input" placeholder="Search your brain..." />
-    </div>
-    <div id="memories-list" class="memories-list"></div>
-    <div class="quick-actions">
-      <button id="btn-remember" class="action-btn">📌 Remember Page</button>
-      <button id="btn-research" class="action-btn">🔬 Research Page</button>
-      <button id="btn-note" class="action-btn">📝 Quick Note</button>
-    </div>
-    <div id="note-area" class="note-area hidden">
-      <textarea id="note-input" placeholder="Type your note..."></textarea>
-      <div class="note-actions">
-        <button id="btn-save-note" class="action-btn accent">Save Note</button>
-        <button id="btn-cancel-note" class="action-btn">Cancel</button>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="active-brain-badge" class="badge">Global</span>
+        <div id="connection-dot" class="dot"></div>
       </div>
-    </div>
-    <div id="research-feed" class="research-feed">
-      <h3>Active Research</h3>
-      <div id="research-list"></div>
+    </header>
+
+    <!-- Tab Navigation Bar -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="memories">🧠 Memories</button>
+      <button class="tab-btn" data-tab="chat">💬 Chat</button>
+      <button class="tab-btn" data-tab="research">🔬 Research</button>
+      <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+    </nav>
+
+    <!-- Tab Panels Container -->
+    <div class="tab-content-container">
+      
+      <!-- Panel 1: Memories -->
+      <section id="tab-memories" class="tab-panel active">
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="Search your brain..." />
+        </div>
+        <div id="memories-list" class="memories-list"></div>
+        <div class="quick-actions">
+          <button id="btn-remember" class="action-btn">📌 Remember Page</button>
+          <button id="btn-research" class="action-btn">🔬 Research Page</button>
+          <button id="btn-note" class="action-btn">📝 Quick Note</button>
+        </div>
+        <div id="note-area" class="note-area hidden">
+          <textarea id="note-input" placeholder="Type your note..."></textarea>
+          <div class="note-actions">
+            <button id="btn-save-note" class="action-btn accent">Save Note</button>
+            <button id="btn-cancel-note" class="action-btn">Cancel</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Chat -->
+      <section id="tab-chat" class="tab-panel">
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-bubble assistant">
+            Hello! Ask me anything about your memories or the current page!
+          </div>
+        </div>
+        
+        <!-- Suggestions row -->
+        <div class="chat-suggestions">
+          <button class="suggestion-btn" id="btn-suggest-summarize">💡 Summarize Page</button>
+          <button class="suggestion-btn" id="btn-suggest-related">🔍 Find Related Notes</button>
+        </div>
+
+        <!-- Web grounding control -->
+        <div class="chat-grounding-row">
+          <label class="grounding-checkbox-label">
+            <input type="checkbox" id="chat-grounding-toggle" checked />
+            🔌 Feed current webpage context
+          </label>
+        </div>
+
+        <!-- Input row -->
+        <div class="chat-input-bar">
+          <textarea id="chat-input" placeholder="Ask your brain... (Shift+Enter for newline)"></textarea>
+          <button id="btn-send-chat" class="chat-send-btn">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Panel 3: Research -->
+      <section id="tab-research" class="tab-panel">
+        <div class="research-feed">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3>Active Background Research</h3>
+            <button id="btn-refresh-research" class="refresh-btn">🔄 Refresh</button>
+          </div>
+          <div id="research-list"></div>
+        </div>
+      </section>
+
+      <!-- Panel 4: Settings -->
+      <section id="tab-settings" class="tab-panel">
+        <div class="settings-panel">
+          <h3>Sovereign Configuration</h3>
+          
+          <div class="settings-group">
+            <label for="settings-brain-selector">Active Brain Layer</label>
+            <select id="settings-brain-selector" class="settings-select">
+              <option value="global">Global Brain</option>
+            </select>
+            <span class="settings-help">Project brain layers override global rules dynamically</span>
+          </div>
+
+          <div class="settings-group">
+            <label>Passive Tracking</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #1e1e2e; padding: 10px 12px; border-radius: 10px; border: 1px solid #313244;">
+              <span style="font-size: 13px; color: #a6adc8;">Capture page logs in background</span>
+              <label class="switch">
+                <input type="checkbox" id="settings-tracking-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <label>Current Domain Actions</label>
+            <button id="btn-block-domain" class="action-btn error" style="width: 100%; margin-bottom: 8px;">🚫 Block Current Domain</button>
+            <span class="settings-help">Prevents passive capturing on this domain</span>
+          </div>
+
+          <div class="settings-group" style="margin-top: auto; padding-top: 16px; border-top: 1px solid #313244;">
+            <button id="btn-recompile-brain" class="action-btn accent" style="width: 100%;">⚡ Recompile Brain Indexes</button>
+            <span class="settings-help" style="text-align: center; display: block; margin-top: 4px;">Forcibly rebuilds vector embeddings and rules shims</span>
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
   <script src="../lib/brain-client.js"></script>

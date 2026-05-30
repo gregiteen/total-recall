@@ -83,6 +83,7 @@ Show all available commands.
 
 - The .agent/ directory strictly contains only the skills/ folder and secrets.enc. Everything else (memory-vault, configs, logs, backups, scheduler, sessions) resides entirely inside skills/total-recall/.
 - When the user asks a question, NEVER edit any files or perform modifying actions until you have fully answered their question.
+- Never refer to the chat interface or AI companion as 'Co-Pilot'. Always refer to it simply as 'Chat'.
 - # Total Recall Operating Protocol
 
 You are operating within the **Total Recall Sovereign OS**. Your memory and logic are entirely governed by the **Structured Semantic Syntax System (SSSS)**. There is no external database. The filesystem is your brain.

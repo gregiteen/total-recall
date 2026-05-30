@@ -131,4 +131,19 @@
 
   // Wait 2 seconds after page load to avoid interfering with page rendering
   setTimeout(queryBrain, 2000);
+
+  // ---- Listen for page context requests ----
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.type === 'GET_PAGE_TEXT') {
+      const selection = window.getSelection().toString().trim();
+      const pageText = document.body.innerText.slice(0, 10000); // limit to 10k chars to avoid token blowout
+      sendResponse({
+        url: location.href,
+        title: document.title,
+        selection,
+        pageText
+      });
+    }
+    return true;
+  });
 })();

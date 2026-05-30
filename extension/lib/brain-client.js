@@ -39,9 +39,27 @@ async function search(query, topK = 3) {
   });
 }
 
-async function healthCheck() {
-  return brainFetch('/health');
+async function chat(messages, options = {}) {
+  const { brainUrl, pat } = await getConfig();
+  const url = `${brainUrl}/v1/chat/completions`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (pat) headers['Authorization'] = `Bearer ${pat}`;
+  if (options.sessionId) headers['x-session-id'] = options.sessionId;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      messages,
+      model: options.model || 'gemini',
+      brainId: options.brainId || 'global',
+      groundingNodes: options.groundingNodes || []
+    })
+  });
+  if (res.status === 401) throw new Error('Authentication failed — check your PAT token');
+  if (!res.ok) throw new Error(`Brain API error: ${res.status}`);
+  return res.json();
 }
 
 // Expose as a global namespace for non-module contexts (service worker, popup, etc.)
-self.BrainClient = { getConfig, brainFetch, share, search, healthCheck };
+self.BrainClient = { getConfig, brainFetch, share, search, healthCheck, chat };
