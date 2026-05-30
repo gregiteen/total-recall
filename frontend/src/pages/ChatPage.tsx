@@ -57,8 +57,8 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
 
   // Model Selector state
   const [availableModels, setAvailableModels] = useState<string[]>([])
-  const [selectedModel, setSelectedModel] = useState<string>('')
-  const [selectedSubModel, setSelectedSubModel] = useState<string>('')
+  const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('selectedModel') || '')
+  const [selectedSubModel, setSelectedSubModel] = useState<string>(() => localStorage.getItem('selectedSubModel') || '')
   const [geminiModels, setGeminiModels] = useState<{ id: string; displayName: string }[]>([])
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -102,24 +102,44 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
 
     fetchHealth()
       .then(health => {
-        if (health.cli_agents && health.cli_agents.length > 0) {
-          setAvailableModels(health.cli_agents)
-          setSelectedModel(health.cli_agents[0])
+        const agents = health.cli_agents && health.cli_agents.length > 0
+          ? health.cli_agents
+          : ['antigravity', 'gemini', 'claude', 'codex'];
+        setAvailableModels(agents);
+        
+        const saved = localStorage.getItem('selectedModel');
+        if (saved && agents.includes(saved)) {
+          setSelectedModel(saved);
         } else {
-          setAvailableModels(['antigravity', 'gemini', 'claude', 'codex'])
-          setSelectedModel('gemini')
+          const defaultAgent = agents.includes('gemini') ? 'gemini' : agents[0];
+          setSelectedModel(defaultAgent);
+          localStorage.setItem('selectedModel', defaultAgent);
         }
       })
       .catch(() => {
-        setAvailableModels(['antigravity', 'gemini', 'claude', 'codex'])
-        setSelectedModel('gemini')
+        const agents = ['antigravity', 'gemini', 'claude', 'codex'];
+        setAvailableModels(agents);
+        const saved = localStorage.getItem('selectedModel');
+        if (saved && agents.includes(saved)) {
+          setSelectedModel(saved);
+        } else {
+          setSelectedModel('gemini');
+          localStorage.setItem('selectedModel', 'gemini');
+        }
       })
 
     fetchGeminiModels()
       .then(models => {
         setGeminiModels(models)
         if (models && models.length > 0) {
-          setSelectedSubModel(models[0].id)
+          const savedSub = localStorage.getItem('selectedSubModel');
+          const exists = models.some(m => m.id === savedSub);
+          if (savedSub && exists) {
+            setSelectedSubModel(savedSub);
+          } else {
+            setSelectedSubModel(models[0].id);
+            localStorage.setItem('selectedSubModel', models[0].id);
+          }
         }
       })
       .catch(console.error)
@@ -488,7 +508,9 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                       className={`model-selector-item ${selectedModel === modelName ? 'selected' : ''}`}
                       onClick={() => {
                         setSelectedModel(modelName)
+                        localStorage.setItem('selectedModel', modelName)
                         setSelectedSubModel('')
+                        localStorage.removeItem('selectedSubModel')
                         setShowModelDropdown(false)
                       }}
                     >
@@ -512,7 +534,10 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                 <span className="selector-label" style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>Base:</span>
                 <select
                   value={selectedSubModel}
-                  onChange={(e) => setSelectedSubModel(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedSubModel(e.target.value)
+                    localStorage.setItem('selectedSubModel', e.target.value)
+                  }}
                   className="submodel-select"
                   style={{
                     background: 'rgba(255, 255, 255, 0.04)',

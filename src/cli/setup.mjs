@@ -456,6 +456,30 @@ export default async function setup(args) {
     }
   }
 
+  // ── Step 1.7: Install automatic brain backup ───────────────────────────────
+
+  hr();
+  console.log('\n  🔄 Automatic Brain Backup');
+  console.log('  Set up daily backup of your brain to a private GitHub repo.');
+  console.log('  Creates the repo, does the first push, and installs a scheduled job.\n');
+
+  const wantBackup = yes ? 'y' : (await prompt('Install automatic backup? [Y/n]:')).toLowerCase();
+  if (wantBackup !== 'n' && wantBackup !== 'no') {
+    if (!dryRun) {
+      try {
+        const backupHandler = await import(path.join(__dirname, 'backup.mjs'));
+        await backupHandler.default(['--install']);
+      } catch (e) {
+        warn(`Backup install failed: ${e.message}`);
+        warn('You can set it up later with: npx total-recall backup --install');
+      }
+    } else {
+      info('[dry-run] would run: total-recall backup --install');
+    }
+  } else {
+    info('Skipping auto-backup. Set it up later: npx total-recall backup --install');
+  }
+
   // ── Step 2: Provider-specific provisioning ──────────────────────────────────
 
   if (deployTarget === 'hetzner') {
