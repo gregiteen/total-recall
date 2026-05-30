@@ -18,3 +18,12 @@
 
 ### Omnichannel Dashboard Features
 - [ ] **Full Internationalization (i18n)**: Add a language picker to settings, abstract all hardcoded UI strings, and append an active `LANGUAGE` variable to `system.yml` to force the local kernel to write SSSS memory nodes and chat responses in the selected language.
+
+## Ingestion Pipeline & Chrome Extension
+
+### Extended Ingestion Channels
+- [ ] **Voice Notes**: Start recording directly (`npx total-recall voice` with mic access) or transcribe an existing file (`npx total-recall voice --file memo.m4a`). Integrates Whisper STT with the `POST /api/share` pipeline.
+- [ ] **Image & File Uploads**: Implement a new `POST /api/files/upload` endpoint (using `multer` middleware) to store files under `files/`, generate visual descriptions via vision models, and link nodes via `x_media_refs`.
+- [ ] **Web Share Target**: Configure the dashboard PWA manifest to act as a Web Share Target so mobile browsers can natively "share-to-brain".
+- [ ] **Gmail & Calendar Connectors**: Implement OAuth2 integrations for incremental sync to create fact nodes. Requires robust local-only encryption, consent framework, and strict classification.
+- [ ] **Location Tracking Ingestion**: Support periodic tracking writes via `POST /api/sessions/ingest { source: 'location' }` to save to memory with `x_location` schema values.

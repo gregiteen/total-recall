@@ -115,17 +115,17 @@
 
 ---
 
-## ⏳ Phase 4: Integration Testing & Verification
+## ✅ Phase 4: Integration Testing & Verification
 
-- [ ] Code quality: `node .agent/skills/code-quality/scripts/start-here-ts.mjs`
-- [ ] Lint: `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
-- [ ] Test suite: `npm test`
-- [ ] Smoke: `npx total-recall share "https://example.com"` queues research
-- [ ] Smoke: `npx total-recall share --text "Test fact"` creates fact node
-- [ ] Smoke: Research UI lifecycle buttons work
-- [ ] Smoke: Steer modal appends direction notes
-- [ ] Smoke: Citation cards show favicons
-- [ ] Smoke: Extension loads unpacked without errors
-- [ ] Smoke: Right-click "Send to Brain" works
-- [ ] Smoke: Side panel shows related memories
-- [ ] Smoke: Popup quick note works
+- [x] Code quality: `node .agent/skills/code-quality/scripts/start-here-ts.mjs`
+- [x] Lint: `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
+- [x] Test suite: `npm test`
+- [x] Smoke: `npx total-recall share "https://example.com"` queues research
+- [x] Smoke: `npx total-recall share --text "Test fact"` creates fact node
+- [x] Smoke: Research UI lifecycle buttons work
+- [x] Smoke: Steer modal appends direction notes
+- [x] Smoke: Citation cards show favicons
+- [x] Smoke: Extension loads unpacked without errors
+- [x] Smoke: Right-click "Send to Brain" works
+- [x] Smoke: Side panel shows related memories
+- [x] Smoke: Popup quick note works
