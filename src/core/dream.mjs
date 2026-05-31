@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { loadNodes, writeNode, atomicWrite, walkMd } from './vault.mjs';
+import { writeNode, atomicWrite, walkMd } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir } from './config.mjs';
 import { loadQueue } from './research-queue.mjs';
@@ -247,7 +248,7 @@ export async function runDreamCycle({
   const candidates = []; 
 
   logger.info('dream', 'PHASE 2 — REM (Pattern Recognition)');
-  const existingNodes = loadNodes(vaultDir);
+  const existingNodes = getNodes(vaultDir);
   
   if (candidates.length > 0) {
     const { promoted, conflicted } = evaluateCandidates(candidates, existingNodes, conflictsDir);
@@ -294,7 +295,7 @@ export async function runDreamCycle({
 
   // Write daily note summary (native SSSS node; Obsidian Daily Notes reads it directly)
   try {
-    const existingNodes = loadNodes(vaultDir);
+    const existingNodes = getNodes(vaultDir);
     writeDailyNote(vaultDir, [
       `Modified vault files scanned: ${modified.length}`,
       `Active nodes: ${existingNodes.filter(n => n.status === 'active').length}`,
@@ -318,7 +319,6 @@ export async function runDreamCycle({
 // ─── Standalone Daemon Execution ────────────────────────────────────────────────
 
 import { fileURLToPath } from 'url';
-import os from 'os';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const vaultDir = path.join(brainDir, 'memory-vault');
