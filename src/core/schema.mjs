@@ -43,7 +43,7 @@ export const MemoryNodeSchema = z.object({
   routes_to_skills: z.array(z.string()),
   sentiment_polarity: z.enum(['directive_must', 'directive_must_not', 'descriptive', 'preference']),
   sentiment_target: z.string(),
-  modality: z.enum(['must', 'must_not', 'should', 'should_not']),
+  modality: z.enum(['must', 'must_not', 'should', 'should_not', 'descriptive', 'preference']),
   subject: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/),
   predicate: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/),
   object: z.string(),
@@ -86,7 +86,7 @@ export const MemoryNodeSchema = z.object({
   // Temporal rule expiration
   expires_at: ssssDatetimeNullable().optional(),
   // Absolute Invariant Extensions
-  priority: z.literal('absolute').optional(),
+  priority: z.enum(['absolute', 'high', 'normal', 'low']).optional(),
   immutable: z.boolean().optional()
 });
 

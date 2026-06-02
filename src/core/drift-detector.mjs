@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'node:crypto';
-import { loadNodes } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 
 /**
  * SSSS Drift Detector
@@ -45,10 +45,10 @@ export function detectIndexDrift(vaultDir, derivedDir, globalVaultDir = undefine
   }
 
   // Load canonical nodes
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   if (globalVaultDir && fs.existsSync(globalVaultDir)) {
     try {
-      const globalNodes = loadNodes(globalVaultDir);
+      const globalNodes = getNodes(globalVaultDir);
       nodes.push(...globalNodes);
     } catch (err) {
       // Ignore or log global vault load failure

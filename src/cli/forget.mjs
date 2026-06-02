@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
-import { deleteNode, loadNodes } from '../core/vault.mjs';
+import { deleteNode } from '../core/vault.mjs';
 
 function printHelp() {
   console.log(`
@@ -46,9 +46,15 @@ export default async function forget(args) {
     // Check project first, then global
     if (brains.project) {
       const projVaultDir = path.join(brains.project.brainDir, 'memory-vault');
-      const projNodes = loadNodes(projVaultDir);
-      if (projNodes.some(n => n.slug === slug)) {
-        layer = 'project';
+      // Direct category scan instead of full vault load
+      if (fs.existsSync(projVaultDir)) {
+        const cats = fs.readdirSync(projVaultDir, { withFileTypes: true });
+        for (const cat of cats) {
+          if (cat.isDirectory() && fs.existsSync(path.join(projVaultDir, cat.name, `${slug}.md`))) {
+            layer = 'project';
+            break;
+          }
+        }
       }
     }
     if (layer === 'auto') {
@@ -76,17 +82,17 @@ export default async function forget(args) {
 
   // Recompile unless --no-compile
   if (!noCompile) {
-    console.log('  ⏳ Recompiling active memory surfaces and indexes...');
+    console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
     try {
-      const compileResult = await compileSurface({
-        vaultDir,
-        skillsDir,
-        derivedDir,
-        instructionsFile
+      const { spawn } = await import('node:child_process');
+      const child = spawn(process.argv[0], [process.argv[1], 'compile'], {
+        detached: true,
+        stdio: 'ignore'
       });
-      console.log(`  ✅ Recompilation successful! Processed ${compileResult.nodesProcessed} SSSS nodes.`);
+      child.unref();
+      console.log('  ✅ Background compilation started.');
     } catch (err) {
-      console.warn(`  ⚠️  Node deleted, but surface recompilation failed: ${err.message}`);
+      console.warn(`  ⚠️  Node deleted, but background recompilation spawn failed: ${err.message}`);
     }
   }
 }

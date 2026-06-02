@@ -8,7 +8,8 @@
 
 import express from 'express';
 import crypto from 'node:crypto';
-import { createMemoryNode, writeNode } from '../../core/vault.mjs';
+import { createMemoryNode } from '../../core/vault.mjs';
+import { writeNodeValidated } from '../../core/validated-write.mjs';
 import { invalidate } from '../../core/vault-cache.mjs';
 import { addToQueue } from '../../core/research-queue.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
@@ -121,7 +122,13 @@ router.post('/api/share', requireAuth, requireScope('memory:write'), async (req,
       }];
     }
 
-    writeNode(node, vaultDir);
+    const vaultResult = writeNodeValidated(node, vaultDir);
+    if (!vaultResult.success) {
+      return res.status(422).json({
+        error: 'Validation failed',
+        validation: vaultResult.validation,
+      });
+    }
     invalidate();
 
     // Mark extension as connected when share comes from the extension

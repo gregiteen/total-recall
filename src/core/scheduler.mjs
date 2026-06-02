@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
-import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { loadQueue, updateQueueItem } from './research-queue.mjs';
 
@@ -243,7 +244,7 @@ function generateProactiveResearchTask() {
  * Pick a random active memory node and create a clarity review task.
  */
 function generateClarityReviewTask(vaultDir) {
-  const nodes = loadNodes(vaultDir).filter((n) => n.status === 'active');
+  const nodes = getNodes(vaultDir).filter((n) => n.status === 'active');
   if (nodes.length === 0) {
     return makeFallbackTask('memory-maintenance', 'No active nodes to review');
   }
@@ -266,7 +267,7 @@ function generateClarityReviewTask(vaultDir) {
  * Pick the oldest fact node and create a staleness check task.
  */
 function generateStalenessCheckTask(vaultDir) {
-  const nodes = loadNodes(vaultDir)
+  const nodes = getNodes(vaultDir)
     .filter((n) => n.status === 'active' && n.category === 'facts')
     .sort((a, b) => {
       const aDate = new Date(a.last_accessed || a.updated || 0).getTime();
@@ -276,7 +277,7 @@ function generateStalenessCheckTask(vaultDir) {
 
   if (nodes.length === 0) {
     // No facts? Pick any old node
-    const allNodes = loadNodes(vaultDir).filter((n) => n.status === 'active');
+    const allNodes = getNodes(vaultDir).filter((n) => n.status === 'active');
     if (allNodes.length === 0) {
       return makeFallbackTask('research-acquisition', 'No facts to verify');
     }
@@ -314,7 +315,7 @@ function generateStalenessCheckTask(vaultDir) {
  * Pick a cluster of related nodes and create an inference task.
  */
 function generateInferenceTask(vaultDir) {
-  const nodes = loadNodes(vaultDir).filter((n) => n.status === 'active');
+  const nodes = getNodes(vaultDir).filter((n) => n.status === 'active');
   if (nodes.length < 3) {
     return makeFallbackTask('system2-deliberation', 'Not enough nodes for inference');
   }

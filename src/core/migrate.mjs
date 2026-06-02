@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { loadNodes, writeNode, atomicWrite } from './vault.mjs';
+import { writeNode, atomicWrite } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { createSnapshot } from './snapshot.mjs';
 import { SSSS_SCHEMAS } from './schema.mjs';
 import { logger } from './logger.mjs';
@@ -33,7 +34,7 @@ export async function runMigration(vaultDir, fromVersion, toVersion, migrationFn
   };
 
   try {
-    const nodes = loadNodes(vaultDir);
+    const nodes = getNodes(vaultDir);
     logger.info('migration', `Loaded ${nodes.length} nodes for migration processing.`);
 
     // 2. Execute Migration
@@ -78,7 +79,7 @@ export async function runMigration(vaultDir, fromVersion, toVersion, migrationFn
 export async function testMigration(vaultDir, migrationFn, targetSchemaType) {
   logger.info('migration', 'Running migration harness in isolated context...');
   
-  const nodes = loadNodes(vaultDir).slice(0, 50); // Sample a subset
+  const nodes = getNodes(vaultDir).slice(0, 50); // Sample a subset
   
   try {
     const testMigrated = await migrationFn(nodes);

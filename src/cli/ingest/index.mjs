@@ -24,7 +24,8 @@ import { parseSearchHistory } from './parsers/search-history.mjs';
 import { parseChromeBookmarks } from './parsers/chrome-bookmarks.mjs';
 import { parseGoogleKeep } from './parsers/google-keep.mjs';
 import { parseYoutubeHistory } from './parsers/youtube-history.mjs';
-import { writeNode, loadNodes } from '../../core/vault.mjs';
+import { writeNode } from '../../core/vault.mjs';
+import { getNodes } from '../../core/vault-cache.mjs';
 import { resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from '../../cli/agent-dir.mjs';
 
 /**
@@ -204,7 +205,7 @@ export async function ingestGoogleTakeout(takeoutPath, options = {}) {
   // Load existing vault nodes for dedup
   let existingNodes = [];
   if (fs.existsSync(vaultDir)) {
-    existingNodes = loadNodes(vaultDir);
+    existingNodes = getNodes(vaultDir);
   }
 
   // Run parsers for each detected type

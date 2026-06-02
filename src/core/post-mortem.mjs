@@ -3,7 +3,8 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';
-import { atomicWrite, loadNodes, safeStringify } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
 
@@ -115,7 +116,7 @@ export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeCo
   }
 
   // Load active rules for violation checking
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const rules = nodes.filter(n =>
     n.status === 'active' &&
     n.priority === 'absolute' &&
@@ -324,7 +325,7 @@ export async function runComplianceAudit(sessionPath, { vaultDir, runtimeConfig 
     return { compliant: true, violations: [], skipped: 'too-short' };
   }
 
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const rules = nodes.filter(n =>
     n.status === 'active' &&
     (n.modality === 'must' || n.modality === 'must_not')

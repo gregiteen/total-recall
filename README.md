@@ -1,6 +1,6 @@
 # Total Recall — SSSS Sovereign AI OS
 
-[![Version](https://img.shields.io/badge/version-3.0.0-indigo.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-3.3.0-indigo.svg)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-emerald.svg)](LICENSE)
 [![Continuous Integration](https://img.shields.io/badge/CI-passing-teal.svg)](.github/workflows/test.yml)
 

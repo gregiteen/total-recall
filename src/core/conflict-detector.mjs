@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'node:crypto';
-import { atomicWrite, walkMd, loadNodes, writeNode, safeStringify } from './vault.mjs';
+import { atomicWrite, walkMd, writeNode, safeStringify } from './vault.mjs';
+import { getNodes, invalidate } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -158,7 +159,7 @@ export function detectSemanticConflicts(candidate, existingNodes, thresholds = {
  * @returns {object[]} Array of conflict records (deduplicated by pair).
  */
 export function scanVaultForConflicts(vaultDir, thresholds = {}) {
-  const nodes = loadNodes(vaultDir).filter(n => n.status === 'active');
+  const nodes = getNodes(vaultDir).filter(n => n.status === 'active');
   const seen = new Set();
   const conflicts = [];
 
@@ -420,6 +421,7 @@ export function applyAutoResolution(conflict, resolution, vaultDir) {
     try {
       writeNode(loserNode, vaultDir);
       writeNode(winnerNode, vaultDir);
+      invalidate(vaultDir);
     } catch (err) {
       logger.error('conflict-detector', `Failed to apply auto-resolution: ${err.message}`);
     }

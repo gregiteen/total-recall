@@ -3,7 +3,8 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
-import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
+import { getNodes, invalidate } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -69,7 +70,7 @@ function buildClarityPrompt(node) {
  * @returns {{ rewrote: boolean, qualityScore?: number, error?: string }}
  */
 export async function runClarityReview(slug, { vaultDir, inboxDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const node = allNodes.find(n => n.slug === slug);
 
   if (!node) {
@@ -192,7 +193,7 @@ function buildStalenessPrompt(node) {
  * @returns {{ verdict: string, confidence: number, error?: string }}
  */
 export async function runStalenessCheck(slug, { vaultDir, queueDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const node = allNodes.find(n => n.slug === slug);
 
   if (!node) {
@@ -304,7 +305,7 @@ Output ONLY valid JSON. Maximum 5 gaps.`;
  * @returns {{ gaps: object[], error?: string }}
  */
 export async function runFactSeeker({ vaultDir, queueDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const activeNodes = allNodes.filter(n => n.status === 'active');
 
   if (activeNodes.length === 0) {
@@ -446,7 +447,7 @@ function isHighDriftNode(node) {
  * @returns {{ audited: number, flagged: number, critical: number }}
  */
 export async function runCutoffAudit({ vaultDir, queueDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const now = Date.now();
   const verifiedCutoff = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -574,6 +575,7 @@ async function stampVerified(node) {
     data.x_cutoff_verified_at = new Date().toISOString();
     data.x_cutoff_risk = 'none';
     atomicWrite(node._filepath, safeStringify(content, data));
+    invalidate(path.dirname(node._filepath));
   } catch (err) {
     logger.debug('clarity-rewriter: stampCutoffRiskNone failed', { err: err.message });
   }
@@ -591,6 +593,7 @@ async function stampCutoffRisk(node, riskLevel, claimCount) {
     const confidencePenalty = riskLevel === 'critical' ? 0.3 : riskLevel === 'high' ? 0.2 : 0.1;
     data.confidence = Math.max(0.1, (data.confidence || 0.5) - confidencePenalty);
     atomicWrite(node._filepath, safeStringify(content, data));
+    invalidate(path.dirname(node._filepath));
   } catch (err) {
     logger.debug('clarity-rewriter: stampCutoffRisk failed', { err: err.message });
   }
@@ -635,7 +638,7 @@ Output ONLY valid JSON.`;
  * @returns {{ correctionSlug: string, verdict: string, error?: string }}
  */
 export async function writeCorrection(originalSlug, researchEvidence, { vaultDir, inboxDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const original = allNodes.find(n => n.slug === originalSlug);
 
   if (!original) {
@@ -764,6 +767,7 @@ async function stampNodeForCorrection(node, correctionSlug, disposition) {
     data.confidence = Math.max(0.05, (data.confidence || 0.5) * 0.3);
     data.updated = new Date().toISOString();
     atomicWrite(node._filepath, safeStringify(content, data));
+    invalidate(path.dirname(node._filepath));
   } catch (err) {
     logger.debug('clarity-rewriter: stampNodeForCorrection failed', { err: err.message });
   }

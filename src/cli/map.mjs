@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
-import { loadNodes } from '../core/vault.mjs';
+import { getNodes } from '../core/vault-cache.mjs';
 
 function printHelp() {
   console.log(`
@@ -68,7 +68,7 @@ export default async function map(args) {
     const vaultDir = path.join(l.path, 'memory-vault');
     if (!fs.existsSync(vaultDir)) continue;
 
-    const nodes = loadNodes(vaultDir).map(n => ({ ...n, _layer: l.name }));
+    const nodes = getNodes(vaultDir).map(n => ({ ...n, _layer: l.name }));
     loadedLayers.push({ name: l.name, nodes });
     totalNodesCount += nodes.length;
   }

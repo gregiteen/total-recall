@@ -112,8 +112,25 @@
     document.body.appendChild(pillHost);
   }
 
+  function isBlocked(blocklist) {
+    if (!Array.isArray(blocklist) || blocklist.length === 0) return false;
+    let host = '';
+    try {
+      host = new URL(pageContext.url).hostname.toLowerCase();
+    } catch {
+      return false;
+    }
+    return blocklist.some((entry) => {
+      const pattern = String(entry || '').trim().toLowerCase();
+      return pattern && (host === pattern || host.endsWith(`.${pattern}`) || pageContext.url.toLowerCase().includes(pattern));
+    });
+  }
+
   // ---- Query brain after delay ----
-  function queryBrain() {
+  async function queryBrain() {
+    const { passiveTracking = false, blocklist = [] } = await chrome.storage.sync.get(['passiveTracking', 'blocklist']);
+    if (!passiveTracking || isBlocked(blocklist)) return;
+
     const query = pageContext.title || pageContext.url;
     if (!query) return;
 

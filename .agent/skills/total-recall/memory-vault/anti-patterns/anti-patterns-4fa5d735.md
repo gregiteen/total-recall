@@ -8,7 +8,7 @@ confidence: 1
 importance: 5
 created: '2026-05-27T05:48:19.555Z'
 updated: '2026-05-27T05:48:19.555Z'
-last_accessed: '2026-05-27T05:48:19.555Z'
+last_accessed: 2026-06-01T06:07:11.601Z
 source:
   type: remember-cli
   session_id: remember-session
@@ -27,7 +27,7 @@ predicate: remembers_fact
 object: brain
 decay:
   half_life_days: 180
-  access_count: 1
+  access_count: 3
 schema_version: 2
 x_temporal_context: '2026-05-27T05:48:19.555Z'
 priority: absolute

@@ -289,7 +289,8 @@ export async function callLocalRuntime(prompt, system, config) {
       maxBuffer: 10 * 1024 * 1024,
       env: {
         ...process.env,
-        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || googleApiKey,
+        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || googleApiKey,
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || googleApiKey,
         TAVILY_API_KEY: process.env.TAVILY_API_KEY || tavilyApiKey,
         BRAVE_API_KEY: process.env.BRAVE_API_KEY || braveApiKey,
         EXA_API_KEY: process.env.EXA_API_KEY || exaApiKey,

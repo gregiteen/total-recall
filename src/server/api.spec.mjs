@@ -373,8 +373,11 @@ describe('API Proxy', () => {
       });
     });
 
-    afterEach(() => {
+    afterEach(async () => {
       fs.rmSync(vaultDir, { recursive: true, force: true });
+      // Invalidate vault-cache so next test gets a fresh read
+      const { invalidate } = await import('../core/vault-cache.mjs');
+      invalidate();
     });
 
     it('injects grounding nodes into the system prompt before forwarding to local runtime', async () => {

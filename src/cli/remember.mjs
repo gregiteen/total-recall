@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
-import { writeNode } from '../core/vault.mjs';
+import { writeNodeValidated } from '../core/validated-write.mjs';
 
 function printHelp() {
   console.log(`
@@ -287,20 +287,30 @@ export default async function remember(args) {
     node.immutable = true;
   }
 
-  writeNode(node, vaultDir);
+  const vaultResult = writeNodeValidated(node, vaultDir);
+  if (!vaultResult.success) {
+    console.error(`  ❌ Validation failed: ${vaultResult.validation.errors.join('; ')}`);
+    if (vaultResult.repair) {
+      console.error(`  🔧 Repair hints:`);
+      for (const fe of vaultResult.repair.field_errors || []) {
+        console.error(`     • ${fe.field}: ${fe.issue}`);
+      }
+    }
+    process.exit(1);
+  }
   console.log(`  ✅ Permanent SSSS memory node created ${layerLabel} in vault: memory-vault/${category}/${finalSlug}.md`);
 
-  // Instantly recompile instructions and vector indexes in the exact same turn!
-  console.log('  ⏳ Recompiling active memory surfaces and indexes...');
+  // Recompile active memory surfaces and indexes in the background to avoid blocking the CLI call.
+  console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
   try {
-    const compileResult = await compileSurface({
-      vaultDir,
-      skillsDir,
-      derivedDir,
-      instructionsFile
+    const { spawn } = await import('node:child_process');
+    const child = spawn(process.argv[0], [process.argv[1], 'compile'], {
+      detached: true,
+      stdio: 'ignore'
     });
-    console.log(`  ✅ Recompilation successful! Processed ${compileResult.nodesProcessed} SSSS nodes.`);
+    child.unref();
+    console.log('  ✅ Background compilation started.');
   } catch (err) {
-    console.warn(`  ⚠️  Memory saved, but surface recompilation failed: ${err.message}`);
+    console.warn(`  ⚠️  Memory saved, but background recompilation spawn failed: ${err.message}`);
   }
 }

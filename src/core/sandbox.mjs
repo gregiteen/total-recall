@@ -1,9 +1,51 @@
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import crypto from "node:crypto";
 import { logger } from './logger.mjs';
+
+let macSandboxProbe = null;
+
+function escapeSandboxPath(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function buildMacSandboxProfile({ allowNetwork }) {
+  return [
+    '(version 1)',
+    '(allow default)',
+    '(deny file-write*)',
+    '(allow file-write*',
+    `  (subpath "/private/tmp")`,
+    `  (subpath "/tmp")`,
+    `  (subpath "${escapeSandboxPath(process.cwd())}")`,
+    `  (subpath "${escapeSandboxPath(os.tmpdir())}")`,
+    `)`,
+    allowNetwork ? '' : '(deny network-outbound)'
+  ].filter(Boolean).join('\n');
+}
+
+function canUseMacSandbox(profile) {
+  if (process.platform !== 'darwin') return false;
+  if (macSandboxProbe !== null) return macSandboxProbe;
+  const result = spawnSync('sandbox-exec', [
+    '-p',
+    profile,
+    process.execPath,
+    '--no-warnings',
+    '-e',
+    'process.exit(0)'
+  ], {
+    encoding: 'utf8',
+    timeout: 1500
+  });
+  macSandboxProbe = result.status === 0;
+  if (!macSandboxProbe) {
+    logger.warn('sandbox', 'macOS sandbox-exec probe failed; falling back to Node process limits.');
+  }
+  return macSandboxProbe;
+}
 
 /**
  * Command Sanitizer / Whitelist Execution Validator
@@ -62,33 +104,21 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
   safeEnv.NODE_OPTIONS = '--experimental-vm-modules';
 
   // OS-specific sandboxing wrappers
-  let cmd = 'node';
+  let cmd = process.execPath;
   let args = ['--no-warnings', scriptPath];
   let tempSbProfilePath = null;
 
   try {
     if (process.platform === 'darwin') {
       // macOS sandbox-exec integration
-      const profile = [
-        '(version 1)',
-        '(allow default)',
-        '(deny file-write*)',
-        '(allow file-write*',
-        `  (subpath "/private/tmp")`,
-        `  (subpath "/tmp")`,
-        `  (subpath "${process.cwd()}")`,
-        `  (subpath "${os.tmpdir()}")`,
-        `)`,
-        allowNetwork 
-          ? '' 
-          : '(deny network-outbound)'
-      ].filter(Boolean).join('\n');
+      const profile = buildMacSandboxProfile({ allowNetwork });
+      if (canUseMacSandbox(profile)) {
+        tempSbProfilePath = path.join(os.tmpdir(), `tr-sandbox-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.sb`);
+        fs.writeFileSync(tempSbProfilePath, profile, 'utf8');
 
-      tempSbProfilePath = path.join(os.tmpdir(), `tr-sandbox-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.sb`);
-      fs.writeFileSync(tempSbProfilePath, profile, 'utf8');
-
-      cmd = 'sandbox-exec';
-      args = ['-f', tempSbProfilePath, 'node', '--no-warnings', scriptPath];
+        cmd = 'sandbox-exec';
+        args = ['-f', tempSbProfilePath, process.execPath, '--no-warnings', scriptPath];
+      }
     } else if (process.platform === 'linux') {
       // Linux namespace isolation check via unshare
       const hasUnshare = fs.existsSync('/usr/bin/unshare') || fs.existsSync('/bin/unshare');
@@ -98,7 +128,7 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
         if (!allowNetwork) {
           unshareArgs.push('--net');
         }
-        args = [...unshareArgs, 'node', '--no-warnings', scriptPath];
+        args = [...unshareArgs, process.execPath, '--no-warnings', scriptPath];
       }
     }
   } catch (err) {
@@ -117,14 +147,14 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
     proc.stdout.on('data', (data) => { stdout += data.toString(); });
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       if (tempSbProfilePath && fs.existsSync(tempSbProfilePath)) {
         try { fs.unlinkSync(tempSbProfilePath); } catch {}
       }
       if (code === 0) {
-        resolve({ success: true, output: stdout });
+        resolve({ success: true, output: stdout, code, signal });
       } else {
-        resolve({ success: false, output: stderr || stdout, code });
+        resolve({ success: false, output: stderr || stdout, code, signal });
       }
     });
 

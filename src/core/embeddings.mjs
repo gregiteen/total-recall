@@ -360,10 +360,14 @@ export function loadEmbeddingsIndex(derivedDir) {
  * @param {string} [model]
  */
 export function saveEmbeddingToIndex(derivedDir, slug, embedding, model = DEFAULT_EMBED_MODEL) {
-  fs.mkdirSync(derivedDir, { recursive: true });
+  const p = indexPath(derivedDir);
   const index = loadEmbeddingsIndex(derivedDir);
   index[slug] = { embedding, model, generated_at: new Date().toISOString() };
-  fs.writeFileSync(indexPath(derivedDir), JSON.stringify(index), 'utf8');
+  fs.mkdirSync(derivedDir, { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(index), 'utf8');
+  cachedIndex = index;
+  cachedIndexPath = p;
+  cachedIndexMtime = fs.statSync(p).mtimeMs;
 }
 
 /**
@@ -374,10 +378,13 @@ export function saveEmbeddingToIndex(derivedDir, slug, embedding, model = DEFAUL
  */
 export function removeEmbeddingFromIndex(derivedDir, slug) {
   const p = indexPath(derivedDir);
-  if (!fs.existsSync(p)) return;
   const index = loadEmbeddingsIndex(derivedDir);
   delete index[slug];
+  fs.mkdirSync(derivedDir, { recursive: true });
   fs.writeFileSync(p, JSON.stringify(index), 'utf8');
+  cachedIndex = index;
+  cachedIndexPath = p;
+  cachedIndexMtime = fs.statSync(p).mtimeMs;
 }
 
 // ─── Text representation ─────────────────────────────────────────────────────
@@ -390,11 +397,24 @@ export function removeEmbeddingFromIndex(derivedDir, slug) {
  * @returns {string}
  */
 export function nodeToEmbedText(node) {
-  const parts = [node.title || node.slug];
+  const parts = [];
+  const title = node.title || node.slug;
+  parts.push(`Title: ${title}`);
   if (node.category) parts.push(`Category: ${node.category}`);
   if (node.tags?.length) parts.push(`Tags: ${node.tags.join(', ')}`);
-  if (node.body) parts.push(node.body.slice(0, 2000)); // cap body at 2k chars
+  if (node.body) parts.push(`Body: ${node.body.slice(0, 2000)}`);
   return parts.join('\n\n');
+}
+
+/**
+ * Split a node's body into paragraph chunks for hierarchical child matching.
+ */
+export function chunkNodeBody(body) {
+  if (!body) return [];
+  return body
+    .split(/\n\n+/)
+    .map(p => p.trim())
+    .filter(p => p.length > 50); // only chunk substantial paragraphs
 }
 
 // ─── Bulk index builder ──────────────────────────────────────────────────────
@@ -430,14 +450,44 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
   let built = 0, skipped = 0, failed = 0;
 
   for (const node of nodes) {
+    const text = nodeToEmbedText(node);
+    const contentHash = crypto.createHash('sha256').update(text).digest('hex');
+
+    // Skip if existing entry has matching content hash (content unchanged)
     if (!force && existing[node.slug]) {
-      skipped++;
-      continue;
+      const cachedHash = existing[node.slug].content_sha256;
+      if (cachedHash && cachedHash === contentHash) {
+        skipped++;
+        continue;
+      }
     }
+
     try {
-      const text = nodeToEmbedText(node);
-      const embedding = await getEmbedding(text, undefined, model);
-      index[node.slug] = { embedding, model, generated_at: new Date().toISOString() };
+      const parentEmbedding = await getEmbedding(text, undefined, model);
+      
+      // Calculate embeddings for children chunks
+      const childChunks = chunkNodeBody(node.body);
+      const chunks = [];
+      
+      for (const chunkText of childChunks) {
+        try {
+          const chunkEmb = await getEmbedding(`Parent: ${node.title}\nChunk: ${chunkText}`, undefined, model);
+          chunks.push({
+            text: chunkText,
+            embedding: chunkEmb
+          });
+        } catch {
+          // Ignore failures for individual chunks
+        }
+      }
+
+      index[node.slug] = {
+        embedding: parentEmbedding,
+        chunks,
+        model,
+        generated_at: new Date().toISOString(),
+        content_sha256: contentHash
+      };
       built++;
       onProgress?.({ slug: node.slug, built, skipped, failed });
     } catch (err) {

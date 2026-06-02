@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import matter from 'gray-matter';
-import { loadNodes, writeNode } from './vault.mjs';
+import { writeNode } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
 
@@ -31,7 +32,7 @@ export function createProposal(category, summary, targetPath = null, rationale =
  * Scans the vault for duplicate or contradictory memories and generates a cleanup proposal.
  */
 export async function generateMemoryCleanupProposals(vaultDir) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const proposals = [];
   
   // Simple heuristic: find nodes with the same predicate and object but different subjects, or duplicate subjects.
@@ -163,7 +164,7 @@ export async function generateWorkflowRepairProposals(vaultDir) {
  */
 export async function generateModelRoutingProposals(vaultDir) {
   const proposals = [];
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
 
   // Find high-importance facts with low confidence — likely needed frontier model
   const underconfident = nodes.filter(n =>
@@ -187,7 +188,7 @@ export async function generateModelRoutingProposals(vaultDir) {
 }
 
 export async function generateStaleKnowledgeRefreshProposals(vaultDir) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const proposals = [];
   
   const now = Date.now();
@@ -272,7 +273,7 @@ Output ONLY valid JSON.`;
  */
 export async function runSmartDecay(vaultDir, runtimeConfig, ageThresholdDays = 60) {
   const { callLocalRuntime } = await import('./runtime.mjs');
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const now = Date.now();
   const ageThresholdMs = ageThresholdDays * 24 * 60 * 60 * 1000;
   const proposals = [];

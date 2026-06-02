@@ -8,7 +8,8 @@ import { requireAuth, requireScope, loginHandler, logoutHandler, changePasswordH
 import { logger } from '../core/logger.mjs';
 import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from '../core/tts.mjs';
 import { KNOWN_SCOPES, loadKeys, issueKey, revokeKey } from './keys.mjs';
-import { loadNodes, writeNode } from '../core/vault.mjs';
+import { writeNode } from '../core/vault.mjs';
+import { getNodes } from '../core/vault-cache.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { resolveAgentDir } from '../cli/agent-dir.mjs';
@@ -599,7 +600,7 @@ ${interviewTask}`;
     if (Array.isArray(groundingNodes) && groundingNodes.length > 0) {
       try {
         const groundingVaultDir = resolveVaultDir(brainId);
-        const allNodes = loadNodes(groundingVaultDir);
+        const allNodes = getNodes(groundingVaultDir);
         let groundingPrompt = '\n\n=== ACTIVE GROUNDING BRAIN NODES ===\nThe user has explicitly selected the following brain memory nodes as context for this conversation. Integrate their contents into your knowledge base and refer to them to inform your answers:';
         let groundedAny = false;
         for (const slug of groundingNodes) {
@@ -864,7 +865,7 @@ apiRouter.delete('/v1/chat/threads/:id', requireAuth, requireScope('chat:write')
 apiRouter.get('/v1/chat/suggestions', requireAuth, requireScope('chat:read'), (req, res) => {
   try {
     const suggestionsVaultDir = resolveVaultDir(req.query?.brain);
-    const allNodes = loadNodes(suggestionsVaultDir);
+    const allNodes = getNodes(suggestionsVaultDir);
     // Find active or draft memory nodes that represent facts, concepts, or research
     const candidates = allNodes.filter(n => n.status !== 'archived' && n.category !== 'preferences');
 

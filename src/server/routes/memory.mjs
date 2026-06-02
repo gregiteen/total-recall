@@ -13,7 +13,8 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { writeNode, createMemoryNode, walkMd } from '../../core/vault.mjs';
+import { createMemoryNode, walkMd } from '../../core/vault.mjs';
+import { writeNodeValidated } from '../../core/validated-write.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { compileSurface } from '../../core/surface.mjs';
@@ -35,6 +36,10 @@ import {
 
 const router = express.Router();
 
+/* ── OPT-6: debounce recompilation across rapid consecutive writes ── */
+let recompileTimer = null;
+const RECOMPILE_DEBOUNCE_MS = 2000; // 2-second quiet period
+
 function nodes(vaultDir = VAULT_DIR) {
   return getNodes(vaultDir);
 }
@@ -44,51 +49,70 @@ function nodes(vaultDir = VAULT_DIR) {
  * Auto-mutates the brain in real time when any fact is written, updated, or deleted!
  */
 async function triggerMutation(node, vaultDir = VAULT_DIR) {
+  // 1. Semantic conflict detection runs IMMEDIATELY (lightweight, per-node)
   try {
-    // 1. Semantic conflict detection & auto-resolution (Sovereign OS Intelligence)
-    try {
-      const existing = nodes(vaultDir);
-      if (node && node.type === 'memory') {
-        detectAndResolve(node, existing, {
-          vaultDir,
-          inboxDir: path.join(BRAIN_DIR, 'memory-inbox'),
-        });
-      }
-    } catch (conflictErr) {
-      // Non-fatal fallback
+    const existing = nodes(vaultDir);
+    if (node && node.type === 'memory') {
+      detectAndResolve(node, existing, {
+        vaultDir,
+        inboxDir: path.join(BRAIN_DIR, 'memory-inbox'),
+      });
     }
-
-    // 2. Recompile instructions surface
-    await compileSurface({
-      vaultDir,
-      skillsDir:       SKILLS_DIR,
-      derivedDir:      DERIVED_DIR,
-      instructionsFile: INSTRUCTIONS,
-    });
-
-    // 3. Rebuild dense embeddings index incrementally in background
-    try {
-      const vaultNodes = nodes(vaultDir);
-      await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
-      await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
-    } catch (embedErr) {
-      // Ollama/embeddings offline non-fatal
-    }
-  } catch (err) {
-    // Non-fatal background log
+  } catch (conflictErr) {
+    // Non-fatal fallback
   }
+
+  // 2+3. Debounce the EXPENSIVE recompile + embeddings rebuild.
+  //       Rapid consecutive writes accumulate; only ONE compile fires
+  //       after a quiet period. Vault-cache is already invalidated
+  //       immediately at each call-site via invalidate().
+  if (recompileTimer) clearTimeout(recompileTimer);
+  recompileTimer = setTimeout(async () => {
+    recompileTimer = null;
+    try {
+      // Recompile instructions surface
+      await compileSurface({
+        vaultDir,
+        skillsDir:       SKILLS_DIR,
+        derivedDir:      DERIVED_DIR,
+        instructionsFile: INSTRUCTIONS,
+      });
+
+      // Rebuild dense embeddings index
+      try {
+        const vaultNodes = nodes(vaultDir);
+        await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
+        await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
+      } catch (embedErr) {
+        // Ollama/embeddings offline non-fatal
+      }
+    } catch (err) {
+      // Non-fatal background log
+    }
+  }, RECOMPILE_DEBOUNCE_MS);
 }
 
 
 // SSSS v2 frontmatter fields we pass through verbatim from request bodies.
-const PASSTHROUGH_FIELDS = ['priority', 'modality', 'confidence', 'importance', 'status', 'related', 'sources'];
+const PASSTHROUGH_FIELDS = [
+  'priority',
+  'modality',
+  'confidence',
+  'importance',
+  'status',
+  'related',
+  'sources',
+  'supersedes',
+  'superseded_by',
+  'contradicts',
+];
 
 router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     let list = nodes(vaultDir);
 
-    const { q, category, tag, limit = '200', offset = '0' } = req.query;
+    const { q, category, tag, status, limit = '200', offset = '0' } = req.query;
 
     if (q) {
       const query = String(q).toLowerCase();
@@ -98,6 +122,7 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
       );
     }
     if (category) list = list.filter(n => n.category === category);
+    if (status) list = list.filter(n => n.status === status);
     if (tag) list = list.filter(n => (n.tags || []).includes(tag));
 
     const total = list.length;
@@ -154,8 +179,15 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    writeNode(node, vaultDir);
-    invalidate();
+    const vaultResult = writeNodeValidated(node, vaultDir);
+    if (!vaultResult.success) {
+      return res.status(422).json({
+        error: 'Validation failed',
+        validation: vaultResult.validation,
+        repair: vaultResult.repair,
+      });
+    }
+    invalidate(vaultDir);
     triggerMutation(node, vaultDir);
     res.status(201).json(sanitizeNode(node));
   } catch (err) {
@@ -178,8 +210,15 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    writeNode(node, vaultDir);
-    invalidate();
+    const vaultResult = writeNodeValidated(node, vaultDir);
+    if (!vaultResult.success) {
+      return res.status(422).json({
+        error: 'Validation failed',
+        validation: vaultResult.validation,
+        repair: vaultResult.repair,
+      });
+    }
+    invalidate(vaultDir);
     triggerMutation(node, vaultDir);
     res.json(sanitizeNode(node));
   } catch (err) {
@@ -202,7 +241,7 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
       content:  actualContent,
     });
     updated.tags = tags ?? existing.tags ?? [];
-    updated.created_at = existing.created_at;
+    updated.created = existing.created;
 
     for (const key of PASSTHROUGH_FIELDS) {
       if (existing[key] !== undefined) updated[key] = existing[key];
@@ -211,8 +250,15 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
       if (req.body[key] !== undefined) updated[key] = req.body[key];
     }
 
-    writeNode(updated, vaultDir);
-    invalidate();
+    const vaultResult = writeNodeValidated(updated, vaultDir);
+    if (!vaultResult.success) {
+      return res.status(422).json({
+        error: 'Validation failed',
+        validation: vaultResult.validation,
+        repair: vaultResult.repair,
+      });
+    }
+    invalidate(vaultDir);
     triggerMutation(updated, vaultDir);
     res.json(sanitizeNode(updated));
   } catch (err) {
@@ -238,7 +284,7 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
         }
       }
     }
-    invalidate();
+    invalidate(vaultDir);
     triggerMutation(null, vaultDir);
     res.json({ deleted: true, slug: req.params.slug });
   } catch (err) {
