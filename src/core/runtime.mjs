@@ -44,7 +44,7 @@ export function findBinaryInPath(binaryName) {
 const DEFAULT_AGENTS = [
   { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 1, enabled: true, exec: 'flag' },
   { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions', priority: 3, enabled: true, exec: 'flag' },
-  { name: 'codex',       binary: 'codex',       flags: '--full-auto --json', priority: 4, enabled: true, exec: 'subcommand' },
+  { name: 'codex',       binary: 'codex',       flags: '--full-auto --json --skip-git-repo-check', priority: 4, enabled: true, exec: 'subcommand' },
 ];
 
 /**
@@ -304,22 +304,28 @@ export async function callLocalRuntime(prompt, system, config) {
     // Pre-flight command execution validation
     validateCommand(cmd);
 
+    const spawnEnv = {
+      ...process.env,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
+      GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || dynamicSecrets.anthropic_api_key,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY || dynamicSecrets.openai_api_key,
+      TAVILY_API_KEY: process.env.TAVILY_API_KEY || dynamicSecrets.tavily_api_key || tavilyApiKey,
+      BRAVE_API_KEY: process.env.BRAVE_API_KEY || dynamicSecrets.brave_api_key || braveApiKey,
+      EXA_API_KEY: process.env.EXA_API_KEY || dynamicSecrets.exa_api_key || exaApiKey,
+      SERPER_API_KEY: process.env.SERPER_API_KEY || dynamicSecrets.serper_api_key || serperApiKey,
+      GITHUB_TOKEN: process.env.GITHUB_TOKEN || dynamicSecrets.github_token || githubToken,
+    };
+
+    if (agent.name === 'antigravity' || agent.name === 'gemini') {
+      delete spawnEnv.GOOGLE_API_KEY;
+    }
+
     const result = spawnSync('sh', ['-c', cmd], {
       encoding: 'utf8',
       timeout,
       maxBuffer: 10 * 1024 * 1024,
-      env: {
-        ...process.env,
-        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || dynamicSecrets.anthropic_api_key,
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY || dynamicSecrets.openai_api_key,
-        TAVILY_API_KEY: process.env.TAVILY_API_KEY || dynamicSecrets.tavily_api_key || tavilyApiKey,
-        BRAVE_API_KEY: process.env.BRAVE_API_KEY || dynamicSecrets.brave_api_key || braveApiKey,
-        EXA_API_KEY: process.env.EXA_API_KEY || dynamicSecrets.exa_api_key || exaApiKey,
-        SERPER_API_KEY: process.env.SERPER_API_KEY || dynamicSecrets.serper_api_key || serperApiKey,
-        GITHUB_TOKEN: process.env.GITHUB_TOKEN || dynamicSecrets.github_token || githubToken,
-      },
+      env: spawnEnv,
       cwd: process.cwd(),
     });
 
