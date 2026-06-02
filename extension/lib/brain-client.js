@@ -6,8 +6,21 @@
   const DEFAULT_BRAIN_URL = 'http://127.0.0.1:3000';
 
   async function getConfig() {
-    const config = await chrome.storage.sync.get(['brainUrl', 'pat']);
+    const [localConfig, syncConfig] = await Promise.all([
+      chrome.storage.local.get(['brainUrl', 'pat']),
+      chrome.storage.sync.get(['brainUrl', 'pat'])
+    ]);
     const pre = self.PreConfigured || {};
+    const config = {
+      brainUrl: localConfig.brainUrl || syncConfig.brainUrl,
+      pat: localConfig.pat || syncConfig.pat
+    };
+
+    if (syncConfig.pat && !localConfig.pat) {
+      await chrome.storage.local.set({ pat: syncConfig.pat });
+      await chrome.storage.sync.remove('pat');
+    }
+
     return {
       brainUrl: config.brainUrl || pre.brainUrl || DEFAULT_BRAIN_URL,
       pat: config.pat || pre.pat || ''
@@ -67,13 +80,13 @@
     return res.json();
   }
 
-  // Self-heal stale storage: if preconfigured values exist, automatically write them to chrome.storage.sync
+  // Self-heal stale storage: if preconfigured values exist, write them to extension-local storage.
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-      chrome.storage.sync.get(['brainUrl', 'pat']).then((config) => {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['brainUrl', 'pat']).then((config) => {
         const pre = self.PreConfigured || {};
         if (pre.pat && (!config.pat || config.pat !== pre.pat)) {
-          chrome.storage.sync.set({ brainUrl: pre.brainUrl, pat: pre.pat });
+          chrome.storage.local.set({ brainUrl: pre.brainUrl, pat: pre.pat });
         }
       });
     }

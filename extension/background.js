@@ -75,7 +75,7 @@ function showBadge(text, color) {
 // ---------------------------------------------------------------------------
 // Message listener (popup, content-script, sidepanel → background)
 // ---------------------------------------------------------------------------
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'QUERY_BRAIN') {
     search(msg.query, msg.topK || 3)
       .then(data => sendResponse({ memories: data.results || [] }))
@@ -94,6 +94,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     healthCheck()
       .then(data => sendResponse({ connected: true, ...data }))
       .catch(() => sendResponse({ connected: false }));
+    return true;
+  }
+
+  if (msg.type === 'OPEN_SIDE_PANEL') {
+    const tabId = sender.tab?.id;
+    if (!chrome.sidePanel?.open || !tabId) {
+      sendResponse({ success: false, error: 'Side panel is unavailable for this tab.' });
+      return false;
+    }
+    chrome.sidePanel.open({ tabId })
+      .then(() => sendResponse({ success: true }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 });

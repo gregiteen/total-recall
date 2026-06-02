@@ -3,7 +3,8 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
-import { loadNodes, atomicWrite, safeStringify } from './vault.mjs';
+import { atomicWrite, safeStringify } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
 
@@ -83,7 +84,7 @@ function buildInferencePrompt(nodes) {
  * @returns {{ conclusions: object[], contradictions: object[], merge_candidates: object[], error? }}
  */
 export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const nodes = allNodes.filter(n => slugs.includes(n.slug) && n.status === 'active');
 
   if (nodes.length < 2) {
@@ -154,7 +155,7 @@ function writeConclusionNode(inboxDir, conclusion, sourceSlugList, vaultDir) {
   
   if (vaultDir) {
     try {
-      const allNodes = loadNodes(vaultDir);
+      const allNodes = getNodes(vaultDir);
       citations = sourceSlugList.map(s => {
         const matchingNode = allNodes.find(n => n.slug === s);
         const cat = matchingNode ? matchingNode.category : 'facts';
@@ -312,7 +313,7 @@ Output valid JSON:
  * @param {object} opts.runtimeConfig
  */
 export async function runSynthesisTask(slugA, slugB, { vaultDir, inboxDir, runtimeConfig }) {
-  const allNodes = loadNodes(vaultDir);
+  const allNodes = getNodes(vaultDir);
   const nodeA = allNodes.find(n => n.slug === slugA);
   const nodeB = allNodes.find(n => n.slug === slugB);
 

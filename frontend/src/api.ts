@@ -563,7 +563,7 @@ export async function resolveConflict(
 
 export async function saveMemory(slug: string, node: Partial<MemoryNode>): Promise<MemoryNode> {
   const res = await apiFetch(`${API_BASE}/api/memory/${slug}`, {
-    method: "PUT",
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(node),
   })
@@ -685,4 +685,3 @@ export async function fetchExtensionStatus(): Promise<{ available: boolean; conn
   if (!res.ok) return { available: false, connected: false }
   return res.json()
 }
-

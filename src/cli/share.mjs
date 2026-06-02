@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { parseLayerFlag, resolveBrainDir, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
-import { writeNode, createMemoryNode } from '../core/vault.mjs';
+import { createMemoryNode } from '../core/vault.mjs';
+import { writeNodeValidated } from '../core/validated-write.mjs';
 import { addToQueue } from '../core/research-queue.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import path from 'node:path';
@@ -160,7 +161,11 @@ export default async function share(args) {
     }];
   }
 
-  writeNode(node, vaultDir);
+  const vaultResult = writeNodeValidated(node, vaultDir);
+  if (!vaultResult.success) {
+    console.error(`  ❌ Validation failed: ${vaultResult.validation.errors.join('; ')}`);
+    process.exit(1);
+  }
   const layerLabel = layer === 'project' ? '[project]' : '[global]';
   console.log(`  ✅ Saved as ${category || 'facts'} ${layerLabel}: ${category || 'facts'}/${slug}.md`);
 

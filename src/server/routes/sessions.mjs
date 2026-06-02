@@ -205,7 +205,12 @@ router.get('/api/sessions/:id', requireAuth, requireScope('memory:read'), (req, 
 router.post('/api/sessions/ingest', ingestRateLimiter(), requireAuth, requireScope('memory:write'), (req, res) => {
   try {
     const body = req.body || {};
-    const source = body.source || 'api';
+    const source = String(body.source || 'api')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 48) || 'api';
 
     let messages;
     if (body.content && typeof body.content === 'string') {
@@ -333,4 +338,3 @@ router.delete('/api/sessions/:id', requireAuth, requireScope('memory:write'), (r
 });
 
 export { router as sessionsRouter, drainActiveEmbeddings };
-

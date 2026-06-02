@@ -1,0 +1,19 @@
+{
+  "name": "Total Recall — Sovereign Brain",
+  "short_name": "Total Recall",
+  "description": "Sovereign AI Memory System. Remember everything, recall anything.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "orientation": "any",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

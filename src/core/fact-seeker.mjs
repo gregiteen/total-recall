@@ -4,7 +4,8 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import os from 'os';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
-import { loadNodes, writeNode, atomicWrite, safeStringify } from './vault.mjs';
+import { writeNode, atomicWrite, safeStringify } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { addToQueue } from './research-queue.mjs';
 import { persistTaskToDisk } from './scheduler.mjs';
@@ -285,62 +286,87 @@ async function gatherFromSources(topicEntry, researchConfig) {
   const useGithub = (suggested_sources || []).includes('github') ||
     (tags || []).some(t => ['code', 'library', 'framework', 'open-source'].includes(t));
 
+  const tasks = [];
+
   // 1. Web search — Brave → Serper fallback, automatically selected
   if (availability.available.includes('brave-search') || availability.available.includes('serper')) {
-    try {
-      const webResults = await webSearch(topic, researchConfig, 5);
-      results.push(...webResults);
-      logger.info({ subsystem: 'fact-seeker', message: `Web search: ${webResults.length} results for "${topic}"` });
-    } catch (err) {
-      errors.push({ source: 'web-search', error: err.message });
-      logger.info({ subsystem: 'fact-seeker', message: `Web search failed: ${err.message}` });
-    }
+    tasks.push((async () => {
+      try {
+        const webResults = await webSearch(topic, researchConfig, 5);
+        logger.info({ subsystem: 'fact-seeker', message: `Web search: ${webResults.length} results for "${topic}"` });
+        return { success: true, results: webResults };
+      } catch (err) {
+        logger.info({ subsystem: 'fact-seeker', message: `Web search failed: ${err.message}` });
+        return { success: false, source: 'web-search', error: err.message };
+      }
+    })());
   }
 
   // 2. DuckDuckGo Instant Answers (always available, good for definitions/facts)
-  try {
-    const ddgResult = await duckduckgoInstant(topic, researchConfig);
-    if (ddgResult) results.push(ddgResult);
-  } catch (err) {
-    errors.push({ source: 'duckduckgo', error: err.message });
-  }
+  tasks.push((async () => {
+    try {
+      const ddgResult = await duckduckgoInstant(topic, researchConfig);
+      return { success: true, results: ddgResult ? [ddgResult] : [] };
+    } catch (err) {
+      return { success: false, source: 'duckduckgo', error: err.message };
+    }
+  })());
 
   // 3. Wikipedia (always available, high-quality structured knowledge)
-  try {
-    const wikiResult = await wikipediaFetch(topic, researchConfig);
-    if (wikiResult) results.push(wikiResult);
-  } catch (err) {
-    errors.push({ source: 'wikipedia', error: err.message });
-  }
+  tasks.push((async () => {
+    try {
+      const wikiResult = await wikipediaFetch(topic, researchConfig);
+      return { success: true, results: wikiResult ? [wikiResult] : [] };
+    } catch (err) {
+      return { success: false, source: 'wikipedia', error: err.message };
+    }
+  })());
 
   // 4. arXiv (for academic/research topics)
   if (useArxiv) {
-    try {
-      const arxivResults = await arxivSearch(topic, researchConfig, 3);
-      results.push(...arxivResults);
-      logger.info({ subsystem: 'fact-seeker', message: `arXiv: ${arxivResults.length} papers for "${topic}"` });
-    } catch (err) {
-      errors.push({ source: 'arxiv', error: err.message });
-    }
+    tasks.push((async () => {
+      try {
+        const arxivResults = await arxivSearch(topic, researchConfig, 3);
+        logger.info({ subsystem: 'fact-seeker', message: `arXiv: ${arxivResults.length} papers for "${topic}"` });
+        return { success: true, results: arxivResults };
+      } catch (err) {
+        return { success: false, source: 'arxiv', error: err.message };
+      }
+    })());
   }
 
   // 5. npm (for JS/Node topics)
   if (useNpm) {
-    try {
-      const npmResults = await npmSearch(topic, researchConfig, 3);
-      results.push(...npmResults);
-    } catch (err) {
-      errors.push({ source: 'npm', error: err.message });
-    }
+    tasks.push((async () => {
+      try {
+        const npmResults = await npmSearch(topic, researchConfig, 3);
+        return { success: true, results: npmResults };
+      } catch (err) {
+        return { success: false, source: 'npm', error: err.message };
+      }
+    })());
   }
 
   // 6. GitHub (for code/library topics)
   if (useGithub) {
-    try {
-      const ghResults = await githubSearch(topic, researchConfig, 'repositories', 3);
-      results.push(...ghResults);
-    } catch (err) {
-      errors.push({ source: 'github', error: err.message });
+    tasks.push((async () => {
+      try {
+        const ghResults = await githubSearch(topic, researchConfig, 'repositories', 3);
+        return { success: true, results: ghResults };
+      } catch (err) {
+        return { success: false, source: 'github', error: err.message };
+      }
+    })());
+  }
+
+  // Await all tasks concurrently in parallel
+  const taskResults = await Promise.all(tasks);
+
+  for (const res of taskResults) {
+    if (res.success) {
+      results.push(...res.results);
+    } else {
+      errors.push({ source: res.source, error: res.error });
     }
   }
 
@@ -730,7 +756,7 @@ Output ONLY valid JSON.`;
  * Evaluates coverage, temporal awareness, source diversity, and limitations.
  */
 export async function runSelfDiagnosis({ vaultDir, runtimeConfig }) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const activeNodes = nodes.filter(n => n.status === 'active');
   const agenda = loadAgenda();
   const availability = checkSourceAvailability(loadResearchConfig());
@@ -994,7 +1020,7 @@ async function pushDeliberationConclusion(conclusions = []) {
  * Phase 2/5: Deliberation
  */
 export async function runResearchDeliberationCycle({ vaultDir, nodeSlug, topic, runtimeConfig }) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const targetNode = nodes.find(n => n.slug === nodeSlug);
   if (!targetNode) {
     return { success: false, error: `Target node not found for slug: ${nodeSlug}` };
@@ -1309,7 +1335,7 @@ Output ONLY valid JSON.`;
  * Phase 3/5: Refinement & Clarity Auditing
  */
 export async function runResearchImprovementCycle({ vaultDir, nodeSlug, topic, runtimeConfig }) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const targetNode = nodes.find(n => n.slug === nodeSlug);
   if (!targetNode) {
     return { success: false, error: `Target node not found for slug: ${nodeSlug}` };
@@ -1384,7 +1410,7 @@ export async function runResearchMonitoringCycle({
   derivedDir,
   instructionsFile
 }) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const targetNode = nodes.find(n => n.slug === nodeSlug);
   if (!targetNode) {
     return { success: false, error: `Target node not found for slug: ${nodeSlug}` };
@@ -1490,7 +1516,7 @@ Output ONLY valid JSON.`;
  * Phase 5/5: Domain Tangents Expansion
  */
 export async function runResearchExpansionCycle({ vaultDir, nodeSlug, topic, runtimeConfig }) {
-  const nodes = loadNodes(vaultDir);
+  const nodes = getNodes(vaultDir);
   const targetNode = nodes.find(n => n.slug === nodeSlug);
   if (!targetNode) {
     return { success: false, error: `Target node not found for slug: ${nodeSlug}` };

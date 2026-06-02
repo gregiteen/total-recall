@@ -3,6 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import { callLocalRuntime } from './runtime.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import { getNodes, invalidate } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -164,6 +165,7 @@ async function promoteToVault(draftNode, confidenceAdj, vaultDir) {
 
   const targetPath = path.join(targetDir, `${data.slug}.md`);
   atomicWrite(targetPath, safeStringify(content, data));
+  invalidate(vaultDir);
 
   // Remove from inbox
   try { fs.unlinkSync(draftNode._filepath); } catch { /* ignore */ }
@@ -222,8 +224,7 @@ export async function runConclusionWriter({ inboxDir, vaultDir, quarantineDir, r
   }
 
   // Load all active vault nodes for comparison
-  const { loadNodes } = await import('./vault.mjs');
-  const allActiveNodes = loadNodes(vaultDir).filter(n => n.status === 'active');
+  const allActiveNodes = getNodes(vaultDir).filter(n => n.status === 'active');
 
   let approved = 0;
   let rejected = 0;

@@ -14,7 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { writeNode, loadNodes } from './vault.mjs';
+import { writeNode } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { agentDir, brainDir } from './config.mjs';
 
 const AGENT_DIR = agentDir;
@@ -75,7 +76,7 @@ export function detectRuleFiles(dirs) {
   // Load existing vault nodes to detect already-imported files
   let existingSlugs = new Set();
   try {
-    existingSlugs = new Set(loadNodes(VAULT_DIR).map(n => n.slug));
+    existingSlugs = new Set(getNodes(VAULT_DIR).map(n => n.slug));
   } catch { /* vault may not exist yet */ }
 
   for (const dir of searchDirs) {

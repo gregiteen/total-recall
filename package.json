@@ -50,7 +50,7 @@
     "local-llm"
   ],
   "author": "gregiteen",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/gregiteen/total-recall/issues"
   },

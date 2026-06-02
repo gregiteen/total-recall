@@ -17,6 +17,7 @@ import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
+import fs from 'node:fs';
 import {
   apiRateLimiter,
   corsOptions,
@@ -34,6 +35,13 @@ import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
+const PACKAGE_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
 
 // ─── Watchdog ───────────────────────────────────────────────────────────────────
 // Attach circuit-breaker log monitor before any subsystem can emit events.
@@ -91,8 +99,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
-import fs from 'node:fs';
-
 // ─── Health Check ───────────────────────────────────────────────────────────────
 
 app.get('/health', requireAuthOrLocal, async (req, res) => {
@@ -134,7 +140,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
 
   res.json({
     status: hasCriticalIssue ? 'degraded' : 'healthy',
-    version: '3.0.0',
+    version: PACKAGE_VERSION,
     uptime_seconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     disk,
@@ -205,60 +211,7 @@ try {
     logger.info('server', 'API routes mounted at /v1/chat/completions');
   }
 } catch (err) {
-  // api.mjs may still be in standalone mode — mount it directly
-  logger.warn('server', 'API router not exported as middleware, loading standalone routes...');
-  const { callLocalRuntimeRaw, loadRuntimeConfig } = await import('../core/runtime.mjs');
-  const os = await import('node:os');
-
-  app.post('/v1/chat/completions', async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Missing or invalid Authorization header' });
-      }
-
-      const configPath = path.join(configBrainDir, 'config', 'runtime.yml');
-      const config = loadRuntimeConfig(configPath);
-      const { messages, model, temperature } = req.body;
-
-      if (!messages || messages.length === 0) {
-        return res.status(400).json({ error: 'Messages array is required' });
-      }
-
-      const activeConfig = {
-        ...config,
-        model: model || config.model,
-        temperature: temperature || config.temperature
-      };
-
-      if (model && activeConfig.agents) {
-        const targetAgentName = model.toLowerCase();
-        const idx = activeConfig.agents.findIndex(a => a.name === targetAgentName);
-        if (idx >= 0) {
-          activeConfig.agents = activeConfig.agents.map(a => ({ ...a }));
-          activeConfig.agents[idx].priority = 0;
-          activeConfig.agents.sort((a, b) => a.priority - b.priority);
-        }
-      }
-
-      const response = await callLocalRuntimeRaw(messages, activeConfig);
-
-      res.json({
-        id: `chatcmpl-${Date.now()}`,
-        object: 'chat.completion',
-        created: Math.floor(Date.now() / 1000),
-        model: model || config.model,
-        choices: [{
-          index: 0,
-          message: response,
-          finish_reason: 'stop'
-        }]
-      });
-    } catch (error) {
-      logger.error('api', 'API Error', { error: error.message });
-      res.status(500).json({ error: error.message });
-    }
-  });
+  logger.error('server', `API router failed to load; /v1/chat/completions left unmounted: ${err.message}`);
 }
 
 
@@ -271,7 +224,7 @@ const frontendDist = path.join(ROOT, 'frontend', 'dist');
 if (!fs.existsSync(path.join(frontendDist, 'index.html'))) {
   const frontendDir = path.join(ROOT, 'frontend');
   if (fs.existsSync(path.join(frontendDir, 'package.json'))) {
-    log.info('Frontend not built. Building automatically...');
+    logger.info('server', 'Frontend not built. Building automatically...');
     try {
       const { execSync } = await import('node:child_process');
       execSync('npm install --no-audit --no-fund 2>/dev/null && npm run build', {
@@ -279,9 +232,9 @@ if (!fs.existsSync(path.join(frontendDist, 'index.html'))) {
         stdio: 'pipe',
         timeout: 120_000,
       });
-      log.info('Frontend build complete.');
+      logger.info('server', 'Frontend build complete.');
     } catch (err) {
-      log.warn(`Frontend auto-build failed: ${err.message?.split('\\n')[0] || 'unknown error'}. Dashboard will show API info instead.`);
+      logger.warn('server', `Frontend auto-build failed: ${err.message?.split('\\n')[0] || 'unknown error'}. Dashboard will show API info instead.`);
     }
   }
 }
@@ -865,4 +818,3 @@ async function handleShutdown(signal) {
 
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
-

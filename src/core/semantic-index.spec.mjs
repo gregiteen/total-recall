@@ -269,12 +269,16 @@ describe('Performance & Cache Optimization', () => {
       { slug: 'active-slug-1', title: 'Active 1', body: 'body content 1' }
     ];
 
-    // Seed the index with both an active slug and a stale/deleted slug
+    // Seed the index with both an active slug and a stale/deleted slug.
+    // The active slug's content_sha256 must match nodeToEmbedText() output
+    // so buildEmbeddingsIndex recognizes it as unchanged and skips it.
+    const { nodeToEmbedText } = await import('./embeddings.mjs');
+    const activeHash = crypto.createHash('sha256').update(nodeToEmbedText(activeNodes[0])).digest('hex');
     fs.mkdirSync(tmpDir, { recursive: true });
     fs.writeFileSync(
       path.join(tmpDir, 'embeddings.json'),
       JSON.stringify({
-        'active-slug-1': { embedding: [0.1, 0.2, 0.3], model: 'gemini-embedding-2', generated_at: new Date().toISOString() },
+        'active-slug-1': { embedding: [0.1, 0.2, 0.3], model: 'gemini-embedding-2', generated_at: new Date().toISOString(), content_sha256: activeHash },
         'stale-slug-99': { embedding: [0.4, 0.5, 0.6], model: 'gemini-embedding-2', generated_at: new Date().toISOString() }
       }),
       'utf8'

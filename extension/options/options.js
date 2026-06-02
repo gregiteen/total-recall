@@ -13,12 +13,14 @@
 
   // ---- Load saved settings ----
   async function loadSettings() {
-    const settings = await chrome.storage.sync.get([
-      'brainUrl',
-      'pat',
+    const [localSettings, syncSettings] = await Promise.all([
+      chrome.storage.local.get(['brainUrl', 'pat']),
+      chrome.storage.sync.get([
       'blocklist',
       'captureGranularity'
+      ])
     ]);
+    const settings = { ...syncSettings, ...localSettings };
 
     const pre = self.PreConfigured || {};
     brainUrlInput.value = settings.brainUrl || pre.brainUrl || 'http://127.0.0.1:3000';
@@ -48,9 +50,12 @@
       const granularityRadio = document.querySelector('input[name="granularity"]:checked');
       const captureGranularity = granularityRadio ? granularityRadio.value : 'minimal';
 
-      await chrome.storage.sync.set({
+      await chrome.storage.local.set({
         brainUrl: brainUrlInput.value.trim() || 'http://127.0.0.1:3000',
         pat: patInput.value.trim(),
+      });
+      await chrome.storage.sync.remove('pat');
+      await chrome.storage.sync.set({
         blocklist,
         captureGranularity
       });

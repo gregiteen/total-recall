@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { loadNodes, loadSkills, atomicWrite } from './vault.mjs';
+import crypto from 'crypto';
+import { loadSkills, atomicWrite, walkMd } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
@@ -114,7 +116,113 @@ function extractRuleContent(filePath) {
   return content.trim();
 }
 
-export function buildRulesBlock(skillsDir, nodes = [], { vaultDir, consumer = 'ide' } = {}) {
+/**
+ * Load cache of compacted rules.
+ */
+function loadCompactedRulesCache(derivedDir) {
+  if (!derivedDir) return {};
+  const cachePath = path.join(derivedDir, 'compacted-rules.json');
+  if (!fs.existsSync(cachePath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Save cache of compacted rules.
+ */
+function saveCompactedRulesCache(derivedDir, cache) {
+  if (!derivedDir) return;
+  const cachePath = path.join(derivedDir, 'compacted-rules.json');
+  try {
+    fs.mkdirSync(derivedDir, { recursive: true });
+    atomicWrite(cachePath, JSON.stringify(cache, null, 2));
+  } catch (err) {
+    // Non-fatal
+  }
+}
+
+/**
+ * Heuristically summarize a memory node.
+ */
+export function heuristicCompact(node) {
+  const title = (node.title || '').trim();
+  const text = (node.body || node.content || '').trim();
+  
+  let summary = title;
+  if (text) {
+    const firstLine = text.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+    if (firstLine && 
+        !title.toLowerCase().includes(firstLine.toLowerCase()) && 
+        !firstLine.toLowerCase().includes(title.toLowerCase())) {
+      const separator = /[.!?]$/.test(title) ? ' ' : ' — ';
+      summary = `${title}${separator}${firstLine}`;
+    }
+  }
+  
+  summary = summary.replace(/\s+/g, ' ');
+  if (summary.length > 180) {
+    summary = summary.substring(0, 180).trim() + '... (use recall to read more)';
+  }
+  return summary;
+}
+
+/**
+ * Compact a single memory node using LLM or heuristic fallback.
+ */
+async function compactNode(node, derivedDir) {
+  const title = (node.title || '').trim();
+  const body = (node.body || node.content || '').trim();
+  const fullText = `${title}\n\n${body}`;
+  const contentHash = crypto.createHash('sha256').update(fullText).digest('hex');
+
+  // Load from cache if possible
+  let cache = {};
+  if (derivedDir) {
+    cache = loadCompactedRulesCache(derivedDir);
+    if (cache[node.slug] && cache[node.slug].content_sha256 === contentHash) {
+      return cache[node.slug].compacted;
+    }
+  }
+
+  // Fallback default
+  let compacted = heuristicCompact(node);
+
+  // If LLM compacting is requested
+  if (process.env.TR_LLM_COMPACT === 'true') {
+    try {
+      const { callLocalRuntime, loadRuntimeConfig } = await import('./runtime.mjs');
+      const runtimeConfig = loadRuntimeConfig();
+      
+      const systemPrompt = "You are a Rule Compactor. Your task is to compress a system instruction or preference rule into a single, dense, highly actionable sentence. Preserve all key constraints, file paths, model names, or terminal commands verbatim. Return only the compacted sentence and nothing else.";
+      const userPrompt = `Rule Title: ${title}\nRule Body: ${body}`;
+      
+      const response = await callLocalRuntime(userPrompt, systemPrompt, runtimeConfig);
+      const cleanResponse = response.trim().replace(/\s+/g, ' ');
+      if (cleanResponse && cleanResponse.length > 0 && cleanResponse.length < 250) {
+        compacted = cleanResponse;
+      }
+    } catch (err) {
+      // Graceful fallback to heuristic
+    }
+  }
+
+  // Save to cache
+  if (derivedDir) {
+    cache[node.slug] = {
+      compacted,
+      content_sha256: contentHash,
+      updated_at: new Date().toISOString()
+    };
+    saveCompactedRulesCache(derivedDir, cache);
+  }
+
+  return compacted;
+}
+
+export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir } = {}) {
   let combined;
 
   if (consumer === 'api') {
@@ -198,48 +306,42 @@ Show all available commands.
 `;
   }
 
-  // 1. Filter expired rules and auto-archive them
+  // 1. Filter expired rules. Compilation must remain a pure projection step;
+  // archival is handled by explicit memory operations.
   const now = new Date();
   const isExpired = (n) => n.expires_at && new Date(n.expires_at) <= now;
 
   const expiredNodes = nodes.filter(n => n.status === 'active' && isExpired(n));
   for (const expired of expiredNodes) {
-    expired.status = 'deprecated';
-    console.error(`⏰ Auto-archived expired rule: ${expired.slug}`);
-    if (vaultDir) {
-      try {
-        const nodePath = path.join(vaultDir, expired.category, `${expired.slug}.md`);
-        if (fs.existsSync(nodePath)) {
-          let content = fs.readFileSync(nodePath, 'utf8');
-          content = content.replace(/^status:\s*active$/m, 'status: deprecated');
-          atomicWrite(nodePath, content);
-        }
-      } catch { /* non-fatal: archive is best-effort */ }
-    }
+    console.error(`⏰ Expired rule omitted from surface: ${expired.slug}`);
   }
 
-  // 2. Group active (non-expired) rules from SSSS vault nodes
+  // 2. Group active (non-expired) rules from SSSS vault nodes.
+  // Note: Only invariants, preferences, and anti-patterns are included in instructions,
+  // enforcing Category Partitioning (concepts, decisions, facts are search-only).
   const invariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active' && !isExpired(n));
   const preferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active' && !isExpired(n));
   const corrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n));
 
-  const formatNodes = (list) => {
-    return list.map(n => {
-      const text = n.body || n.content || '';
-      return text.startsWith('-') ? text : `- ${text}`;
-    }).join('\n');
+  const formatNodes = async (list) => {
+    const formatted = [];
+    for (const n of list) {
+      const snippet = await compactNode(n, derivedDir);
+      formatted.push(snippet.startsWith('-') ? snippet : `- ${snippet}`);
+    }
+    return formatted.join('\n');
   };
 
   if (invariants.length > 0) {
-    combined += `\n\n## Invariant Rules\n\n${formatNodes(invariants)}`;
+    combined += `\n\n## Invariant Rules\n\n${await formatNodes(invariants)}`;
   }
 
   if (preferences.length > 0) {
-    combined += `\n\n## User Preferences\n\n${formatNodes(preferences)}`;
+    combined += `\n\n## User Preferences\n\n${await formatNodes(preferences)}`;
   }
 
   if (corrections.length > 0) {
-    combined += `\n\n## Corrections\n\n${formatNodes(corrections)}`;
+    combined += `\n\n## Corrections\n\n${await formatNodes(corrections)}`;
   }
 
   // 2. Append legacy rule sheet files if they exist
@@ -283,9 +385,9 @@ function injectDirectives(fileContent, rulesBlock) {
 /**
  * Write or update a platform instruction shim with the pointer and active rules.
  */
-function writeShim(shimPath, skillsDir, nodes = [], { vaultDir } = {}) {
+async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir } = {}) {
   const shimDir = path.dirname(shimPath);
-  const rulesBlock = buildRulesBlock(skillsDir, nodes, { vaultDir });
+  const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir });
   const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
   const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
@@ -333,9 +435,7 @@ const CLIENT_SHIMS = {
 };
 
 /**
- * Read the set of connected IDE clients from config/clients.json.
- * Returns a Set of client name strings, or null if the file is
- * missing / empty / malformed (null signals "write all shims").
+ * Read the connected client config.
  */
 function readConnectedClients(clientsPath) {
   try {
@@ -351,22 +451,14 @@ function readConnectedClients(clientsPath) {
 }
 
 /**
- * Compile pointers with active rules directly into root instruction shims.
- *
- * ALL files (including INSTRUCTIONS.md) are user-owned. TR only injects
- * content between the <!-- BEGIN/END INJECTED ACTIVE DIRECTIVES --> markers,
- * preserving any user-written content outside the markers.
- *
- * Only shims for connected clients (per config/clients.json) are written.
- * If clients.json is absent or unreadable, ALL shims are written (backward compat).
- * INSTRUCTIONS.md is always written as the canonical source.
+ * Compile shims asynchronously.
  */
-function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir } = {}) {
+async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir } = {}) {
   const agentDir = path.dirname(instructionsFile);
   const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
 
   // Always write the canonical INSTRUCTIONS.md
-  writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir });
+  await writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir, derivedDir });
 
   // Determine which client shims to write
   const clientsPath = path.join(baseDir, '.agent', 'config', 'clients.json');
@@ -376,7 +468,7 @@ function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir } =
     // No clients.json → backward compat: write ALL client shims
     for (const files of Object.values(CLIENT_SHIMS)) {
       for (const file of files) {
-        writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir });
+        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
       }
     }
   } else {
@@ -385,7 +477,7 @@ function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir } =
       const files = CLIENT_SHIMS[client];
       if (!files) continue;
       for (const file of files) {
-        writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir });
+        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
       }
     }
   }
@@ -394,11 +486,29 @@ function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir } =
 /**
  * Main surface compilation entry point.
  */
-export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile }) {
-  const nodes = loadNodes(vaultDir);
+export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force = false }) {
+  const nodes = getNodes(vaultDir);
+
+  // ── Incremental compilation: vault content hash check ──
+  const hashFile = path.join(derivedDir, 'vault-hash.txt');
+  const currentHash = computeVaultHash(vaultDir);
+
+  if (!force && fs.existsSync(hashFile)) {
+    const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
+    if (storedHash === currentHash) {
+      return {
+        nodesProcessed: nodes.length,
+        skillsInjected: 0,
+        semanticIndexed: 0,
+        semanticUnavailable: false,
+        skipped: true,
+        reason: 'vault-hash-unchanged'
+      };
+    }
+  }
 
   // 1. Write pointer and active rules to all instruction shims
-  compilePointers(instructionsFile, skillsDir, nodes, { vaultDir });
+  await compilePointers(instructionsFile, skillsDir, nodes, { vaultDir, derivedDir });
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
@@ -415,30 +525,70 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   }));
   atomicWrite(path.join(derivedDir, 'graph-index.jsonl'), graphIndex.map(n => JSON.stringify(n)).join('\n'));
   atomicWrite(
-    path.join(derivedDir, 'memory-layers.jsonl'),
-    buildMemoryLayerIndex(nodes).map(n => JSON.stringify(n)).join('\n')
+      path.join(derivedDir, 'memory-layers.jsonl'),
+      buildMemoryLayerIndex(nodes).map(n => JSON.stringify(n)).join('\n')
   );
 
   // 3. Build semantic embeddings index if available (fire-and-forget)
   let semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true };
   try {
-    const { buildSemanticIndex } = await import('./semantic-index.mjs');
-    semanticResult = await buildSemanticIndex(nodes, derivedDir);
-  } catch { /* semantic index is optional — never block compile */ }
+    const { buildEmbeddingsIndex } = await import('./embeddings.mjs');
+    const embResult = await buildEmbeddingsIndex(nodes, derivedDir);
+    semanticResult = { indexed: embResult.built, skipped: embResult.skipped, unavailable: false };
+  } catch { /* semantic index is optional */ }
 
-  // 4. Generate Obsidian Canvas (fire-and-forget)
+  // 4. Generate Obsidian Canvas
   try {
     generateCanvas(nodes, vaultDir);
   } catch { /* non-fatal */ }
 
+  // 5. Write vault hash + projection manifest
+  atomicWrite(hashFile, currentHash);
+  writeProjectionManifest(derivedDir, currentHash);
+
   return {
     nodesProcessed: nodes.length,
-    skillsInjected: 0,  // v2: no more skill injection
+    skillsInjected: 0,
     semanticIndexed: semanticResult.indexed,
     semanticUnavailable: semanticResult.unavailable
   };
 }
+
+/**
+ * Compute vault content hash.
+ */
+function computeVaultHash(vaultDir) {
+  const files = walkMd(vaultDir).sort();
+  const hash = crypto.createHash('sha256');
+  for (const file of files) {
+    try {
+      const stat = fs.statSync(file);
+      hash.update(`${file}:${stat.mtimeMs}:${stat.size}\n`);
+    } catch { /* skip unreadable files */ }
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * Write projection manifest.
+ */
+function writeProjectionManifest(derivedDir, vaultHash) {
+  const manifest = {
+    type: 'projection-manifest',
+    generated_at: new Date().toISOString(),
+    vault_hash: `sha256:${vaultHash}`,
+    projections: [
+      { file: 'graph-index.jsonl', disposable: true },
+      { file: 'memory-layers.jsonl', disposable: true },
+      { file: 'embeddings.jsonl', disposable: true },
+      { file: 'vault-hash.txt', disposable: true }
+    ],
+    rebuild_command: 'npx total-recall compile'
+  };
+  atomicWrite(path.join(derivedDir, 'MANIFEST.json'), JSON.stringify(manifest, null, 2));
+}
+
 // ─── Legacy exports (kept for backward compatibility) ───
 export function routeNodesToSkills() { return []; }
 export function injectSkills() {}
-export function compileTier1(nodes, instructionsFile) { compilePointers(instructionsFile); }
+export async function compileTier1(nodes, instructionsFile) { await compilePointers(instructionsFile); }

@@ -59,7 +59,7 @@ export async function runRebuild(options = {}) {
 
   console.log('🏗️  Recompiling surface from canonical vault...');
   try {
-    const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
+    const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true });
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
     console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);

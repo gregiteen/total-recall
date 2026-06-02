@@ -80,6 +80,10 @@ async function dispatchTask(task) {
       case 'memory-maintenance':
         return await runMaintenanceTask(task);
 
+      case 'proactive-research':
+      case 'research-acquisition':
+        return await runResearchTask(task);
+
       default:
         // All other categories (research, deliberation, inference, etc.)
         // require LLM and are handled by IDE agents, not the daemon.
@@ -249,6 +253,17 @@ async function main() {
           });
         } catch (err) {
           logger.info({ subsystem: 'daemon-loop', message: `Surface recompile error: ${err.message}` });
+        }
+
+        // Compact any append logs with accumulated dirty entries
+        try {
+          const { compactAppendLogs } = await import('./append-log.mjs');
+          const compactResult = compactAppendLogs();
+          if (compactResult.logs_compacted > 0) {
+            logger.info({ subsystem: 'daemon-loop', message: `Compacted ${compactResult.logs_compacted} append logs (${compactResult.total_entries} entries)` });
+          }
+        } catch (err) {
+          logger.info({ subsystem: 'daemon-loop', message: `Append log compaction error: ${err.message}` });
         }
       }
 

@@ -13,7 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import matter from 'gray-matter';
-import { loadNodes, writeNode, deleteNode } from './vault.mjs';
+import { writeNode, deleteNode } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { brainDir } from './config.mjs';
 
 const getBrainDir = () => {
@@ -235,7 +236,7 @@ export function loadQueue(overrideBrainDir) {
       let node = null;
       if (item.node_slug) {
         try {
-          const nodes = loadNodes(vaultDir);
+          const nodes = getNodes(vaultDir);
           node = nodes.find(n => n.slug === item.node_slug);
           if (!node) {
             const inboxFile = path.join(effectiveBrainDir, 'memory-inbox', 'pending', `${item.node_slug}.md`);
@@ -384,7 +385,7 @@ export function updateQueueItem(id, patch = {}, overrideBrainDir) {
   let node = null;
   if (item.node_slug) {
     try {
-      const nodes = loadNodes(vaultDir);
+      const nodes = getNodes(vaultDir);
       node = nodes.find(n => n.slug === item.node_slug);
       
       if (!node) {

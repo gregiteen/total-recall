@@ -37,22 +37,6 @@ function stripUndefined(obj) {
  * @returns {string}        The serialized markdown with frontmatter
  */
 export function safeStringify(content, data) {
-  if (data && data.type === 'memory') {
-    const now = new Date().toISOString();
-    if (!data.x_temporal_context) {
-      data.x_temporal_context = data.updated || data.created || now;
-    }
-    if (!data.x_citations) {
-      data.x_citations = [{
-        source: data.source?.type || 'unknown',
-        title: data.title || 'Untitled Memory',
-        url: data.source?.session_id ? `session://${data.source.session_id}` : 'unknown',
-        published: data.x_temporal_context,
-        relevance: 1.0,
-        accessed: now
-      }];
-    }
-  }
   return matter.stringify(content ?? '', stripUndefined(data ?? {}));
 }
 
@@ -63,13 +47,12 @@ export function walkMd(dir) {
   let results = [];
   if (!fs.existsSync(dir)) return results;
   
-  const list = fs.readdirSync(dir);
-  for (const file of list) {
-    const fullPath = path.join(dir, file);
-    const stat = fs.statSync(fullPath);
-    if (stat && stat.isDirectory()) {
+  const list = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of list) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
       results = results.concat(walkMd(fullPath));
-    } else if (fullPath.endsWith('.md')) {
+    } else if (entry.name.endsWith('.md')) {
       results.push(fullPath);
     }
   }
@@ -178,13 +161,18 @@ export function writeNode(node, vaultDir) {
  * @returns {boolean}
  */
 export function deleteNode(slug, vaultDir) {
-  const nodes = loadNodes(vaultDir);
-  const node = nodes.find(n => n.slug === slug);
-  if (!node) return false;
-  const filePath = path.join(vaultDir, node.category, `${node.slug}.md`);
-  if (fs.existsSync(filePath)) {
-    fs.rmSync(filePath);
-    return true;
+  if (!SAFE_NAME.test(slug)) return false;
+  if (!fs.existsSync(vaultDir)) return false;
+  
+  // Scan category directories directly instead of loading entire vault
+  const entries = fs.readdirSync(vaultDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const filePath = path.join(vaultDir, entry.name, `${slug}.md`);
+    if (fs.existsSync(filePath)) {
+      fs.rmSync(filePath);
+      return true;
+    }
   }
   return false;
 }

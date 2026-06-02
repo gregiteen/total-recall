@@ -52,10 +52,11 @@ import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import matter from 'gray-matter';
 import { fileURLToPath } from 'node:url';
+import yaml from 'yaml';
 import { loadRuntimeConfig } from '../core/runtime.mjs';
 
 
-import { loadNodes, writeNode, deleteNode, walkMd, safeStringify } from '../core/vault.mjs';
+import { writeNode, deleteNode, safeStringify } from '../core/vault.mjs';
 import { getNodes, invalidate } from '../core/vault-cache.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
@@ -232,6 +233,161 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
 });
 
 /**
+ * POST /api/vault/compact
+ * Compact all active append-only log files (dedup, remove tombstones).
+ */
+router.post('/api/vault/compact', requireAuth, requireScope('memory:write'), async (req, res) => {
+  try {
+    const { compactAppendLogs } = await import('../core/append-log.mjs');
+    const result = compactAppendLogs();
+    res.json({ compacted: true, ...result });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/context
+ * Dynamic streaming context compilation.
+ * Assembles a query-aware, temporally-scored, budget-constrained context
+ * document from the vault in real-time. Every token earns its place.
+ *
+ * Body: { query: string, budget?: object, momentum_slugs?: string[] }
+ * Returns: { context: string, stats: object }
+ */
+router.post('/api/context', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { compileContext } = await import('../core/context-compiler.mjs');
+    const { query, budget, momentum_slugs } = req.body || {};
+    const result = await compileContext({
+      query: query || '',
+      vaultDir: VAULT_DIR,
+      derivedDir: DERIVED_DIR,
+      budget: budget || {},
+      consumer: 'api',
+      momentumSlugs: momentum_slugs || [],
+    });
+    res.json(result);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/context/preview
+ * Lightweight context preview — returns temporally-scored candidates
+ * and budget allocation without computing embeddings.
+ */
+router.get('/api/context/preview', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { previewContext } = await import('../core/context-compiler.mjs');
+    const result = previewContext({ vaultDir: VAULT_DIR });
+    res.json(result);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/context/stream
+ * Massively parallel context streaming via Flash fan-out.
+ * Chunks the entire vault, dispatches parallel Flash calls to score
+ * every node against the query simultaneously, merges into budget.
+ *
+ * Body: { query: string, budget_tokens?: number, batch_size?: number,
+ *         concurrency?: number, min_score?: number }
+ * Returns: { context: string, stats: object, scored: array }
+ */
+router.post('/api/context/stream', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { streamParallelContext } = await import('../core/parallel-context.mjs');
+    const { query, budget_tokens, batch_size, concurrency, min_score } = req.body || {};
+    if (!query) return badRequest(res, 'query is required');
+    const result = await streamParallelContext({
+      query,
+      vaultDir: VAULT_DIR,
+      budgetTokens: budget_tokens,
+      batchSize: batch_size,
+      concurrency,
+      minScore: min_score,
+    });
+    res.json(result);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/context/flash/health
+ * Check Flash API connectivity for parallel context streaming.
+ */
+router.get('/api/context/flash/health', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { checkFlashHealth } = await import('../core/parallel-context.mjs');
+    const result = await checkFlashHealth();
+    res.json(result);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+// ─── Vector Field ─────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/field/compile
+ * Compile the full vector field: embed all nodes, compute N×N covariance
+ * matrix, track velocities, persist to disk.
+ */
+router.post('/api/field/compile', requireAuth, requireScope('memory:recompile'), async (req, res) => {
+  try {
+    const { compileField } = await import('../core/vector-field.mjs');
+    const result = await compileField({ vaultDir: VAULT_DIR, derivedDir: DERIVED_DIR });
+    res.json({ compiled: true, ...result.meta });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/field/sample
+ * Sample the vector field at a query point.
+ * Returns ranked nodes with direct similarity, entanglement boost, and velocity.
+ *
+ * Body: { query: string, top_k?: number, entanglement_boost?: number, velocity_weight?: number }
+ */
+router.post('/api/field/sample', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { sampleField } = await import('../core/vector-field.mjs');
+    const { query, top_k, entanglement_boost, velocity_weight } = req.body || {};
+    if (!query) return badRequest(res, 'query is required');
+    const result = await sampleField({
+      query,
+      topK: top_k,
+      entanglementBoost: entanglement_boost,
+      velocityWeight: velocity_weight,
+      derivedDir: DERIVED_DIR,
+    });
+    res.json(result);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/field/stats
+ * Vector field statistics: point count, velocity distribution,
+ * strongest couplings, compilation metadata.
+ */
+router.get('/api/field/stats', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { fieldStats } = await import('../core/vector-field.mjs');
+    res.json(fieldStats(DERIVED_DIR));
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
  * POST /api/dream
  */
 router.post('/api/dream', requireAuth, requireScope('memory:recompile'), async (req, res) => {
@@ -254,23 +410,38 @@ router.post('/api/dream', requireAuth, requireScope('memory:recompile'), async (
 });
 
 /**
+ * GET /api/vault/hash
+ * Lightweight endpoint for PWA cache invalidation.
+ * Returns only the vault content hash — no expensive I/O.
+ */
+router.get('/api/vault/hash', requireAuth, requireScope('memory:read'), (req, res) => {
+  try {
+    const hashFile = path.join(DERIVED_DIR, 'vault-hash.txt');
+    const hash = fs.existsSync(hashFile) ? fs.readFileSync(hashFile, 'utf8').trim() : null;
+    res.json({ vault_hash: hash });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
  * GET /api/vault/status
  */
 router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
-    const nodeCount   = fs.existsSync(VAULT_DIR)  ? walkMd(VAULT_DIR).length  : 0;
-    const skillCount  = fs.existsSync(SKILLS_DIR)  ? fs.readdirSync(SKILLS_DIR).filter(d =>
-      fs.existsSync(path.join(SKILLS_DIR, d, 'SKILL.md'))).length : 0;
+    // Use vault-cache instead of scanning every .md file from disk
+    const nodeCount = getNodes(VAULT_DIR).length;
+    const skillCount  = fs.existsSync(SKILLS_DIR)  ? fs.readdirSync(SKILLS_DIR, { withFileTypes: true }).filter(d =>
+      d.isDirectory() && fs.existsSync(path.join(SKILLS_DIR, d.name, 'SKILL.md'))).length : 0;
     const lastCompile = fs.existsSync(INSTRUCTIONS)
       ? fs.statSync(INSTRUCTIONS).mtime.toISOString()
       : null;
     const derivedFiles = fs.existsSync(DERIVED_DIR)
       ? fs.readdirSync(DERIVED_DIR).length : 0;
 
-    const vaultEmbedCount   = fs.existsSync(path.join(DERIVED_DIR, 'embeddings.json'))
-      ? Object.keys(JSON.parse(fs.readFileSync(path.join(DERIVED_DIR, 'embeddings.json'), 'utf8') || '{}')).length : 0;
-    const sessionEmbedCount = fs.existsSync(path.join(DERIVED_DIR, 'session-embeddings.json'))
-      ? Object.keys(JSON.parse(fs.readFileSync(path.join(DERIVED_DIR, 'session-embeddings.json'), 'utf8') || '{}')).length : 0;
+    // Use mtime-cached loaders instead of raw readFile + JSON.parse
+    const vaultEmbedCount   = Object.keys(loadEmbeddingsIndex(DERIVED_DIR)).length;
+    const sessionEmbedCount = Object.keys(loadSessionEmbeddingsIndex(DERIVED_DIR)).length;
 
     // CLI agent availability (best-effort)
     const { findBinaryInPath } = await import('../core/runtime.mjs');
@@ -471,6 +642,7 @@ router.get('/api', (req, res) => {
       },
       vault: {
         'POST /api/vault/compile':          'Recompile SSSS surface (INSTRUCTIONS.md)',
+        'POST /api/vault/compact':          'Compact all active append-only log files',
         'GET /api/vault/status':            'Node count, skill count, last compile time',
       },
       keys: {
@@ -728,17 +900,7 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
 
 // ─── Chrome Extension Download ───────────────────────────────────────────────
 
-router.get('/api/extension/download', async (_req, res) => {
-  let preconfiguredPath = '';
-  let originalContent = '';
-  const cleanup = () => {
-    if (preconfiguredPath && originalContent) {
-      try {
-        fs.writeFileSync(preconfiguredPath, originalContent, 'utf8');
-      } catch {}
-    }
-  };
-
+router.get('/api/extension/download', requireAuth, requireScope('config:read'), async (_req, res) => {
   try {
     // Extension lives at <package-root>/extension/
     const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
@@ -746,30 +908,8 @@ router.get('/api/extension/download', async (_req, res) => {
       return res.status(404).json({ error: 'Chrome extension not found in this installation.' });
     }
 
-    // Read local brain configuration to get active URL and token
-    const brainPath = path.join(CONFIG_DIR, 'brain.json');
-    let brainUrl = '';
-    let patToken = '';
-    if (fs.existsSync(brainPath)) {
-      try {
-        const brain = JSON.parse(fs.readFileSync(brainPath, 'utf8'));
-        brainUrl = brain.url || '';
-        patToken = brain.token || '';
-      } catch {}
-    }
-
-    // Overwrite preconfigured.js temporarily with injected values
-    preconfiguredPath = path.join(extDir, 'lib', 'preconfigured.js');
-    if (fs.existsSync(preconfiguredPath)) {
-      originalContent = fs.readFileSync(preconfiguredPath, 'utf8');
-      const injectedContent = `// Exposes default configuration dynamically injected by the server
-self.PreConfigured = {
-  brainUrl: "${brainUrl}",
-  pat: "${patToken}"
-};
-`;
-      fs.writeFileSync(preconfiguredPath, injectedContent, 'utf8');
-    }
+    // Never inject PATs into packaged extension source. Pair from the extension
+    // options page so secrets stay in extension-local storage.
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.zip"');
@@ -784,18 +924,14 @@ self.PreConfigured = {
         res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.tar.gz"');
         const tar = spawn('tar', ['czf', '-', '-C', path.dirname(extDir), 'extension'], { stdio: ['ignore', 'pipe', 'ignore'] });
         tar.stdout.pipe(res);
-        tar.on('error', err => { cleanup(); if (!res.headersSent) serverError(res, err); });
-        tar.on('close', () => { cleanup(); if (!res.writableEnded) res.end(); });
-      } else {
-        cleanup();
+        tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
+        tar.on('close', () => { if (!res.writableEnded) res.end(); });
       }
     });
     zip.on('close', code => {
-      cleanup();
       if (code !== 0 && !res.writableEnded) res.end();
     });
   } catch (err) {
-    cleanup();
     serverError(res, err);
   }
 });
@@ -804,7 +940,7 @@ self.PreConfigured = {
  * GET /api/extension/status
  * Returns whether the extension is available (packaged) and connected (has sent captures).
  */
-router.get('/api/extension/status', async (_req, res) => {
+router.get('/api/extension/status', requireAuth, requireScope('config:read'), async (_req, res) => {
   try {
     const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
     const available = fs.existsSync(path.join(extDir, 'manifest.json'));
@@ -1104,7 +1240,7 @@ router.put("/api/scripts/:name", requireAuth, requireScope("files:write"), (req,
   }
 });
 
-router.post("/api/scripts/:name/run", requireAuth, requireScope("sandbox:run"), (req, res) => {
+router.post("/api/scripts/:name/run", sandboxRateLimiter(), requireAuth, requireScope("sandbox:run"), requireSandboxEnabled, async (req, res) => {
   try {
     const { name } = req.params;
     if (name.includes("..") || name.includes("/") || name.includes("\\")) {
@@ -1115,15 +1251,21 @@ router.post("/api/scripts/:name/run", requireAuth, requireScope("sandbox:run"), 
       return res.status(404).json({ error: `Script "${name}" not found` });
     }
 
-    const isPython = name.endsWith(".py");
-    const isShell = name.endsWith(".sh");
-    const runner = isPython ? "python3" : isShell ? "bash" : "node";
+    const isNodeScript = name.endsWith(".js") || name.endsWith(".mjs") || name.endsWith(".cjs");
+    if (!isNodeScript) {
+      return res.status(400).json({
+        error: "Only Node.js scripts can be run through the sandbox endpoint."
+      });
+    }
 
-    const result = spawnSync(runner, [scriptPath], { encoding: "utf8", timeout: 10000 });
+    const result = await runInSandbox(scriptPath, 10000, {
+      allowNetwork: req.body?.allowNetwork === true
+    });
     res.json({
-      success: result.status === 0,
-      output: result.stdout || result.stderr || "(no output)",
-      exitCode: result.status
+      success: result.success,
+      output: result.output || "(no output)",
+      exitCode: result.code ?? null,
+      signal: result.signal ?? null
     });
   } catch (err) {
     serverError(res, err);
@@ -1250,7 +1392,13 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
       } catch {}
     }
 
-    res.json({ security, budget, brain });
+    const safeBrain = { ...brain };
+    if (safeBrain.token) {
+      safeBrain.has_token = true;
+      delete safeBrain.token;
+    }
+
+    res.json({ security, budget, brain: safeBrain });
   } catch (err) { serverError(res, err); }
 });
 
@@ -1272,7 +1420,18 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), (req,
       fs.writeFileSync(budgetPath, yaml.stringify(budget), { encoding: 'utf8', mode: 0o600 });
     }
     if (brain) {
-      fs.writeFileSync(brainPath, JSON.stringify(brain, null, 2), { encoding: 'utf8', mode: 0o600 });
+      let existingBrain = {};
+      if (fs.existsSync(brainPath)) {
+        try {
+          existingBrain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {};
+        } catch {}
+      }
+      const nextBrain = { ...existingBrain, ...brain };
+      if ((brain.token === undefined || brain.token === '') && existingBrain.token) {
+        nextBrain.token = existingBrain.token;
+      }
+      delete nextBrain.has_token;
+      fs.writeFileSync(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
     }
 
     res.json({ success: true });
@@ -1548,7 +1707,7 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), (req, res) => 
     let globalNodeCount = 0;
     if (fs.existsSync(globalVaultDir)) {
       try {
-        globalNodeCount = loadNodes(globalVaultDir).length;
+        globalNodeCount = getNodes(globalVaultDir).length;
       } catch {
         // Count .md files manually
         const countMd = (dir) => {
@@ -1649,7 +1808,19 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
       return res.json({ nodes: [], brain_id: brainId });
     }
 
-    const nodes = loadNodes(vaultDir);
+    let nodes = getNodes(vaultDir);
+    const { q, category, status, tag } = req.query;
+    if (q) {
+      const query = String(q).toLowerCase();
+      nodes = nodes.filter(n =>
+        [n.slug, n.title, n.category, (n.tags || []).join(' '), n.body]
+          .join(' ').toLowerCase().includes(query)
+      );
+    }
+    if (category) nodes = nodes.filter(n => n.category === category);
+    if (status) nodes = nodes.filter(n => n.status === status);
+    if (tag) nodes = nodes.filter(n => (n.tags || []).includes(tag));
+
     res.json({ nodes, brain_id: brainId, count: nodes.length });
   } catch (err) { serverError(res, err); }
 });
