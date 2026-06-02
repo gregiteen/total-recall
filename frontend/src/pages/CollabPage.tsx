@@ -307,7 +307,6 @@ function CollabSandbox({ token, username, onBack }: { token: string, username: s
     };
 
     return () => { ws.close(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUrl, token]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages, systemLogs]);
