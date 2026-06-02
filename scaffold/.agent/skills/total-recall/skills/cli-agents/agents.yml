@@ -8,7 +8,7 @@ agents:
 
   - name: claude
     binary: claude
-    flags: --output-format json --permission-mode bypassPermissions
+    flags: --output-format json --permission-mode bypassPermissions --setting-sources local --tools ""
     priority: 3
     enabled: true
     exec: flag

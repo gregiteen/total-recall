@@ -43,7 +43,7 @@ export function findBinaryInPath(binaryName) {
 
 const DEFAULT_AGENTS = [
   { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 1, enabled: true, exec: 'flag' },
-  { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions', priority: 3, enabled: true, exec: 'flag' },
+  { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions --setting-sources local --tools ""', priority: 3, enabled: true, exec: 'flag' },
   { name: 'codex',       binary: 'codex',       flags: '--full-auto --json --skip-git-repo-check', priority: 4, enabled: true, exec: 'subcommand' },
 ];
 
