@@ -78,6 +78,7 @@ const COMMANDS = {
   config:   'config.mjs',
   skill:    'skill.mjs',
   help:     'help.mjs',
+  collab:   'collab.mjs',
 };
 function printHelp() {
   console.log(`
@@ -126,6 +127,8 @@ function printHelp() {
                         Commands: start | stop | status | once | install | uninstall
     uninstall           Completely uninstall all services, launchd agents, VFS, and shims
     help <topic>        Interactive offline documentation, SSSS reference, and system help
+    collab              Start Express/WebSockets backend & React collab sandbox dev server
+
 
 
 
