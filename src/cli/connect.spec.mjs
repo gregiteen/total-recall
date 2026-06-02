@@ -5,10 +5,23 @@
  * for Cursor, Claude Code, and Codex clients, and registers the client
  * in clients.json.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+vi.mock('../core/surface.mjs', () => ({
+  compileSurface: vi.fn().mockImplementation(async ({ instructionsFile }) => {
+    const fs = await import('node:fs');
+    fs.writeFileSync(instructionsFile, '# Curated Instructions\n', 'utf8');
+    return {
+      nodesProcessed: 0,
+      skillsInjected: 0,
+      semanticIndexed: 0,
+      semanticUnavailable: true
+    };
+  })
+}));
 
 // We need to control cwd and AGENT_DIR so connect writes to a safe temp dir
 let tmpProject;
