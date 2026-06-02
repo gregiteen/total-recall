@@ -676,6 +676,413 @@ Provide helpful analysis grounded on both the user's brain memory and this page 
     }
   }
 
+  // ==================== COLLABORATION MODULE ====================
+  const collabAuthView = document.getElementById('collab-auth-view');
+  const collabMainView = document.getElementById('collab-main-view');
+  const collabUsernameInput = document.getElementById('collab-username');
+  const collabPasswordInput = document.getElementById('collab-password');
+  const btnCollabLogin = document.getElementById('btn-collab-login');
+  const btnCollabRegister = document.getElementById('btn-collab-register');
+
+  const collabUserDisplay = document.getElementById('collab-user-display');
+  const btnCollabLogout = document.getElementById('btn-collab-logout');
+  const collabGroupSelect = document.getElementById('collab-group-select');
+
+  const btnCollabShowJoin = document.getElementById('btn-collab-show-join');
+  const btnCollabShowCreate = document.getElementById('btn-collab-show-create');
+  const collabJoinGroupRow = document.getElementById('collab-join-group-row');
+  const collabJoinCode = document.getElementById('collab-join-code');
+  const btnCollabSubmitJoin = document.getElementById('btn-collab-submit-join');
+
+  const collabCreateGroupRow = document.getElementById('collab-create-group-row');
+  const collabCreateName = document.getElementById('collab-create-name');
+  const btnCollabSubmitCreate = document.getElementById('btn-collab-submit-create');
+
+  const collabAnnotationsList = document.getElementById('collab-annotations-list');
+  const collabNoteInput = document.getElementById('collab-note-input');
+  const btnCollabSaveNote = document.getElementById('btn-collab-save-note');
+
+  const collabPresenceCount = document.getElementById('collab-presence-count');
+  const collabChatMessages = document.getElementById('collab-chat-messages');
+  const collabChatInput = document.getElementById('collab-chat-input');
+  const btnCollabSendChat = document.getElementById('btn-collab-send-chat');
+
+  let collabToken = '';
+  let collabUsername = '';
+  let collabActiveUrl = '';
+  let collabSocket = null;
+  let collabGroups = [];
+  let collabSelectedGroup = null;
+
+  async function initCollab() {
+    const data = await chrome.storage.local.get(['collabToken', 'collabUsername']);
+    if (data.collabToken && data.collabUsername) {
+      collabToken = data.collabToken;
+      collabUsername = data.collabUsername;
+      showCollabMain();
+    } else {
+      showCollabAuth();
+    }
+  }
+
+  function showCollabAuth() {
+    collabAuthView.classList.remove('hidden');
+    collabMainView.classList.add('hidden');
+    closeCollabSocket();
+  }
+
+  async function showCollabMain() {
+    collabAuthView.classList.add('hidden');
+    collabMainView.classList.remove('hidden');
+    collabUserDisplay.textContent = collabUsername;
+    await fetchCollabGroups();
+    updateCollabActiveUrl();
+  }
+
+  async function fetchCollabGroups() {
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/groups`, {
+        headers: { 'Authorization': `Bearer ${collabToken}` }
+      });
+      if (res.ok) {
+        collabGroups = await res.json();
+        renderCollabGroupsDropdown();
+      } else if (res.status === 401) {
+        logoutCollab();
+      }
+    } catch (err) {
+      console.error('Failed to fetch collab groups:', err);
+    }
+  }
+
+  function renderCollabGroupsDropdown() {
+    collabGroupSelect.innerHTML = collabGroups.map(g => 
+      `<option value="${g.code}">${escapeHtml(g.name)} (${g.code})</option>`
+    ).join('');
+    if (collabGroups.length > 0) {
+      const activeCode = collabGroupSelect.value;
+      collabSelectedGroup = collabGroups.find(g => g.code === activeCode) || collabGroups[0];
+    } else {
+      collabSelectedGroup = null;
+    }
+  }
+
+  async function updateCollabActiveUrl() {
+    try {
+      const tab = await getCurrentTab();
+      if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome-extension://')) {
+        const cleanUrl = tab.url.split('#')[0];
+        if (cleanUrl !== collabActiveUrl) {
+          collabActiveUrl = cleanUrl;
+          if (collabToken) {
+            await fetchCollabAnnotations();
+            connectCollabSocket();
+          }
+        }
+      } else {
+        collabActiveUrl = '';
+        collabAnnotationsList.innerHTML = '<div class="memories-empty">No active web tab</div>';
+        closeCollabSocket();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function fetchCollabAnnotations() {
+    if (!collabActiveUrl || !collabToken) return;
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/annotations?url=${encodeURIComponent(collabActiveUrl)}`, {
+        headers: { 'Authorization': `Bearer ${collabToken}` }
+      });
+      if (res.ok) {
+        const annotations = await res.json();
+        renderCollabAnnotations(annotations);
+      }
+    } catch (err) {
+      console.error('Failed to fetch annotations:', err);
+    }
+  }
+
+  function renderCollabAnnotations(list) {
+    if (!list.length) {
+      collabAnnotationsList.innerHTML = '<div class="memories-empty">No notes on this page</div>';
+      return;
+    }
+    collabAnnotationsList.innerHTML = list.map(a => `
+      <div class="collab-annotation-item">
+        <div class="author">👤 ${escapeHtml(a.author)}</div>
+        ${a.excerpt ? `<div class="excerpt">${escapeHtml(a.excerpt)}</div>` : ''}
+        <div class="text">${escapeHtml(a.text)}</div>
+        <div class="time">${formatTime(a.created_at)}</div>
+      </div>
+    `).join('');
+  }
+
+  function connectCollabSocket() {
+    if (!collabToken || !collabActiveUrl) return;
+    closeCollabSocket();
+
+    self.BrainClient.getConfig().then(config => {
+      const serverUrl = new URL(config.brainUrl);
+      const wsProto = serverUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProto}//${serverUrl.host}/collab-ws?token=${collabToken}`;
+      
+      const ws = new WebSocket(wsUrl);
+      collabSocket = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'SUBSCRIBE', url: collabActiveUrl }));
+        collabPresenceCount.textContent = 'Connected';
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'CHAT_MESSAGE') {
+            appendCollabChatBubble(data.username, data.text, data.created_at);
+          } else if (data.type === 'USER_JOINED') {
+            appendCollabChatBubble('System', `${data.username} joined this page`, new Date().toISOString(), true);
+          } else if (data.type === 'USER_LEFT') {
+            appendCollabChatBubble('System', `${data.username} left`, new Date().toISOString(), true);
+          } else if (data.type === 'ANNOTATION_ADDED') {
+            fetchCollabAnnotations();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      };
+
+      ws.onclose = () => {
+        collabPresenceCount.textContent = 'Disconnected';
+      };
+
+      ws.onerror = () => {
+        collabPresenceCount.textContent = 'Error';
+      };
+    });
+  }
+
+  function closeCollabSocket() {
+    if (collabSocket) {
+      try {
+        collabSocket.close();
+      } catch {}
+      collabSocket = null;
+    }
+  }
+
+  function appendCollabChatBubble(sender, text, timestamp, isSystem = false) {
+    const bubble = document.createElement('div');
+    if (isSystem) {
+      bubble.className = 'chat-bubble system';
+      bubble.textContent = text;
+    } else {
+      const isMe = sender.toLowerCase() === collabUsername.toLowerCase();
+      bubble.className = `chat-bubble ${isMe ? 'user' : 'assistant'}`;
+      bubble.innerHTML = `<span style="font-size: 10px; opacity: 0.8; font-weight: bold; display: block; margin-bottom: 2px;">${escapeHtml(sender)}</span>${escapeHtml(text)}`;
+    }
+    collabChatMessages.appendChild(bubble);
+    collabChatMessages.scrollTop = collabChatMessages.scrollHeight;
+  }
+
+  async function registerCollab(username, password) {
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        collabToken = data.token;
+        collabUsername = data.username;
+        await chrome.storage.local.set({ collabToken: data.token, collabUsername: data.username });
+        showToast('Registered successfully!');
+        showCollabMain();
+      } else {
+        showToast('Registration failed: ' + (data.error || 'Unknown error'), true);
+      }
+    } catch (err) {
+      showToast('Registration error: ' + err.message, true);
+    }
+  }
+
+  async function loginCollab(username, password) {
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        collabToken = data.token;
+        collabUsername = data.username;
+        await chrome.storage.local.set({ collabToken: data.token, collabUsername: data.username });
+        showToast('Logged in successfully!');
+        showCollabMain();
+      } else {
+        showToast('Login failed: ' + (data.error || 'Unknown error'), true);
+      }
+    } catch (err) {
+      showToast('Login error: ' + err.message, true);
+    }
+  }
+
+  async function logoutCollab() {
+    collabToken = '';
+    collabUsername = '';
+    await chrome.storage.local.remove(['collabToken', 'collabUsername']);
+    showCollabAuth();
+    showToast('Logged out');
+  }
+
+  // --- Buttons / Forms bindings ---
+  btnCollabLogin.addEventListener('click', () => {
+    const u = collabUsernameInput.value.trim();
+    const p = collabPasswordInput.value.trim();
+    if (u && p) loginCollab(u, p);
+  });
+
+  btnCollabRegister.addEventListener('click', () => {
+    const u = collabUsernameInput.value.trim();
+    const p = collabPasswordInput.value.trim();
+    if (u && p) registerCollab(u, p);
+  });
+
+  btnCollabLogout.addEventListener('click', logoutCollab);
+
+  btnCollabShowJoin.addEventListener('click', () => {
+    collabJoinGroupRow.classList.toggle('hidden');
+    collabCreateGroupRow.classList.add('hidden');
+  });
+
+  btnCollabShowCreate.addEventListener('click', () => {
+    collabCreateGroupRow.classList.toggle('hidden');
+    collabJoinGroupRow.classList.add('hidden');
+  });
+
+  btnCollabSubmitJoin.addEventListener('click', async () => {
+    const code = collabJoinCode.value.trim();
+    if (!code) return;
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/groups/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${collabToken}`
+        },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Joined group!');
+        collabJoinCode.value = '';
+        collabJoinGroupRow.classList.add('hidden');
+        await fetchCollabGroups();
+      } else {
+        showToast('Join error: ' + data.error, true);
+      }
+    } catch (err) {
+      showToast('Failed to join: ' + err.message, true);
+    }
+  });
+
+  btnCollabSubmitCreate.addEventListener('click', async () => {
+    const name = collabCreateName.value.trim();
+    if (!name) return;
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/groups`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${collabToken}`
+        },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Group created!');
+        collabCreateName.value = '';
+        collabCreateGroupRow.classList.add('hidden');
+        await fetchCollabGroups();
+      } else {
+        showToast('Create error: ' + data.error, true);
+      }
+    } catch (err) {
+      showToast('Failed to create group: ' + err.message, true);
+    }
+  });
+
+  collabGroupSelect.addEventListener('change', () => {
+    const activeCode = collabGroupSelect.value;
+    collabSelectedGroup = collabGroups.find(g => g.code === activeCode) || null;
+    fetchCollabAnnotations();
+  });
+
+  btnCollabSaveNote.addEventListener('click', async () => {
+    const text = collabNoteInput.value.trim();
+    if (!text || !collabActiveUrl || !collabSelectedGroup) return;
+    try {
+      const config = await self.BrainClient.getConfig();
+      const res = await fetch(`${config.brainUrl}/api/collab/annotations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${collabToken}`
+        },
+        body: JSON.stringify({
+          url: collabActiveUrl,
+          groupCode: collabSelectedGroup.code,
+          text
+        })
+      });
+      if (res.ok) {
+        showToast('Note pinned!');
+        collabNoteInput.value = '';
+        fetchCollabAnnotations();
+      } else {
+        const errData = await res.json();
+        showToast('Pin note error: ' + errData.error, true);
+      }
+    } catch (err) {
+      showToast('Failed to pin note: ' + err.message, true);
+    }
+  });
+
+  btnCollabSendChat.addEventListener('click', () => {
+    const text = collabChatInput.value.trim();
+    if (text && collabSocket && collabSocket.readyState === WebSocket.OPEN) {
+      collabSocket.send(JSON.stringify({ type: 'CHAT_MESSAGE', text }));
+      collabChatInput.value = '';
+    }
+  });
+
+  collabChatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      btnCollabSendChat.click();
+    }
+  });
+
+  // Listen for tab active changes
+  chrome.tabs.onActivated.addListener(() => {
+    updateCollabActiveUrl();
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url) {
+      updateCollabActiveUrl();
+    }
+  });
+
   // ---- Event listeners ----
   searchInput.addEventListener('input', (e) => debounceSearch(e.target.value));
 
@@ -684,6 +1091,7 @@ Provide helpful analysis grounded on both the user's brain memory and this page 
   loadSettingsState().then(() => {
     loadRecentCaptures();
     recordRememberInvariants();
+    initCollab();
   });
   
   // Set intervals
@@ -696,3 +1104,5 @@ Provide helpful analysis grounded on both the user's brain memory and this page 
     }
   }, 30000);
 })();
+
+

@@ -22,6 +22,7 @@
       <button class="tab-btn" data-tab="chat">💬 Chat</button>
       <button class="tab-btn" data-tab="research">🔬 Research</button>
       <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+      <button class="tab-btn" data-tab="collab">👥 Collab</button>
     </nav>
 
     <!-- Tab Panels Container -->
@@ -124,6 +125,77 @@
           <div class="settings-group" style="margin-top: auto; padding-top: 16px; border-top: 1px solid #313244;">
             <button id="btn-recompile-brain" class="action-btn accent" style="width: 100%;">⚡ Recompile Brain Indexes</button>
             <span class="settings-help" style="text-align: center; display: block; margin-top: 4px;">Forcibly rebuilds vector embeddings and rules shims</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 5: Collaboration -->
+      <section id="tab-collab" class="tab-panel">
+        <!-- Auth View -->
+        <div id="collab-auth-view" class="collab-section">
+          <h3>👥 Join Collab Network</h3>
+          <p class="collab-subtext">Register or log in to sync annotations and chat on websites live.</p>
+          <div class="collab-form">
+            <input type="text" id="collab-username" placeholder="Username" />
+            <input type="password" id="collab-password" placeholder="Password" />
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <button id="btn-collab-login" class="action-btn accent" style="flex: 1;">Login</button>
+              <button id="btn-collab-register" class="action-btn" style="flex: 1;">Register</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Collaboration View -->
+        <div id="collab-main-view" class="collab-section hidden" style="display: flex; flex-direction: column; height: 100%;">
+          <div class="collab-user-bar">
+            <span>👤 <strong id="collab-user-display"></strong></span>
+            <button id="btn-collab-logout" class="collab-logout-btn">Logout</button>
+          </div>
+
+          <div class="collab-control-group">
+            <label for="collab-group-select">Workspace Group</label>
+            <select id="collab-group-select" class="settings-select"></select>
+          </div>
+
+          <div class="collab-action-grid" style="display: flex; gap: 8px; margin-bottom: 8px; margin-top: 4px;">
+            <button id="btn-collab-show-join" class="action-btn" style="padding: 6px; font-size: 11px;">Join Group</button>
+            <button id="btn-collab-show-create" class="action-btn" style="padding: 6px; font-size: 11px;">Create Group</button>
+          </div>
+
+          <div id="collab-join-group-row" class="collab-action-row hidden" style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <input type="text" id="collab-join-code" placeholder="Invite Code" style="flex: 1; padding: 6px; font-size: 12px; background: #1e1e2e; border: 1px solid #313244; color: #cdd6f4; border-radius: 6px;" />
+            <button id="btn-collab-submit-join" class="action-btn accent" style="flex-shrink: 0; padding: 6px 12px; font-size: 11px; height: 28px;">Join</button>
+          </div>
+
+          <div id="collab-create-group-row" class="collab-action-row hidden" style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <input type="text" id="collab-create-name" placeholder="Group Name" style="flex: 1; padding: 6px; font-size: 12px; background: #1e1e2e; border: 1px solid #313244; color: #cdd6f4; border-radius: 6px;" />
+            <button id="btn-collab-submit-create" class="action-btn accent" style="flex-shrink: 0; padding: 6px 12px; font-size: 11px; height: 28px;">Create</button>
+          </div>
+
+          <!-- Pinned Annotations -->
+          <div class="collab-panel-header">
+            <h4>📌 Notes on Page</h4>
+          </div>
+          <div id="collab-annotations-list" class="collab-list"></div>
+
+          <!-- Add Annotation Form -->
+          <div class="collab-annotation-form">
+            <textarea id="collab-note-input" placeholder="Pin a note to this page..."></textarea>
+            <button id="btn-collab-save-note" class="action-btn accent" style="width: 100%; margin-top: 4px; padding: 6px; font-size: 12px;">Pin Note</button>
+          </div>
+
+          <!-- Real-time Site Chat -->
+          <div class="collab-panel-header" style="margin-top: 8px;">
+            <h4>💬 Site Chat Room</h4>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span class="pulse" style="width: 6px; height: 6px; background: #a6e3a1; box-shadow: 0 0 4px #a6e3a1; border-radius: 50%;"></span>
+              <span id="collab-presence-count" style="font-size: 10px; color: #a6e3a1;">1 online</span>
+            </div>
+          </div>
+          <div id="collab-chat-messages" class="chat-messages collab-chat-box"></div>
+          <div class="chat-input-bar collab-input-bar">
+            <textarea id="collab-chat-input" placeholder="Send a message to team..."></textarea>
+            <button id="btn-collab-send-chat" class="chat-send-btn">Send</button>
           </div>
         </div>
       </section>

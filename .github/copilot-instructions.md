@@ -83,6 +83,7 @@ Show all available commands.
 
 - Self-captured memory: The .agent/ directory strictly contains only the s... The .agent/ directory strictly contains only the skills/ folder and secrets.enc. Everything else (memory... (use recall to read more)
 - Self-captured memory: Never use ephemeral documents (like implementation... Never use ephemeral documents (like implementation_plan.md, task.md, or walkthrough.md) for project mana... (use recall to read more)
+- Self-captured memory: Never build simulated, mock, or fake features (e.g... Never build simulated, mock, or fake features (e.g. simulation sandboxes) when a real, functional browse... (use recall to read more)
 - Self-captured memory: When the user asks a question, NEVER edit any file... When the user asks a question, NEVER edit any files or perform modifying actions until you have fully an... (use recall to read more)
 - Self-captured memory: Never use system documents (like task.md or walkth... Never use system documents (like task.md or walkthrough.md in the artifacts directory) for project manag... (use recall to read more)
 - Self-captured memory: Never refer to the chat interface or AI companion ... Never refer to the chat interface or AI companion as 'Co-Pilot'. Always refer to it simply as 'Chat'.
