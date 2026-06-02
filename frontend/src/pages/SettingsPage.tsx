@@ -35,6 +35,7 @@ export default function SettingsPage() {
       if (!data.budget.budget) data.budget.budget = { daily_cap_usd: 5.0, weekly_cap_usd: 25.0, enabled: true };
       if (!data.brain) data.brain = {};
       if (!data.brain.preferred_agent) data.brain.preferred_agent = 'auto';
+      if (!data.secrets) data.secrets = {};
       
       setConfigData(data);
     } catch (err: unknown) {
@@ -152,6 +153,17 @@ export default function SettingsPage() {
     });
   };
 
+  const updateSecretsProp = (prop: string, value: string) => {
+    if (!configData) return;
+    setConfigData({
+      ...configData,
+      secrets: {
+        ...configData.secrets,
+        [prop]: value
+      }
+    });
+  };
+
   return (
     <div className="page" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
@@ -209,7 +221,7 @@ export default function SettingsPage() {
         </div>
       ) : viewMode === 'visual' && configData ? (
         /* ==================== VISUAL CONTROL PANEL UI ==================== */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24, flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 24 }}>
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveVisual(); }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24, flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 24 }}>
           
           {/* Card 1: AI Reasoning & Autonomy */}
           <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
@@ -537,7 +549,190 @@ export default function SettingsPage() {
             </div>
           </div>
 
-        </div>
+          {/* Card 5: API Keys & Integrations */}
+          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+              <span style={{ fontSize: 20 }}>🔑</span>
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 600 }}>API Keys & Integrations</h3>
+                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Manage access keys and tokens for AI models and search providers</p>
+              </div>
+            </div>
+
+            {/* Google Gemini API Key */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor="google_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Google Gemini API Key</label>
+              <input
+                id="google_api_key"
+                type="password"
+                placeholder="AIzaSy..."
+                value={configData.secrets?.google_api_key || ''}
+                onChange={(e) => updateSecretsProp('google_api_key', e.target.value)}
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  outline: 'none',
+                  fontSize: 13
+                }}
+              />
+            </div>
+
+            {/* Anthropic API Key */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor="anthropic_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Anthropic API Key (Claude Code)</label>
+              <input
+                id="anthropic_api_key"
+                type="password"
+                placeholder="sk-ant-..."
+                value={configData.secrets?.anthropic_api_key || ''}
+                onChange={(e) => updateSecretsProp('anthropic_api_key', e.target.value)}
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  outline: 'none',
+                  fontSize: 13
+                }}
+              />
+              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Configuring this allows Claude Code CLI to run without prompting for OAuth login.</span>
+            </div>
+
+            {/* OpenAI API Key */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor="openai_api_key" style={{ fontSize: 13, fontWeight: 500 }}>OpenAI API Key (Codex)</label>
+              <input
+                id="openai_api_key"
+                type="password"
+                placeholder="sk-proj-..."
+                value={configData.secrets?.openai_api_key || ''}
+                onChange={(e) => updateSecretsProp('openai_api_key', e.target.value)}
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  outline: 'none',
+                  fontSize: 13
+                }}
+              />
+            </div>
+
+            {/* Tavily API Key */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label htmlFor="tavily_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Tavily Search API Key</label>
+              <input
+                id="tavily_api_key"
+                type="password"
+                placeholder="tvly-..."
+                value={configData.secrets?.tavily_api_key || ''}
+                onChange={(e) => updateSecretsProp('tavily_api_key', e.target.value)}
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  padding: '8px 12px',
+                  borderRadius: 6,
+                  outline: 'none',
+                  fontSize: 13
+                }}
+              />
+            </div>
+
+            {/* Other Search Keys (Brave, Exa, Serper) */}
+            <details style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              <summary style={{ cursor: 'pointer', fontWeight: 500, outline: 'none', padding: '4px 0' }}>More Provider Keys (Brave, Exa, Serper, GitHub)</summary>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12, paddingLeft: 8, borderLeft: '2px solid var(--border)' }}>
+                {/* Brave Search Key */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="brave_api_key" style={{ fontSize: 12, fontWeight: 500 }}>Brave Search API Key</label>
+                  <input
+                    id="brave_api_key"
+                    type="password"
+                    value={configData.secrets?.brave_api_key || ''}
+                    onChange={(e) => updateSecretsProp('brave_api_key', e.target.value)}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      outline: 'none',
+                      fontSize: 13
+                    }}
+                  />
+                </div>
+
+                {/* Exa Search Key */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="exa_api_key" style={{ fontSize: 12, fontWeight: 500 }}>Exa API Key</label>
+                  <input
+                    id="exa_api_key"
+                    type="password"
+                    value={configData.secrets?.exa_api_key || ''}
+                    onChange={(e) => updateSecretsProp('exa_api_key', e.target.value)}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      outline: 'none',
+                      fontSize: 13
+                    }}
+                  />
+                </div>
+
+                {/* Serper API Key */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="serper_api_key" style={{ fontSize: 12, fontWeight: 500 }}>Serper (Google Search API) Key</label>
+                  <input
+                    id="serper_api_key"
+                    type="password"
+                    value={configData.secrets?.serper_api_key || ''}
+                    onChange={(e) => updateSecretsProp('serper_api_key', e.target.value)}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      outline: 'none',
+                      fontSize: 13
+                    }}
+                  />
+                </div>
+
+                {/* GitHub Token */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label htmlFor="github_token" style={{ fontSize: 12, fontWeight: 500 }}>GitHub Personal Access Token</label>
+                  <input
+                    id="github_token"
+                    type="password"
+                    placeholder="ghp_..."
+                    value={configData.secrets?.github_token || ''}
+                    onChange={(e) => updateSecretsProp('github_token', e.target.value)}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      outline: 'none',
+                      fontSize: 13
+                    }}
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+
+        </form>
       ) : (
         /* ==================== RAW YAML EDITOR UI ==================== */
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>

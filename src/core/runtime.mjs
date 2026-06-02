@@ -254,6 +254,27 @@ export async function callLocalRuntime(prompt, system, config) {
 
   let lastError;
 
+  // Load dynamic secrets from secrets.enc to ensure changes take effect immediately without server restart
+  let dynamicSecrets = {};
+  try {
+    const pathsToCheck = [
+      path.join(process.cwd(), '.agent', 'secrets.enc'),
+      path.join(agentDir, 'secrets.enc'),
+      path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'secrets.enc'),
+      path.join(agentDir, 'skills', 'total-recall', 'config', 'secrets.enc'),
+    ];
+    for (const p of pathsToCheck) {
+      if (fs.existsSync(p)) {
+        try {
+          dynamicSecrets = JSON.parse(fs.readFileSync(p, 'utf8') || '{}');
+          if (Object.keys(dynamicSecrets).length > 0) {
+            break;
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
   // Try agents in priority order with retry budget
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const agent = attempt === 0 ? resolveAgent(config) : resolveAgent({
@@ -289,13 +310,15 @@ export async function callLocalRuntime(prompt, system, config) {
       maxBuffer: 10 * 1024 * 1024,
       env: {
         ...process.env,
-        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || googleApiKey,
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || googleApiKey,
-        TAVILY_API_KEY: process.env.TAVILY_API_KEY || tavilyApiKey,
-        BRAVE_API_KEY: process.env.BRAVE_API_KEY || braveApiKey,
-        EXA_API_KEY: process.env.EXA_API_KEY || exaApiKey,
-        SERPER_API_KEY: process.env.SERPER_API_KEY || serperApiKey,
-        GITHUB_TOKEN: process.env.GITHUB_TOKEN || githubToken,
+        GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || dynamicSecrets.anthropic_api_key,
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY || dynamicSecrets.openai_api_key,
+        TAVILY_API_KEY: process.env.TAVILY_API_KEY || dynamicSecrets.tavily_api_key || tavilyApiKey,
+        BRAVE_API_KEY: process.env.BRAVE_API_KEY || dynamicSecrets.brave_api_key || braveApiKey,
+        EXA_API_KEY: process.env.EXA_API_KEY || dynamicSecrets.exa_api_key || exaApiKey,
+        SERPER_API_KEY: process.env.SERPER_API_KEY || dynamicSecrets.serper_api_key || serperApiKey,
+        GITHUB_TOKEN: process.env.GITHUB_TOKEN || dynamicSecrets.github_token || githubToken,
       },
       cwd: process.cwd(),
     });
