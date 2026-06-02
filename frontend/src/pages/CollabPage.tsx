@@ -166,7 +166,7 @@ function CollabDashboard({ token, username, onLogout, onSelectSandbox }: { token
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Share annotations and real-time page chat rooms</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-purple" onClick={onSelectSandbox}>🌐 Open Page Sandbox</button>
+          <button className="btn btn-purple" onClick={onSelectSandbox}>🌐 Open Browse Workspace</button>
           <button className="btn btn-ghost" onClick={onLogout} style={{ color: '#f87171' }}>Logout</button>
         </div>
       </div>
@@ -219,7 +219,7 @@ function CollabDashboard({ token, username, onLogout, onSelectSandbox }: { token
 function CollabSandbox({ token, username, onBack }: { token: string, username: string, onBack: () => void }) {
   const [groups, setGroups] = useState<CollabGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<CollabGroup | null>(null);
-  const [simulatedUrl, setSimulatedUrl] = useState('https://news.ycombinator.com');
+  const [activeBrowseUrl, setActiveBrowseUrl] = useState('https://news.ycombinator.com');
   const [activeUrl, setActiveUrl] = useState('https://news.ycombinator.com');
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [noteText, setNoteText] = useState('');
@@ -313,9 +313,9 @@ function CollabSandbox({ token, username, onBack }: { token: string, username: s
 
   const handleUrlSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!simulatedUrl.trim()) return;
+    if (!activeBrowseUrl.trim()) return;
     setChatMessages([]); setSystemLogs([]); setActiveUsers([]);
-    setActiveUrl(simulatedUrl);
+    setActiveUrl(activeBrowseUrl);
   };
 
   const handleAddAnnotation = async (e: React.FormEvent) => {
@@ -348,14 +348,14 @@ function CollabSandbox({ token, username, onBack }: { token: string, username: s
       <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '12px 20px', borderRadius: '8px', border: '1px solid var(--border)', flexWrap: 'wrap' }}>
         <button className="btn btn-ghost" onClick={onBack}>← Back to Workspaces</button>
         <form onSubmit={handleUrlSubmit} style={{ display: 'flex', gap: '10px', flex: '1', minWidth: '250px' }}>
-          <input type="text" value={simulatedUrl} onChange={e => setSimulatedUrl(e.target.value)} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: '#fff', padding: '6px 12px', borderRadius: '6px', flex: '1', fontFamily: 'monospace' }} />
-          <button type="submit" className="btn btn-purple">Simulate Visit</button>
+          <input type="text" value={activeBrowseUrl} onChange={e => setActiveBrowseUrl(e.target.value)} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', color: '#fff', padding: '6px 12px', borderRadius: '6px', flex: '1', fontFamily: 'monospace' }} />
+          <button type="submit" className="btn btn-purple">Connect URL</button>
         </form>
         <div style={{ fontSize: '13px', color: wsConnected ? '#34d399' : '#f87171' }}>● {wsConnected ? 'Connected' : 'Disconnected'}</div>
       </div>
 
       <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-        Simulated browser context: <strong style={{ color: 'var(--purple-primary)', fontFamily: 'monospace' }}>{activeUrl}</strong>
+        Active browse context URL: <strong style={{ color: 'var(--purple-primary)', fontFamily: 'monospace' }}>{activeUrl}</strong>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '20px', height: '500px' }}>

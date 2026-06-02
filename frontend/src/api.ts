@@ -530,6 +530,13 @@ export async function triggerDream(): Promise<{ success: boolean; status: string
   return res.json()
 }
 
+export async function runAgentDiagnostics(): Promise<{ success: boolean; output: string }> {
+  const res = await apiFetch(`${API_BASE}/api/diagnostics/agents`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Diagnostics API error: ${res.status}`)
+  return res.json()
+}
+
+
 export async function fetchGraph(): Promise<{ nodes: MemoryNode[]; routes: unknown[] }> {
   const res = await apiFetch(`${API_BASE}/api/graph`)
   if (!res.ok) throw new Error(`Graph API error: ${res.status}`)
