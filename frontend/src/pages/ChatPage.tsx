@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels, shareToApi, fetchExtensionStatus } from '../api'
+import { useNavigate } from 'react-router-dom'
+import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchChatHistory, fetchChatThreads, deleteChatThread, listMemory, listResearch, fetchHealth, fetchGeminiModels, shareToApi, fetchExtensionStatus, checkUpdate } from '../api'
 import type { ChatThread } from '../api'
-import type { ChatMessage, MemoryNode, ResearchItem } from '../types'
+import type { ChatMessage, MemoryNode, ResearchItem, UpdateCheckResult } from '../types'
 import Graph3D from '../components/Graph3D'
 
 
@@ -23,6 +24,7 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrainId?: string; onBrainChange?: (id: string) => void }) {
+  const navigate = useNavigate()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -33,6 +35,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
 
   const [voiceMode, setVoiceMode] = useState(false)
   const [kokoroEnabled, setKokoroEnabled] = useState<boolean | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null)
   const [deepResearchMode, setDeepResearchMode] = useState(false)
   const [detectedUrl, setDetectedUrl] = useState<string | null>(null)
   const [urlToast, setUrlToast] = useState<string | null>(null)
@@ -147,6 +150,24 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
       })
       .catch(console.error)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- onBrainChange is stable from parent
+  }, [])
+
+  // Periodic update check
+  useEffect(() => {
+    let active = true
+    const check = () => {
+      checkUpdate()
+        .then(data => {
+          if (active) setUpdateInfo(data)
+        })
+        .catch(console.error)
+    }
+    check()
+    const interval = setInterval(check, 3600000)
+    return () => {
+      active = false
+      clearInterval(interval)
+    }
   }, [])
 
   // Reload memory nodes when active selected brain changes
@@ -564,6 +585,47 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
           </div>
         </header>
 
+        {/* Update Available Banner */}
+        {updateInfo?.updateAvailable && (
+          <div className="animate-fade-in" style={{
+            margin: '0 16px 12px',
+            padding: '12px 16px',
+            background: 'linear-gradient(135deg, rgba(63, 185, 80, 0.12), rgba(34, 197, 94, 0.12))',
+            border: '1px solid rgba(63, 185, 80, 0.3)',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 22, flexShrink: 0 }}>🚀</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)', marginBottom: 2 }}>
+                System Update Available
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                Version {updateInfo.latestVersion} is available. Upgrade to load the latest features.
+              </div>
+            </div>
+            <button
+              onClick={() => navigate('/health')}
+              style={{
+                flexShrink: 0,
+                padding: '6px 14px',
+                background: '#3fb950',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Go to Update
+            </button>
+          </div>
+        )}
+
         {/* Chrome Extension Banner — shows when available but not connected */}
         {extensionStatus?.available && !extensionStatus.connected && !extensionBannerDismissed && (
           <div style={{
@@ -623,8 +685,18 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
           </div>
         )}
 
-        <div className="chat-messages">
-          {messages.length === 0 && (
+        <div className="chat-messages" style={{ position: 'relative' }}>
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1,
+            pointerEvents: messages.length > 0 ? 'none' : 'auto',
+            opacity: messages.length > 0 ? 0.35 : 1,
+            transition: 'opacity 0.3s ease'
+          }}>
             <Graph3D
               threads={threads}
               memoryNodes={allMemoryNodes}
@@ -637,9 +709,24 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
               }}
               selectedGroundingNodes={selectedGroundingNodes}
             />
-          )}
-          {messages.map((m, index) => (
-            <div key={m.id} className={`message message-${m.role}`}>
+          </div>
+
+          <div style={{
+            position: 'relative',
+            zIndex: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            width: '100%',
+            pointerEvents: 'auto'
+          }}>
+            {messages.map((m, index) => (
+              <div key={m.id} className={`message message-${m.role}`} style={{
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                background: m.role === 'user' ? 'rgba(108, 92, 231, 0.75)' : 'rgba(18, 18, 26, 0.75)',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}>
               <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'break-word' }}>{m.content}</div>
               {m.role === 'assistant' && (
                 <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 13, color: 'var(--text-tertiary)', alignItems: 'center', userSelect: 'none' }}>
@@ -672,11 +759,17 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
             </div>
           ))}
           {loading && (
-            <div className="message message-assistant">
+            <div className="message message-assistant" style={{
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              background: 'rgba(18, 18, 26, 0.75)',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
               <span className="skeleton" style={{ display: 'inline-block', width: 180, height: 16 }} />
             </div>
           )}
           <div ref={messagesEnd} />
+          </div>
         </div>
         <div className="chat-input-bar">
           {selectedGroundingNodes.length > 0 && (

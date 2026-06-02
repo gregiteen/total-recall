@@ -944,12 +944,19 @@ router.get('/api/extension/status', requireAuth, requireScope('config:read'), as
   try {
     const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
     const available = fs.existsSync(path.join(extDir, 'manifest.json'));
+    let version = '0.0.0';
+    if (available) {
+      try {
+        const manifest = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
+        version = manifest.version || '0.0.0';
+      } catch {}
+    }
 
     // Check if extension has ever connected by looking for the marker file
     const markerPath = path.join(BRAIN_DIR, 'config', '.extension-connected');
     const connected = fs.existsSync(markerPath);
 
-    res.json({ available, connected });
+    res.json({ available, connected, version });
   } catch (err) { serverError(res, err); }
 });
 
@@ -2062,6 +2069,47 @@ router.post('/api/update/run', requireAuth, async (req, res) => {
         logger.error('update', `Auto-update failed: ${err.message}`);
       }
     });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.get('/api/help', requireAuth, (req, res) => {
+  const { topic } = req.query;
+  const docsDir = path.join(ROOT, 'docs');
+  const referenceDir = path.join(docsDir, 'reference');
+
+  if (!topic) {
+    return res.json({
+      topics: [
+        { id: 'cli-reference', title: 'CLI Reference Guide', description: 'npx total-recall command catalog and flags' },
+        { id: 'ssss', title: 'SSSS Specifications', description: 'Structured Semantic Syntax System guide' },
+        { id: 'architecture', title: 'System Architecture', description: 'System topology and VFS structures' },
+        { id: 'collab', title: 'Collaboration Guide', description: 'Collaborative workspaces and team annotations' }
+      ]
+    });
+  }
+
+  try {
+    let filePath = '';
+    if (topic === 'cli-reference') {
+      filePath = path.join(referenceDir, 'cli-reference.md');
+    } else if (topic === 'ssss') {
+      filePath = path.join(docsDir, 'SSSS.md');
+    } else if (topic === 'architecture') {
+      filePath = path.join(docsDir, 'ARCHITECTURE.md');
+    } else if (topic === 'collab') {
+      filePath = path.join(referenceDir, 'collab.md');
+    } else {
+      return res.status(404).json({ error: 'Help topic not found' });
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Help topic document not found on server' });
+    }
+
+    const content = fs.readFileSync(filePath, 'utf8');
+    res.json({ topic, content });
   } catch (err) {
     serverError(res, err);
   }

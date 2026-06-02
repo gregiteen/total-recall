@@ -50,8 +50,13 @@ export default function HealthPage() {
       }
     }
     checkVersion()
+    const updateInterval = setInterval(checkVersion, 3600000)
 
-    return () => { active = false; clearInterval(interval) }
+    return () => { 
+      active = false; 
+      clearInterval(interval); 
+      clearInterval(updateInterval); 
+    }
   }, [])
 
   const handleStartUpdate = async () => {
