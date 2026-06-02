@@ -1,6 +1,6 @@
 # SSSS — Structured Semantic Syntax System
 
-**Specification v0.1 — Draft**
+**Specification v0.2 — Draft**
 
 > This is the canonical, vendor-neutral specification for SSSS. It is the ground
 > truth on which all SSSS implementations are built. It is intended to be vendored
@@ -198,8 +198,8 @@ The knowledge primitive. Categories: `invariants`, `patterns`, `anti-patterns`,
 REQUIRED: `type`, `slug`, `category`, `title`, `status`, `schema_version`.
 
 Knowledge-graph fields, REQUIRED when `schema_version: 2`: `confidence` (0..1),
-`importance` (1..5), `modality` (`must|must_not|should|should_not`), `subject`,
-`predicate`, `object`, `sentiment_polarity`
+`importance` (1..5), `modality` (`must|must_not|should|should_not|descriptive|preference`),
+`subject`, `predicate`, `object`, `sentiment_polarity`
 (`directive_must|directive_must_not|descriptive|preference`).
 
 The `subject`/`predicate`/`object` triple SHOULD use stable, language-neutral
@@ -228,7 +228,8 @@ POSIX filesystems; direct writes risk partial-file corruption on crash.
 ```
 
 Memory nodes in the `invariants` category additionally carry `priority: absolute`
-and `immutable: true`.
+and `immutable: true`. The full `priority` enum is `absolute|high|normal|low`;
+`priority` is OPTIONAL on non-invariant categories (defaults to `normal`).
 
 #### `skill`
 
@@ -673,6 +674,30 @@ A host that maintains projections MUST provide a means to (a) rebuild a projecti
 from a vault scan, and (b) detect and repair drift between a projection and the
 vault.
 
+### 10.1 Projection Manifest
+
+A host SHOULD maintain a `MANIFEST.json` (or equivalent) in the derived-artifacts
+directory declaring each projection as disposable and recording provenance:
+
+```jsonc
+{
+  "type": "projection-manifest",
+  "generated_at": "2026-05-30T06:35:00Z",
+  "vault_hash": "sha256:abc123...",       // content hash of the vault at build time
+  "projections": [
+    { "file": "graph-index.jsonl",    "disposable": true },
+    { "file": "memory-layers.jsonl",  "disposable": true },
+    { "file": "embeddings.json",      "disposable": true }
+  ],
+  "rebuild_command": "npx total-recall compile"
+}
+```
+
+The `vault_hash` field enables **staleness detection**: if the current vault hash
+differs from the manifest's hash, the projections are stale and SHOULD be rebuilt.
+This supports **incremental compilation** — a host MAY skip recompilation when the
+hash matches, avoiding redundant I/O on unchanged vaults.
+
 ---
 
 ## 11. The Semantic Layer
@@ -713,6 +738,9 @@ disposable, never source-of-truth, fully rebuildable from the vault.
 
 - It MUST record the `embedding_model` and vector `dim` that produced it. Embeddings
   are not comparable across models; a model change REQUIRES a full reindex.
+- A host MUST maintain exactly **one canonical embedding implementation**. Parallel
+  or duplicate embedding systems (e.g. one in JSON format and another in JSONL)
+  create consistency risks where a node is indexed in one but not the other.
 - Retrieval SHOULD be **hybrid**: an exact/lexical pass (strong for slugs,
   identifiers, and code) fused with a dense semantic pass (strong for meaning and
   cross-lingual matches).
@@ -802,7 +830,7 @@ opaque ID as the slug and keep the human-readable label in `title` / `name`.
 This document is versioned independently of any host and of the conformance
 fixture set.
 
-- The spec version is stated in the document header (currently **v0.1 — Draft**).
+- The spec version is stated in the document header (currently **v0.2 — Draft**).
 - Breaking changes to the file format, the type registry, or the Operation
   Contract increment the spec version.
 - Until **v1.0**, any version MAY introduce breaking changes.

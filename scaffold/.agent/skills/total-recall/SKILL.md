@@ -26,9 +26,10 @@ You MUST actively reference and apply this skill under the following specific ru
 
 ### 3. When searching for complex domain knowledge or general facts
 *   **Trigger**: When you need to retrieve deep factual information (e.g. from the `facts/` category) or conceptual domain structures (e.g. from `concepts/`) that are not present in your active instruction files.
-*   **Action**: Use the two complementary search modes:
-     *   **Regular Text Search** (e.g. filesystem grep / literal matching): Use this when searching for specific literal keywords, exact config keys, exact filenames, or exact slugs.
-     *   **Semantic Search (REST API POST `/api/memory/search/semantic`)**: Use this when searching for conceptual matching, high-level intent, design patterns, or user preferences. Do NOT rely on only one search mode; combine both to ensure absolute coverage.
+*   **Action**: Use the semantic/lexical hybrid search engine (via the local `recall` command, or `/api/memory/search/semantic` endpoint) along with regular text search (e.g., grep):
+     *   **Hybrid Search**: Blends cosine-similarity vector search and lexical density TF-IDF keyword matching using Reciprocal Rank Fusion (RRF). This blends intent-based semantic matching with exact keyword accuracy.
+     *   **Hierarchical Parent-Child Search**: Memory node bodies are chunked and indexed as children. The vector store searches both the parent node and child chunks, returning matches based on maximum similarity.
+     *   **Regular Text Search**: Use grep to locate exact configurations, literal keys, or symbols.
 
 ### 4. When a topic requires deep, structured domain learning and mastery
 *   **Trigger**: When you encounter a complex architectural topic, a deep conceptual system, or a technical domain where you need to acquire deep mastery to proceed effectively.
@@ -37,7 +38,7 @@ You MUST actively reference and apply this skill under the following specific ru
 
 ### 5. When you modify, add, or delete files in the memory vault
 *   **Trigger**: Immediately after performing any memory node writes.
-*   **Action**: Rebuild the instruction shims by sending a POST request to `/api/vault/compile`.
+*   **Action**: Rebuild the instruction shims. If using CLI commands (`npx total-recall remember` / `forget`), recompilation runs automatically in the background (asynchronously via detached subprocesses) to minimize latency. If editing vault files directly, trigger manual compilation by sending a POST request to `/api/vault/compile` or running `npx total-recall compile`.
 
 ### 6. When troubleshooting connections, port blocks, or sync errors
 *   **Trigger**: If the REST server is unreachable, ports are blocked, or the upstream sync tool encounters errors.
@@ -48,12 +49,12 @@ You MUST actively reference and apply this skill under the following specific ru
 ## ⚡ Core Directives for IDE Agents
 
 ### 1. Zero-Database Sovereign Integrity
-Total Recall operates **entirely database-free**. The local filesystem is the source of truth. Every rule, pattern, decision, concept, preference, and fact exists as a plain Markdown file with semantic YAML frontmatter. Derived indexes are disposable caches. Do not look for PostgreSQL or SQLite databases.
+Total Recall operates **entirely database-free**. The local filesystem is the source of truth. Every rule, pattern, decision, concept, preference, and fact exists as a plain Markdown file with semantic YAML frontmatter. Derived indexes are disposable caches. While the internal Vector Store engine is pluggable and ready for native drop-in indexing engines (such as SQLite-VSS or HNSWLib), the canonical source of truth remains filesystem flat files. Do not look for PostgreSQL or traditional SQL databases.
 
 ### 2. Precise Tool & API Selection Heuristics
 When interacting with the system, choose your interfaces based on the following:
 *   **Local Skills**: Use local skill packages (located in `.agent/skills/`) for complex workspace tasks, testing, and formatting. If a local skill has custom helper scripts, ALWAYS invoke them via your shell command tool instead of running raw standard commands.
-*   **Total Recall Brain (MANDATORY)**: For all semantic searches, memory retrieval, memory writes, and derived index recompilation, **ALWAYS use shell `curl` commands** targeting the REST API endpoints documented below.
+*   **Total Recall Brain (MANDATORY)**: For all semantic searches, memory retrieval, memory writes, and derived index recompilation, **use either the local CLI suite (`npx total-recall`) or shell `curl` commands** targeting the REST API endpoints documented below.
 
 ### 3. Non-Destructive Code Modifications
 When modifying existing rule surfaces or IDE shims (such as `.cursorrules`, `CLAUDE.md`, `GEMINI.md`, etc.), **NEVER** overwrite the developer's custom pre-existing rules. Instead, write compiled absolute invariants inside the managed comment block:
@@ -78,6 +79,54 @@ This spins up a secure local Express server (port 3000, increments dynamically i
 *   **Credential Restoration**: Automatically parses, protects, and restores AES-encrypted API tokens and bcrypt cost-12 dashboard passwords from `.agent/secrets.enc` so you never lose credentials.
 *   **Automated SSL & Tunnels**: Automatically deploys free, encrypted Cloudflare Quick Tunnels (`*.trycloudflare.com`) or permanent Zero Trust domains over secure HTTPS/Caddy TLS.
 *   **Omni-Channel Integration Checklists**: Multi-select and configure your active editors (Claude Code, Cursor, Codex, Gemini, VS Code, Obsidian) with live terminal logs in the browser.
+
+---
+
+## 🛠️ LOCAL CLI SUITE REFERENCE
+
+For local workstation and terminal-based agent workflows, Total Recall provides a CLI command suite:
+
+### 1. Save Memory Node
+```bash
+npx total-recall remember <category> "<content>" [options]
+```
+Save rules, preferences, corrections, and facts.
+*   **Categories**: `invariant`, `preference`, `correction`, `fact`, `concept`, `pattern`, `anti-pattern`, `decision`, `lore`.
+*   **Options**:
+    *   `--global` / `--project`: Target scope. Global writes propagate to all registered projects.
+    *   `--importance <1-5>`: Define relative importance.
+    *   `--priority <level>`: Set priority level (`absolute`, `high`, `normal`, `low`).
+    *   `--modality <type>`: Modality constraints (`must`, `must_not`, `should`, `should_not`, `descriptive`).
+    *   `--slug <custom-slug>` / `--title "<custom-title>"`: Override automatic identifiers.
+    *   `--expires <duration>`: Set expiration lifespan (e.g. `7d`, `2w`, `6h`, `3m`).
+*   *Note*: Spawns an asynchronous background surface compile process immediately on execution to avoid synchronous blockages.
+
+### 2. Delete Memory Node
+```bash
+npx total-recall forget <slug> [options]
+```
+Delete a memory node by slug.
+*   **Options**:
+    *   `--global` / `--project`: Scope layers. If omitted, checks project first, then global.
+    *   `--no-compile`: Skip automatic background recompilation.
+*   *Note*: Spawns an asynchronous background surface compile process immediately on execution.
+
+### 3. Recall / Hybrid Search
+```bash
+npx total-recall recall "<query>" [options]
+```
+Perform semantic/lexical hybrid search across rules, facts, and session history using Reciprocal Rank Fusion (RRF).
+*   **Options**:
+    *   `--top-k, -k <number>`: Number of results (default: 5).
+    *   `--category, -cat <name>`: Filter by SSSS category.
+    *   `--tags, -t <list>`: Filter by tags.
+    *   `--global` / `--project`: Search specific layer.
+
+### 4. Build Memory Vault (Recompile)
+```bash
+npx total-recall compile
+```
+Synchronously rebuild the entire memory index (derived embeddings) and regenerate prompt instruction shims (such as `INSTRUCTIONS.md`, `GEMINI.md`, `AGENTS.md`, etc.).
 
 ---
 
