@@ -148,6 +148,6 @@ function printGeneralHelp() {
   \x1b[1mAll Commands Available:\x1b[0m
     \x1b[33minit\x1b[0m, \x1b[33msetup\x1b[0m, \x1b[33mstart\x1b[0m, \x1b[33mdeploy\x1b[0m, \x1b[33mdoctor\x1b[0m, \x1b[33mdream\x1b[0m, \x1b[33mlint\x1b[0m, \x1b[33mdaemon\x1b[0m, \x1b[33mbackup\x1b[0m, \x1b[33mrestore\x1b[0m, \x1b[33msync\x1b[0m, \x1b[33mstatus\x1b[0m,
     \x1b[33mgenerate-pat\x1b[0m, \x1b[33mhash-password\x1b[0m, \x1b[33mreset-password\x1b[0m, \x1b[33mcompile\x1b[0m, \x1b[33mrebuild\x1b[0m, \x1b[33msnapshot\x1b[0m, \x1b[33mmigrate\x1b[0m,
-    \x1b[33mimport\x1b[0m, \x1b[33mingest\x1b[0m, \x1b[33mconnect\x1b[0m, \x1b[33mrelay\x1b[0m, \x1b[33muninstall\x1b[0m, \x1b[33mchat\x1b[0m, \x1b[33mremember\x1b[0m, \x1b[33mrecall\x1b[0m, \x1b[33mresearch\x1b[0m, \x1b[33mmap\x1b[0m, \x1b[33mbrain\x1b[0m, \x1b[33mskill\x1b[0m
+    \x1b[33mimport\x1b[0m, \x1b[33mingest\x1b[0m, \x1b[33mconnect\x1b[0m, \x1b[33mrelay\x1b[0m, \x1b[33muninstall\x1b[0m, \x1b[33mchat\x1b[0m, \x1b[33mremember\x1b[0m, \x1b[33mrecall\x1b[0m, \x1b[33mresearch\x1b[0m, \x1b[33mmap\x1b[0m, \x1b[33mbrain\x1b[0m, \x1b[33mskill\x1b[0m, \x1b[33mcollab\x1b[0m
 `);
 }
