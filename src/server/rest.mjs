@@ -468,6 +468,25 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
   }
 });
 
+/**
+ * POST /api/diagnostics/agents
+ * Run `upgrade --agents` diagnostics checks and return the console text output.
+ */
+router.post('/api/diagnostics/agents', requireAuth, requireScope('health:read'), async (req, res) => {
+  try {
+    const result = spawnSync('node', [path.join(ROOT, 'bin', 'total-recall.mjs'), 'upgrade', '--agents'], {
+      encoding: 'utf8',
+      cwd: ROOT,
+      env: { ...process.env }
+    });
+    const output = (result.stdout || '') + (result.stderr || '');
+    res.json({ success: result.status === 0, output });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+
 // ─── Keys ─────────── (moved to ./routes/keys.mjs)
 // ─── Sessions ─────── (moved to ./routes/sessions.mjs)
 // ─── Sandbox ──────────────────────────────────────────────────────────────────

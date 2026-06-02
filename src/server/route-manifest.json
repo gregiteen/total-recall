@@ -69,6 +69,10 @@
   },
   {
     "method": "POST",
+    "path": "/api/diagnostics/agents"
+  },
+  {
+    "method": "POST",
     "path": "/api/dream"
   },
   {
