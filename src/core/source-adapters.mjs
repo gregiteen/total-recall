@@ -1,7 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import { brainDir } from './config.mjs';
+import {
+  brainDir,
+  braveApiKey as defaultBraveKey,
+  braveSearchApiKey as defaultBraveSearchKey,
+  exaApiKey as defaultExaKey,
+  githubToken as defaultGithubToken,
+  serperApiKey as defaultSerperKey,
+  tavilyApiKey as defaultTavilyKey
+} from './config.mjs';
 
 /**
  * Research Source Adapters — Real Service Integrations
@@ -42,12 +50,12 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
 
   return {
     // ── Paid search providers (fallback chain: Brave → Tavily → Exa → Serper) ──
-    braveApiKey:  process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || secrets.brave_api_key || fileConfig.brave_api_key  || null,
-    tavilyApiKey: process.env.TAVILY_API_KEY                                    || secrets.tavily_api_key || fileConfig.tavily_api_key || null,
-    exaApiKey:    process.env.EXA_API_KEY                                       || secrets.exa_api_key    || fileConfig.exa_api_key    || null,
-    serperApiKey: process.env.SERPER_API_KEY                                    || secrets.serper_api_key || fileConfig.serper_api_key || null,
+    braveApiKey:  process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || secrets.brave_api_key || fileConfig.brave_api_key  || defaultBraveKey || defaultBraveSearchKey || null,
+    tavilyApiKey: process.env.TAVILY_API_KEY                                    || secrets.tavily_api_key || fileConfig.tavily_api_key || defaultTavilyKey || null,
+    exaApiKey:    process.env.EXA_API_KEY                                       || secrets.exa_api_key    || fileConfig.exa_api_key    || defaultExaKey || null,
+    serperApiKey: process.env.SERPER_API_KEY                                    || secrets.serper_api_key || fileConfig.serper_api_key || defaultSerperKey || null,
     // GitHub: personal access token for higher rate limits (60→5000 req/hr)
-    githubToken: process.env.GITHUB_TOKEN || secrets.github_token || fileConfig.github_token || null,
+    githubToken: process.env.GITHUB_TOKEN || secrets.github_token || fileConfig.github_token || defaultGithubToken || null,
     fetchTimeoutMs: fileConfig.fetch_timeout_ms || 10000,
     maxResultsPerSource: fileConfig.max_results_per_source || 5,
     userAgent: fileConfig.user_agent || 'TotalRecall/1.0 (knowledge-acquisition; +https://github.com/gregiteen/total-recall)',

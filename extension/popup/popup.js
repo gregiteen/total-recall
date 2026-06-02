@@ -26,6 +26,25 @@
     try {
       await self.BrainClient.healthCheck();
       dot.className = 'dot connected';
+
+      // Check for extension updates
+      try {
+        const status = await self.BrainClient.brainFetch('/api/extension/status');
+        const clientVersion = chrome.runtime.getManifest().version;
+        if (status && status.version && status.version !== clientVersion) {
+          const config = await self.BrainClient.getConfig();
+          const brainUrl = config.brainUrl || 'http://127.0.0.1:3000';
+          const footer = document.querySelector('.popup-footer');
+          if (footer) {
+            footer.innerHTML = `
+              <span style="color: #f38ba8; font-weight: bold; display: flex; align-items: center; gap: 4px;">⚠️ Update Available (v${status.version})</span>
+              <a href="${brainUrl}/health" target="_blank" style="color: #89b4fa; text-decoration: none; font-weight: bold;">Download ZIP</a>
+            `;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check extension update status:', err);
+      }
     } catch {
       dot.className = 'dot disconnected';
     }
@@ -147,4 +166,10 @@
   fillCurrentTab();
   checkConnection();
   loadTrackingPref();
+
+  // Populate version label
+  const versionLabel = document.getElementById('version-label');
+  if (versionLabel) {
+    versionLabel.textContent = 'v' + chrome.runtime.getManifest().version;
+  }
 })();

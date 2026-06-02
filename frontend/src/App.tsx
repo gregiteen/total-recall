@@ -18,6 +18,9 @@ import AutomationsPage from './pages/AutomationsPage'
 import DeploymentsPage from './pages/DeploymentsPage'
 import SkillsPage from './pages/SkillsPage'
 import UsagePage from './pages/UsagePage'
+import CollabPage from './pages/CollabPage'
+import HelpPage from './pages/HelpPage'
+import GraphPage from './pages/GraphPage'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -142,6 +145,29 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
           Skills Manager
+        </NavLink>
+        <NavLink to="/collab" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-collab">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path d="M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          Collaboration
+        </NavLink>
+        <NavLink to="/help" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-help">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          Documentation
+        </NavLink>
+        <NavLink to="/graph" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-graph">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 2 22 22 22" />
+          </svg>
+          Sovereign Graph
         </NavLink>
       </nav>
       <div className="sidebar-footer">
@@ -293,6 +319,9 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/keys" element={<ApiKeysPage />} />
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/collab" element={<CollabPage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
           </Routes>
         </div>
       )}

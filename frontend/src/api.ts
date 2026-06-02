@@ -705,3 +705,23 @@ export async function runUpdate(): Promise<{ success: boolean; message: string }
   if (!res.ok) throw new Error(`Run update API error: ${res.status}`)
   return res.json()
 }
+
+// ─── Help API ──────────────────────────────────────────────────────────────────
+
+export interface HelpTopic {
+  id: string
+  title: string
+  description: string
+}
+
+export async function fetchHelpTopics(): Promise<{ topics: HelpTopic[] }> {
+  const res = await apiFetch(`${API_BASE}/api/help`)
+  if (!res.ok) throw new Error('Failed to load help topics')
+  return res.json()
+}
+
+export async function fetchHelpContent(topicId: string): Promise<{ topic: string; content: string }> {
+  const res = await apiFetch(`${API_BASE}/api/help?topic=${encodeURIComponent(topicId)}`)
+  if (!res.ok) throw new Error('Failed to load help content')
+  return res.json()
+}

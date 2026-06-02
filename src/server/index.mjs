@@ -198,8 +198,12 @@ try {
   app.use('/api', apiRateLimiter());
   app.use(restRouter);
   logger.info('server', 'REST API mounted (/api/*, /v1/models, /.well-known/total-recall.json)');
+
+  const { collabRouter } = await import('./routes/collab.mjs');
+  app.use(collabRouter);
+  logger.info('server', 'Collaboration API routes mounted (/api/collab/*)');
 } catch (err) {
-  logger.error('server', `REST API failed to load: ${err.message}`);
+  logger.error('server', `REST API or Collab routes failed to load: ${err.message}`);
 }
 
 // ─── API Routes (/v1/chat/completions) ──────────────────────────────────────────
@@ -573,7 +577,23 @@ const HOST = nodeEnv === 'production' && publicBindRequested && serverSecurityCo
   ? '127.0.0.1'
   : configuredHost;
 
+import { WebSocketServer } from 'ws';
+const collabWss = new WebSocketServer({ noServer: true });
+
 const server = app.listen(PORT, HOST, () => {
+  server.on('upgrade', async (request, socket, head) => {
+    const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+    if (url.pathname === '/collab-ws') {
+      try {
+        const { handleCollabUpgrade } = await import('./routes/collab.mjs');
+        handleCollabUpgrade(request, socket, head, collabWss);
+      } catch (err) {
+        socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+        socket.destroy();
+      }
+    }
+  });
+
   if (HOST !== configuredHost) {
     logger.error("server", `Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
   }

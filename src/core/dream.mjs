@@ -137,6 +137,47 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
   pruneDir(inboxDir, draftMaxAgeMs); // Keeps the local dev inbox fully clean of automatic research noise
   if (conflictsDir) pruneDir(conflictsDir, draftMaxAgeMs);
 
+  // Prune scheduler tasks queue: move completed/failed ones to archive, delete archives older than logMaxAgeMs
+  const tasksQueueDir = path.join(brainDir, 'scheduler', 'queue');
+  const tasksArchiveDir = path.join(tasksQueueDir, 'archive');
+  if (fs.existsSync(tasksQueueDir)) {
+    try {
+      if (!fs.existsSync(tasksArchiveDir)) {
+        fs.mkdirSync(tasksArchiveDir, { recursive: true });
+      }
+      const files = fs.readdirSync(tasksQueueDir);
+      for (const file of files) {
+        if (!file.endsWith('.md')) continue;
+        const fullPath = path.join(tasksQueueDir, file);
+        try {
+          const raw = fs.readFileSync(fullPath, 'utf8');
+          const { data } = matter(raw);
+          if (data.status === 'completed' || data.status === 'failed') {
+            fs.renameSync(fullPath, path.join(tasksArchiveDir, file));
+          }
+        } catch (e) {
+          // ignore parsing/permission errors for individual files
+        }
+      }
+
+      const archiveFiles = fs.readdirSync(tasksArchiveDir);
+      for (const file of archiveFiles) {
+        if (!file.endsWith('.md')) continue;
+        const fullPath = path.join(tasksArchiveDir, file);
+        try {
+          const stat = fs.statSync(fullPath);
+          if (now - stat.mtimeMs > logMaxAgeMs) {
+            fs.unlinkSync(fullPath);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (err) {
+      logger.warn('dream', `Failed to prune scheduler tasks: ${err.message}`);
+    }
+  }
+
   // Automatically prune transient planning files in every active/historical conversation folder,
   // while permanently preserving the conversations/threads themselves (.system_generated)
   try {
