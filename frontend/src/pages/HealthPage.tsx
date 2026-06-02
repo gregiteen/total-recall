@@ -21,6 +21,26 @@ export default function HealthPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [updateError, setUpdateError] = useState('')
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
+  const [checkMessage, setCheckMessage] = useState('')
+
+  const handleManualCheckUpdate = async () => {
+    setIsCheckingUpdate(true)
+    setCheckMessage('')
+    setUpdateError('')
+    try {
+      const data = await checkUpdate()
+      setUpdateInfo(data)
+      if (!data.updateAvailable) {
+        setCheckMessage('System is up to date!')
+        setTimeout(() => setCheckMessage(''), 3000)
+      }
+    } catch (e) {
+      setUpdateError(`Failed to check updates: ${(e as Error).message}`)
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -168,7 +188,7 @@ export default function HealthPage() {
           <h1>System Health</h1>
           <p>Live monitoring of your sovereign brain {lastPoll && <span>· Last poll: {lastPoll.toLocaleTimeString()}</span>}</p>
         </div>
-        {updateInfo?.updateAvailable && (
+        {updateInfo?.updateAvailable ? (
           <div className="badge badge-success" style={{
             display: 'flex',
             alignItems: 'center',
@@ -197,6 +217,30 @@ export default function HealthPage() {
               }}
             >
               Update Now
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {checkMessage && (
+              <span style={{ color: '#3fb950', fontSize: 14, fontWeight: 500, animation: 'fadeIn 0.3s ease' }}>
+                {checkMessage}
+              </span>
+            )}
+            <button
+              className="btn btn-secondary"
+              disabled={isCheckingUpdate}
+              onClick={handleManualCheckUpdate}
+              style={{
+                fontSize: 13,
+                padding: '8px 16px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
             </button>
           </div>
         )}

@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.3] — 2026-06-02
+
+### ✨ Features
+- **Real Browser-Level Collaboration**: Integrated group sharing of webpage annotations, live user presence counting, and real-time site-scoped messaging directly into the Chrome Extension side panel (replacing the simulated sandbox).
+- **Check for Updates Button**: Added a manual "Check for Updates" button to the System Health Page to check registry versions on demand.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.6.3`.
+
+## [3.6.2] — 2026-06-02
+
+### ⚡ Performance & UX
+- **Optimized Claude Code Completions in UI**: Added `--setting-sources local` and `--tools ""` to the default and compiled `claude` agent flags, bypassing the loading of the user's 30 global plugins and disabling local directory/command scanning, speeding up UI responses significantly.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.6.2`.
+
 ## [3.6.1] — 2026-06-02
 
 ### 🐛 Bug Fixes
