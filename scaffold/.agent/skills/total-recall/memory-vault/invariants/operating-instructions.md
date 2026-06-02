@@ -15,7 +15,7 @@ predicate: operate
 object: memory_system
 created: 2026-05-01T00:00:00.000Z
 updated: 2026-05-15T00:00:00.000Z
-last_accessed: 2026-05-15T00:00:00.000Z
+last_accessed: 2026-06-01T06:07:11.601Z
 source:
   type: scaffold
   session_id: scaffold-seed
@@ -36,7 +36,7 @@ sentiment_polarity: directive_must
 sentiment_target: memory_system
 decay:
   half_life_days: 365
-  access_count: 1
+  access_count: 3
 x_temporal_context: 2026-05-26T23:05:06.525Z
 ---
 # Total Recall Operating Protocol
