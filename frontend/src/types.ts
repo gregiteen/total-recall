@@ -159,5 +159,21 @@ export interface ConfigJson {
   brain?: {
     preferred_agent?: string
   }
+  secrets?: {
+    google_api_key?: string
+    anthropic_api_key?: string
+    openai_api_key?: string
+    tavily_api_key?: string
+    brave_api_key?: string
+    exa_api_key?: string
+    serper_api_key?: string
+    github_token?: string
+  }
+}
+
+export interface UpdateCheckResult {
+  currentVersion: string
+  latestVersion: string
+  updateAvailable: boolean
 }
 

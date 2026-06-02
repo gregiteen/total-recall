@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.0] — 2026-06-02
+
+### ✨ Features
+- **Core Self-Update System**: Integrated `/api/update/check` and `/api/update/run` endpoints into the REST router to query the npm registry for updates, pull the latest git code, install dependencies, and reboot the system kernel.
+- **Health Check Update Alerts & Dynamic UI**: Modified the frontend Health Page to dynamically fetch update availability, display an animated update banner, prompt for confirmation, and run the self-update sequence.
+- **Progress Overlay & Resilient Polling Recovery**: Built an updating spinner overlay with blurred glassmorphic backdrops and programmed auto-polling to restore the tab state once the server restarts.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.5.0`.
+
 ## [3.4.0] — 2026-06-02
 
 ### ✨ Features

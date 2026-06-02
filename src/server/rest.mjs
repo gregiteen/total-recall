@@ -1371,10 +1371,12 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
     const brainPath = path.join(CONFIG_DIR, 'brain.json');
+    const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
 
     let security = {};
     let budget = {};
     let brain = {};
+    let secrets = {};
 
     if (fs.existsSync(securityPath)) {
       try {
@@ -1391,6 +1393,11 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
         brain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {};
       } catch {}
     }
+    if (fs.existsSync(secretsPath)) {
+      try {
+        secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
+      } catch {}
+    }
 
     const safeBrain = { ...brain };
     if (safeBrain.token) {
@@ -1398,16 +1405,25 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
       delete safeBrain.token;
     }
 
-    res.json({ security, budget, brain: safeBrain });
+    const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
+    const safeSecrets = {};
+    for (const key of allowedKeys) {
+      if (secrets[key] !== undefined) {
+        safeSecrets[key] = secrets[key];
+      }
+    }
+
+    res.json({ security, budget, brain: safeBrain, secrets: safeSecrets });
   } catch (err) { serverError(res, err); }
 });
 
 router.post('/api/config-json', requireAuth, requireScope('config:write'), (req, res) => {
   try {
-    const { security, budget, brain } = req.body;
+    const { security, budget, brain, secrets } = req.body;
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
     const brainPath = path.join(CONFIG_DIR, 'brain.json');
+    const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
 
     if (!fs.existsSync(CONFIG_DIR)) {
       fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -1432,6 +1448,25 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), (req,
       }
       delete nextBrain.has_token;
       fs.writeFileSync(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
+    }
+    if (secrets) {
+      let existingSecrets = {};
+      if (fs.existsSync(secretsPath)) {
+        try {
+          existingSecrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
+        } catch {}
+      }
+      const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
+      for (const key of allowedKeys) {
+        if (secrets[key] !== undefined) {
+          if (secrets[key] === '') {
+            delete existingSecrets[key];
+          } else {
+            existingSecrets[key] = secrets[key];
+          }
+        }
+      }
+      fs.writeFileSync(secretsPath, JSON.stringify(existingSecrets, null, 2), { encoding: 'utf8', mode: 0o600 });
     }
 
     res.json({ success: true });
@@ -1959,5 +1994,77 @@ function getLastModified(filePath) {
   } catch {}
   return null;
 }
+
+/**
+ * GET /api/update/check
+ */
+router.get('/api/update/check', requireAuth, async (req, res) => {
+  try {
+    const localPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const currentVersion = localPkg.version || '0.0.0';
+
+    const registryRes = await fetch('https://registry.npmjs.org/total-recall-brain/latest');
+    if (!registryRes.ok) {
+      throw new Error(`Failed to fetch latest version from npm: ${registryRes.status}`);
+    }
+    const registryData = await registryRes.json();
+    const latestVersion = registryData.version || '0.0.0';
+
+    const updateAvailable = latestVersion !== currentVersion;
+
+    res.json({
+      currentVersion,
+      latestVersion,
+      updateAvailable
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/update/run
+ */
+router.post('/api/update/run', requireAuth, async (req, res) => {
+  try {
+    res.json({ success: true, message: 'Update started. Server is updating and will restart shortly.' });
+
+    setImmediate(async () => {
+      logger.info('update', 'Starting auto-update process...');
+      try {
+        const { exec } = await import('node:child_process');
+        
+        const runCmd = (cmd, cwd) => new Promise((resolve, reject) => {
+          logger.info('update', `Running: ${cmd} in ${cwd}`);
+          exec(cmd, { cwd }, (err, stdout, stderr) => {
+            if (err) {
+              logger.error('update', `Command failed: ${cmd}. Error: ${err.message}`);
+              return reject(err);
+            }
+            resolve({ stdout, stderr });
+          });
+        });
+
+        // 1. git pull
+        await runCmd('git pull', ROOT);
+        // 2. npm install
+        await runCmd('npm install', ROOT);
+        // 3. build/install frontend if package.json exists
+        const frontendPath = path.join(ROOT, 'frontend');
+        if (fs.existsSync(path.join(frontendPath, 'package.json'))) {
+          await runCmd('npm install', frontendPath);
+          await runCmd('npm run build', frontendPath);
+        }
+
+        logger.info('update', 'Update successfully applied. Restarting server...');
+        process.exit(0);
+      } catch (err) {
+        logger.error('update', `Auto-update failed: ${err.message}`);
+      }
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
 
 export { router as restRouter };

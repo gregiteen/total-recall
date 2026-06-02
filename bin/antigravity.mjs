@@ -83,10 +83,9 @@ if (!process.env.GOOGLE_API_KEY) {
   }
 }
 
-const apiKey = process.env.GOOGLE_API_KEY;
+const apiKey = process.env.GOOGLE_API_KEY || '';
 if (!apiKey) {
-  console.error('Error: GOOGLE_API_KEY environment variable is not configured.');
-  process.exit(1);
+  console.warn('Warning: GOOGLE_API_KEY environment variable is not configured. Attempting connection via GCP Application Default Credentials or ambient environment...');
 }
 
 // Resolve the model dynamically from the API registry based on the category/alias selected
@@ -109,7 +108,13 @@ async function resolveGenerativeModel(selectedModel) {
   }
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+    const keyParam = apiKey ? `key=${apiKey}` : '';
+    const headers = {};
+    if (!apiKey && process.env.GCLOUD_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.GCLOUD_TOKEN}`;
+    }
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?${keyParam}`, {
+      headers,
       signal: AbortSignal.timeout(5000)
     });
     if (res.ok) {
@@ -154,13 +159,19 @@ async function resolveGenerativeModel(selectedModel) {
 async function main() {
   try {
     const resolvedModel = await resolveGenerativeModel(requestedModel);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolvedModel}:generateContent?key=${apiKey}`;
+    const keyParam = apiKey ? `?key=${apiKey}` : '';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolvedModel}:generateContent${keyParam}`;
+
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (!apiKey && process.env.GCLOUD_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.GCLOUD_TOKEN}`;
+    }
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         contents: [{
           parts: [{ text: prompt }]
