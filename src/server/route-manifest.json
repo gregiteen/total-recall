@@ -105,6 +105,10 @@
   },
   {
     "method": "GET",
+    "path": "/api/help"
+  },
+  {
+    "method": "GET",
     "path": "/api/import/rules"
   },
   {
