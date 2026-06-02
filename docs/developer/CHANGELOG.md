@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.1] — 2026-06-02
+
+### 🐛 Bug Fixes
+- **CLI Agent Key Isolation**: Patched runtime spawning logic to delete `GOOGLE_API_KEY` for `antigravity` and `gemini` agent commands, preventing API key validation errors when both keys are loaded.
+- **Codex Git Trust Flags**: Added `--skip-git-repo-check` to the default `codex` flags to prevent execution failures in untrusted git directories.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.6.1`.
+
 ## [3.6.0] — 2026-06-02
 
 ### ✨ Features
