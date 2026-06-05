@@ -15,7 +15,7 @@ import ApiKeysPage from './pages/ApiKeysPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import BrainSelector from './components/BrainSelector'
 import AutomationsPage from './pages/AutomationsPage'
-import DeploymentsPage from './pages/DeploymentsPage'
+import ModelsPage from './pages/ModelsPage'
 import SkillsPage from './pages/SkillsPage'
 import UsagePage from './pages/UsagePage'
 import CollabPage from './pages/CollabPage'
@@ -99,14 +99,11 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           </svg>
           Sandbox
         </NavLink>
-        <NavLink to="/deployments" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-deployments">
+        <NavLink to="/models" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-models">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-            <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-            <line x1="6" y1="6" x2="6.01" y2="6" />
-            <line x1="6" y1="18" x2="6.01" y2="18" />
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>
           </svg>
-          Deployments
+          Models & Agents
         </NavLink>
         <NavLink to="/health" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-health">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -312,7 +309,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/automations" element={<AutomationsPage />} />
             <Route path="/files" element={<FilesPage />} />
             <Route path="/sandbox" element={<SandboxPage />} />
-            <Route path="/deployments" element={<DeploymentsPage />} />
+            <Route path="/models" element={<ModelsPage />} />
             <Route path="/health" element={<HealthPage />} />
             <Route path="/usage" element={<UsagePage />} />
             <Route path="/settings" element={<SettingsPage />} />
