@@ -181,9 +181,14 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
           {brains.map(brain => {
             const isSelected = selectedIds.includes(brain.id);
             return (
-              <button
+              <div
                 key={brain.id}
-                onClick={(e) => handleRowClick(brain.id, e)}
+                onClick={(e) => {
+                  if (brain.exists) {
+                    handleRowClick(brain.id, e);
+                    setExpanded(false); // Close dropdown on single selection
+                  }
+                }}
                 style={{
                   width: '100%',
                   padding: '8px 10px',
@@ -201,7 +206,8 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                 }}
                 onMouseEnter={e => { if (brain.exists) (e.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isSelected ? 'var(--accent-faint)' : 'transparent' }}
-                disabled={!brain.exists}
+                role="button"
+                tabIndex={0}
               >
                 <input
                   type="checkbox"
@@ -247,7 +253,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                 }}>
                   {brain.layer}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>

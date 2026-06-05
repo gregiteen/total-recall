@@ -93,6 +93,7 @@ Show all available commands.
 
 - Self-captured memory: Always check secrets.enc for 'npm_token' or 'npm_r... Always check secrets.enc for 'npm_token' or 'npm_recovery_code' to publish packages without prompting th... (use recall to read more)
 - Always Perform Web Search for Cutoff Gap
+- Self-captured memory: If a task is deemed unnecessary, delete it entirel... If a task is deemed unnecessary, delete it entirely instead of moving it to the deferred backlog.
 - Self-captured memory: The global brain must not be used to automatically... The global brain must not be used to automatically infer and force system execution rules upon local pro... (use recall to read more)
 - Self-captured memory: Always check secrets.enc for 'npm_recovery_code' t... Always check secrets.enc for 'npm_recovery_code' to publish packages without prompting the user for 2FA... (use recall to read more)
 - Self-captured memory: Always audit and clean up local side-effects, data... Always audit and clean up local side-effects, database writes, or mock test entries left behind by runni... (use recall to read more)
