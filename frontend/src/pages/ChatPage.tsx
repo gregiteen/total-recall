@@ -718,6 +718,8 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
             flexDirection: 'column',
             gap: '16px',
             width: '100%',
+            maxWidth: 800,
+            margin: '0 auto',
             pointerEvents: 'auto'
           }}>
             {messages.map((m, index) => (
