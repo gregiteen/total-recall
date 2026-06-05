@@ -28,5 +28,3 @@
 - [ ] **Gmail & Calendar Connectors**: Implement OAuth2 integrations for incremental sync to create fact nodes. Requires robust local-only encryption, consent framework, and strict classification.
 - [ ] **Location Tracking Ingestion**: Support periodic tracking writes via `POST /api/sessions/ingest { source: 'location' }` to save to memory with `x_location` schema values.
 
-## Bring Your Own Model (BYOM) Architecture
-- [ ] Determine backend data structures required for the new page components.
