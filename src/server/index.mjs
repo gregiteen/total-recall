@@ -138,6 +138,23 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // Determine overall status
   const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || cliAgents.length === 0;
 
+  // Check Caddy and Cloudflare status
+  let caddyStatus = 'inactive';
+  let cloudflareStatus = 'inactive';
+  try {
+    const { exec } = await import('node:child_process');
+    const util = await import('node:util');
+    const execAsync = util.promisify(exec);
+    try {
+      await execAsync('pgrep caddy');
+      caddyStatus = 'active';
+    } catch { }
+    try {
+      await execAsync('pgrep cloudflared');
+      cloudflareStatus = 'active';
+    } catch { }
+  } catch { }
+
   res.json({
     status: hasCriticalIssue ? 'degraded' : 'healthy',
     version: PACKAGE_VERSION,
@@ -146,6 +163,8 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     disk,
     cli_agents: cliAgents,
     daemon: daemonStatus,
+    caddy: caddyStatus,
+    cloudflare: cloudflareStatus,
     emergency_alerts: emergencyAlerts || null,
     vfs: {
       exists: vaultExists,
