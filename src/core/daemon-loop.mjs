@@ -68,11 +68,15 @@ function requiresLLM(task) {
   return false;
 }
 
-/**
- * Dispatch a task to the appropriate engine.
- * Only deterministic (non-LLM) tasks are executed.
- */
 async function dispatchTask(task) {
+  if (requiresLLM(task)) {
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: `Skipping task (requires LLM): ${task.slug} [${task.category}]`,
+    });
+    return { success: true, skippedLLM: true, output: 'Skipped — handled by IDE agents' };
+  }
+
   const category = task.category;
 
   try {
@@ -85,13 +89,11 @@ async function dispatchTask(task) {
         return await runResearchTask(task);
 
       default:
-        // All other categories (research, deliberation, inference, etc.)
-        // require LLM and are handled by IDE agents, not the daemon.
         logger.info({
           subsystem: 'daemon-loop',
           message: `Skipping task (not deterministic): ${task.slug} [${category}]`,
         });
-        return { success: true, output: 'Skipped — handled by IDE agents' };
+        return { success: true, skippedLLM: true, output: 'Skipped — handled by IDE agents' };
     }
   } catch (err) {
     logger.info({
@@ -309,7 +311,11 @@ async function main() {
       // Mark complete
       if ((source === 'explicit' || source === 'idle') && task._filepath) {
         try {
-          updateTaskStatus(task, result.success ? 'completed' : 'failed', QUEUE_DIR);
+          if (result.skippedLLM) {
+            updateTaskStatus(task, 'pending', QUEUE_DIR);
+          } else {
+            updateTaskStatus(task, result.success ? 'completed' : 'failed', QUEUE_DIR);
+          }
         } catch (statusErr) {
           logger.info({
             subsystem: 'daemon-loop',
@@ -321,15 +327,22 @@ async function main() {
         try {
           const patch = {
             status: result.success ? 'pending' : 'failed',
-            notes: result.output || result.error || null,
+            // Append the output rather than completely overwriting the original rationale
+            notes: result.output ? `Phase output: ${result.output}` : (result.error || null),
           };
           if (result.factSlug) {
             patch.node_slug = result.factSlug;
           }
-          // Only advance through acquisition phase — skip LLM phases
-          if (result.success && task._research_phase === 'acquisition' && result.factSlug) {
-            // Research stays in acquisition — no LLM phases to advance to
-            patch.status = 'done';
+          // If the task was skipped because it requires an LLM, DO NOT complete the research project.
+          // Wait for an IDE agent to run it.
+          if (result.skippedLLM) {
+            patch.status = 'pending';
+          } else if (result.success && task._research_phase === 'acquisition' && result.factSlug) {
+            // Acquisition is done, advance to deliberation phase for LLM processing!
+            patch.status = 'pending';
+            patch.research_phase = 'deliberation';
+            // Also notify the user/UI that phase 1 is complete!
+            patch.completed_at = new Date().toISOString();
           }
           updateQueueItem(task._research_id, patch);
         } catch (err) {
