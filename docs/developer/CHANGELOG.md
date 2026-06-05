@@ -2,8 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.6.4] — 2026-06-02
+## [3.6.5] — 2026-06-05
 
+### 🐛 Bug Fixes
+- **BrainSelector UX**: Fixed brain selection buttons failing to trigger correctly by replacing invalid HTML nested inputs with valid wrapper `<div>`s, properly isolating checkbox toggles from single-select actions, and ensuring the dropdown closes dynamically on selection.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.6.5`.
+
+## [3.6.4] — 2026-06-02
 ### ✨ Features
 - **CLI Agent Diagnostics Panel**: Replaced the deprecated mock model-pulling widget on the Deployments page with a functional diagnostics panel. It connects to the new `POST /api/diagnostics/agents` endpoint, runs `upgrade --agents` in the background, and outputs live CLI results.
 - **Clean Collaboration Labels**: Cleaned up the simulated sandbox styling terminology in the CollabPage views, renaming it to clear real-world descriptors like "Connect URL" and "Active browse context URL".
