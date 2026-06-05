@@ -47,6 +47,8 @@ export interface HealthData {
   ollama_models?: string[]
   cli_agents?: string[]
   daemon?: string
+  caddy?: string
+  cloudflare?: string
   emergency_alerts?: string | null
 }
 
@@ -158,6 +160,7 @@ export interface ConfigJson {
   }
   brain?: {
     preferred_agent?: string
+    local_endpoint?: string
   }
   secrets?: {
     google_api_key?: string
