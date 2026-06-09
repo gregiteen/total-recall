@@ -296,6 +296,10 @@
     "path": "/api/tasks"
   },
   {
+    "method": "DELETE",
+    "path": "/api/tasks/cleanup"
+  },
+  {
     "method": "POST",
     "path": "/api/tts"
   },

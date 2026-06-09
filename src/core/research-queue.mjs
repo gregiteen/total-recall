@@ -325,6 +325,14 @@ export function listQueue({ status, query, limit = 100, offset = 0, brainDir: ov
  */
 export function addToQueue({ topic, priority = 'medium', notes, brainDir: overrideBrainDir } = {}) {
   if (!topic) throw new Error('topic is required');
+
+  const items = loadQueue(overrideBrainDir);
+  const normalizedTopic = String(topic).trim().toLowerCase();
+  const existing = items.find(i => i.topic.trim().toLowerCase() === normalizedTopic);
+  if (existing) {
+    return existing;
+  }
+
   const item = {
     id:           crypto.randomUUID(),
     topic:        String(topic),
@@ -338,7 +346,6 @@ export function addToQueue({ topic, priority = 'medium', notes, brainDir: overri
     completed_at: null,
   };
   item.summary = compileResearchProjectSummary(item, null);
-  const items = loadQueue(overrideBrainDir);
   items.unshift(item);
   saveQueue(items, overrideBrainDir);
 

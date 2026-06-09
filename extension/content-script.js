@@ -398,7 +398,15 @@
           toast.classList.add('visible');
           setTimeout(() => toast.classList.remove('visible'), 2500);
         } else {
-          toast.textContent = '❌ Action failed';
+          let errText = '❌ Action failed';
+          if (res && res.error) {
+            if (res.error.includes('Authentication failed')) {
+              errText = '❌ Auth Error - Check PAT';
+            } else {
+              errText = `❌ ${res.error}`;
+            }
+          }
+          toast.textContent = errText;
           toast.style.background = '#e74c3c';
           toast.style.boxShadow = '0 4px 12px rgba(231, 76, 60, 0.3)';
           toast.classList.add('visible');

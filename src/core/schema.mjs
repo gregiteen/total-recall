@@ -644,6 +644,28 @@ export const PhoneNumberSchema = z.object({
   user_id: z.string().optional().nullable(),
 });
 
+export const DomainSchema = z.object({
+  type: z.literal('domain'),
+  domain_name: z.string(),
+  registrar: z.string(),
+  status: z.string(),
+  payment_status: z.string(),
+  workspace_id: z.string().optional().nullable(),
+  user_id: z.string().optional().nullable(),
+  base_price_usd: z.number().optional().nullable(),
+  purchase_price_usd: z.number().optional().nullable(),
+  annual_renewal_usd: z.number().optional().nullable(),
+  markup_amount_usd: z.number().optional().nullable(),
+  markup_rate: z.number().optional().nullable(),
+  expires_at: z.string().optional().nullable(),
+  payment_method: z.string().optional().nullable(),
+  vercel_domain_id: z.string().optional().nullable(),
+  stripe_payment_intent_id: z.string().optional().nullable(),
+  stripe_checkout_session_id: z.string().optional().nullable(),
+  credits_charged: z.number().optional().nullable(),
+  credit_transaction_id: z.string().optional().nullable(),
+});
+
 export const WorkspaceSchema = z.object({
   type: z.literal('workspace'),
   name: z.string(),
@@ -804,6 +826,7 @@ export const SSSS_SCHEMAS = {
   workspace_transfer: WorkspaceTransferSchema,
   extension: ExtensionSchema,
   phone_number: PhoneNumberSchema,
+  domain: DomainSchema,
   workspace: WorkspaceSchema,
   commerce_catalog: CommerceCatalogSchema,
   product: ProductSchema,
