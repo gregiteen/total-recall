@@ -10,6 +10,10 @@ const { share, search, healthCheck } = self.BrainClient;
 // Context menu registration
 // ---------------------------------------------------------------------------
 chrome.runtime.onInstalled.addListener(() => {
+  if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
+  }
+
   chrome.contextMenus.create({
     id: 'send-to-brain',
     title: 'Send to Brain',

@@ -529,7 +529,8 @@ export function buildMultiNoteGraph(topic, synthesis, parsedSupportingNotes, sta
     return { slug, body: bodyLines.join('\n'), frontmatter };
   });
 
-  const masterSlug = `fact-master-${crypto.randomBytes(5).toString('hex')}`;
+  const topicHash = crypto.createHash('md5').update(topic).digest('hex').slice(0, 10);
+  const masterSlug = `fact-master-${topicHash}`;
 
   // Bidirectionally link the master node and supporting notes
   const masterRelated = supportingNodes.map(n => n.slug);
@@ -658,7 +659,8 @@ async function writeAndSurfaceImmediately(topic, synthesis, sourceResults, {
   const topResults = sourceResults.slice(0, 4);
   for (const r of topResults) {
     const summary = await synthesizeSupportingNote(topic, r, runtimeConfig);
-    const slug = `fact-note-${crypto.randomBytes(5).toString('hex')}`;
+    const noteHash = crypto.createHash('md5').update(r.url || r.title || r.snippet).digest('hex').slice(0, 10);
+    const slug = `fact-note-${noteHash}`;
     parsedSupportingNotes.push({ result: r, summary, slug });
   }
 
@@ -700,7 +702,8 @@ async function writeDraftToInbox(topic, synthesis, sourceResults, inboxDir, runt
   const topResults = sourceResults.slice(0, 4);
   for (const r of topResults) {
     const summary = await synthesizeSupportingNote(topic, r, runtimeConfig);
-    const slug = `fact-note-${crypto.randomBytes(5).toString('hex')}`;
+    const noteHash = crypto.createHash('md5').update(r.url || r.title || r.snippet).digest('hex').slice(0, 10);
+    const slug = `fact-note-${noteHash}`;
     parsedSupportingNotes.push({ result: r, summary, slug });
   }
 

@@ -210,6 +210,7 @@ export function generateIdleTask({ vaultDir, sessionsDir }) {
     () => generateInferenceTask(vaultDir),
     () => generatePostMortemTask(sessionsDir),
     () => generateClarityReviewTask(vaultDir),
+    () => generateMemoryCompactionTask(vaultDir),
   ];
 
   const strategy = cleanStrategies[_idleCycleCounter % cleanStrategies.length];
@@ -248,18 +249,34 @@ function generateClarityReviewTask(vaultDir) {
   if (nodes.length === 0) {
     return makeFallbackTask('memory-maintenance', 'No active nodes to review');
   }
-
-  const target = nodes[crypto.randomInt(0, nodes.length)];
+  const target = nodes[Math.floor(Math.random() * nodes.length)];
   return {
     type: 'task',
-    slug: `clarity-review-${target.slug}-${Date.now().toString(36)}`,
+    slug: `clarity-review-${crypto.randomBytes(4).toString('hex')}`,
     priority: 30,
     category: 'memory-maintenance',
     target: target.slug,
     status: 'pending',
     created_by: 'scheduler-idle',
-    reason: `Idle task: review "${target.title}" for clarity and actionability.`,
-    body: `## Objective\nReview memory node "${target.slug}" and evaluate:\n1. Is the title descriptive enough for a 7-item skill injection?\n2. Is the body actionable by an AI agent?\n3. Does the frontmatter accurately reflect the content?\n\nIf improvements are needed, generate a rewrite proposal.`,
+    reason: `Idle task: selected active node ${target.slug} for clarity review.`,
+    body: `Analyze node ${target.slug} for clarity, deduplication, formatting, and structural integrity. Rewrite via SSSS strict compliance if needed.`,
+  };
+}
+
+/**
+ * Generate a memory compaction task to fuse highly overlapping fragmented nodes.
+ */
+function generateMemoryCompactionTask(vaultDir) {
+  return {
+    type: 'task',
+    slug: `memory-compaction-${crypto.randomBytes(4).toString('hex')}`,
+    priority: 35,
+    category: 'memory-maintenance',
+    target: 'global',
+    status: 'pending',
+    created_by: 'scheduler-idle',
+    reason: `Idle task: scan vault for fragmented nodes to merge into comprehensive master documents.`,
+    body: `Scan for highly overlapping or fragmented memory nodes and fuse them into comprehensive master nodes, archiving the fragments.`,
   };
 }
 
@@ -523,6 +540,7 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
         body,
         _research_id: item.id,
         _research_phase: phase,
+        _node_slug: item.node_slug,
       });
     }
     if (researchItems.length > 0) {

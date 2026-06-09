@@ -38,63 +38,81 @@ const RECOMPILE_EVERY_N_TASKS = 20;
 // Pause between task iterations (ms)
 const TASK_SLEEP_MS = 10000;
 
-// ─── Categories that require LLM (skipped in deterministic mode) ────────────────
-
-const LLM_REQUIRED_CATEGORIES = new Set([
-  'system2-deliberation',
-  'conscious-enforcement',
-  'cutoff-audit',
-]);
-
-/**
- * Check if a task requires an LLM to execute.
- * These tasks are skipped — the daemon is deterministic.
- */
-function requiresLLM(task) {
-  if (LLM_REQUIRED_CATEGORIES.has(task.category)) return true;
-
-  const slug = task.slug;
-  if (slug.startsWith('research-deliberation-')) return true;
-  if (slug.startsWith('research-improvement-')) return true;
-  if (slug.startsWith('research-monitoring-')) return true;
-  if (slug.startsWith('research-expansion-')) return true;
-  if (slug.includes('self-diagnosis')) return true;
-  if (slug.includes('clarity-review')) return true;
-  if (slug.includes('staleness-check')) return true;
-  if (slug.includes('inference')) return true;
-  if (slug.includes('post-mortem')) return true;
-  if (slug.includes('compliance')) return true;
-
-  return false;
-}
+// ─── Tasks are no longer skipped to conserve resources. We use CLI agents! ───
 
 async function dispatchTask(task) {
-  if (requiresLLM(task)) {
-    logger.info({
-      subsystem: 'daemon-loop',
-      message: `Skipping task (requires LLM): ${task.slug} [${task.category}]`,
-    });
-    return { success: true, skippedLLM: true, output: 'Skipped — handled by IDE agents' };
-  }
-
   const category = task.category;
 
   try {
-    switch (category) {
-      case 'memory-maintenance':
-        return await runMaintenanceTask(task);
+    const { loadRuntimeConfig } = await import('./runtime.mjs');
+    const runtimeConfig = await loadRuntimeConfig();
 
-      case 'proactive-research':
-      case 'research-acquisition':
-        return await runResearchTask(task);
-
-      default:
-        logger.info({
-          subsystem: 'daemon-loop',
-          message: `Skipping task (not deterministic): ${task.slug} [${category}]`,
-        });
-        return { success: true, skippedLLM: true, output: 'Skipped — handled by IDE agents' };
+    // ─── Research & Proactive Tasks (LLM + Fetching) ───
+    if (task.slug.startsWith('research-') || category === 'proactive-research' || category === 'research-acquisition') {
+      if (task.slug.startsWith('staleness-check-')) {
+         const { runStalenessCheck } = await import('./clarity-rewriter.mjs');
+         const result = await runStalenessCheck(task.target, { vaultDir: VAULT_DIR, queueDir: QUEUE_DIR, runtimeConfig });
+         return { success: true, output: `Staleness check complete: ${result.verdict} (conf: ${result.confidence})` };
+      }
+      return await runResearchTask(task, runtimeConfig);
     }
+    
+    // ─── System 2 Inference ───
+    if (category === 'system2-deliberation') {
+      const { runInferenceTask } = await import('./inference-engine.mjs');
+      const slugs = task.target ? task.target.split(',') : [];
+      const result = await runInferenceTask(slugs, {
+        vaultDir: VAULT_DIR,
+        inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'),
+        runtimeConfig
+      });
+      return { success: true, output: `Inference complete: ${result.conclusions?.length || 0} conclusions` };
+    }
+
+    // ─── Cutoff Audit ───
+    if (category === 'cutoff-audit' || task.slug.startsWith('cutoff-audit-')) {
+      const { runCutoffAudit } = await import('./clarity-rewriter.mjs');
+      const result = await runCutoffAudit({ vaultDir: VAULT_DIR, queueDir: QUEUE_DIR, runtimeConfig });
+      return { success: true, output: `Cutoff audit complete: ${result.audited} audited, ${result.flagged} flagged, ${result.critical} critical` };
+    }
+
+    // ─── Self Diagnosis & Conscious Enforcement ───
+    if (category === 'conscious-enforcement' || task.slug.includes('self-diagnosis')) {
+      if (task.slug.startsWith('post-mortem-')) {
+        const { runPostMortem } = await import('./post-mortem.mjs');
+        const sessionPath = path.join(brainDir, 'sessions', task.target);
+        const result = await runPostMortem(sessionPath, { vaultDir: VAULT_DIR, inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'), runtimeConfig });
+        return { success: true, output: `Post-mortem complete: ${result.nodesCreated || 0} nodes extracted` };
+      }
+
+      if (task.slug.includes('self-diagnosis')) {
+        const { runSelfDiagnosis } = await import('./fact-seeker.mjs');
+        await runSelfDiagnosis({ vaultDir: VAULT_DIR, runtimeConfig });
+        return { success: true, output: `Self-diagnosis complete` };
+      }
+      return { success: true, output: `Conscious enforcement handled` };
+    }
+
+    // ─── Memory Maintenance ───
+    if (category === 'memory-maintenance') {
+      if (task.slug.startsWith('clarity-review-')) {
+        const { runClarityReview } = await import('./clarity-rewriter.mjs');
+        const result = await runClarityReview(task.target, { vaultDir: VAULT_DIR, inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'), runtimeConfig });
+        return { success: true, output: `Clarity review complete: rewrote=${result.rewrote}` };
+      }
+      if (task.slug.startsWith('memory-compaction-')) {
+        const { runMemoryCompaction } = await import('./fact-seeker.mjs');
+        const result = await runMemoryCompaction({ vaultDir: VAULT_DIR, inboxDir: path.join(BRAIN_DIR, 'memory-inbox', 'pending'), runtimeConfig });
+        return { success: true, output: `Memory compaction complete. Consolidated nodes: ${result.consolidatedCount || 0}` };
+      }
+      return await runMaintenanceTask(task);
+    }
+
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: `Skipping unhandled task category: ${task.slug} [${category}]`,
+    });
+    return { success: true, output: 'Skipped unhandled task' };
   } catch (err) {
     logger.info({
       subsystem: 'daemon-loop',
@@ -106,10 +124,10 @@ async function dispatchTask(task) {
 
 // ─── Research Engine (Web Fetching Only — No LLM Synthesis) ─────────────────────
 
-async function runResearchTask(task) {
+async function runResearchTask(task, runtimeConfig) {
   const inboxDir = path.join(BRAIN_DIR, 'memory-inbox', 'pending');
 
-  // Knowledge acquisition — fetch from web, save raw results
+  // Phase 1: Knowledge acquisition
   if (task.slug.startsWith('research-acquisition-') || task.category === 'proactive-research' || task.slug.includes('fact-seeker') || task.slug.includes('knowledge-acquisition')) {
     const { runKnowledgeAcquisitionCycle } = await import('./fact-seeker.mjs');
     const forceTopic = task.target || null;
@@ -121,6 +139,7 @@ async function runResearchTask(task) {
       skillsDir: SKILLS_DIR,
       derivedDir: DERIVED_DIR,
       instructionsFile: INSTRUCTIONS_FILE,
+      runtimeConfig
     });
     if (result.skipped) return { success: true, output: `Knowledge acquisition: ${result.skipped}` };
     const surfaceNote = result.surfaced ? ' [SURFACED]' : ' [staged]';
@@ -131,8 +150,59 @@ async function runResearchTask(task) {
     };
   }
 
+  // Phase 2: Deliberation
+  if (task.slug.startsWith('research-deliberation-')) {
+    const { runResearchDeliberationCycle } = await import('./fact-seeker.mjs');
+    const result = await runResearchDeliberationCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug: task._node_slug || 'pending',
+      topic: task.title || task.target || 'Unknown Topic',
+      runtimeConfig
+    });
+    return { success: true, output: `Deliberation complete: ${result.slug || 'done'}` };
+  }
+
+  // Phase 3: Improvement
+  if (task.slug.startsWith('research-improvement-')) {
+    const { runResearchImprovementCycle } = await import('./fact-seeker.mjs');
+    const result = await runResearchImprovementCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug: task._node_slug || 'pending',
+      topic: task.title || task.target || 'Unknown Topic',
+      runtimeConfig
+    });
+    return { success: true, output: `Improvement complete` };
+  }
+
+  // Phase 4: Monitoring
+  if (task.slug.startsWith('research-monitoring-')) {
+    const { runResearchMonitoringCycle } = await import('./fact-seeker.mjs');
+    const result = await runResearchMonitoringCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug: task._node_slug || 'pending',
+      topic: task.title || task.target || 'Unknown Topic',
+      runtimeConfig,
+      skillsDir: SKILLS_DIR,
+      derivedDir: DERIVED_DIR,
+      instructionsFile: INSTRUCTIONS_FILE
+    });
+    return { success: true, output: `Monitoring complete` };
+  }
+
+  // Phase 5: Expansion
+  if (task.slug.startsWith('research-expansion-')) {
+    const { runResearchExpansionCycle } = await import('./fact-seeker.mjs');
+    const result = await runResearchExpansionCycle({
+      vaultDir: VAULT_DIR,
+      nodeSlug: task._node_slug || 'pending',
+      topic: task.title || task.target || 'Unknown Topic',
+      runtimeConfig
+    });
+    return { success: true, output: `Expansion complete` };
+  }
+
   // Conclusion writer — validate pending drafts (deterministic checks)
-  if (task.slug.includes('validate') || task.category === 'research-acquisition') {
+  if (task.slug.includes('validate')) {
     const { runConclusionWriter } = await import('./conclusion-writer.mjs');
     const result = await runConclusionWriter({
       inboxDir,
@@ -313,8 +383,18 @@ async function main() {
         try {
           if (result.skippedLLM) {
             updateTaskStatus(task, 'pending', QUEUE_DIR);
+          } else if (result.success) {
+            updateTaskStatus(task, 'completed', QUEUE_DIR);
           } else {
-            updateTaskStatus(task, result.success ? 'completed' : 'failed', QUEUE_DIR);
+            // Dead Letter Queue / Retry Logic
+            task.retry_count = (task.retry_count || 0) + 1;
+            if (task.retry_count >= 3) {
+              logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed 3 times. Moving to DLQ (failed).` });
+              updateTaskStatus(task, 'failed', QUEUE_DIR);
+            } else {
+              logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed. Retry ${task.retry_count}/3. Requeueing.` });
+              updateTaskStatus(task, 'pending', QUEUE_DIR);
+            }
           }
         } catch (statusErr) {
           logger.info({
@@ -334,15 +414,26 @@ async function main() {
             patch.node_slug = result.factSlug;
           }
           // If the task was skipped because it requires an LLM, DO NOT complete the research project.
-          // Wait for an IDE agent to run it.
           if (result.skippedLLM) {
             patch.status = 'pending';
-          } else if (result.success && task._research_phase === 'acquisition' && result.factSlug) {
-            // Acquisition is done, advance to deliberation phase for LLM processing!
-            patch.status = 'pending';
-            patch.research_phase = 'deliberation';
-            // Also notify the user/UI that phase 1 is complete!
-            patch.completed_at = new Date().toISOString();
+          } else if (result.success && result.factSlug) {
+            if (task._research_phase === 'acquisition') {
+              patch.status = 'pending';
+              patch.research_phase = 'deliberation';
+              patch.completed_at = new Date().toISOString();
+            } else if (task._research_phase === 'deliberation') {
+              patch.status = 'pending';
+              patch.research_phase = 'improvement';
+            } else if (task._research_phase === 'improvement') {
+              patch.status = 'pending';
+              patch.research_phase = 'monitoring';
+            } else if (task._research_phase === 'monitoring') {
+              patch.status = 'pending';
+              patch.research_phase = 'expansion';
+            } else if (task._research_phase === 'expansion') {
+              patch.status = 'done';
+              patch.completed_at = new Date().toISOString();
+            }
           }
           updateQueueItem(task._research_id, patch);
         } catch (err) {

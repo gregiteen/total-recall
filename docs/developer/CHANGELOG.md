@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.6] — 2026-06-09
+
+### 🐛 Bug Fixes
+- **Extension Side Panel Flow**: Removed `default_popup` from `manifest.json` and added dynamic `sidePanel.setPanelBehavior` routing so clicking the extension icon organically opens the side panel.
+- **Unauthenticated Errors**: The extension content script now inspects API failure payloads and explicitly renders a visible `❌ Auth Error - Check PAT` toast rather than failing silently if `total-recall` requests return a 403.
+- **Research Queue Slugs**: Repaired the dynamic task generation lifecycle in `scheduler.mjs` and `daemon-loop.mjs` to properly propagate and respect `node_slug`, preventing human-readable topic strings from corrupting the factual document slugs.
+- **Completed Scheduler Tasks**: `GET /api/tasks` now cleanly filters out completed tasks by default. Added a new `DELETE /api/tasks/cleanup` endpoint to easily garbage-collect execution piles.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.6.6`.
+
 ## [3.6.5] — 2026-06-05
 
 ### 🐛 Bug Fixes
