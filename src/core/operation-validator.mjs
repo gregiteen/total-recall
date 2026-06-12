@@ -10,6 +10,7 @@ import {
 } from './schema.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { validateMemoryNode } from './total-recall-memory-validator.mjs';
 
 const APPEND_TYPES = new Set(['conversation', 'run']);
 const PROTOCOL_PATHS = [
@@ -158,8 +159,14 @@ export function processOperation(envelope, vaultRoot, options = {}) {
         if (!resolvedType) errors.push('Missing required frontmatter field: type');
         else if (!SSSS_SCHEMAS[resolvedType]) errors.push(`Unknown SSSS type: '${resolvedType}'.`);
         else {
-          const r = SSSS_SCHEMAS[resolvedType].safeParse(fmData);
-          if (!r.success) r.error.issues.forEach(i => errors.push(`${i.path.join('.')}: ${i.message}`));
+          if (resolvedType === 'memory' && envelope.path.includes('.agent/memory-vault/')) {
+            const vResult = validateMemoryNode(fmData);
+            if (!vResult.success) vResult.errors.forEach(e => errors.push(e));
+          } else {
+            const r = SSSS_SCHEMAS[resolvedType].safeParse(fmData);
+            if (!r.success) r.error.issues.forEach(i => errors.push(`${i.path.join('.')}: ${i.message}`));
+          }
+          
           if (envelope.type === 'operation' && APPEND_TYPES.has(resolvedType)) {
             const ap = resolveVfsPath(vaultRoot, envelope.path);
             if (fs.existsSync(ap)) {
