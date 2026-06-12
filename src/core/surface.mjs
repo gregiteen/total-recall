@@ -395,8 +395,9 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
     if (fs.existsSync(shimPath)) {
       const stat = fs.lstatSync(shimPath);
       if (stat.isSymbolicLink()) {
-        fs.unlinkSync(shimPath);
-        atomicWrite(shimPath, fullContent);
+        // If it's a symlink, DO NOT destroy it. It likely points to INSTRUCTIONS.md natively,
+        // and its content will update automatically when the target updates.
+        return;
       } else {
         const raw = fs.readFileSync(shimPath, 'utf8');
         let cleaned = raw;
@@ -465,12 +466,9 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   const connectedClients = readConnectedClients(clientsPath);
 
   if (connectedClients === null) {
-    // No clients.json → backward compat: write ALL client shims
-    for (const files of Object.values(CLIENT_SHIMS)) {
-      for (const file of files) {
-        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
-      }
-    }
+    // Backward compat loop removed to prevent context exhaustion.
+    // By default, we only write INSTRUCTIONS.md.
+    // Users must explicitly use 'npx total-recall connect' to register client IDEs.
   } else {
     // Only write shims for connected clients
     for (const client of connectedClients) {
