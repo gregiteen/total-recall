@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.8] — 2026-06-11
+
+### 🐛 Bug Fixes
+- **Restored IDE Support**: Restored out-of-the-box IDE support without triggering context bloat by generating hidden dotfile shims (e.g. `.clauderules`, `.codexrules`) by default instead of `.md` files that are eagerly globbed by Antigravity and Gemini.
+
 ## [3.6.7] — 2026-06-11
 
 ### 🐛 Bug Fixes
