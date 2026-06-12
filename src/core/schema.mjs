@@ -24,8 +24,8 @@ export const MemoryNodeSchema = z.object({
   category: z.string(),
   title: z.string(),
   status: z.enum(['active', 'superseded', 'deprecated', 'draft']),
-  confidence: z.number().min(0).max(1),
-  importance: z.number().int().min(1).max(5),
+  confidence: z.number().min(0).max(1).optional(),
+  importance: z.number().int().min(1).max(5).optional(),
   created: ssssDatetime(),
   updated: ssssDatetime(),
   last_accessed: ssssDatetime(),
@@ -41,12 +41,12 @@ export const MemoryNodeSchema = z.object({
   tags: z.array(z.string()),
   related: z.array(z.string()),
   routes_to_skills: z.array(z.string()),
-  sentiment_polarity: z.enum(['directive_must', 'directive_must_not', 'descriptive', 'preference']),
-  sentiment_target: z.string(),
-  modality: z.enum(['must', 'must_not', 'should', 'should_not', 'descriptive', 'preference']),
-  subject: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/),
-  predicate: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/),
-  object: z.string(),
+  sentiment_polarity: z.enum(['directive_must', 'directive_must_not', 'descriptive', 'preference']).optional(),
+  sentiment_target: z.string().optional(),
+  modality: z.enum(['must', 'must_not', 'should', 'should_not', 'descriptive', 'preference']).optional(),
+  subject: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/).optional(),
+  predicate: z.string().regex(/^[a-zA-Z0-9_\s.-]+$/).optional(),
+  object: z.string().optional(),
   decay: z.object({
     half_life_days: z.number(),
     access_count: z.number().int(),
@@ -87,7 +87,8 @@ export const MemoryNodeSchema = z.object({
   expires_at: ssssDatetimeNullable().optional(),
   // Absolute Invariant Extensions
   priority: z.enum(['absolute', 'high', 'normal', 'low']).optional(),
-  immutable: z.boolean().optional()
+  immutable: z.boolean().optional(),
+  feedback_scope: z.enum(['local_thread', 'workspace', 'account', 'system_candidate', 'system_promoted']).optional()
 });
 
 export const ConflictRecordSchema = z.object({
@@ -464,6 +465,7 @@ export const EventSchema = z.object({
   comment: z.string().optional().nullable(),
   comment_lang: z.string().optional().nullable(),
   timestamp: z.string().optional().nullable(),
+  feedback_scope: z.enum(['local_thread', 'workspace', 'account', 'system_candidate', 'system_promoted']).optional().nullable(),
 });
 
 export const LanguageConventionSchema = z.object({
