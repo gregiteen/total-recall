@@ -492,15 +492,7 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   const clientsPath = path.join(baseDir, '.agent', 'config', 'clients.json');
   const connectedClients = readConnectedClients(clientsPath);
 
-  if (connectedClients === null) {
-    // Write out-of-the-box dotfiles to support IDEs automatically,
-    // avoiding duplicate .md files to prevent Antigravity context bloat.
-    for (const files of Object.values(CLIENT_SHIMS)) {
-      for (const file of files) {
-        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
-      }
-    }
-  } else {
+  if (connectedClients !== null) {
     // Only write shims for connected clients
     for (const client of connectedClients) {
       const files = CLIENT_SHIMS[client];
