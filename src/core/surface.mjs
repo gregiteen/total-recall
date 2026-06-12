@@ -425,14 +425,14 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
  */
 const CLIENT_SHIMS = {
   cursor:        ['.cursorrules'],
-  'claude-code': ['CLAUDE.md', '.clauderules'],
-  antigravity:   ['AGENTS.md'],
-  gemini:        ['GEMINI.md'],
-  codex:         ['CODEX.md', '.codexrules'],
+  'claude-code': ['.clauderules'],
+  antigravity:   [],
+  gemini:        [],
+  codex:         ['.codexrules'],
   vscode:        ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
-  pi:            ['AGENTS.md'],
+  pi:            [],
   aider:         ['.aider.rules.md'],
-  windsurf:      ['.windsurfrules', 'WINDSURF.md'],
+  windsurf:      ['.windsurfrules'],
 };
 
 /**
@@ -466,9 +466,13 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   const connectedClients = readConnectedClients(clientsPath);
 
   if (connectedClients === null) {
-    // Backward compat loop removed to prevent context exhaustion.
-    // By default, we only write INSTRUCTIONS.md.
-    // Users must explicitly use 'npx total-recall connect' to register client IDEs.
+    // Write out-of-the-box dotfiles to support IDEs automatically,
+    // avoiding duplicate .md files to prevent Antigravity context bloat.
+    for (const files of Object.values(CLIENT_SHIMS)) {
+      for (const file of files) {
+        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
+      }
+    }
   } else {
     // Only write shims for connected clients
     for (const client of connectedClients) {
