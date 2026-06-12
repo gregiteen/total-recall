@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { loadSkills, atomicWrite, walkMd } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
+import matter from 'gray-matter';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
@@ -359,6 +360,32 @@ Show all available commands.
     }
     if (legacyCorrections) {
       combined += `\n\n${legacyCorrections}`;
+    }
+  }
+
+  // 3. Inject Installed Skills Inventory
+  if (skillsDir && fs.existsSync(skillsDir)) {
+    const installedSkills = [];
+    try {
+      const entries = fs.readdirSync(skillsDir);
+      for (const entry of entries) {
+        const fullPath = path.join(skillsDir, entry);
+        if (fs.statSync(fullPath).isDirectory()) {
+          const skillMdPath = path.join(fullPath, 'SKILL.md');
+          if (fs.existsSync(skillMdPath)) {
+            const raw = fs.readFileSync(skillMdPath, 'utf8');
+            const { data } = matter(raw);
+            if (data && data.name && data.description) {
+              installedSkills.push(`- **${data.name}** (\`.agent/skills/${entry}/SKILL.md\`): ${data.description}`);
+            }
+          }
+        }
+      }
+      if (installedSkills.length > 0) {
+        combined += `\n\n## Installed Agent Skills\n\nYou have access to specialized 'skills' to help you with complex tasks. If a skill seems relevant to your current task, you MUST read its SKILL.md file before proceeding.\n\nAvailable skills:\n${installedSkills.join('\n')}`;
+      }
+    } catch (err) {
+      console.error('Error in skills injection:', err);
     }
   }
 
