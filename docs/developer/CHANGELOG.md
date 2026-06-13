@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.9] — 2026-06-13
+
+### ✨ Features
+- **SSSS Improvements Epic**: Completed and archived the full SSSS Improvements project — secure memory validation with schema v2 conditional requirements (`TotalRecallMemoryValidator`), feedback privacy scopes to prevent workspace data leaking into system cache, and optimizer promotion pipeline (`workspace` → `system_candidate` → `system_promoted`) with strict provenance stripping and PII redaction.
+
+### 🐛 Bug Fixes
+- **Context Bloat (Definitive Fix)**: Completely removed the fallback shim generation loop in `surface.mjs`. When `clients.json` is missing, only the canonical `INSTRUCTIONS.md` is now written. Client-specific shims (`.cursorrules`, `.clauderules`, `AGENTS.md`, etc.) are exclusively generated via `npx total-recall connect`. This supersedes the partial fixes in v3.6.7 and v3.6.8.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.6.9`.
+
 ## [3.6.8] — 2026-06-11
 
 ### 🐛 Bug Fixes
