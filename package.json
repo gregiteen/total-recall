@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.6.8",
+  "version": "3.6.9",
   "description": "Sovereign AI system — database-free, SSSS-powered personal intelligence engine deployable to any POSIX host.",
   "type": "module",
   "bin": {
