@@ -11,7 +11,7 @@
 - [x] Test `npx total-recall compile` on a fresh project to verify only `INSTRUCTIONS.md` is generated.
 - [x] Connect a client via `npx total-recall connect` to verify it registers in `clients.json` and updates the correct shim.
 
-## ⏳ Phase 3: Deployment
-- [ ] Update version in `package.json`.
-- [ ] Run typescript and lint checks.
-- [ ] Publish the fix to npm.
+## ✅ Phase 3: Deployment
+- [x] Update version in `package.json`.
+- [x] Run typescript and lint checks.
+- [x] Publish the fix to npm.
