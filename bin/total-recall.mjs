@@ -79,6 +79,7 @@ const COMMANDS = {
   skill:    'skill.mjs',
   help:     'help.mjs',
   collab:   'collab.mjs',
+  command:  'command.mjs',
 };
 function printHelp() {
   console.log(`
@@ -128,6 +129,7 @@ function printHelp() {
     uninstall           Completely uninstall all services, launchd agents, VFS, and shims
     help <topic>        Interactive offline documentation, SSSS reference, and system help
     collab              Start Express/WebSockets backend & React collab sandbox dev server
+    command <create|remove>  Manage custom project-local CLI commands
 
 
 
@@ -166,8 +168,29 @@ async function main() {
   if (!handlerFile) {
     // Check if it is a dynamic integration command configured in the VFS
     try {
-      const { agentDir } = await import('../src/core/config.mjs');
+      const { agentDir, resolveBrainLayer } = await import('../src/core/config.mjs');
       const fs = await import('node:fs');
+      
+      // Check for custom project-level commands first
+      let projectAgentDir = null;
+      try {
+        const pBrain = resolveBrainLayer('project');
+        projectAgentDir = pBrain.agentDir;
+      } catch (e) { /* ignore */ }
+      
+      if (projectAgentDir) {
+        const customCmdPath = path.join(projectAgentDir, 'commands', `${command}.mjs`);
+        if (fs.existsSync(customCmdPath)) {
+          const handler = await import(customCmdPath);
+          if (handler.run) {
+            await handler.run(process.argv);
+          } else {
+            await handler.default(process.argv.slice(3));
+          }
+          process.exit(0);
+        }
+      }
+
       const integrationPath = path.join(agentDir, 'skills', 'total-recall', 'integrations', `${command}.md`);
       
       if (fs.existsSync(integrationPath)) {
