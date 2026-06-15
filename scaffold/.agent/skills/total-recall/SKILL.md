@@ -130,9 +130,15 @@ Synchronously rebuild the entire memory index (derived embeddings) and regenerat
 
 ### 5. Project CLI Commands
 ```bash
-npx total-recall command <create|remove> <name> ["<code>"]
+npx total-recall command <create|read|update|remove|list> <name> ["<code>"]
 ```
 Create custom executable project-local CLI commands within your active `.agent/commands/` directory. These extend the `npx total-recall` binary specifically within your repository context.
+
+**How it works:**
+- **Creation**: When you run `npx total-recall command create <name> "<code>"`, the CLI wraps your code snippet inside a standard module export: `export default async function run(args) { ... }` and saves it to `.agent/commands/<name>.mjs`.
+- **Execution**: To run the custom command, use `npx total-recall <name> [args...]`. The CLI dynamically imports the corresponding `.mjs` file from your project's `.agent/commands/` folder and invokes its default `run(args)` export, passing any extra arguments directly.
+- **Management**: You can list active commands via `command list`, view their source code with `command read <name>`, update existing logic via `command update <name> "<code>"`, or delete them with `command remove <name>`.
+- **Environment**: These commands execute natively in the Node context of your current workspace (`process.cwd()`) and have full filesystem and standard library access.
 
 ---
 
