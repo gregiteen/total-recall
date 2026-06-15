@@ -128,6 +128,12 @@ npx total-recall compile
 ```
 Synchronously rebuild the entire memory index (derived embeddings) and regenerate prompt instruction shims (such as `INSTRUCTIONS.md`, `GEMINI.md`, `AGENTS.md`, etc.).
 
+### 5. Project CLI Commands
+```bash
+npx total-recall command <create|remove> <name> ["<code>"]
+```
+Create custom executable project-local CLI commands within your active `.agent/commands/` directory. These extend the `npx total-recall` binary specifically within your repository context.
+
 ---
 
 ## 🌐 DIRECT REST API REFERENCE
