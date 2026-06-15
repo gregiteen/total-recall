@@ -129,7 +129,7 @@ function printHelp() {
     uninstall           Completely uninstall all services, launchd agents, VFS, and shims
     help <topic>        Interactive offline documentation, SSSS reference, and system help
     collab              Start Express/WebSockets backend & React collab sandbox dev server
-    command <create|remove>  Manage custom project-local CLI commands
+    command <create|read|update|remove|list>  Manage custom project-local CLI commands
 
 
 
