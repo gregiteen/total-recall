@@ -267,6 +267,19 @@ Search, install, security audit, and remove packages from the skills.sh registry
 
 ---
 
+### `command`
+Manage custom project-local CLI commands dynamically.
+- **What it does**: Writes or removes executable `.mjs` scripts in your project's local brain (`.agent/commands/`), allowing you to extend `total-recall` with project-specific orchestration logic.
+- **Usage**:
+  ```bash
+  npx total-recall command <create|remove> <name> ["<code>"]
+  ```
+- **Commands**:
+  - `create <name> "<code>"`: Instantiates a new executable CLI subcommand within the active project.
+  - `remove <name>`: Deletes a previously instantiated project-local subcommand.
+
+---
+
 ### `uninstall`
 Completely purge background services, configurations, and shims.
 - **What it does**: Stops background Relays and Daemons, unregisters macOS launchd plists/Linux systemd user units, removes editor shims, and deletes global configs.
