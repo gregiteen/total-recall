@@ -8,11 +8,15 @@ function printHelp() {
 
   Usage:
     total-recall command create <name> "<code>"   Create a new custom CLI command
+    total-recall command read <name>              Read the code of a custom CLI command
+    total-recall command update <name> "<code>"   Update an existing custom CLI command
     total-recall command remove <name>            Remove a custom CLI command
+    total-recall command list                     List all custom CLI commands
 
   Examples:
     npx total-recall command create hello "console.log('Hello from the brain!');"
-    npx total-recall command remove hello
+    npx total-recall command read hello
+    npx total-recall command list
 `);
 }
 
@@ -25,7 +29,7 @@ export default async function commandCmd(args) {
     return;
   }
 
-  if (!name) {
+  if (!name && action !== 'list') {
     console.error(`Error: Missing command name.`);
     console.error(`Usage: total-recall command ${action} <name>`);
     process.exit(1);
@@ -67,6 +71,52 @@ export default async function run(args) {
     fs.writeFileSync(commandPath, fileContent, 'utf8');
     console.log(`\x1b[32m✔ Successfully created custom command: \x1b[1mnpx total-recall ${name}\x1b[0m`);
     console.log(`  Saved to: ${commandPath}`);
+  } else if (action === 'read') {
+    const commandPath = path.join(commandsDir, `${name}.mjs`);
+    if (fs.existsSync(commandPath)) {
+      console.log(fs.readFileSync(commandPath, 'utf8'));
+    } else {
+      console.error(`Error: Custom command '${name}' does not exist.`);
+      process.exit(1);
+    }
+  } else if (action === 'update') {
+    const code = args[2];
+    if (!code) {
+      console.error(`Error: Missing code snippet for the command.`);
+      console.error(`Usage: total-recall command update <name> "<code>"`);
+      process.exit(1);
+    }
+
+    const commandPath = path.join(commandsDir, `${name}.mjs`);
+    if (!fs.existsSync(commandPath)) {
+      console.error(`Error: Custom command '${name}' does not exist.`);
+      process.exit(1);
+    }
+
+    // Wrap code in a default exported function for CLI execution
+    const fileContent = `// Auto-generated custom CLI command: ${name}
+export default async function run(args) {
+  ${code}
+}
+`;
+
+    fs.writeFileSync(commandPath, fileContent, 'utf8');
+    console.log(`\x1b[32m✔ Successfully updated custom command: \x1b[1m${name}\x1b[0m`);
+    console.log(`  Saved to: ${commandPath}`);
+  } else if (action === 'list') {
+    if (!fs.existsSync(commandsDir)) {
+      console.log('No custom commands found.');
+      return;
+    }
+    const files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.mjs'));
+    if (files.length === 0) {
+      console.log('No custom commands found.');
+    } else {
+      console.log(`\x1b[1mCustom CLI commands in ${commandsDir}:\x1b[0m`);
+      files.forEach(f => {
+        console.log(`  - ${f.replace('.mjs', '')}`);
+      });
+    }
   } else if (action === 'remove') {
     const commandPath = path.join(commandsDir, `${name}.mjs`);
     if (fs.existsSync(commandPath)) {
