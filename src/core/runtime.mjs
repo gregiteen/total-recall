@@ -317,10 +317,7 @@ export async function callLocalRuntime(prompt, system, config) {
       GITHUB_TOKEN: process.env.GITHUB_TOKEN || dynamicSecrets.github_token || githubToken,
     };
 
-    if (agent.name === 'antigravity' || agent.name === 'gemini') {
-      delete spawnEnv.GOOGLE_API_KEY;
-    }
-
+    logger.info('api', 'SPAWN_ENV GOOGLE_API_KEY length: ' + (spawnEnv.GOOGLE_API_KEY ? spawnEnv.GOOGLE_API_KEY.length : 0));
     const result = spawnSync('sh', ['-c', cmd], {
       encoding: 'utf8',
       timeout,

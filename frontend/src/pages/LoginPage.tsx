@@ -142,6 +142,7 @@ export default function LoginPage({ onAuthenticated }: Props) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <input type="text" name="username" autoComplete="username" style={{ display: "none" }} />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label htmlFor="login-password" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               {(needsReset || isFirstTime) ? "New Password" : "Password"}
