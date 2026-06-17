@@ -424,7 +424,7 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
       if (stat.isSymbolicLink()) {
         // If it's a symlink, DO NOT destroy it. It likely points to INSTRUCTIONS.md natively,
         // and its content will update automatically when the target updates.
-        return;
+        return false;
       } else {
         const raw = fs.readFileSync(shimPath, 'utf8');
         let cleaned = raw;
@@ -435,15 +435,18 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
         
         const updated = injectDirectives(cleaned, rulesBlock);
         atomicWrite(shimPath, updated);
+        return true;
       }
     } else {
       if (!fs.existsSync(shimDir)) {
         fs.mkdirSync(shimDir, { recursive: true });
       }
       atomicWrite(shimPath, fullContent);
+      return true;
     }
   } catch (err) {
     // Ignore permission errors
+    return false;
   }
 }
 
@@ -453,8 +456,8 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
 const CLIENT_SHIMS = {
   cursor:        ['.cursorrules'],
   'claude-code': ['.clauderules'],
-  antigravity:   [],
-  gemini:        [],
+  antigravity:   ['AGENTS.md'],
+  gemini:        ['GEMINI.md'],
   codex:         ['.codexrules'],
   vscode:        ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
   pi:            [],
@@ -484,9 +487,12 @@ function readConnectedClients(clientsPath) {
 async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir } = {}) {
   const agentDir = path.dirname(instructionsFile);
   const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
+  let injectedCount = 0;
 
   // Always write the canonical INSTRUCTIONS.md
-  await writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir, derivedDir });
+  if (await writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir, derivedDir })) {
+    injectedCount++;
+  }
 
   // Determine which client shims to write
   const clientsPath = path.join(baseDir, '.agent', 'config', 'clients.json');
@@ -498,10 +504,14 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
       const files = CLIENT_SHIMS[client];
       if (!files) continue;
       for (const file of files) {
-        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
+        if (await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir })) {
+          injectedCount++;
+        }
       }
     }
   }
+  
+  return injectedCount;
 }
 
 /**
@@ -529,7 +539,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   }
 
   // 1. Write pointer and active rules to all instruction shims
-  await compilePointers(instructionsFile, skillsDir, nodes, { vaultDir, derivedDir });
+  const skillsInjected = await compilePointers(instructionsFile, skillsDir, nodes, { vaultDir, derivedDir });
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
@@ -569,7 +579,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
 
   return {
     nodesProcessed: nodes.length,
-    skillsInjected: 0,
+    skillsInjected,
     semanticIndexed: semanticResult.indexed,
     semanticUnavailable: semanticResult.unavailable
   };

@@ -54,7 +54,24 @@ Total Recall operates **entirely database-free**. The local filesystem is the so
 ### 2. Precise Tool & API Selection Heuristics
 When interacting with the system, choose your interfaces based on the following:
 *   **Local Skills**: Use local skill packages (located in `.agent/skills/`) for complex workspace tasks, testing, and formatting. If a local skill has custom helper scripts, ALWAYS invoke them via your shell command tool instead of running raw standard commands.
-*   **Total Recall Brain (MANDATORY)**: For all semantic searches, memory retrieval, memory writes, and derived index recompilation, **use either the local CLI suite (`npx total-recall`) or shell `curl` commands** targeting the REST API endpoints documented below.
+*   **Total Recall CLI (PRIMARY — use this)**: For all memory operations — saving, recalling, forgetting, and compiling — use the `npx total-recall` CLI commands. This is the correct and preferred interface.
+    ```bash
+    npx total-recall recall "your query here" --top-k 5
+    npx total-recall remember invariant "rule text" --importance 5 --priority absolute
+    npx total-recall remember fact "fact text" --project
+    npx total-recall forget <slug>
+    npx total-recall compile
+    ```
+*   **Custom Local Commands**: The Total Recall CLI supports managing project-specific CLI commands dynamically. Use the `command` subcommand to manage these.
+    ```bash
+    npx total-recall command create hello "console.log('Hello from the brain!');"
+    npx total-recall command list
+    npx total-recall command read hello
+    npx total-recall command update hello "console.log('Updated hello command');"
+    npx total-recall command remove hello
+    ```
+    Custom commands are auto-generated and stored in the workspace at `.agent/commands/<name>.mjs`.
+*   **REST API via curl (SECONDARY — fallback only)**: Use raw `curl` commands to the REST API endpoints only when the CLI is unavailable or for advanced programmatic use cases not covered by the CLI.
 
 ### 3. Non-Destructive Code Modifications
 When modifying existing rule surfaces or IDE shims (such as `.cursorrules`, `CLAUDE.md`, `GEMINI.md`, etc.), **NEVER** overwrite the developer's custom pre-existing rules. Instead, write compiled absolute invariants inside the managed comment block:
@@ -127,18 +144,6 @@ Perform semantic/lexical hybrid search across rules, facts, and session history 
 npx total-recall compile
 ```
 Synchronously rebuild the entire memory index (derived embeddings) and regenerate prompt instruction shims (such as `INSTRUCTIONS.md`, `GEMINI.md`, `AGENTS.md`, etc.).
-
-### 5. Project CLI Commands
-```bash
-npx total-recall command <create|read|update|remove|list> <name> ["<code>"]
-```
-Create custom executable project-local CLI commands within your active `.agent/commands/` directory. These extend the `npx total-recall` binary specifically within your repository context.
-
-**How it works:**
-- **Creation**: When you run `npx total-recall command create <name> "<code>"`, the CLI wraps your code snippet inside a standard module export: `export default async function run(args) { ... }` and saves it to `.agent/commands/<name>.mjs`.
-- **Execution**: To run the custom command, use `npx total-recall <name> [args...]`. The CLI dynamically imports the corresponding `.mjs` file from your project's `.agent/commands/` folder and invokes its default `run(args)` export, passing any extra arguments directly.
-- **Management**: You can list active commands via `command list`, view their source code with `command read <name>`, update existing logic via `command update <name> "<code>"`, or delete them with `command remove <name>`.
-- **Environment**: These commands execute natively in the Node context of your current workspace (`process.cwd()`) and have full filesystem and standard library access.
 
 ---
 
