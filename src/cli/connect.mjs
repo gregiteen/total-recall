@@ -62,13 +62,13 @@ const CLIENTS = {
   antigravity: {
     label: 'Antigravity',
     mode: 'symlink',
-    target: 'AGENTS.md',
+    target: '.agents/rules/AGENTS.md',
     writeSlashCommands: true
   },
   gemini: {
     label: 'Gemini',
     mode: 'symlink',
-    target: 'GEMINI.md',
+    target: '.agents/rules/GEMINI.md',
     writeSlashCommands: true
   },
   aider: {
