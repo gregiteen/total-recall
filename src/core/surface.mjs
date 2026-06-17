@@ -456,8 +456,8 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
 const CLIENT_SHIMS = {
   cursor:        ['.cursorrules'],
   'claude-code': ['.clauderules'],
-  antigravity:   ['AGENTS.md'],
-  gemini:        ['GEMINI.md'],
+  antigravity:   ['AGENTS.md', '.agents/rules/AGENTS.md', '.agent/rules/AGENTS.md'],
+  gemini:        ['GEMINI.md', '.agents/rules/GEMINI.md', '.agent/rules/GEMINI.md'],
   codex:         ['.codexrules'],
   vscode:        ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
   pi:            [],
@@ -474,8 +474,20 @@ function readConnectedClients(clientsPath) {
     const raw = fs.readFileSync(clientsPath, 'utf8').trim();
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return new Set(parsed.map(String));
+    
+    // Support object format: { clients: { gemini: {...} } }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.clients) {
+      const keys = Object.keys(parsed.clients);
+      if (keys.length === 0) return null;
+      return new Set(keys);
+    }
+    
+    // Support legacy array format just in case
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return new Set(parsed.map(String));
+    }
+    
+    return null;
   } catch {
     return null;
   }
