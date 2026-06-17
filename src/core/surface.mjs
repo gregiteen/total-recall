@@ -456,8 +456,8 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
 const CLIENT_SHIMS = {
   cursor:        ['.cursorrules'],
   'claude-code': ['.clauderules'],
-  antigravity:   ['AGENTS.md', '.agents/rules/AGENTS.md', '.agent/rules/AGENTS.md'],
-  gemini:        ['GEMINI.md', '.agents/rules/GEMINI.md', '.agent/rules/GEMINI.md'],
+  antigravity:   ['AGENTS.md', '.agents/rules/AGENTS.md'],
+  gemini:        ['GEMINI.md', '.agents/rules/GEMINI.md'],
   codex:         ['.codexrules'],
   vscode:        ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
   pi:            [],
