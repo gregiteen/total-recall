@@ -168,6 +168,17 @@ export function heuristicCompact(node) {
   const title = (node.title || '').trim();
   const text = (node.body || node.content || '').trim();
   
+  if (node.category && ['invariants', 'preferences', 'anti-patterns'].includes(node.category)) {
+    if (text) {
+      const lines = text.split('\n');
+      if (lines.length > 1) {
+        return `${title}:\n  ${lines.map(l => l.trim()).join('\n  ')}`;
+      }
+      return `${title}: ${text}`;
+    }
+    return title;
+  }
+  
   let summary = title;
   if (text) {
     const firstLine = text.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
@@ -605,6 +616,15 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   // 5. Write vault hash + projection manifest
   atomicWrite(hashFile, currentHash);
   writeProjectionManifest(derivedDir, currentHash);
+
+  // 6. Generate live OKF Index and Log
+  try {
+    const { generateLiveIndex, generateLiveLog } = await import('./okf-adapter.mjs');
+    generateLiveIndex(vaultDir);
+    generateLiveLog(vaultDir);
+  } catch (err) {
+    logger.warn('surface', `Failed to generate live OKF index/log: ${err.message}`);
+  }
 
   return {
     nodesProcessed: nodes.length,

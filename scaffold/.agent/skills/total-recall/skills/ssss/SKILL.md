@@ -1,8 +1,6 @@
 ---
-type: skill
 name: ssss
 description: "Use this skill to inspect, validate, write, and manage SSSS primitives, memory nodes, operation envelopes, scope overlays, projections, and VFS specifications in the Total Recall reference kernel. MANDATORY: Read this file before editing SSSS files or code."
-schema_version: 2
 ---
 
 # SSSS — Structured Semantic Syntax System Manager
