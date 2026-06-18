@@ -128,6 +128,52 @@ describe('connect — Codex projection', () => {
   });
 });
 
+describe('connect — repo skills projected as slash commands', () => {
+  // Seed two repo skills in the agent dir (the connect skills source)
+  function seedSkill(name, description) {
+    const dir = path.join(tmpAgentDir, 'skills', name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'SKILL.md'),
+      `---\nname: ${name}\ndescription: "${description}"\n---\n\nBody for ${name}.\n`,
+      'utf8'
+    );
+    return dir;
+  }
+
+  it('claude-code: symlinks each repo skill into <project>/.claude/skills/', async () => {
+    const pushDir = seedSkill('push', 'Deploy to production');
+    seedSkill('repo-expert', 'Understand the repo');
+    await runConnect(['claude-code']);
+
+    const link = path.join(tmpProject, '.claude', 'skills', 'push');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(path.resolve(fs.readlinkSync(link))).toBe(path.resolve(pushDir));
+    expect(fs.existsSync(path.join(link, 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpProject, '.claude', 'skills', 'repo-expert'))).toBe(true);
+  });
+
+  it('antigravity: projects repo skills into <project>/.agents/skills/', async () => {
+    seedSkill('test', 'Run the test suite');
+    await runConnect(['antigravity']);
+    const link = path.join(tmpProject, '.agents', 'skills', 'test');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  });
+
+  it('self-heals a stale/broken skill symlink without --force', async () => {
+    const dir = seedSkill('push', 'Deploy to production');
+    const destDir = path.join(tmpProject, '.claude', 'skills');
+    fs.mkdirSync(destDir, { recursive: true });
+    // Pre-create a broken symlink pointing at a moved/old location
+    fs.symlinkSync('/nonexistent/old/repo/.agent/skills/push', path.join(destDir, 'push'));
+
+    await runConnect(['claude-code']); // no --force
+    const link = path.join(destDir, 'push');
+    expect(fs.existsSync(link)).toBe(true); // resolves now
+    expect(path.resolve(fs.readlinkSync(link))).toBe(path.resolve(dir));
+  });
+});
+
 describe('connect — Core skills seeding', () => {
   it('seeds the master total-recall skill folder during connection bootstrap', async () => {
     // Delete pre-created instructions to trigger connection bootstrapping
