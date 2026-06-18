@@ -1,8 +1,6 @@
 ---
-type: skill
 name: cli-agents
 description: "Orchestrate headlessly spawned CLI agents from the central registry."
-schema_version: 2
 ---
 
 # CLI Agents — Headless Multi-Agent Orchestration & Dispatch Engine

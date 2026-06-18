@@ -1,5 +1,4 @@
 ---
-type: skill
 name: total-recall
 description: "Use this skill as the master guide to understand the entire Total Recall Sovereign AI OS setup, VFS topologies, SSSS protocol, CLI parameter reference, troubleshooting, and automated upstream repository sync. MANDATORY: Read this file before attempting major setup modifications or diagnoses."
 ---

@@ -462,3 +462,82 @@ export function lintOkfCompliance(vaultDir, options = {}) {
     errors
   };
 }
+
+export function generateLiveIndex(vaultDir) {
+  const nodes = getNodes(vaultDir);
+  if (nodes.length === 0) return;
+  
+  const conceptsByType = {};
+
+  for (const node of nodes) {
+    const concept = ssssNodeToOkfConcept(node);
+    if (!concept) continue;
+
+    const type = concept.frontmatter.type || 'Generic Concept';
+    const category = node.category || 'facts';
+    const filename = `${node.slug}.md`;
+
+    if (!conceptsByType[type]) {
+      conceptsByType[type] = [];
+    }
+    conceptsByType[type].push({
+      title: node.title || node.slug,
+      relPath: `./${category}/${filename}`,
+      description: concept.frontmatter.description || ''
+    });
+  }
+
+  let indexContent = '# Knowledge Bundle Index\n\n';
+  const sortedTypes = Object.keys(conceptsByType).sort();
+  for (const type of sortedTypes) {
+    indexContent += `# ${type}\n\n`;
+    const list = conceptsByType[type].sort((a, b) => a.title.localeCompare(b.title));
+    for (const item of list) {
+      const descSuffix = item.description ? ` - ${item.description}` : '';
+      indexContent += `* [${item.title}](${item.relPath})${descSuffix}\n`;
+    }
+    indexContent += '\n';
+  }
+  fs.writeFileSync(path.join(vaultDir, 'index.md'), indexContent, 'utf8');
+}
+
+export function generateLiveLog(vaultDir) {
+  let logContent = '# Bundle Update History\n\n';
+  const auditPath = path.join(vaultDir, '.events', 'audit.jsonl');
+  if (fs.existsSync(auditPath)) {
+    try {
+      const lines = fs.readFileSync(auditPath, 'utf8').trim().split('\n').filter(Boolean);
+      const eventsByDate = {};
+
+      for (const line of lines) {
+        const event = JSON.parse(line);
+        if (!event.ts) continue;
+        const dateStr = new Date(event.ts).toISOString().split('T')[0];
+        const operation = event.payload?.resolved_type || 'mutation';
+        const formattedOp = operation.charAt(0).toUpperCase() + operation.slice(1);
+        const subject = event.subject || event.path || 'unknown';
+        
+        if (!eventsByDate[dateStr]) {
+          eventsByDate[dateStr] = [];
+        }
+        eventsByDate[dateStr].push(`* **${formattedOp}**: Committed at \`${subject}\``);
+      }
+
+      const sortedDates = Object.keys(eventsByDate).sort().reverse();
+      for (const date of sortedDates) {
+        logContent += `## ${date}\n`;
+        const logs = eventsByDate[date].reverse();
+        for (const log of logs) {
+          logContent += `${log}\n`;
+        }
+        logContent += '\n';
+      }
+    } catch (err) {
+      logContent += `Failed to parse audit history: ${err.message}\n`;
+    }
+  } else {
+    logContent += 'No update history available.\n';
+  }
+  fs.writeFileSync(path.join(vaultDir, 'log.md'), logContent, 'utf8');
+}
+
