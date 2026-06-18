@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import matter from 'gray-matter';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { writeNodeValidated } from '../core/validated-write.mjs';
@@ -286,6 +287,50 @@ export default async function remember(args) {
     node.priority = 'absolute';
     node.immutable = true;
   }
+
+  // --- START AUTOMATIC DEDUPLICATION ---
+  try {
+    const catDir = path.join(vaultDir, category);
+    if (fs.existsSync(catDir)) {
+      const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md'));
+      for (const f of files) {
+        const p = path.join(catDir, f);
+        const raw = fs.readFileSync(p, 'utf8');
+        const { data, content: oldContent } = matter(raw);
+        
+        if (data.status === 'active' && data.slug !== finalSlug) {
+          const oldTitle = (data.title || '').trim().toLowerCase();
+          const newTitle = finalTitle.trim().toLowerCase();
+          
+          const words1 = new Set(bodyContent.toLowerCase().match(/\\b\\w+\\b/g) || []);
+          const words2 = new Set((oldContent || '').toLowerCase().match(/\\b\\w+\\b/g) || []);
+          const intersection = new Set([...words1].filter(x => words2.has(x)));
+          const union = new Set([...words1, ...words2]);
+          const similarity = union.size === 0 ? 1 : intersection.size / union.size;
+          
+          if (oldTitle === newTitle || similarity > 0.8) {
+            console.log(`  ♻️  Archiving duplicate node: ${data.slug} (similarity: ${Math.round(similarity * 100)}%)`);
+            data.status = 'archived';
+            data.x_archived_reason = 'superseded_by_duplicate';
+            data.superseded_by = finalSlug;
+            data.updated = now;
+            node.supersedes = [...(node.supersedes || []), data.slug];
+            
+            const lines = ['---'];
+            for (const key of Object.keys(data)) {
+              lines.push(`${key}: ${JSON.stringify(data[key])}`);
+            }
+            lines.push('---');
+            lines.push(oldContent);
+            fs.writeFileSync(p, lines.join('\\n'));
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`  ⚠️  Deduplication check failed: ${err.message}`);
+  }
+  // --- END AUTOMATIC DEDUPLICATION ---
 
   const vaultResult = writeNodeValidated(node, vaultDir);
   if (!vaultResult.success) {
