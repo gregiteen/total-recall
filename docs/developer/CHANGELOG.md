@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.9.0] — 2026-06-18
+
+### ✨ Features
+- **`connect` projects repo skills as native slash commands** across IDEs via the open Agent Skills standard. Every `.agent/skills/<name>/SKILL.md` is symlinked into the connected client's Agent-Skills directory so it becomes a `/<name>` slash command:
+  - **Claude Code** → `<project>/.claude/skills/` (project-scoped)
+  - **Antigravity CLI** → `<project>/.agents/skills/` (project-scoped; replaces the deprecated Gemini CLI `~/.gemini/commands` location)
+  - **Codex** → `~/.codex/skills/` (global — Codex has no project-local skills dir)
+- **Self-healing skill symlinks**: a broken or stale skill link (e.g. after the source repo moves) is refreshed automatically on `connect`, without requiring `--force`.
+
+### 🐛 Bug Fixes
+- **Nested symlink projections no longer dangle**: `connect` targets like Antigravity's `.agents/rules/AGENTS.md` now create their parent directory and point the symlink at `INSTRUCTIONS.md` using a path relative to the link's own directory, instead of a hardcoded `INSTRUCTIONS.md` that resolved incorrectly from a nested folder.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.9.0`.
+
 ## [3.8.1] — 2026-06-18
 
 ### ✨ Features
