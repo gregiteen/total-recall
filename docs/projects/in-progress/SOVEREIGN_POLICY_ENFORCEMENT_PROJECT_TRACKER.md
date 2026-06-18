@@ -57,4 +57,4 @@
 - [x] Run linting/typechecking via start-here scripts, and Vitest suite manually (replaced deleted `scripts/code-quality-gate.mjs`)
 - [x] Inspect generated shims (`INSTRUCTIONS.md`, etc.) to verify full rules are rendered
 - [x] Inspect generated live catalog files (`index.md`, `log.md`) to verify OKF spec compliance
-- [ ] Commit all changes and verify git status is clean
+- [x] Commit all changes and verify git status is clean
