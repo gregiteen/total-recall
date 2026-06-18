@@ -28,3 +28,8 @@
 - [ ] **Gmail & Calendar Connectors**: Implement OAuth2 integrations for incremental sync to create fact nodes. Requires robust local-only encryption, consent framework, and strict classification.
 - [ ] **Location Tracking Ingestion**: Support periodic tracking writes via `POST /api/sessions/ingest { source: 'location' }` to save to memory with `x_location` schema values.
 
+### Knowledge Packs & OKF Extensions
+- [ ] **Remote Knowledge Pack Installer**: Support installing public OKF bundles directly from GitHub/GitLab repositories (e.g. `npx total-recall install-pack <org>/<repo>`).
+- [ ] **Automatic Conflict Resolution Policies**: Introduce semantic similarity thresholds to automatically merge or link imported OKF concepts with existing SSSS memory nodes.
+- [ ] **Bidirectional Git Sync**: Continuous background git sync for remote OKF bundles to automatically pull updates and push local modifications back to the remote repository.
+

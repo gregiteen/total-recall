@@ -38,6 +38,8 @@ function printHelp() {
   Subcommands:
     google-takeout <path>  Ingest Google Takeout export data
                            Use 'total-recall ingest google-takeout --help' for details
+    okf <path>             Ingest an Open Knowledge Format (OKF) bundle directory
+                           Use 'total-recall ingest okf --help' for details
 
   IDE Session Ingest:
     Scans known local directories for conversation history from:
@@ -52,6 +54,7 @@ function printHelp() {
   Usage:
     total-recall ingest [options]
     total-recall ingest google-takeout <path> [options]
+    total-recall ingest okf <path> [options]
 
   Options:
     --sources <list>   Comma-separated source filter (e.g. claude-code,codex)
@@ -65,6 +68,12 @@ export default async function ingest(args) {
   if (args[0] === 'google-takeout') {
     const { runGoogleTakeout } = await import('./ingest/index.mjs');
     await runGoogleTakeout(args.slice(1));
+    return;
+  }
+
+  if (args[0] === 'okf') {
+    const { runOkfIngest } = await import('./ingest-okf.mjs');
+    await runOkfIngest(args.slice(1));
     return;
   }
 

@@ -62,6 +62,105 @@ describe('Schema Validations', () => {
       expect(result.success).toBe(false);
     });
 
+    it('validates a memory node with description and resource', () => {
+      const baseNode = {
+        type: 'memory',
+        slug: 'test-node',
+        category: 'test',
+        title: 'Test Node',
+        description: 'A test description of this memory node',
+        resource: 'https://example.com/resource',
+        status: 'active',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        last_accessed: new Date().toISOString(),
+        source: {
+          type: 'user',
+          session_id: '123',
+          evidence_count: 1
+        },
+        supersedes: [],
+        superseded_by: null,
+        contradicts: [],
+        tags: ['test'],
+        related: [],
+        routes_to_skills: [],
+        decay: {
+          half_life_days: 30,
+          access_count: 5
+        },
+        schema_version: 2
+      };
+
+      const result = MemoryNodeSchema.safeParse(baseNode);
+      expect(result.success).toBe(true);
+    });
+
+    it('validates a memory node without description and resource', () => {
+      const baseNode = {
+        type: 'memory',
+        slug: 'test-node',
+        category: 'test',
+        title: 'Test Node',
+        status: 'active',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        last_accessed: new Date().toISOString(),
+        source: {
+          type: 'user',
+          session_id: '123',
+          evidence_count: 1
+        },
+        supersedes: [],
+        superseded_by: null,
+        contradicts: [],
+        tags: ['test'],
+        related: [],
+        routes_to_skills: [],
+        decay: {
+          half_life_days: 30,
+          access_count: 5
+        },
+        schema_version: 2
+      };
+
+      const result = MemoryNodeSchema.safeParse(baseNode);
+      expect(result.success).toBe(true);
+    });
+
+    it('validates a memory node with non-HTTP resource URIs', () => {
+      const baseNode = {
+        type: 'memory',
+        slug: 'test-node',
+        category: 'test',
+        title: 'Test Node',
+        resource: 'gs://my-bucket/data.csv',
+        status: 'active',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        last_accessed: new Date().toISOString(),
+        source: {
+          type: 'user',
+          session_id: '123',
+          evidence_count: 1
+        },
+        supersedes: [],
+        superseded_by: null,
+        contradicts: [],
+        tags: ['test'],
+        related: [],
+        routes_to_skills: [],
+        decay: {
+          half_life_days: 30,
+          access_count: 5
+        },
+        schema_version: 2
+      };
+
+      const result = MemoryNodeSchema.safeParse(baseNode);
+      expect(result.success).toBe(true);
+    });
+
     it('rejects an unknown memory layer', () => {
       const node = {
         type: 'memory',

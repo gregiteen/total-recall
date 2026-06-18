@@ -151,11 +151,53 @@ Manage, query, or queue autonomous background research projects.
 ---
 
 ### `lint`
-Validate all vault Markdown nodes against SSSS v2 Zod schema constraints.
+Validate all vault Markdown nodes against SSSS v2 Zod schema constraints, or check for OKF metadata compliance.
 - **Usage**:
   ```bash
-  npx total-recall lint
+  npx total-recall lint [options]
   ```
+- **Options**:
+  - `--strict`: Treat warnings as errors (exit 1 on any issue).
+  - `--okf`: Verify OKF v0.1 draft metadata compliance (checks for title, description, tags, and updated timestamp).
+  - `--json`: Output results as JSONL.
+  - `--vault <path>`: Override vault directory (default: ~/.agent/memory-vault).
+
+---
+
+### `ingest`
+Ingest external data sources or IDE conversation logs into Total Recall.
+- **Usage**:
+  ```bash
+  npx total-recall ingest [options]
+  npx total-recall ingest google-takeout <path> [options]
+  npx total-recall ingest okf <bundle-path> [options]
+  ```
+- **Ingestion sources**:
+  - IDE conversation histories are scanned from Claude Code, OpenAI Codex, Gemini CLI, Antigravity, and Cursor.
+- **Options for `okf`**:
+  - `<bundle-path>`: Path to the OKF bundle directory.
+  - `--dry-run`: Pre-flight check and validate concepts without writing.
+  - `--category <name>`: Override and force category for all imported concepts.
+  - `--importance <1-5>`: Override default importance level (default: 3).
+  - `--on-conflict <skip|warn|overwrite>`: Strategy for duplicate slugs (default: warn).
+  - `--type-map <mapping>`: Custom type mappings. Format: "Type A=facts,Type B=concepts".
+  - `--global`: Target the global brain.
+  - `--project`: Target the project brain.
+
+---
+
+### `export`
+Export a Total Recall knowledge base to external formats.
+- **Usage**:
+  ```bash
+  npx total-recall export <output-path> --okf [options]
+  ```
+- **Options**:
+  - `--okf`: Export as an Open Knowledge Format (OKF) bundle (required).
+  - `--format <dir|tar.gz>`: Output format: directory or compressed tarball (default: dir).
+  - `--strip-ssss`: Remove all SSSS-specific metadata fields, leaving only pure OKF.
+  - `--global`: Source from the global brain.
+  - `--project`: Source from the project brain (default).
 
 ---
 

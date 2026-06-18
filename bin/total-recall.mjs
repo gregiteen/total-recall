@@ -80,6 +80,7 @@ const COMMANDS = {
   help:     'help.mjs',
   collab:   'collab.mjs',
   command:  'command.mjs',
+  export:   'export.mjs',
 };
 function printHelp() {
   console.log(`
@@ -122,6 +123,7 @@ function printHelp() {
                                      into the vault (run before compile on first install)
     ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
     ingest google-takeout <path>  Ingest Google Takeout export data
+    export <path> --okf Export memory vault as an OKF-compliant bundle
     connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, Gemini, etc.
     sync [--watch]      Pull remote brain instructions into the current workspace
     relay <cmd>         Local background relay: ship IDE sessions to remote brain

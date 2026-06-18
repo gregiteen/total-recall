@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.7.0] — 2026-06-18
+
+### ✨ Features
+- **Open Knowledge Format (OKF v0.1 Draft) Integration**:
+  - Implemented bidirectional schema mappings, allowing GCP/git-based knowledge catalogs to sync with the SSSS v2 memory vault.
+  - Added `total-recall ingest okf <path>` to recursively import OKF bundles with custom override parameters, conflict strategies, and automated background recompilation.
+  - Added `total-recall export <path> --okf` to export SSSS memories as OKF-compliant bundles with directory partitions, `index.md` relative links compilation, and `log.md` chronologically populated audit logs.
+  - Added `total-recall lint --okf` to audit memory nodes for OKF metadata parameters, supporting `--strict` error conversion.
+  - Enhanced graph indexing by expanding relative Markdown links extraction (`[text](./target.md)`).
+  - Created a dedicated `okf` skill package detailing format specifications, helper script wrappers, validation assertions, and delegation prompts.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.7.0`.
+
 ## [3.6.10] — 2026-06-17
 
 ### 🐛 Bug Fixes

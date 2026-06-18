@@ -10,13 +10,29 @@ import {
 } from './memory-layers.mjs';
 
 /**
- * Extract [[slug]] wikilink references from body text.
+ * Extract [[slug]] wikilink references and relative Markdown link targets from body text.
  * Native TR link resolution; Obsidian renders them as graph edges.
  */
 export function extractWikilinks(body) {
   if (!body) return [];
   const matches = body.match(/\[\[([^\]]+)\]\]/g) || [];
-  return [...new Set(matches.map(m => m.slice(2, -2).split('|')[0].trim()))];
+  const wikilinks = matches.map(m => m.slice(2, -2).split('|')[0].trim());
+
+  const mdLinkMatches = body.matchAll(/\[([^\]]*)\]\(([^)]+)\)/g);
+  const mdLinks = [];
+  for (const match of mdLinkMatches) {
+    const url = match[2].trim();
+    if (/^https?:\/\//i.test(url)) {
+      continue;
+    }
+    const base = path.basename(url);
+    const targetSlug = base.endsWith('.md') ? base.slice(0, -3) : base;
+    if (targetSlug) {
+      mdLinks.push(targetSlug);
+    }
+  }
+
+  return [...new Set([...wikilinks, ...mdLinks])];
 }
 
 /**
@@ -564,7 +580,8 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     category: n.category,
     status: n.status,
     confidence: n.confidence,
-    memory_layer: inferMemoryLayer(n)
+    memory_layer: inferMemoryLayer(n),
+    links: extractWikilinks(n.body || '')
   }));
   atomicWrite(path.join(derivedDir, 'graph-index.jsonl'), graphIndex.map(n => JSON.stringify(n)).join('\n'));
   atomicWrite(
