@@ -38,8 +38,18 @@ describe('Surface Routing Accuracy', () => {
       body: 'Always use single quotes in JavaScript files to maintain consistency across the codebase.'
     };
     const compactedRedundant = heuristicCompact(redundantNode);
-    // Since the body starts with the title, it should not repeat it
-    expect(compactedRedundant).toBe('Always use single quotes');
+    // Since the body starts with the title, titleIsEcho fires and uses body directly (more info for agents)
+    expect(compactedRedundant).toBe('Always use single quotes in JavaScript files to maintain consistency across the codebase.');
+
+    // Categorized nodes get modality markers
+    const invariantNode = {
+      title: 'Never run tsc',
+      body: 'Use start-here scripts.',
+      category: 'invariants',
+      modality: 'must'
+    };
+    const compactedInvariant = heuristicCompact(invariantNode);
+    expect(compactedInvariant).toBe('[MUST] Never run tsc: Use start-here scripts.');
   });
 
   it('compiles only invariants, preferences, and anti-patterns (category partitioning)', async () => {
