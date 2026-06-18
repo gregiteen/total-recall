@@ -145,6 +145,38 @@ npx total-recall compile
 ```
 Synchronously rebuild the entire memory index (derived embeddings) and regenerate prompt instruction shims (such as `INSTRUCTIONS.md`, `GEMINI.md`, `AGENTS.md`, etc.).
 
+### 5. Ingest OKF Bundle
+```bash
+npx total-recall ingest okf <path> [options]
+```
+Recursively parse and ingest an Open Knowledge Format (OKF v0.1 Draft) bundle directory.
+*   **Options**:
+    *   `--dry-run`: Parse and validate nodes without writing files.
+    *   `--category <name>`: Override and force all imported nodes to a specific category.
+    *   `--importance <1-5>`: Override importance for imported nodes.
+    *   `--on-conflict <strategy>`: Slug conflict behavior (`overwrite`, `skip`, `warn` - default is `warn`).
+    *   `--type-map <json>`: Custom type-to-category mapping JSON.
+*   *Note*: Spawns an asynchronous background surface compile process immediately on successful ingest.
+
+### 6. Export OKF Bundle
+```bash
+npx total-recall export <path> [options]
+```
+Export the memory vault into an OKF-compliant directory structure.
+*   **Options**:
+    *   `--okf`: Run in OKF export mode.
+    *   `--strip-ssss`: Strip all SSSS-specific metadata parameters from output frontmatter.
+    *   `--format <type>`: Package output as archive (`tar.gz`).
+    *   `--global` / `--project`: Target scope layer.
+
+### 7. Lint OKF Compliance
+```bash
+npx total-recall lint --okf [options]
+```
+Scan vault memory nodes and check for OKF metadata compliance (presence of title, description, tags, and updated timestamp).
+*   **Options**:
+    *   `--strict`: Promote compliance warnings to errors and exit with code 1.
+
 ---
 
 ## 🌐 DIRECT REST API REFERENCE

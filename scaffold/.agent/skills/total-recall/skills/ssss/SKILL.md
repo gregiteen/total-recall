@@ -127,6 +127,9 @@ SSSS schema v2. Required schema v2 knowledge-graph fields are:
 
 Invariants additionally use `priority: absolute` and `immutable: true`.
 
+### OKF Compatibility Note
+SSSS v0.2 is a strict superset of the Open Knowledge Format (OKF v0.1 Draft). SSSS memory nodes are fully OKF-compatible, as they are Markdown files containing a YAML frontmatter block with a `type` field (which maps to SSSS `category` via the OKF adapter). To bridge the format seamlessly, SSSS v0.2 extends `MemoryNodeSchema` with two optional OKF-standard fields: `description` and `resource` (supporting non-HTTP URIs such as `gs://` or `s3://`).
+
 Memory validation is owned by `TotalRecallMemoryValidator`, not by generic loose
 frontmatter checks. No memory path may be committed with zero validation.
 

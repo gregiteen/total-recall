@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock } from './surface.mjs';
+import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks } from './surface.mjs';
 
 describe('Surface Routing Accuracy', () => {
 
@@ -55,5 +55,25 @@ describe('Surface Routing Accuracy', () => {
     expect(block).toContain('Single quotes');
     expect(block).toContain('No global variables');
     expect(block).not.toContain('Server port'); // facts should be excluded (category partitioning)
+  });
+
+  describe('extractWikilinks', () => {
+    it('extracts standard wikilinks correctly', () => {
+      const body = 'Check out [[some-slug]] and [[another-slug|with alias]].';
+      const links = extractWikilinks(body);
+      expect(links).toEqual(['some-slug', 'another-slug']);
+    });
+
+    it('extracts relative Markdown link targets and excludes absolute URLs', () => {
+      const body = 'See [also](./patterns/atomic-writes.md) or visit [Google](https://google.com).';
+      const links = extractWikilinks(body);
+      expect(links).toEqual(['atomic-writes']);
+    });
+
+    it('returns empty array when no links are present', () => {
+      const body = 'Plain text without any links.';
+      const links = extractWikilinks(body);
+      expect(links).toEqual([]);
+    });
   });
 });

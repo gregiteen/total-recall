@@ -23,6 +23,8 @@ export const MemoryNodeSchema = z.object({
   slug: z.string(),
   category: z.string(),
   title: z.string(),
+  description: z.string().optional(),
+  resource: z.string().optional(),
   status: z.enum(['active', 'superseded', 'deprecated', 'draft']),
   confidence: z.number().min(0).max(1).optional(),
   importance: z.number().int().min(1).max(5).optional(),
