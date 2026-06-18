@@ -2,8 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.8.0] — 2026-06-18
+## [3.8.1] — 2026-06-18
 
+### ✨ Features
+- **Unbreakable Invariant Enforcements**: Surface compiler now wraps invariant and correction injections in aggressive system prompt override boundaries (`# 🔴 ABSOLUTE SYSTEM OVERRIDE 🔴`) to structurally protect memory rules from ephemeral IDE prompt interference.
+- **Native Memory Deduplication**: CLI `remember` automatically scans for existing nodes in the category and gracefully archives duplicates based on >80% textual Jaccard similarity or identical titles, preventing context saturation from repeated corrections.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.8.1`.
+
+## [3.8.0] — 2026-06-18
 ### ✨ Features
 - **OKF-Aligned Surface Compilation Quality** (inspired by OKF enrichment agent patterns):
   - **Modality Markers**: Compiled shims now prefix every rule with `[MUST]`, `[MUST NOT]`, `[SHOULD]`, `[CORRECTION]`, or `[PREF]` — giving agents instant priority signal instead of treating all rules identically.
