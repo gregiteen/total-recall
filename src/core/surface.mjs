@@ -162,25 +162,55 @@ function saveCompactedRulesCache(derivedDir, cache) {
 }
 
 /**
+ * Map a node's modality field to a compact marker for compiled shims.
+ * Gives agents instant priority signal per OKF §4.1 typed-concept pattern.
+ */
+function modalityMarker(node) {
+  const m = (node.modality || '').toLowerCase();
+  if (m === 'must') return '[MUST]';
+  if (m === 'must_not') return '[MUST NOT]';
+  if (m === 'should') return '[SHOULD]';
+  if (m === 'should_not') return '[SHOULD NOT]';
+  // Fallback: infer from category
+  if (node.category === 'invariants') return '[MUST]';
+  if (node.category === 'anti-patterns') return '[CORRECTION]';
+  if (node.category === 'preferences') return '[PREF]';
+  return '';
+}
+
+/**
  * Heuristically summarize a memory node.
+ * OKF-aligned: modality markers, no title/body duplication, sentence-boundary truncation.
  */
 export function heuristicCompact(node) {
   const title = (node.title || '').trim();
   const text = (node.body || node.content || '').trim();
-  
+  const marker = modalityMarker(node);
+  const prefix = marker ? `${marker} ` : '';
+
+  // Determine the best display text, avoiding title/body duplication.
+  // When title is auto-generated ("Self-captured memory: ...") it echoes the body —
+  // use the body directly to avoid doubling the same content.
+  const titleIsEcho = title.startsWith('Self-captured memory:') ||
+    (text && title.length > 20 && text.toLowerCase().startsWith(title.toLowerCase().slice(0, 20)));
+
   if (node.category && ['invariants', 'preferences', 'anti-patterns'].includes(node.category)) {
     if (text) {
+      if (titleIsEcho) {
+        // Use body directly — title would duplicate it
+        return `${prefix}${_truncateAtSentence(text, 180)}`;
+      }
       const lines = text.split('\n');
       if (lines.length > 1) {
-        return `${title}:\n  ${lines.map(l => l.trim()).join('\n  ')}`;
+        return `${prefix}${title}:\n  ${lines.map(l => l.trim()).join('\n  ')}`;
       }
-      return `${title}: ${text}`;
+      return `${prefix}${title}: ${text}`;
     }
-    return title;
+    return `${prefix}${title}`;
   }
   
-  let summary = title;
-  if (text) {
+  let summary = titleIsEcho && text ? text : title;
+  if (text && !titleIsEcho) {
     const firstLine = text.split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
     if (firstLine && 
         !title.toLowerCase().includes(firstLine.toLowerCase()) && 
@@ -191,24 +221,42 @@ export function heuristicCompact(node) {
   }
   
   summary = summary.replace(/\s+/g, ' ');
-  if (summary.length > 180) {
-    summary = summary.substring(0, 180).trim() + '... (use recall to read more)';
+  return `${prefix}${_truncateAtSentence(summary, 180)}`;
+}
+
+/**
+ * Truncate text at the nearest sentence boundary before maxLen,
+ * or at maxLen if no sentence boundary is found.
+ */
+function _truncateAtSentence(text, maxLen) {
+  if (text.length <= maxLen) return text;
+  // Look for sentence-ending punctuation before maxLen
+  const slice = text.substring(0, maxLen);
+  const lastSentence = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? ')
+  );
+  if (lastSentence > maxLen * 0.4) {
+    return text.substring(0, lastSentence + 1).trim() + ' (use recall to read more)';
   }
-  return summary;
+  return slice.trim() + '... (use recall to read more)';
 }
 
 /**
  * Compact a single memory node using LLM or heuristic fallback.
+ * When force=true, bypass cache read but still write back (OKF augmentation pattern).
  */
-async function compactNode(node, derivedDir) {
+async function compactNode(node, derivedDir, force = false) {
   const title = (node.title || '').trim();
   const body = (node.body || node.content || '').trim();
   const fullText = `${title}\n\n${body}`;
   const contentHash = crypto.createHash('sha256').update(fullText).digest('hex');
 
-  // Load from cache if possible
+  // Load from cache if possible — skip when force=true to recompute from scratch.
+  // Per OKF augmentation pattern: force bypasses cache *read* but preserves cache *write*.
   let cache = {};
-  if (derivedDir) {
+  if (derivedDir && !force) {
     cache = loadCompactedRulesCache(derivedDir);
     if (cache[node.slug] && cache[node.slug].content_sha256 === contentHash) {
       return cache[node.slug].compacted;
@@ -237,8 +285,13 @@ async function compactNode(node, derivedDir) {
     }
   }
 
-  // Save to cache
+  // Save to cache — always merge into existing cache (OKF non-destructive augmentation).
+  // When force=true we skipped cache loading above, so reload it now before writing
+  // to avoid blowing away other nodes' cached compactions.
   if (derivedDir) {
+    if (force) {
+      cache = loadCompactedRulesCache(derivedDir);
+    }
     cache[node.slug] = {
       compacted,
       content_sha256: contentHash,
@@ -250,87 +303,23 @@ async function compactNode(node, derivedDir) {
   return compacted;
 }
 
-export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir } = {}) {
+export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir, force = false } = {}) {
   let combined;
 
   if (consumer === 'api') {
     // API consumers don't need CLI quickstart docs
     combined = `## Total Recall — Active Memory Context\n\nYour memories and rules are loaded from the active brain vault.\n`;
   } else {
-    // CLI quickstart is always included so agents know TR is installed
+    // Compact CLI reference (OKF §6 progressive disclosure — summary, not full manual)
     combined = `## Total Recall — Sovereign Memory System (Installed)
 
-You have Total Recall installed. Use these CLI commands to remember and recall information.
-
-### npx total-recall remember <category> "<content>" [options]
-Save rules, preferences, corrections, and facts to permanent memory.
-
-**Categories:** invariant, preference, correction, fact, concept, pattern, anti-pattern, decision, lore
-
-**Options:**
-  --tags, -t <list>          Comma-separated tags (e.g. "config,server")
-  --importance, -i <1-5>     Importance level (default: 3)
-  --priority, -p <level>     absolute | high | normal | low (default: normal)
-  --modality, -m <type>      must | must_not | should | should_not | descriptive | preference
-  --confidence, -c <0-1>     Confidence level (default: 1.0)
-  --slug <custom-slug>       Custom kebab-case slug
-  --title <custom-title>     Custom human-readable title
-  --status <state>           active | draft | archived (default: active)
-  --related <list>           Comma-separated related slugs
-  --global                   Save to global brain (identity layer)
-  --project                  Save to project brain (context layer)
-
-**Examples:**
-  npx total-recall remember invariant "Never run tsc directly." --importance 5 --priority absolute
-  npx total-recall remember preference "Always use single quotes." --tags "style,js"
-  npx total-recall remember fact "The server runs on port 3000." --importance 4
-  npx total-recall remember fact "Uses Drizzle ORM" --project
-
-### npx total-recall recall "<query>" [options]
-Semantic search across rules, facts, and session history.
-
-**Options:**
-  --top-k, -k <number>       Results to return (default: 5, max: 20)
-  --no-sessions, -ns         Exclude session chunks, vault only
-  --format, -f <type>        text (default) or json
-  --category, -cat <name>    Filter by SSSS category
-  --tags, -t <list>          Filter by tags
-  --modality, -m <type>      Filter by modality
-  --importance, -i <1-5>     Filter by minimum importance
-  --global                   Search global brain only
-  --project                  Search project brain only
-
-**Examples:**
-  npx total-recall recall "Never run tsc directly"
-  npx total-recall recall "Express server port" --top-k 3
-  npx total-recall recall "tsc" --category invariants --modality must
-
-### npx total-recall forget <slug> [options]
-Delete a memory node by slug. Auto-recompiles surfaces and propagates to project brains.
-
-**Options:**
-  --global                   Delete from global brain
-  --project                  Delete from project brain
-  --no-compile               Skip auto-recompilation after deletion
-
-**Examples:**
-  npx total-recall forget old-invariant-slug
-  npx total-recall forget stale-fact --global
-  npx total-recall forget project-specific-node --project
-
-### npx total-recall help <topic>
-Query interactive local documentation, VFS specifications, and command references.
-
-**Options:**
-  --json, -j               Emit machine-readable JSON (ideal for programmatic retrieval)
-
-**Examples:**
-  npx total-recall help connect
-  npx total-recall help architecture
-  npx total-recall help ssss
-
-### npx total-recall --help
-Show all available commands.
+**Quick Reference:**
+- \`npx total-recall remember <category> "<content>" [options]\` — Save to memory (categories: invariant, preference, correction, fact, concept, pattern, anti-pattern, decision, lore; key flags: --importance, --priority, --modality, --tags, --global, --project)
+- \`npx total-recall recall "<query>" [options]\` — Search memory (--top-k, --category, --tags, --modality)
+- \`npx total-recall forget <slug> [options]\` — Delete a memory node (--global, --project)
+- \`npx total-recall compile\` — Rebuild instruction surfaces
+- \`npx total-recall help <topic>\` — Query local documentation
+- \`npx total-recall --help\` — Full CLI reference
 `;
   }
 
@@ -351,10 +340,35 @@ Show all available commands.
   const preferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active' && !isExpired(n));
   const corrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n));
 
-  const formatNodes = async (list) => {
-    const formatted = [];
+  // Deduplicate nodes by compacted content hash (OKF non-destructive merge pattern).
+  // When two nodes produce identical compacted text, keep the one with higher importance.
+  const deduplicateNodes = (list) => {
+    const seen = new Map();
+    const deduped = [];
     for (const n of list) {
-      const snippet = await compactNode(n, derivedDir);
+      const key = (n.body || n.content || '').trim().toLowerCase().substring(0, 200);
+      if (seen.has(key)) {
+        const existing = seen.get(key);
+        if ((n.importance || 3) > (existing.importance || 3)) {
+          // Replace with higher-importance node
+          const idx = deduped.indexOf(existing);
+          if (idx !== -1) deduped[idx] = n;
+          seen.set(key, n);
+        }
+        // else skip the lower-importance duplicate
+      } else {
+        seen.set(key, n);
+        deduped.push(n);
+      }
+    }
+    return deduped;
+  };
+
+  const formatNodes = async (list) => {
+    const unique = deduplicateNodes(list);
+    const formatted = [];
+    for (const n of unique) {
+      const snippet = await compactNode(n, derivedDir, force);
       formatted.push(snippet.startsWith('-') ? snippet : `- ${snippet}`);
     }
     return formatted.join('\n');
@@ -439,9 +453,9 @@ function injectDirectives(fileContent, rulesBlock) {
 /**
  * Write or update a platform instruction shim with the pointer and active rules.
  */
-async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir } = {}) {
+async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const shimDir = path.dirname(shimPath);
-  const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir });
+  const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir, force });
   const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
   const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
@@ -523,13 +537,13 @@ function readConnectedClients(clientsPath) {
 /**
  * Compile shims asynchronously.
  */
-async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir } = {}) {
+async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const agentDir = path.dirname(instructionsFile);
   const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
   let injectedCount = 0;
 
   // Always write the canonical INSTRUCTIONS.md
-  if (await writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir, derivedDir })) {
+  if (await writeShim(path.join(baseDir, 'INSTRUCTIONS.md'), skillsDir, nodes, { vaultDir, derivedDir, force })) {
     injectedCount++;
   }
 
@@ -543,7 +557,7 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
       const files = CLIENT_SHIMS[client];
       if (!files) continue;
       for (const file of files) {
-        if (await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir })) {
+        if (await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir, force })) {
           injectedCount++;
         }
       }
@@ -578,7 +592,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   }
 
   // 1. Write pointer and active rules to all instruction shims
-  const skillsInjected = await compilePointers(instructionsFile, skillsDir, nodes, { vaultDir, derivedDir });
+  const skillsInjected = await compilePointers(instructionsFile, skillsDir, nodes, { vaultDir, derivedDir, force });
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
