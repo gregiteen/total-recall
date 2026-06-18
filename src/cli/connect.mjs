@@ -52,18 +52,27 @@ const CLIENTS = {
     label: 'Claude Code',
     mode: 'symlink',
     target: 'CLAUDE.md',
-    writeSlashCommands: true
+    writeSlashCommands: true,
+    // Project-scoped: repo skills are repo-specific. Claude Code discovers
+    // these as native skills / slash commands under <project>/.claude/skills/.
+    skillsProjection: { scope: 'project', dir: path.join('.claude', 'skills') }
   },
   codex: {
     label: 'Codex',
     mode: 'symlink',
-    target: 'AGENTS.md'
+    target: 'AGENTS.md',
+    // Codex only discovers skills globally under $CODEX_HOME/skills (~/.codex/skills).
+    // There is no project-local skills dir, so this projection is global by necessity.
+    skillsProjection: { scope: 'home', dir: path.join('.codex', 'skills') }
   },
   antigravity: {
     label: 'Antigravity',
     mode: 'symlink',
     target: '.agents/rules/AGENTS.md',
-    writeSlashCommands: true
+    writeSlashCommands: true,
+    // Antigravity CLI (the Agent Skills standard) reads project workspace skills
+    // from <project>/.agents/skills/ and turns each into a /name slash command.
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   gemini: {
     label: 'Gemini',
@@ -293,7 +302,12 @@ function writeSymlinkProjection(cwd, preset, opts) {
       fs.rmSync(targetPath, { force: true, recursive: true });
     }
   }
-  fs.symlinkSync('INSTRUCTIONS.md', targetPath);
+  // Ensure the parent dir exists (nested targets like .agents/rules/AGENTS.md)
+  // and point the symlink at INSTRUCTIONS.md using a path relative to the
+  // link's own directory, so nested projections don't dangle.
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const linkTarget = path.relative(path.dirname(targetPath), instructionsPath);
+  fs.symlinkSync(linkTarget, targetPath);
   return { targetPath, action: 'symlinked' };
 }
 
@@ -614,6 +628,64 @@ Instructions:
 }
 
 
+/**
+ * Discover repo skills to expose as slash commands.
+ * Every <agentDir>/skills/<name>/ directory containing a SKILL.md is a skill.
+ * The SKILL.md (Agent Skills standard) is what each IDE turns into /<name>.
+ */
+function discoverRepoSkills(agentDir) {
+  const skillsRoot = path.join(agentDir, 'skills');
+  if (!fs.existsSync(skillsRoot)) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(skillsRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const skills = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const skillDir = path.join(skillsRoot, entry.name);
+    if (!fs.existsSync(path.join(skillDir, 'SKILL.md'))) continue;
+    skills.push({ name: entry.name, skillDir });
+  }
+  return skills;
+}
+
+/**
+ * Symlink each discovered skill dir into an IDE's Agent-Skills directory.
+ * Idempotent and self-healing: a symlink that is broken or points at a stale
+ * location (e.g. after the repo moved) is refreshed even without --force; a
+ * real (non-symlink) entry is only replaced with --force.
+ */
+function projectSkillsAsCommands(destDir, skills, opts) {
+  fs.mkdirSync(destDir, { recursive: true });
+  const written = [];
+  for (const skill of skills) {
+    const linkPath = path.join(destDir, skill.name);
+    const wantTarget = path.resolve(skill.skillDir);
+    if (pathExists(linkPath)) {
+      const stat = fs.lstatSync(linkPath);
+      if (stat.isSymbolicLink()) {
+        const current = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+        if (current === wantTarget && fs.existsSync(linkPath) && !opts.force) {
+          written.push({ name: skill.name, action: 'exists' });
+          continue;
+        }
+        fs.unlinkSync(linkPath); // stale, broken, or --force → refresh
+      } else if (!opts.force) {
+        written.push({ name: skill.name, action: 'skipped' }); // real file/dir in the way
+        continue;
+      } else {
+        fs.rmSync(linkPath, { recursive: true, force: true });
+      }
+    }
+    fs.symlinkSync(skill.skillDir, linkPath);
+    written.push({ name: skill.name, action: 'linked' });
+  }
+  return written;
+}
+
 export default async function connect(args) {
   const opts = parseArgs(args);
   if (opts.help || !opts.client) {
@@ -840,6 +912,29 @@ export default async function connect(args) {
       if (created.length > 0) {
         result.notes.push(`  Slash commands written to ~/.claude/commands/:\n` +
           created.map(r => `    /${r.file.replace('.md', '')} (${r.action})`).join('\n'));
+      }
+    }
+  }
+
+  // Project repo skills as native slash commands via the Agent Skills standard.
+  // Each <agentDir>/skills/<name>/SKILL.md becomes /<name> in the target IDE.
+  if (preset.skillsProjection) {
+    const skills = discoverRepoSkills(agentDir);
+    if (skills.length > 0) {
+      const destDir = preset.skillsProjection.scope === 'home'
+        ? path.join(os.homedir(), preset.skillsProjection.dir)
+        : path.join(cwd, preset.skillsProjection.dir);
+      const skillResults = projectSkillsAsCommands(destDir, skills, opts);
+      result.skill_commands = skillResults;
+      const fresh = skillResults.filter(r => r.action === 'linked');
+      if (fresh.length > 0) {
+        const destLabel = preset.skillsProjection.scope === 'home'
+          ? destDir
+          : (path.relative(cwd, destDir) || destDir);
+        result.notes.push(
+          `  Repo skills projected as slash commands → ${destLabel}/:\n` +
+          fresh.map(r => `    /${r.name}`).join('\n')
+        );
       }
     }
   }
