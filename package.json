@@ -4,8 +4,8 @@
   "description": "Sovereign AI system — database-free, SSSS-powered personal intelligence engine deployable to any POSIX host.",
   "type": "module",
   "bin": {
-    "total-recall": "./bin/total-recall.mjs",
-    "antigravity": "./bin/antigravity.mjs"
+    "total-recall": "bin/total-recall.mjs",
+    "antigravity": "bin/antigravity.mjs"
   },
   "files": [
     "bin/",
