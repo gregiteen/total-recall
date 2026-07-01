@@ -1,6 +1,7 @@
 ---
 type: skill
-name: research
+name: tr-research
+provenance: total-recall
 description: "Use this skill when queueing, searching, and managing long-horizon background research projects via the Total Recall REST API."
 ---
 

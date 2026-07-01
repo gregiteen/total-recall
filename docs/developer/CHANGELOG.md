@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.10.0] — 2026-07-01
+
+### ✨ Features
+- **Namespaced Total Recall sub-skills**: Renamed bundled nested skills to `tr-cli-agents`, `tr-research`, `tr-skill`, and `tr-ssss` so packaged Total Recall skills no longer collide with user-authored generic slash commands.
+- **Scope-aware skill projection**: Added project/global skill projection helpers and `init` wiring so repo skills are exposed only to the IDE skill surfaces that are actually in use.
+- **SSSS delete envelope and schema expansion**: Added delete-envelope validation/auditing and the `email_account` primitive schema.
+- **Research runtime refinements**: Hardened research planning/synthesis prompts, stripped scratchpad output from stored reports, and marked empty acquisition runs as failed instead of silently advancing.
+
+### 🐛 Bug Fixes
+- **Packaged skill CLI helpers resolve correctly**: `total-recall skill` and `/api/skills/*` now load helper scripts from the active brain first, then fall back to the shipped scaffold, preventing dev-only `.agent` path failures after npm install.
+- **Skill manager helpers are self-contained**: Restored missing `searchAndSort`, scanner `runScan`, and safe install wrapper behavior in the `tr-skill` bundle.
+- **Runtime config compatibility**: Agent registry lookup now checks both namespaced and legacy `cli-agents` paths.
+- **Dependency audit cleanup**: Updated transitive lockfile entries to clear npm advisories for `form-data`, `js-yaml`, and `vite`.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.10.0`.
+
 ## [3.9.0] — 2026-06-18
 
 ### ✨ Features

@@ -1,9 +1,30 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { logger } from '../../core/logger.mjs';
-import { SKILLS_DIR } from './_shared.mjs';
+import { AGENT_DIR, SKILLS_DIR } from './_shared.mjs';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+function resolveTrSkillScript(scriptName) {
+  const candidates = [
+    path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
+    path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
+    path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
+    path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
+  ];
+  const found = candidates.find(candidate => fs.existsSync(candidate));
+  if (!found) {
+    throw new Error(`Could not find bundled skill helper "${scriptName}".`);
+  }
+  return found;
+}
+
+async function importTrSkillScript(scriptName) {
+  return import(pathToFileURL(resolveTrSkillScript(scriptName)).href);
+}
 
 function serverError(res, err) {
   logger.error('skills', 'Internal server error', { error: err.message, stack: err.stack });
@@ -49,7 +70,7 @@ skillsRouter.get('/api/skills/search', requireAuth, requireScope('files:read', '
     if (!q) {
       return res.status(400).json({ error: 'Missing search query parameter `q`.' });
     }
-    const { searchAndSort } = await import('../../../.agent/skills/total-recall/skills/skill/scripts/find-skills.mjs');
+    const { searchAndSort } = await importTrSkillScript('find-skills.mjs');
     const results = searchAndSort(q);
     res.json(results);
   } catch (err) { serverError(res, err); }
@@ -61,8 +82,8 @@ skillsRouter.post('/api/skills/install', requireAuth, requireScope('files:write'
     if (!pkg) {
       return res.status(400).json({ error: 'Missing required `pkg` body parameter.' });
     }
-    const { installSkill } = await import('../../../.agent/skills/total-recall/skills/skill/scripts/install-skill.mjs');
-    const result = installSkill(pkg);
+    const { installSkill } = await importTrSkillScript('install-skill.mjs');
+    const result = installSkill(pkg, { agentDir: AGENT_DIR });
     res.json(result);
   } catch (err) { serverError(res, err); }
 });

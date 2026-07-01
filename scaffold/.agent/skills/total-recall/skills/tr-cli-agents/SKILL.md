@@ -1,5 +1,6 @@
 ---
-name: cli-agents
+name: tr-cli-agents
+provenance: total-recall
 description: "Orchestrate headlessly spawned CLI agents from the central registry."
 ---
 
@@ -12,7 +13,7 @@ This system skill governs the discovery, configuration, and execution of headles
 ## 🎯 SYSTEM OVERVIEW
 
 The CLI Agent Dispatch Engine parses agent profiles from the central registry file:
-`.agent/skills/total-recall/skills/cli-agents/agents.yml`
+`.agent/skills/total-recall/skills/tr-cli-agents/agents.yml`
 
 ```mermaid
 flowchart TD

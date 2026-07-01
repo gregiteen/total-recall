@@ -205,3 +205,23 @@ export function formatReport(findings) {
 
   return report;
 }
+
+/**
+ * CLI-friendly scanner entrypoint.
+ *
+ * @param {string} targetDir
+ * @returns {{ success: boolean, findings: Array, report: string }}
+ */
+export function runScan(targetDir) {
+  if (!targetDir || !fs.existsSync(targetDir)) {
+    const report = `Skill directory not found: ${targetDir}\n`;
+    console.error(report.trim());
+    return { success: false, findings: [], report };
+  }
+
+  const findings = scanDirectory(targetDir);
+  const report = formatReport(findings);
+  const blocked = findings.some(f => f.severity === 'CRITICAL');
+  console.log(report.trimEnd());
+  return { success: !blocked, findings, report };
+}

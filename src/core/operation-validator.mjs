@@ -7,6 +7,7 @@ import {
   OperationEnvelopeSchema,
   PatchEnvelopeSchema,
   EventEnvelopeSchema,
+  DeleteEnvelopeSchema,
 } from './schema.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
@@ -109,7 +110,7 @@ export function processOperation(envelope, vaultRoot, options = {}) {
   const warnings = [];
 
   // Stage 1: Envelope Validation
-  const schemaMap = { operation: OperationEnvelopeSchema, patch: PatchEnvelopeSchema, event: EventEnvelopeSchema };
+  const schemaMap = { operation: OperationEnvelopeSchema, patch: PatchEnvelopeSchema, event: EventEnvelopeSchema, delete: DeleteEnvelopeSchema };
   const envSchema = schemaMap[envelope.type];
   if (!envSchema) return makeErrorResponse(envelope.type || 'unknown', operationId, envelope.path || '', [`Unknown envelope type: ${envelope.type}`]);
   const envResult = envSchema.safeParse(envelope);
@@ -189,6 +190,17 @@ export function processOperation(envelope, vaultRoot, options = {}) {
   }
   if (envelope.type === 'event') { try { JSON.parse(envelope.content); } catch { errors.push('Event content must be valid JSON.'); } }
 
+  if (envelope.type === 'delete') {
+    const absPath = resolveVfsPath(vaultRoot, envelope.path);
+    if (!fs.existsSync(absPath)) { errors.push(`Target file does not exist for delete: ${envelope.path}`); }
+    else {
+      const { data } = matter(fs.readFileSync(absPath, 'utf8'));
+      resolvedType = data.type || null;
+      // §6.2: append-type documents are immutable and may not be deleted.
+      if (APPEND_TYPES.has(resolvedType)) errors.push(`Append-type '${resolvedType}' may not be deleted.`);
+    }
+  }
+
   const isValid = errors.length === 0;
   if (envelope.dry_run || !isValid) {
     const resp = { success: isValid, type: envelope.type, operation_id: operationId, path: envelope.path, committed_at: null, dry_run: !!envelope.dry_run, validation: { valid: isValid, type: resolvedType, errors, warnings } };
@@ -230,6 +242,12 @@ export function processOperation(envelope, vaultRoot, options = {}) {
       const logDir = eventLogDir || path.join(vaultRoot, '.events');
       if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
       fs.appendFileSync(path.join(logDir, `${envelope.workspace_id}.jsonl`), JSON.stringify({ event_id: operationId, event_type: 'operation-audit', ts: committedAt, path: envelope.path, content: envelope.content, idempotency_key: envelope.idempotency_key }) + '\n');
+    } else if (envelope.type === 'delete') {
+      fs.rmSync(absPath, { force: true });
+      // §6.2: a delete emits an auditable deletion event so history is never lost.
+      const logDir = eventLogDir || path.join(vaultRoot, '.events');
+      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+      fs.appendFileSync(path.join(logDir, `${envelope.workspace_id}.jsonl`), JSON.stringify({ event_id: operationId, event_type: 'delete', ts: committedAt, path: envelope.path, resolved_type: resolvedType, idempotency_key: envelope.idempotency_key }) + '\n');
     }
   } catch (err) {
     logger.error('operation-validator', `Commit failed: ${err.message}`);

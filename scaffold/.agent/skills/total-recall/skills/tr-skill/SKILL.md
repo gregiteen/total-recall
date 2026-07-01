@@ -1,5 +1,6 @@
 ---
-name: skill
+name: tr-skill
+provenance: total-recall
 description: "Use this skill when creating, auditing, or modifying any skill in the .agent/skills/ ecosystem. MANDATORY: You MUST read the full SKILL.md file before executing."
 ---
 
@@ -186,7 +187,7 @@ Contains standalone prompt files for subtasks that can be delegated to parallel 
 
 ### Quick method (script):
 ```bash
-bash .agent/skills/skill/scripts/create-skill.sh my-new-skill
+bash .agent/skills/tr-skill/scripts/create-skill.sh my-new-skill
 ```
 
 ### Manual method:

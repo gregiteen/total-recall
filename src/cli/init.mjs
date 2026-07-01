@@ -30,6 +30,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { exec, spawn, spawnSync } from 'node:child_process';
+import { projectSkillsForScope, detectActiveSkillTargets } from './skill-projection.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -83,7 +84,8 @@ function parseArgs(args) {
     domain: null,
     tunnelName: null,
     tunnelCredentials: null,
-    yes: false
+    yes: false,
+    force: false
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -97,6 +99,7 @@ function parseArgs(args) {
     else if (arg === '--tunnel-name') opts.tunnelName = args[++i];
     else if (arg === '--tunnel-credentials') opts.tunnelCredentials = args[++i];
     else if (arg === '--yes' || arg === '-y') opts.yes = true;
+    else if (arg === '--force') opts.force = true;
   }
   return opts;
 }
@@ -474,7 +477,7 @@ export default async function init(args) {
   }
 
   // ── Symlink nested brain skills to top-level .agent/skills/ ──
-  // Skills inside the brain (e.g. .agent/skills/total-recall/skills/ssss/) are
+  // Skills inside the brain (e.g. .agent/skills/total-recall/skills/tr-ssss/) are
   // invisible to IDEs because they only scan .agent/skills/<name>/ one level
   // deep. Create symlinks so they appear as slash commands.
   const nestedSkillsDir = path.join(brainDir, 'skills');
@@ -495,6 +498,43 @@ export default async function init(args) {
       } else {
         log(`  Would symlink ${entry.name} → ${target}`);
       }
+    }
+  }
+
+  // ── Step 3.7: Project skills as slash commands into the IDEs in use ──
+  // Scope matches the brain: `init --project` projects PROJECT skills into the
+  // repo's IDE skill dirs for IDEs actually used here (.claude/, .agents/, or
+  // the current process); `init` projects GLOBAL skills into installed IDEs'
+  // global skill dirs. Codex (global-only) is opt-in for project skills.
+  const skillScope = isProject ? 'project' : 'global';
+  logStep('3.7/4', `Projecting ${skillScope} skills as slash commands (IDEs in use)`);
+  if (opts.dryRun) {
+    const targets = detectActiveSkillTargets({ scope: skillScope, cwd });
+    for (const t of targets.filter(t => t.supported)) {
+      const destLabel = t.destDir ? path.relative(cwd, t.destDir) || t.destDir : '(n/a)';
+      log(`  ${t.active ? 'would wire' : 'available (opt-in)'}: ${t.label} → ${destLabel}/`);
+    }
+  } else {
+    try {
+      const { skills, wired, available } = projectSkillsForScope({
+        scope: skillScope, cwd, agentDir, opts: { force: opts.force }
+      });
+      if (skills.length === 0) {
+        log('  No skills found yet — author one under .agent/skills/<name>/SKILL.md');
+      } else if (wired.length === 0) {
+        log(`  No in-use IDE detected for ${skillScope} skills — run \`npx total-recall connect <ide>\` to wire them.`);
+      } else {
+        for (const t of wired) {
+          const n = t.results.filter(r => ['linked', 'exists', 'source'].includes(r.action)).length;
+          logOk(`${t.label}: ${n} skill(s) → ${path.relative(cwd, t.destDir) || t.destDir}/`);
+        }
+        log(`  Slash commands: ${skills.map(s => '/' + s.name).join(', ')}`);
+        if (available.length > 0) {
+          log(`  Also available (opt-in): ${available.map(t => t.clients.join('/')).join(', ')} — \`npx total-recall connect <ide>\``);
+        }
+      }
+    } catch (err) {
+      logWarn(`Could not project skills into IDEs: ${err.message}`);
     }
   }
 

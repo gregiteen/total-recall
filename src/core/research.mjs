@@ -109,11 +109,25 @@ async function planResearchQueries(task, context) {
   const today = getLocalizedDateTime();
   const cutoff = context.runtimeConfig?.training_cutoff || 'January 2025';
 
-  const planSystem = `You are a Research Planner. Today's date and time is ${today}. The model's training data cutoff is ${cutoff}.
-Decompose the research objective into 3 distinct, specific search queries. Prioritize queries targeting fresh, timely information that has arisen or been updated since the training cutoff.
-Output ONLY valid JSON: { "queries": ["query 1", "query 2", "query 3"], "source_hints": { "query 1": ["brave-search", "arxiv"] } }`;
+  const planSystem = `<system_instructions>
+You are a Research Planner.
+- Decompose the research objective into 3 distinct, specific search queries.
+- Prioritize queries targeting fresh, timely information that has arisen or been updated since the training cutoff.
+- ALWAYS think inside a <scratchpad> block first to outline your queries.
+- Your final output MUST be ONLY valid JSON matching this schema: { "queries": ["query 1", "query 2", "query 3"], "source_hints": { "query 1": ["brave-search", "arxiv"] } }
+</system_instructions>
 
-  const planPrompt = `Research Objective: ${task.target}\nDetails: ${task.body || ''}\nGenerate 3 targeted search queries targeting active, timely information post-${cutoff}.`;
+<context>
+Today's date and time is ${today}.
+The model's training data cutoff is ${cutoff}.
+</context>`;
+
+  const planPrompt = `<user_goal>
+Research Objective: ${task.target}
+Details: ${task.body || 'None'}
+</user_goal>
+
+Generate 3 targeted search queries targeting active, timely information post-${cutoff}.`;
 
   try {
     const raw = await callLocalRuntime(planPrompt, planSystem, context.runtimeConfig);
@@ -436,12 +450,36 @@ async function synthesizeLocally(task, results, runtimeConfig) {
     .map(r => `[${r.source}] ${r.title}: ${r.snippet?.slice(0, 300)}`)
     .join('\n');
 
-  const system = `You are a Deep Research Synthesizer. Today's date and time is ${today}. The model's training data cutoff is ${cutoff}.
-Synthesize research results into a concise report. Cite sources inline [Source: URL]. Prioritize fresh, timely information published after the cutoff.`;
-  const prompt = `Topic: "${task.target}"\n\nResults:\n${sourceSummary.slice(0, 6000)}`;
+  const system = `<system_instructions>
+You are a Deep Research Synthesizer.
+- Synthesize research results into a concise report.
+- Cite sources inline [Source: URL].
+- Prioritize fresh, timely information published after the cutoff.
+- ALWAYS use a <scratchpad> block first to outline your synthesis and evaluate source reliability before writing the final report.
+</system_instructions>
+
+<context>
+Today's date and time is ${today}.
+The model's training data cutoff is ${cutoff}.
+</context>`;
+
+  const prompt = `<user_goal>
+Topic: "${task.target}"
+</user_goal>
+
+<retrieved_docs>
+${sourceSummary.slice(0, 6000)}
+</retrieved_docs>
+
+Please synthesize the research results.`;
 
   try {
-    return callLocalRuntime(prompt, system, runtimeConfig);
+    let report = await callLocalRuntime(prompt, system, runtimeConfig);
+    // Remove the scratchpad from the final stored report
+    if (report) {
+      report = report.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/gi, '').trim();
+    }
+    return report;
   } catch (err) {
     logger.error('research: callLocalRuntime failed during synthesis', { err: err.message });
     return null;

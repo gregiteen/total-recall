@@ -1,16 +1,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { resolveAgentDir, parseLayerFlag } from './agent-dir.mjs';
 
 // Helper to resolve agent directories dynamically
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../');
-const agentDir = path.join(ROOT, '.agent');
-const skillsDir = path.join(agentDir, 'skills');
 
-// Direct dynamic imports for scripts layer to preserve environment paths
-const scriptsPath = path.join(agentDir, 'skills', 'total-recall', 'skills', 'skill', 'scripts');
+export function resolveSkillScriptPath(scriptName, { agentDir = resolveAgentDir(), root = ROOT } = {}) {
+  const candidates = [
+    path.join(agentDir, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
+    path.join(agentDir, 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
+    path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
+    path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
+  ];
+  const found = candidates.find(candidate => fs.existsSync(candidate));
+  if (!found) {
+    throw new Error(`Could not find bundled skill helper "${scriptName}". Checked: ${candidates.join(', ')}`);
+  }
+  return found;
+}
+
+async function importSkillScript(scriptName, options) {
+  return import(pathToFileURL(resolveSkillScriptPath(scriptName, options)).href);
+}
 
 function printHelp() {
   console.log(`
@@ -28,6 +42,8 @@ function printHelp() {
     remove <name>         Safely delete a skill package and hot-recompile shims (alias: rm)
 
   Options:
+    --global              Target the global brain (~/.agent)
+    --project             Target the current repo's project brain
     --help, -h            Show this help menu
   
   Examples:
@@ -40,15 +56,24 @@ function printHelp() {
 }
 
 export default async function skillCli(args) {
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  if (remainingArgs.length === 0 || remainingArgs.includes('--help') || remainingArgs.includes('-h')) {
     printHelp();
     return;
   }
 
-  const command = args[0];
+  let agentDir;
+  try {
+    agentDir = resolveAgentDir(layer);
+  } catch (err) {
+    console.error(`❌ ${err.message}`);
+    process.exit(1);
+  }
+  const skillsDir = path.join(agentDir, 'skills');
+  const command = remainingArgs[0];
 
   if (command === 'find') {
-    const query = args[1];
+    const query = remainingArgs[1];
     if (!query) {
       console.error('❌ You must provide a search query.');
       console.error('Usage: npx total-recall skill find <query>');
@@ -56,7 +81,7 @@ export default async function skillCli(args) {
     }
 
     try {
-      const { searchAndSort } = await import('../../.agent/skills/total-recall/skills/skill/scripts/find-skills.mjs');
+      const { searchAndSort } = await importSkillScript('find-skills.mjs', { agentDir });
       const results = searchAndSort(query);
       
       if (results.length === 0) {
@@ -100,7 +125,7 @@ export default async function skillCli(args) {
   } 
   
   else if (command === 'install' || command === 'add' || command === 'load') {
-    const pkg = args[1];
+    const pkg = remainingArgs[1];
     if (!pkg) {
       console.error('❌ You must provide a skill package to load.');
       console.error('Usage: npx total-recall skill load <owner/repo@skill>');
@@ -108,8 +133,8 @@ export default async function skillCli(args) {
     }
 
     try {
-      const { installSkill } = await import('../../.agent/skills/total-recall/skills/skill/scripts/install-skill.mjs');
-      const res = installSkill(pkg);
+      const { installSkill } = await importSkillScript('install-skill.mjs', { agentDir });
+      const res = installSkill(pkg, { cwd: process.cwd(), agentDir });
       if (!res.success) {
         process.exit(1);
       }
@@ -120,7 +145,7 @@ export default async function skillCli(args) {
   } 
   
   else if (command === 'scan') {
-    const target = args[1];
+    const target = remainingArgs[1];
     if (!target) {
       console.error('❌ You must specify a local skill directory to scan.');
       console.error('Usage: npx total-recall skill scan <skill-name>');
@@ -130,7 +155,7 @@ export default async function skillCli(args) {
     const targetDir = path.resolve(skillsDir, target);
 
     try {
-      const { runScan } = await import('../../.agent/skills/total-recall/skills/skill/scripts/scan-skill.mjs');
+      const { runScan } = await importSkillScript('scan-skill.mjs', { agentDir });
       const result = runScan(targetDir);
       process.exit(result.success ? 0 : 1);
     } catch (err) {
@@ -176,7 +201,7 @@ export default async function skillCli(args) {
   } 
   
   else if (command === 'remove' || command === 'rm') {
-    const target = args[1];
+    const target = remainingArgs[1];
     if (!target) {
       console.error('❌ You must specify a skill name to remove.');
       console.error('Usage: npx total-recall skill remove <skill-name>');
@@ -197,7 +222,8 @@ export default async function skillCli(args) {
     console.log('🔄 Hot-recompiling active shims to reflect changes...');
     const child = spawnSync('npx', ['total-recall', 'compile'], { 
       encoding: 'utf8',
-      cwd: ROOT
+      cwd: process.cwd(),
+      env: { ...process.env, AGENT_DIR: agentDir },
     });
 
     if (child.error || child.status !== 0) {
@@ -208,7 +234,7 @@ export default async function skillCli(args) {
   } 
   
   else if (command === 'create' || command === 'new') {
-    const target = args[1];
+    const target = remainingArgs[1];
     if (!target) {
       console.error('❌ You must specify a skill name to create.');
       console.error('Usage: npx total-recall skill create <skill-name>');
@@ -285,7 +311,7 @@ Provide a high-level explanation of the skill's capabilities and context.
   }
 
   else if (command === 'edit') {
-    const target = args[1];
+    const target = remainingArgs[1];
     if (!target) {
       console.error('❌ You must specify a skill name to edit.');
       console.error('Usage: npx total-recall skill edit <skill-name>');

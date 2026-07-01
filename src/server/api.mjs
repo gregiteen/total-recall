@@ -176,7 +176,7 @@ function resolveRequestedModel(requestedModel, runtimeConfig) {
 }
 
 function ssssReferenceDir() {
-  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'references');
+  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references');
 }
 
 function listSsssReferences(req) {
@@ -510,7 +510,7 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
         baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${compressInstructions(instructions)}`;
       }
 
-      const ssssPath = path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'ssss', 'SKILL.md');
+      const ssssPath = path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-ssss', 'SKILL.md');
       if (fs.existsSync(ssssPath)) {
         const ssssContent = fs.readFileSync(ssssPath, 'utf8');
         baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nYou are the orchestrator of this system. Here is the architectural specification:\n${compressSsssSkill(ssssContent)}`;

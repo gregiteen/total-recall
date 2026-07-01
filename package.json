@@ -56,6 +56,7 @@
   },
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
+    "@ssss/cli": "github:gregiteen/ssss#v0.4.0",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -64,9 +65,9 @@
     "gray-matter": "^4.0.3",
     "jsonwebtoken": "^9.0.3",
     "natural": "^8.1.1",
+    "ws": "^8.18.0",
     "yaml": "^2.9.0",
-    "zod": "^4.4.3",
-    "ws": "^8.18.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "skills": "^1.5.7",
