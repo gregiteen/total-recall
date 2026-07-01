@@ -77,6 +77,7 @@ export function parseFindOutput(rawOutput) {
 
     const name = skillMatch[1];
     const installs = parseInstalls(skillMatch[2], skillMatch[3] || '');
+    const installsStr = `${skillMatch[2]}${skillMatch[3] || ''}`;
 
     // Next non-empty line should be the URL (prefixed with └ or similar box-drawing chars)
     let url = '';
@@ -92,10 +93,17 @@ export function parseFindOutput(rawOutput) {
       break; // only check the very next non-empty line
     }
 
-    results.push({ name, installs, url });
+    results.push({ name, installs, installsStr, url });
   }
 
   return results;
+}
+
+function formatInstalls(installs) {
+  if (installs >= 1_000_000_000) return `${(installs / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+  if (installs >= 1_000_000) return `${(installs / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (installs >= 1_000) return `${(installs / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  return String(installs);
 }
 
 // ─── Live Registry Search ───────────────────────────────────────────────────
@@ -121,4 +129,20 @@ export function searchRegistry(query, { timeoutMs = 15_000 } = {}) {
     // skills CLI not installed or network error — degrade gracefully
     return [];
   }
+}
+
+/**
+ * Search skills.sh and sort by absolute install count, highest first.
+ *
+ * @param {string} query
+ * @param {object} [options]
+ * @returns {Array<{ name: string, installs: number, installsStr: string, url: string }>}
+ */
+export function searchAndSort(query, options = {}) {
+  return searchRegistry(query, options)
+    .map(result => ({
+      ...result,
+      installsStr: result.installsStr || formatInstalls(result.installs || 0),
+    }))
+    .sort((a, b) => (b.installs || 0) - (a.installs || 0));
 }

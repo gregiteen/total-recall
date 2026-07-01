@@ -60,4 +60,11 @@ log "Starting the standalone server..."
 # Spawn server in background. The index.mjs watchdog will auto-start the daemon.
 nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port 3000 --host 127.0.0.1 > /root/.agent/logs/server.log 2>&1 &
 
+log "Updating OKF knowledge-catalog repo..."
+if [ -d "$REPO_DIR/knowledge-catalog" ]; then
+  cd "$REPO_DIR/knowledge-catalog"
+  git pull origin main || true
+  log "✅ OKF repo updated."
+fi
+
 log "🎉 Successfully updated and hot-reloaded the Total Recall Brain in the cloud!"

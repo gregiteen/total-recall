@@ -293,6 +293,14 @@ process.on('SIGINT', () => {
   running = false;
 });
 
+process.on('uncaughtException', (err) => {
+  logger.error({ subsystem: 'daemon-loop', message: `Uncaught Exception (suppressed to keep daemon alive): ${err.stack || err.message}` });
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({ subsystem: 'daemon-loop', message: `Unhandled Rejection (suppressed to keep daemon alive): ${reason}` });
+});
+
 async function main() {
   logger.info({
     subsystem: 'daemon-loop',
@@ -416,8 +424,11 @@ async function main() {
           // If the task was skipped because it requires an LLM, DO NOT complete the research project.
           if (result.skippedLLM) {
             patch.status = 'pending';
-          } else if (result.success && result.factSlug) {
-            if (task._research_phase === 'acquisition') {
+          } else if (result.success) {
+            if (task._research_phase === 'acquisition' && !result.factSlug) {
+              patch.status = 'failed';
+              patch.notes = 'No insights found during acquisition.';
+            } else if (task._research_phase === 'acquisition') {
               patch.status = 'pending';
               patch.research_phase = 'deliberation';
               patch.completed_at = new Date().toISOString();

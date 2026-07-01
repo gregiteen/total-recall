@@ -1520,7 +1520,7 @@ function absoluteUrl(req, routePath) {
 }
 
 function ssssReferenceDir() {
-  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'references');
+  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references');
 }
 
 function listSsssReferences(req) {
@@ -1561,7 +1561,7 @@ router.get('/api/ssss', requireAuth, requireScope('ssss:read'), (req, res) => {
       name: 'ssss-skill',
       url: absoluteUrl(req, '/api/ssss/skill/ssss'),
       ...(() => {
-        const r = readTextResource(path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'SKILL.md'), 'ssss-skill');
+        const r = readTextResource(path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'SKILL.md'), 'ssss-skill');
         return r ? { sha256: r.sha256, bytes: r.bytes, modified: r.modified } : { sha256: null, bytes: 0, modified: null };
       })()
     },
@@ -1588,7 +1588,7 @@ router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'ins
 });
 
 router.get('/api/ssss/skill/ssss', requireAuth, requireScope('ssss:read'), (_req, res) => {
-  return sendTextResource(res, path.join(SKILLS_DIR, 'total-recall', 'skills', 'ssss', 'SKILL.md'), 'ssss-skill');
+  return sendTextResource(res, path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'SKILL.md'), 'ssss-skill');
 });
 
 router.get('/api/ssss/spec', requireAuth, requireScope('ssss:read'), (_req, res) => {

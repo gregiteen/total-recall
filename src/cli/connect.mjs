@@ -4,6 +4,7 @@ import path from 'node:path';
 import { agentDir as configAgentDir, brainDir as configBrainDir, xdgConfigHome, trBrain, trPat } from '../core/config.mjs';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, getBothBrains, detectProjectBrain } from './agent-dir.mjs';
+import { discoverRepoSkills, projectSkillsAsCommands } from './skill-projection.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
@@ -78,7 +79,11 @@ const CLIENTS = {
     label: 'Gemini',
     mode: 'symlink',
     target: '.agents/rules/GEMINI.md',
-    writeSlashCommands: true
+    writeSlashCommands: true,
+    // Gemini CLI reads project workspace skills from <project>/.agents/skills/
+    // (the same Agent Skills location Antigravity uses) and turns each into a
+    // /name slash command.
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   aider: {
     label: 'Aider',
@@ -627,64 +632,6 @@ Instructions:
   return written;
 }
 
-
-/**
- * Discover repo skills to expose as slash commands.
- * Every <agentDir>/skills/<name>/ directory containing a SKILL.md is a skill.
- * The SKILL.md (Agent Skills standard) is what each IDE turns into /<name>.
- */
-function discoverRepoSkills(agentDir) {
-  const skillsRoot = path.join(agentDir, 'skills');
-  if (!fs.existsSync(skillsRoot)) return [];
-  let entries;
-  try {
-    entries = fs.readdirSync(skillsRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const skills = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-    const skillDir = path.join(skillsRoot, entry.name);
-    if (!fs.existsSync(path.join(skillDir, 'SKILL.md'))) continue;
-    skills.push({ name: entry.name, skillDir });
-  }
-  return skills;
-}
-
-/**
- * Symlink each discovered skill dir into an IDE's Agent-Skills directory.
- * Idempotent and self-healing: a symlink that is broken or points at a stale
- * location (e.g. after the repo moved) is refreshed even without --force; a
- * real (non-symlink) entry is only replaced with --force.
- */
-function projectSkillsAsCommands(destDir, skills, opts) {
-  fs.mkdirSync(destDir, { recursive: true });
-  const written = [];
-  for (const skill of skills) {
-    const linkPath = path.join(destDir, skill.name);
-    const wantTarget = path.resolve(skill.skillDir);
-    if (pathExists(linkPath)) {
-      const stat = fs.lstatSync(linkPath);
-      if (stat.isSymbolicLink()) {
-        const current = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
-        if (current === wantTarget && fs.existsSync(linkPath) && !opts.force) {
-          written.push({ name: skill.name, action: 'exists' });
-          continue;
-        }
-        fs.unlinkSync(linkPath); // stale, broken, or --force → refresh
-      } else if (!opts.force) {
-        written.push({ name: skill.name, action: 'skipped' }); // real file/dir in the way
-        continue;
-      } else {
-        fs.rmSync(linkPath, { recursive: true, force: true });
-      }
-    }
-    fs.symlinkSync(skill.skillDir, linkPath);
-    written.push({ name: skill.name, action: 'linked' });
-  }
-  return written;
-}
 
 export default async function connect(args) {
   const opts = parseArgs(args);

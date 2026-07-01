@@ -1,5 +1,6 @@
 ---
-name: ssss
+name: tr-ssss
+provenance: total-recall
 description: "Use this skill to inspect, validate, write, and manage SSSS primitives, memory nodes, operation envelopes, scope overlays, projections, and VFS specifications in the Total Recall reference kernel. MANDATORY: Read this file before editing SSSS files or code."
 ---
 
@@ -12,9 +13,16 @@ schema/reference files.
 
 ## Ground Truth
 
-The vendor-neutral contract is `references/ssss-spec.md`. If this skill conflicts
-with the spec, correct this skill unless the implementation has intentionally
-advanced beyond the vendored spec and the difference is documented here.
+The vendor-neutral contract is now a published package, **`@ssss/cli`** (pinned to
+**`v0.4.0`**; source <https://github.com/gregiteen/ssss>), declared in
+`package.json`. `references/ssss-spec.md` is the local mirror. The canon owns the
+spec (§5.5 portability, §6 Operation Contract incl. `delete`, §16 the `.ucw` bundle
+format, §17 provisioning), the core registry (`@ssss/cli/registry/core.json`: 13
+document + 5 contract primitives), the reference engine, and the conformance
+fixtures. Total Recall's kernel was the engine the canon's reference implementation
+was harvested from; keep them aligned. If this skill conflicts with the canon,
+correct this skill unless the implementation has intentionally advanced beyond it
+and the difference is documented here.
 
 Current local implementation entry points:
 
@@ -26,6 +34,32 @@ Current local implementation entry points:
 - `src/core/vault-cache.mjs` — cached vault reads and watcher invalidation.
 - `src/core/vector-store.mjs` and `src/core/semantic-index.mjs` — canonical
   search/index path.
+
+## Using the `@ssss/cli` CLI
+
+`@ssss/cli` ships a `ssss` command (available via `npx`, since it's a dependency).
+It operates on a **vault directory** of Markdown files and `.ucw` bundles, using
+the canon's own reference engine — separate from this kernel's `processOperation`.
+Use it for bundle/tenant tooling and conformance; for in-kernel memory writes keep
+using `writeNodeValidated()` / `processOperation()`.
+
+```bash
+npx ssss help                  # list doc topics; e.g. `ssss help portability|bundle|provisioning`
+npx ssss <command> --help      # flags for any command
+
+# Vault → bundle → vault lifecycle (§16/§17)
+npx ssss export <vault-dir> --profile sale --out pack.ucw.json   # backup | template | sale
+npx ssss validate pack.ucw.json                                  # schema + portability + content hash
+npx ssss inspect  pack.ucw.json --files                          # manifest, inventory, params, steps
+npx ssss provision pack.ucw.json --param domain=acme.live --out plan.json   # pure: params + links → envelopes
+npx ssss import   pack.ucw.json --vault ./new-vault --param domain=acme.live  # idempotent replay
+
+npx ssss conformance --engine  # replay the canonical fixtures + round-trip the reference bundle
+```
+
+`export` is pure/deterministic and `template`/`sale` drop every `tenant_private`
+file (§5.5). Note: the canon's `.ucw` bundle (§16) is distinct from §7.4's OKF
+memory-vault `importBundle`/`exportBundle` in `repo-expert`.
 
 ## Current Contract
 
@@ -45,17 +79,16 @@ processOperation(envelope, vaultRoot, options)
 Use `writeNodeValidated()` for Total Recall memory writes. Do not call raw
 `writeNode()` or write files directly when an agent is mutating an SSSS vault.
 
-Total Recall currently implements these envelope types in
+Total Recall implements all four canonical envelope types in
 `processOperation()`:
 
 - `operation` — full file create/replace.
 - `patch` — partial frontmatter/body merge.
 - `event` — append-only JSON event payload.
-
-The UltraChat host also models a `delete` envelope. Do not claim or use `delete`
-inside the Total Recall kernel until `src/core/schema.mjs` and
-`src/core/operation-validator.mjs` implement and test it. For memory removal, use
-the CLI/API forget/archive flow.
+- `delete` — remove a replace-type VFS file (SSSS spec §6.2). Refuses to delete
+  append-type documents (`conversation`, `run`), and emits an auditable deletion
+  event so history is never lost. Idempotent. For *memory* removal, still prefer
+  the CLI/API forget/archive flow over a raw `delete` envelope.
 
 Use `dry_run: true` for preflight validation when constructing writes from model
 output.
@@ -157,7 +190,7 @@ spec and tests are updated together.
 Validate an individual SSSS Markdown file with:
 
 ```bash
-node .agent/skills/ssss/scripts/validate-schema.mjs <path-to-node.md>
+node .agent/skills/tr-ssss/scripts/validate-schema.mjs <path-to-node.md>
 ```
 
 Run focused kernel tests after changing the operation contract, schema registry,
@@ -168,8 +201,16 @@ npx vitest run \
   src/core/schema.spec.mjs \
   src/core/operation-validator.spec.mjs \
   src/core/total-recall-memory-validator.spec.mjs \
-  src/core/vault-cache.spec.mjs
+  src/core/vault-cache.spec.mjs \
+  src/core/ssss-conformance.bridge.spec.mjs
 ```
+
+The **conformance bridge** (`src/core/ssss-conformance.bridge.spec.mjs`) runs the
+canonical fixtures from `@ssss/cli` through this kernel's `processOperation` and
+asserts every canonical core primitive is present in `SSSS_SCHEMAS`. It proves the
+kernel implements the *same* standard as the festech and UltraChat hosts. If you
+change the operation contract or the registry, keep this green; to adopt a newer
+standard, bump the `@ssss/cli` pin and re-run it.
 
 ## Do Not
 
@@ -179,8 +220,7 @@ npx vitest run \
 - Do not collapse `global`/`project` or `system`/`account`/`workspace` scope
   boundaries.
 - Do not represent copied seeded skills as canonical system primitives.
-- Do not claim Total Recall supports `delete` envelopes until the implementation
-  supports them.
+- Do not delete append-type documents (`conversation`, `run`); they are immutable.
 - Do not add host-specific required fields to the vendor-neutral spec unless they
   are being standardized.
 
@@ -188,7 +228,10 @@ npx vitest run \
 
 | For | Read |
 | --- | --- |
-| SSSS standard | `references/ssss-spec.md` |
+| Upstream canon (package) | `@ssss/cli` (`v0.4.0`, github:gregiteen/ssss) |
+| Canonical core registry | `@ssss/cli/registry/core.json` |
+| Conformance bridge | `src/core/ssss-conformance.bridge.spec.mjs` |
+| SSSS standard (local mirror) | `references/ssss-spec.md` |
 | Implemented schemas | `src/core/schema.mjs` |
 | Operation pipeline | `src/core/operation-validator.mjs` |
 | Validated memory writes | `src/core/validated-write.mjs` |

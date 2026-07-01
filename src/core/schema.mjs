@@ -284,11 +284,23 @@ export const EventEnvelopeSchema = z.object({
   intent: z.string().optional(),
 });
 
+// The canonical fourth envelope type (SSSS spec §6.2): remove a replace-type VFS
+// file. Carries no `content`; the deletion is recorded as an auditable event so
+// history is never lost. Append-type documents may not be deleted.
+export const DeleteEnvelopeSchema = z.object({
+  type: z.literal('delete'),
+  idempotency_key: z.string().min(8),
+  path: z.string(),
+  workspace_id: z.string(),
+  lease_id: z.string().optional(),
+  intent: z.string().optional(),
+});
+
 // ─── Operation Response (§6.4 of the SSSS spec) ────────────────────────────
 
 export const OperationResponseSchema = z.object({
   success: z.boolean(),
-  type: z.enum(['operation', 'patch', 'event']),
+  type: z.enum(['operation', 'patch', 'event', 'delete']),
   operation_id: z.string(),
   path: z.string(),
   committed_at: z.string().datetime().nullable(),
@@ -712,6 +724,15 @@ export const CommerceCatalogSchema = z.object({
   db_id: z.string().optional().nullable(),
 });
 
+export const EmailAccountSchema = z.object({
+  type: z.literal("email_account"),
+  email_address: z.string(),
+  display_name: z.string(),
+  provider: z.string(),
+  status: z.string(),
+  workspace_id: z.string().optional().nullable(),
+  metadata: z.record(z.unknown()).optional().nullable(),
+});
 export const ProductSchema = z.object({
   type: z.literal('product'),
   name: z.string(),
@@ -828,6 +849,7 @@ export const SSSS_SCHEMAS = {
   account_memory: AccountMemorySchema,
   account_workflow: AccountWorkflowSchema,
   workspace_transfer: WorkspaceTransferSchema,
+  email_account: EmailAccountSchema,
   extension: ExtensionSchema,
   phone_number: PhoneNumberSchema,
   domain: DomainSchema,
