@@ -40,6 +40,8 @@ function printHelp() {
                            Use 'total-recall ingest google-takeout --help' for details
     okf <path>             Ingest an Open Knowledge Format (OKF) bundle directory
                            Use 'total-recall ingest okf --help' for details
+    openwiki <path>        Ingest a LangChain OpenWiki directory
+                           Use 'total-recall ingest openwiki --help' for details
 
   IDE Session Ingest:
     Scans known local directories for conversation history from:
@@ -55,6 +57,7 @@ function printHelp() {
     total-recall ingest [options]
     total-recall ingest google-takeout <path> [options]
     total-recall ingest okf <path> [options]
+    total-recall ingest openwiki <path> [options]
 
   Options:
     --sources <list>   Comma-separated source filter (e.g. claude-code,codex)
@@ -74,6 +77,12 @@ export default async function ingest(args) {
   if (args[0] === 'okf') {
     const { runOkfIngest } = await import('./ingest-okf.mjs');
     await runOkfIngest(args.slice(1));
+    return;
+  }
+
+  if (args[0] === 'openwiki') {
+    const { runOpenWikiIngest } = await import('./ingest-openwiki.mjs');
+    await runOpenWikiIngest(args.slice(1));
     return;
   }
 

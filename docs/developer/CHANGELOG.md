@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.11.0] — 2026-07-04
+
+### ✨ Features
+- **LangChain OpenWiki Integration**: Added \`total-recall ingest openwiki <path>\` command to automatically ingest LangChain's auto-generated architectural OpenWiki directories into Total Recall's semantic knowledge graph.
+
+### 📦 Publishing
+- Published to npm as \`total-recall-brain@3.11.0\`.
+
 ## [3.10.0] — 2026-07-01
 
 ### ✨ Features

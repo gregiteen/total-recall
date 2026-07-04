@@ -50,7 +50,7 @@ describe('SSSS conformance bridge (canonical fixtures → total-recall engine)',
     const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-conf-'));
     try {
       for (const f of fixtures) {
-        const res = processOperation(JSON.parse(JSON.stringify(f.request)), vault, { agentRole: 'admin' });
+        const res = processOperation(JSON.parse(JSON.stringify(f.request)), vault);
         results.set(f.id, normalize(res));
       }
     } finally {

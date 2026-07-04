@@ -28,21 +28,21 @@ export const MemoryNodeSchema = z.object({
   status: z.enum(['active', 'superseded', 'deprecated', 'draft']),
   confidence: z.number().min(0).max(1).optional(),
   importance: z.number().int().min(1).max(5).optional(),
-  created: ssssDatetime(),
-  updated: ssssDatetime(),
-  last_accessed: ssssDatetime(),
+  created: ssssDatetime().optional(),
+  updated: ssssDatetime().optional(),
+  last_accessed: ssssDatetime().optional(),
   source: z.object({
     type: z.string(),
     session_id: z.string(),
     agent: z.string().optional(),
     evidence_count: z.number().int(),
-  }),
-  supersedes: z.array(z.string()),
-  superseded_by: z.string().nullable(),
-  contradicts: z.array(z.string()),
-  tags: z.array(z.string()),
-  related: z.array(z.string()),
-  routes_to_skills: z.array(z.string()),
+  }).optional(),
+  supersedes: z.array(z.string()).optional(),
+  superseded_by: z.string().nullable().optional(),
+  contradicts: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  related: z.array(z.string()).optional(),
+  routes_to_skills: z.array(z.string()).optional(),
   sentiment_polarity: z.enum(['directive_must', 'directive_must_not', 'descriptive', 'preference']).optional(),
   sentiment_target: z.string().optional(),
   modality: z.enum(['must', 'must_not', 'should', 'should_not', 'descriptive', 'preference']).optional(),
@@ -52,7 +52,7 @@ export const MemoryNodeSchema = z.object({
   decay: z.object({
     half_life_days: z.number(),
     access_count: z.number().int(),
-  }),
+  }).optional(),
   schema_version: z.literal(2),
   x_memory_layer: z.enum(MEMORY_LAYERS).optional(),
   x_temporal_context: z.preprocess((val) => (val instanceof Date ? val.toISOString() : val), z.string()).optional(),
@@ -91,6 +91,25 @@ export const MemoryNodeSchema = z.object({
   priority: z.enum(['absolute', 'high', 'normal', 'low']).optional(),
   immutable: z.boolean().optional(),
   feedback_scope: z.enum(['local_thread', 'workspace', 'account', 'system_candidate', 'system_promoted']).optional()
+}).superRefine((node, ctx) => {
+  if (node.schema_version !== 2) return;
+  for (const field of [
+    'confidence',
+    'importance',
+    'modality',
+    'subject',
+    'predicate',
+    'object',
+    'sentiment_polarity',
+  ]) {
+    if (node[field] === undefined || node[field] === null || node[field] === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [field],
+        message: `Required when schema_version is 2`,
+      });
+    }
+  }
 });
 
 export const ConflictRecordSchema = z.object({
@@ -163,6 +182,13 @@ export const RuleSchema = z.object({
   scope: z.string().optional(),
 });
 
+export const SecurityRoleSchema = z.object({
+  type: z.literal('security_role'),
+  name: z.string(),
+  permissions: z.array(z.string()),
+  description: z.string().optional(),
+});
+
 export const ModelSchema = z.object({
   type: z.literal('model'),
   model_id: z.string(),
@@ -184,9 +210,28 @@ export const RunSchema = z.object({
   type: z.literal('run'),
   run_id: z.string(),
   workflow_id: z.string(),
-  status: z.enum(['pending', 'running', 'done', 'failed']).optional(),
+  task_id: z.string().optional(),
+  task_path: z.string().optional(),
+  workspace_id: z.string().optional(),
+  status: z.enum([
+    'queued',
+    'claimed',
+    'running',
+    'waiting_for_human',
+    'succeeded',
+    'failed',
+    'canceled',
+    'retrying',
+    'dead_letter',
+    // Backward-compatible legacy statuses used by older Total Recall runs.
+    'pending',
+    'done',
+  ]).optional(),
   step_count: z.number().int().optional(),
   started_at: ssssDatetime().optional(),
+  ended_at: ssssDatetime().optional(),
+  claimed_by: z.string().optional(),
+  provenance: z.record(z.unknown()).optional(),
 });
 
 export const ProposalSchema = z.object({
@@ -258,6 +303,7 @@ export const OperationEnvelopeSchema = z.object({
   path: z.string(),
   workspace_id: z.string(),
   content: z.string(),
+  actor: z.object({ role: z.string() }).passthrough().optional(),
   lease_id: z.string().optional(),
   intent: z.string().optional(),
   dry_run: z.boolean().optional(),
@@ -269,6 +315,7 @@ export const PatchEnvelopeSchema = z.object({
   path: z.string(),
   workspace_id: z.string(),
   patches: z.record(z.unknown()),
+  actor: z.object({ role: z.string() }).passthrough().optional(),
   lease_id: z.string().optional(),
   intent: z.string().optional(),
   dry_run: z.boolean().optional(),
@@ -280,6 +327,7 @@ export const EventEnvelopeSchema = z.object({
   path: z.string(),
   workspace_id: z.string(),
   content: z.string(),
+  actor: z.object({ role: z.string() }).passthrough().optional(),
   lease_id: z.string().optional(),
   intent: z.string().optional(),
 });
@@ -292,6 +340,7 @@ export const DeleteEnvelopeSchema = z.object({
   idempotency_key: z.string().min(8),
   path: z.string(),
   workspace_id: z.string(),
+  actor: z.object({ role: z.string() }).passthrough().optional(),
   lease_id: z.string().optional(),
   intent: z.string().optional(),
 });
@@ -822,6 +871,7 @@ export const SSSS_SCHEMAS = {
   assistant: AssistantSchema,
   workflow: WorkflowSchema,
   rule: RuleSchema,
+  security_role: SecurityRoleSchema,
   model: ModelSchema,
   conversation: ConversationSchema,
   run: RunSchema,

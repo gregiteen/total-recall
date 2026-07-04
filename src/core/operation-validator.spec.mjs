@@ -36,6 +36,7 @@ function makeOpEnvelope(content, pathStr = 'patterns/test.md', overrides = {}) {
     idempotency_key: `test-key-${Date.now()}-${Math.random()}`,
     path: pathStr,
     workspace_id: 'test-ws',
+    actor: { role: 'admin' },
     content,
     ...overrides,
   };

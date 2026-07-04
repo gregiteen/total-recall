@@ -14,15 +14,17 @@ schema/reference files.
 ## Ground Truth
 
 The vendor-neutral contract is now a published package, **`@ssss/cli`** (pinned to
-**`v0.4.0`**; source <https://github.com/gregiteen/ssss>), declared in
+**`v0.7.0`**, spec v0.6 draft; source <https://github.com/gregiteen/ssss>), declared in
 `package.json`. `references/ssss-spec.md` is the local mirror. The canon owns the
-spec (§5.5 portability, §6 Operation Contract incl. `delete`, §16 the `.ucw` bundle
-format, §17 provisioning), the core registry (`@ssss/cli/registry/core.json`: 13
-document + 5 contract primitives), the reference engine, and the conformance
-fixtures. Total Recall's kernel was the engine the canon's reference implementation
-was harvested from; keep them aligned. If this skill conflicts with the canon,
-correct this skill unless the implementation has intentionally advanced beyond it
-and the difference is documented here.
+spec (§4.2 universal OKF-compatible frontmatter, §5.5 portability, §6 Operation
+Contract incl. `event` and `delete`, §11.8 workflow runtime daemon contract, §16
+the `.ucw` bundle format, §17 provisioning), the core
+registry (`@ssss/cli/registry/core.json`: 14 document + 5 contract primitives),
+the reference engine, runtime helpers, and the v1.4.0 conformance fixtures. Total
+Recall's kernel was the engine the canon's reference implementation was harvested
+from; keep them aligned. If this skill conflicts with the canon, correct this
+skill unless the implementation has intentionally advanced beyond it and the
+difference is documented here.
 
 Current local implementation entry points:
 
@@ -41,7 +43,8 @@ Current local implementation entry points:
 It operates on a **vault directory** of Markdown files and `.ucw` bundles, using
 the canon's own reference engine — separate from this kernel's `processOperation`.
 Use it for bundle/tenant tooling and conformance; for in-kernel memory writes keep
-using `writeNodeValidated()` / `processOperation()`.
+using `writeNodeValidated()` / `processOperation()`. Use `@ssss/cli/runtime` when
+building daemon, cron, webhook, event, file-change, or agent-host wake-up loops.
 
 ```bash
 npx ssss help                  # list doc topics; e.g. `ssss help portability|bundle|provisioning`
@@ -68,7 +71,7 @@ All agent-generated mutations must flow through the SSSS operation pipeline:
 ```text
 processOperation(envelope, vaultRoot, options)
   -> envelope validation
-  -> idempotency check
+  -> idempotency replay/conflict check
   -> authorization
   -> lease validation
   -> deterministic schema validation
@@ -92,6 +95,52 @@ Total Recall implements all four canonical envelope types in
 
 Use `dry_run: true` for preflight validation when constructing writes from model
 output.
+
+## Universal Frontmatter / OKF
+
+SSSS v0.7.0 / spec v0.6 is an OKF-compatible Markdown contract. Every SSSS
+document primitive, including skills, memory, workflows, assistants, pages,
+models, migrations, and releases, MUST carry non-empty universal frontmatter:
+
+- `type`
+- `title`
+- `description`
+- `timestamp`
+
+Recommended OKF-compatible fields are:
+
+- `resource`
+- `tags`
+- `aliases`
+
+Primitive-specific required fields still apply on top of the universal fields.
+For example, a `workflow` still needs its workflow identity fields, and
+`schema_version: 2` memory nodes still need the knowledge-graph fields below.
+Do not "fix" OKF compatibility by weakening primitive validation; add the
+universal metadata and keep the primitive registry strict.
+
+## Security Contract
+
+The reference engine now treats path and replay safety as part of the standard:
+
+- `workspace_id`, `idempotency_key`, and `actor.role` must be safe identifiers:
+  ASCII alphanumeric start, then ASCII letters, digits, `.`, `_`, or `-`, max
+  128 characters.
+- Operation paths must be relative vault paths. Reject empty/root paths, `.`,
+  `..`, absolute paths, backslashes, null bytes, empty segments, and directory
+  targets.
+- `type` is immutable after creation. An operation or patch must not rewrite an
+  existing file from one primitive type to another.
+- Append-only primitives may only preserve existing content exactly or append
+  after the existing body plus a newline. Prefix tricks are not enough.
+- Idempotency is scoped by `workspace_id + idempotency_key + request_hash`.
+  Replaying the same effective request returns the original result; reusing the
+  same key/workspace with a different effective request is an idempotency
+  conflict and must fail.
+- Leases fail closed. Corrupt or unreadable lease state does not authorize a
+  write, and lease storage must not expose the VFS path directly.
+- Bundle import/export must reject unsafe or duplicate file paths, and exporters
+  must not follow symlinked vault entries into files outside the vault.
 
 ## Canonical State
 
@@ -158,9 +207,6 @@ SSSS schema v2. Required schema v2 knowledge-graph fields are:
 
 Invariants additionally use `priority: absolute` and `immutable: true`.
 
-### OKF Compatibility Note
-SSSS v0.2 is a strict superset of the Open Knowledge Format (OKF v0.1 Draft). SSSS memory nodes are fully OKF-compatible, as they are Markdown files containing a YAML frontmatter block with a `type` field (which maps to SSSS `category` via the OKF adapter). To bridge the format seamlessly, SSSS v0.2 extends `MemoryNodeSchema` with two optional OKF-standard fields: `description` and `resource` (supporting non-HTTP URIs such as `gs://` or `s3://`).
-
 Memory validation is owned by `TotalRecallMemoryValidator`, not by generic loose
 frontmatter checks. No memory path may be committed with zero validation.
 
@@ -174,6 +220,13 @@ frontmatter checks. No memory path may be committed with zero validation.
   body records but must not rewrite prior records.
 - Events are immutable. Do not update or delete event records.
 - Leases must be time-bound, actor-owned, operation-linked, and recoverable.
+- Workflow daemons, crons, webhook workers, and agent hosts must treat workflow
+  frontmatter triggers as canonical and use deterministic runtime planning
+  (`@ssss/cli/runtime`) to derive event/task/run envelopes.
+- Bundle exporters/importers must use the canon's path, content hash,
+  portability, and provisioning validation. `template` and `sale` profiles must
+  drop every `tenant_private` primitive and reduce `resource_bound` values to
+  requirement declarations.
 
 ## Projections And Indexes
 
@@ -208,9 +261,9 @@ npx vitest run \
 The **conformance bridge** (`src/core/ssss-conformance.bridge.spec.mjs`) runs the
 canonical fixtures from `@ssss/cli` through this kernel's `processOperation` and
 asserts every canonical core primitive is present in `SSSS_SCHEMAS`. It proves the
-kernel implements the *same* standard as the festech and UltraChat hosts. If you
-change the operation contract or the registry, keep this green; to adopt a newer
-standard, bump the `@ssss/cli` pin and re-run it.
+kernel implements the *same* standard as the SSSS reference engine and host apps.
+If you change the operation contract or the registry, keep this green; to adopt a
+newer standard, bump the `@ssss/cli` pin and re-run it.
 
 ## Do Not
 
@@ -223,13 +276,18 @@ standard, bump the `@ssss/cli` pin and re-run it.
 - Do not delete append-type documents (`conversation`, `run`); they are immutable.
 - Do not add host-specific required fields to the vendor-neutral spec unless they
   are being standardized.
+- Do not claim OKF compliance unless `type`, `title`, `description`, and
+  `timestamp` are present and non-empty.
+- Do not replay idempotency keys without comparing `request_hash`.
+- Do not export symlinked vault entries or accept unsafe bundle paths.
 
 ## References
 
 | For | Read |
 | --- | --- |
-| Upstream canon (package) | `@ssss/cli` (`v0.4.0`, github:gregiteen/ssss) |
+| Upstream canon (package) | `@ssss/cli` (`v0.7.0`, spec v0.6 draft, github:gregiteen/ssss) |
 | Canonical core registry | `@ssss/cli/registry/core.json` |
+| Runtime helpers | `@ssss/cli/runtime` |
 | Conformance bridge | `src/core/ssss-conformance.bridge.spec.mjs` |
 | SSSS standard (local mirror) | `references/ssss-spec.md` |
 | Implemented schemas | `src/core/schema.mjs` |
