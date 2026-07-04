@@ -93,8 +93,46 @@ function resolveVfsPath(vaultRoot, vfsPath) {
   return resolved;
 }
 
-function makeErrorResponse(type, opId, p, errors) {
-  return { success: false, type, operation_id: opId, path: p, committed_at: null, validation: { valid: false, errors, warnings: [] } };
+function makeErrorResponse(type, opId, p, errors, resolvedType = undefined, repairEntries = undefined) {
+  const response = {
+    success: false,
+    type,
+    operation_id: opId,
+    path: p,
+    committed_at: null,
+    validation: { valid: false, type: resolvedType, errors, warnings: [] }
+  };
+  if (repairEntries) response.repair = { field_errors: repairEntries };
+  return response;
+}
+
+function getActorRole(envelope, options) {
+  return options.agentRole || envelope.actor?.role || null;
+}
+
+function loadRolePermissions(vaultRoot, role) {
+  if (role === 'system') return ['*:*'];
+  if (role === 'admin') return ['write:*', 'read:*'];
+  if (role === 'optimizer') return ['write:memory'];
+  if (!role) return [];
+
+  const roleFile = path.join(vaultRoot, 'roles', role, 'ROLE.md');
+  if (!fs.existsSync(roleFile)) return [];
+
+  try {
+    const { data } = matter(fs.readFileSync(roleFile, 'utf8'));
+    return Array.isArray(data.permissions) ? data.permissions : [];
+  } catch {
+    return [];
+  }
+}
+
+function hasPermission(permissions, requiredPerm) {
+  const [, permType] = requiredPerm.split(':');
+  return permissions.includes('*:*') ||
+    permissions.includes('write:*') ||
+    permissions.includes(`*:${permType}`) ||
+    permissions.includes(requiredPerm);
 }
 
 /**
@@ -105,9 +143,10 @@ function makeErrorResponse(type, opId, p, errors) {
  * @returns {object} OperationResponse (§6.4).
  */
 export function processOperation(envelope, vaultRoot, options = {}) {
-  const { agentRole = 'admin', leaseStore, eventLogDir } = options;
+  const { leaseStore, eventLogDir } = options;
   const operationId = crypto.randomUUID();
   const warnings = [];
+  const actorRole = getActorRole(envelope, options);
 
   // Stage 1: Envelope Validation
   const schemaMap = { operation: OperationEnvelopeSchema, patch: PatchEnvelopeSchema, event: EventEnvelopeSchema, delete: DeleteEnvelopeSchema };
@@ -126,7 +165,7 @@ export function processOperation(envelope, vaultRoot, options = {}) {
   if (cached) return { ...cached.response, replay: cached.response };
 
   // Stage 3: Authorization
-  if (isProtocolPath(envelope.path) && agentRole !== 'admin') return makeErrorResponse(envelope.type, operationId, envelope.path, [`Protocol path '${envelope.path}' requires admin role.`]);
+  if (isProtocolPath(envelope.path) && actorRole !== 'admin' && actorRole !== 'system') return makeErrorResponse(envelope.type, operationId, envelope.path, [`Protocol path '${envelope.path}' requires admin role.`]);
 
   // Stage 4: Lease Check
   if (leaseStore) {
@@ -176,12 +215,12 @@ export function processOperation(envelope, vaultRoot, options = {}) {
               if (eb && !nb.startsWith(eb)) errors.push(`Append-type '${resolvedType}' does not allow rewriting existing records.`);
             }
           }
-          if (agentRole === 'optimizer' && resolvedType === 'memory') {
+          if (actorRole === 'optimizer' && resolvedType === 'memory') {
             if (fmData.priority === 'absolute') warnings.push('Optimizer writing Tier 1 (priority: absolute) node.');
             if (fmData.immutable === true) warnings.push('Optimizer writing immutable node.');
           }
           if (resolvedType === 'schema-proposal' && fmData.status === 'accepted') {
-            if (agentRole !== 'admin') errors.push('Only admin may accept schema-proposals.');
+            if (actorRole !== 'admin') errors.push('Only admin may accept schema-proposals.');
             if (!fmData.reviewed_by) errors.push('Accepted schema-proposals must have reviewed_by.');
           }
         }
@@ -201,10 +240,29 @@ export function processOperation(envelope, vaultRoot, options = {}) {
     }
   }
 
+  if (errors.length === 0) {
+    const permType = envelope.type === 'event' ? 'event' : resolvedType;
+    const requiredPerm = `write:${permType}`;
+    const permissions = loadRolePermissions(vaultRoot, actorRole);
+    if (!hasPermission(permissions, requiredPerm)) {
+      errors.push(`Access denied: role '${actorRole || '(none)'}' lacks permission '${requiredPerm}'.`);
+    }
+  }
+
   const isValid = errors.length === 0;
   if (envelope.dry_run || !isValid) {
     const resp = { success: isValid, type: envelope.type, operation_id: operationId, path: envelope.path, committed_at: null, dry_run: !!envelope.dry_run, validation: { valid: isValid, type: resolvedType, errors, warnings } };
-    if (!isValid) resp.repair = { field_errors: errors.map(e => ({ field: e.split(': ')[0] || '(unknown)', issue: e })) };
+    if (!isValid) resp.repair = {
+      field_errors: errors.map(e => {
+        if (e.startsWith('Access denied:')) {
+          return {
+            field: 'actor.role',
+            issue: actorRole ? 'Insufficient permissions.' : 'Missing actor.role — the envelope was not authorized by a verified identity.'
+          };
+        }
+        return { field: e.split(': ')[0] || '(unknown)', issue: e };
+      })
+    };
     return resp;
   }
 
@@ -258,7 +316,7 @@ export function processOperation(envelope, vaultRoot, options = {}) {
   try {
     const auditDir = eventLogDir || path.join(vaultRoot, '.events');
     if (!fs.existsSync(auditDir)) fs.mkdirSync(auditDir, { recursive: true });
-    fs.appendFileSync(path.join(auditDir, 'audit.jsonl'), JSON.stringify({ event_id: crypto.randomUUID(), event_type: 'audit', correlation_id: operationId, ts: committedAt, subject: envelope.path, payload: { envelope_type: envelope.type, idempotency_key: envelope.idempotency_key, workspace_id: envelope.workspace_id, agent_role: agentRole, resolved_type: resolvedType } }) + '\n');
+    fs.appendFileSync(path.join(auditDir, 'audit.jsonl'), JSON.stringify({ event_id: crypto.randomUUID(), event_type: 'audit', correlation_id: operationId, ts: committedAt, subject: envelope.path, payload: { envelope_type: envelope.type, idempotency_key: envelope.idempotency_key, workspace_id: envelope.workspace_id, agent_role: actorRole, resolved_type: resolvedType } }) + '\n');
   } catch (err) { logger.error('operation-validator', `Audit failed: ${err.message}`); }
 
   const response = { success: true, type: envelope.type, operation_id: operationId, path: envelope.path, committed_at: committedAt, validation: { valid: true, type: resolvedType, errors: [], warnings } };

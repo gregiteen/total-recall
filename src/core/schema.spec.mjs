@@ -85,6 +85,13 @@ describe('Schema Validations', () => {
         tags: ['test'],
         related: [],
         routes_to_skills: [],
+        confidence: 0.9,
+        importance: 3,
+        sentiment_polarity: 'descriptive',
+        modality: 'should',
+        subject: 'agent',
+        predicate: 'tests',
+        object: 'code',
         decay: {
           half_life_days: 30,
           access_count: 5
@@ -117,6 +124,13 @@ describe('Schema Validations', () => {
         tags: ['test'],
         related: [],
         routes_to_skills: [],
+        confidence: 0.9,
+        importance: 3,
+        sentiment_polarity: 'descriptive',
+        modality: 'should',
+        subject: 'agent',
+        predicate: 'tests',
+        object: 'code',
         decay: {
           half_life_days: 30,
           access_count: 5
@@ -150,6 +164,13 @@ describe('Schema Validations', () => {
         tags: ['test'],
         related: [],
         routes_to_skills: [],
+        confidence: 0.9,
+        importance: 3,
+        sentiment_polarity: 'descriptive',
+        modality: 'should',
+        subject: 'agent',
+        predicate: 'tests',
+        object: 'code',
         decay: {
           half_life_days: 30,
           access_count: 5
