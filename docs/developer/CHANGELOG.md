@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.12.0] — 2026-07-05
+
+### ✨ Features
+- **Interactive Scaffolding Prompts**: Updated the `total-recall init` CLI wizard to prompt users to optionally initialize OpenWiki for auto-documentation and import OKF knowledge bundles directly during the bootstrap process.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.12.0`.
+
 ## [3.11.0] — 2026-07-04
 
 ### ✨ Features

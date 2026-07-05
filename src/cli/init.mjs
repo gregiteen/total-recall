@@ -126,6 +126,11 @@ function printHelp() {
     --dry-run             Print what would be done without making changes
     --help, -h            Show this help
 
+  Interactive Scaffolding Prompts (when run without --yes):
+    - UI Deploy Mode (Local, Cloudflare Tunnel, Custom Domain)
+    - OpenWiki Initialization (auto-document codebase)
+    - OKF Knowledge Bundle Import
+
   Examples:
     npx total-recall init              # Global brain (run once)
     npx total-recall init --project    # Project brain (run per project)
@@ -386,6 +391,21 @@ export default async function init(args) {
         domain = (await ask('  Enter Custom Domain (e.g. brain.mydomain.com): ')).trim();
       }
     }
+
+    const runOpenwiki = (await ask('\n  [3.8] Would you like to initialize OpenWiki for auto-documentation? (y/N): ')).trim().toLowerCase();
+    if (runOpenwiki === 'y' || runOpenwiki === 'yes') {
+      console.error('\n  Starting OpenWiki interactive setup...');
+      spawnSync('npx', ['openwiki', '--init'], { stdio: 'inherit', cwd: process.cwd() });
+    }
+
+    const runOkf = (await ask('\n  [3.9] Would you like to import an existing OKF knowledge bundle? (y/N): ')).trim().toLowerCase();
+    if (runOkf === 'y' || runOkf === 'yes') {
+      const bundlePath = (await ask('  Enter path to OKF bundle: ')).trim();
+      if (bundlePath) {
+        spawnSync('npx', ['total-recall', 'ingest', 'okf', bundlePath], { stdio: 'inherit', cwd: process.cwd() });
+      }
+    }
+
     rl.close();
   } else if (!deployMode) {
     deployMode = 'local';
