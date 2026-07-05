@@ -477,18 +477,18 @@ export default async function init(args) {
       if (domain) {
         current['cfg-domain'] = domain;
         current['cfg-api-url'] = `https://${domain}`;
-        current['cfg-dash-url'] = `https://${domain}/dashboard`;
+        current['cfg-dash-url'] = `https://${domain}/`;
         current['cfg-health-url'] = `https://${domain}/health`;
       }
     } else if (deployMode === 'custom-domain') {
       current['cfg-domain'] = domain;
       current['cfg-api-url'] = `https://${domain}`;
-      current['cfg-dash-url'] = `https://${domain}/dashboard`;
+      current['cfg-dash-url'] = `https://${domain}/`;
       current['cfg-health-url'] = `https://${domain}/health`;
     } else if (deployMode === 'local') {
       current['cfg-domain'] = 'localhost';
       current['cfg-api-url'] = 'http://localhost:3000';
-      current['cfg-dash-url'] = 'http://localhost:3000/dashboard';
+      current['cfg-dash-url'] = 'http://localhost:3000/';
       current['cfg-health-url'] = 'http://localhost:3000/health';
     }
 
@@ -704,7 +704,7 @@ export default async function init(args) {
           }
           current['cfg-domain'] = tunnelUrl.replace('https://', '');
           current['cfg-api-url'] = tunnelUrl;
-          current['cfg-dash-url'] = `${tunnelUrl}/dashboard`;
+          current['cfg-dash-url'] = `${tunnelUrl}/`;
           current['cfg-health-url'] = `${tunnelUrl}/health`;
           
           fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
