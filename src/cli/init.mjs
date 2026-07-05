@@ -395,14 +395,14 @@ export default async function init(args) {
     const runOpenwiki = (await ask('\n  [3.8] Would you like to initialize OpenWiki for auto-documentation? (y/N): ')).trim().toLowerCase();
     if (runOpenwiki === 'y' || runOpenwiki === 'yes') {
       console.error('\n  Starting OpenWiki interactive setup...');
-      spawnSync('npx', ['openwiki', '--init'], { stdio: 'inherit', cwd: process.cwd() });
+      spawnSync('npx', ['-y', 'openwiki', '--init'], { stdio: 'inherit', cwd: process.cwd() });
     }
 
     const runOkf = (await ask('\n  [3.9] Would you like to import an existing OKF knowledge bundle? (y/N): ')).trim().toLowerCase();
     if (runOkf === 'y' || runOkf === 'yes') {
       const bundlePath = (await ask('  Enter path to OKF bundle: ')).trim();
       if (bundlePath) {
-        spawnSync('npx', ['total-recall', 'ingest', 'okf', bundlePath], { stdio: 'inherit', cwd: process.cwd() });
+        spawnSync('npx', ['-y', 'total-recall', 'ingest', 'okf', bundlePath], { stdio: 'inherit', cwd: process.cwd() });
       }
     }
 
