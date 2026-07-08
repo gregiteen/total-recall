@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import './App.css'
 import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
 import type { HealthData } from './types'
@@ -15,12 +15,18 @@ import ApiKeysPage from './pages/ApiKeysPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import BrainSelector from './components/BrainSelector'
 import AutomationsPage from './pages/AutomationsPage'
-import ModelsPage from './pages/ModelsPage'
+import VaultPage from './pages/VaultPage'
+import InboxPage from './pages/InboxPage'
 import SkillsPage from './pages/SkillsPage'
+import ModelsPage from './pages/ModelsPage'
 import UsagePage from './pages/UsagePage'
 import CollabPage from './pages/CollabPage'
 import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
+import InstructionsPage from './pages/InstructionsPage'
+import DesignDocsPage from './pages/DesignDocsPage'
+import OkfPage from './pages/OkfPage'
+import OpenWikiPage from './pages/OpenWikiPage'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -73,6 +79,18 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
           </svg>
           Memory
+        </NavLink>
+        <NavLink to="/vault" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-vault">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Vault Docs
+        </NavLink>
+        <NavLink to="/inbox" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-inbox">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+          Inbox
         </NavLink>
         <NavLink to="/tasks" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-tasks">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -151,6 +169,42 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             <path d="M16 3.13a4 4 0 010 7.75" />
           </svg>
           Collaboration
+        </NavLink>
+        <NavLink to="/instructions" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-instructions">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+          Instructions
+        </NavLink>
+        <NavLink to="/design" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-design">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+            <line x1="9" y1="21" x2="9" y2="9" />
+          </svg>
+          Design Docs
+        </NavLink>
+        <NavLink to="/okf" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-okf">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+            <polyline points="7.5 4.21 12 6.81 16.5 4.21" />
+            <polyline points="7.5 19.79 7.5 14.6 3 12" />
+            <polyline points="21 12 16.5 14.6 16.5 19.79" />
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+          </svg>
+          OKF Manager
+        </NavLink>
+        <NavLink to="/openwiki" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-openwiki">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+            <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+          </svg>
+          OpenWiki
         </NavLink>
         <NavLink to="/help" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-help">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -303,8 +357,11 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
       {(!isChat || floatingChat) && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <Routes>
-            <Route path="/" element={<div/>} />
+            <Route path="/" element={<Navigate to="/chat" replace />} />
+            <Route path="/chat" element={<ChatPage activeBrainId={activeBrainId} />} />
             <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
+            <Route path="/vault" element={<VaultPage activeBrainId={activeBrainId} />} />
+            <Route path="/inbox" element={<InboxPage activeBrainId={activeBrainId} />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/automations" element={<AutomationsPage />} />
             <Route path="/files" element={<FilesPage />} />
@@ -317,6 +374,10 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/integrations" element={<IntegrationsPage />} />
             <Route path="/skills" element={<SkillsPage />} />
             <Route path="/collab" element={<CollabPage />} />
+            <Route path="/instructions" element={<InstructionsPage />} />
+            <Route path="/design" element={<DesignDocsPage />} />
+            <Route path="/okf" element={<OkfPage />} />
+            <Route path="/openwiki" element={<OpenWikiPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
           </Routes>

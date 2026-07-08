@@ -88,6 +88,42 @@ skillsRouter.post('/api/skills/install', requireAuth, requireScope('files:write'
   } catch (err) { serverError(res, err); }
 });
 
+skillsRouter.get('/api/skills/:name/files', requireAuth, requireScope('files:read', 'ssss:read'), (req, res) => {
+  try {
+    const { name } = req.params;
+    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
+      return res.status(400).json({ error: 'Invalid skill name' });
+    }
+    const skillDir = path.join(SKILLS_DIR, name);
+    if (!fs.existsSync(skillDir)) {
+      return res.status(404).json({ error: `Skill "${name}" not found` });
+    }
+    const dirParam = req.query.dir;
+    let targetDir = skillDir;
+    if (dirParam) {
+      if (dirParam.includes('..') || dirParam.includes('/') || dirParam.includes('\\')) {
+        return res.status(400).json({ error: 'Invalid dir parameter' });
+      }
+      targetDir = path.join(skillDir, dirParam);
+    }
+    
+    if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+      return res.json([]);
+    }
+    
+    const files = fs.readdirSync(targetDir).map(file => {
+      const stats = fs.statSync(path.join(targetDir, file));
+      return {
+        name: file,
+        size: stats.isDirectory() ? 'DIR' : (stats.size < 1024 ? `${stats.size} B` : `${(stats.size / 1024).toFixed(1)} KB`),
+        isDirectory: stats.isDirectory()
+      };
+    }).filter(f => !f.isDirectory);
+    
+    res.json(files);
+  } catch (err) { serverError(res, err); }
+});
+
 skillsRouter.get('/api/skills/:name', requireAuth, requireScope('files:read', 'ssss:read'), (req, res) => {
   try {
     const { name } = req.params;

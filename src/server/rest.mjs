@@ -87,6 +87,8 @@ import { authRouter }     from './routes/auth.mjs';
 import { sandboxRouter }  from './routes/sandbox.mjs';
 import { researchRouter } from './routes/research.mjs';
 import { skillsRouter }   from './routes/skills.mjs';
+import { docsRouter }     from './routes/docs.mjs';
+import syncRouter         from './routes/sync.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -167,8 +169,10 @@ router.use(authRouter);
 router.use(sandboxRouter);
 router.use(researchRouter);
 router.use(skillsRouter);
+router.use(docsRouter);
+router.use(syncRouter);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Brain Routing Middleware ──────────────────────────────────────────────────────────────────
 
 function notFound(res, msg) {
   return res.status(404).json({ error: msg || 'Not found' });
@@ -806,6 +810,7 @@ router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, 
     if (dirs.length === 0) return badRequest(res, 'No permitted directories specified');
     const detected = detectRuleFiles(dirs);
     res.json({ dirs, detected });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -825,6 +830,7 @@ router.post('/api/import/rules', requireAuth, requireScope('memory:write'), (req
     if (dryRun) return res.json({ dryRun: true, detected, toImport, imported: [], skipped: [], failed: [] });
     const result = importRuleFiles(toImport, { force, vaultDir: VAULT_DIR });
     res.json({ detected, ...result });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -859,6 +865,7 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
     tar.stdout.pipe(res);
     tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
     tar.on('close', code => { if (code !== 0 && !res.writableEnded) res.end(); });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -921,6 +928,7 @@ router.get('/api/extension/status', requireAuth, requireScope('config:read'), as
     const connected = fs.existsSync(markerPath);
 
     res.json({ available, connected, version });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -945,6 +953,7 @@ router.get('/api/graph', requireAuth, requireScope('ssss:read'), (req, res) => {
       ? fs.readFileSync(routesFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
       : [];
     res.json({ nodes, routes });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1040,6 +1049,7 @@ router.get('/api/files', requireAuth, requireScope('files:read'), (req, res) => 
       };
     });
     res.json(files);
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1170,6 +1180,7 @@ router.get('/api/logs/:type', requireAuth, requireScope('health:read'), (req, re
     const lines = content.split('\n');
     const lastLines = lines.slice(-200).join('\n');
     res.json({ content: lastLines });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1199,6 +1210,7 @@ router.get('/api/tasks', requireAuth, requireScope('tasks:read'), (req, res) => 
       }
     }
     res.json(tasks.sort((a, b) => (a.priority || 5) - (b.priority || 5)));
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1224,6 +1236,7 @@ router.delete('/api/tasks/cleanup', requireAuth, requireScope('tasks:write'), (r
       }
     }
     res.json({ deleted });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1252,6 +1265,7 @@ router.post('/api/tasks', requireAuth, requireScope('tasks:write'), (req, res) =
     const raw = safeStringify(body || '', frontmatter);
     fs.writeFileSync(path.join(TASKS_DIR, `${slug}.md`), raw, 'utf8');
     res.json({ slug, ...frontmatter });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1313,6 +1327,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
     }
 
     res.json({ security, budget, brain: safeBrain, secrets: safeSecrets });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1369,12 +1384,18 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), (req,
     }
 
     res.json({ success: true });
+    
   } catch (err) { serverError(res, err); }
 });
 
 router.get('/api/usage', requireAuth, async (req, res) => {
   try {
-    const { calculateCurrentCost } = await import('../core/usage-tracker.mjs');
+    const { syncUsageLedger, calculateCurrentCost } = await import('../core/usage-tracker.mjs');
+    
+    // Sync the ledger first to capture new logs and lock in current prices
+    const pricingMap = await getPricingMap();
+    syncUsageLedger(pricingMap);
+    
     res.json(calculateCurrentCost());
   } catch (err) { serverError(res, err); }
 });
@@ -1391,6 +1412,7 @@ router.get('/api/config/:name', requireAuth, requireScope('config:read'), (req, 
     }
     const content = fs.readFileSync(filePath, 'utf8');
     res.json({ content });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1403,6 +1425,7 @@ router.put('/api/config/:name', requireAuth, requireScope('config:write'), (req,
     }
     fs.writeFileSync(filePath, req.body.content, 'utf8');
     res.json({ success: true });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1427,6 +1450,41 @@ router.post('/api/capture/:source', requireAuth, requireScope('memory:write'), a
     const result = captureMessage({ text, author, channel, source });
     res.json({ ok: true, slug: result.slug });
   } catch (err) {
+    console.error("API ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/openrouter-models
+ * Dynamically fetches the list of available OpenRouter models.
+ */
+router.get('/api/openrouter-models', requireAuth, async (req, res) => {
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models');
+    if (response.ok) {
+      const data = await response.json();
+      const models = data.data.map(m => {
+        return {
+          id: m.id,
+          displayName: m.name,
+          pricing: m.pricing,
+          created: m.created || 0
+        };
+      });
+      // Sort first by provider (alphabetical), then by created (descending)
+      models.sort((a, b) => {
+        const provA = a.id.split('/')[0];
+        const provB = b.id.split('/')[0];
+        if (provA < provB) return -1;
+        if (provA > provB) return 1;
+        return b.created - a.created;
+      });
+      return res.json({ models });
+    }
+    throw new Error(`OpenRouter API responded with ${response.status}`);
+  } catch (err) {
+    console.error("API ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1464,6 +1522,48 @@ router.post('/api/tts', requireAuth, requireScope('tts:use'), async (req, res) =
 });
 
 // ─── Instructions (sync consumers) ─────────────────────────────────────────────
+
+router.get('/api/dashboard/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {
+  const surfaces = [];
+  const surfaceFiles = ['AGENTS.md', 'GEMINI.md', 'CLAUDE.md', 'INSTRUCTIONS.md'];
+  
+  for (const name of surfaceFiles) {
+    let filePath;
+    if (name === 'INSTRUCTIONS.md') {
+      filePath = INSTRUCTIONS;
+    } else {
+      filePath = path.join(process.cwd(), name);
+    }
+    
+    let size = 0;
+    let lastCompiled = '';
+    let active = false;
+    
+    if (fs.existsSync(filePath)) {
+      const stat = fs.statSync(filePath);
+      size = stat.size;
+      lastCompiled = stat.mtime.toISOString();
+      active = true;
+    }
+    
+    surfaces.push({
+      name,
+      filename: name,
+      size,
+      lastCompiled,
+      active
+    });
+  }
+  
+  const lastCompileTimestamp = fs.existsSync(INSTRUCTIONS) ? fs.statSync(INSTRUCTIONS).mtime.toISOString() : '';
+  const totalNodes = fs.existsSync(VAULT_DIR) ? getNodes(VAULT_DIR).length : 0;
+  
+  res.json({
+    surfaces,
+    lastCompileTimestamp,
+    totalNodes
+  });
+});
 
 router.get('/api/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {
   return sendTextResource(res, INSTRUCTIONS, 'instructions');
@@ -1583,7 +1683,16 @@ router.get('/api/ssss', requireAuth, requireScope('ssss:read'), (req, res) => {
   });
 });
 
-router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'instructions:read'), (_req, res) => {
+router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'instructions:read'), (req, res) => {
+  const surface = req.query.surface;
+  if (surface) {
+    if (surface === 'INSTRUCTIONS.md') {
+      return sendTextResource(res, INSTRUCTIONS, 'instructions');
+    }
+    const safeSurface = path.basename(surface);
+    const surfacePath = path.join(process.cwd(), safeSurface);
+    return sendTextResource(res, surfacePath, safeSurface);
+  }
   return sendTextResource(res, INSTRUCTIONS, 'instructions');
 });
 
@@ -1612,7 +1721,7 @@ router.get('/api/ssss/references/:name', requireAuth, requireScope('ssss:read'),
  * List all known brains (global + registered projects) with state metadata.
  * The global brain reads project brain frontmatter for state display.
  */
-router.get('/api/brains', requireAuth, requireScope('ssss:read'), (req, res) => {
+router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, res) => {
   try {
     const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
     const brains = [];
@@ -1683,10 +1792,50 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), (req, res) => 
             last_compiled: project.last_compiled || getLastModified(path.join(project.brainDir, 'memory-derived', 'graph-index.jsonl')),
           });
         }
-      } catch { /* ignore registry parse errors */ }
+      } catch (err) {
+        logger.error('server', 'Failed to read project registry', { error: err.message });
+      }
+    }
+
+    // Portfolio Sync Tenant
+    try {
+      // Need to import dynamically because rest.mjs is already imported above
+      const config = await import('../core/config.mjs');
+      if (config.portfolioSync?.enabled) {
+        const tenantVaultDir = config.portfolioSync.vaultDir;
+        const exists = fs.existsSync(tenantVaultDir);
+        let nodeCount = 0;
+        
+        if (exists) {
+            const countMd = (dir) => {
+              if (!fs.existsSync(dir)) return 0;
+              let count = 0;
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (entry.isDirectory()) count += countMd(path.join(dir, entry.name));
+                else if (entry.name.endsWith('.md')) count++;
+              }
+              return count;
+            };
+            nodeCount = countMd(tenantVaultDir);
+        }
+
+        brains.push({
+          id: 'tenant:portfolio-site',
+          name: 'Portfolio Site (Tenant)',
+          layer: 'tenant',
+          path: tenantVaultDir,
+          project_root: path.dirname(tenantVaultDir),
+          exists,
+          node_count: nodeCount,
+          last_compiled: null
+        });
+      }
+    } catch (err) {
+       // ignore
     }
 
     res.json({ brains });
+    
   } catch (err) { serverError(res, err); }
 });
 
@@ -1694,13 +1843,15 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), (req, res) => 
  * GET /api/brains/:id/nodes
  * List all memory nodes for a specific brain.
  */
-router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memory:read'), (req, res) => {
+router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memory:read'), async (req, res) => {
   try {
     const brainId = req.params.id;
     let brainDir;
+    let vaultDir;
 
     if (brainId === 'global') {
       brainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+      vaultDir = path.join(brainDir, 'memory-vault');
     } else if (brainId.startsWith('project:')) {
       const projectName = brainId.slice('project:'.length);
       const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
@@ -1711,14 +1862,24 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
       const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
       const project = registry.find(p => p.name === projectName);
       if (!project) {
-        return res.status(404).json({ error: `Project \"${projectName}\" not found in registry` });
+        return res.status(404).json({ error: `Project "${projectName}" not found in registry` });
       }
       brainDir = project.brainDir;
+      vaultDir = path.join(brainDir, 'memory-vault');
+    } else if (brainId.startsWith('tenant:')) {
+      const tenantName = brainId.slice('tenant:'.length);
+      if (tenantName !== 'portfolio-site') {
+         return res.status(404).json({ error: `Tenant "${tenantName}" not found` });
+      }
+      const config = await import('../core/config.mjs');
+      if (!config.portfolioSync?.enabled) {
+         return res.status(404).json({ error: `Tenant sync not enabled` });
+      }
+      vaultDir = config.portfolioSync.vaultDir;
     } else {
-      return res.status(400).json({ error: 'Invalid brain ID. Use \"global\" or \"project:<name>\"' });
+      return res.status(400).json({ error: 'Invalid brain ID. Use "global", "project:<name>", or "tenant:<name>"' });
     }
 
-    const vaultDir = path.join(brainDir, 'memory-vault');
     if (!fs.existsSync(vaultDir)) {
       return res.json({ nodes: [], brain_id: brainId });
     }
@@ -1739,6 +1900,35 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
     res.json({ nodes, brain_id: brainId, count: nodes.length });
   } catch (err) { serverError(res, err); }
 });
+
+let cachedPricingMap = null;
+let lastPricingFetch = 0;
+
+async function getPricingMap() {
+  if (cachedPricingMap && Date.now() - lastPricingFetch < 1000 * 60 * 60) {
+    return cachedPricingMap;
+  }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (response.ok) {
+      const data = await response.json();
+      const map = {};
+      for (const m of (data.data || [])) {
+        const parts = m.id.split('/');
+        const baseId = parts[parts.length - 1];
+        map[baseId] = m.pricing;
+        map[m.id] = m.pricing;
+      }
+      cachedPricingMap = map;
+      lastPricingFetch = Date.now();
+      return map;
+    }
+  } catch (e) {}
+  return {};
+}
 
 /**
  * GET /api/gemini-models
@@ -1773,10 +1963,11 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
 
           const uniqueModels = [...new Set(discovered)];
           if (uniqueModels.length > 0) {
+            const pricingMap = await getPricingMap();
             const cliModels = uniqueModels.map(modelId => {
               const parts = modelId.split('-');
               const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-              return { id: modelId, displayName };
+              return { id: modelId, displayName, pricing: pricingMap[modelId] || pricingMap[`google/${modelId}`] };
             });
             return res.json({ models: cliModels, source: 'cli' });
           }
@@ -1786,38 +1977,20 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
       // Fail silently and fall back
     }
 
-    let apiKey = process.env.GOOGLE_API_KEY;
+    let apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      // Find GOOGLE_API_KEY in upwards .env files
       try {
-        let dir = process.cwd();
-        while (dir !== path.dirname(dir)) {
-          const envPath = path.join(dir, '.env');
-          if (fs.existsSync(envPath)) {
-            const content = fs.readFileSync(envPath, 'utf8');
-            for (const line of content.split('\n')) {
-              const match = line.match(/^\s*GOOGLE_API_KEY\s*=\s*(["']?)(.*?)\1\s*$/);
-              if (match) {
-                apiKey = match[2];
-                break;
-              }
-            }
-          }
-          if (apiKey) break;
-          dir = path.dirname(dir);
+        const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
+        if (fs.existsSync(secretsPath)) {
+          const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
+          apiKey = secrets.gemini_api_key || secrets.google_api_key;
         }
       } catch {}
     }
 
-    const fallbackModels = [
-      { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' },
-      { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview' },
-      { id: 'gemini-3.1-flash-lite', displayName: 'Gemini 3.1 Flash Lite' }
-    ];
 
-    if (!apiKey) {
-      return res.json({ models: fallbackModels, source: 'fallback' });
-    }
+
+    if (!apiKey) return res.json({ models: [], source: 'missing_key' });
 
     try {
       const controller = new AbortController();
@@ -1829,6 +2002,7 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
 
       if (response.ok) {
         const data = await response.json();
+        const pricingMap = await getPricingMap();
         const models = (data.models || [])
           .filter(m => m.name.startsWith('models/gemini-') || m.name.startsWith('models/gemini'))
           .map(m => {
@@ -1836,30 +2010,126 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
             // Create nice display name e.g., "gemini-3.5-flash" -> "Gemini 3.5 Flash"
             const parts = id.split('-');
             const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-            return { id, displayName };
+            const pricing = pricingMap[`google/${id}`] || pricingMap[id] || null;
+            return { id, displayName, pricing };
           })
-          .filter(m => {
-            // Only keep Gemini 3.1 and newer models
-            const match = m.id.match(/^gemini-(\d+)\.(\d+)/);
-            if (match) {
-              const major = parseInt(match[1], 10);
-              const minor = parseInt(match[2], 10);
-              return major > 3 || (major === 3 && minor >= 1);
-            }
-            const majorMatch = m.id.match(/^gemini-(\d+)/);
-            if (majorMatch) {
-              const major = parseInt(majorMatch[1], 10);
-              return major >= 3;
-            }
-            return false;
-          });
+          ;
         if (models.length > 0) {
           return res.json({ models, source: 'dynamic' });
         }
       }
     } catch {}
 
-    res.json({ models: fallbackModels, source: 'fallback_error' });
+    res.json({ models: [], source: 'api_error' });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/claude-models
+ * Dynamically fetches the list of available Anthropic models using the user's ANTHROPIC_API_KEY.
+ */
+router.get('/api/claude-models', requireAuth, async (req, res) => {
+  try {
+    let apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      try {
+        const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
+        if (fs.existsSync(secretsPath)) {
+          const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
+          apiKey = secrets.anthropic_api_key;
+        }
+      } catch {}
+    }
+
+
+
+    if (!apiKey) return res.json({ models: [], source: 'missing_key' });
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch('https://api.anthropic.com/v1/models', {
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const pricingMap = await getPricingMap();
+        const models = (data.data || []).map(m => {
+          const parts = m.id.split('-');
+          const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+          const pricing = pricingMap[`openai/${m.id}`] || pricingMap[m.id] || null;
+          return { id: m.id, displayName, pricing };
+        });
+        if (models.length > 0) {
+          return res.json({ models, source: 'dynamic' });
+        }
+      }
+    } catch {}
+
+    res.json({ models: [], source: 'api_error' });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/openai-models
+ * Dynamically fetches the list of available OpenAI models using the user's OPENAI_API_KEY.
+ */
+router.get('/api/openai-models', requireAuth, async (req, res) => {
+  try {
+    let apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      try {
+        const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
+        if (fs.existsSync(secretsPath)) {
+          const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
+          apiKey = secrets.openai_api_key;
+        }
+      } catch {}
+    }
+
+
+
+    if (!apiKey) return res.json({ models: [], source: 'missing_key' });
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch('https://api.openai.com/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const pricingMap = await getPricingMap();
+        const models = (data.data || [])
+          .filter(m => m.id.startsWith('gpt-') || m.id.startsWith('o1') || m.id.startsWith('o3') || m.id.startsWith('o4') || m.id.startsWith('chatgpt-'))
+          .map(m => {
+            const pricing = pricingMap[`openai/${m.id}`] || pricingMap[m.id] || null;
+            return { id: m.id, displayName: m.id, pricing };
+          });
+          
+        if (models.length > 0) {
+          models.sort((a, b) => a.id.localeCompare(b.id));
+          return res.json({ models, source: 'dynamic' });
+        }
+      }
+    } catch {}
+
+    res.json({ models: [], source: 'api_error' });
   } catch (err) {
     serverError(res, err);
   }

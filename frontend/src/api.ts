@@ -20,7 +20,13 @@ export function registerUnauthedCallback(cb: UnauthedCallback) { onUnauthed = cb
 export function clearUnauthedCallback() { onUnauthed = null }
 
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const res = await fetch(url, { credentials: 'include', ...options })
+  const activeBrain = localStorage.getItem('total-recall-active-brain');
+  const headers = new Headers(options.headers || {});
+  if (activeBrain) {
+    headers.set('x-total-recall-brain', activeBrain);
+  }
+
+  const res = await fetch(url, { credentials: 'include', ...options, headers })
   if (res.status === 401) {
     onUnauthed?.()
   }
@@ -319,6 +325,12 @@ export async function listSkills(): Promise<import('./types').FileNode[]> {
 export async function fetchSkill(name: string): Promise<{ name: string; content: string }> {
   const res = await apiFetch(`${API_BASE}/api/skills/${name}`)
   if (!res.ok) throw new Error(`Skill fetch API error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchSkillFiles(name: string, dir: string): Promise<{ name: string; size: string; isDirectory: boolean }[]> {
+  const res = await apiFetch(`${API_BASE}/api/skills/${name}/files?dir=${encodeURIComponent(dir)}`)
+  if (!res.ok) throw new Error(`Skill files fetch API error: ${res.status}`)
   return res.json()
 }
 
@@ -667,8 +679,29 @@ export interface GeminiModelInfo {
 }
 
 export async function fetchGeminiModels(): Promise<GeminiModelInfo[]> {
-  const res = await apiFetch(`${API_BASE}/api/gemini-models`)
+  const res = await apiFetch(`${API_BASE}/api/gemini-models?t=${Date.now()}`)
   if (!res.ok) throw new Error(`Gemini models API error: ${res.status}`)
+  const data = await res.json()
+  return data.models ?? []
+}
+
+export async function fetchClaudeModels(): Promise<GeminiModelInfo[]> {
+  const res = await apiFetch(`${API_BASE}/api/claude-models?t=${Date.now()}`)
+  if (!res.ok) throw new Error(`Claude models API error: ${res.status}`)
+  const data = await res.json()
+  return data.models ?? []
+}
+
+export async function fetchOpenaiModels(): Promise<GeminiModelInfo[]> {
+  const res = await apiFetch(`${API_BASE}/api/openai-models?t=${Date.now()}`)
+  if (!res.ok) throw new Error(`OpenAI models API error: ${res.status}`)
+  const data = await res.json()
+  return data.models ?? []
+}
+
+export async function fetchOpenRouterModels(): Promise<GeminiModelInfo[]> {
+  const res = await apiFetch(`${API_BASE}/api/openrouter-models?t=${Date.now()}`)
+  if (!res.ok) throw new Error(`OpenRouter models API error: ${res.status}`)
   const data = await res.json()
   return data.models ?? []
 }
@@ -732,3 +765,165 @@ export async function fetchHelpContent(topicId: string): Promise<{ topic: string
   if (!res.ok) throw new Error('Failed to load help content')
   return res.json()
 }
+
+// ─── Instructions APIs ─────────────────────────────────────────────────────────
+
+export async function fetchInstructions(): Promise<{ surfaces: Array<{ name: string; filename: string; size: number; lastCompiled: string; active: boolean }>; lastCompileTimestamp: string; totalNodes: number }> {
+  const res = await apiFetch(`${API_BASE}/api/dashboard/instructions`)
+  if (!res.ok) throw new Error(`Instructions API error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchInstructionContent(name: string): Promise<{ name: string; content: string }> {
+  const res = await apiFetch(`${API_BASE}/api/ssss/instructions?surface=${encodeURIComponent(name)}`)
+  if (!res.ok) throw new Error(`Instruction content error: ${res.status}`)
+  return res.json()
+}
+
+// ─── OKF APIs ──────────────────────────────────────────────────────────────────
+
+export async function runOkfLint(): Promise<{ results: Array<{ slug: string; field: string; severity: string; message: string }>; summary: { total: number; errors: number; warnings: number } }> {
+  const res = await apiFetch(`${API_BASE}/api/sandbox`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: 'const { execSync } = require("child_process"); console.log(JSON.stringify({ output: execSync("npx total-recall lint --okf 2>&1 || true", { encoding: "utf-8" }) }));', timeout: 30000 }),
+  })
+  if (!res.ok) throw new Error(`OKF lint error: ${res.status}`)
+  return res.json()
+}
+
+export async function triggerOkfExport(path: string, options: { stripSsss?: boolean; format?: string; scope?: string }): Promise<{ success: boolean; message: string; path?: string }> {
+  const args = [`export ${path} --okf`]
+  if (options.stripSsss) args.push('--strip-ssss')
+  if (options.format) args.push(`--format ${options.format}`)
+  if (options.scope === 'global') args.push('--global')
+  if (options.scope === 'project') args.push('--project')
+
+  const res = await apiFetch(`${API_BASE}/api/sandbox`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: `const { execSync } = require("child_process"); try { const out = execSync("npx total-recall ${args.join(' ')} 2>&1", { encoding: "utf-8" }); console.log(JSON.stringify({ success: true, message: out })); } catch(e) { console.log(JSON.stringify({ success: false, message: e.stdout || e.message })); }`, timeout: 60000 }),
+  })
+  if (!res.ok) throw new Error(`OKF export error: ${res.status}`)
+  return res.json()
+}
+
+// ─── OpenWiki APIs ─────────────────────────────────────────────────────────────
+
+export async function fetchOpenWikiNodes(): Promise<import('./types').MemoryNode[]> {
+  const res = await apiFetch(`${API_BASE}/api/memory?tags=openwiki`)
+  if (!res.ok) throw new Error(`OpenWiki nodes error: ${res.status}`)
+  const data = await res.json()
+  return Array.isArray(data) ? data : (data.nodes ?? [])
+}
+
+// UCW export/import/validate handled via runSandbox + @ssss/cli (SSSS §16)
+
+export async function fetchVaultStatus(): Promise<{ totalNodes: number; categories: Record<string, number>; embeddings: number; lastCompiled: string }> {
+  const res = await apiFetch(`${API_BASE}/api/vault/status`)
+  if (!res.ok) throw new Error(`Vault status error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchMemoryStats(): Promise<{ total: number; byCategory: Record<string, number>; byPriority: Record<string, number>; byStatus: Record<string, number> }> {
+  const res = await apiFetch(`${API_BASE}/api/memory/stats`)
+  if (!res.ok) throw new Error(`Memory stats error: ${res.status}`)
+  return res.json()
+}
+
+// ─── Design Docs APIs ──────────────────────────────────────────────────────────
+
+export async function fetchDesignDocs(): Promise<Array<{ name: string; path: string; size: number; modified: string; category: string }>> {
+  const res = await apiFetch(`${API_BASE}/api/files?path=docs`)
+  if (!res.ok) throw new Error(`Design docs error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchDesignDocContent(path: string): Promise<{ content: string }> {
+  const res = await apiFetch(`${API_BASE}/api/files?path=${encodeURIComponent(path)}&content=true`)
+  if (!res.ok) throw new Error(`Design doc content error: ${res.status}`)
+  return res.json()
+}
+
+export async function fetchDocs(brain?: string, params?: Record<string, string>) {
+  const p = new URLSearchParams()
+  if (brain) p.set('brain', brain)
+  if (params) {
+    for (const [k, v] of Object.entries(params)) if (v) p.set(k, v)
+  }
+  const res = await apiFetch(`/api/docs?${p.toString()}`)
+  if (!res.ok) throw new Error('Failed to fetch docs')
+  return res.json()
+}
+
+export async function readDoc(path: string, brain?: string) {
+  const p = new URLSearchParams({ path })
+  if (brain) p.set('brain', brain)
+  const res = await apiFetch(`/api/docs/read?${p.toString()}`)
+  if (!res.ok) throw new Error('Failed to read doc')
+  return res.json()
+}
+
+export async function createDoc(path: string, content: string, brain?: string) {
+  const res = await apiFetch('/api/docs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content, brainId: brain })
+  })
+  if (!res.ok) throw new Error('Failed to create doc')
+  return res.json()
+}
+
+export async function updateDoc(path: string, content: string, brain?: string) {
+  const res = await apiFetch('/api/docs', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content, brainId: brain })
+  })
+  if (!res.ok) throw new Error('Failed to update doc')
+  return res.json()
+}
+
+export async function deleteDoc(path: string, brain?: string) {
+  const p = new URLSearchParams({ path })
+  if (brain) p.set('brain', brain)
+  const res = await apiFetch(`/api/docs?${p.toString()}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete doc')
+  return res.json()
+}
+
+export async function fetchViews() {
+  const res = await apiFetch('/api/views')
+  if (!res.ok) throw new Error('Failed to fetch views')
+  return res.json()
+}
+
+export async function createView(name: string, filters: Record<string, string>) {
+  const res = await apiFetch('/api/views', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, filters })
+  })
+  if (!res.ok) throw new Error('Failed to create view')
+  return res.json()
+}
+
+export async function deleteView(id: string) {
+  const res = await apiFetch(`/api/views/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete view')
+  return res.json()
+}
+
+export async function postDecision(id: string, action: string, notes?: string): Promise<{ success: boolean; droplet_response?: any }> {
+  const res = await apiFetch(`${API_BASE}/api/sync/portfolio/proposals/${id}/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, notes }),
+  })
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}))
+    throw new Error(errorData.error || `Decision API error: ${res.status}`)
+  }
+  return res.json()
+}
+

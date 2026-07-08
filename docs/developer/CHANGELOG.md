@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.13.0] — 2026-07-06
+
+### ✨ Features
+- **OpenWiki Skill Integration**: Updated `total-recall` and `repo-expert` skill documentation to include native integration commands for initializing and ingesting OpenWiki (`npx -y openwiki --init` and `npx total-recall ingest openwiki <path>`).
+- **Advanced Skill Lifecycle & P2P Network Docs**: Documented Total Recall's new advanced skill capabilities within `tr-skill` SKILL.md, detailing Skill Lifecycle/Versioning, Auto-Improvement loops, and the upcoming P2P Skills Network.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.13.0`.
+
 ## [3.12.0] — 2026-07-05
 
 ### ✨ Features

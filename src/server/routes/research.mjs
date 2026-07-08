@@ -53,3 +53,28 @@ researchRouter.delete('/api/research/:id', requireAuth, requireScope('memory:wri
     serverError(res, err);
   }
 });
+
+// ─── Portfolio Sync ───────────────────────────────────────────────────────────
+
+researchRouter.post('/api/sync/portfolio/run', requireAuth, requireScope('memory:write'), async (req, res) => {
+  try {
+    const { runSync } = await import('../../core/portfolio-sync.mjs');
+    // Non-blocking background run, respond immediately
+    runSync().catch(err => logger.error('portfolio-sync', 'Background sync failed', { error: err.message }));
+    res.json({ status: 'started' });
+  } catch (err) { serverError(res, err); }
+});
+
+researchRouter.get('/api/sync/portfolio/status', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { portfolioSync } = await import('../../core/config.mjs');
+    const statusFile = path.join(path.dirname(portfolioSync.vaultDir), 'sync-status.json');
+    if (!fs.existsSync(statusFile)) {
+      return res.json({ ok: false, error: 'Never run' });
+    }
+    const status = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+    res.json(status);
+  } catch (err) { serverError(res, err); }
+});
