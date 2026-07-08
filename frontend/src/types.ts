@@ -9,6 +9,15 @@ export interface ChatMessage {
   currentVersionIndex?: number
 }
 
+export interface GeminiModelInfo {
+  id: string
+  displayName: string
+  pricing?: {
+    prompt: string
+    completion: string
+  }
+}
+
 export interface MemoryNode {
   slug: string
   title: string
@@ -119,6 +128,18 @@ export interface UsageData {
     gemini: UsageBreakdown
     claude: UsageBreakdown
     codex: UsageBreakdown
+    openrouter?: UsageBreakdown
+  }
+  timeseries?: {
+    [dateStr: string]: {
+      [modelId: string]: {
+        input: number
+        output: number
+        tokens: number
+        provider: string
+        cost: number
+      }
+    }
   }
 }
 
@@ -161,6 +182,10 @@ export interface ConfigJson {
   brain?: {
     preferred_agent?: string
     local_endpoint?: string
+    openrouter_model?: string
+    gemini_model?: string
+    claude_model?: string
+    openai_model?: string
   }
   secrets?: {
     google_api_key?: string
@@ -171,6 +196,7 @@ export interface ConfigJson {
     exa_api_key?: string
     serper_api_key?: string
     github_token?: string
+    openrouter_api_key?: string
   }
 }
 
@@ -178,5 +204,139 @@ export interface UpdateCheckResult {
   currentVersion: string
   latestVersion: string
   updateAvailable: boolean
+}
+
+// ─── Instruction Surface Types ──────────────────────────────────────────────────
+
+export interface InstructionSurface {
+  name: string
+  filename: string
+  size: number
+  lastCompiled: string
+  active: boolean
+  content?: string
+}
+
+export interface InstructionsData {
+  surfaces: InstructionSurface[]
+  lastCompileTimestamp: string
+  totalNodes: number
+}
+
+// ─── Skill Detail Types ─────────────────────────────────────────────────────────
+
+export interface SkillSubFile {
+  name: string
+  path: string
+  size: number
+  modified: string
+  isDirectory: boolean
+}
+
+export interface SkillDetail {
+  name: string
+  description: string
+  content: string
+  subFiles: {
+    scripts: SkillSubFile[]
+    references: SkillSubFile[]
+    evals: SkillSubFile[]
+    subagents: SkillSubFile[]
+  }
+  evalsStatus?: {
+    total: number
+    passed: number
+    failed: number
+  }
+}
+
+// ─── OKF Types ──────────────────────────────────────────────────────────────────
+
+export interface OkfLintResult {
+  slug: string
+  field: string
+  severity: 'warning' | 'error'
+  message: string
+}
+
+export interface OkfExportOptions {
+  stripSsss: boolean
+  format: 'directory' | 'tar.gz'
+  scope: 'global' | 'project' | 'all'
+}
+
+// ─── OpenWiki Types ─────────────────────────────────────────────────────────────
+
+export interface OpenWikiNode {
+  slug: string
+  title: string
+  category: string
+  tags: string[]
+  body: string
+  source: string
+}
+
+// ─── UCW Bundle Types (SSSS §16 — UltraChat Workspace) ─────────────────────────
+
+export interface UcwBundleManifest {
+  name: string
+  description: string
+  version: string
+  exported_at: string
+  ssss_core_version: string
+  required_extensions: string[]
+  export_profile: 'backup' | 'template' | 'sale'
+  primitive_inventory: Record<string, number>
+  provisioning: UcwProvisioningStep[]
+  parameters?: UcwParameter[]
+  source_workspace_id?: string
+  file_count: number
+  provenance: {
+    content_hash: string
+    exporter: string
+    signature?: string
+  }
+}
+
+export interface UcwProvisioningStep {
+  type: string
+  target: string
+  action: string
+  installMode?: 'optional' | 'recommended' | 'required'
+}
+
+export interface UcwParameter {
+  name: string
+  description: string
+  required: boolean
+  default?: string
+}
+
+export interface UcwBundle {
+  manifest: UcwBundleManifest
+  branding?: Record<string, string>
+  files: Array<{ path: string; content: string; frontmatter?: Record<string, unknown> }>
+}
+
+// ─── Design Docs Types ──────────────────────────────────────────────────────────
+
+export interface DesignDoc {
+  name: string
+  path: string
+  size: number
+  modified: string
+  category: 'in-progress' | 'completed' | 'planned' | 'archived' | 'backlog' | 'root'
+  content?: string
+}
+
+// ─── Memory Stats Types ─────────────────────────────────────────────────────────
+
+export interface MemoryVaultStats {
+  total: number
+  byCategory: Record<string, number>
+  byPriority: Record<string, number>
+  byStatus: Record<string, number>
+  avgImportance: number
+  avgConfidence: number
 }
 

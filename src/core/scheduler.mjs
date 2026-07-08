@@ -3,6 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import config from './config.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { loadQueue, updateQueueItem } from './research-queue.mjs';
@@ -457,6 +458,38 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
   const diskTasks = loadPendingTasks(queueDir);
   for (const task of diskTasks) {
     queue.enqueue(task);
+  }
+
+  // Portfolio Sync Job
+  try {
+    const { portfolioSync } = config;
+    if (portfolioSync.enabled) {
+      const statusFile = path.join(path.dirname(portfolioSync.vaultDir), 'sync-status.json');
+      let lastRunMs = 0;
+      if (fs.existsSync(statusFile)) {
+        try {
+          const status = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+          lastRunMs = new Date(status.lastRunAt || 0).getTime();
+        } catch {}
+      }
+      
+      const SYNC_COOLDOWN_MS = portfolioSync.intervalMinutes * 60000;
+      if (Date.now() - lastRunMs >= SYNC_COOLDOWN_MS) {
+        queue.enqueue({
+          type: 'task',
+          slug: `portfolio-sync-${Date.now().toString(36)}`,
+          priority: 90,
+          category: 'memory-maintenance',
+          status: 'pending',
+          created_by: 'scheduler',
+          reason: 'Scheduled periodic portfolio sync.',
+          body: 'Run portfolio synchronization.',
+          _is_portfolio_sync: true
+        });
+      }
+    }
+  } catch (err) {
+    logger.error({ subsystem: 'scheduler', message: `Failed to load portfolio sync: ${err.message}` });
   }
 
   // Load pending research queue tasks

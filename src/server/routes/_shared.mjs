@@ -40,7 +40,7 @@ export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-rec
  * @returns {string} Absolute path to the memory-vault directory
  */
 export function resolveVaultFromQuery(req) {
-  const brainId = req.query?.brain || req.body?.brainId;
+  const brainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
 
   // No brain specified or explicitly global → default vault
   if (!brainId || brainId === 'global') {
@@ -67,6 +67,16 @@ export function resolveVaultFromQuery(req) {
       }
     } catch {
       // Registry parse error — fall through to default
+    }
+  }
+
+  if (brainId.startsWith('tenant:')) {
+    const tenantName = brainId.slice('tenant:'.length);
+    if (tenantName === 'portfolio-site') {
+      const tenantVaultDir = path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'vault');
+      if (fs.existsSync(tenantVaultDir)) {
+        return tenantVaultDir;
+      }
     }
   }
 

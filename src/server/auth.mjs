@@ -37,7 +37,7 @@ export function loadSecurityConfig() {
       api: { pats: [], allow_static_pats: false },
       network: { require_https: true, public_health: false, allowed_origins: [], trusted_proxies: [] },
       bind: { host: '127.0.0.1', port: 3000, allow_public_bind: false },
-      rate_limits: { api_requests_per_minute: 60 },
+      rate_limits: { api_requests_per_minute: 1200 },
       sandbox: { enabled: false }
     };
   }
@@ -50,7 +50,7 @@ export function loadSecurityConfig() {
 
 export function apiRateLimiter() {
   const config = loadSecurityConfig();
-  const limit = config.rate_limits?.api_requests_per_minute || 60;
+  const limit = config.rate_limits?.api_requests_per_minute || 1200;
   return rateLimit({
     windowMs: 60 * 1000,
     max: limit,

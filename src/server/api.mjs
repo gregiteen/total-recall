@@ -716,6 +716,8 @@ You are operating in a lightweight text-only mode. Answer the user's questions d
       messages: currentMessages,
       response: finalMessage,
       tokens: promptTokens + completionTokens,
+      input_tokens: promptTokens,
+      output_tokens: completionTokens,
       brain_id: brainId || 'global'
     });
     // Emit latency + tokens so the watchdog log monitor can react to anomalies.

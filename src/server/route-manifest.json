@@ -25,6 +25,10 @@
   },
   {
     "method": "GET",
+    "path": "/api/claude-models"
+  },
+  {
+    "method": "GET",
     "path": "/api/config"
   },
   {
@@ -68,8 +72,32 @@
     "path": "/api/context/stream"
   },
   {
+    "method": "GET",
+    "path": "/api/dashboard/instructions"
+  },
+  {
     "method": "POST",
     "path": "/api/diagnostics/agents"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/docs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/docs"
+  },
+  {
+    "method": "POST",
+    "path": "/api/docs"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/docs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/docs/read"
   },
   {
     "method": "POST",
@@ -185,6 +213,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/openai-models"
+  },
+  {
+    "method": "GET",
+    "path": "/api/openrouter-models"
+  },
+  {
+    "method": "GET",
     "path": "/api/research"
   },
   {
@@ -256,6 +292,10 @@
     "path": "/api/skills/:name"
   },
   {
+    "method": "GET",
+    "path": "/api/skills/:name/files"
+  },
+  {
     "method": "POST",
     "path": "/api/skills/install"
   },
@@ -286,6 +326,18 @@
   {
     "method": "GET",
     "path": "/api/ssss/spec"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sync/portfolio/proposals/:id/decision"
+  },
+  {
+    "method": "POST",
+    "path": "/api/sync/portfolio/run"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sync/portfolio/status"
   },
   {
     "method": "GET",
@@ -334,6 +386,18 @@
   {
     "method": "GET",
     "path": "/api/vault/status"
+  },
+  {
+    "method": "GET",
+    "path": "/api/views"
+  },
+  {
+    "method": "POST",
+    "path": "/api/views"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/views/:id"
   },
   {
     "method": "POST",

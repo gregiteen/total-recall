@@ -47,6 +47,13 @@ async function dispatchTask(task) {
     const { loadRuntimeConfig } = await import('./runtime.mjs');
     const runtimeConfig = await loadRuntimeConfig();
 
+    // ─── Portfolio Sync ───
+    if (task._is_portfolio_sync || task.slug.startsWith('portfolio-sync-')) {
+      const { runSync } = await import('./portfolio-sync.mjs');
+      await runSync();
+      return { success: true, output: 'Portfolio sync completed' };
+    }
+
     // ─── Research & Proactive Tasks (LLM + Fetching) ───
     if (task.slug.startsWith('research-') || category === 'proactive-research' || category === 'research-acquisition') {
       if (task.slug.startsWith('staleness-check-')) {

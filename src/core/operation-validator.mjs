@@ -26,6 +26,14 @@ const warmedVaults = new Set();
 
 function cacheKey(wid, key) { return `${wid}:${key}`; }
 
+function getPayloadHash(envelope) {
+  let p = '';
+  if (envelope.type === 'patch') p = JSON.stringify(envelope.patches);
+  else if (envelope.type === 'delete') p = envelope.path;
+  else p = envelope.content || '';
+  return crypto.createHash('sha256').update(p).digest('hex');
+}
+
 function pruneExpired() {
   const now = Date.now();
   for (const [k, v] of idempotencyCache) {
@@ -67,7 +75,7 @@ export function warmIdempotencyCache(vaultRoot, eventLogDir) {
             warnings: []
           }
         };
-        idempotencyCache.set(ck, { response, ts });
+        idempotencyCache.set(ck, { response, payload_hash: record.payload.payload_hash, ts });
       } catch { /* skip corrupt lines */ }
     }
   } catch (err) {
@@ -160,9 +168,15 @@ export function processOperation(envelope, vaultRoot, options = {}) {
 
   // Stage 2: Idempotency
   pruneExpired();
+  const ph = getPayloadHash(envelope);
   const ck = cacheKey(envelope.workspace_id, envelope.idempotency_key);
   const cached = idempotencyCache.get(ck);
-  if (cached) return { ...cached.response, replay: cached.response };
+  if (cached) {
+    if (cached.payload_hash && cached.payload_hash !== ph) {
+      return makeErrorResponse(envelope.type, operationId, envelope.path || '', ['Idempotency conflict: payload changed for same key']);
+    }
+    return { ...cached.response, replay: cached.response };
+  }
 
   // Stage 3: Authorization
   if (isProtocolPath(envelope.path) && actorRole !== 'admin' && actorRole !== 'system') return makeErrorResponse(envelope.type, operationId, envelope.path, [`Protocol path '${envelope.path}' requires admin role.`]);
@@ -316,11 +330,11 @@ export function processOperation(envelope, vaultRoot, options = {}) {
   try {
     const auditDir = eventLogDir || path.join(vaultRoot, '.events');
     if (!fs.existsSync(auditDir)) fs.mkdirSync(auditDir, { recursive: true });
-    fs.appendFileSync(path.join(auditDir, 'audit.jsonl'), JSON.stringify({ event_id: crypto.randomUUID(), event_type: 'audit', correlation_id: operationId, ts: committedAt, subject: envelope.path, payload: { envelope_type: envelope.type, idempotency_key: envelope.idempotency_key, workspace_id: envelope.workspace_id, agent_role: actorRole, resolved_type: resolvedType } }) + '\n');
+    fs.appendFileSync(path.join(auditDir, 'audit.jsonl'), JSON.stringify({ event_id: crypto.randomUUID(), event_type: 'audit', correlation_id: operationId, ts: committedAt, subject: envelope.path, payload: { envelope_type: envelope.type, idempotency_key: envelope.idempotency_key, payload_hash: ph, workspace_id: envelope.workspace_id, agent_role: actorRole, resolved_type: resolvedType } }) + '\n');
   } catch (err) { logger.error('operation-validator', `Audit failed: ${err.message}`); }
 
   const response = { success: true, type: envelope.type, operation_id: operationId, path: envelope.path, committed_at: committedAt, validation: { valid: true, type: resolvedType, errors: [], warnings } };
-  idempotencyCache.set(ck, { response, ts: Date.now() });
+  idempotencyCache.set(ck, { response, payload_hash: ph, ts: Date.now() });
   return response;
 }
 

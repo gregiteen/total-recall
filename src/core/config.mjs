@@ -69,7 +69,24 @@ const configSchema = z.object({
   xdgConfigHome: z.preprocess(
     (val) => val || path.join(os.homedir(), '.config'),
     z.string()
-  )
+  ),
+  portfolioSync: z.object({
+    enabled: z.boolean().default(true),
+    baseUrl: z.string().default(process.env.PORTFOLIO_SYNC_URL || 'https://gregiteen.xyz'),
+    tokenRef: z.string().default('PORTFOLIO_ADMIN_TOKEN'),
+    intervalMinutes: z.number().int().default(30),
+    vaultDir: z.string().default(path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'vault')),
+    assetsDir: z.string().default(path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'assets')),
+    keepAssets: z.number().int().default(7)
+  }).default({
+    enabled: true,
+    baseUrl: process.env.PORTFOLIO_SYNC_URL || 'https://gregiteen.xyz',
+    tokenRef: 'PORTFOLIO_ADMIN_TOKEN',
+    intervalMinutes: 30,
+    vaultDir: path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'vault'),
+    assetsDir: path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'assets'),
+    keepAssets: 7
+  })
 });
 
 // Resolve brainDir paths
@@ -195,7 +212,8 @@ export const {
   totalRecallToken,
   trBrain,
   trPat,
-  xdgConfigHome
+  xdgConfigHome,
+  portfolioSync
 } = config;
 
 export function getEnvVar(name) {

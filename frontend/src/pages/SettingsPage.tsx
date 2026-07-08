@@ -835,6 +835,189 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* UCW WORKSPACE EXPORT (SSSS §16 .ucw Bundle Format) */}
+      <div style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: 20,
+        marginTop: 20,
+        backdropFilter: 'blur(12px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>UCW Bundle (SSSS §16)</h3>
+          <span className="badge badge-accent" style={{ fontSize: 10, padding: '2px 8px' }}>UltraChat Workspace</span>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+          Export your vault as a <code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono, monospace)' }}>package.ucw.json</code> bundle 
+          per the SSSS §16 Universal Containerized Workspace format. Bundles can be backed up, shared, sold, and re-provisioned across any SSSS-compatible host.
+        </p>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>Export Profile</label>
+            <select
+              id="ucw-export-profile"
+              style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, outline: 'none' }}
+            >
+              <option value="backup">backup — full vault snapshot</option>
+              <option value="template">template — strips tenant_private</option>
+              <option value="sale">sale — portable marketplace bundle</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px' }}>
+            <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>Output Filename</label>
+            <input
+              id="ucw-export-filename"
+              type="text"
+              defaultValue="package.ucw.json"
+              style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, outline: 'none', fontFamily: 'var(--font-mono, monospace)' }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            id="ucw-export-btn"
+            className="btn btn-primary"
+            style={{ background: 'linear-gradient(135deg, var(--accent), #5a4bd1)', color: '#fff', borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
+            onClick={async () => {
+              try {
+                const profile = (document.getElementById('ucw-export-profile') as HTMLSelectElement)?.value || 'backup';
+                const filename = (document.getElementById('ucw-export-filename') as HTMLInputElement)?.value || 'package.ucw.json';
+                const { runSandbox } = await import('../api');
+                const result = await runSandbox(`const { execSync } = require("child_process"); try { const out = execSync("npx ssss export . --profile ${profile} --out ${filename} 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }`, 60000);
+                if (result.success) {
+                  setSuccess(true);
+                  setTimeout(() => setSuccess(false), 5000);
+                } else {
+                  setError(result.output || 'UCW export failed');
+                }
+              } catch (err: unknown) {
+                setError((err as Error).message || 'Export failed');
+              }
+            }}
+          >
+            ⬇ Export .ucw Bundle
+          </button>
+          <button
+            id="ucw-validate-btn"
+            className="btn btn-ghost"
+            style={{ borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
+            onClick={async () => {
+              try {
+                const { runSandbox } = await import('../api');
+                const result = await runSandbox('const { execSync } = require("child_process"); try { const out = execSync("npx ssss validate package.ucw.json 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }', 30000);
+                if (result.success) {
+                  setSuccess(true);
+                  setTimeout(() => setSuccess(false), 5000);
+                } else {
+                  setError(result.output || 'Validation failed');
+                }
+              } catch (err: unknown) {
+                setError((err as Error).message || 'Validation failed');
+              }
+            }}
+          >
+            ✓ Validate Bundle
+          </button>
+          <button
+            id="ucw-import-btn"
+            className="btn btn-ghost"
+            style={{ borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
+            onClick={async () => {
+              try {
+                const { runSandbox } = await import('../api');
+                const result = await runSandbox('const { execSync } = require("child_process"); try { const out = execSync("npx ssss import package.ucw.json --vault . 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }', 60000);
+                if (result.success) {
+                  setSuccess(true);
+                  setTimeout(() => setSuccess(false), 5000);
+                } else {
+                  setError(result.output || 'Import failed');
+                }
+              } catch (err: unknown) {
+                setError((err as Error).message || 'Import failed');
+              }
+            }}
+          >
+            ⬆ Import .ucw Bundle
+          </button>
+          <button
+            id="ucw-inspect-btn"
+            className="btn btn-ghost"
+            style={{ borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
+            onClick={async () => {
+              try {
+                const { runSandbox } = await import('../api');
+                const result = await runSandbox('const { execSync } = require("child_process"); try { const out = execSync("npx ssss inspect package.ucw.json --files 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }', 30000);
+                if (result.success) {
+                  setSuccess(true);
+                  setTimeout(() => setSuccess(false), 5000);
+                } else {
+                  setError(result.output || 'Inspect failed');
+                }
+              } catch (err: unknown) {
+                setError((err as Error).message || 'Inspect failed');
+              }
+            }}
+          >
+            🔍 Inspect Bundle
+          </button>
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 12 }}>
+          Powered by <code style={{ fontFamily: 'var(--font-mono, monospace)' }}>@ssss/cli</code> v0.7.0 — <code style={{ fontFamily: 'var(--font-mono, monospace)' }}>npx ssss export|import|validate|inspect</code>
+        </p>
+      </div>
+
+      {/* SECRETS.ENC KEY VIEWER */}
+      <div style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--border)',
+        borderRadius: 10,
+        padding: 20,
+        marginTop: 16,
+        backdropFilter: 'blur(12px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Stored Secrets (secrets.enc)</h3>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+          These credentials are stored in your encrypted secrets file. Values are masked for security.
+        </p>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {configData?.secrets && Object.entries(configData.secrets).map(([key, value]) => (
+            <div key={key} style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 12px',
+              background: 'rgba(255,255,255,0.02)',
+              borderRadius: 6,
+              border: '1px solid rgba(255,255,255,0.04)',
+            }}>
+              <span style={{ fontSize: 13, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-primary)' }}>
+                {key}
+              </span>
+              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-tertiary)' }}>
+                {value ? `${String(value).slice(0, 4)}${'•'.repeat(Math.min(20, String(value).length - 4))}` : '(not set)'}
+              </span>
+            </div>
+          ))}
+          {(!configData?.secrets || Object.keys(configData.secrets).length === 0) && (
+            <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '12px', textAlign: 'center' }}>
+              No secrets configured. Add API keys through the visual settings editor above.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* FOOTER ACTIONS */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16, flexShrink: 0 }}>
         <button 

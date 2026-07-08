@@ -25,6 +25,7 @@ export const KNOWN_SCOPES = [
   'models:read',
   'instructions:read',
   'ssss:read',
+  'ssss:write',
   'memory:read',
   'memory:write',
   'memory:recompile',

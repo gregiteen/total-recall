@@ -17,7 +17,7 @@ export default function GraphPage({ activeBrainId }: { activeBrainId?: string })
       try {
         const [nodes, researchRes, threadsRes] = await Promise.all([
           listMemory(activeBrainId),
-          listResearch(activeBrainId).catch(() => ({ items: [] })),
+          listResearch().catch(() => ({ items: [] })),
           fetchChatThreads().catch(() => [])
         ])
         setMemoryNodes(nodes)

@@ -1,20 +1,17 @@
 #!/usr/bin/env node
-// Antigravity CLI Agent Wrapper — routes through the running Antigravity IDE
-// via agentapi, using the user's logged-in Google account.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawnSync } from 'node:child_process';
 
 const args = process.argv.slice(2);
 let prompt = '';
 let outputJson = false;
-let requestedModel = process.env.TR_CLI_MODEL || 'flash';
+let requestedModel = process.env.TR_CLI_MODEL || 'default';
 
 if (args.includes('-h') || args.includes('--help')) {
   console.log(`
-Antigravity CLI Agent Wrapper — Headless via agentapi (logged-in account)
+Antigravity CLI Agent Wrapper — Headless Zero-Dependency Cognitive Agent
 
 Usage:
   antigravity [options] [prompt]
@@ -22,15 +19,15 @@ Usage:
 
 Options:
   -p, --prompt    The text prompt to generate content for
-  -m, --model     Model: flash_lite, flash, pro (default: flash)
-  -o json         Output JSON response payload
-  --json          Output JSON response payload
+  -m, --model     Gemini API model identifier or alias (default: default / gemini-3.5-flash)
+  -o, --json      Output dynamic JSON response payload
+  --json          Output dynamic JSON response payload
   -h, --help      Show this help information
 `);
   process.exit(0);
 }
 
-// Ignored flags for compatibility with tr-cli-agents dispatch
+// Ignored flags for compat with tr-cli-agents dispatch
 const IGNORED = new Set(['--sandbox=false', '--yolo']);
 
 for (let i = 0; i < args.length; i++) {
@@ -42,7 +39,6 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!prompt && args.length > 0) {
-  // Last non-flag arg is the prompt
   for (let i = args.length - 1; i >= 0; i--) {
     if (!args[i].startsWith('-') && !IGNORED.has(args[i])) { prompt = args[i]; break; }
   }
@@ -53,50 +49,83 @@ if (!prompt) {
   process.exit(1);
 }
 
-// Map model aliases
-const modelMap = {
-  default: 'flash', gemini: 'flash', 'gemini-flash': 'flash',
-  'gemini-3.5-flash': 'flash', '3.5-flash': 'flash',
-  pro: 'pro', 'gemini-pro': 'pro', '3.1-pro': 'pro',
-  lite: 'flash_lite', 'flash-lite': 'flash_lite',
-};
-const model = modelMap[requestedModel] || requestedModel;
+// Load GOOGLE_API_KEY from env or .env files
+if (!process.env.GOOGLE_API_KEY) {
+  try {
+    let dir = process.cwd();
+    while (dir !== path.dirname(dir)) {
+      const envPath = path.join(dir, '.env');
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        for (const line of content.split('\n')) {
+          const match = line.match(/^\s*GOOGLE_API_KEY\s*=\s*(["']?)(.*?)\1\s*$/);
+          if (match) { process.env.GOOGLE_API_KEY = match[2]; break; }
+        }
+      }
+      if (process.env.GOOGLE_API_KEY) break;
+      dir = path.dirname(dir);
+    }
+  } catch {}
+}
 
-// Spawn agentapi new-conversation and capture the response
-const result = spawnSync('agentapi', [
-  'new-conversation',
-  `--model=${model}`,
-  '--title=antigravity-cli',
-  prompt,
-], {
-  encoding: 'utf8',
-  timeout: 300_000,
-  maxBuffer: 10 * 1024 * 1024,
-  env: process.env,
-});
-
-if (result.status !== 0) {
-  const err = result.stderr || result.stdout || 'agentapi failed';
-  console.error('Error:', err);
+const apiKey = process.env.GOOGLE_API_KEY || '';
+if (!apiKey) {
+  console.error('Error: GOOGLE_API_KEY not set.');
   process.exit(1);
 }
 
-const raw = result.stdout?.trim() || '';
+// Model alias resolution
+const aliases = {
+  gemini: 'gemini-3.5-flash', default: 'gemini-3.5-flash',
+  flash: 'gemini-3.5-flash', 'gemini-flash': 'gemini-3.5-flash', '3.5-flash': 'gemini-3.5-flash',
+  pro: 'gemini-3.1-pro-preview', 'gemini-pro': 'gemini-3.1-pro-preview', '3.1-pro': 'gemini-3.1-pro-preview',
+};
+const resolvedModel = aliases[requestedModel] || requestedModel;
 
-// Parse agentapi response
-let text = raw;
-try {
-  const parsed = JSON.parse(raw);
-  // agentapi returns { response: { conversationId, content } }
-  if (parsed.response?.content) text = parsed.response.content;
-  else if (parsed.content) text = parsed.content;
-  else if (parsed.response) text = typeof parsed.response === 'string' ? parsed.response : JSON.stringify(parsed.response);
-} catch {
-  // Not JSON, use raw output
+async function main() {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolvedModel}:generateContent?key=${apiKey}`;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API returned status ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Save usage data for budget safety
+    try {
+      const promptTokens = data.usageMetadata?.promptTokenCount || 0;
+      const candidatesTokens = data.usageMetadata?.candidatesTokenCount || 0;
+      if (promptTokens > 0 || candidatesTokens > 0) {
+        const tmpDir = path.join(os.homedir(), '.gemini', 'tmp', 'antigravity', 'chats');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        const usageLine = JSON.stringify({
+          timestamp: new Date().toISOString(),
+          tokens: { input: promptTokens, output: candidatesTokens }
+        });
+        fs.appendFileSync(path.join(tmpDir, 'usage.jsonl'), usageLine + '\n', 'utf8');
+      }
+    } catch {}
+
+    if (outputJson) {
+      console.log(JSON.stringify({ response: text }));
+    } else {
+      console.log(text);
+    }
+  } catch (err) {
+    console.error('Error calling Gemini API:', err.message);
+    process.exit(1);
+  }
 }
 
-if (outputJson) {
-  console.log(JSON.stringify({ response: text }));
-} else {
-  console.log(text);
-}
+main();
