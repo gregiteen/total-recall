@@ -382,7 +382,7 @@ describe('API Proxy', () => {
 
     it('injects grounding nodes into the system prompt before forwarding to local runtime', async () => {
       const { writeNode } = await import('../core/vault.mjs');
-      writeNode({
+      await writeNode({
         slug: 'my-project-recall',
         category: 'facts',
         type: 'memory',
@@ -413,7 +413,7 @@ describe('API Proxy', () => {
     it('returns proactive suggested discussions matching structure constraints', async () => {
       const { writeNode } = await import('../core/vault.mjs');
       
-      writeNode({
+      await writeNode({
         slug: 'fact-node',
         category: 'facts',
         type: 'memory',
@@ -422,7 +422,7 @@ describe('API Proxy', () => {
         body: 'Vibrant facts of the system.'
       }, vaultDir);
 
-      writeNode({
+      await writeNode({
         slug: 'concept-node',
         category: 'concepts',
         type: 'memory',
@@ -431,7 +431,7 @@ describe('API Proxy', () => {
         body: 'Dynamic ideas of the brain.'
       }, vaultDir);
 
-      writeNode({
+      await writeNode({
         slug: 'draft-node',
         category: 'patterns',
         type: 'memory',

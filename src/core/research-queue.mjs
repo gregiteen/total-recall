@@ -112,7 +112,7 @@ export function compileResearchProjectSummary(item, node) {
  * Sync a research project summary node to the SSSS memory vault.
  * Creates/updates a .md node in memory-vault/facts/ named research-project-<id>.md.
  */
-export function syncResearchProjectNode(item) {
+export async function syncResearchProjectNode(item) {
   if (!item) return;
   const vaultDir = path.join(getBrainDir(), 'memory-vault');
 
@@ -210,7 +210,7 @@ export function syncResearchProjectNode(item) {
   };
 
   try {
-    writeNode(node, vaultDir);
+    await writeNode(node, vaultDir);
   } catch (e) {
     // Log or handle error gracefully
   }
@@ -257,7 +257,7 @@ export function loadQueue(overrideBrainDir) {
       const summaryPath = path.join(vaultDir, 'facts', `research-project-${item.id}.md`);
       if (!fs.existsSync(summaryPath)) {
         try {
-          syncResearchProjectNode(item);
+          void syncResearchProjectNode(item);
         } catch {}
       }
     } else {
@@ -349,10 +349,8 @@ export function addToQueue({ topic, priority = 'medium', notes, brainDir: overri
   items.unshift(item);
   saveQueue(items, overrideBrainDir);
 
-  // Sync initial pending project summary node to the vault
-  try {
-    syncResearchProjectNode(item);
-  } catch {}
+  // Sync initial pending project summary node to the vault (async, non-blocking)
+  void syncResearchProjectNode(item).catch(() => {});
 
   return item;
 }
@@ -412,10 +410,8 @@ export function updateQueueItem(id, patch = {}, overrideBrainDir) {
   items[idx] = item;
   saveQueue(items, overrideBrainDir);
 
-  // Sync updated research project summary node to the vault
-  try {
-    syncResearchProjectNode(item);
-  } catch {}
+  // Sync updated research project summary node to the vault (async, non-blocking)
+  void syncResearchProjectNode(item).catch(() => {});
 
   return item;
 }

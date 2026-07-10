@@ -208,7 +208,7 @@ export function detectRuleFiles(dirs) {
  * @param {{ force?: boolean, vaultDir?: string }} opts
  * @returns {{ imported: object[], skipped: object[], failed: object[] }}
  */
-export function importRuleFiles(files, { force = false, vaultDir = VAULT_DIR } = {}) {
+export async function importRuleFiles(files, { force = false, vaultDir = VAULT_DIR } = {}) {
   const imported = [], skipped = [], failed = [];
 
   for (const file of files) {
@@ -225,23 +225,35 @@ export function importRuleFiles(files, { force = false, vaultDir = VAULT_DIR } =
         type:         'memory',
         slug:         file.slug,
         title:        `Imported rules: ${file.filename}`,
-        category:     'instructions',
+        description:  `Imported IDE rules from ${file.filename}`,
+        timestamp:    new Date().toISOString(),
+        // Package memory.category enum — host folder preserved as tag folder:instructions
+        category:     'preferences',
         status:       'active',
         confidence:   1.0,
         importance:   5,
-        tags:         ['imported-rules', file.ide, path.basename(file.filename)],
+        schema_version: 2,
+        modality:     'must',
+        subject:      'agent',
+        predicate:    'follow',
+        object:       'imported-rules',
+        sentiment_polarity: 'directive_must',
+        sentiment_target: 'agent',
+        tags:         ['imported-rules', 'folder:instructions', file.ide, path.basename(file.filename)].filter(Boolean),
         created:      new Date().toISOString(),
         updated:      new Date().toISOString(),
         last_accessed: new Date().toISOString(),
         source: {
           type:          'import',
+          session_id:    `import-${file.slug}`,
+          evidence_count: 1,
           file:          file.absolutePath,
           imported_at:   new Date().toISOString(),
         },
         body: content,
       };
 
-      writeNode(node, vaultDir);
+      await writeNode(node, vaultDir);
       imported.push({ slug: node.slug, title: node.title, file: file.absolutePath, size: file.size });
     } catch (err) {
       failed.push({ ...file, error: err.message });
@@ -256,7 +268,7 @@ export function importRuleFiles(files, { force = false, vaultDir = VAULT_DIR } =
  *
  * @param {{ dirs?: string[], force?: boolean, vaultDir?: string, dryRun?: boolean }} opts
  */
-export function detectAndImport({ dirs, force = false, vaultDir = VAULT_DIR, dryRun = false } = {}) {
+export async function detectAndImport({ dirs, force = false, vaultDir = VAULT_DIR, dryRun = false } = {}) {
   const detected = detectRuleFiles(dirs);
   const toImport = detected.filter(f => !f.alreadyImported || force);
 
@@ -264,7 +276,7 @@ export function detectAndImport({ dirs, force = false, vaultDir = VAULT_DIR, dry
     return { detected, toImport, imported: [], skipped: detected.filter(f => f.alreadyImported && !force), failed: [], dryRun: true };
   }
 
-  const { imported, skipped, failed } = importRuleFiles(toImport, { force, vaultDir });
+  const { imported, skipped, failed } = await importRuleFiles(toImport, { force, vaultDir });
   return { detected, imported, skipped, failed, dryRun: false };
 }
 

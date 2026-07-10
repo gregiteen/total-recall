@@ -1,48 +1,121 @@
 /**
- * src/core/validated-write.mjs
- *
- * Validated write adapter — routes memory mutations through the SSSS §6
- * Operation Contract (processOperation) instead of bypassing it via raw
- * writeNode(). This ensures every write gets:
- *   - Envelope validation (Stage 1)
- *   - Idempotency deduplication (Stage 2)
- *   - Authorization checks (Stage 3)
- *   - Lease protection (Stage 4)
- *   - Schema validation (Stage 5)
- *   - Atomic commit (Stage 6)
- *   - Audit trail (Stage 7)
+ * Validated write adapter — all vault node mutations go through the SSSS 0.9
+ * package kernel (processOperationAsync).
  *
  * Usage:
- *   import { writeNodeValidated } from './validated-write.mjs';
- *   const result = writeNodeValidated(node, vaultDir);
+ *   const result = await writeNodeValidatedAsync(node, vaultDir);
  *   if (!result.success) throw new Error(result.validation.errors.join('; '));
  */
 
 import crypto from 'node:crypto';
-import path from 'node:path';
-import matter from 'gray-matter';
-import { processOperation, processOperationAsync } from './operation-validator.mjs';
+import { processOperationAsync } from './operation-validator.mjs';
 import { safeStringify } from './vault.mjs';
 import { invalidate } from './vault-cache.mjs';
-import { getKernelMode } from './ssss-kernel-bridge.mjs';
+
+const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Normalize a vault node so package universal frontmatter + TR memory v2 pass.
+ */
+export function prepareNodeForContract(node = {}) {
+  const prepared = { ...node };
+  if (!prepared.type) prepared.type = 'memory';
+
+  // Identity fallbacks
+  if (!prepared.slug) {
+    prepared.slug = prepared.proposal_id || prepared.migration_id || prepared.release_id || 'unnamed';
+  }
+  // Proposal "category" is a topic label in TR; vault folder is always proposals/.
+  if (prepared.type === 'proposal') {
+    if (prepared.category && prepared.category !== 'proposals') {
+      prepared.proposal_topic = prepared.proposal_topic || prepared.category;
+    }
+    prepared.category = 'proposals';
+  } else if (!prepared.category) {
+    if (prepared.type === 'migration') prepared.category = 'migrations';
+    else if (prepared.type === 'schema-proposal') prepared.category = 'schema-proposals';
+    else prepared.category = 'uncategorized';
+  }
+
+  // Package 0.9 universal fields
+  if (!prepared.title) {
+    prepared.title = prepared.name || prepared.summary || prepared.slug || 'Untitled';
+  }
+  if (!prepared.description) {
+    prepared.description = prepared.rationale || prepared.summary || prepared.title;
+  }
+  if (!prepared.timestamp) {
+    prepared.timestamp = prepared.updated || prepared.created || prepared.proposed_at
+      || prepared.applied_at || new Date().toISOString();
+  }
+
+  if (prepared.type === 'memory') {
+    if (!prepared.schema_version) prepared.schema_version = 2;
+    if (!prepared.status) prepared.status = 'active';
+    if (!prepared.updated) prepared.updated = new Date().toISOString();
+    if (!prepared.last_accessed) prepared.last_accessed = new Date().toISOString();
+    if (!prepared.created) prepared.created = prepared.updated;
+    // Package core enum for memory.category is closed; remap host-only folders.
+    const MEMORY_CATEGORIES = new Set([
+      'invariants', 'patterns', 'anti-patterns', 'preferences',
+      'decisions', 'concepts', 'facts', 'lore',
+    ]);
+    if (prepared.category && !MEMORY_CATEGORIES.has(prepared.category)) {
+      const original = prepared.category;
+      prepared.tags = Array.isArray(prepared.tags) ? [...prepared.tags] : [];
+      if (!prepared.tags.includes(`folder:${original}`)) prepared.tags.push(`folder:${original}`);
+      prepared.category = original === 'instructions' ? 'preferences' : 'facts';
+    }
+    // Fill schema v2 required fields so partial updates (graph linking) still validate.
+    if (prepared.schema_version === 2) {
+      if (prepared.confidence === undefined || prepared.confidence === null) prepared.confidence = 0.5;
+      if (prepared.importance === undefined || prepared.importance === null) prepared.importance = 3;
+      if (!prepared.modality) prepared.modality = 'descriptive';
+      if (!prepared.subject) prepared.subject = 'agent';
+      if (!prepared.predicate) prepared.predicate = 'know';
+      if (!prepared.object) prepared.object = prepared.slug || 'fact';
+      if (!prepared.sentiment_polarity) prepared.sentiment_polarity = 'descriptive';
+      if (!prepared.sentiment_target) prepared.sentiment_target = prepared.slug || 'memory';
+    }
+    const now = new Date().toISOString();
+    if (!prepared.x_temporal_context) {
+      prepared.x_temporal_context = prepared.updated || prepared.created || now;
+    }
+    if (!prepared.x_citations) {
+      prepared.x_citations = [{
+        source: prepared.source?.type || 'unknown',
+        title: prepared.title || 'Untitled Memory',
+        url: prepared.source?.session_id ? `session://${prepared.source.session_id}` : 'unknown',
+        published: prepared.x_temporal_context,
+        relevance: 1.0,
+        accessed: now,
+      }];
+    }
+  }
+
+  return prepared;
+}
 
 function buildEnvelope(node, options = {}) {
   const {
     workspaceId = 'default',
     idempotencyKey,
     dryRun = false,
+    path: pathOverride,
   } = options;
 
-  const { body, _filePath, ...frontmatter } = node;
-  if (!frontmatter.type) frontmatter.type = 'memory';
-  if (!frontmatter.schema_version) frontmatter.schema_version = 2;
-  if (!frontmatter.updated) frontmatter.updated = new Date().toISOString();
-  if (!frontmatter.last_accessed) frontmatter.last_accessed = new Date().toISOString();
+  const prepared = prepareNodeForContract(node);
+  const { body, _filePath, _layer, _filepath, ...frontmatter } = prepared;
+
+  if (!SAFE_NAME.test(String(frontmatter.slug))) {
+    throw new Error(`Invalid slug: ${frontmatter.slug}`);
+  }
+  if (!SAFE_NAME.test(String(frontmatter.category))) {
+    throw new Error(`Invalid category: ${frontmatter.category}`);
+  }
 
   const content = safeStringify(body || '', frontmatter);
-  const category = frontmatter.category || 'uncategorized';
-  const slug = frontmatter.slug || 'unnamed';
-  const vfsPath = `${category}/${slug}.md`;
+  const vfsPath = pathOverride || `${frontmatter.category}/${frontmatter.slug}.md`;
 
   return {
     type: 'operation',
@@ -50,53 +123,30 @@ function buildEnvelope(node, options = {}) {
     path: vfsPath,
     workspace_id: workspaceId,
     content,
-    dry_run: dryRun,
+    dry_run: !!dryRun,
+    actor: { role: options.agentRole || 'system' },
   };
 }
 
 /**
- * Write a memory node through the full §6 Operation Contract pipeline.
- * Sync legacy path — use {@link writeNodeValidatedAsync} under kernel modes.
- *
- * @param {object} node - The memory node object (slug, category, title, body, etc.)
- * @param {string} vaultDir - Absolute path to the vault directory
- * @param {object} [options]
- * @returns {object} Operation response (§6.4)
+ * @deprecated Use {@link writeNodeValidatedAsync}.
  */
 export function writeNodeValidated(node, vaultDir, options = {}) {
-  const {
-    agentRole = 'admin',
-    leaseStore,
-    eventLogDir,
-    dryRun = false,
-  } = options;
-
-  const envelope = buildEnvelope(node, options);
-  const result = processOperation(envelope, vaultDir, {
-    agentRole,
-    leaseStore,
-    eventLogDir,
-  });
-
-  if (result.success && !dryRun) {
-    invalidate(vaultDir);
-  }
-
-  return result;
+  return writeNodeValidatedAsync(node, vaultDir, options);
 }
 
 /**
- * Async write path that can use the SSSS 0.9 package kernel when enabled.
+ * Write a node through the SSSS 0.9 package kernel.
  */
 export async function writeNodeValidatedAsync(node, vaultDir, options = {}) {
   const {
-    agentRole = 'admin',
+    agentRole = 'system',
     leaseStore,
     eventLogDir,
     dryRun = false,
   } = options;
 
-  const envelope = buildEnvelope(node, options);
+  const envelope = buildEnvelope(node, { ...options, agentRole });
   const result = await processOperationAsync(envelope, vaultDir, {
     agentRole,
     leaseStore,
@@ -111,17 +161,8 @@ export async function writeNodeValidatedAsync(node, vaultDir, options = {}) {
 }
 
 /**
- * Validate a node against the §6 pipeline without committing.
- * Useful for pre-flight checks on user input.
- *
- * @param {object} node - The memory node object
- * @param {string} vaultDir - Absolute path to the vault directory
- * @returns {object|Promise<object>} Validation result with errors/warnings
+ * Validate a node without committing.
  */
 export function validateNode(node, vaultDir) {
-  const mode = getKernelMode();
-  if (mode === 'kernel' || mode === 'kernel-core' || mode === 'kernel-low-risk') {
-    return writeNodeValidatedAsync(node, vaultDir, { dryRun: true });
-  }
-  return writeNodeValidated(node, vaultDir, { dryRun: true });
+  return writeNodeValidatedAsync(node, vaultDir, { dryRun: true });
 }

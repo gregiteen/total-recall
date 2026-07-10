@@ -37,7 +37,7 @@ function makeNode(slug, overrides = {}) {
 }
 
 describe('Semantic Conflict Detection', () => {
-  it('detects polarity flip conflict between similar nodes', () => {
+  it('detects polarity flip conflict between similar nodes', async () => {
     const candidate = makeNode('use-html-email', {
       title: 'Use HTML email format',
       sentiment_polarity: 'directive_must',
@@ -61,7 +61,7 @@ describe('Semantic Conflict Detection', () => {
     expect(conflicts[0].status).toBe('pending');
   });
 
-  it('does not flag nodes with same polarity', () => {
+  it('does not flag nodes with same polarity', async () => {
     const candidate = makeNode('prefer-html-email', {
       sentiment_polarity: 'directive_must',
       modality: 'must',
@@ -77,7 +77,7 @@ describe('Semantic Conflict Detection', () => {
     expect(conflicts.length).toBe(0);
   });
 
-  it('does not flag low-similarity nodes even with polarity flip', () => {
+  it('does not flag low-similarity nodes even with polarity flip', async () => {
     const candidate = makeNode('use-tabs', {
       title: 'Use tabs for indentation',
       sentiment_polarity: 'directive_must',
@@ -99,13 +99,13 @@ describe('Semantic Conflict Detection', () => {
     expect(conflicts.length).toBe(0);
   });
 
-  it('skips non-memory types', () => {
+  it('skips non-memory types', async () => {
     const candidate = { type: 'task', slug: 'task-1' };
     const conflicts = detectSemanticConflicts(candidate, [makeNode('n1')]);
     expect(conflicts.length).toBe(0);
   });
 
-  it('skips inactive existing nodes', () => {
+  it('skips inactive existing nodes', async () => {
     const candidate = makeNode('new-node', {
       sentiment_polarity: 'directive_must_not', modality: 'must_not',
     });
@@ -121,7 +121,7 @@ describe('Patch Conflict Detection', () => {
   beforeEach(() => { vaultRoot = tmpDir(); });
   afterEach(() => { fs.rmSync(vaultRoot, { recursive: true, force: true }); });
 
-  it('detects no conflict when hash matches', () => {
+  it('detects no conflict when hash matches', async () => {
     const content = '---\ntype: task\n---\nBody.\n';
     const fp = path.join(vaultRoot, 'test.md');
     fs.writeFileSync(fp, content);
@@ -130,7 +130,7 @@ describe('Patch Conflict Detection', () => {
     expect(result.conflicted).toBe(false);
   });
 
-  it('detects conflict when file was modified', () => {
+  it('detects conflict when file was modified', async () => {
     const fp = path.join(vaultRoot, 'test.md');
     fs.writeFileSync(fp, 'original');
     const hash = computeFileHash(vaultRoot, 'test.md');
@@ -140,12 +140,12 @@ describe('Patch Conflict Detection', () => {
     expect(result.error).toContain('modified since patch');
   });
 
-  it('returns no conflict for non-existent file', () => {
+  it('returns no conflict for non-existent file', async () => {
     const result = detectPatchConflict(vaultRoot, 'missing.md', 'abc');
     expect(result.conflicted).toBe(false);
   });
 
-  it('detects path traversal', () => {
+  it('detects path traversal', async () => {
     const result = detectPatchConflict(vaultRoot, '../../../etc/passwd', 'x');
     expect(result.conflicted).toBe(true);
     expect(result.error).toContain('traversal');
@@ -174,7 +174,7 @@ describe('Vault-Wide Scan', () => {
 
   afterEach(() => { fs.rmSync(vaultRoot, { recursive: true, force: true }); });
 
-  it('finds conflicts in a vault scan', () => {
+  it('finds conflicts in a vault scan', async () => {
     const conflicts = scanVaultForConflicts(vaultRoot, { conflictThreshold: 0.70 });
     expect(conflicts.length).toBe(1);
     expect(conflicts[0].polarity_flip).toBe(true);
@@ -187,7 +187,7 @@ describe('Conflict Persistence', () => {
   beforeEach(() => { inboxDir = tmpDir(); });
   afterEach(() => { fs.rmSync(inboxDir, { recursive: true, force: true }); });
 
-  it('writes conflict records to inbox', () => {
+  it('writes conflict records to inbox', async () => {
     const conflicts = [{
       type: 'conflict', conflict_id: 'conflict-2026-05-16-abc123',
       status: 'pending', new_slug: 'a', existing_slug: 'b',
@@ -200,7 +200,7 @@ describe('Conflict Persistence', () => {
     expect(fs.existsSync(fp)).toBe(true);
   });
 
-  it('resolves a conflict', () => {
+  it('resolves a conflict', async () => {
     const conflicts = [{
       type: 'conflict', conflict_id: 'conflict-res-001',
       status: 'pending', new_slug: 'a', existing_slug: 'b',
@@ -255,7 +255,7 @@ describe('Auto-Resolution Engine', () => {
     };
   }
 
-  it('Tier 0: new user-created node (from CLI, API, or chat) always wins and auto-supersedes', () => {
+  it('Tier 0: new user-created node (from CLI, API, or chat) always wins and auto-supersedes', async () => {
     // 1. Candidate is remember-cli, existing is machine
     const conflict1 = makeConflict(
       { source: { type: 'remember-cli', session_id: 's2', evidence_count: 1 } },
@@ -288,7 +288,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result3.winner).toBe('new-node');
   });
 
-  it('Tier 1: quarantines when both nodes are protected invariants', () => {
+  it('Tier 1: quarantines when both nodes are protected invariants', async () => {
     const conflict = makeConflict(
       { priority: 'absolute', immutable: true },
       { priority: 'absolute', immutable: true },
@@ -299,7 +299,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.reason).toContain('protected invariants');
   });
 
-  it('Tier 2: existing protected invariant wins over non-protected new node', () => {
+  it('Tier 2: existing protected invariant wins over non-protected new node', async () => {
     const conflict = makeConflict(
       { /* not protected */ },
       { priority: 'absolute', immutable: true },
@@ -310,7 +310,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.winner).toBe('existing-node');
   });
 
-  it('Tier 2: new protected invariant supersedes non-protected existing node', () => {
+  it('Tier 2: new protected invariant supersedes non-protected existing node', async () => {
     const conflict = makeConflict(
       { priority: 'absolute', immutable: true },
       { /* not protected */ },
@@ -321,7 +321,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.winner).toBe('new-node');
   });
 
-  it('Tier 3: user-created node supersedes machine-generated node', () => {
+  it('Tier 3: user-created node supersedes machine-generated node', async () => {
     const conflict = makeConflict(
       { source: { type: 'chat', session_id: 's2', evidence_count: 1 } },
       { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 } },
@@ -332,7 +332,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.reason).toContain('User-created');
   });
 
-  it('Tier 3: machine-generated node rejected in favor of user-created node', () => {
+  it('Tier 3: machine-generated node rejected in favor of user-created node', async () => {
     const conflict = makeConflict(
       { source: { type: 'optimizer', session_id: 's2', evidence_count: 1 } },
       { source: { type: 'user', session_id: 's1', evidence_count: 1 } },
@@ -343,7 +343,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.reason).toContain('Machine-generated');
   });
 
-  it('Tier 4: newer node wins when both have same source authority', () => {
+  it('Tier 4: newer node wins when both have same source authority', async () => {
     const conflict = makeConflict(
       { source: { type: 'dream-cycle', session_id: 's2', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
       { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 }, updated: '2026-05-15T12:00:00Z' },
@@ -354,7 +354,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.reason).toContain('recency');
   });
 
-  it('Tier 4: existing node wins when it is more recent', () => {
+  it('Tier 4: existing node wins when it is more recent', async () => {
     const conflict = makeConflict(
       { source: { type: 'dream-cycle', session_id: 's2', evidence_count: 1 }, updated: '2026-05-10T12:00:00Z' },
       { source: { type: 'dream-cycle', session_id: 's1', evidence_count: 1 }, updated: '2026-05-17T12:00:00Z' },
@@ -365,7 +365,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.reason).toContain('more recent');
   });
 
-  it('Tier 5: quarantines when provenance and timestamps are identical', () => {
+  it('Tier 5: quarantines when provenance and timestamps are identical', async () => {
     const ts = '2026-05-16T12:00:00Z';
     const conflict = makeConflict(
       { source: { type: 'test', session_id: 's', evidence_count: 1 }, created: ts, updated: ts },
@@ -376,7 +376,7 @@ describe('Auto-Resolution Engine', () => {
     expect(result.action).toBe('quarantine');
   });
 
-  it('returns quarantine when provenance metadata is missing', () => {
+  it('returns quarantine when provenance metadata is missing', async () => {
     const conflict = { conflict_id: 'x', status: 'pending' };
     const result = autoResolveConflict(conflict);
     expect(result.resolved).toBe(false);
@@ -394,7 +394,7 @@ describe('applyAutoResolution', () => {
   });
   afterEach(() => { fs.rmSync(vaultRoot, { recursive: true, force: true }); });
 
-  it('marks the loser as superseded and updates the winner', () => {
+  it('marks the loser as superseded and updates the winner', async () => {
     const newNode = makeNode('html-email', {
       source: { type: 'chat', session_id: 's2', evidence_count: 1 },
       updated: '2026-05-17T10:00:00Z',
@@ -428,7 +428,7 @@ describe('applyAutoResolution', () => {
       reason: 'User supersedes machine.',
     };
 
-    const updated = applyAutoResolution(conflict, resolution, vaultRoot);
+    const updated = await applyAutoResolution(conflict, resolution, vaultRoot);
 
     expect(updated.status).toBe('auto-resolved');
     expect(updated.resolution).toContain('html-email');
@@ -451,7 +451,7 @@ describe('applyAutoResolution', () => {
 });
 
 describe('detectAndResolve', () => {
-  it('auto-resolves user vs machine conflict without quarantine', () => {
+  it('auto-resolves user vs machine conflict without quarantine', async () => {
     const candidate = makeNode('use-html-email', {
       title: 'Use HTML email format',
       sentiment_polarity: 'directive_must',
@@ -471,7 +471,7 @@ describe('detectAndResolve', () => {
       }),
     ];
 
-    const { autoResolved, quarantined } = detectAndResolve(
+    const { autoResolved, quarantined } = await detectAndResolve(
       candidate, existing, { thresholds: { conflictThreshold: 0.70 } },
     );
     expect(autoResolved.length).toBe(1);
@@ -479,7 +479,7 @@ describe('detectAndResolve', () => {
     expect(autoResolved[0].status).toBe('auto-resolved');
   });
 
-  it('quarantines conflicts between two absolute invariants', () => {
+  it('quarantines conflicts between two absolute invariants', async () => {
     const candidate = makeNode('use-html-email', {
       title: 'Use HTML email format',
       sentiment_polarity: 'directive_must',
@@ -497,7 +497,7 @@ describe('detectAndResolve', () => {
       }),
     ];
 
-    const { autoResolved, quarantined } = detectAndResolve(
+    const { autoResolved, quarantined } = await detectAndResolve(
       candidate, existing, { thresholds: { conflictThreshold: 0.70 } },
     );
     expect(autoResolved.length).toBe(0);

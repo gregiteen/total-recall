@@ -1,37 +1,24 @@
-# ECSystemYSTEM SYNC AND SCALE: DEV PLAN
+# ECOSYSTEM SYNC AND SCALE: DEV PLAN
 
-## Phase 1: API & Concurrency Hardening (Days 1-2)
-1. **Remove `process.cwd()` dependencies**: Execute a full find-and-replace across `src/server/rest.mjs`. All routes must resolve paths using the globally exported `ROOT`, `BRAIN_DIR`, or `AGENT_DIR` variables.
-2. **Patch Concurrent `fs` operations**: Add `try/catch` and `fs.existsSync()` safety wrappers around all `fs.unlinkSync()` and `fs.statSync()` calls in `rest.mjs` and `vault.mjs`.
-3. **Fix API Key Leak**: Patch `PSystemT /api/config-json` to whitelist `openrouter_api_key`.
+## Phase 1: De-coupling Universal Skills (Days 1-2)
+1. **Un-nest Universal Skills**: Rearchitect the scaffold directory. Extract `tr-ssss`, `tr-project-management`, and `tr-okf` out of the `total-recall` namespace.
+2. **Remove `tr-` Prefixes**: Rename them to top-level ecosystem skills (`ssss`, `okf`, `project-management`).
+3. **Granular File Breakout**: Ensure all monolithic `SKILL.md` files in the scaffold are broken down so that **every single idea is its own `.md` file**.
 
-## Phase 2: Frontend UX Resiliency (Days 3-4)
-1. **Eliminate Waterfall Fetches**: Refactor React hooks in `ModelsPage.tsx` and `MemoryPage.tsx` to use `Promise.all()` for concurrent data loading.
-2. **Empty State Handlers**: Implement explicit empty state components for:
-   - Local Graph (When 0 nodes exist)
-   - Memory Categories (When category is empty)
-   - Usage Charts (When data arrays are empty)
-3. **WYSIWYG Editor Safety**: Refactor `MemoryPage.tsx` away from raw `contentEditable` and `dangerouslySetInnerHTML`.
+## Phase 2: The Synchronization Engine (Days 3-5)
+1. **Granular Sync Logic**: Update the TR daemon's sync logic to synchronize on a file-by-file basis rather than directory scaffolding.
+2. **Universal vs Local Parsing**: The sync engine must be able to push updates to universal `.md` files in a repo's `.agent/skills/` directory without overwriting or deleting repo-specific `.md` files in that same directory.
+3. **Daemon DLQ Hooks**: Hook the granular sync engine into the Dead Letter Queue (DLQ) in `task_runner.mjs` to ensure syncs survive failures and rate limits.
 
-## Phase 3: Global vs Project Data Resolution (Days 5-6)
-1. **Core Data API Refactor**: Refactor the `/api/skills` and `/api/instructions` endpoints.
-2. **Implement 3-Tier Merge**: Construct the pipeline that merges:
-   - Identity (`~/.gemini/config/`)
-   - Context (`~/.gemini/antigravity/brain/<project>/`)
-   - Embedded (`<repo>/.agent/`)
-3. **UI Badging**: Add visual indicators in the React frontend so users can see which scope a specific skill or memory belongs to.
+## Phase 3: VFS & API Hardening (Days 6-7)
+1. **Path Resolution**: Remove `process.cwd()` dependencies across `src/server/rest.mjs`. All file operations must explicitly resolve using the centralized VFS logic (`ROOT`, `AGENT_DIR`).
+2. **Missing Error Handlers**: Patch swallowed exceptions in model fetching (`GET /api/openai-models`) and fix the missing `openrouter_api_key` payload processing.
+3. **Race Conditions**: Wrap `fs.statSync()` calls in `rest.mjs` with `existsSync()` to prevent daemon crashes during active synchronization.
 
-## Phase 4: Sync Bridges (Days 7-9)
-1. **Obsidian Sync Bridge**:
-   - Write `src/core/obsidian-bridge.mjs`.
-   - Instantiate `chokidar` watcher in `daemon-loop.mjs`.
-2. **GitHub Sync Bridge**:
-   - Write `src/core/github-bridge.mjs`.
-   - Expose explicit Git push/pull shell commands wrapped in Node `exec`.
-3. **Autonomous CRON Integration**:
-   - Hook the bridges and the "Code Examiner Worker" into the existing `src/core/crons.mjs` scheduler.
+## Phase 4: UI Command Center Upgrades (Days 8-9)
+1. **OpenWiki Enhancement**: Ensure OpenWiki seamlessly renders the newly flattened, granular `.md` skill files into a cohesive knowledge graph.
+2. **Skills Matrix Dashboard**: Refactor the Skills UI to visualize which universal `.md` files are fully synced vs. drifted across registered repos.
 
-## Phase 5: Testing & Release (Day 10)
-1. Ensure the `ssss-conformance.bridge.spec.mjs` suite passes.
-2. Perform a multi-agent stress test where 3 agents attempt to modify memory simultaneously while the GitHub sync runs.
-3. Final tag and push.
+## Phase 5: Verification & Release (Day 10)
+1. Execute `ssss-conformance.bridge.spec.mjs` to ensure the VFS strictly handles granular `.md` files.
+2. Run a full-scale local sync test to verify universal files update without crushing local override files.

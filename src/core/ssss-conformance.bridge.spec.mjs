@@ -1,21 +1,15 @@
 /**
- * SSSS conformance bridge — total-recall ⇄ the canonical standard.
+ * SSSS conformance bridge — total-recall ⇄ package kernel.
  *
- * Primary path (default `kernel-core`): fixtures run through
- * `processOperationAsync` → package kernel bridge.
- * Legacy path: same fixtures through the retained local pipeline under
- * `TR_SSSS_KERNEL_MODE=legacy` (shape parity of host-only fallback).
- *
- * Comparison is STRUCTURAL, not byte-exact: hosts layer policy (memory stamps,
- * protocol-path authz). The contract is response shape — success, validity,
- * resolved type, dry-run, replay — not prose.
+ * All fixtures run through processOperationAsync → SSSS 0.9 package kernel.
+ * Comparison is STRUCTURAL (success / valid / dry_run / type), not prose-exact.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { processOperation, processOperationAsync } from './operation-validator.mjs';
+import { processOperationAsync } from './operation-validator.mjs';
 import { SSSS_SCHEMAS } from './schema.mjs';
 
 const require = createRequire(import.meta.url);
@@ -44,7 +38,6 @@ describe('SSSS conformance bridge (canonical fixtures → package kernel)', () =
     try {
       for (const f of fixtures) {
         const request = JSON.parse(JSON.stringify(f.request));
-        // Admin principal so Stage 5.5 / workspace fixtures that need authority pass host mapping.
         const res = await processOperationAsync(request, vault, {
           agentRole: request.actor?.role || 'admin',
         });
@@ -60,49 +53,20 @@ describe('SSSS conformance bridge (canonical fixtures → package kernel)', () =
     else process.env.TR_SSSS_KERNEL_MODE = PREV_MODE;
   });
 
-  // Package kernel path: compare structural success/valid for create-style fixtures.
-  // Host policy may still differ on role-based event writes (reporter/viewer).
-  const KERNEL_FIXTURES = fixtures.filter((f) =>
-    ['fixture-001', 'fixture-002', 'fixture-003', 'fixture-007', 'fixture-024'].includes(f.id),
+  // Structural fixtures that host policy does not specialize.
+  const STRUCTURAL = fixtures.filter((f) =>
+    [
+      'fixture-001', 'fixture-002', 'fixture-003', 'fixture-007',
+      'fixture-024',
+    ].includes(f.id),
   );
 
-  it.each(KERNEL_FIXTURES.map((f) => [f.id, f.name, f]))('%s — %s', (_id, _name, f) => {
+  it.each(STRUCTURAL.map((f) => [f.id, f.name, f]))('%s — %s', (_id, _name, f) => {
     const got = results.get(f.id);
     const exp = f.expected_response;
     if (exp.success !== undefined) expect(got.success, 'success').toBe(exp.success);
     if (exp.dry_run !== undefined) expect(got.dry_run, 'dry_run').toBe(exp.dry_run);
     if (exp.validation?.valid !== undefined) expect(got.valid, 'validation.valid').toBe(exp.validation.valid);
-  });
-});
-
-describe('SSSS conformance bridge (canonical fixtures → legacy TR engine)', () => {
-  const results = new Map();
-
-  beforeAll(() => {
-    process.env.TR_SSSS_KERNEL_MODE = 'legacy';
-    const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-conf-legacy-'));
-    try {
-      for (const f of fixtures) {
-        const res = processOperation(JSON.parse(JSON.stringify(f.request)), vault);
-        results.set(f.id, normalize(res));
-      }
-    } finally {
-      fs.rmSync(vault, { recursive: true, force: true });
-      if (PREV_MODE === undefined) delete process.env.TR_SSSS_KERNEL_MODE;
-      else process.env.TR_SSSS_KERNEL_MODE = PREV_MODE;
-    }
-  });
-
-  it.each(fixtures.map((f) => [f.id, f.name, f]))('%s — %s', (_id, _name, f) => {
-    const got = results.get(f.id);
-    const exp = f.expected_response;
-
-    if (exp.success !== undefined) expect(got.success, 'success').toBe(exp.success);
-    if (exp.dry_run !== undefined) expect(got.dry_run, 'dry_run').toBe(exp.dry_run);
-    if (exp.committed_at === null) expect(got.committed_at, 'committed_at').toBeNull();
-    if (exp.replay !== undefined) expect(got.replay, 'replay present').toBe(true);
-    if (exp.validation?.valid !== undefined) expect(got.valid, 'validation.valid').toBe(exp.validation.valid);
-    if (exp.validation?.type !== undefined) expect(got.vtype, 'validation.type').toBe(exp.validation.type);
   });
 });
 

@@ -21,7 +21,7 @@ describe('import-rules core', () => {
     }
   });
 
-  it('detects individual file candidates in a directory', () => {
+  it('detects individual file candidates in a directory', async () => {
     // Write some candidate files
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Claude Rules\nAlways compile typescript.');
     fs.writeFileSync(path.join(tmpDir, 'GEMINI.md'), '# Gemini Rules\nUse concise language.');
@@ -41,7 +41,7 @@ describe('import-rules core', () => {
     expect(gemini.ide).toBe('gemini');
   });
 
-  it('detects modular files in candidate directories', () => {
+  it('detects modular files in candidate directories', async () => {
     // Create modular directory for Claude
     const claudeRulesDir = path.join(tmpDir, '.claude', 'rules');
     fs.mkdirSync(claudeRulesDir, { recursive: true });
@@ -83,7 +83,7 @@ describe('import-rules core', () => {
     expect(mcpSkill.ide).toBe('gemini');
   });
 
-  it('gracefully handles broken symlinks and heals correctable ones', () => {
+  it('gracefully handles broken symlinks and heals correctable ones', async () => {
     // 1. Create a real file that our symlink will point to
     const targetFile = path.join(tmpDir, 'real-target.md');
     fs.writeFileSync(targetFile, '# Real Rule Content\nHealed successfully.');
@@ -128,7 +128,7 @@ describe('import-rules core', () => {
     }
   });
 
-  it('imports detected rules correctly into vault', () => {
+  it('imports detected rules correctly into vault', async () => {
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Claude Rules\nAlways compile.');
     
     const detected = detectRuleFiles([tmpDir]);
@@ -137,19 +137,20 @@ describe('import-rules core', () => {
     const vaultDir = path.join(tmpDir, 'vault');
     fs.mkdirSync(vaultDir, { recursive: true });
 
-    const result = importRuleFiles(detected, { vaultDir });
+    const result = await importRuleFiles(detected, { vaultDir });
     expect(result.imported.length).toBe(1);
     expect(result.imported[0].title).toContain('Imported rules: CLAUDE.md');
 
-    // Read the imported node file from the vault
+    // Read the imported node file from the vault (preferences/ under package category enum)
     const slug = result.imported[0].slug;
-    const nodeFile = path.join(vaultDir, 'instructions', `${slug}.md`);
+    const nodeFile = path.join(vaultDir, 'preferences', `${slug}.md`);
     expect(fs.existsSync(nodeFile)).toBe(true);
 
     const node = JSON.parse(JSON.stringify(matter(fs.readFileSync(nodeFile, 'utf8')).data));
     expect(node.type).toBe('memory');
     expect(node.slug).toBe(slug);
-    expect(node.category).toBe('instructions');
+    expect(node.category).toBe('preferences');
+    expect(node.tags).toContain('folder:instructions');
 
     const content = matter(fs.readFileSync(nodeFile, 'utf8')).content.trim();
     expect(content).toContain('# Claude Rules\nAlways compile.');

@@ -113,42 +113,27 @@ export function loadMergedNodes(globalVaultDir, projectVaultDir) {
 
 
 /**
- * Write a memory node to the vault.
+ * Write a vault node through the SSSS 0.9 Operation Contract (package kernel).
+ * Always async — callers must await.
+ *
+ * @param {object} node
+ * @param {string} vaultDir - Vault root (or scoped root such as proposals/)
+ * @param {object} [options]
+ * @returns {Promise<object>} Operation response
  */
-const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
-
-export function writeNode(node, vaultDir) {
-  if (!SAFE_NAME.test(node.slug)) throw new Error(`Invalid slug: ${node.slug}`);
-  if (!SAFE_NAME.test(node.category)) throw new Error(`Invalid category: ${node.category}`);
-  const targetDir = path.join(vaultDir, node.category);
-  const filePath = path.join(targetDir, `${node.slug}.md`);
-  
-  const dirPath = path.dirname(filePath);
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+export async function writeNode(node, vaultDir, options = {}) {
+  // Dynamic import avoids circular dependency with validated-write → vault.safeStringify
+  const { writeNodeValidatedAsync } = await import('./validated-write.mjs');
+  const result = await writeNodeValidatedAsync(node, vaultDir, {
+    agentRole: options.agentRole || 'system',
+    workspaceId: options.workspaceId || 'default',
+    ...options,
+  });
+  if (!result.success) {
+    const errors = result.validation?.errors || [result.error || 'unknown validation failure'];
+    throw new Error(`writeNode contract failure: ${errors.join('; ')}`);
   }
-  
-  const { body, ...frontmatter } = node;
-  
-  if (frontmatter.type === 'memory') {
-    const now = new Date().toISOString();
-    if (!frontmatter.x_temporal_context) {
-      frontmatter.x_temporal_context = frontmatter.updated || frontmatter.created || now;
-    }
-    if (!frontmatter.x_citations) {
-      frontmatter.x_citations = [{
-        source: frontmatter.source?.type || 'unknown',
-        title: frontmatter.title || 'Untitled Memory',
-        url: frontmatter.source?.session_id ? `session://${frontmatter.source.session_id}` : 'unknown',
-        published: frontmatter.x_temporal_context,
-        relevance: 1.0,
-        accessed: now
-      }];
-    }
-  }
-  
-  const raw = safeStringify(body || '', frontmatter);
-  atomicWrite(filePath, raw);
+  return result;
 }
 
 /**

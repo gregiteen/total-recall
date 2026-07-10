@@ -295,7 +295,7 @@ export async function runDreamCycle({
     const { promoted, conflicted } = evaluateCandidates(candidates, existingNodes, conflictsDir);
     logger.info('dream', `Promoted: ${promoted.length} | Conflicts: ${conflicted.length}`);
     for (const node of promoted) {
-      writeNode(node, vaultDir);
+      await writeNode(node, vaultDir);
     }
   } else {
     logger.info('dream', 'No new candidates to evaluate.');
@@ -312,9 +312,6 @@ export async function runDreamCycle({
   logger.info('dream', 'PHASE 4 — Lucid Dreaming (Optimizer Proposals)');
   let proposalCount = 0;
   try {
-    const proposalsDir = path.join(vaultDir, 'proposals');
-    if (!fs.existsSync(proposalsDir)) fs.mkdirSync(proposalsDir, { recursive: true });
-
     const cleanupProposals = await generateMemoryCleanupProposals(vaultDir);
     const staleProposals = await generateStaleKnowledgeRefreshProposals(vaultDir);
     const allProposals = [...cleanupProposals, ...staleProposals];
@@ -324,7 +321,8 @@ export async function runDreamCycle({
       for (const p of allProposals) {
         const passed = await evaluateProposalGate(p, null);
         logger.info('dream', `Proposal [${p.category}]: ${p.summary} -> ${passed ? 'ACCEPTED' : 'REJECTED'}`);
-        writeNode(p, proposalsDir);
+        // Contract write under vault root → proposals/<slug>.md
+        await writeNode(p, vaultDir);
         if (passed) proposalCount++;
       }
     } else {

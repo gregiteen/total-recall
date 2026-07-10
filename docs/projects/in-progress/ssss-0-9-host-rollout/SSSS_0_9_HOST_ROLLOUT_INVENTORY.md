@@ -97,8 +97,9 @@ From package `registry/core.json`:
 - [x] Memory + workflow route through package kernel with host policy hooks
 - [x] Direct-write detector flags unapproved canonical paths
 - [x] Bridge tests green under `vitest`
-- [x] Default production path is package kernel (`kernel-core`); legacy retained only for host-only types + explicit `legacy` mode
+- [x] Default production path is package kernel (`kernel-core`); legacy pipeline deleted
 - [x] Clean-account, replay, recovery, scope, and privacy verification
+- [x] All `writeNode()` call sites route through Operation Contract / package kernel
 
 ## Implementation (2026-07-10)
 
@@ -116,10 +117,12 @@ From package `registry/core.json`:
 
 Default mode is **`kernel-core`**. Set `TR_SSSS_KERNEL_MODE=legacy` only for emergency fallback or legacy unit tests.
 
-### Deferred (not 8A blockers)
+### Completed cleanup (2026-07-10)
 
-- `writeNode()` call sites in `fact-seeker`, `dream`, `conflict-detector`, `research-queue`, `import-rules`, `migrate`, `cli/ingest` still bypass the Operation Contract for some memory writes. Track under DEFERRED_BACKLOG; detector lists them.
-- Full deletion of `processOperationLegacy` body after all host-only types are package-extension complete.
+- `writeNode()` is async and always calls `writeNodeValidatedAsync` → package kernel.
+- Call sites updated: fact-seeker, dream, conflict-detector, research-queue, import-rules, migrate, cli/ingest.
+- `processOperationLegacy` fully removed; `processOperation` (sync) throws; use `processOperationAsync`.
+- Host prep fills schema v2 fields and remaps non-enum memory categories (e.g. `instructions` → `preferences` + `folder:` tag).
 
 ### Memory / workflow host policy (kernel path)
 

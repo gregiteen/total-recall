@@ -395,7 +395,7 @@ export function autoResolveConflict(conflict) {
  * @param {string} vaultDir - Path to the memory vault.
  * @returns {object} Updated conflict record.
  */
-export function applyAutoResolution(conflict, resolution, vaultDir) {
+export async function applyAutoResolution(conflict, resolution, vaultDir) {
   if (!resolution.resolved) return conflict;
 
   const winner = resolution.winner;
@@ -419,8 +419,8 @@ export function applyAutoResolution(conflict, resolution, vaultDir) {
     winnerNode.updated = new Date().toISOString();
 
     try {
-      writeNode(loserNode, vaultDir);
-      writeNode(winnerNode, vaultDir);
+      await writeNode(loserNode, vaultDir);
+      await writeNode(winnerNode, vaultDir);
       invalidate(vaultDir);
     } catch (err) {
       logger.error('conflict-detector', `Failed to apply auto-resolution: ${err.message}`);
@@ -447,7 +447,7 @@ export function applyAutoResolution(conflict, resolution, vaultDir) {
  * @param {object} options - { vaultDir, inboxDir, thresholds }
  * @returns {{ autoResolved: object[], quarantined: object[] }}
  */
-export function detectAndResolve(candidate, existingNodes, options = {}) {
+export async function detectAndResolve(candidate, existingNodes, options = {}) {
   const { vaultDir, inboxDir, thresholds } = options;
   const conflicts = detectSemanticConflicts(candidate, existingNodes, thresholds);
 
@@ -458,7 +458,7 @@ export function detectAndResolve(candidate, existingNodes, options = {}) {
     const resolution = autoResolveConflict(conflict);
 
     if (resolution.resolved) {
-      const resolved = applyAutoResolution(conflict, resolution, vaultDir);
+      const resolved = await applyAutoResolution(conflict, resolution, vaultDir);
       autoResolved.push(resolved);
       logger.info('conflict-detector', `Auto-resolved ${conflict.conflict_id}: ${resolution.reason}`);
     } else {

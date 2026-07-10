@@ -668,10 +668,10 @@ async function writeAndSurfaceImmediately(topic, synthesis, sourceResults, {
 
   // Write supporting nodes to vault
   for (const node of supportingNodes) {
-    writeNode({ ...node.frontmatter, body: node.body }, vaultDir);
+    await writeNode({ ...node.frontmatter, body: node.body }, vaultDir);
   }
   // Write master node to vault
-  writeNode({ ...masterNode.frontmatter, body: masterNode.body }, vaultDir);
+  await writeNode({ ...masterNode.frontmatter, body: masterNode.body }, vaultDir);
 
   for (const sr of sourceResults) {
     try { registerSource(sr, masterNode.slug); } catch (err) { logger.debug('fact-seeker: registerSource fast-path failed', { err: err.message }); }
@@ -1138,7 +1138,7 @@ Output ONLY valid JSON.`;
             otherRelated.add(nodeSlug);
             otherNode.related = Array.from(otherRelated);
             otherNode.updated = new Date().toISOString();
-            writeNode(otherNode, vaultDir);
+            await writeNode(otherNode, vaultDir);
           }
         }
       }
@@ -1159,7 +1159,7 @@ Output ONLY valid JSON.`;
             otherContradicts.add(nodeSlug);
             otherNode.contradicts = Array.from(otherContradicts);
             otherNode.updated = new Date().toISOString();
-            writeNode(otherNode, vaultDir);
+            await writeNode(otherNode, vaultDir);
           }
         }
       }
@@ -1178,7 +1178,7 @@ Output ONLY valid JSON.`;
           if (otherNode) {
             otherNode.superseded_by = nodeSlug;
             otherNode.updated = new Date().toISOString();
-            writeNode(otherNode, vaultDir);
+            await writeNode(otherNode, vaultDir);
           }
         }
       }
@@ -1200,7 +1200,7 @@ Output ONLY valid JSON.`;
       updated: new Date().toISOString()
     };
     
-    writeNode(updatedNode, vaultDir);
+    await writeNode(updatedNode, vaultDir);
     
     const conclusions = [];
     if (result.insights && result.insights.length > 0) {
@@ -1267,7 +1267,7 @@ Output ONLY valid JSON.`;
           body: inst.body || ''
         };
         
-        writeNode(ruleNode, vaultDir);
+        await writeNode(ruleNode, vaultDir);
         rulesSynthesized = true;
         logger.info({
           subsystem: 'fact-seeker',
@@ -1389,7 +1389,7 @@ Output ONLY the raw markdown of the polished body, starting immediately with no 
       updated: new Date().toISOString()
     };
     
-    writeNode(updatedNode, vaultDir);
+    await writeNode(updatedNode, vaultDir);
     
     return {
       success: true,
@@ -1486,7 +1486,7 @@ Output ONLY valid JSON.`;
       updated: new Date().toISOString()
     };
     
-    writeNode(updatedNode, vaultDir);
+    await writeNode(updatedNode, vaultDir);
     
     // Trigger immediate surface recompilation if active rules/sources were added
     if (skillsDir && derivedDir && instructionsFile) {
@@ -1618,7 +1618,7 @@ Output ONLY valid JSON.`;
       updated: new Date().toISOString()
     };
     
-    writeNode(updatedNode, vaultDir);
+    await writeNode(updatedNode, vaultDir);
     
     return {
       success: true,
