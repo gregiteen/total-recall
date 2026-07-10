@@ -161,7 +161,7 @@ function hasPermission(permissions, requiredPerm) {
  */
 export function processOperation(envelope, vaultRoot, options = {}) {
   const mode = getKernelMode();
-  if (mode === 'kernel' || mode === 'kernel-low-risk') {
+  if (mode === 'kernel' || mode === 'kernel-core' || mode === 'kernel-low-risk') {
     throw new Error(
       `TR_SSSS_KERNEL_MODE=${mode} requires processOperationAsync (package kernel is async).`,
     );

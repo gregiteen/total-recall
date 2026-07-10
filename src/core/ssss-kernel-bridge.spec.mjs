@@ -8,9 +8,12 @@ import {
   createTotalRecallRegistrySet,
   processViaPackageKernel,
   mapTrPrincipal,
-  compareVerdicts,
   shadowCompare,
   isLowRiskEnvelope,
+  isCoreRouteEnvelope,
+  prepareEnvelopeForKernel,
+  listUnapprovedCanonicalWriters,
+  scanDirectCanonicalWrites,
 } from './ssss-kernel-bridge.mjs';
 import {
   listHostOnlyTypes,
@@ -117,6 +120,141 @@ describe('SSSS 0.9 package kernel bridge', () => {
     }, vault, { agentRole: 'optimizer' });
     expect(result.success).toBe(false);
     expect(result.validation.errors.join(' ')).toMatch(/Protocol path/i);
+  });
+
+  it('commits memory through the package kernel with host preflight stamps', async () => {
+    const raw = fs.readFileSync(path.resolve('fixtures/valid/memory-node.md'), 'utf8');
+    const envelope = {
+      type: 'operation',
+      workspace_id: 'ws-bridge',
+      idempotency_key: 'bridge-memory-1',
+      path: 'patterns/fixture-valid-memory.md',
+      content: raw,
+      actor: { role: 'admin' },
+    };
+    expect(isCoreRouteEnvelope(envelope)).toBe(true);
+    const prepared = prepareEnvelopeForKernel(envelope, { agentRole: 'admin' });
+    expect(prepared.errors).toEqual([]);
+    expect(prepared.envelope.content).toMatch(/description:/);
+    expect(prepared.envelope.content).toMatch(/timestamp:/);
+
+    const result = await processViaPackageKernel(envelope, vault, { agentRole: 'admin' });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    const written = fs.readFileSync(path.join(vault, 'patterns/fixture-valid-memory.md'), 'utf8');
+    expect(written).toMatch(/updated:/);
+    expect(written).toMatch(/last_accessed:/);
+  });
+
+  it('commits workflow through the package kernel', async () => {
+    const content = [
+      '---',
+      'type: workflow',
+      'title: Daily Digest',
+      'description: Summarize unread messages.',
+      'timestamp: 2026-07-10T00:00:00Z',
+      'name: Daily Digest',
+      'isActive: true',
+      'priority: 80',
+      '---',
+      '',
+      '1. Gather.',
+      '2. Summarize.',
+      '',
+    ].join('\n');
+    const envelope = {
+      type: 'operation',
+      workspace_id: 'ws-bridge',
+      idempotency_key: 'bridge-workflow-1',
+      path: 'workflows/daily-digest/WORKFLOW.md',
+      content,
+      actor: { role: 'admin' },
+    };
+    expect(isCoreRouteEnvelope(envelope)).toBe(true);
+    const result = await processViaPackageKernel(envelope, vault, { agentRole: 'admin' });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    expect(fs.existsSync(path.join(vault, 'workflows/daily-digest/WORKFLOW.md'))).toBe(true);
+  });
+
+  it('rejects incomplete schema_version 2 memory via host overlay', async () => {
+    const content = [
+      '---',
+      'type: memory',
+      'slug: incomplete',
+      'category: facts',
+      'title: Incomplete',
+      'description: Missing v2 fields',
+      'timestamp: 2026-07-10T00:00:00Z',
+      'status: active',
+      'schema_version: 2',
+      '---',
+      '',
+      'Body',
+      '',
+    ].join('\n');
+    const result = await processViaPackageKernel({
+      type: 'operation',
+      workspace_id: 'ws-bridge',
+      idempotency_key: 'mem-bad',
+      path: 'facts/incomplete.md',
+      content,
+    }, vault, { agentRole: 'admin' });
+    expect(result.success).toBe(false);
+    expect(result.validation.errors.join(' ')).toMatch(/V2 Schema Requirement|confidence|modality/i);
+  });
+
+  it('warns when optimizer writes absolute-priority memory', async () => {
+    const content = [
+      '---',
+      'type: memory',
+      'slug: abs-node',
+      'category: invariants',
+      'title: Absolute rule',
+      'description: Tier 1',
+      'timestamp: 2026-07-10T00:00:00Z',
+      'status: active',
+      'schema_version: 2',
+      'confidence: 1',
+      'importance: 5',
+      'modality: must',
+      'subject: agent',
+      'predicate: obey',
+      'object: absolute-rule',
+      'sentiment_polarity: directive_must',
+      'sentiment_target: agent',
+      'priority: absolute',
+      '---',
+      '',
+      'Must.',
+      '',
+    ].join('\n');
+    const result = await processViaPackageKernel({
+      type: 'operation',
+      workspace_id: 'ws-bridge',
+      idempotency_key: 'opt-abs',
+      path: 'invariants/abs-node.md',
+      content,
+    }, vault, { agentRole: 'optimizer' });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    expect(result.validation.warnings.join(' ')).toMatch(/Optimizer writing Tier 1/i);
+  });
+});
+
+describe('SSSS 0.9 direct-write detection', () => {
+  it('lists unapproved canonical writers in src/core', () => {
+    const writers = listUnapprovedCanonicalWriters(path.resolve('src/core'));
+    expect(Array.isArray(writers)).toBe(true);
+    // Contract surfaces must not appear.
+    expect(writers.some((w) => w.endsWith('operation-validator.mjs'))).toBe(false);
+    expect(writers.some((w) => w.endsWith('validated-write.mjs'))).toBe(false);
+  });
+
+  it('scans for direct write patterns with severity tags', () => {
+    const findings = scanDirectCanonicalWrites(path.resolve('src/core'));
+    expect(Array.isArray(findings)).toBe(true);
+    for (const finding of findings.slice(0, 5)) {
+      expect(finding).toHaveProperty('file');
+      expect(finding).toHaveProperty('severity');
+    }
   });
 });
 

@@ -85,6 +85,7 @@ From package `registry/core.json`:
 | `legacy` (default) | Existing `processOperation` only |
 | `shadow` | Legacy commits; package kernel dry-runs and logs verdict diffs |
 | `kernel-low-risk` | Package kernel for structural low-risk types (`rule`, `page`, `assistant`, `skill`, `model`); legacy otherwise |
+| `kernel-core` | Package kernel for core package types **including memory + workflow** |
 | `kernel` | Package kernel for all package-known types; host extension for TR-only |
 
 ## Verification checklist (Phase 8A gate)
@@ -93,9 +94,11 @@ From package `registry/core.json`:
 - [x] Host extension registry loads with package core
 - [x] Shadow suite compares local vs package success/valid on core fixtures
 - [x] Low-risk types can commit via package kernel
-- [x] Memory + workflow still correct under legacy until policy hooks ported
-- [ ] Direct-write detector flags unapproved canonical paths
+- [x] Memory + workflow route through package kernel with host policy hooks
+- [x] Direct-write detector flags unapproved canonical paths
 - [x] Bridge tests green under `vitest`
+- [ ] Remove local core `processOperation` body after sustained parity
+- [ ] Clean-account, replay, recovery, scope, and privacy verification
 
 ## Implementation (2026-07-10)
 
@@ -106,5 +109,15 @@ From package `registry/core.json`:
 | `src/core/ssss-kernel-bridge.spec.mjs` | Inventory, low-risk commit, protocol path, shadow fixtures |
 | `processOperationAsync` | Async entry for kernel / shadow modes |
 | `writeNodeValidatedAsync` | Async memory write path for kernel modes |
+| `prepareEnvelopeForKernel` | Universal frontmatter fill, memory stamps, v2 overlay, optimizer warnings |
+| `listUnapprovedCanonicalWriters` | Heuristic list of core modules bypassing Operation Contract |
 
 Default mode is **legacy**. Enable gradually with `TR_SSSS_KERNEL_MODE`.
+
+### Memory / workflow host policy (kernel path)
+
+1. Fill package universal fields (`description`, `timestamp`) when missing.
+2. Stamp `updated` / `last_accessed` on memory commits.
+3. Enforce TR `validateMemoryNode` (schema v2 + `sentiment_target`) before kernel.
+4. Optimizer absolute/immutable writes emit warnings; capabilities expand to `ssss:memory:*`.
+5. Protocol paths still require admin/system.

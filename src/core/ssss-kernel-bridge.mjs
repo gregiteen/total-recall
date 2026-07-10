@@ -5,7 +5,8 @@
  *   legacy          — local processOperation only (default)
  *   shadow          — legacy commits; package kernel dry-runs for verdict diffs
  *   kernel-low-risk — package kernel for structural low-risk core types
- *   kernel          — package kernel for package-known types
+ *   kernel-core     — package kernel for core package types (incl. memory/workflow)
+ *   kernel          — package kernel for all package-known types
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +20,7 @@ import {
 } from '@ssss/cli/registry';
 import { detectDirectWrites } from '@ssss/cli/guard';
 import { logger } from './logger.mjs';
+import { validateMemoryNode } from './total-recall-memory-validator.mjs';
 import {
   TOTAL_RECALL_HOST_EXTENSION,
   listCoreTypes,
@@ -27,18 +29,46 @@ import {
 } from './ssss-host-extension.mjs';
 
 const LOW_RISK_TYPES = new Set(['rule', 'page', 'assistant', 'skill', 'model']);
+/** Core package primitives safe to cut over before full host-type migration. */
+const CORE_ROUTE_TYPES = new Set([
+  ...LOW_RISK_TYPES,
+  'memory',
+  'workflow',
+  'task',
+  'security_role',
+  'run',
+  'conversation',
+  'conflict',
+  'migration',
+  'release',
+  'primitive',
+]);
 const PROTOCOL_PATHS = new Set([
   'references/ssss-spec.md',
   'references/admin-protocol-evolution-policy.md',
   'references/user-local-optimizer-boundary-policy.md',
 ]);
 
+/** Source modules allowed to touch derived / non-canonical state without kernel. */
+const DIRECT_WRITE_APPROVED = [
+  'src/core/operation-validator.mjs',
+  'src/core/ssss-kernel-bridge.mjs',
+  'src/core/validated-write.mjs',
+  'src/core/vault.mjs',
+  'src/core/surface.mjs',
+  'src/core/blackboard.mjs',
+  'src/core/steering.mjs',
+  'src/core/logger.mjs',
+  'src/core/daemon-control.mjs',
+  'src/core/snapshot.mjs',
+];
+
 let cachedEngine = null;
 let cachedRegistryKey = '';
 
 export function getKernelMode() {
   const mode = (process.env.TR_SSSS_KERNEL_MODE || 'legacy').toLowerCase();
-  if (['legacy', 'shadow', 'kernel-low-risk', 'kernel'].includes(mode)) return mode;
+  if (['legacy', 'shadow', 'kernel-low-risk', 'kernel-core', 'kernel'].includes(mode)) return mode;
   return 'legacy';
 }
 
@@ -49,6 +79,7 @@ export function inventorySummary() {
     host_only_types: listHostOnlyTypes(),
     missing_local_core_schemas: listMissingCoreSchemas(),
     low_risk_types: [...LOW_RISK_TYPES],
+    core_route_types: [...CORE_ROUTE_TYPES],
   };
 }
 
@@ -83,19 +114,27 @@ export function mapTrPrincipal(envelope, callOptions = {}, vaultRoot = '') {
   }
 
   // Map TR write:* style permissions into capability wildcards the package authorizer understands.
+  // Package kernel may require either local (`memory:create`) or qualified (`ssss:memory:create`) IDs.
   const expanded = new Set(capabilities);
+  const addTypeCaps = (type) => {
+    for (const action of ['*', 'create', 'replace', 'patch', 'delete', 'event', 'append']) {
+      expanded.add(`${type}:${action}`);
+      expanded.add(`ssss:${type}:${action}`);
+    }
+  };
   for (const perm of capabilities) {
     if (perm === 'write:*' || perm === '*:*') expanded.add('*:*');
-    if (perm.startsWith('write:')) {
-      const type = perm.slice('write:'.length);
-      expanded.add(`${type}:*`);
-      expanded.add(`${type}:create`);
-      expanded.add(`${type}:replace`);
-      expanded.add(`${type}:patch`);
-      expanded.add(`${type}:delete`);
-      expanded.add(`${type}:event`);
+    if (perm.startsWith('write:')) addTypeCaps(perm.slice('write:'.length));
+    // Also expand bare type wildcards / actions already present.
+    const match = /^([a-z][a-z0-9_-]*):([a-z*].*)$/i.exec(perm);
+    if (match) {
+      expanded.add(perm);
+      expanded.add(`ssss:${perm}`);
+      if (match[2] === '*') addTypeCaps(match[1]);
     }
   }
+  // Optimizer convenience: memory mutations.
+  if (role === 'optimizer') addTypeCaps('memory');
 
   return {
     id: `tr-role:${role}`,
@@ -167,6 +206,10 @@ function declaredTypeFromEnvelope(envelope) {
       return null;
     }
   }
+  if (envelope?.type === 'patch' || envelope?.type === 'delete') {
+    // Caller may pass resolved type; otherwise unknown until kernel reads the file.
+    return envelope.primitive_type || null;
+  }
   return null;
 }
 
@@ -175,12 +218,102 @@ export function isLowRiskEnvelope(envelope) {
   return declared ? LOW_RISK_TYPES.has(declared) : false;
 }
 
+export function isCoreRouteEnvelope(envelope) {
+  const declared = declaredTypeFromEnvelope(envelope);
+  return declared ? CORE_ROUTE_TYPES.has(declared) : false;
+}
+
 export function isProtocolPath(vfsPath = '') {
   const cleaned = String(vfsPath).replace(/^\/+/, '');
   if (PROTOCOL_PATHS.has(cleaned)) return true;
   if (cleaned.startsWith('fixtures/')) return true;
   if (cleaned.endsWith('schema.mjs') || cleaned.endsWith('schema.spec.mjs')) return true;
   return false;
+}
+
+function stringifyDocument(data, body) {
+  // Prefer gray-matter when available; fall back to simple frontmatter dump.
+  try {
+    return matter.stringify(body || '', data);
+  } catch {
+    const yaml = Object.entries(data)
+      .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+      .join('\n');
+    return `---\n${yaml}\n---\n\n${body || ''}`;
+  }
+}
+
+/**
+ * Host preflight: satisfy package universal frontmatter + TR memory policy.
+ * Returns { envelope, warnings, errors }.
+ */
+export function prepareEnvelopeForKernel(envelope, options = {}) {
+  const warnings = [];
+  const errors = [];
+  const role = options.agentRole || envelope.actor?.role || null;
+  const now = options.clock?.() || new Date().toISOString();
+  let env = { ...envelope };
+
+  if (env.type === 'operation' && typeof env.content === 'string') {
+    let parsed;
+    try {
+      parsed = matter(env.content);
+    } catch (error) {
+      return { envelope: env, warnings, errors: [`Content parsing error: ${error.message}`] };
+    }
+    const data = { ...parsed.data };
+
+    // Package 0.9 universal frontmatter.
+    if (!data.title && data.name) data.title = data.name;
+    if (!data.description) {
+      data.description = data.title || data.name || data.slug || 'Total Recall document';
+    }
+    if (!data.timestamp) {
+      data.timestamp = data.updated || data.created || now;
+    }
+
+    if (data.type === 'memory') {
+      if (!env.dry_run) {
+        data.updated = now;
+        data.last_accessed = now;
+        if (!data.created) data.created = now;
+      }
+      // TR host overlay (schema v2 + sentiment_target).
+      const overlay = validateMemoryNode(data);
+      if (!overlay.success) errors.push(...overlay.errors);
+
+      if (role === 'optimizer') {
+        if (data.priority === 'absolute') warnings.push('Optimizer writing Tier 1 (priority: absolute) node.');
+        if (data.immutable === true) warnings.push('Optimizer writing immutable node.');
+      }
+    }
+
+    if (data.type === 'workflow') {
+      if (!data.title && data.name) data.title = data.name;
+      if (!data.name && data.title) data.name = data.title;
+    }
+
+    if (data.type === 'schema-proposal' && data.status === 'accepted') {
+      if (role !== 'admin' && role !== 'system') {
+        errors.push('Only admin may accept schema-proposals.');
+      }
+      if (!data.reviewed_by) errors.push('Accepted schema-proposals must have reviewed_by.');
+    }
+
+    env = { ...env, content: stringifyDocument(data, parsed.content) };
+  }
+
+  if (env.type === 'patch' && env.patches && typeof env.patches === 'object') {
+    const patches = { ...env.patches };
+    // Memory touch stamps on patch.
+    if (!env.dry_run && (patches.type === 'memory' || options.resolvedType === 'memory' || env.path?.includes('memory-vault/') || /^(invariants|patterns|anti-patterns|preferences|decisions|concepts|facts|lore)\//.test(env.path || ''))) {
+      patches.updated = patches.updated || now;
+      patches.last_accessed = patches.last_accessed || now;
+    }
+    env = { ...env, patches };
+  }
+
+  return { envelope: env, warnings, errors };
 }
 
 /**
@@ -196,7 +329,7 @@ export async function processViaPackageKernel(envelope, vaultRoot, options = {})
   });
 
   const role = options.agentRole || envelope.actor?.role;
-  const env = {
+  let env = {
     ...envelope,
     actor: envelope.actor || (role ? { role } : undefined),
   };
@@ -219,11 +352,40 @@ export async function processViaPackageKernel(envelope, vaultRoot, options = {})
     };
   }
 
+  const prepared = prepareEnvelopeForKernel(env, { ...options, agentRole: role });
+  if (prepared.errors.length) {
+    return {
+      success: false,
+      type: env.type,
+      operation_id: null,
+      path: env.path,
+      committed_at: null,
+      dry_run: !!env.dry_run,
+      validation: {
+        valid: false,
+        type: declaredTypeFromEnvelope(env),
+        errors: prepared.errors,
+        warnings: prepared.warnings,
+      },
+      repair: {
+        field_errors: prepared.errors.map((issue) => ({ field: '(host-policy)', issue })),
+      },
+    };
+  }
+  env = prepared.envelope;
+
   const response = await engine.processOperation(env, vaultRoot, {
     ...options,
     vaultRoot,
     principal: options.principal || mapTrPrincipal(env, options, vaultRoot),
   });
+
+  if (prepared.warnings.length && response?.validation) {
+    response.validation.warnings = [
+      ...(response.validation.warnings || []),
+      ...prepared.warnings,
+    ];
+  }
   return response;
 }
 
@@ -277,13 +439,51 @@ export function shouldRouteToKernel(envelope) {
   const mode = getKernelMode();
   if (mode === 'legacy' || mode === 'shadow') return false;
   if (mode === 'kernel') return true;
+  if (mode === 'kernel-core') return isCoreRouteEnvelope(envelope);
   if (mode === 'kernel-low-risk') return isLowRiskEnvelope(envelope);
   return false;
 }
 
-export function scanDirectCanonicalWrites(rootDir) {
-  // Package guard flags raw write patterns in host source trees.
-  return detectDirectWrites(rootDir);
+/**
+ * Scan host source for direct filesystem mutations outside approved adapters.
+ * Returns package-guard findings filtered to canonical-risk paths.
+ */
+export function scanDirectCanonicalWrites(rootDir = path.resolve('src'), options = {}) {
+  const approved = options.approved || DIRECT_WRITE_APPROVED;
+  const findings = detectDirectWrites(rootDir, { approved, ...options });
+
+  // Highlight likely canonical vault mutations (memory nodes, vault docs).
+  const CANONICAL_HINT = /memory-vault|writeNode\b|safeStringify\b|processOperation\b|atomicWrite\b/;
+  return findings.map((finding) => ({
+    ...finding,
+    severity: CANONICAL_HINT.test(finding.source) ? 'high' : 'medium',
+  }));
+}
+
+/**
+ * Modules that write memory-like markdown without going through Operation Contract.
+ * Heuristic: atomicWrite/writeNode call sites outside the approved contract surface.
+ */
+export function listUnapprovedCanonicalWriters(rootDir = path.resolve('src/core')) {
+  const approved = new Set(DIRECT_WRITE_APPROVED.map((p) => path.normalize(p)));
+  const writers = [];
+  const stack = [path.resolve(rootDir)];
+  while (stack.length) {
+    const dir = stack.pop();
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.endsWith('.spec.mjs')) continue;
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) { stack.push(absolute); continue; }
+      if (!entry.name.endsWith('.mjs')) continue;
+      const relative = path.relative(process.cwd(), absolute).split(path.sep).join('/');
+      if (approved.has(relative) || approved.has(path.normalize(relative))) continue;
+      const text = fs.readFileSync(absolute, 'utf8');
+      if (/\bwriteNode\s*\(/.test(text) || /\batomicWrite\s*\([^)]*\.md/.test(text)) {
+        writers.push(relative);
+      }
+    }
+  }
+  return writers.sort();
 }
 
 export function resolveHostDefinition(type) {

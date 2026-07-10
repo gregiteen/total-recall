@@ -119,7 +119,8 @@ export async function writeNodeValidatedAsync(node, vaultDir, options = {}) {
  * @returns {object|Promise<object>} Validation result with errors/warnings
  */
 export function validateNode(node, vaultDir) {
-  if (getKernelMode() === 'kernel' || getKernelMode() === 'kernel-low-risk') {
+  const mode = getKernelMode();
+  if (mode === 'kernel' || mode === 'kernel-core' || mode === 'kernel-low-risk') {
     return writeNodeValidatedAsync(node, vaultDir, { dryRun: true });
   }
   return writeNodeValidated(node, vaultDir, { dryRun: true });
