@@ -1,18 +1,10 @@
-# Total Recall modules
+# Total Recall modules (minimal)
 
-These folders are **not** IDE agent skills. They hold documentation and scripts that
-implement Total Recall features. The only agent skill is:
+Only files **required for operation** live here. Not IDE skills.
 
-```text
-.agent/skills/total-recall/SKILL.md
-```
+| Path | Required by |
+|------|-------------|
+| `skill-deploy/scripts/*.mjs` | `total-recall skill` CLI + REST `/api/skills` |
+| `agents/agents.yml` | Headless CLI agent dispatch (`runtime.mjs`) |
 
-| Module | Purpose |
-|--------|---------|
-| `ssss/` | SSSS memory/schema notes + validators (prefer `@ssss/cli`) |
-| `skill-deploy/` | Scripts for creating/installing/scanning user skills |
-| `agents/` | CLI agent registry (`agents.yml`) for headless dispatch |
-| `research/` | Background research API notes (optional / demoted) |
-
-User-authored skills for a repo go in `.agent/skills/<name>/` (sibling of total-recall),
-not under `total-recall/modules/`.
+Everything else was removed. Prefer `@ssss/cli` for SSSS; prefer vault + openwiki for knowledge.

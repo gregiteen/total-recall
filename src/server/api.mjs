@@ -176,7 +176,12 @@ function resolveRequestedModel(requestedModel, runtimeConfig) {
 }
 
 function ssssReferenceDir() {
-  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references');
+  const candidates = [
+    path.join(SKILLS_DIR, 'total-recall', 'references'),
+    path.join(SKILLS_DIR, 'total-recall', 'modules', 'ssss', 'references'),
+    path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references'),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
 
 function listSsssReferences(req) {
@@ -510,10 +515,14 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
         baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${compressInstructions(instructions)}`;
       }
 
-      const ssssPath = path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-ssss', 'SKILL.md');
-      if (fs.existsSync(ssssPath)) {
+      const ssssCandidates = [
+        path.join(AGENT_DIR, 'skills', 'total-recall', 'references', 'ssss-reference.md'),
+        path.join(AGENT_DIR, 'skills', 'total-recall', 'SKILL.md'),
+      ];
+      const ssssPath = ssssCandidates.find((p) => fs.existsSync(p));
+      if (ssssPath) {
         const ssssContent = fs.readFileSync(ssssPath, 'utf8');
-        baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nYou are the orchestrator of this system. Here is the architectural specification:\n${compressSsssSkill(ssssContent)}`;
+        baseSystemPrompt += `\n\n=== STRUCTURED SEMANTIC SYNTAX SYSTEM (SSSS) DOCUMENTATION ===\nPrefer @ssss/cli for mutations. Compact reference:\n${compressSsssSkill(ssssContent)}`;
       }
 
       // Load user profile — drives all personalisation and idle work

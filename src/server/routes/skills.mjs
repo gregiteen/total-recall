@@ -10,10 +10,11 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..',
 
 function resolveTrSkillScript(scriptName) {
   const candidates = [
+    path.join(AGENT_DIR, 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
+    path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
+    // legacy paths for brains not yet upgraded
     path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
-    path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
     path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
-    path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
   ];
   const found = candidates.find(candidate => fs.existsSync(candidate));
   if (!found) {

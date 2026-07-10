@@ -37,3 +37,7 @@ Refocus Total Recall on portable memory, instructions, openwiki, skill deploy ac
   SKILL.md). init no longer symlinks nested packages as IDE skills. openwiki templates
   ship; init seeds openwiki on brain create. runtime agents.yml path updated.
   skill.spec.mjs imports updated.
+- 2026-07-10 — **Modules jettisoned to operational minimum.** Removed `research/` and
+  entire `ssss/` module (docs/spec dump). Kept only:
+  `skill-deploy/scripts/{find,install,scan}-skills.mjs` and `agents/agents.yml`.
+  API SSSS docs now use `references/ssss-reference.md`.
