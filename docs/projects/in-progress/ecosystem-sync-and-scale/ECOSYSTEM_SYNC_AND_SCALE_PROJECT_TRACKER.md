@@ -5,28 +5,28 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 
 ## ⏳ Phase 1: Comprehensive UI & API Audit
 *Goal: Systematically review every single section of the app to map current data architecture, identify rendering bugs (like the recent 404s), and prepare for synchronization.*
-- [ ] **Chat**: Audit message rendering, connection to `task_runner`, and model selection fallback.
-- [ ] **Memory**: Check grid display for empty nodes and confirm `processOperation` deletes work.
-- [ ] **Vault Docs**: Verify document hydration and markdown rendering.
-- [ ] **Inbox**: Validate the conflicts and pending approvals logic.
-- [ ] **Tasks**: Ensure background scheduler properly exposes pending items.
-- [ ] **Automations**: Verify SSSS workflow triggers.
-- [ ] **Files**: Verify derived files and VFS explorer integrity.
-- [ ] **Sandbox**: Check Code Mode bindings and iframe output.
-- [ ] **Models & Agents**: Confirm model catalog and local routing logic.
-- [ ] **Health**: Validate daemon loop heartbeats.
-- [ ] **Usage & Costs**: Audit token tracking persistence.
-- [ ] **Settings**: Test environment and path configurations.
-- [ ] **API Keys**: Ensure secret storage doesn't leak into VFS (`secrets.enc` logic).
-- [ ] **Integrations**: Document missing Webhooks/API integrations.
-- [ ] **Skills Manager**: Define embedded vs global vs project skills display.
-- [ ] **Collaboration**: Check UX for multi-agent or multi-tenant workflows.
-- [ ] **Instructions**: (404 fixed, audit caching).
-- [ ] **Design Docs**: Verify OKF rendering.
-- [ ] **OKF Manager**: Ensure `@ssss/cli` bundle validation works.
-- [ ] **OpenWiki**: Ensure tree display uses correct memory nodes.
-- [ ] **Documentation**: Ensure `SKILL.md` loading logic.
-- [ ] **Sovereign Graph**: Audit semantic visualization for disconnected nodes.
+- [x] **Chat**: Audit message rendering, connection to `task_runner`, and model selection fallback.
+- [x] **Memory**: Check grid display for empty nodes and confirm `processOperation` deletes work.
+- [x] **Vault Docs**: Verify document hydration and markdown rendering.
+- [x] **Inbox**: Validate the conflicts and pending approvals logic.
+- [x] **Tasks**: Ensure background scheduler properly exposes pending items.
+- [x] **Automations**: Verify SSSS workflow triggers.
+- [x] **Files**: Verify derived files and VFS explorer integrity.
+- [x] **Sandbox**: Check Code Mode bindings and iframe output.
+- [x] **Models & Agents**: Confirm model catalog and local routing logic.
+- [x] **Health**: Validate daemon loop heartbeats.
+- [x] **Usage & Costs**: Audit token tracking persistence.
+- [x] **Settings**: Test environment and path configurations.
+- [x] **API Keys**: Ensure secret storage doesn't leak into VFS (`secrets.enc` logic).
+- [x] **Integrations**: Document missing Webhooks/API integrations.
+- [x] **Skills Manager**: Define embedded vs global vs project skills display.
+- [x] **Collaboration**: Check UX for multi-agent or multi-tenant workflows.
+- [x] **Instructions**: (404 fixed, audit caching).
+- [x] **Design Docs**: Verify OKF rendering.
+- [x] **OKF Manager**: Ensure `@ssss/cli` bundle validation works.
+- [x] **OpenWiki**: Ensure tree display uses correct memory nodes.
+- [x] **Documentation**: Ensure `SKILL.md` loading logic.
+- [x] **Sovereign Graph**: Audit semantic visualization for disconnected nodes.
 
 ## ⏳ Phase 2: Centralized Data Organization
 - [ ] Define and document global vs project skill resolution paths in the reference engine.
