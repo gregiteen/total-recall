@@ -2,7 +2,7 @@
  * src/core/search.mjs
  *
  * Canonical semantic search logic — searches vault nodes and session history
- * by meaning via Ollama embeddings. Called by both the MCP layer and REST API.
+ * by meaning via embedding vector similarity. Called by both the MCP layer and REST API.
  *
  * MCP and REST are thin wrappers; all logic lives here.
  */

@@ -1,27 +1,28 @@
-import { useState, useEffect } from "react"
-import { fetchDocs, readDoc, updateDoc, postDecision } from "../api"
+import { useState, useEffect, useCallback } from "react"
+import { fetchDocs, readDoc, updateDoc, postDecision, type VaultDocument } from "../api"
 import { DocumentTable } from "../components/DocumentTable"
 
 export default function InboxPage({ activeBrainId }: { activeBrainId?: string }) {
-  const [items, setItems] = useState<any[]>([])
+  const [items, setItems] = useState<VaultDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const data = await fetchDocs(activeBrainId, { status: "pending_approval" })
       setItems(data.docs)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load the approval inbox")
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeBrainId])
 
   useEffect(() => {
-    loadData()
-  }, [activeBrainId])
+    const timer = window.setTimeout(() => { void loadData() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadData])
 
   const handleDecision = async (path: string, action: string) => {
     try {
@@ -38,8 +39,8 @@ export default function InboxPage({ activeBrainId }: { activeBrainId?: string })
         await updateDoc(path, newBody, activeBrainId)
       }
       loadData()
-    } catch (err: any) {
-      alert("Decision failed: " + err.message)
+    } catch (err: unknown) {
+      alert("Decision failed: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -63,7 +64,7 @@ export default function InboxPage({ activeBrainId }: { activeBrainId?: string })
                 { key: 'type', header: 'Type', render: (d) => <span style={{ opacity: 0.6 }}>{d.type}</span> },
                 { key: 'name', header: 'Name', render: (d) => d.name },
                 { key: 'status', header: 'Status', render: (d) => <span style={{ fontSize: '0.8em', background: 'rgba(234,179,8,0.15)', color: '#eab308', padding: '2px 6px', borderRadius: '4px' }}>{d.status || 'pending'}</span> },
-                { key: 'updated', header: 'Last Updated', render: (d) => new Date(d.updatedAt).toLocaleDateString() },
+                { key: 'updated', header: 'Last Updated', render: (d) => d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : '-' },
                 { key: 'actions', header: 'Actions', render: (d) => (
                     <>
                       <button onClick={() => handleDecision(d.path, 'approved')} style={{ marginRight: '10px', background: '#22c55e', border: 'none', color: 'white', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}>Approve</button>

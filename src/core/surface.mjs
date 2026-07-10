@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { loadSkills, atomicWrite, walkMd } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import matter from 'gray-matter';
+import { logger } from './logger.mjs';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
@@ -427,6 +428,19 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
       }
     } catch (err) {
       console.error('Error in skills injection:', err);
+    }
+
+    // 4. Inject OpenWiki Codebase Summary
+    try {
+      const baseDir = path.dirname(path.dirname(skillsDir));
+      const quickstartPath = path.join(baseDir, 'openwiki', 'quickstart.md');
+      if (fs.existsSync(quickstartPath)) {
+        const quickstart = fs.readFileSync(quickstartPath, 'utf8');
+        const summary = quickstart.length > 2500 ? quickstart.substring(0, 2500) + '\n... (truncated)' : quickstart;
+        combined += `\n\n## OpenWiki Codebase Summary\n\nThe following is the generated codebase overview from OpenWiki:\n\n${summary}`;
+      }
+    } catch (err) {
+      console.error('Error injecting OpenWiki:', err);
     }
   }
 

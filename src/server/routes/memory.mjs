@@ -32,6 +32,7 @@ import {
   serverError,
   sanitizeNode,
   resolveVaultFromQuery,
+  resolveAllVaultsFromQuery,
 } from './_shared.mjs';
 
 const router = express.Router();
@@ -109,9 +110,22 @@ const PASSTHROUGH_FIELDS = [
 
 router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
-    let list = nodes(vaultDir);
+    const vaultDirs = resolveAllVaultsFromQuery(req);
+    let list = [];
 
+    // Track unique slugs so we don't count shadowing duplicates twice
+    const seenSlugs = new Set();
+
+    // Iterate backwards so most specific (last in list) is seen first
+    for (let i = vaultDirs.length - 1; i >= 0; i--) {
+      const vaultList = nodes(vaultDirs[i]);
+      for (const n of vaultList) {
+        if (!seenSlugs.has(n.slug)) {
+          seenSlugs.add(n.slug);
+          list.push(n);
+        }
+      }
+    }
     const { q, category, tag, status, limit = '200', offset = '0' } = req.query;
 
     if (q) {
@@ -138,13 +152,26 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
 
 router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
-    const list = nodes(vaultDir);
+    const vaultDirs = resolveAllVaultsFromQuery(req);
     const byCategory = {};
-    for (const n of list) {
-      byCategory[n.category] = (byCategory[n.category] || 0) + 1;
+    let total = 0;
+
+    // Track unique slugs so we don't count shadowing duplicates twice
+    const seenSlugs = new Set();
+
+    // Iterate backwards so most specific (last in list) is seen first
+    for (let i = vaultDirs.length - 1; i >= 0; i--) {
+      const list = nodes(vaultDirs[i]);
+      for (const n of list) {
+        if (!seenSlugs.has(n.slug)) {
+          seenSlugs.add(n.slug);
+          byCategory[n.category] = (byCategory[n.category] || 0) + 1;
+          total++;
+        }
+      }
     }
-    res.json({ total: list.length, by_category: byCategory });
+
+    res.json({ total, by_category: byCategory });
   } catch (err) {
     serverError(res, err);
   }
@@ -152,10 +179,16 @@ router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, 
 
 router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
-    const node = nodes(vaultDir).find(n => n.slug === req.params.slug);
-    if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
-    res.json(sanitizeNode(node));
+    const vaultDirs = resolveAllVaultsFromQuery(req);
+
+    for (const vaultDir of vaultDirs) {
+      const node = nodes(vaultDir).find(n => n.slug === req.params.slug);
+      if (node) {
+        return res.json(sanitizeNode(node));
+      }
+    }
+
+    return notFound(res, `Memory node not found: ${req.params.slug}`);
   } catch (err) {
     serverError(res, err);
   }
@@ -210,7 +243,7 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    const vaultResult = writeNodeValidated(node, vaultDir);
+    const vaultResult = writeNodeValidated(node, targetVaultDir);
     if (!vaultResult.success) {
       return res.status(422).json({
         error: 'Validation failed',
@@ -218,8 +251,8 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
         repair: vaultResult.repair,
       });
     }
-    invalidate(vaultDir);
-    triggerMutation(node, vaultDir);
+    invalidate(targetVaultDir);
+    triggerMutation(node, targetVaultDir);
     res.json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -228,8 +261,18 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
 
 router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
-    const existing = nodes(vaultDir).find(n => n.slug === req.params.slug);
+    const vaultDirs = resolveAllVaultsFromQuery(req);
+    let existing;
+    let targetVaultDir = vaultDirs[vaultDirs.length - 1]; // Default to most specific
+
+    for (const vaultDir of vaultDirs) {
+      existing = nodes(vaultDir).find(n => n.slug === req.params.slug);
+      if (existing) {
+        targetVaultDir = vaultDir;
+        break;
+      }
+    }
+
     if (!existing) return notFound(res, `Memory node not found: ${req.params.slug}`);
 
     const { title, category, content, body, tags } = req.body || {};
@@ -268,15 +311,24 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
 
 router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
-    const list = nodes(vaultDir);
-    const node = list.find(n => n.slug === req.params.slug);
+    const vaultDirs = resolveAllVaultsFromQuery(req);
+    let node;
+    let targetVaultDir;
+
+    for (const vaultDir of vaultDirs) {
+      node = nodes(vaultDir).find(n => n.slug === req.params.slug);
+      if (node) {
+        targetVaultDir = vaultDir;
+        break;
+      }
+    }
+
     if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
 
     if (node._filePath && fs.existsSync(node._filePath)) {
       fs.unlinkSync(node._filePath);
     } else {
-      for (const file of walkMd(vaultDir)) {
+      for (const file of walkMd(targetVaultDir)) {
         const raw = fs.readFileSync(file, 'utf8');
         if (raw.includes(`slug: ${req.params.slug}`)) {
           fs.unlinkSync(file);
@@ -284,8 +336,8 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
         }
       }
     }
-    invalidate(vaultDir);
-    triggerMutation(null, vaultDir);
+    invalidate(targetVaultDir);
+    triggerMutation(null, targetVaultDir);
     res.json({ deleted: true, slug: req.params.slug });
   } catch (err) {
     serverError(res, err);

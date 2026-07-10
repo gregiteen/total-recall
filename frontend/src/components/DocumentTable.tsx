@@ -12,7 +12,7 @@ export interface DocumentTableProps<T> {
   emptyMessage?: string;
 }
 
-export function DocumentTable<T>({ data, columns, emptyMessage = "No documents found." }: DocumentTableProps<T>) {
+export function DocumentTable<T extends Record<string, unknown>>({ data, columns, emptyMessage = "No documents found." }: DocumentTableProps<T>) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', marginTop: '10px' }}>
       <thead>
@@ -25,11 +25,11 @@ export function DocumentTable<T>({ data, columns, emptyMessage = "No documents f
         </tr>
       </thead>
       <tbody>
-        {data.map((row: any, i) => (
-          <tr key={row.id || row.path || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        {data.map((row, i) => (
+          <tr key={String(row.id || row.path || i)} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
             {columns.map((col, idx) => (
               <td key={col.key} style={{ padding: '10px 0', textAlign: idx === columns.length - 1 && col.header === 'Actions' ? 'right' : 'left' }}>
-                {col.render ? col.render(row) : (row[col.key] || '-')}
+                {col.render ? col.render(row) : String(row[col.key] || '-')}
               </td>
             ))}
           </tr>

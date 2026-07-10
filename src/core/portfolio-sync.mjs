@@ -4,6 +4,8 @@ import { spawnSync } from 'child_process';
 import http from 'http';
 import https from 'https';
 import { pipeline } from 'stream/promises';
+import { createHash } from 'crypto';
+import { createEngine } from '@ssss/cli/engine';
 import { portfolioSync } from './config.mjs';
 import { logger } from './logger.mjs';
 
@@ -41,6 +43,38 @@ function pruneAssets(assetsDir, keepCount) {
   }
 }
 
+function portfolioRegistryDir() {
+  return process.env.PORTFOLIO_REGISTRY_DIR
+    || path.join(process.env.HOME || '/Users/greg', 'Github', 'portfolio-site', 'vault-registry');
+}
+
+/**
+ * `ssss import` currently provisions against its bundled core registry and
+ * ignores an extension registry. Portfolio exports contain its own primitives,
+ * so replay each verified bundle document through the reference engine with the
+ * source registry explicitly bound instead.
+ */
+export function importPortfolioBundle(bundle, vaultDir, registryDir) {
+  const files = Array.isArray(bundle?.files) ? bundle.files : [];
+  const engine = createEngine({ registryDir });
+  const failures = [];
+  for (const file of files) {
+    const result = engine.processOperation({
+      type: 'operation',
+      idempotency_key: createHash('sha256').update(file.path).update('\n').update(file.content).digest('hex'),
+      workspace_id: 'portfolio-site',
+      path: file.path,
+      content: file.content,
+      actor: { role: 'system' },
+    }, vaultDir);
+    if (!result.success) {
+      failures.push(`${file.path}: ${(result.validation?.errors || ['unknown operation failure']).join('; ')}`);
+    }
+  }
+  if (failures.length) throw new Error(`Bundle import failed: ${failures.join(' | ')}`);
+  return { imported: files.length };
+}
+
 export async function runSync() {
   if (!portfolioSync.enabled) return;
 
@@ -62,33 +96,31 @@ export async function runSync() {
   try {
     // 1. Fetch export-bundle
     const bundleUrl = `${portfolioSync.baseUrl.replace(/\/+$/, '')}/api/admin/export-bundle`;
-    const tmpBundle = path.join(tenantDir, 'tmp-bundle.json');
+    const tmpBundle = path.join(tenantDir, `tmp-bundle-${process.pid}-${Date.now()}.json`);
     const bundleStream = fs.createWriteStream(tmpBundle);
     await fetchExport(bundleUrl, token, bundleStream);
 
     // 2. Validate it
+    const registryDir = portfolioRegistryDir();
     const ssssCmd = path.join(process.cwd(), 'node_modules', '.bin', 'ssss');
     let validateCmd = 'ssss';
     if (fs.existsSync(ssssCmd)) {
       validateCmd = ssssCmd;
     }
-    const valRes = spawnSync(validateCmd, ['validate', tmpBundle, '--registry', path.join(process.env.HOME || '/Users/greg', 'Github', 'portfolio-site', 'vault-registry')], { encoding: 'utf8' });
+    const valRes = spawnSync(validateCmd, ['validate', tmpBundle, '--registry', registryDir], { encoding: 'utf8' });
     if (valRes.status !== 0) {
       throw new Error(`Bundle validation failed: ${valRes.stderr}`);
     }
     
     // Parse bundle for nodeCounts (primitive_inventory)
     const bundleContent = JSON.parse(fs.readFileSync(tmpBundle, 'utf8'));
-    const nodeCounts = bundleContent.primitive_inventory || {};
+    const nodeCounts = bundleContent.manifest?.primitive_inventory || bundleContent.primitive_inventory || {};
 
     // 3. Import
     if (!fs.existsSync(portfolioSync.vaultDir)) {
       fs.mkdirSync(portfolioSync.vaultDir, { recursive: true });
     }
-    const impRes = spawnSync(validateCmd, ['import', tmpBundle, '--vault', portfolioSync.vaultDir, '--registry', path.join(process.env.HOME || '/Users/greg', 'Github', 'portfolio-site', 'vault-registry')], { encoding: 'utf8' });
-    if (impRes.status !== 0) {
-      throw new Error(`Bundle import failed: ${impRes.stderr}`);
-    }
+    importPortfolioBundle(bundleContent, portfolioSync.vaultDir, registryDir);
 
     // 4. Fetch export-assets
     const assetsUrl = `${portfolioSync.baseUrl.replace(/\/+$/, '')}/api/admin/export-assets`;

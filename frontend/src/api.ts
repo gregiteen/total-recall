@@ -845,7 +845,31 @@ export async function fetchDesignDocContent(path: string): Promise<{ content: st
   return res.json()
 }
 
-export async function fetchDocs(brain?: string, params?: Record<string, string>) {
+export interface VaultDocument extends Record<string, unknown> {
+  id?: string
+  type?: string
+  name?: string
+  path: string
+  status?: string
+  portability?: string
+  updatedAt?: string | number
+}
+
+export interface DocsResponse {
+  docs: VaultDocument[]
+}
+
+export interface DocumentResponse {
+  raw: string
+}
+
+export interface SavedView {
+  id: string
+  name: string
+  filters: Record<string, string>
+}
+
+export async function fetchDocs(brain?: string, params?: Record<string, string>): Promise<DocsResponse> {
   const p = new URLSearchParams()
   if (brain) p.set('brain', brain)
   if (params) {
@@ -856,7 +880,7 @@ export async function fetchDocs(brain?: string, params?: Record<string, string>)
   return res.json()
 }
 
-export async function readDoc(path: string, brain?: string) {
+export async function readDoc(path: string, brain?: string): Promise<DocumentResponse> {
   const p = new URLSearchParams({ path })
   if (brain) p.set('brain', brain)
   const res = await apiFetch(`/api/docs/read?${p.toString()}`)
@@ -892,7 +916,7 @@ export async function deleteDoc(path: string, brain?: string) {
   return res.json()
 }
 
-export async function fetchViews() {
+export async function fetchViews(): Promise<SavedView[]> {
   const res = await apiFetch('/api/views')
   if (!res.ok) throw new Error('Failed to fetch views')
   return res.json()
@@ -914,7 +938,7 @@ export async function deleteView(id: string) {
   return res.json()
 }
 
-export async function postDecision(id: string, action: string, notes?: string): Promise<{ success: boolean; droplet_response?: any }> {
+export async function postDecision(id: string, action: string, notes?: string): Promise<{ success: boolean; droplet_response?: unknown }> {
   const res = await apiFetch(`${API_BASE}/api/sync/portfolio/proposals/${id}/decision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -926,4 +950,3 @@ export async function postDecision(id: string, action: string, notes?: string): 
   }
   return res.json()
 }
-

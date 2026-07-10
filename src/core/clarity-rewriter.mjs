@@ -106,7 +106,7 @@ export async function runClarityReview(slug, { vaultDir, inboxDir, runtimeConfig
     fs.mkdirSync(inboxDir, { recursive: true });
   }
 
-  const proposalSlug = `clarity-rewrite-${slug}-${crypto.randomBytes(3).toString('hex')}`;
+  const proposalSlug = `clarity-rewrite-${slug}`;
   const now = new Date().toISOString();
 
   const proposalFrontmatter = {
@@ -229,7 +229,7 @@ export async function runStalenessCheck(slug, { vaultDir, queueDir, runtimeConfi
       fs.mkdirSync(queueDir, { recursive: true });
     }
 
-    const taskSlug = `refresh-${slug}-${crypto.randomBytes(3).toString('hex')}`;
+    const taskSlug = `refresh-${slug}`;
     const priority = verdict === 'LIKELY_OUTDATED' ? 70 : 40;
 
     const taskData = {
@@ -342,7 +342,7 @@ export async function runFactSeeker({ vaultDir, queueDir, runtimeConfig }) {
   }
 
   for (const gap of gaps.filter(g => g.priority >= 3)) {
-    const taskSlug = `fact-seeker-${crypto.randomBytes(4).toString('hex')}`;
+    const taskSlug = `fact-seeker-${crypto.createHash('md5').update(gap.query || gap.topic || '').digest('hex').slice(0, 8)}`;
 
     const taskData = {
       type: 'task',
@@ -519,7 +519,7 @@ export async function runCutoffAudit({ vaultDir, queueDir, runtimeConfig }) {
 
     // Queue a verification task for each claim
     for (const claim of intrinsicClaims.slice(0, 3)) {
-      const taskSlug = `cutoff-verify-${node.slug}-${crypto.randomBytes(3).toString('hex')}`;
+      const taskSlug = `cutoff-verify-${node.slug}`;
 
       const taskData = {
         type: 'task',
@@ -679,7 +679,7 @@ export async function writeCorrection(originalSlug, researchEvidence, { vaultDir
   }
 
   // Write the correction as a new draft node
-  const correctionSlug = `correction-${originalSlug}-${crypto.randomBytes(4).toString('hex')}`;
+  const correctionSlug = `correction-${originalSlug}-${crypto.createHash('md5').update(correction.was_wrong_about || correction.content || originalSlug).digest('hex').slice(0, 8)}`;
   const now = new Date().toISOString();
 
   const correctionFrontmatter = {
