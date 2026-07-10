@@ -21,35 +21,18 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import matter from 'gray-matter';
-import { processOperation } from './operation-validator.mjs';
+import { processOperation, processOperationAsync } from './operation-validator.mjs';
 import { safeStringify } from './vault.mjs';
 import { invalidate } from './vault-cache.mjs';
+import { getKernelMode } from './ssss-kernel-bridge.mjs';
 
-/**
- * Write a memory node through the full §6 Operation Contract pipeline.
- *
- * @param {object} node - The memory node object (slug, category, title, body, etc.)
- * @param {string} vaultDir - Absolute path to the vault directory
- * @param {object} [options]
- * @param {string} [options.agentRole='admin'] - Agent authorization role
- * @param {string} [options.workspaceId='default'] - Workspace scope
- * @param {string} [options.idempotencyKey] - Idempotency key (auto-generated if omitted)
- * @param {string} [options.leaseStore] - Path to lease store directory
- * @param {string} [options.eventLogDir] - Path to event log directory
- * @param {boolean} [options.dryRun=false] - Validate without committing
- * @returns {object} Operation response (§6.4)
- */
-export function writeNodeValidated(node, vaultDir, options = {}) {
+function buildEnvelope(node, options = {}) {
   const {
-    agentRole = 'admin',
     workspaceId = 'default',
     idempotencyKey,
-    leaseStore,
-    eventLogDir,
     dryRun = false,
   } = options;
 
-  // Build the Markdown content from the node object
   const { body, _filePath, ...frontmatter } = node;
   if (!frontmatter.type) frontmatter.type = 'memory';
   if (!frontmatter.schema_version) frontmatter.schema_version = 2;
@@ -57,13 +40,11 @@ export function writeNodeValidated(node, vaultDir, options = {}) {
   if (!frontmatter.last_accessed) frontmatter.last_accessed = new Date().toISOString();
 
   const content = safeStringify(body || '', frontmatter);
-
-  // Build the §6.1 envelope
   const category = frontmatter.category || 'uncategorized';
   const slug = frontmatter.slug || 'unnamed';
   const vfsPath = `${category}/${slug}.md`;
 
-  const envelope = {
+  return {
     type: 'operation',
     idempotency_key: idempotencyKey || crypto.randomUUID(),
     path: vfsPath,
@@ -71,15 +52,57 @@ export function writeNodeValidated(node, vaultDir, options = {}) {
     content,
     dry_run: dryRun,
   };
+}
 
-  // Run the full §6.3 pipeline
+/**
+ * Write a memory node through the full §6 Operation Contract pipeline.
+ * Sync legacy path — use {@link writeNodeValidatedAsync} under kernel modes.
+ *
+ * @param {object} node - The memory node object (slug, category, title, body, etc.)
+ * @param {string} vaultDir - Absolute path to the vault directory
+ * @param {object} [options]
+ * @returns {object} Operation response (§6.4)
+ */
+export function writeNodeValidated(node, vaultDir, options = {}) {
+  const {
+    agentRole = 'admin',
+    leaseStore,
+    eventLogDir,
+    dryRun = false,
+  } = options;
+
+  const envelope = buildEnvelope(node, options);
   const result = processOperation(envelope, vaultDir, {
     agentRole,
     leaseStore,
     eventLogDir,
   });
 
-  // Invalidate vault cache on successful commit
+  if (result.success && !dryRun) {
+    invalidate(vaultDir);
+  }
+
+  return result;
+}
+
+/**
+ * Async write path that can use the SSSS 0.9 package kernel when enabled.
+ */
+export async function writeNodeValidatedAsync(node, vaultDir, options = {}) {
+  const {
+    agentRole = 'admin',
+    leaseStore,
+    eventLogDir,
+    dryRun = false,
+  } = options;
+
+  const envelope = buildEnvelope(node, options);
+  const result = await processOperationAsync(envelope, vaultDir, {
+    agentRole,
+    leaseStore,
+    eventLogDir,
+  });
+
   if (result.success && !dryRun) {
     invalidate(vaultDir);
   }
@@ -93,8 +116,11 @@ export function writeNodeValidated(node, vaultDir, options = {}) {
  *
  * @param {object} node - The memory node object
  * @param {string} vaultDir - Absolute path to the vault directory
- * @returns {object} Validation result with errors/warnings
+ * @returns {object|Promise<object>} Validation result with errors/warnings
  */
 export function validateNode(node, vaultDir) {
+  if (getKernelMode() === 'kernel' || getKernelMode() === 'kernel-low-risk') {
+    return writeNodeValidatedAsync(node, vaultDir, { dryRun: true });
+  }
   return writeNodeValidated(node, vaultDir, { dryRun: true });
 }
