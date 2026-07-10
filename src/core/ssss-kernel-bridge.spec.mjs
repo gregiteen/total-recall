@@ -261,6 +261,8 @@ describe('SSSS 0.9 direct-write detection', () => {
 describe('SSSS 0.9 shadow comparison on core fixtures', () => {
   it('compares local legacy verdicts with package kernel dry-runs for create fixtures', async () => {
     const vault = tmpVault();
+    const prev = process.env.TR_SSSS_KERNEL_MODE;
+    process.env.TR_SSSS_KERNEL_MODE = 'legacy';
     try {
       // Apply only pure create-style fixtures that do not depend on prior state.
       const createFixtures = fixtures.filter((f) =>
@@ -268,7 +270,7 @@ describe('SSSS 0.9 shadow comparison on core fixtures', () => {
       );
       for (const f of createFixtures) {
         const request = JSON.parse(JSON.stringify(f.request));
-        // Legacy path still uses processOperation (default legacy mode).
+        // Local legacy path (explicit mode) vs package kernel dry-run.
         const local = processOperation(request, vault, { agentRole: request.actor?.role || 'admin' });
         const { comparison } = await shadowCompare(request, vault, local, {
           agentRole: request.actor?.role || 'admin',
@@ -285,6 +287,8 @@ describe('SSSS 0.9 shadow comparison on core fixtures', () => {
         }
       }
     } finally {
+      if (prev === undefined) delete process.env.TR_SSSS_KERNEL_MODE;
+      else process.env.TR_SSSS_KERNEL_MODE = prev;
       fs.rmSync(vault, { recursive: true, force: true });
     }
   });

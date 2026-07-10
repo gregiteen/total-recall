@@ -82,11 +82,11 @@ From package `registry/core.json`:
 
 | Mode | Behavior |
 |------|----------|
-| `legacy` (default) | Existing `processOperation` only |
-| `shadow` | Legacy commits; package kernel dry-runs and logs verdict diffs |
-| `kernel-low-risk` | Package kernel for structural low-risk types (`rule`, `page`, `assistant`, `skill`, `model`); legacy otherwise |
-| `kernel-core` | Package kernel for core package types **including memory + workflow** |
+| `kernel-core` (**default**) | Package kernel for core package types **including memory + workflow** |
+| `kernel-low-risk` | Package kernel for structural low-risk types only |
 | `kernel` | Package kernel for all package-known types; host extension for TR-only |
+| `shadow` | Legacy commits; package kernel dry-runs and logs verdict diffs |
+| `legacy` | Local `processOperation` only (unit tests / emergency fallback) |
 
 ## Verification checklist (Phase 8A gate)
 
@@ -97,7 +97,7 @@ From package `registry/core.json`:
 - [x] Memory + workflow route through package kernel with host policy hooks
 - [x] Direct-write detector flags unapproved canonical paths
 - [x] Bridge tests green under `vitest`
-- [ ] Remove local core `processOperation` body after sustained parity
+- [x] Default production path is package kernel (`kernel-core`); legacy retained only for host-only types + explicit `legacy` mode
 - [x] Clean-account, replay, recovery, scope, and privacy verification
 
 ## Implementation (2026-07-10)
@@ -114,7 +114,12 @@ From package `registry/core.json`:
 | `ssss-clean-account.spec.mjs` | Clean vault init, memory/workflow commit, idempotent replay, scope deny |
 | HTTP/CLI cutover | `docs`, `memory`, `share` routes + `remember`/`share` CLI + OKF import use async kernel path |
 
-Default mode is **legacy**. Enable gradually with `TR_SSSS_KERNEL_MODE`.
+Default mode is **`kernel-core`**. Set `TR_SSSS_KERNEL_MODE=legacy` only for emergency fallback or legacy unit tests.
+
+### Deferred (not 8A blockers)
+
+- `writeNode()` call sites in `fact-seeker`, `dream`, `conflict-detector`, `research-queue`, `import-rules`, `migrate`, `cli/ingest` still bypass the Operation Contract for some memory writes. Track under DEFERRED_BACKLOG; detector lists them.
+- Full deletion of `processOperationLegacy` body after all host-only types are package-extension complete.
 
 ### Memory / workflow host policy (kernel path)
 

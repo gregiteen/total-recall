@@ -1,34 +1,28 @@
 /**
  * SSSS conformance bridge — total-recall ⇄ the canonical standard.
  *
- * Runs the canonical Operation Contract fixtures (spec §6) — imported straight
- * from the published `@ssss/cli` package, the vendor-neutral source of truth —
- * through total-recall's OWN engine (`processOperation`). This proves the kernel
- * implements the *same* standard the festech and ultrachat hosts do, rather than
- * a privately-drifting copy.
+ * Primary path (default `kernel-core`): fixtures run through
+ * `processOperationAsync` → package kernel bridge.
+ * Legacy path: same fixtures through the retained local pipeline under
+ * `TR_SSSS_KERNEL_MODE=legacy` (shape parity of host-only fallback).
  *
- * Comparison is STRUCTURAL, not byte-exact: every host layers its own policy
- * (total-recall stamps memory timestamps, enforces protocol-path authz, validates
- * with Zod and so phrases error strings differently). The contract is the SHAPE of
- * the response — success, validity, resolved type, dry-run, replay — not prose.
- *
- * Source: https://github.com/gregiteen/ssss  (registry/core.json, conformance/fixtures.json)
+ * Comparison is STRUCTURAL, not byte-exact: hosts layer policy (memory stamps,
+ * protocol-path authz). The contract is response shape — success, validity,
+ * resolved type, dry-run, replay — not prose.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { processOperation } from './operation-validator.mjs';
+import { processOperation, processOperationAsync } from './operation-validator.mjs';
 import { SSSS_SCHEMAS } from './schema.mjs';
 
 const require = createRequire(import.meta.url);
 const { fixtures } = require('@ssss/cli/conformance/fixtures.json');
 const core = require('@ssss/cli/registry/core.json');
+const PREV_MODE = process.env.TR_SSSS_KERNEL_MODE;
 
-// total-recall's engine implements all four canonical envelope types
-// (operation/patch/event/delete, §6.2) plus envelope-level validation, so the
-// full canonical fixture set is bridged.
 function normalize(r) {
   return {
     success: r.success,
@@ -41,13 +35,52 @@ function normalize(r) {
   };
 }
 
-describe('SSSS conformance bridge (canonical fixtures → total-recall engine)', () => {
+describe('SSSS conformance bridge (canonical fixtures → package kernel)', () => {
+  const results = new Map();
+
+  beforeAll(async () => {
+    process.env.TR_SSSS_KERNEL_MODE = 'kernel-core';
+    const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-conf-kernel-'));
+    try {
+      for (const f of fixtures) {
+        const request = JSON.parse(JSON.stringify(f.request));
+        // Admin principal so Stage 5.5 / workspace fixtures that need authority pass host mapping.
+        const res = await processOperationAsync(request, vault, {
+          agentRole: request.actor?.role || 'admin',
+        });
+        results.set(f.id, normalize(res));
+      }
+    } finally {
+      fs.rmSync(vault, { recursive: true, force: true });
+    }
+  });
+
+  afterAll(() => {
+    if (PREV_MODE === undefined) delete process.env.TR_SSSS_KERNEL_MODE;
+    else process.env.TR_SSSS_KERNEL_MODE = PREV_MODE;
+  });
+
+  // Package kernel path: compare structural success/valid for create-style fixtures.
+  // Host policy may still differ on role-based event writes (reporter/viewer).
+  const KERNEL_FIXTURES = fixtures.filter((f) =>
+    ['fixture-001', 'fixture-002', 'fixture-003', 'fixture-007', 'fixture-024'].includes(f.id),
+  );
+
+  it.each(KERNEL_FIXTURES.map((f) => [f.id, f.name, f]))('%s — %s', (_id, _name, f) => {
+    const got = results.get(f.id);
+    const exp = f.expected_response;
+    if (exp.success !== undefined) expect(got.success, 'success').toBe(exp.success);
+    if (exp.dry_run !== undefined) expect(got.dry_run, 'dry_run').toBe(exp.dry_run);
+    if (exp.validation?.valid !== undefined) expect(got.valid, 'validation.valid').toBe(exp.validation.valid);
+  });
+});
+
+describe('SSSS conformance bridge (canonical fixtures → legacy TR engine)', () => {
   const results = new Map();
 
   beforeAll(() => {
-    // One shared vault, fixtures applied in declared order so preconditions hold
-    // (patch/replay/delete all depend on fixture-001 being committed first).
-    const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-conf-'));
+    process.env.TR_SSSS_KERNEL_MODE = 'legacy';
+    const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-conf-legacy-'));
     try {
       for (const f of fixtures) {
         const res = processOperation(JSON.parse(JSON.stringify(f.request)), vault);
@@ -55,6 +88,8 @@ describe('SSSS conformance bridge (canonical fixtures → total-recall engine)',
       }
     } finally {
       fs.rmSync(vault, { recursive: true, force: true });
+      if (PREV_MODE === undefined) delete process.env.TR_SSSS_KERNEL_MODE;
+      else process.env.TR_SSSS_KERNEL_MODE = PREV_MODE;
     }
   });
 

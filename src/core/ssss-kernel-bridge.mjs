@@ -2,11 +2,11 @@
  * SSSS 0.9 package kernel bridge for Total Recall.
  *
  * Modes (env TR_SSSS_KERNEL_MODE):
- *   legacy          — local processOperation only (default)
- *   shadow          — legacy commits; package kernel dry-runs for verdict diffs
- *   kernel-low-risk — package kernel for structural low-risk core types
- *   kernel-core     — package kernel for core package types (incl. memory/workflow)
+ *   kernel-core     — **default** — package kernel for core types (incl. memory/workflow)
+ *   kernel-low-risk — package kernel for structural low-risk core types only
  *   kernel          — package kernel for all package-known types
+ *   shadow          — legacy commits; package kernel dry-runs for verdict diffs
+ *   legacy          — local processOperation only (fallback / unit tests)
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -68,9 +68,11 @@ let cachedEngine = null;
 let cachedRegistryKey = '';
 
 export function getKernelMode() {
-  const mode = (process.env.TR_SSSS_KERNEL_MODE || 'legacy').toLowerCase();
+  // Default to package-kernel cutover for core types (memory/workflow/low-risk).
+  // Set TR_SSSS_KERNEL_MODE=legacy only when deliberately testing the old pipeline.
+  const mode = (process.env.TR_SSSS_KERNEL_MODE || 'kernel-core').toLowerCase();
   if (['legacy', 'shadow', 'kernel-low-risk', 'kernel-core', 'kernel'].includes(mode)) return mode;
-  return 'legacy';
+  return 'kernel-core';
 }
 
 export function inventorySummary() {
