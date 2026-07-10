@@ -111,6 +111,8 @@ From package `registry/core.json`:
 | `writeNodeValidatedAsync` | Async memory write path for kernel modes |
 | `prepareEnvelopeForKernel` | Universal frontmatter fill, memory stamps, v2 overlay, optimizer warnings |
 | `listUnapprovedCanonicalWriters` | Heuristic list of core modules bypassing Operation Contract |
+| `ssss-clean-account.spec.mjs` | Clean vault init, memory/workflow commit, idempotent replay, scope deny |
+| HTTP/CLI cutover | `docs`, `memory`, `share` routes + `remember`/`share` CLI + OKF import use async kernel path |
 
 Default mode is **legacy**. Enable gradually with `TR_SSSS_KERNEL_MODE`.
 

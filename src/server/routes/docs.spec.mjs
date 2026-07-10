@@ -18,7 +18,7 @@ vi.mock('../../core/vault-cache.mjs', () => ({
 }));
 
 vi.mock('../../core/operation-validator.mjs', () => ({
-  processOperation: vi.fn()
+  processOperationAsync: vi.fn()
 }));
 
 vi.mock('./_shared.mjs', async (importOriginal) => {
@@ -30,7 +30,7 @@ vi.mock('./_shared.mjs', async (importOriginal) => {
 });
 
 import { getNodes } from '../../core/vault-cache.mjs';
-import { processOperation } from '../../core/operation-validator.mjs';
+import { processOperationAsync } from '../../core/operation-validator.mjs';
 import { resolveVaultFromQuery } from './_shared.mjs';
 
 const app = express();
@@ -88,24 +88,24 @@ describe('Docs Router', () => {
   });
 
   it('POST /api/docs - creates document', async () => {
-    processOperation.mockReturnValue({ success: true });
+    processOperationAsync.mockResolvedValue({ success: true });
     const res = await request(app)
       .post('/api/docs')
       .send({ path: 'new.md', content: 'hello' });
     
     if (res.status !== 200) console.log(res.body, res.error);
     expect(res.status).toBe(200);
-    expect(processOperation).toHaveBeenCalled();
+    expect(processOperationAsync).toHaveBeenCalled();
   });
 
   it('PUT /api/docs - updates document', async () => {
-    processOperation.mockReturnValue({ success: true });
+    processOperationAsync.mockResolvedValue({ success: true });
     const res = await request(app)
       .put('/api/docs')
       .send({ path: 'existing.md', content: 'hello' });
     
     expect(res.status).toBe(200);
-    expect(processOperation).toHaveBeenCalled();
+    expect(processOperationAsync).toHaveBeenCalled();
   });
   
   it('PUT /api/docs - 404 if not found', async () => {
@@ -117,10 +117,10 @@ describe('Docs Router', () => {
   });
 
   it('DELETE /api/docs - deletes document', async () => {
-    processOperation.mockReturnValue({ success: true });
+    processOperationAsync.mockResolvedValue({ success: true });
     const res = await request(app).delete('/api/docs?path=existing.md');
     expect(res.status).toBe(200);
-    expect(processOperation).toHaveBeenCalledWith(
+    expect(processOperationAsync).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'delete', path: 'existing.md' }),
       mockVaultDir,
       expect.any(Object)

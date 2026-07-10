@@ -14,7 +14,7 @@ import {
   CONFIG_DIR
 } from './_shared.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
-import { processOperation } from '../../core/operation-validator.mjs';
+import { processOperationAsync } from '../../core/operation-validator.mjs';
 
 const router = express.Router();
 
@@ -129,7 +129,7 @@ router.get('/api/docs/read', requireAuth, requireScope('ssss:read'), (req, res) 
  * POST /api/docs
  * Create a new document
  */
-router.post('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => {
+router.post('/api/docs', requireAuth, requireScope('ssss:write'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const { path: relPath, content } = req.body;
@@ -146,7 +146,7 @@ router.post('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => 
       content
     };
 
-    const result = processOperation(envelope, vaultDir, { agentRole: 'admin' });
+    const result = await processOperationAsync(envelope, vaultDir, { agentRole: 'admin' });
     if (!result.success) {
       return res.status(400).json({ error: 'Validation failed', details: result });
     }
@@ -159,7 +159,7 @@ router.post('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => 
  * PUT /api/docs
  * Update an existing document
  */
-router.put('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => {
+router.put('/api/docs', requireAuth, requireScope('ssss:write'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const { path: relPath, content } = req.body;
@@ -176,7 +176,7 @@ router.put('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => {
       content
     };
 
-    const result = processOperation(envelope, vaultDir, { agentRole: 'admin' });
+    const result = await processOperationAsync(envelope, vaultDir, { agentRole: 'admin' });
     if (!result.success) {
       return res.status(400).json({ error: 'Validation failed', details: result });
     }
@@ -189,7 +189,7 @@ router.put('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => {
  * DELETE /api/docs
  * Delete a document
  */
-router.delete('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) => {
+router.delete('/api/docs', requireAuth, requireScope('ssss:write'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const relPath = req.query.path;
@@ -205,7 +205,7 @@ router.delete('/api/docs', requireAuth, requireScope('ssss:write'), (req, res) =
       workspace_id: 'default'
     };
 
-    const result = processOperation(envelope, vaultDir, { agentRole: 'admin' });
+    const result = await processOperationAsync(envelope, vaultDir, { agentRole: 'admin' });
     if (!result.success) {
       return res.status(400).json({ error: 'Validation failed', details: result });
     }

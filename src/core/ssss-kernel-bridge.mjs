@@ -10,6 +10,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import matter from 'gray-matter';
 import { createEngine } from '@ssss/cli/engine';
 import { createValidator } from '@ssss/cli/validator';
@@ -247,11 +248,23 @@ function stringifyDocument(data, body) {
  * Host preflight: satisfy package universal frontmatter + TR memory policy.
  * Returns { envelope, warnings, errors }.
  */
+/**
+ * Stable timestamp for a given idempotency key so exact retries prepare identical
+ * content (package kernel binds idempotency to the request hash of content).
+ */
+export function stableTimestampForKey(idempotencyKey, fallback = () => new Date().toISOString()) {
+  if (typeof idempotencyKey !== 'string' || !idempotencyKey) return fallback();
+  const digest = crypto.createHash('sha256').update(idempotencyKey).digest();
+  // Fixed epoch window so values stay valid ISO datetimes without needing wall clock.
+  const ms = Date.UTC(2026, 0, 1) + (digest.readUInt32BE(0) % (86400_000 * 365));
+  return new Date(ms).toISOString();
+}
+
 export function prepareEnvelopeForKernel(envelope, options = {}) {
   const warnings = [];
   const errors = [];
   const role = options.agentRole || envelope.actor?.role || null;
-  const now = options.clock?.() || new Date().toISOString();
+  const now = options.clock?.() || stableTimestampForKey(envelope.idempotency_key);
   let env = { ...envelope };
 
   if (env.type === 'operation' && typeof env.content === 'string') {
