@@ -249,7 +249,7 @@ export async function ingestGoogleTakeout(takeoutPath, options = {}) {
 
     for (const node of unique) {
       try {
-        writeNode(node, vaultDir);
+        await writeNode(node, vaultDir);
         written++;
       } catch (err) {
         console.error(`  ⚠️  Failed to write ${node.slug}: ${err.message}`);

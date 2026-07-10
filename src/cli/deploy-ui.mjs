@@ -511,7 +511,7 @@ export function startDeployUI(port = 3001) {
             const detected = detectRuleFiles(parentDirs);
             const selectedFileObjects = detected.filter(f => files.includes(f.absolutePath));
             
-            const result = importRuleFiles(selectedFileObjects, { force, vaultDir });
+            const result = await importRuleFiles(selectedFileObjects, { force, vaultDir });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
           } catch (e) {

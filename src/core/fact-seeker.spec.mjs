@@ -206,7 +206,7 @@ describe('multi-note wiki-graph architecture', () => {
       };
       
       const { writeNode } = await import('./vault.mjs');
-      writeNode(targetNode, tempVaultDir);
+      await writeNode(targetNode, tempVaultDir);
       
       // Also create an existing node that targetNode connects with
       const otherSlug = 'fact-note-other';
@@ -223,7 +223,7 @@ describe('multi-note wiki-graph architecture', () => {
         related: [],
         tags: []
       };
-      writeNode(otherNode, tempVaultDir);
+      await writeNode(otherNode, tempVaultDir);
       
       // Mock callLocalRuntime response
       const mockDelibResponse = {
@@ -338,7 +338,7 @@ describe('multi-note wiki-graph architecture', () => {
       };
       
       const { writeNode } = await import('./vault.mjs');
-      writeNode(targetNode, tempVaultDir);
+      await writeNode(targetNode, tempVaultDir);
       
       const mockExpandResponse = {
         tangents: [
@@ -501,7 +501,7 @@ describe('multi-note wiki-graph architecture', () => {
         supersedes: [],
         superseded_by: null
       };
-      writeNode(oldNode, tempVaultDir);
+      await writeNode(oldNode, tempVaultDir);
 
       // 2. Create the newer target node being deliberated
       const targetSlug = 'fact-master-newer-fact';
@@ -520,7 +520,7 @@ describe('multi-note wiki-graph architecture', () => {
         supersedes: [],
         superseded_by: null
       };
-      writeNode(targetNode, tempVaultDir);
+      await writeNode(targetNode, tempVaultDir);
 
       // 3. Mock the LLM Deliberation output to say it supersedes the old fact slug
       const mockDelibResponse = {

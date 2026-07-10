@@ -18,6 +18,13 @@ export function createProposal(category, summary, targetPath = null, rationale =
   return {
     type: 'proposal',
     proposal_id: proposalId,
+    slug: proposalId,
+    // Vault folder for proposal documents (distinct from proposal.category topic)
+    // prepareNodeForContract falls back to category=proposals when absent; set explicitly.
+    // Note: SSSS field `category` here is the proposal topic (memory-cleanup, etc.).
+    title: summary || proposalId,
+    description: rationale || summary || 'Optimizer proposal',
+    timestamp: new Date().toISOString(),
     category,
     status: 'draft',
     target_path: targetPath,

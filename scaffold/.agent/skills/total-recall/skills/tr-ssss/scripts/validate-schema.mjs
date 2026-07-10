@@ -30,6 +30,7 @@ const FALLBACK_REQUIRED_BY_TYPE = {
   page: ['slug', 'name', 'sandbox_entry'],
   migration: ['migration_id', 'from_version', 'to_version', 'status', 'description'],
   release: ['release_id', 'version', 'schema_version', 'summary', 'released_at'],
+  translation: ['title', 'description', 'timestamp', 'translation_id', 'source_path', 'source_hash', 'locale', 'status', 'translated_fields'],
 };
 
 let kernelPromise;

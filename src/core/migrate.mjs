@@ -31,6 +31,9 @@ export async function runMigration(vaultDir, fromVersion, toVersion, migrationFn
     to_version: toVersion,
     status: 'pending',
     description,
+    title: `Migration v${fromVersion}→v${toVersion}`,
+    timestamp: new Date().toISOString(),
+    category: 'migrations',
   };
 
   try {
@@ -44,7 +47,7 @@ export async function runMigration(vaultDir, fromVersion, toVersion, migrationFn
     // Note: in a real system we'd diff and only write changed, but migration often touches all.
     for (const node of migratedNodes) {
       // In a real migration we might delete old files if slug changes, but this assumes in-place update
-      writeNode(node, vaultDir);
+      await writeNode(node, vaultDir);
     }
 
     migrationRecord.status = 'applied';
@@ -60,13 +63,16 @@ export async function runMigration(vaultDir, fromVersion, toVersion, migrationFn
     logger.error('migration', `WARNING: Vault may be in an inconsistent state. Please run 'total-recall snapshot rollback ${snapshotId}' immediately to recover.`);
     throw err;
   } finally {
-    // 3. Record the migration event
-    const migrationsDir = path.join(vaultDir, 'system', 'migrations');
-    if (!fs.existsSync(migrationsDir)) fs.mkdirSync(migrationsDir, { recursive: true });
-    
-    // Ensure slug doesn't conflict
-    const slug = `migration-v${toVersion}-${migrationId}`;
-    writeNode({ ...migrationRecord, slug }, migrationsDir);
+    // 3. Record the migration event via Operation Contract (migrations/<slug>.md)
+    const slug = `migration-v${toVersion}-${migrationId}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+    await writeNode({
+      ...migrationRecord,
+      slug,
+      category: 'migrations',
+      title: migrationRecord.title || slug,
+      description: description || slug,
+      timestamp: migrationRecord.applied_at || new Date().toISOString(),
+    }, vaultDir);
   }
 
   return { migrationId, status: migrationRecord.status };

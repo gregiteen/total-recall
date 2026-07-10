@@ -817,7 +817,7 @@ router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, 
  * Import rule files into the vault.
  * Body: { dirs?: string[], files?: string[], force?: boolean, dryRun?: boolean }
  */
-router.post('/api/import/rules', requireAuth, requireScope('memory:write'), (req, res) => {
+router.post('/api/import/rules', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const { dirs, force = false, dryRun = false } = req.body || {};
     const searchDirs = dirs?.length ? dirs : [process.cwd(), os.homedir()];
@@ -826,7 +826,7 @@ router.post('/api/import/rules', requireAuth, requireScope('memory:write'), (req
       ? detected.filter(f => req.body.files.includes(f.absolutePath))
       : detected.filter(f => !f.alreadyImported || force);
     if (dryRun) return res.json({ dryRun: true, detected, toImport, imported: [], skipped: [], failed: [] });
-    const result = importRuleFiles(toImport, { force, vaultDir: VAULT_DIR });
+    const result = await importRuleFiles(toImport, { force, vaultDir: VAULT_DIR });
     res.json({ detected, ...result });
     
   } catch (err) { serverError(res, err); }

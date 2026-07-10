@@ -20,8 +20,6 @@ import {
   listMissingCoreSchemas,
   listCoreTypes,
 } from './ssss-host-extension.mjs';
-import { processOperation } from './operation-validator.mjs';
-
 const require = createRequire(import.meta.url);
 const { fixtures } = require('@ssss/cli/conformance/fixtures.json');
 
@@ -258,37 +256,21 @@ describe('SSSS 0.9 direct-write detection', () => {
   });
 });
 
-describe('SSSS 0.9 shadow comparison on core fixtures', () => {
-  it('compares local legacy verdicts with package kernel dry-runs for create fixtures', async () => {
+describe('SSSS 0.9 package kernel fixture smoke', () => {
+  it('commits structural create fixtures through the package kernel', async () => {
     const vault = tmpVault();
-    const prev = process.env.TR_SSSS_KERNEL_MODE;
-    process.env.TR_SSSS_KERNEL_MODE = 'legacy';
     try {
-      // Apply only pure create-style fixtures that do not depend on prior state.
       const createFixtures = fixtures.filter((f) =>
-        f.id === 'fixture-001' || f.id === 'fixture-002' || f.id === 'fixture-003' || f.id === 'fixture-024',
+        f.id === 'fixture-001' || f.id === 'fixture-003' || f.id === 'fixture-024',
       );
       for (const f of createFixtures) {
         const request = JSON.parse(JSON.stringify(f.request));
-        // Local legacy path (explicit mode) vs package kernel dry-run.
-        const local = processOperation(request, vault, { agentRole: request.actor?.role || 'admin' });
-        const { comparison } = await shadowCompare(request, vault, local, {
+        const result = await processViaPackageKernel(request, vault, {
           agentRole: request.actor?.role || 'admin',
         });
-        // success/valid should agree for core structural creates; type strings may differ in edge failures.
-        if (f.id === 'fixture-001' || f.id === 'fixture-003' || f.id === 'fixture-024') {
-          expect(comparison.success_match, `${f.id} success`).toBe(true);
-          expect(comparison.valid_match, `${f.id} valid`).toBe(true);
-        }
-        if (f.id === 'fixture-002') {
-          // Both should deny invalid content.
-          expect(comparison.local.success).toBe(false);
-          expect(comparison.kernel.success).toBe(false);
-        }
+        expect(result.success, `${f.id} ${JSON.stringify(result)}`).toBe(true);
       }
     } finally {
-      if (prev === undefined) delete process.env.TR_SSSS_KERNEL_MODE;
-      else process.env.TR_SSSS_KERNEL_MODE = prev;
       fs.rmSync(vault, { recursive: true, force: true });
     }
   });

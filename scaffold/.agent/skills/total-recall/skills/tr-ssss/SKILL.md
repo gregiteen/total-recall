@@ -13,14 +13,16 @@ schema/reference files.
 
 ## Ground Truth
 
-The vendor-neutral contract is now a published package, **`@ssss/cli`** (pinned to
-**`v0.7.0`**, spec v0.6 draft; source <https://github.com/gregiteen/ssss>), declared in
+The vendor-neutral contract is the npm package **`@gregiteen/ssss-cli`**, installed
+under the compatibility alias **`@ssss/cli`** at **`0.8.0`** (spec v0.7 draft;
+source <https://github.com/gregiteen/ssss>), declared in
 `package.json`. `references/ssss-spec.md` is the local mirror. The canon owns the
 spec (§4.2 universal OKF-compatible frontmatter, §5.5 portability, §6 Operation
-Contract incl. `event` and `delete`, §11.8 workflow runtime daemon contract, §16
-the `.ucw` bundle format, §17 provisioning), the core
-registry (`@ssss/cli/registry/core.json`: 14 document + 5 contract primitives),
-the reference engine, runtime helpers, and the v1.4.0 conformance fixtures. Total
+Contract incl. `event` and `delete`, §11.8 workflow runtime daemon contract, §11.9
+semantic/localization contract, §16 the `.ucw` bundle format, §17 provisioning),
+the core registry (`@ssss/cli/registry/core.json`: 15 document + 5 contract
+primitives), the reference engine, runtime and semantic helpers, and the v1.5.0
+conformance fixtures. Total
 Recall's kernel was the engine the canon's reference implementation was harvested
 from; keep them aligned. If this skill conflicts with the canon, correct this
 skill unless the implementation has intentionally advanced beyond it and the
@@ -56,6 +58,11 @@ npx ssss validate pack.ucw.json                                  # schema + port
 npx ssss inspect  pack.ucw.json --files                          # manifest, inventory, params, steps
 npx ssss provision pack.ucw.json --param domain=acme.live --out plan.json   # pure: params + links → envelopes
 npx ssss import   pack.ucw.json --vault ./new-vault --param domain=acme.live  # idempotent replay
+
+# Deterministic semantic/localization projections (§11.9)
+npx ssss semantic <vault-dir> --query "refund policy"
+npx ssss semantic <vault-dir> --locale es --out ./derived/semantic-es.json
+npx ssss localize <vault-dir> --locale es --out ./derived/es
 
 npx ssss conformance --engine  # replay the canonical fixtures + round-trip the reference bundle
 ```
@@ -98,7 +105,7 @@ output.
 
 ## Universal Frontmatter / OKF
 
-SSSS v0.7.0 / spec v0.6 is an OKF-compatible Markdown contract. Every SSSS
+SSSS package 0.8.0 / spec v0.7 is an OKF-compatible Markdown contract. Every SSSS
 document primitive, including skills, memory, workflows, assistants, pages,
 models, migrations, and releases, MUST carry non-empty universal frontmatter:
 
@@ -141,6 +148,11 @@ The reference engine now treats path and replay safety as part of the standard:
   write, and lease storage must not expose the VFS path directly.
 - Bundle import/export must reject unsafe or duplicate file paths, and exporters
   must not follow symlinked vault entries into files outside the vault.
+- Registry `patterns`, `immutable_fields`, and `references` are executable
+  constraints. Extension registries fail closed on malformed shapes, invalid
+  regexes, symlinks, and core/sibling type collisions.
+- Bundle import preflights the full plan before committing so a late invalid
+  envelope cannot leave a partial install.
 
 ## Canonical State
 
@@ -238,6 +250,13 @@ The canonical search/index stack is the Total Recall semantic index/vector store
 Do not introduce a second embedding or indexing path for SSSS memory unless the
 spec and tests are updated together.
 
+The canon's `translation` primitive is a structural, exact-source-hash overlay.
+Only `title`, `description`, and body are translatable; identity, permissions,
+status, enums, relations, and other symbolic fields remain canonical. Canonical
+semantic/localized projections exclude `tenant_private` and `resource_bound`
+documents by default, require explicit authorization to include them, and publish
+derived output outside the source vault from a complete staged tree.
+
 ## Validation
 
 Validate an individual SSSS Markdown file with:
@@ -285,9 +304,10 @@ newer standard, bump the `@ssss/cli` pin and re-run it.
 
 | For | Read |
 | --- | --- |
-| Upstream canon (package) | `@ssss/cli` (`v0.7.0`, spec v0.6 draft, github:gregiteen/ssss) |
+| Upstream canon (package) | `@ssss/cli` alias → `@gregiteen/ssss-cli@0.8.0` (spec v0.7 draft) |
 | Canonical core registry | `@ssss/cli/registry/core.json` |
 | Runtime helpers | `@ssss/cli/runtime` |
+| Semantic/localization helpers | `@ssss/cli/semantic` |
 | Conformance bridge | `src/core/ssss-conformance.bridge.spec.mjs` |
 | SSSS standard (local mirror) | `references/ssss-spec.md` |
 | Implemented schemas | `src/core/schema.mjs` |
