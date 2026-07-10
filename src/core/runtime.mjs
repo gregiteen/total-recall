@@ -35,8 +35,8 @@ export function findBinaryInPath(binaryName) {
  * Total Recall Runtime — CLI Agent Dispatch
  *
  * All reasoning tasks are dispatched to headless CLI agents.
- * Agent registry lives in the tr-cli-agents skill:
- *   .agent/skills/total-recall/skills/tr-cli-agents/agents.yml
+ * Agent registry lives in the agents module (not an IDE skill):
+ *   .agent/skills/total-recall/modules/agents/agents.yml
  */
 
 // ─── Default agent registry (used when agents.yml doesn't exist) ─────────────
@@ -51,14 +51,13 @@ const DEFAULT_AGENTS = [
  * Resolve the path to the cli-agents config file.
  */
 function getAgentsConfigPath() {
-  // The cli-agents skill was namespaced to tr-cli-agents; check the new name
-  // first, then fall back to the legacy name for repos initialized before the
-  // rename, in both the nested (meta-skill) and standalone locations.
+  // Prefer modules/agents (TR_CORE_FOCUS). Fall back to legacy nested-skill paths.
   const candidates = [
+    path.join(agentDir, 'skills', 'total-recall', 'modules', 'agents', 'agents.yml'),
     path.join(agentDir, 'skills', 'total-recall', 'skills', 'tr-cli-agents', 'agents.yml'),
     path.join(agentDir, 'skills', 'total-recall', 'skills', 'cli-agents', 'agents.yml'),
     path.join(agentDir, 'skills', 'tr-cli-agents', 'agents.yml'),
-    path.join(agentDir, 'skills', 'cli-agents', 'agents.yml')
+    path.join(agentDir, 'skills', 'cli-agents', 'agents.yml'),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;

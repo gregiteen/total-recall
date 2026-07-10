@@ -1,8 +1,8 @@
----
-name: tr-skill
-provenance: total-recall
-description: "Use this skill when creating, auditing, or modifying any skill in the .agent/skills/ ecosystem. MANDATORY: You MUST read the full SKILL.md file before executing."
----
+# Total Recall module: skill-deploy
+
+> **Not an agent skill.** This is an internal Total Recall module (docs + scripts).
+> Agents operate Total Recall via the parent skill only:
+> `.agent/skills/total-recall/SKILL.md`
 
 # Skill Architecture — Canonical Format Guide
 
@@ -187,7 +187,7 @@ Contains standalone prompt files for subtasks that can be delegated to parallel 
 
 ### Quick method (script):
 ```bash
-bash .agent/skills/tr-skill/scripts/create-skill.sh my-new-skill
+bash .agent/skills/total-recall/modules/skill-deploy/scripts/create-skill.sh my-new-skill
 ```
 
 ### Manual method:

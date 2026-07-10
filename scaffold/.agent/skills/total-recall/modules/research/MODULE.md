@@ -1,9 +1,8 @@
----
-type: skill
-name: tr-research
-provenance: total-recall
-description: "Use this skill when queueing, searching, and managing long-horizon background research projects via the Total Recall REST API."
----
+# Total Recall module: research
+
+> **Not an agent skill.** This is an internal Total Recall module (docs + scripts).
+> Agents operate Total Recall via the parent skill only:
+> `.agent/skills/total-recall/SKILL.md`
 
 # Total Recall — Background Research & Continuous Intelligence Skill
 

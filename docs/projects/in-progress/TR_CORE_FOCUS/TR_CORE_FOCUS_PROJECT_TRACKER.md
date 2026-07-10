@@ -11,7 +11,7 @@ timestamp: 2026-07-10T00:00:00Z
 > **Kanban State**: 🏗️ In Progress  
 > **Date**: 2026-07-10  
 
-> **Current Phase:** Phase 0 — Freeze scope  
+> **Current Phase:** Phase 1–2 in progress  
 
 ## Goal
 
@@ -20,8 +20,8 @@ Refocus Total Recall on portable memory, instructions, openwiki, skill deploy ac
 ## Phase status
 
 - [x] Phase 0 — PRD / architecture / plan written
-- [ ] Phase 1 — Nested skills → modules
-- [ ] Phase 2 — Openwiki ships with TR
+- [x] Phase 1 — Nested skills → modules (`tr-*` → `modules/{ssss,research,skill-deploy,agents}`)
+- [x] Phase 2 — Openwiki ships with TR (`templates/openwiki` + `init` ensureOpenWiki; scaffold seeded)
 - [ ] Phase 3 — Skills registry + deploy
 - [ ] Phase 4 — Secrets & usage
 - [ ] Phase 5 — Slim runtime + README
@@ -33,3 +33,7 @@ Refocus Total Recall on portable memory, instructions, openwiki, skill deploy ac
   Confirmed: TR is separate from ssss package; openwiki currently lives in host apps
   (e.g. UltraChat), not as a first-class TR ship artifact; nested `tr-*` skills under
   `total-recall/skills/` are the main structural smell to fix first.
+- 2026-07-10 — **Phase 1+2 landed.** Nested skills converted to modules (MODULE.md, not
+  SKILL.md). init no longer symlinks nested packages as IDE skills. openwiki templates
+  ship; init seeds openwiki on brain create. runtime agents.yml path updated.
+  skill.spec.mjs imports updated.

@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseInstalls, parseFindOutput } from '../../.agent/skills/total-recall/skills/tr-skill/scripts/find-skills.mjs';
-import { scanFile, runScan } from '../../.agent/skills/total-recall/skills/tr-skill/scripts/scan-skill.mjs';
-import { installSkill, validateSkillSource, inferSkillName } from '../../.agent/skills/total-recall/skills/tr-skill/scripts/install-skill.mjs';
+import { parseInstalls, parseFindOutput } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/find-skills.mjs';
+import { scanFile, runScan } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/scan-skill.mjs';
+import { installSkill, validateSkillSource, inferSkillName } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/install-skill.mjs';
 import { resolveSkillScriptPath } from './skill.mjs';
 
 describe('Sovereign Skill Manager', () => {
@@ -148,7 +148,7 @@ jiulingyun/openclaw-cn@github 21 installs
   describe('Skill helper resolution', () => {
     it('prefers helper scripts from the active brain', () => {
       const agentDir = path.join(tempDir, '.agent');
-      const scriptPath = path.join(agentDir, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', 'find-skills.mjs');
+      const scriptPath = path.join(agentDir, 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', 'find-skills.mjs');
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
       fs.writeFileSync(scriptPath, 'export const marker = true;\n', 'utf8');
 
@@ -158,7 +158,7 @@ jiulingyun/openclaw-cn@github 21 installs
     it('falls back to the packaged scaffold when active brain helpers are absent', () => {
       const agentDir = path.join(tempDir, 'empty-agent');
       const scriptPath = resolveSkillScriptPath('find-skills.mjs', { agentDir, root: process.cwd() });
-      expect(scriptPath).toContain(path.join('scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', 'find-skills.mjs'));
+      expect(scriptPath).toContain(path.join('scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', 'find-skills.mjs'));
     });
   });
 });

@@ -1,10 +1,15 @@
 ---
 name: total-recall
 provenance: total-recall
-description: "Use this skill as the master guide to understand the entire Total Recall Sovereign AI OS setup, VFS topologies, SSSS protocol, CLI parameter reference, troubleshooting, and automated upstream repository sync. MANDATORY: Read this file before attempting major setup modifications or diagnoses."
+description: "Use this skill to operate Total Recall — portable memory, instructions, openwiki, skill deploy, and secrets. MANDATORY: Read this file before changing TR setup. Nested packages under modules/ are NOT agent skills."
 ---
 
-# Total Recall — Master Agent Skill (REST API First)
+# Total Recall — Master Agent Skill
+
+> **Product focus:** portable personal memory + IDE instructions + openwiki + skill deploy + secrets.
+> **Only agent skill in this package.** Implementation helpers live in `modules/` (not skills).
+> Openwiki ships with the brain at `openwiki/`.
+
 
 Welcome to the master control skill for the **Total Recall Sovereign AI OS**. > [!NOTE]
 > **Total Recall Architecture:**
@@ -158,7 +163,15 @@ Recursively parse and ingest an Open Knowledge Format (OKF v0.1 Draft) bundle di
     *   `--type-map <json>`: Custom type-to-category mapping JSON.
 *   *Note*: Spawns an asynchronous background surface compile process immediately on successful ingest.
 
-### 6. Export OKF Bundle
+### 6. Ingest OpenWiki Directory
+```bash
+npx total-recall ingest openwiki <path>
+```
+Automatically ingest LangChain's auto-generated architectural OpenWiki directories into Total Recall's semantic knowledge graph.
+*   Tags all ingested nodes with `openwiki`, `architecture`, `auto-generated`.
+*   Nodes can be viewed in the dashboard's OpenWiki browser.
+
+### 7. Export OKF Bundle
 ```bash
 npx total-recall export <path> [options]
 ```
@@ -169,7 +182,7 @@ Export the memory vault into an OKF-compliant directory structure.
     *   `--format <type>`: Package output as archive (`tar.gz`).
     *   `--global` / `--project`: Target scope layer.
 
-### 7. Lint OKF Compliance
+### 8. Lint OKF Compliance
 ```bash
 npx total-recall lint --okf [options]
 ```
@@ -291,3 +304,18 @@ curl -H "Authorization: Bearer <YOUR_PAT_TOKEN>" \
 <!-- @route: tfidf, generated_at: 2026-05-21T03:34:14.837Z -->
 
 <!-- END INJECTED MEMORY -->
+
+
+---
+
+## Modules (not skills)
+
+| Path | Role |
+|------|------|
+| `modules/ssss/` | SSSS notes + local validators; prefer `@ssss/cli` |
+| `modules/skill-deploy/` | Scripts to create/install/scan user skills |
+| `modules/agents/` | `agents.yml` for headless CLI agent dispatch |
+| `modules/research/` | Optional research API notes (demoted from core skill) |
+| `openwiki/` | Human/agent knowledge docs (auto-shipped on init) |
+
+Do **not** symlink modules into `.agent/skills/<name>` as if they were user skills.
