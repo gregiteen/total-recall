@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the FILES module for autonomous ecosystem sync
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 2 Audit Findings
+- [ ] Fix race condition in `handleCreateScript()` where `handleSelectScript()` is called before state is fully committed.

@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the MODELS_AGENTS module for autonomous ecosys
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 2 Audit Findings
+- [ ] Fix waterfall network fetching bug in `fetchSystemData()` by utilizing `Promise.all()` to prevent UI blocking.

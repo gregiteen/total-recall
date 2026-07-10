@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the SETTINGS module for autonomous ecosystem s
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 2 Audit Findings
+- [ ] Fix `POST /api/config-json` endpoint to properly validate and include `openrouter_api_key` in the `allowedKeys` array.

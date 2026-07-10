@@ -49,3 +49,8 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 - [ ] Execute Clean-Account Initialization with the new features enabled.
 - [ ] Verify GitHub push/pull doesn't corrupt local memory.
 - [ ] Verify Obsidian edits propagate to the UI immediately.
+
+## Global Backend Audit Findings (rest.mjs)
+- [ ] Replace `process.cwd()` and `os.homedir()` fallback in `/api/import/rules` with absolute path variables.
+- [ ] Add `try/catch` block to `fs.statSync()` loops in `/api/files` and `/api/scripts` to prevent unhandled exceptions on concurrent file deletion.
+- [ ] Implement proper error propagation in `GET /api/openai-models` instead of swallowing errors silently.

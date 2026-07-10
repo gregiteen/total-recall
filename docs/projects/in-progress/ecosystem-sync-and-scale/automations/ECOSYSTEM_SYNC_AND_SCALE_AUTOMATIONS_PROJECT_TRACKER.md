@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the AUTOMATIONS module for autonomous ecosyste
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 2 Audit Findings
+- [ ] Ensure `POST /api/update/run` async logic correctly pipes errors back to the client instead of prematurely returning `success: true`.
