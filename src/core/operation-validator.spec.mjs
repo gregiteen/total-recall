@@ -1,9 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
 import { processOperation, acquireLease, releaseLease } from './operation-validator.mjs';
+
+const PREV_MODE = process.env.TR_SSSS_KERNEL_MODE;
+
+// These unit tests exercise the local legacy pipeline only.
+beforeAll(() => { process.env.TR_SSSS_KERNEL_MODE = 'legacy'; });
+afterAll(() => {
+  if (PREV_MODE === undefined) delete process.env.TR_SSSS_KERNEL_MODE;
+  else process.env.TR_SSSS_KERNEL_MODE = PREV_MODE;
+});
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'ssss-opval-'));

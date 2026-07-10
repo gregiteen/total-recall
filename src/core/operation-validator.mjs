@@ -150,27 +150,28 @@ function hasPermission(permissions, requiredPerm) {
 }
 
 /**
- * Process an SSSS operation through the full §6.3 pipeline.
- * @param {object} envelope - The operation envelope.
- * @param {string} vaultRoot - Absolute path to the vault directory.
- * @param {object} [options] - { agentRole, leaseStore, eventLogDir }
- * @returns {object} OperationResponse (§6.4).
+ * Sync Operation Contract entry (legacy-compatible).
  *
- * Prefer {@link processOperationAsync} when `TR_SSSS_KERNEL_MODE` is `kernel` or
- * `kernel-low-risk` so the package kernel path is awaited correctly.
+ * Under package-kernel modes (`kernel-core` default), only envelopes that do
+ * **not** route to the package kernel may use this sync path (host-only types).
+ * Core package types must use {@link processOperationAsync}.
+ *
+ * @deprecated Prefer {@link processOperationAsync}.
  */
 export function processOperation(envelope, vaultRoot, options = {}) {
   const mode = getKernelMode();
-  if (mode === 'kernel' || mode === 'kernel-core' || mode === 'kernel-low-risk') {
+  if (
+    (mode === 'kernel' || mode === 'kernel-core' || mode === 'kernel-low-risk')
+    && shouldRouteToKernel(envelope)
+  ) {
     throw new Error(
-      `TR_SSSS_KERNEL_MODE=${mode} requires processOperationAsync (package kernel is async).`,
+      `TR_SSSS_KERNEL_MODE=${mode} routes this envelope through the package kernel — use processOperationAsync.`,
     );
   }
 
   const result = processOperationLegacy(envelope, vaultRoot, options);
 
   if (mode === 'shadow') {
-    // Non-blocking dry-run comparison against the package kernel.
     queueMicrotask(() => {
       shadowCompare(envelope, vaultRoot, result, options).catch(() => {});
     });
@@ -180,8 +181,10 @@ export function processOperation(envelope, vaultRoot, options = {}) {
 }
 
 /**
- * Async Operation Contract entry: routes to the SSSS 0.9 package kernel when
- * enabled, otherwise uses the legacy Total Recall pipeline.
+ * Primary Operation Contract entry for Total Recall.
+ * Routes core package types through `@ssss/cli` when `TR_SSSS_KERNEL_MODE` is
+ * `kernel-core` (default), `kernel-low-risk`, or `kernel`. Host-only types and
+ * `legacy` mode use the local pipeline.
  */
 export async function processOperationAsync(envelope, vaultRoot, options = {}) {
   if (shouldRouteToKernel(envelope)) {
