@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import matter from 'gray-matter';
 import { safeStringify } from './vault.mjs';
-import { writeNodeValidated } from './validated-write.mjs';
+import { writeNodeValidatedAsync } from './validated-write.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { validateMemoryNode } from './total-recall-memory-validator.mjs';
 
@@ -280,7 +280,7 @@ export async function importBundle(bundlePath, vaultDir, options = {}) {
     }
 
     try {
-      const writeResult = writeNodeValidated(node, vaultDir, {
+      const writeResult = await writeNodeValidatedAsync(node, vaultDir, {
         dryRun: options.dryRun || false,
         agentRole: options.agentRole || 'admin'
       });

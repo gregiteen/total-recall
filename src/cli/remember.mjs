@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import matter from 'gray-matter';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
-import { writeNodeValidated } from '../core/validated-write.mjs';
+import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
 
 function printHelp() {
   console.log(`
@@ -332,7 +332,7 @@ export default async function remember(args) {
   }
   // --- END AUTOMATIC DEDUPLICATION ---
 
-  const vaultResult = writeNodeValidated(node, vaultDir);
+  const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
   if (!vaultResult.success) {
     console.error(`  ❌ Validation failed: ${vaultResult.validation.errors.join('; ')}`);
     if (vaultResult.repair) {

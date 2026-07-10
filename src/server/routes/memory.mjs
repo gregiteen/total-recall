@@ -14,7 +14,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createMemoryNode, walkMd } from '../../core/vault.mjs';
-import { writeNodeValidated } from '../../core/validated-write.mjs';
+import { writeNodeValidatedAsync } from '../../core/validated-write.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { compileSurface } from '../../core/surface.mjs';
@@ -195,7 +195,7 @@ router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, 
   }
 });
 
-router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res) => {
+router.post('/api/memory', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const { slug, title, category, content, body, tags } = req.body || {};
@@ -213,7 +213,7 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    const vaultResult = writeNodeValidated(node, vaultDir);
+    const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
     if (!vaultResult.success) {
       return res.status(422).json({
         error: 'Validation failed',
@@ -229,7 +229,7 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), (req, res)
   }
 });
 
-router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
+router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const { title, category, content, body, tags } = req.body || {};
@@ -244,7 +244,7 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
       if (req.body[key] !== undefined) node[key] = req.body[key];
     }
 
-    const vaultResult = writeNodeValidated(node, targetVaultDir);
+    const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
     if (!vaultResult.success) {
       return res.status(422).json({
         error: 'Validation failed',
@@ -260,7 +260,7 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req,
   }
 });
 
-router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
+router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const vaultDirs = resolveAllVaultsFromQuery(req);
     let existing;
@@ -294,7 +294,7 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
       if (req.body[key] !== undefined) updated[key] = req.body[key];
     }
 
-    const vaultResult = writeNodeValidated(updated, vaultDir);
+    const vaultResult = await writeNodeValidatedAsync(updated, targetVaultDir);
     if (!vaultResult.success) {
       return res.status(422).json({
         error: 'Validation failed',
@@ -302,8 +302,8 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), (re
         repair: vaultResult.repair,
       });
     }
-    invalidate(vaultDir);
-    triggerMutation(updated, vaultDir);
+    invalidate(targetVaultDir);
+    triggerMutation(updated, targetVaultDir);
     res.json(sanitizeNode(updated));
   } catch (err) {
     serverError(res, err);

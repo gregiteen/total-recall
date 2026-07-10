@@ -9,7 +9,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { createMemoryNode } from '../../core/vault.mjs';
-import { writeNodeValidated } from '../../core/validated-write.mjs';
+import { writeNodeValidatedAsync } from '../../core/validated-write.mjs';
 import { invalidate } from '../../core/vault-cache.mjs';
 import { addToQueue } from '../../core/research-queue.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
@@ -122,7 +122,7 @@ router.post('/api/share', requireAuth, requireScope('memory:write'), async (req,
       }];
     }
 
-    const vaultResult = writeNodeValidated(node, vaultDir);
+    const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
     if (!vaultResult.success) {
       return res.status(422).json({
         error: 'Validation failed',

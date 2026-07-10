@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { parseLayerFlag, resolveBrainDir, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { createMemoryNode } from '../core/vault.mjs';
-import { writeNodeValidated } from '../core/validated-write.mjs';
+import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
 import { addToQueue } from '../core/research-queue.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import path from 'node:path';
@@ -161,7 +161,7 @@ export default async function share(args) {
     }];
   }
 
-  const vaultResult = writeNodeValidated(node, vaultDir);
+  const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
   if (!vaultResult.success) {
     console.error(`  ❌ Validation failed: ${vaultResult.validation.errors.join('; ')}`);
     process.exit(1);
