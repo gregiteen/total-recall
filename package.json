@@ -1,7 +1,7 @@
 {
   "name": "total-recall-brain",
   "version": "3.13.0",
-  "description": "Sovereign AI system — database-free, SSSS-powered personal intelligence engine deployable to any POSIX host.",
+  "description": "Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.",
   "type": "module",
   "bin": {
     "total-recall": "bin/total-recall.mjs",
@@ -44,7 +44,6 @@
   },
   "keywords": [
     "ai",
-    "sovereign",
     "ssss",
     "memory",
     "local-llm"
@@ -56,7 +55,7 @@
   },
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
-    "@ssss/cli": "github:gregiteen/ssss#v0.7.1",
+    "@ssss/cli": "github:gregiteen/ssss#main",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

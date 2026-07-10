@@ -12,6 +12,12 @@ import {
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';
 import { validateMemoryNode } from './total-recall-memory-validator.mjs';
+import {
+  getKernelMode,
+  processViaPackageKernel,
+  shouldRouteToKernel,
+  shadowCompare,
+} from './ssss-kernel-bridge.mjs';
 
 const APPEND_TYPES = new Set(['conversation', 'run']);
 const PROTOCOL_PATHS = [
@@ -149,8 +155,46 @@ function hasPermission(permissions, requiredPerm) {
  * @param {string} vaultRoot - Absolute path to the vault directory.
  * @param {object} [options] - { agentRole, leaseStore, eventLogDir }
  * @returns {object} OperationResponse (§6.4).
+ *
+ * Prefer {@link processOperationAsync} when `TR_SSSS_KERNEL_MODE` is `kernel` or
+ * `kernel-low-risk` so the package kernel path is awaited correctly.
  */
 export function processOperation(envelope, vaultRoot, options = {}) {
+  const mode = getKernelMode();
+  if (mode === 'kernel' || mode === 'kernel-low-risk') {
+    throw new Error(
+      `TR_SSSS_KERNEL_MODE=${mode} requires processOperationAsync (package kernel is async).`,
+    );
+  }
+
+  const result = processOperationLegacy(envelope, vaultRoot, options);
+
+  if (mode === 'shadow') {
+    // Non-blocking dry-run comparison against the package kernel.
+    queueMicrotask(() => {
+      shadowCompare(envelope, vaultRoot, result, options).catch(() => {});
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Async Operation Contract entry: routes to the SSSS 0.9 package kernel when
+ * enabled, otherwise uses the legacy Total Recall pipeline.
+ */
+export async function processOperationAsync(envelope, vaultRoot, options = {}) {
+  if (shouldRouteToKernel(envelope)) {
+    return processViaPackageKernel(envelope, vaultRoot, options);
+  }
+  const result = processOperationLegacy(envelope, vaultRoot, options);
+  if (getKernelMode() === 'shadow') {
+    await shadowCompare(envelope, vaultRoot, result, options);
+  }
+  return result;
+}
+
+function processOperationLegacy(envelope, vaultRoot, options = {}) {
   const { leaseStore, eventLogDir } = options;
   const operationId = crypto.randomUUID();
   const warnings = [];
@@ -202,6 +246,10 @@ export function processOperation(envelope, vaultRoot, options = {}) {
         else {
           const { data, content: body } = matter(fs.readFileSync(absPath, 'utf8'));
           fmData = { ...data, ...envelope.patches };
+          if (Object.prototype.hasOwnProperty.call(envelope.patches, 'type') &&
+              envelope.patches.type !== data.type) {
+            errors.push(`Patch may not change immutable field 'type' for ${envelope.path}.`);
+          }
           if (envelope.patches.__body__ !== undefined && APPEND_TYPES.has(data.type)) {
             const eb = body.trim(), nb = String(envelope.patches.__body__).trim();
             if (eb && !nb.startsWith(eb)) errors.push(`Append-type '${data.type}' does not allow rewriting existing records.`);
@@ -219,6 +267,16 @@ export function processOperation(envelope, vaultRoot, options = {}) {
           } else {
             const r = SSSS_SCHEMAS[resolvedType].safeParse(fmData);
             if (!r.success) r.error.issues.forEach(i => errors.push(`${i.path.join('.')}: ${i.message}`));
+          }
+
+          if (envelope.type === 'operation') {
+            const existingPath = resolveVfsPath(vaultRoot, envelope.path);
+            if (fs.existsSync(existingPath)) {
+              const existingData = matter(fs.readFileSync(existingPath, 'utf8')).data;
+              if (existingData.type && existingData.type !== resolvedType) {
+                errors.push(`Type rewrite refused for ${envelope.path}: '${existingData.type}' cannot become '${resolvedType}'.`);
+              }
+            }
           }
           
           if (envelope.type === 'operation' && APPEND_TYPES.has(resolvedType)) {

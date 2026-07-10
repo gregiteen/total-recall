@@ -272,6 +272,19 @@ export const SchemaProposalSchema = z.object({
   reviewed_by: z.string().nullable().optional(),
 });
 
+/** SSSS 0.9 meta-primitive for runtime-authored definitions (package core). */
+export const PrimitiveSchema = z.object({
+  type: z.literal('primitive'),
+  title: z.string(),
+  description: z.string(),
+  timestamp: ssssDatetime(),
+  primitive_id: z.string().optional(),
+  namespace: z.string().optional(),
+  name: z.string().optional(),
+  version: z.union([z.number(), z.string()]).optional(),
+  portability: z.enum(['structural', 'tenant_private', 'resource_bound']).optional(),
+}).passthrough();
+
 export const MigrationSchema = z.object({
   type: z.literal('migration'),
   migration_id: z.string(),
@@ -875,6 +888,7 @@ export const SSSS_SCHEMAS = {
   model: ModelSchema,
   conversation: ConversationSchema,
   run: RunSchema,
+  primitive: PrimitiveSchema,
   proposal: ProposalSchema,
   'schema-proposal': SchemaProposalSchema,
   migration: MigrationSchema,
