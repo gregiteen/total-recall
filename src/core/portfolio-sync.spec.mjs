@@ -82,7 +82,7 @@ describe('Portfolio Sync', () => {
       const req = { on: vi.fn() };
       setTimeout(() => {
         cb(res);
-        res.end(JSON.stringify({ primitive_inventory: { proposals: 2 } }));
+        res.end(JSON.stringify({ primitive_inventory: { proposals: 2 }, files: [] }));
       }, 10);
       return req;
     });

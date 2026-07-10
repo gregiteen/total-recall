@@ -501,8 +501,32 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
       </aside>
 
       {/* Main Chat Area */}
-      <div className="chat-container">
-        <header className="chat-header animate-fade-in">
+      <div className="chat-container" style={{ position: 'relative' }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 0,
+          pointerEvents: messages.length > 0 ? 'none' : 'auto',
+          opacity: messages.length > 0 ? 0.35 : 1,
+          transition: 'opacity 0.3s ease'
+        }}>
+          <Graph3D
+            threads={threads}
+            memoryNodes={allMemoryNodes}
+            researchItems={researchItems}
+            onOpenThread={(threadId) => setActiveThreadId(threadId)}
+            onGroundMemoryNode={(slug) => {
+              setSelectedGroundingNodes(prev =>
+                prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug]
+              )
+            }}
+            selectedGroundingNodes={selectedGroundingNodes}
+          />
+        </div>
+        <header className="chat-header animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
           <div className="chat-header-title">
             <h2>Chat Session</h2>
             {activeThreadId && (
@@ -685,35 +709,9 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
           </div>
         )}
 
-        <div className="chat-messages" style={{ position: 'relative' }}>
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 1,
-            pointerEvents: messages.length > 0 ? 'none' : 'auto',
-            opacity: messages.length > 0 ? 0.35 : 1,
-            transition: 'opacity 0.3s ease'
-          }}>
-            <Graph3D
-              threads={threads}
-              memoryNodes={allMemoryNodes}
-              researchItems={researchItems}
-              onOpenThread={(threadId) => setActiveThreadId(threadId)}
-              onGroundMemoryNode={(slug) => {
-                setSelectedGroundingNodes(prev =>
-                  prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug]
-                )
-              }}
-              selectedGroundingNodes={selectedGroundingNodes}
-            />
-          </div>
-
+        <div className="chat-messages" style={{ position: 'relative', zIndex: 1 }}>
           <div style={{
             position: 'relative',
-            zIndex: 2,
             display: 'flex',
             flexDirection: 'column',
             gap: '16px',
@@ -773,7 +771,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
           <div ref={messagesEnd} />
           </div>
         </div>
-        <div className="chat-input-bar">
+        <div className="chat-input-bar" style={{ position: 'relative', zIndex: 1 }}>
           {selectedGroundingNodes.length > 0 && (
             <div className="grounding-pills">
               {selectedGroundingNodes.map(slug => {

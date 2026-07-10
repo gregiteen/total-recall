@@ -147,7 +147,7 @@ export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfi
 // ─── Node Writers ───────────────────────────────────────────────────────────────
 
 function writeConclusionNode(inboxDir, conclusion, sourceSlugList, vaultDir) {
-  const slug = `inference-${crypto.randomBytes(4).toString('hex')}`;
+  const slug = `inference-${crypto.createHash('md5').update(conclusion.title || conclusion.description || JSON.stringify(conclusion)).digest('hex').slice(0, 8)}`;
   const now = new Date().toISOString();
 
   let latestPublished = null;
@@ -239,7 +239,7 @@ function writeContradictionRecord(conflictsDir, contradiction) {
     fs.mkdirSync(conflictsDir, { recursive: true });
   }
 
-  const slug = `contradiction-${crypto.randomBytes(4).toString('hex')}`;
+  const slug = `contradiction-${crypto.createHash('md5').update(contradiction.node_a + contradiction.node_b).digest('hex').slice(0, 8)}`;
   const now = new Date().toISOString();
 
   const data = {
@@ -264,7 +264,7 @@ function writeMergeProposal(proposalsDir, candidate) {
     fs.mkdirSync(proposalsDir, { recursive: true });
   }
 
-  const slug = `merge-proposal-${crypto.randomBytes(4).toString('hex')}`;
+  const slug = `merge-proposal-${crypto.createHash('md5').update(candidate.node_a + candidate.node_b).digest('hex').slice(0, 8)}`;
   const now = new Date().toISOString();
 
   const data = {

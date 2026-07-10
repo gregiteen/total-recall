@@ -1,6 +1,6 @@
 # Sovereign Policy Enforcement — Project Tracker
 
-> **Status**: In Progress
+> **Status**: ✅ Completed
 > **Date**: June 18, 2026
 > **Companion Docs**:
 > - [SOVEREIGN_POLICY_ENFORCEMENT_PRD.md](./SOVEREIGN_POLICY_ENFORCEMENT_PRD.md)
@@ -9,14 +9,14 @@
 
 ---
 
-## ⏳ Phase 1: Core Compiler Truncation Bypass
+## ✅ Phase 1: Core Compiler Truncation Bypass
 
 - [x] Modify `heuristicCompact(node)` in `src/core/surface.mjs` to exempt invariants/preferences/anti-patterns
 - [x] Format multi-line bodies with indentation to keep list items valid in Markdown
 
 ---
 
-## ⏳ Phase 2: Live Index & Log Generators
+## ✅ Phase 2: Live Index & Log Generators
 
 - [x] Implement SPEC-compliant `generateLiveIndex` in `src/core/okf-adapter.mjs` (type-grouped `#` headers, `*` bullets)
 - [x] Implement SPEC-compliant `generateLiveLog` in `src/core/okf-adapter.mjs` (date-grouped `## YYYY-MM-DD` headers, `*` bullets)
@@ -24,7 +24,7 @@
 
 ---
 
-## ⏳ Phase 3: Legacy Skills Standardization
+## ✅ Phase 3: Legacy Skills Standardization
 
 - [x] Create scripts/evals/subagents folders and `.gitkeep` files for `cli-agents`
 - [x] Remove SSSS metadata from `cli-agents/SKILL.md` frontmatter
@@ -36,21 +36,21 @@
 
 ---
 
-## ⏳ Phase 4: Quality Gate Integration
+## ✅ Phase 4: Quality Gate Integration
 
 - [x] Integrate skill optimization check (`enforce-skill-optimization.mjs`) into `scripts/code-quality-gate.mjs`
 - [x] Integrate non-blocking OKF compliance check (`lint --okf`) into `scripts/code-quality-gate.mjs`
 
 ---
 
-## ⏳ Phase 5: Programmatic Evals Spec Test
+## ✅ Phase 5: Programmatic Evals Spec Test
 
 - [x] Create programmatic evals test file `src/core/skills-evals.spec.mjs`
 - [x] Add Vitest assertions mapping to skill `evals.json` criteria
 
 ---
 
-## ⏳ Phase 6: Testing & Verification
+## ✅ Phase 6: Testing & Verification
 
 - [x] Re-run scaffold sync script (`node scripts/sync-scaffold.mjs`)
 - [x] Re-compile the vault (`npx total-recall compile` with cache bypass)

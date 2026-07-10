@@ -115,7 +115,7 @@ export function addToAgenda({ topic, priority = 50, source, rationale = '', tags
     if (directInstruction) existing.direct_instruction = true;
   } else {
     agenda.push({
-      id: crypto.randomBytes(4).toString('hex'),
+      id: crypto.createHash('md5').update(topic).digest('hex').slice(0, 8),
       topic,
       priority,
       source,
@@ -1221,7 +1221,7 @@ Output ONLY valid JSON.`;
     
     if (result.synthesized_instructions && result.synthesized_instructions.length > 0) {
       for (const inst of result.synthesized_instructions) {
-        const ruleSlug = `rule-synth-${crypto.randomBytes(5).toString('hex')}`;
+        const ruleSlug = `rule-synth-${crypto.createHash('md5').update(inst.title || inst.content || '').digest('hex').slice(0, 10)}`;
         const ruleNode = {
           type: 'memory',
           slug: ruleSlug,
@@ -1301,7 +1301,7 @@ Output ONLY valid JSON.`;
       const queueDir = path.join(localBrainDir, 'scheduler', 'queue');
       const { persistTaskToDisk } = await import('./scheduler.mjs');
       for (const t of result.autonomous_tasks) {
-        const taskSlug = `delib-task-${crypto.randomBytes(4).toString('hex')}`;
+        const taskSlug = `delib-task-${crypto.createHash('md5').update(t.task || t.topic || t.description || '').digest('hex').slice(0, 8)}`;
         const taskNode = {
           type: 'task',
           slug: taskSlug,
@@ -1578,7 +1578,7 @@ Output ONLY valid JSON.`;
         
         // Also schedule a scheduler task to run proactive research for this topic
         const prio = tangent.priority === 'high' ? 65 : (tangent.priority === 'low' ? 45 : 55);
-        const taskSlug = `proactive-research-${crypto.randomBytes(4).toString('hex')}`;
+        const taskSlug = `proactive-research-${crypto.createHash('md5').update(tangent.topic || '').digest('hex').slice(0, 8)}`;
         const taskNode = {
           type: 'task',
           slug: taskSlug,

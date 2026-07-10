@@ -348,8 +348,16 @@
     "path": "/api/tasks"
   },
   {
+    "method": "POST",
+    "path": "/api/tasks/:id/retry"
+  },
+  {
     "method": "DELETE",
     "path": "/api/tasks/cleanup"
+  },
+  {
+    "method": "GET",
+    "path": "/api/tasks/failed"
   },
   {
     "method": "POST",

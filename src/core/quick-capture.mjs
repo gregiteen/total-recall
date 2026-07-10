@@ -39,7 +39,7 @@ function classifyMessage(text) {
 
 function buildInboxNode({ text, author, channel, source, ts }) {
   const now = ts || new Date().toISOString();
-  const slug = `capture-${source}-${crypto.randomBytes(4).toString('hex')}`;
+  const slug = `capture-${source}-${crypto.createHash('md5').update(text).digest('hex').slice(0, 8)}`;
   const nodeType = classifyMessage(text);
 
   return {

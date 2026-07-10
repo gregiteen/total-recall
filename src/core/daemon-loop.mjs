@@ -401,14 +401,17 @@ async function main() {
           } else if (result.success) {
             updateTaskStatus(task, 'completed', QUEUE_DIR);
           } else {
-            // Dead Letter Queue / Retry Logic
+            // Dead Letter Queue / Retry Logic with exponential backoff
             task.retry_count = (task.retry_count || 0) + 1;
+            task.last_error = result.error || 'Unknown error';
             if (task.retry_count >= 3) {
-              logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed 3 times. Moving to DLQ (failed).` });
-              updateTaskStatus(task, 'failed', QUEUE_DIR);
+              logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed ${task.retry_count} times. Moving to DLQ (failed). Last error: ${task.last_error}` });
+              updateTaskStatus(task, 'failed', QUEUE_DIR, result.error || 'Unknown error');
             } else {
-              logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed. Retry ${task.retry_count}/3. Requeueing.` });
-              updateTaskStatus(task, 'pending', QUEUE_DIR);
+              const backoffMs = Math.min(Math.pow(2, task.retry_count) * 1000, 60000);
+              logger.info({ subsystem: 'daemon-loop', message: `Task ${task.slug} failed. Retry ${task.retry_count}/3 after ${backoffMs}ms backoff. Error: ${task.last_error}` });
+              updateTaskStatus(task, 'pending', QUEUE_DIR, result.error || 'Unknown error');
+              await new Promise(r => setTimeout(r, backoffMs));
             }
           }
         } catch (statusErr) {

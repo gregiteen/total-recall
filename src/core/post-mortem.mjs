@@ -219,7 +219,7 @@ export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeCo
 // ─── Draft Node Writers ─────────────────────────────────────────────────────────
 
 function writeDraftNode(inboxDir, { title, body, category, layer, tags, sourceSession }) {
-  const slug = `pm-${category}-${crypto.randomBytes(4).toString('hex')}`;
+  const slug = `pm-${category}-${crypto.createHash('md5').update(sourceSession + title).digest('hex').slice(0, 8)}`;
   const now = new Date().toISOString();
 
   const frontmatter = {
@@ -270,7 +270,7 @@ function writeDraftNode(inboxDir, { title, body, category, layer, tags, sourceSe
 }
 
 function writeSkillGapTask(queueDir, { topic, description, sourceSession }) {
-  const slug = `skill-gap-${topic}-${crypto.randomBytes(3).toString('hex')}`;
+  const slug = `skill-gap-${crypto.createHash('md5').update(topic).digest('hex').slice(0, 6)}`;
   const data = {
     type: 'task',
     slug,

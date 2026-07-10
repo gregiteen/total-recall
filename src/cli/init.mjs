@@ -392,8 +392,8 @@ export default async function init(args) {
       }
     }
 
-    const runOpenwiki = (await ask('\n  [3.8] Would you like to initialize OpenWiki for auto-documentation? (y/N): ')).trim().toLowerCase();
-    if (runOpenwiki === 'y' || runOpenwiki === 'yes') {
+    const runOpenwiki = (await ask('\n  [3.8] Would you like to initialize OpenWiki for auto-documentation? (Y/n): ')).trim().toLowerCase();
+    if (runOpenwiki !== 'n' && runOpenwiki !== 'no') {
       console.error('\n  Starting OpenWiki interactive setup...');
       spawnSync('npx', ['-y', 'openwiki', '--init'], { stdio: 'inherit', cwd: process.cwd() });
     }
@@ -407,8 +407,14 @@ export default async function init(args) {
     }
 
     rl.close();
-  } else if (!deployMode) {
-    deployMode = 'local';
+  } else {
+    if (!deployMode) {
+      deployMode = 'local';
+    }
+    if (!opts.dryRun) {
+      console.error('\n  Starting OpenWiki automatic setup...');
+      spawnSync('npx', ['-y', 'openwiki', '--init', '--yes'], { stdio: 'inherit', cwd: process.cwd() });
+    }
   }
 
   // Verify cloudflared binary dependency if a tunnel mode is selected

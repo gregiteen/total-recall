@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react"
-import { fetchDocs, readDoc, createDoc, updateDoc, deleteDoc, fetchViews, createView, deleteView } from "../api"
+import { useState, useEffect, useCallback, type MouseEvent } from "react"
+import { fetchDocs, readDoc, createDoc, updateDoc, deleteDoc, fetchViews, createView, deleteView, type SavedView, type VaultDocument } from "../api"
 import { useSearchParams } from "react-router-dom"
 import { DocumentTable } from "../components/DocumentTable"
 import { DocumentEditorModal } from "../components/DocumentEditorModal"
 
 export default function VaultPage({ activeBrainId }: { activeBrainId?: string }) {
-  const [docs, setDocs] = useState<any[]>([])
+  const [docs, setDocs] = useState<VaultDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [views, setViews] = useState<any[]>([])
+  const [views, setViews] = useState<SavedView[]>([])
 
   const [searchParams, setSearchParams] = useSearchParams()
   const q = searchParams.get("q") || ""
@@ -22,23 +22,24 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
   const [newPath, setNewPath] = useState("")
   const [saving, setSaving] = useState(false)
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const data = await fetchDocs(activeBrainId, { q, type, portability, status })
       const viewsData = await fetchViews()
       setDocs(data.docs)
       setViews(viewsData)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load vault data")
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeBrainId, portability, q, status, type])
 
   useEffect(() => {
-    loadData()
-  }, [activeBrainId, q, type, portability, status])
+    const timer = window.setTimeout(() => { void loadData() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadData])
 
   const handleSaveView = async () => {
     const name = prompt("Enter a name for this view:")
@@ -46,12 +47,12 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
     try {
       await createView(name, { q, type, portability, status })
       loadData()
-    } catch (err: any) {
-      alert("Failed to save view: " + err.message)
+    } catch (err: unknown) {
+      alert("Failed to save view: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
-  const handleApplyView = (v: any) => {
+  const handleApplyView = (v: SavedView) => {
     setSearchParams(prev => {
       prev.set("q", v.filters.q || "")
       prev.set("type", v.filters.type || "")
@@ -61,14 +62,14 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
     })
   }
 
-  const handleDeleteView = async (id: string, e: any) => {
+  const handleDeleteView = async (id: string, e: MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
     if (!confirm("Delete this saved view?")) return
     try {
       await deleteView(id)
       loadData()
-    } catch (err: any) {
-      alert("Delete failed: " + err.message)
+    } catch (err: unknown) {
+      alert("Delete failed: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -79,8 +80,8 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       setEditContent(data.raw)
       setIsNew(false)
       setNewPath(path)
-    } catch (err: any) {
-      alert("Failed to load document: " + err.message)
+    } catch (err: unknown) {
+      alert("Failed to load document: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -89,8 +90,8 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
     try {
       await deleteDoc(path, activeBrainId)
       loadData()
-    } catch (err: any) {
-      alert("Delete failed: " + err.message)
+    } catch (err: unknown) {
+      alert("Delete failed: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -105,8 +106,8 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       }
       setEditingPath(null)
       loadData()
-    } catch (err: any) {
-      alert("Save failed: " + err.message)
+    } catch (err: unknown) {
+      alert("Save failed: " + (err instanceof Error ? err.message : "Unknown error"))
     } finally {
       setSaving(false)
     }

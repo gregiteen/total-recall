@@ -1,10 +1,10 @@
 /**
  * Semantic Index — file-native vector search alongside tf-idf
  *
- * Generates embeddings via a local Ollama embedding model and persists them
+ * Generates embeddings via a local embedding model and persists them
  * in memory-derived/embeddings.jsonl — a plain JSONL file, no database.
  *
- * Embedding model: nomic-embed-text (default) or any Ollama embedding model.
+ * Embedding model: text-embedding-004 (default) or any embedding model.
  *
  * Usage:
  *   - `buildSemanticIndex(nodes, derivedDir, opts)` — called by compileSurface
@@ -134,7 +134,7 @@ async function throttledMap(items, limit, fn) {
 /**
  * Build (or incrementally update) the embeddings index from SSSS nodes.
  * Re-embeds nodes if they are missing from the index OR if their content hash has changed.
- * Skips silently if Ollama is unreachable.
+ * Skips silently if the embedding service is unreachable.
  *
  * @param {object[]} nodes        SSSS nodes with slug, title, body/content fields
  * @param {string}   derivedDir

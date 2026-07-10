@@ -40,7 +40,15 @@ export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-rec
  * @returns {string} Absolute path to the memory-vault directory
  */
 export function resolveVaultFromQuery(req) {
-  const brainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
+  const rawBrainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
+  let brainId = rawBrainId;
+
+  if (rawBrainId && rawBrainId.includes(',')) {
+    const parts = rawBrainId.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      brainId = parts[parts.length - 1];
+    }
+  }
 
   // No brain specified or explicitly global → default vault
   if (!brainId || brainId === 'global') {
@@ -82,6 +90,26 @@ export function resolveVaultFromQuery(req) {
 
   // Unknown brain ID format or resolution failed → default vault
   return VAULT_DIR;
+}
+
+export function resolveAllVaultsFromQuery(req) {
+  const rawBrainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
+  if (!rawBrainId) return [VAULT_DIR];
+
+  const ids = rawBrainId.split(',').map(s => s.trim()).filter(Boolean);
+  const vaults = [];
+
+  for (const id of ids) {
+    // We can reuse resolveVaultFromQuery by mocking the req object
+    const vault = resolveVaultFromQuery({ query: { brain: id } });
+    if (vault) {
+      vaults.push(vault);
+    }
+  }
+
+  // Deduplicate vaults
+  const uniqueVaults = [...new Set(vaults)];
+  return uniqueVaults.length > 0 ? uniqueVaults : [VAULT_DIR];
 }
 
 export function notFound(res, msg) {

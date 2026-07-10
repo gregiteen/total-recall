@@ -1,3 +1,21 @@
+---
+type: development_plan
+title: "SYSTEM RESILIENCE DEVELOPMENT PLAN"
+description: "Development plan for improving Total Recall autonomous stability through API decomposition, fault-tolerant DLQ with exponential backoff, deterministic slug generation, mobile web dispatch, Ollama cleanup, and frontend decomposition. Verified against actual source code on 2026-07-08."
+timestamp: "2026-07-08T22:25:00.000Z"
+tags:
+  - system-resilience
+  - development-plan
+  - daemon
+  - dlq
+  - architecture
+resource: "docs/projects/in-progress/system-resilience/SYSTEM_RESILIENCE_DEV_PLAN.md"
+aliases:
+  - "system-resilience-dev-plan"
+related:
+  - "SYSTEM_RESILIENCE_PROJECT_TRACKER"
+---
+
 # SYSTEM RESILIENCE DEVELOPMENT PLAN
 
 ## 1. Context & Motivation

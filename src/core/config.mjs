@@ -140,6 +140,14 @@ try {
   // Ignore
 }
 
+// Tenant integrations keep their credentials in the same local secret store as
+// provider keys. Expose this one only to the running process: the portfolio
+// sync client reads it by configured reference and it is never returned by an
+// HTTP route or written into repository configuration.
+if (!process.env.PORTFOLIO_ADMIN_TOKEN && typeof secrets.portfolio_admin_token === 'string' && secrets.portfolio_admin_token) {
+  process.env.PORTFOLIO_ADMIN_TOKEN = secrets.portfolio_admin_token;
+}
+
 // Capture raw configuration values from process.env and secrets.enc
 const rawConfig = {
   agentDir: process.env.AGENT_DIR,

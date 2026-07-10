@@ -33,7 +33,7 @@
  *     GET    /api/config              get sanitized runtime + security config
  *
  *   Models (OpenAI-compatible extension)
- *     GET    /v1/models               list available Ollama models
+ *     GET    /v1/models               list available models (OpenAI-compatible)
  *
  *   Vault (admin operations)
  *     POST   /api/vault/compile       trigger full surface compile (re-generates compile.json)
@@ -202,7 +202,6 @@ function sanitizeNode({ body, ...rest }) {
  * POST /api/memory/search/semantic
  * Body: { query: string, top_k?: number }
  * Returns top-k vault nodes ranked by vector similarity to the query.
- * Requires Ollama with nomic-embed-text running.
  */
 router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
@@ -212,7 +211,6 @@ router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:rea
     if (results.length === 0) return res.status(503).json({ error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.' });
     res.json({ query, top_k: Math.min(Number(top_k) || 5, 20), results });
   } catch (err) {
-    if (err.message?.includes('Ollama')) return res.status(503).json({ error: err.message });
     serverError(res, err);
   }
 });
@@ -237,7 +235,7 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
       const vaultNodes = getNodes(VAULT_DIR);
       vaultEmbed = await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
       sessionEmbed = await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
-    } catch { /* Ollama may not be running — non-fatal */ }
+    } catch { /* embedding service may be unavailable — non-fatal */ }
     res.json({ compiled: true, elapsed_ms: Date.now() - start, vault_embeddings: vaultEmbed, session_embeddings: sessionEmbed });
   } catch (err) {
     serverError(res, err);
@@ -637,7 +635,7 @@ router.get('/api', (req, res) => {
         'GET /api/memory/stats':                  'Node counts by category',
         'GET /api/memory/:slug':                  'Get node by slug',
         'POST /api/memory':                       'Create node (slug, title, category, content)',
-        'POST /api/memory/search/semantic':       'Semantic search by meaning (query, top_k) — requires Ollama',
+        'POST /api/memory/search/semantic':       'Semantic search by meaning (query, top_k)',
         'PUT /api/memory/:slug':                  'Replace node',
         'PATCH /api/memory/:slug':                'Partial update',
         'DELETE /api/memory/:slug':               'Delete node',
@@ -670,7 +668,7 @@ router.get('/api', (req, res) => {
       },
       discovery: {
         'GET /.well-known/total-recall.json': 'Client auto-config manifest',
-        'GET /health':                      'System health (disk, ollama, vault)',
+        'GET /health':                      'System health (disk, embedding service, vault)',
       },
     },
     scopes: {
@@ -2212,6 +2210,35 @@ router.post('/api/update/run', requireAuth, async (req, res) => {
         logger.error('update', `Auto-update failed: ${err.message}`);
       }
     });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+// ─── DLQ Admin Routes ────────────────────────────────────────────────────────────
+const QUEUE_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
+
+router.get('/api/tasks/failed', requireAuth, async (req, res) => {
+  try {
+    const { loadPendingTasks } = await import('../core/scheduler.mjs');
+    const allTasks = loadPendingTasks(QUEUE_DIR);
+    const failed = allTasks.filter(t => t.status === 'failed');
+    res.json({ total: failed.length, tasks: failed });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.post('/api/tasks/:id/retry', requireAuth, async (req, res) => {
+  try {
+    const taskId = req.params.id;
+    const { loadPendingTasks, updateTaskStatus } = await import('../core/scheduler.mjs');
+    const allTasks = loadPendingTasks(QUEUE_DIR);
+    const task = allTasks.find(t => t.slug === taskId);
+    if (!task) return res.status(404).json({ error: 'Task not found in queue' });
+    if (task.status !== 'failed') return res.status(400).json({ error: 'Task is not in failed state' });
+    updateTaskStatus(task, 'pending', QUEUE_DIR);
+    res.json({ success: true, message: `Task ${taskId} re-queued` });
   } catch (err) {
     serverError(res, err);
   }

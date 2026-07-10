@@ -125,7 +125,7 @@ export function loadPendingTasks(queueDir) {
 /**
  * Update a task's status on disk.
  */
-export function updateTaskStatus(task, newStatus, queueDir) {
+export function updateTaskStatus(task, newStatus, queueDir, lastError = null) {
   const filepath = task._filepath || path.join(queueDir, `${task.slug}.md`);
   if (!fs.existsSync(filepath)) return;
 
@@ -134,6 +134,9 @@ export function updateTaskStatus(task, newStatus, queueDir) {
   data.status = newStatus;
   if (newStatus === 'completed') {
     data.completed_at = new Date().toISOString();
+  }
+  if (lastError) {
+    data.last_error = lastError;
   }
 
   // Also update in-memory object properties so they stay in sync
@@ -253,7 +256,7 @@ function generateClarityReviewTask(vaultDir) {
   const target = nodes[Math.floor(Math.random() * nodes.length)];
   return {
     type: 'task',
-    slug: `clarity-review-${crypto.randomBytes(4).toString('hex')}`,
+    slug: `clarity-review-${crypto.createHash('md5').update(target.slug).digest('hex').slice(0, 8)}`,
     priority: 30,
     category: 'memory-maintenance',
     target: target.slug,
@@ -270,7 +273,7 @@ function generateClarityReviewTask(vaultDir) {
 function generateMemoryCompactionTask(vaultDir) {
   return {
     type: 'task',
-    slug: `memory-compaction-${crypto.randomBytes(4).toString('hex')}`,
+    slug: `memory-compaction-${new Date().toISOString().slice(0, 10)}`,
     priority: 35,
     category: 'memory-maintenance',
     target: 'global',
