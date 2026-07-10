@@ -173,32 +173,23 @@ export default async function skillCli(args) {
       return;
     }
 
-    const dirs = fs.readdirSync(skillsDir).filter(d => 
-      fs.statSync(path.join(skillsDir, d)).isDirectory()
-    );
+    // Only list packages with SKILL.md (real agent skills). Skip modules/, etc.
+    const dirs = fs.readdirSync(skillsDir).filter((d) => {
+      const skillPath = path.join(skillsDir, d);
+      if (!fs.statSync(skillPath).isDirectory()) return false;
+      return fs.existsSync(path.join(skillPath, 'SKILL.md'));
+    });
 
     if (dirs.length === 0) {
       console.log('No installed skills found in the active brain.');
       return;
     }
 
-    console.log('\n📦 Installed Sovereign Skills:');
+    console.log('\n📦 Installed Skills (SKILL.md present):');
     console.log('------------------------------------------------------------');
     for (const d of dirs) {
-      const skillPath = path.join(skillsDir, d);
-      const subSkillsPath = path.join(skillPath, 'skills');
-      let subSkills = [];
-
-      if (fs.existsSync(subSkillsPath) && fs.statSync(subSkillsPath).isDirectory()) {
-        subSkills = fs.readdirSync(subSkillsPath).filter(sd => 
-          fs.statSync(path.join(subSkillsPath, sd)).isDirectory()
-        );
-      }
-
-      console.log(` • ${d.padEnd(20)} [Universal Skill Package]`);
-      if (subSkills.length > 0) {
-        console.log(`   └ Sub-skills: ${subSkills.map(s => `🧩 ${s}`).join(', ')}`);
-      }
+      const note = d === 'total-recall' ? ' [TR core skill]' : '';
+      console.log(` • ${d.padEnd(20)}${note}`);
     }
     console.log('------------------------------------------------------------\n');
   } 

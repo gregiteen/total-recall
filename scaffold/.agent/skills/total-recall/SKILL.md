@@ -308,14 +308,15 @@ curl -H "Authorization: Bearer <YOUR_PAT_TOKEN>" \
 
 ---
 
-## Modules (not skills)
+## Operational modules only (not skills)
+
+Only files required at runtime live under `modules/`. Everything else was removed.
 
 | Path | Role |
 |------|------|
-| `modules/ssss/` | SSSS notes + local validators; prefer `@ssss/cli` |
-| `modules/skill-deploy/` | Scripts to create/install/scan user skills |
-| `modules/agents/` | `agents.yml` for headless CLI agent dispatch |
-| `modules/research/` | Optional research API notes (demoted from core skill) |
-| `openwiki/` | Human/agent knowledge docs (auto-shipped on init) |
+| `modules/skill-deploy/scripts/` | `find-skills` / `install-skill` / `scan-skill` for CLI + API |
+| `modules/agents/agents.yml` | Headless CLI agent registry for `runtime.mjs` |
+| `openwiki/` | Knowledge docs (auto-shipped on init) |
+| `references/ssss-reference.md` | Compact SSSS notes (prefer `@ssss/cli` for mutations) |
 
-Do **not** symlink modules into `.agent/skills/<name>` as if they were user skills.
+Do **not** nest agent skills inside total-recall. User skills: `.agent/skills/<name>/SKILL.md`.

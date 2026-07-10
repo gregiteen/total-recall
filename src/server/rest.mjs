@@ -1618,7 +1618,23 @@ function absoluteUrl(req, routePath) {
 }
 
 function ssssReferenceDir() {
-  return path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references');
+  // Prefer compact TR references; fall back to legacy nested module paths.
+  const candidates = [
+    path.join(SKILLS_DIR, 'total-recall', 'references'),
+    path.join(SKILLS_DIR, 'total-recall', 'modules', 'ssss', 'references'),
+    path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references'),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
+}
+
+function ssssSkillDocPath() {
+  const candidates = [
+    path.join(SKILLS_DIR, 'total-recall', 'references', 'ssss-reference.md'),
+    path.join(SKILLS_DIR, 'total-recall', 'SKILL.md'),
+    path.join(SKILLS_DIR, 'total-recall', 'modules', 'ssss', 'MODULE.md'),
+    path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'SKILL.md'),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
 
 function listSsssReferences(req) {
@@ -1659,7 +1675,7 @@ router.get('/api/ssss', requireAuth, requireScope('ssss:read'), (req, res) => {
       name: 'ssss-skill',
       url: absoluteUrl(req, '/api/ssss/skill/ssss'),
       ...(() => {
-        const r = readTextResource(path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'SKILL.md'), 'ssss-skill');
+        const r = readTextResource(ssssSkillDocPath(), 'ssss-skill');
         return r ? { sha256: r.sha256, bytes: r.bytes, modified: r.modified } : { sha256: null, bytes: 0, modified: null };
       })()
     },
@@ -1667,7 +1683,11 @@ router.get('/api/ssss', requireAuth, requireScope('ssss:read'), (req, res) => {
       name: 'ssss-spec',
       url: absoluteUrl(req, '/api/ssss/spec'),
       ...(() => {
-        const r = readTextResource(path.join(ssssReferenceDir(), 'ssss-spec.md'), 'ssss-spec');
+        const refs = ssssReferenceDir();
+        const specPath = ['ssss-reference.md', 'ssss-spec.md']
+          .map((n) => path.join(refs, n))
+          .find((p) => fs.existsSync(p));
+        const r = specPath ? readTextResource(specPath, 'ssss-spec') : null;
         return r ? { sha256: r.sha256, bytes: r.bytes, modified: r.modified } : { sha256: null, bytes: 0, modified: null };
       })()
     },
@@ -1695,11 +1715,15 @@ router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'ins
 });
 
 router.get('/api/ssss/skill/ssss', requireAuth, requireScope('ssss:read'), (_req, res) => {
-  return sendTextResource(res, path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'SKILL.md'), 'ssss-skill');
+  return sendTextResource(res, ssssSkillDocPath(), 'ssss-skill');
 });
 
 router.get('/api/ssss/spec', requireAuth, requireScope('ssss:read'), (_req, res) => {
-  return sendTextResource(res, path.join(ssssReferenceDir(), 'ssss-spec.md'), 'ssss-spec');
+  const refs = ssssReferenceDir();
+  const specPath = ['ssss-reference.md', 'ssss-spec.md']
+    .map((n) => path.join(refs, n))
+    .find((p) => fs.existsSync(p));
+  return sendTextResource(res, specPath || path.join(refs, 'ssss-reference.md'), 'ssss-spec');
 });
 
 router.get('/api/ssss/references', requireAuth, requireScope('ssss:read'), (req, res) => {

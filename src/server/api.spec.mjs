@@ -54,7 +54,7 @@ const { restRouter } = await import('./rest.mjs');
 const AGENT_DIR = TEST_AGENT_DIR;
 const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
 const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
-const SSSS_FILE = path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-ssss', 'SKILL.md');
+const SSSS_FILE = path.join(AGENT_DIR, 'skills', 'total-recall', 'references', 'ssss-reference.md');
 
 const FIXTURE_INSTRUCTIONS = '# Test Instructions Marker\n\nTOTAL_RECALL_INSTRUCTIONS_FIXTURE_TOKEN\n';
 const FIXTURE_SSSS = '# SSSS Test Marker\n\nTOTAL_RECALL_SSSS_FIXTURE_TOKEN\n';
@@ -88,10 +88,9 @@ describe('API Proxy', () => {
     beforeEach(() => {
       fs.mkdirSync(path.dirname(INSTRUCTIONS_FILE), { recursive: true });
       fs.writeFileSync(INSTRUCTIONS_FILE, FIXTURE_INSTRUCTIONS);
-      fs.mkdirSync(path.dirname(SSSS_FILE), { recursive: true });
-      fs.writeFileSync(SSSS_FILE, FIXTURE_SSSS);
-      const refsDir = path.join(path.dirname(SSSS_FILE), 'references');
+      const refsDir = path.dirname(SSSS_FILE);
       fs.mkdirSync(refsDir, { recursive: true });
+      fs.writeFileSync(SSSS_FILE, FIXTURE_SSSS);
       fs.writeFileSync(path.join(refsDir, 'ssss-spec.md'), '# Spec\n\nTOTAL_RECALL_SPEC_FIXTURE_TOKEN\n');
       fs.writeFileSync(path.join(refsDir, 'authoring-principles.md'), '# Authoring\n\nTOTAL_RECALL_AUTHORING_FIXTURE_TOKEN\n');
     });
