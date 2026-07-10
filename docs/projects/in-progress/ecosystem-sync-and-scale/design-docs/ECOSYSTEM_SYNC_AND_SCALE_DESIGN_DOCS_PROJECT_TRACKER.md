@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the DESIGN_DOCS module for autonomous ecosyste
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 4 Audit Findings
+- [ ] Remove statically hardcoded `CORE_DOCS` and `DEV_GUIDES` and wire up the actual `fetchDesignDocs()` response data to the sidebar.

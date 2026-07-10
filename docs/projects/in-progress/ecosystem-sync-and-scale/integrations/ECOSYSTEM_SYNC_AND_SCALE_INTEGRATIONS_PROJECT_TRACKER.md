@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the INTEGRATIONS module for autonomous ecosyst
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 3 Audit Findings
+- [ ] Add explicit error state handling for `listApiKeys`, `fetchActiveIntegrations`, and `fetchExtensionStatus` instead of swallowing rejections in empty `.catch()` blocks.

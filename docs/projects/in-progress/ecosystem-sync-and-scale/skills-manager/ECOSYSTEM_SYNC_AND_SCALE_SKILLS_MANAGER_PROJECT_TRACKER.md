@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the SKILLS_MANAGER module for autonomous ecosy
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 3 Audit Findings
+- [ ] Surface error toast/UI feedback in `handleFetchResearch` and `handleToggleSubDir` instead of failing silently.

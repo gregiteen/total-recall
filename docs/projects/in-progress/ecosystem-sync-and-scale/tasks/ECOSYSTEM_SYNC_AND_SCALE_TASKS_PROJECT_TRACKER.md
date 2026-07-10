@@ -16,3 +16,7 @@ Audit, stabilize, and standardize the TASKS module for autonomous ecosystem sync
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 1 Audit Findings
+- [ ] `handleToggleExpand`: Add visible error state/toast when `readMemory` fails, instead of silent console log.
+- [ ] Polling loop: Add exponential backoff to `fetchTasks`, `fetchResearch`, and `fetchDaemonLogs` to prevent spamming errors when backend is offline.

@@ -21,6 +21,7 @@ import { logger } from './logger.mjs';
 import { updateQueueItem, loadQueue } from './research-queue.mjs';
 import { execFileSync } from "node:child_process";
 import { agentDir, brainDir } from './config.mjs';
+import { runCrons } from './crons.mjs';
 
 const AGENT_DIR = agentDir;
 const BRAIN_DIR = brainDir;
@@ -351,6 +352,13 @@ async function main() {
           }
         } catch (err) {
           logger.info({ subsystem: 'daemon-loop', message: `Append log compaction error: ${err.message}` });
+        }
+
+        // Execute background ecosystem CRONs (Code scan, GitHub sync, Obsidian sync)
+        try {
+          await runCrons({ vaultDir: VAULT_DIR, skillsDir: SKILLS_DIR, brainDir: BRAIN_DIR });
+        } catch (err) {
+          logger.error({ subsystem: 'daemon-loop', message: `Cron execution failed: ${err.message}` });
         }
       }
 

@@ -16,3 +16,8 @@ Audit, stabilize, and standardize the MEMORY module for autonomous ecosystem syn
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 1 Audit Findings
+- [ ] Fix missing empty state when a category has 0 nodes or search yields 0 results.
+- [ ] Refactor WYSIWYG editor away from `contentEditable` and `document.execCommand` to avoid cursor jumping and React desync.
+- [ ] Replace `dangerouslySetInnerHTML` regex parsing with proper Markdown rendering and HTML sanitization to prevent XSS.

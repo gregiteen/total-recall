@@ -16,3 +16,7 @@ Audit, stabilize, and standardize the SOVEREIGN_GRAPH module for autonomous ecos
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 4 Audit Findings
+- [ ] `listMemory(activeBrainId)` in the `Promise.all` needs a `.catch()` block.
+- [ ] Render an explicit empty state message instead of a blank 3D canvas if zero nodes/research/threads exist.

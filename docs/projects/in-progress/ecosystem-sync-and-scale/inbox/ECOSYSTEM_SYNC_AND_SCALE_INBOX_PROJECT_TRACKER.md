@@ -16,3 +16,6 @@ Audit, stabilize, and standardize the INBOX module for autonomous ecosystem sync
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 1 Audit Findings
+- [ ] `handleDecision`: Replace synchronous `alert()` calls with non-blocking UI toasts or error states for `postDecision` and `updateDoc` failures.

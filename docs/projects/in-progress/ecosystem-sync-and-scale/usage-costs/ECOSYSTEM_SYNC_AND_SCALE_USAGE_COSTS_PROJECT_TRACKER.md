@@ -16,3 +16,7 @@ Audit, stabilize, and standardize the USAGE_COSTS module for autonomous ecosyste
 ## ⏳ Phase 3: Testing & Verification
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
+
+## Batch 3 Audit Findings
+- [ ] Add explicit optional chaining to nested properties like `usage?.breakdown?.gemini?.dailyUsd?.toFixed(4)` to prevent TypeError crashes.
+- [ ] Add empty state fallback UI for `timeseriesData` chart to prevent rendering an empty AreaChart.
