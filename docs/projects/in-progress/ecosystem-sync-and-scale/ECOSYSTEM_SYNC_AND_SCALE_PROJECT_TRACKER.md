@@ -1,4 +1,4 @@
-# ECOSYSTEM SYNC AND SCALE: PROJECT TRACKER
+# ECSystemYSTEM SYNC AND SCALE: PROJECT TRACKER
 
 ## Goal
 Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Data fragmentation, implementing CRON automation, adding GitHub/Obsidian sync, and hardening OKF/SSSS spec compliance.
@@ -26,7 +26,7 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 - [x] **OKF Manager**: Ensure `@ssss/cli` bundle validation works.
 - [x] **OpenWiki**: Ensure tree display uses correct memory nodes.
 - [x] **Documentation**: Ensure `SKILL.md` loading logic.
-- [x] **Sovereign Graph**: Audit semantic visualization for disconnected nodes.
+- [x] **Local Graph**: Audit semantic visualization for disconnected nodes.
 
 ## ⏳ Phase 2: Centralized Data Organization
 - [ ] Define and document global vs project skill resolution paths in the reference engine.
@@ -82,7 +82,7 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
 ## Batch 2 Audit Findings
-- [ ] Ensure `POST /api/update/run` async logic correctly pipes errors back to the client instead of prematurely returning `success: true`.
+- [ ] Ensure `PSystemT /api/update/run` async logic correctly pipes errors back to the client instead of prematurely returning `success: true`.
 
 ### CHAT
 - [ ] Audit UI components for rendering bugs and empty state crashes.
@@ -296,7 +296,7 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 - [ ] Write integration test.
 - [ ] Verify functionality under Clean-Account Initialization.
 ## Batch 2 Audit Findings
-- [ ] Fix `POST /api/config-json` endpoint to properly validate and include `openrouter_api_key` in the `allowedKeys` array.
+- [ ] Fix `PSystemT /api/config-json` endpoint to properly validate and include `openrouter_api_key` in the `allowedKeys` array.
 
 ### SKILLS MANAGER
 - [ ] Audit UI components for rendering bugs and empty state crashes.
@@ -342,7 +342,7 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 - [ ] `handleToggleExpand`: Add visible error state/toast when `readMemory` fails, instead of silent console log.
 - [ ] Polling loop: Add exponential backoff to `fetchTasks`, `fetchResearch`, and `fetchDaemonLogs` to prevent spamming errors when backend is offline.
 
-### USAGE COSTS
+### USAGE CSystemTS
 - [ ] Audit UI components for rendering bugs and empty state crashes.
 - [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
 - [ ] Map data resolution (Global vs. Project scoped data).

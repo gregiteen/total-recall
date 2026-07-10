@@ -1,4 +1,4 @@
-# ECOSYSTEM SYNC AND SCALE: PRD
+# ECSystemYSTEM SYNC AND SCALE: PRD
 
 ## 1. Goal & Vision
 Total Recall must evolve from a fragmented, localized memory vault into a fully integrated ecosystem manager. 
@@ -7,7 +7,7 @@ It must autonomously manage repo-specific skills, embedded skills, automatic cod
 Crucially, **Brains must remain strictly isolated**. We are not merging them. The goal is to build a robust resolution pipeline so the daemon knows exactly which isolated scope (Global, Project, or Embedded) it is reading from or writing to at any given time.
 
 ## 2. Target Audience & Personas
-- **The Sovereign Developer**: Wants a completely autonomous background system that observes their code, writes skills, and manages cross-repo context without manual CLI prompting.
+- **The Independent Developer**: Wants a completely autonomous background system that observes their code, writes skills, and manages cross-repo context without manual CLI prompting.
 - **The System Administrator**: Requires robust sync guarantees (GitHub/Obsidian) so that modifying memory via external tools does not corrupt the SSSS engine.
 
 ## 3. Core Features

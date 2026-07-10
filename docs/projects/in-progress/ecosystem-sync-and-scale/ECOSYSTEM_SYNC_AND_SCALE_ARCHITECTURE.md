@@ -1,4 +1,4 @@
-# ECOSYSTEM SYNC AND SCALE: ARCHITECTURE
+# ECSystemYSTEM SYNC AND SCALE: ARCHITECTURE
 
 ## 1. System Topology Overview
 The architecture is fundamentally shifting from a stateless CLI tool invoking single operations, to a stateful, background Daemon that continuously observes the VFS (Virtual File System) and synchronizes with external platforms.

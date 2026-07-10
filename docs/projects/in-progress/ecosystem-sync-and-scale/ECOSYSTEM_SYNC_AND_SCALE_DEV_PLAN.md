@@ -1,14 +1,14 @@
-# ECOSYSTEM SYNC AND SCALE: DEV PLAN
+# ECSystemYSTEM SYNC AND SCALE: DEV PLAN
 
 ## Phase 1: API & Concurrency Hardening (Days 1-2)
 1. **Remove `process.cwd()` dependencies**: Execute a full find-and-replace across `src/server/rest.mjs`. All routes must resolve paths using the globally exported `ROOT`, `BRAIN_DIR`, or `AGENT_DIR` variables.
 2. **Patch Concurrent `fs` operations**: Add `try/catch` and `fs.existsSync()` safety wrappers around all `fs.unlinkSync()` and `fs.statSync()` calls in `rest.mjs` and `vault.mjs`.
-3. **Fix API Key Leak**: Patch `POST /api/config-json` to whitelist `openrouter_api_key`.
+3. **Fix API Key Leak**: Patch `PSystemT /api/config-json` to whitelist `openrouter_api_key`.
 
 ## Phase 2: Frontend UX Resiliency (Days 3-4)
 1. **Eliminate Waterfall Fetches**: Refactor React hooks in `ModelsPage.tsx` and `MemoryPage.tsx` to use `Promise.all()` for concurrent data loading.
 2. **Empty State Handlers**: Implement explicit empty state components for:
-   - Sovereign Graph (When 0 nodes exist)
+   - Local Graph (When 0 nodes exist)
    - Memory Categories (When category is empty)
    - Usage Charts (When data arrays are empty)
 3. **WYSIWYG Editor Safety**: Refactor `MemoryPage.tsx` away from raw `contentEditable` and `dangerouslySetInnerHTML`.
