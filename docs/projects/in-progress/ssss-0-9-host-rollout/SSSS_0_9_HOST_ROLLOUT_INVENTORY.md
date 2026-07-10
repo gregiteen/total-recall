@@ -98,7 +98,7 @@ From package `registry/core.json`:
 - [x] Direct-write detector flags unapproved canonical paths
 - [x] Bridge tests green under `vitest`
 - [ ] Remove local core `processOperation` body after sustained parity
-- [ ] Clean-account, replay, recovery, scope, and privacy verification
+- [x] Clean-account, replay, recovery, scope, and privacy verification
 
 ## Implementation (2026-07-10)
 
