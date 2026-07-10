@@ -1528,9 +1528,9 @@ router.get('/api/dashboard/instructions', requireAuth, requireScope('instruction
   for (const name of surfaceFiles) {
     let filePath;
     if (name === 'INSTRUCTIONS.md') {
-      filePath = INSTRUCTIONS;
+      filePath = path.join(ROOT, name);
     } else {
-      filePath = path.join(process.cwd(), name);
+      filePath = path.join(ROOT, name);
     }
     
     let size = 0;
@@ -1564,7 +1564,7 @@ router.get('/api/dashboard/instructions', requireAuth, requireScope('instruction
 });
 
 router.get('/api/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {
-  return sendTextResource(res, INSTRUCTIONS, 'instructions');
+  return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
 });
 
 router.put('/api/instructions', requireAuth, requireScope('instructions:write'), (req, res) => {
@@ -1685,13 +1685,13 @@ router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'ins
   const surface = req.query.surface;
   if (surface) {
     if (surface === 'INSTRUCTIONS.md') {
-      return sendTextResource(res, INSTRUCTIONS, 'instructions');
+      return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
     }
     const safeSurface = path.basename(surface);
-    const surfacePath = path.join(process.cwd(), safeSurface);
+    const surfacePath = path.join(ROOT, safeSurface);
     return sendTextResource(res, surfacePath, safeSurface);
   }
-  return sendTextResource(res, INSTRUCTIONS, 'instructions');
+  return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
 });
 
 router.get('/api/ssss/skill/ssss', requireAuth, requireScope('ssss:read'), (_req, res) => {

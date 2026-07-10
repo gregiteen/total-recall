@@ -170,11 +170,51 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
     }
   }, [])
 
-  // Reload memory nodes when active selected brain changes
+  // Reload memory nodes when active selected brain changes or background SSE triggers
   useEffect(() => {
-    listMemory(activeBrainId)
-      .then(setAllMemoryNodes)
-      .catch(console.error)
+    let active = true
+
+    const loadMemoryNodes = () => {
+      listMemory(activeBrainId)
+        .then(nodes => {
+          if (!active) return
+          setAllMemoryNodes(nodes)
+          // Ensure selected grounding nodes stay in sync if a node is deleted in another tab/process
+          setSelectedGroundingNodes(prev => prev.filter(slug => nodes.some(n => n.slug === slug)))
+        })
+        .catch(console.error)
+    }
+
+    // Initial load
+    loadMemoryNodes()
+
+    // Listen to Cognitive Daemon SSE for memory surface rebuilds
+    const sseUrl = "http://localhost:9111/stream"
+    const eventSource = new EventSource(sseUrl)
+
+    eventSource.onmessage = (event) => {
+      if (!active) return
+      try {
+        const logEntry = JSON.parse(event.data)
+        if (
+          logEntry.sender === 'conflict-detector' ||
+          logEntry.sender === 'memory-ingestion' ||
+          logEntry.message?.includes('Surface compilation') ||
+          logEntry.message?.includes('Brain embeddings rebuilt') ||
+          logEntry.message?.includes('Graph indices rebuilt') ||
+          logEntry.message?.includes('deleted')
+        ) {
+          loadMemoryNodes()
+        }
+      } catch (e) {
+        // ignore parsing errors from stream
+      }
+    }
+
+    return () => {
+      active = false
+      eventSource.close()
+    }
   }, [activeBrainId])
 
   // Click outside listener for grounding node selector popover and model selector dropdown
