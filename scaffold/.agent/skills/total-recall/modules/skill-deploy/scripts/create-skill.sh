@@ -1,8 +1,8 @@
 #!/bin/bash
 # create-skill.sh — Scaffold a new Dev Skill from the template
 #
-# Usage: bash .agent/skills/tr-skill/scripts/create-skill.sh <skill-name>
-# Example: bash .agent/skills/tr-skill/scripts/create-skill.sh my-new-skill
+# Usage: bash .agent/skills/total-recall/modules/skill-deploy/scripts/create-skill.sh <skill-name>
+# Example: bash .agent/skills/total-recall/modules/skill-deploy/scripts/create-skill.sh my-new-skill
 
 set -euo pipefail
 
@@ -60,6 +60,6 @@ echo ""
 echo "📝 Next steps:"
 echo "  1. Edit $TARGET/SKILL.md with real instructions"
 echo "  2. Write a trigger-optimized description in the frontmatter"
-echo "  3. Run: node .agent/skills/tr-skill/scripts/update-skill-index.mjs"
+echo "  3. Run: node .agent/skills/total-recall/modules/skill-deploy/scripts/update-skill-index.mjs"
 echo ""
 echo "🏁 Done."

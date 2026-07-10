@@ -1,8 +1,8 @@
----
-name: tr-ssss
-provenance: total-recall
-description: "Use this skill to inspect, validate, write, and manage SSSS primitives, memory nodes, operation envelopes, scope overlays, projections, and VFS specifications in the Total Recall reference kernel. MANDATORY: Read this file before editing SSSS files or code."
----
+# Total Recall module: ssss
+
+> **Not an agent skill.** This is an internal Total Recall module (docs + scripts).
+> Agents operate Total Recall via the parent skill only:
+> `.agent/skills/total-recall/SKILL.md`
 
 # SSSS — Structured Semantic Syntax System Manager
 
@@ -262,7 +262,7 @@ derived output outside the source vault from a complete staged tree.
 Validate an individual SSSS Markdown file with:
 
 ```bash
-node .agent/skills/tr-ssss/scripts/validate-schema.mjs <path-to-node.md>
+node .agent/skills/total-recall/modules/ssss/scripts/validate-schema.mjs <path-to-node.md>
 ```
 
 Run focused kernel tests after changing the operation contract, schema registry,

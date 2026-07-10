@@ -1,8 +1,8 @@
----
-name: tr-cli-agents
-provenance: total-recall
-description: "Orchestrate headlessly spawned CLI agents from the central registry."
----
+# Total Recall module: agents
+
+> **Not an agent skill.** This is an internal Total Recall module (docs + scripts).
+> Agents operate Total Recall via the parent skill only:
+> `.agent/skills/total-recall/SKILL.md`
 
 # CLI Agents — Headless Multi-Agent Orchestration & Dispatch Engine
 
@@ -13,7 +13,7 @@ This system skill governs the discovery, configuration, and execution of headles
 ## 🎯 SYSTEM OVERVIEW
 
 The CLI Agent Dispatch Engine parses agent profiles from the central registry file:
-`.agent/skills/total-recall/skills/tr-cli-agents/agents.yml`
+`.agent/skills/total-recall/modules/agents/agents.yml`
 
 ```mermaid
 flowchart TD

@@ -73,6 +73,36 @@ function copyDirMerge(src, dest, dryRun) {
   }
 }
 
+/**
+ * Ship openwiki with the brain (global or project). Prefer packaged templates;
+ * fall back to a minimal set of pages so every brain has docs.
+ */
+function ensureOpenWiki(brainDir, isProject, dryRun) {
+  const wikiDir = path.join(brainDir, 'openwiki');
+  const templateRoot = path.join(ROOT, 'templates', 'openwiki');
+  if (ensureDir(wikiDir, dryRun)) {
+    logOk(`Created openwiki at ${path.relative(process.cwd(), wikiDir) || wikiDir}`);
+  }
+  if (fs.existsSync(templateRoot)) {
+    copyDirMerge(templateRoot, wikiDir, dryRun);
+  } else {
+    // Minimal fallback pages when templates/ not packaged yet
+    const pages = {
+      'README.md': `# OpenWiki\n\nPortable knowledge docs for this Total Recall brain (${isProject ? 'project' : 'global'}).\n\n- Not the SSSS memory vault — use vault nodes for rules/facts.\n- Use these pages for architecture, stack, and how-to knowledge.\n`,
+      'memory.md': `# Memory\n\nHow this brain stores invariants, preferences, and facts.\n\nUse \`npx total-recall remember\` / \`recall\` / \`compile\`.\n`,
+      'ide.md': `# IDE personalization\n\nConnect surfaces with \`npx total-recall connect <ide>\`.\nInjected blocks live inside BEGIN/END INJECTED MEMORY markers only.\n`,
+      'skills.md': `# Skills\n\nUser skills live in \`.agent/skills/<name>/\` (siblings of total-recall).\nTotal Recall tracks and deploys skills; it does not nest product skills inside itself.\n`,
+      'secrets.md': `# Secrets\n\nAPI keys and credentials belong in the encrypted secrets store — never in openwiki or instruction shims.\n`,
+    };
+    for (const [name, body] of Object.entries(pages)) {
+      const dest = path.join(wikiDir, name);
+      if (fs.existsSync(dest)) continue;
+      if (!dryRun) fs.writeFileSync(dest, body);
+      logOk(`Seeded openwiki/${name}`);
+    }
+  }
+}
+
 function parseArgs(args) {
   const opts = {
     dryRun: false,
@@ -502,30 +532,13 @@ export default async function init(args) {
     logOk('UI deploy configuration persisted to wizard-config.json!');
   }
 
-  // ── Symlink nested brain skills to top-level .agent/skills/ ──
-  // Skills inside the brain (e.g. .agent/skills/total-recall/skills/tr-ssss/) are
-  // invisible to IDEs because they only scan .agent/skills/<name>/ one level
-  // deep. Create symlinks so they appear as slash commands.
-  const nestedSkillsDir = path.join(brainDir, 'skills');
-  if (fs.existsSync(nestedSkillsDir)) {
-    const topSkillsDir = path.join(agentDir, 'skills');
-    for (const entry of fs.readdirSync(nestedSkillsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const target = path.join(topSkillsDir, entry.name);
-      const source = path.join(nestedSkillsDir, entry.name);
-      if (fs.existsSync(target)) continue; // don't clobber existing top-level skills
-      if (!opts.dryRun) {
-        try {
-          fs.symlinkSync(source, target);
-          logOk(`Symlinked nested skill: ${entry.name} → IDE-visible`);
-        } catch (err) {
-          logWarn(`Could not symlink skill "${entry.name}": ${err.message}`);
-        }
-      } else {
-        log(`  Would symlink ${entry.name} → ${target}`);
-      }
-    }
-  }
+  // Nested packages under total-recall/skills/ are no longer promoted as IDE skills
+  // (TR_CORE_FOCUS). Implementation lives in total-recall/modules/. User skills are
+  // only those with SKILL.md directly under .agent/skills/<name>/.
+
+  // ── Step 3.6: Ensure openwiki ships with the brain ──
+  logStep('3.6/4', 'Ensuring openwiki is present');
+  ensureOpenWiki(brainDir, isProject, opts.dryRun);
 
   // ── Step 3.7: Project skills as slash commands into the IDEs in use ──
   // Scope matches the brain: `init --project` projects PROJECT skills into the

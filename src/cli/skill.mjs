@@ -9,7 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../');
 
 export function resolveSkillScriptPath(scriptName, { agentDir = resolveAgentDir(), root = ROOT } = {}) {
+  // skill-deploy module (TR_CORE_FOCUS); keep legacy nested-skill paths for old brains.
   const candidates = [
+    path.join(agentDir, 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
+    path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
     path.join(agentDir, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
     path.join(agentDir, 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
     path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
