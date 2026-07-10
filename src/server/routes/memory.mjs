@@ -20,6 +20,7 @@ import { requireAuth, requireScope } from '../auth.mjs';
 import { compileSurface } from '../../core/surface.mjs';
 import { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } from '../../core/embeddings.mjs';
 import { detectAndResolve } from '../../core/conflict-detector.mjs';
+import { listQueue, updateQueueItem } from '../../core/research-queue.mjs';
 import {
   BRAIN_DIR,
   VAULT_DIR,
@@ -338,6 +339,15 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
     }
     invalidate(targetVaultDir);
     triggerMutation(null, targetVaultDir);
+
+    // Keep interface and queue in sync: clear this node_slug from any research agenda items
+    const queue = listQueue({});
+    for (const item of queue.items) {
+      if (item.node_slug === req.params.slug) {
+        updateQueueItem(item.id, { node_slug: null });
+      }
+    }
+
     res.json({ deleted: true, slug: req.params.slug });
   } catch (err) {
     serverError(res, err);

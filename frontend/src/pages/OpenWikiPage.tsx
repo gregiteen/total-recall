@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { searchMemory, runSandbox } from '../api';
+import { 
+  searchMemory, 
+  readMemory, 
+  runSandbox, 
+  fetchOpenWikiNodes 
+} from '../api';
 import type { MemoryNode } from '../types';
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
@@ -143,7 +148,7 @@ export default function OpenWikiPage() {
   const fetchNodes = async () => {
     setNodesLoading(true);
     try {
-      const results = await searchMemory('openwiki');
+      const results = await fetchOpenWikiNodes();
       setNodes(results);
       setNodeCount(results.length);
       setInitialized(results.length > 0);
