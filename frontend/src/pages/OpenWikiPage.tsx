@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { 
-  searchMemory, 
-  readMemory, 
-  runSandbox, 
-  fetchOpenWikiNodes 
+import {
+  runSandbox,
+  fetchOpenWikiNodes,
 } from '../api';
 import type { MemoryNode } from '../types';
 
@@ -125,7 +123,21 @@ function categoryColor(cat: string): { bg: string; fg: string } {
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
-export default function OpenWikiPage() {
+function brainLabel(brainId: string): string {
+  if (!brainId || brainId === 'global') return 'Global brain';
+  return brainId
+    .split(',')
+    .map((id) => {
+      const t = id.trim();
+      if (t === 'global') return 'Global';
+      if (t.startsWith('project:')) return t.slice('project:'.length);
+      if (t.startsWith('tenant:')) return `tenant:${t.slice('tenant:'.length)}`;
+      return t;
+    })
+    .join(' + ');
+}
+
+export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrainId?: string }) {
   // Status
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
@@ -143,15 +155,17 @@ export default function OpenWikiPage() {
   const [selectedNode, setSelectedNode] = useState<MemoryNode | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
-  // ── Data Fetching ──
+  // ── Data Fetching (scoped to selected brain / repos) ──
 
-  const fetchNodes = async () => {
+  const fetchNodes = async (brainId: string) => {
     setNodesLoading(true);
+    setStatusLoading(true);
     try {
-      const results = await fetchOpenWikiNodes();
+      const results = await fetchOpenWikiNodes(brainId);
       setNodes(results);
       setNodeCount(results.length);
       setInitialized(results.length > 0);
+      setSelectedNode(null);
     } catch {
       setNodes([]);
       setInitialized(false);
@@ -162,9 +176,8 @@ export default function OpenWikiPage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-    fetchNodes();
-  }, []);
+    void fetchNodes(activeBrainId || 'global');
+  }, [activeBrainId]);
 
   // ── Ingestion Handlers ──
 
@@ -187,7 +200,7 @@ try {
       setCmdError(!result.success);
       if (result.success) {
         // Refresh nodes after successful ingestion
-        await fetchNodes();
+        await fetchNodes(activeBrainId || 'global');
       }
     } catch (e) {
       setCmdOutput((e as Error).message);
@@ -233,6 +246,8 @@ try {
         <h1>📚 OpenWiki Browser</h1>
         <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0' }}>
           Auto-document your codebase with OpenWiki and ingest nodes into memory.
+          Scoped to <strong style={{ color: 'var(--text-primary)' }}>{brainLabel(activeBrainId)}</strong>
+          {' '}— change the brain selector to switch repos.
         </p>
       </div>
 
@@ -257,7 +272,7 @@ try {
             <>
               <span style={badgeStyle('rgba(0,206,201,0.15)', 'var(--success)')}>Initialized</span>
               <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                {nodeCount} node{nodeCount !== 1 ? 's' : ''} ingested
+                {nodeCount} node{nodeCount !== 1 ? 's' : ''} in {brainLabel(activeBrainId)}
               </span>
             </>
           ) : (
@@ -339,8 +354,9 @@ try {
             }}
           >
             <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>
-              No OpenWiki nodes found. Initialize OpenWiki to auto-document your codebase.
+            <p style={{ color: 'var(--text-secondary)', fontSize: 15, maxWidth: 440, margin: '0 auto' }}>
+              No OpenWiki nodes for <strong>{brainLabel(activeBrainId)}</strong>. Switch the brain
+              selector, or initialize / ingest OpenWiki into this project’s vault.
             </p>
           </div>
         )}

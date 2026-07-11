@@ -81,9 +81,11 @@ import { synthesize as synthesizeTts, isTtsEnabled, TtsNotConfiguredError } from
 import { logger } from '../core/logger.mjs';
 import { memoryRouter }   from './routes/memory.mjs';
 import { keysRouter }     from './routes/keys.mjs';
+import { secretsRouter }  from './routes/secrets.mjs';
 import { sessionsRouter } from './routes/sessions.mjs';
 import { shareRouter }    from './routes/share.mjs';
 import { authRouter }     from './routes/auth.mjs';
+import { webauthnRouter } from './routes/webauthn.mjs';
 import { sandboxRouter }  from './routes/sandbox.mjs';
 import { researchRouter } from './routes/research.mjs';
 import { skillsRouter }   from './routes/skills.mjs';
@@ -163,9 +165,11 @@ const router = express.Router();
 // handlers below so URL precedence stays identical to the pre-refactor file.
 router.use(memoryRouter);
 router.use(keysRouter);
+router.use(secretsRouter);
 router.use(sessionsRouter);
 router.use(shareRouter);
 router.use(authRouter);
+router.use(webauthnRouter);
 router.use(sandboxRouter);
 router.use(researchRouter);
 router.use(skillsRouter);
@@ -753,7 +757,7 @@ router.post('/api/integrations/connect', requireAuth, (req, res) => {
 
     const validClients = [
       'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'claude-code',
-      'codex', 'gemini', 'aider', 'ultrachat', 'obsidian',
+      'codex', 'gemini', 'aider', 'http-api', 'obsidian',
       'generic', 'antigravity'
     ];
 
@@ -1819,41 +1823,42 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, re
       }
     }
 
-    // Portfolio Sync Tenant
+    // Optional remote/tenant vault from config (path-agnostic — user sets vaultDir)
     try {
-      // Need to import dynamically because rest.mjs is already imported above
       const config = await import('../core/config.mjs');
-      if (config.portfolioSync?.enabled) {
-        const tenantVaultDir = config.portfolioSync.vaultDir;
+      if (config.remoteVaultSync?.enabled && config.remoteVaultSync.vaultDir) {
+        const tenantVaultDir = config.remoteVaultSync.vaultDir;
+        const tenantId =
+          process.env.TR_TENANT_ID ||
+          path.basename(path.dirname(tenantVaultDir)) ||
+          'remote';
         const exists = fs.existsSync(tenantVaultDir);
         let nodeCount = 0;
-        
         if (exists) {
-            const countMd = (dir) => {
-              if (!fs.existsSync(dir)) return 0;
-              let count = 0;
-              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-                if (entry.isDirectory()) count += countMd(path.join(dir, entry.name));
-                else if (entry.name.endsWith('.md')) count++;
-              }
-              return count;
-            };
-            nodeCount = countMd(tenantVaultDir);
+          const countMd = (dir) => {
+            if (!fs.existsSync(dir)) return 0;
+            let count = 0;
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (entry.isDirectory()) count += countMd(path.join(dir, entry.name));
+              else if (entry.name.endsWith('.md')) count++;
+            }
+            return count;
+          };
+          nodeCount = countMd(tenantVaultDir);
         }
-
         brains.push({
-          id: 'tenant:portfolio-site',
-          name: 'Portfolio Site (Tenant)',
+          id: `tenant:${tenantId}`,
+          name: process.env.TR_TENANT_NAME || `Tenant (${tenantId})`,
           layer: 'tenant',
           path: tenantVaultDir,
           project_root: path.dirname(tenantVaultDir),
           exists,
           node_count: nodeCount,
-          last_compiled: null
+          last_compiled: null,
         });
       }
-    } catch (err) {
-       // ignore
+    } catch {
+      // ignore
     }
 
     res.json({ brains });
@@ -1889,15 +1894,26 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
       brainDir = project.brainDir;
       vaultDir = path.join(brainDir, 'memory-vault');
     } else if (brainId.startsWith('tenant:')) {
-      const tenantName = brainId.slice('tenant:'.length);
-      if (tenantName !== 'portfolio-site') {
-         return res.status(404).json({ error: `Tenant "${tenantName}" not found` });
-      }
+      const tenantName = brainId.slice('tenant:'.length).replace(/[^a-zA-Z0-9._-]/g, '');
       const config = await import('../core/config.mjs');
-      if (!config.portfolioSync?.enabled) {
-         return res.status(404).json({ error: `Tenant sync not enabled` });
+      // Prefer configured remote vault when id matches configured tenant; else ~/.agent/tenants/<name>/vault
+      const configuredId =
+        process.env.TR_TENANT_ID ||
+        (config.remoteVaultSync?.vaultDir
+          ? path.basename(path.dirname(config.remoteVaultSync.vaultDir))
+          : null);
+      if (
+        config.remoteVaultSync?.enabled &&
+        config.remoteVaultSync.vaultDir &&
+        (tenantName === configuredId || tenantName === 'remote' || tenantName === 'default')
+      ) {
+        vaultDir = config.remoteVaultSync.vaultDir;
+      } else {
+        vaultDir = path.join(os.homedir(), '.agent', 'tenants', tenantName, 'vault');
+        if (!fs.existsSync(vaultDir)) {
+          return res.status(404).json({ error: `Tenant "${tenantName}" not found` });
+        }
       }
-      vaultDir = config.portfolioSync.vaultDir;
     } else {
       return res.status(400).json({ error: 'Invalid brain ID. Use "global", "project:<name>", or "tenant:<name>"' });
     }

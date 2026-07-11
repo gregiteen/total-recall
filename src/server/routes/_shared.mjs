@@ -78,10 +78,11 @@ export function resolveVaultFromQuery(req) {
     }
   }
 
+  // tenant:<name> → ~/.agent/tenants/<name>/vault (any tenant the user configures)
   if (brainId.startsWith('tenant:')) {
-    const tenantName = brainId.slice('tenant:'.length);
-    if (tenantName === 'portfolio-site') {
-      const tenantVaultDir = path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'vault');
+    const tenantName = brainId.slice('tenant:'.length).replace(/[^a-zA-Z0-9._-]/g, '');
+    if (tenantName) {
+      const tenantVaultDir = path.join(os.homedir(), '.agent', 'tenants', tenantName, 'vault');
       if (fs.existsSync(tenantVaultDir)) {
         return tenantVaultDir;
       }

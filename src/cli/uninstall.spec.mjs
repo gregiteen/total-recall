@@ -28,7 +28,7 @@ vi.mock('node:child_process', async (importOriginal) => {
         if (args.includes('fail') || (opts && opts.cwd && opts.cwd.includes('fail'))) {
           return { status: 1, stderr: Buffer.from('No remote found\n') };
         }
-        return { status: 0, stdout: Buffer.from('git@github.com:gregiteen/backup-test.git\n') };
+        return { status: 0, stdout: Buffer.from('git@github.com:example-org/backup-test.git\n') };
       }
       return original.spawnSync(cmd, args, opts);
     })

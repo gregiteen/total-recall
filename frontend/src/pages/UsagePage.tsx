@@ -123,10 +123,10 @@ export default function UsagePage() {
         <span style={{ fontSize: 24 }}>🛡️</span>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: 0.3 }}>
-            Sovereign — Self-Hosted
+            Local-first · Self-hosted
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
-            All processing stays on your infrastructure. No external billing.
+            Memory and processing stay on your machine. No vendor lock-in.
           </div>
         </div>
       </div>
@@ -344,8 +344,8 @@ export default function UsagePage() {
           <AreaChart data={timeseriesData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
             <defs>
               <linearGradient id="gradGemini" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6c5ce7" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#6c5ce7" stopOpacity={0} />
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="gradClaude" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#e17055" stopOpacity={0.4} />
@@ -369,7 +369,7 @@ export default function UsagePage() {
               formatter={(value: any, name: any) => [`$${Number(value).toFixed(3)}`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
             />
             <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />
-            <Area type="monotone" dataKey="gemini" stackId="1" stroke="#6c5ce7" fill="url(#gradGemini)" strokeWidth={2} />
+            <Area type="monotone" dataKey="gemini" stackId="1" stroke="#3b82f6" fill="url(#gradGemini)" strokeWidth={2} />
             <Area type="monotone" dataKey="claude" stackId="1" stroke="#e17055" fill="url(#gradClaude)" strokeWidth={2} />
             <Area type="monotone" dataKey="openrouter" stackId="1" stroke="#74b9ff" fill="url(#gradOpenRouter)" strokeWidth={2} />
             <Area type="monotone" dataKey="codex" stackId="1" stroke="#00cec9" fill="url(#gradCodex)" strokeWidth={2} />
@@ -380,7 +380,7 @@ export default function UsagePage() {
       {/* ── Provider Surface Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginTop: 24 }}>
         {([
-          { name: 'Gemini', color: '#6c5ce7', emoji: '♊', key: 'gemini' as const },
+          { name: 'Gemini', color: '#3b82f6', emoji: '♊', key: 'gemini' as const },
           { name: 'Claude', color: '#e17055', emoji: '🍊', key: 'claude' as const },
           { name: 'OpenRouter', color: '#74b9ff', emoji: '🌐', key: 'openrouter' as const },
           { name: 'Codex', color: '#00cec9', emoji: '💻', key: 'codex' as const },
@@ -443,7 +443,7 @@ export default function UsagePage() {
             </thead>
             <tbody>
               {([
-                { name: 'Gemini', key: 'gemini' as const, color: '#6c5ce7' },
+                { name: 'Gemini', key: 'gemini' as const, color: '#3b82f6' },
                 { name: 'Claude', key: 'claude' as const, color: '#e17055' },
                 { name: 'Codex', key: 'codex' as const, color: '#00cec9' },
                 { name: 'OpenRouter', key: 'openrouter' as const, color: '#74b9ff' },

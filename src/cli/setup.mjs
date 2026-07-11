@@ -315,14 +315,31 @@ async function remoteSetup(ip, user, opts = {}) {
 
 // ─── GitHub fork ─────────────────────────────────────────────────────────────
 
-const UPSTREAM_OWNER = 'gregiteen';
-const UPSTREAM_REPO  = 'total-recall';
+// Published package upstream for optional fork-during-setup (env only — no third-party product repos)
+function resolveUpstreamGithub() {
+  if (process.env.TR_UPSTREAM_OWNER && process.env.TR_UPSTREAM_REPO) {
+    return { owner: process.env.TR_UPSTREAM_OWNER, repo: process.env.TR_UPSTREAM_REPO };
+  }
+  const repoUrl =
+    process.env.TR_UPSTREAM_REPO_URL ||
+    process.env.npm_package_repository_url ||
+    '';
+  const m = String(repoUrl).match(/github\.com[/:]([^/]+)\/([^/.]+)/i);
+  if (m) return { owner: m[1], repo: m[2].replace(/\.git$/, '') };
+  return null;
+}
 
 async function forkRepo(githubToken) {
-  info('Forking gregiteen/total-recall to your GitHub account...');
+  const upstream = resolveUpstreamGithub();
+  if (!upstream) {
+    throw new Error(
+      'No upstream configured for fork. Set TR_UPSTREAM_OWNER + TR_UPSTREAM_REPO (or package repository.url).',
+    );
+  }
+  info(`Forking ${upstream.owner}/${upstream.repo} to your GitHub account...`);
   const res = await httpRequest(
     'POST',
-    `https://api.github.com/repos/${UPSTREAM_OWNER}/${UPSTREAM_REPO}/forks`,
+    `https://api.github.com/repos/${upstream.owner}/${upstream.repo}/forks`,
     {
       headers: {
         Authorization: `Bearer ${githubToken}`,
@@ -436,10 +453,20 @@ export default async function setup(args) {
             ok('Run `npx total-recall sync --push` anytime to back up your vault to GitHub.');
           } catch (e) {
             warn(`Could not fork: ${e.message}`);
-            warn('You can fork manually at https://github.com/gregiteen/total-recall');
+            const u = resolveUpstreamGithub();
+            warn(
+              u
+                ? `You can fork manually at https://github.com/${u.owner}/${u.repo}`
+                : 'Set TR_UPSTREAM_OWNER/TR_UPSTREAM_REPO to enable auto-fork, or fork your package upstream manually.',
+            );
           }
         } else {
-          info('[dry-run] would fork gregiteen/total-recall to your account');
+          const u = resolveUpstreamGithub();
+          info(
+            u
+              ? `[dry-run] would fork ${u.owner}/${u.repo} to your account`
+              : '[dry-run] would fork package upstream (set TR_UPSTREAM_* if needed)',
+          );
         }
         // Store GitHub token for sync --push
         const secretsPath = path.join(resolveBrainDir(), 'config', 'secrets.enc');
@@ -595,7 +622,7 @@ export default async function setup(args) {
     { label: 'Cursor',        value: 'cursor' },
     { label: 'Aider',         value: 'aider' },
     { label: 'Obsidian',      value: 'obsidian' },
-    { label: 'UltraChat',     value: 'ultrachat' },
+    { label: 'HTTP host app', value: 'http-api' },
   ];
 
   const selectedIDEs = await chooseMultiple(

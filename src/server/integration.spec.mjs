@@ -130,7 +130,7 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
   it('ingests a session and writes it to disk', async () => {
     const payload = {
       id: 'uc-2026-test',
-      source: 'ultrachat',
+      source: 'http-api',
       messages: [
         { role: 'user', content: 'What is Total Recall?' },
         { role: 'assistant', content: 'A sovereign AI OS.' }
@@ -144,7 +144,7 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     // New format: slug is date-prefixed with source and title
-    expect(res.body.id).toMatch(/^\d{4}-\d{2}-\d{2}-ultrachat-what-is-total-recall-/);
+    expect(res.body.id).toMatch(/^\d{4}-\d{2}-\d{2}-http-api-what-is-total-recall-/);
     expect(res.body.filename).toMatch(/\.md$/);
 
     const file = path.join(SESSIONS_DIR, res.body.filename);
@@ -153,7 +153,7 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
     // Verify SSSS frontmatter
     expect(raw.startsWith('---')).toBe(true);
     expect(raw).toContain('type: session');
-    expect(raw).toContain('source: ultrachat');
+    expect(raw).toContain('source: http-api');
     expect(raw).toContain('schema_version: 2');
     expect(raw).toContain('title:');
     expect(raw).toContain('date:');
@@ -161,7 +161,7 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
     const bodyStart = raw.indexOf('---', 3);
     const body = raw.slice(bodyStart + 3).trim();
     const written = JSON.parse(body);
-    expect(written.source).toBe('ultrachat');
+    expect(written.source).toBe('http-api');
     expect(written.messages).toHaveLength(2);
   });
 

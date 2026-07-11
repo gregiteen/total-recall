@@ -1,6 +1,17 @@
+/**
+ * Skills API — project skills by repo (excludes Total Recall / tr-* system skills).
+ *
+ * GET  /api/skills                 list skills grouped by registered project
+ * GET  /api/skills/:name?repo=…    read SKILL.md
+ * PUT  /api/skills/:name?repo=…    write SKILL.md
+ * DELETE /api/skills/:name?repo=…  remove skill dir
+ * GET  /api/skills/:name/files?repo=…&dir=…
+ */
+
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { logger } from '../../core/logger.mjs';
@@ -8,15 +19,325 @@ import { AGENT_DIR, SKILLS_DIR } from './_shared.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
+/**
+ * Project-level skill roots mapped to IDEs that load them.
+ * Sources: Claude Code docs (.claude/skills), Cursor docs (.cursor/skills + .agents/skills + compat),
+ * Gemini CLI (.gemini/skills + .agents/skills), Codex (~/.codex/skills primarily; project .codex/skills),
+ * Total Recall / agent (.agent/skills).
+ */
+const SKILL_ROOTS = [
+  {
+    rel: '.claude/skills',
+    ide: 'claude-code',
+    ide_label: 'Claude Code',
+    docs: 'https://code.claude.com/docs/en/skills',
+  },
+  {
+    rel: '.cursor/skills',
+    ide: 'cursor',
+    ide_label: 'Cursor',
+    docs: 'https://cursor.com/docs/skills',
+  },
+  {
+    rel: '.agents/skills',
+    ide: 'agents-standard',
+    ide_label: 'Agents standard (Cursor / Gemini)',
+    docs: 'https://cursor.com/docs/skills',
+  },
+  {
+    rel: '.gemini/skills',
+    ide: 'gemini',
+    ide_label: 'Gemini CLI',
+    docs: 'https://geminicli.com/docs/cli/skills/',
+  },
+  {
+    rel: '.codex/skills',
+    ide: 'codex',
+    ide_label: 'Codex',
+    docs: 'https://developers.openai.com/codex/skills',
+  },
+  {
+    rel: '.agent/skills',
+    ide: 'total-recall',
+    ide_label: 'Total Recall / .agent',
+    docs: null,
+  },
+];
+
+// Back-compat alias for older callers
+const SKILL_DIR_CANDIDATES = SKILL_ROOTS.map((r) => r.rel);
+
+/**
+ * Exclude Total Recall core / product skills from the UI list.
+ * User-facing Skills page should only show project/app skills.
+ */
+const TR_SKILL_EXCLUDE = new Set([
+  'total-recall',
+  'tr-skill',
+  'tr-ssss',
+  'tr-research',
+  'tr-cli-agents',
+  'tr-cli-agent',
+  'cli-agents', // TR CLI agent registry package, not an app skill
+]);
+
+function isTrSkillName(name) {
+  if (!name || typeof name !== 'string') return true;
+  const n = name.toLowerCase();
+  if (TR_SKILL_EXCLUDE.has(n)) return true;
+  if (n.startsWith('tr-')) return true;
+  if (n.startsWith('total-recall')) return true;
+  return false;
+}
+
+function rootMeta(rel) {
+  return SKILL_ROOTS.find((r) => r.rel === rel) || {
+    rel,
+    ide: 'unknown',
+    ide_label: rel,
+    docs: null,
+  };
+}
+
+function loadProjectRegistry() {
+  const registryPath = path.join(
+    os.homedir(),
+    '.agent',
+    'skills',
+    'total-recall',
+    'config',
+    'project-registry.json',
+  );
+  if (!fs.existsSync(registryPath)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function listSubSkills(skillDir) {
+  const subSkills = [];
+  try {
+    for (const entry of fs.readdirSync(skillDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      // nested skills/ folder OR common skill subdirs
+      if (entry.name === 'skills') {
+        const nested = path.join(skillDir, 'skills');
+        try {
+          for (const sd of fs.readdirSync(nested, { withFileTypes: true })) {
+            if (sd.isDirectory()) subSkills.push(sd.name);
+          }
+        } catch {
+          /* ignore */
+        }
+      } else {
+        subSkills.push(entry.name);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return subSkills;
+}
+
+function scanSkillRoot(skillsRoot, repo, projectPath, rootInfo) {
+  if (!fs.existsSync(skillsRoot) || !fs.statSync(skillsRoot).isDirectory()) return [];
+  const out = [];
+  let entries;
+  try {
+    entries = fs.readdirSync(skillsRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const sourceRel = rootInfo.rel;
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    if (isTrSkillName(ent.name)) continue;
+    const skillDir = path.join(skillsRoot, ent.name);
+    const skillMd = path.join(skillDir, 'SKILL.md');
+    const skillMdAlt = path.join(skillDir, 'skill.md');
+    const hasSkillMd = fs.existsSync(skillMd) || fs.existsSync(skillMdAlt);
+    let stats;
+    try {
+      stats = fs.statSync(skillDir);
+    } catch {
+      continue;
+    }
+    out.push({
+      // Unique per repo + IDE path + name (same name can exist under multiple IDEs)
+      id: `${repo}::${rootInfo.ide}::${ent.name}`,
+      name: ent.name,
+      repo,
+      project_path: projectPath,
+      source: sourceRel,
+      ide: rootInfo.ide,
+      ide_label: rootInfo.ide_label,
+      skill_dir: skillDir,
+      has_skill_md: hasSkillMd,
+      size: stats.size,
+      modified: stats.mtime,
+      isDirectory: true,
+      subSkills: listSubSkills(skillDir),
+    });
+  }
+  return out;
+}
+
+/**
+ * Collect skills for all registered projects, grouped by repo → IDE.
+ * Excludes total-recall / tr-* system skills.
+ */
+export function collectSkillsByRepo() {
+  const registry = loadProjectRegistry();
+  const byRepo = new Map();
+
+  for (const entry of registry) {
+    const projectPath = entry.path || entry.project_root;
+    const repo = entry.name || (projectPath ? path.basename(projectPath) : null);
+    if (!repo || !projectPath || !fs.existsSync(projectPath)) {
+      if (repo) {
+        byRepo.set(repo, {
+          repo,
+          path: projectPath || null,
+          skills: [],
+          ides: [],
+          ok: false,
+          error: 'path missing',
+        });
+      }
+      continue;
+    }
+
+    const skills = [];
+    const byIde = new Map();
+
+    for (const rootInfo of SKILL_ROOTS) {
+      const root = path.join(projectPath, rootInfo.rel);
+      const found = scanSkillRoot(root, repo, projectPath, rootInfo);
+      if (!found.length) continue;
+      found.sort((a, b) => a.name.localeCompare(b.name));
+      skills.push(...found);
+      byIde.set(rootInfo.ide, {
+        ide: rootInfo.ide,
+        ide_label: rootInfo.ide_label,
+        source: rootInfo.rel,
+        docs: rootInfo.docs,
+        skills: found,
+        count: found.length,
+      });
+    }
+
+    // Stable IDE order matching SKILL_ROOTS
+    const ides = SKILL_ROOTS.map((r) => byIde.get(r.ide)).filter(Boolean);
+
+    skills.sort((a, b) => {
+      const ideCmp = (a.ide_label || '').localeCompare(b.ide_label || '');
+      if (ideCmp !== 0) return ideCmp;
+      return a.name.localeCompare(b.name);
+    });
+
+    byRepo.set(repo, {
+      repo,
+      path: projectPath,
+      skills,
+      ides,
+      ok: true,
+      count: skills.length,
+    });
+  }
+
+  const repos = [...byRepo.values()].sort((a, b) => a.repo.localeCompare(b.repo));
+  const flat = repos.flatMap((r) => r.skills);
+  return {
+    repos,
+    skills: flat,
+    total: flat.length,
+    ide_roots: SKILL_ROOTS.map(({ rel, ide, ide_label, docs }) => ({
+      rel,
+      ide,
+      ide_label,
+      docs,
+    })),
+    excluded_note: 'total-recall and tr-* skills are hidden from this catalog',
+  };
+}
+
+function resolveRegisteredProject(repoName) {
+  if (!repoName) return null;
+  const registry = loadProjectRegistry();
+  const entry = registry.find(
+    (p) => p.name === repoName || path.basename(p.path || p.project_root || '') === repoName,
+  );
+  if (!entry) return null;
+  const projectPath = entry.path || entry.project_root;
+  if (!projectPath || !fs.existsSync(projectPath)) return null;
+  return { name: entry.name || repoName, path: path.resolve(projectPath) };
+}
+
+/**
+ * Resolve skill directory under a registered project only.
+ * @param {string} repoName
+ * @param {string} skillName
+ * @param {{ source?: string, ide?: string }} [opts]
+ */
+function resolveSkillDir(repoName, skillName, opts = {}) {
+  if (!skillName || skillName.includes('..') || skillName.includes('/') || skillName.includes('\\')) {
+    throw new Error('Invalid skill name');
+  }
+  if (isTrSkillName(skillName)) {
+    throw new Error('Total Recall system skills are not managed on this page');
+  }
+  const project = resolveRegisteredProject(repoName);
+  if (!project) {
+    // Fallback: global SKILLS_DIR for backward compat (non-TR only)
+    if (!repoName || repoName === 'global' || repoName === '_') {
+      const globalDir = path.join(SKILLS_DIR, skillName);
+      if (fs.existsSync(globalDir) && !isTrSkillName(skillName)) {
+        return { skillDir: globalDir, repo: 'global', projectPath: AGENT_DIR };
+      }
+    }
+    throw new Error(`Unknown repo: ${repoName || '(none)'}`);
+  }
+
+  const preferredSource =
+    opts.source ||
+    (opts.ide ? SKILL_ROOTS.find((r) => r.ide === opts.ide)?.rel : null);
+  const roots = preferredSource
+    ? [
+        ...SKILL_ROOTS.filter((r) => r.rel === preferredSource),
+        ...SKILL_ROOTS.filter((r) => r.rel !== preferredSource),
+      ]
+    : SKILL_ROOTS;
+
+  for (const rootInfo of roots) {
+    const skillDir = path.join(project.path, rootInfo.rel, skillName);
+    if (fs.existsSync(skillDir) && fs.statSync(skillDir).isDirectory()) {
+      const resolved = path.resolve(skillDir);
+      if (!resolved.startsWith(project.path + path.sep) && resolved !== project.path) {
+        throw new Error('Skill path escapes project root');
+      }
+      return {
+        skillDir: resolved,
+        repo: project.name,
+        projectPath: project.path,
+        source: rootInfo.rel,
+        ide: rootInfo.ide,
+      };
+    }
+  }
+  throw new Error(`Skill "${skillName}" not found in repo ${project.name}`);
+}
+
 function resolveTrSkillScript(scriptName) {
   const candidates = [
     path.join(AGENT_DIR, 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
     path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
-    // legacy paths for brains not yet upgraded
     path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
     path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
   ];
-  const found = candidates.find(candidate => fs.existsSync(candidate));
+  const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found) {
     throw new Error(`Could not find bundled skill helper "${scriptName}".`);
   }
@@ -34,35 +355,13 @@ function serverError(res, err) {
 
 export const skillsRouter = express.Router();
 
-skillsRouter.get('/api/skills', requireAuth, requireScope('files:read', 'ssss:read'), (req, res) => {
+skillsRouter.get('/api/skills', requireAuth, requireScope('files:read', 'ssss:read'), (_req, res) => {
   try {
-    if (!fs.existsSync(SKILLS_DIR)) {
-      fs.mkdirSync(SKILLS_DIR, { recursive: true });
-    }
-    const skills = fs.readdirSync(SKILLS_DIR).map(dir => {
-      const dirPath = path.join(SKILLS_DIR, dir);
-      const stats = fs.statSync(dirPath);
-      
-      let subSkills = [];
-      const subSkillsPath = path.join(dirPath, 'skills');
-      if (fs.existsSync(subSkillsPath) && fs.statSync(subSkillsPath).isDirectory()) {
-        try {
-          subSkills = fs.readdirSync(subSkillsPath).filter(sd => 
-            fs.statSync(path.join(subSkillsPath, sd)).isDirectory()
-          );
-        } catch (e) {}
-      }
-
-      return {
-        name: dir,
-        size: stats.size,
-        modified: stats.mtime,
-        isDirectory: stats.isDirectory(),
-        subSkills
-      };
-    });
-    res.json(skills);
-  } catch (err) { serverError(res, err); }
+    const catalog = collectSkillsByRepo();
+    res.json(catalog);
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 skillsRouter.get('/api/skills/search', requireAuth, requireScope('files:read', 'ssss:read'), async (req, res) => {
@@ -74,7 +373,9 @@ skillsRouter.get('/api/skills/search', requireAuth, requireScope('files:read', '
     const { searchAndSort } = await importTrSkillScript('find-skills.mjs');
     const results = searchAndSort(q);
     res.json(results);
-  } catch (err) { serverError(res, err); }
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 skillsRouter.post('/api/skills/install', requireAuth, requireScope('files:write', 'ssss:write'), async (req, res) => {
@@ -86,18 +387,22 @@ skillsRouter.post('/api/skills/install', requireAuth, requireScope('files:write'
     const { installSkill } = await importTrSkillScript('install-skill.mjs');
     const result = installSkill(pkg, { agentDir: AGENT_DIR });
     res.json(result);
-  } catch (err) { serverError(res, err); }
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 skillsRouter.get('/api/skills/:name/files', requireAuth, requireScope('files:read', 'ssss:read'), (req, res) => {
   try {
     const { name } = req.params;
-    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
-      return res.status(400).json({ error: 'Invalid skill name' });
-    }
-    const skillDir = path.join(SKILLS_DIR, name);
-    if (!fs.existsSync(skillDir)) {
-      return res.status(404).json({ error: `Skill "${name}" not found` });
+    const repo = req.query.repo || req.query.project || '';
+    const source = req.query.source || '';
+    const ide = req.query.ide || '';
+    let skillDir;
+    try {
+      ({ skillDir } = resolveSkillDir(String(repo), name, { source: source || undefined, ide: ide || undefined }));
+    } catch (e) {
+      return res.status(404).json({ error: e.message });
     }
     const dirParam = req.query.dir;
     let targetDir = skillDir;
@@ -107,70 +412,126 @@ skillsRouter.get('/api/skills/:name/files', requireAuth, requireScope('files:rea
       }
       targetDir = path.join(skillDir, dirParam);
     }
-    
+
     if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
       return res.json([]);
     }
-    
-    const files = fs.readdirSync(targetDir).map(file => {
-      const stats = fs.statSync(path.join(targetDir, file));
-      return {
-        name: file,
-        size: stats.isDirectory() ? 'DIR' : (stats.size < 1024 ? `${stats.size} B` : `${(stats.size / 1024).toFixed(1)} KB`),
-        isDirectory: stats.isDirectory()
-      };
-    }).filter(f => !f.isDirectory);
-    
+
+    const files = fs
+      .readdirSync(targetDir)
+      .map((file) => {
+        const stats = fs.statSync(path.join(targetDir, file));
+        return {
+          name: file,
+          size: stats.isDirectory()
+            ? 'DIR'
+            : stats.size < 1024
+              ? `${stats.size} B`
+              : `${(stats.size / 1024).toFixed(1)} KB`,
+          isDirectory: stats.isDirectory(),
+        };
+      })
+      .filter((f) => !f.isDirectory);
+
     res.json(files);
-  } catch (err) { serverError(res, err); }
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 skillsRouter.get('/api/skills/:name', requireAuth, requireScope('files:read', 'ssss:read'), (req, res) => {
   try {
     const { name } = req.params;
-    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
-      return res.status(400).json({ error: 'Invalid skill name' });
+    const repo = req.query.repo || req.query.project || '';
+    const source = req.query.source || '';
+    const ide = req.query.ide || '';
+    let skillDir;
+    let resolved;
+    try {
+      resolved = resolveSkillDir(String(repo), name, {
+        source: source || undefined,
+        ide: ide || undefined,
+      });
+      skillDir = resolved.skillDir;
+    } catch (e) {
+      return res.status(404).json({ error: e.message });
     }
-    const skillPath = path.join(SKILLS_DIR, name, 'SKILL.md');
+    const skillPath = fs.existsSync(path.join(skillDir, 'SKILL.md'))
+      ? path.join(skillDir, 'SKILL.md')
+      : path.join(skillDir, 'skill.md');
     if (!fs.existsSync(skillPath)) {
-      return res.status(404).json({ error: `Skill "${name}" not found` });
+      return res.status(404).json({ error: `SKILL.md not found for "${name}"` });
     }
     const content = fs.readFileSync(skillPath, 'utf8');
-    res.json({ name, content });
-  } catch (err) { serverError(res, err); }
+    res.json({
+      name,
+      repo: String(repo),
+      source: resolved.source,
+      ide: resolved.ide,
+      content,
+      skill_dir: skillDir,
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 skillsRouter.put('/api/skills/:name', requireAuth, requireScope('files:write', 'ssss:write'), (req, res) => {
   try {
     const { name } = req.params;
-    const { content } = req.body;
-    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
-      return res.status(400).json({ error: 'Invalid skill name' });
-    }
+    const { content, repo: bodyRepo, source: bodySource, ide: bodyIde } = req.body || {};
+    const repo = bodyRepo || req.query.repo || req.query.project || '';
+    const source = bodySource || req.query.source || '';
+    const ide = bodyIde || req.query.ide || '';
     if (typeof content !== 'string') {
       return res.status(400).json({ error: 'Missing or invalid `content` field.' });
     }
-    const skillDir = path.join(SKILLS_DIR, name);
-    if (!fs.existsSync(skillDir)) {
+    let skillDir;
+    try {
+      ({ skillDir } = resolveSkillDir(String(repo), name, {
+        source: source || undefined,
+        ide: ide || undefined,
+      }));
+    } catch (e) {
+      // create under preferred IDE path (default Claude Code or .agent)
+      const project = resolveRegisteredProject(String(repo));
+      if (!project) return res.status(404).json({ error: e.message });
+      if (isTrSkillName(name)) {
+        return res.status(400).json({ error: 'Cannot create Total Recall system skills here' });
+      }
+      const createRel =
+        source ||
+        (ide ? SKILL_ROOTS.find((r) => r.ide === ide)?.rel : null) ||
+        '.claude/skills';
+      skillDir = path.join(project.path, createRel, name);
       fs.mkdirSync(skillDir, { recursive: true });
     }
     const skillPath = path.join(skillDir, 'SKILL.md');
     fs.writeFileSync(skillPath, content, 'utf8');
-    res.json({ success: true, message: `Skill "${name}" updated successfully` });
-  } catch (err) { serverError(res, err); }
+    res.json({ success: true, message: `Skill "${name}" updated successfully`, repo: String(repo) });
+  } catch (err) {
+    serverError(res, err);
+  }
 });
 
 skillsRouter.delete('/api/skills/:name', requireAuth, requireScope('files:write', 'ssss:write'), (req, res) => {
   try {
     const { name } = req.params;
-    if (name.includes('..') || name.includes('/') || name.includes('\\')) {
-      return res.status(400).json({ error: 'Invalid skill name' });
-    }
-    const skillDir = path.join(SKILLS_DIR, name);
-    if (!fs.existsSync(skillDir)) {
-      return res.status(404).json({ error: `Skill "${name}" not found` });
+    const repo = req.query.repo || req.query.project || '';
+    const source = req.query.source || '';
+    const ide = req.query.ide || '';
+    let skillDir;
+    try {
+      ({ skillDir } = resolveSkillDir(String(repo), name, {
+        source: source || undefined,
+        ide: ide || undefined,
+      }));
+    } catch (e) {
+      return res.status(404).json({ error: e.message });
     }
     fs.rmSync(skillDir, { recursive: true, force: true });
     res.json({ success: true, message: `Skill "${name}" deleted successfully` });
-  } catch (err) { serverError(res, err); }
+  } catch (err) {
+    serverError(res, err);
+  }
 });

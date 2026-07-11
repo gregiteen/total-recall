@@ -267,8 +267,11 @@ export async function searchMemory(query: string, category?: string): Promise<Me
   return Array.isArray(data) ? data : (data.nodes || [])
 }
 
-export async function readMemory(slug: string): Promise<MemoryNode | null> {
-  const res = await apiFetch(`${API_BASE}/api/memory/${slug}`)
+export async function readMemory(slug: string, brainId?: string): Promise<MemoryNode | null> {
+  const params = new URLSearchParams()
+  if (brainId) params.set('brain', brainId)
+  const qs = params.toString()
+  const res = await apiFetch(`${API_BASE}/api/memory/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`)
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`Memory API error: ${res.status}`)
   return res.json()
@@ -316,35 +319,75 @@ export async function listFiles(): Promise<import('./types').FileNode[]> {
   return res.json()
 }
 
-export async function listSkills(): Promise<import('./types').FileNode[]> {
+export interface ProjectSkill {
+  id: string
+  name: string
+  repo: string
+  project_path?: string
+  source?: string
+  skill_dir?: string
+  has_skill_md?: boolean
+  size?: number
+  modified?: string
+  isDirectory?: boolean
+  subSkills?: string[]
+}
+
+export interface SkillsCatalog {
+  repos: {
+    repo: string
+    path: string | null
+    skills: ProjectSkill[]
+    ok?: boolean
+    count?: number
+    error?: string
+  }[]
+  skills: ProjectSkill[]
+  total: number
+  excluded_note?: string
+}
+
+export async function listSkills(): Promise<SkillsCatalog | ProjectSkill[]> {
   const res = await apiFetch(API_BASE + '/api/skills')
   if (!res.ok) throw new Error(`Skills API error: ${res.status}`)
   return res.json()
 }
 
-export async function fetchSkill(name: string): Promise<{ name: string; content: string }> {
-  const res = await apiFetch(`${API_BASE}/api/skills/${name}`)
+export async function fetchSkill(
+  name: string,
+  repo?: string,
+): Promise<{ name: string; content: string; repo?: string }> {
+  const q = repo ? `?repo=${encodeURIComponent(repo)}` : ''
+  const res = await apiFetch(`${API_BASE}/api/skills/${encodeURIComponent(name)}${q}`)
   if (!res.ok) throw new Error(`Skill fetch API error: ${res.status}`)
   return res.json()
 }
 
-export async function fetchSkillFiles(name: string, dir: string): Promise<{ name: string; size: string; isDirectory: boolean }[]> {
-  const res = await apiFetch(`${API_BASE}/api/skills/${name}/files?dir=${encodeURIComponent(dir)}`)
+export async function fetchSkillFiles(
+  name: string,
+  dir: string,
+  repo?: string,
+): Promise<{ name: string; size: string; isDirectory: boolean }[]> {
+  const params = new URLSearchParams({ dir })
+  if (repo) params.set('repo', repo)
+  const res = await apiFetch(`${API_BASE}/api/skills/${encodeURIComponent(name)}/files?${params}`)
   if (!res.ok) throw new Error(`Skill files fetch API error: ${res.status}`)
   return res.json()
 }
 
-export async function saveSkill(name: string, content: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/api/skills/${name}`, {
+export async function saveSkill(name: string, content: string, repo?: string): Promise<void> {
+  const q = repo ? `?repo=${encodeURIComponent(repo)}` : ''
+  const res = await apiFetch(`${API_BASE}/api/skills/${encodeURIComponent(name)}${q}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, repo }),
   })
   if (!res.ok) throw new Error(`Skill save API error: ${res.status}`)
 }
 
-export async function deleteSkill(name: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/api/skills/${name}`, {
+export async function deleteSkill(name: string, repo?: string): Promise<void> {
+  const q = repo ? `?repo=${encodeURIComponent(repo)}` : ''
+  const res = await apiFetch(`${API_BASE}/api/skills/${encodeURIComponent(name)}${q}`, {
     method: 'DELETE',
   })
   if (!res.ok) throw new Error(`Skill delete API error: ${res.status}`)
@@ -464,6 +507,342 @@ export async function revokeApiKey(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
 }
 
+// ─── Secrets store (API keys / env import — not PATs) ─────────────────────────
+
+export interface EnvSecretCandidate {
+  key: string
+  source: string
+  source_label: string
+  provider: string | null
+  masked: string
+  length: number
+  known: boolean
+  already_set?: boolean
+}
+
+export async function scanEnvSecrets(): Promise<{
+  candidates: EnvSecretCandidate[]
+  count: number
+  sources_scanned: string[]
+}> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/scan-env`)
+  if (!res.ok) throw new Error(`Env scan failed: ${res.status}`)
+  return res.json()
+}
+
+export async function parseEnvPaste(text: string): Promise<{
+  candidates: EnvSecretCandidate[]
+  count: number
+}> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/parse-env`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Parse failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function importEnvSecrets(opts: {
+  keys?: string[]
+  all?: boolean
+  pairs?: Record<string, string>
+  overwrite?: boolean
+}): Promise<{
+  imported: { key: string; provider: string | null }[]
+  skipped: { key: string; reason: string }[]
+  errors: { key: string; error: string }[]
+  imported_count: number
+  skipped_count: number
+}> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/import-env`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Import failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export interface SecretCatalogKey {
+  key: string
+  set: boolean
+  length: number
+  fingerprint: string | null
+  masked: string | null
+  scope: string
+  provider: string | null
+  provider_name?: string | null
+  label: string | null
+  repos: string[]
+  /** Single product repo, or null for Developer secrets */
+  repo?: string | null
+  multi_repo_error?: boolean
+  binding_error?: string | null
+  project_path: string | null
+  subscription_tier: string | null
+  monthly_cost_usd: number | null
+  monthly_cap_usd: number | null
+  api_docs_url: string | null
+  console_url: string | null
+  pricing_url: string | null
+  schema: { auth: string; header?: string; env_keys?: string[]; notes?: string } | null
+  schema_notes: string | null
+  auth_scheme: string | null
+  rotate_every_days: number | null
+  auto_rotate: boolean
+  next_rotate_due: string | null
+  rotation_overdue: boolean
+  notes: string | null
+  created_at: string | null
+  updated_at: string | null
+  rotated_at: string | null
+  usage_30d: { events: number; cost_usd: number; input_tokens: number; output_tokens: number }
+  tiers: { id: string; label: string; monthly_usd?: number | null }[]
+}
+
+export interface SecretCatalog {
+  keys: SecretCatalogKey[]
+  providers: unknown[]
+  summary: {
+    total_keys: number
+    providers_active: number
+    monthly_subscription_usd: number
+    multi_repo_violations?: number
+    developer_keys?: number
+    product_keys?: number
+    usage_7d: { events: number; cost_usd: number }
+    usage_30d: { events: number; cost_usd: number }
+    rotation_overdue: number
+    budget: Record<string, unknown>
+  }
+  by_provider: { provider: string; keys: number; cost_30d: number; monthly_cost: number }[]
+  store: string
+}
+
+export async function fetchSecretsCatalog(): Promise<SecretCatalog> {
+  const res = await apiFetch(`${API_BASE}/api/secrets`)
+  if (!res.ok) throw new Error(`Secrets catalog error: ${res.status}`)
+  return res.json()
+}
+
+export async function updateSecretMeta(key: string, patch: Record<string, unknown>): Promise<SecretCatalogKey> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/${encodeURIComponent(key)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Meta update failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function rotateSecretValue(
+  key: string,
+  value: string,
+  opts: { export_env?: boolean; export_all?: boolean } = {},
+): Promise<{
+  rotated?: boolean
+  next_rotate_due?: string | null
+  exports?: { ok: boolean; envPath?: string; count?: number; error?: string }[]
+  secret?: SecretCatalogKey
+}> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/${encodeURIComponent(key)}/rotate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      value,
+      export_env: opts.export_env ?? true,
+      export_all: opts.export_all ?? true,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Rotate failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteProviderSecret(key: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
+}
+
+export async function recordSecretUsage(body: {
+  key_ref?: string
+  key?: string
+  provider?: string
+  model?: string
+  cost_usd?: number
+  input_tokens?: number
+  output_tokens?: number
+  source?: string
+}): Promise<unknown> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/usage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`Usage record failed: ${res.status}`)
+  return res.json()
+}
+
+export async function exportEnvFromSecrets(opts: {
+  path?: string
+  all_projects?: boolean
+  dry_run?: boolean
+  include_global?: boolean
+  keys?: string[]
+}): Promise<{
+  count?: number
+  keys?: string[]
+  envPath?: string
+  results?: { ok: boolean; name?: string; envPath?: string; count?: number; error?: string }[]
+  store?: string
+}> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/export-env`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `export-env failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchRotationDue(): Promise<{ due: SecretCatalogKey[]; count: number }> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/rotation-due`)
+  if (!res.ok) throw new Error(`rotation-due failed: ${res.status}`)
+  return res.json()
+}
+
+export async function enqueueRotationDue(): Promise<unknown> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/rotation-due/enqueue`, { method: 'POST' })
+  if (!res.ok) {
+    // fallback: client can use CLI; route may not exist yet
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `enqueue failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+// ─── WebAuthn / passkey step-up (secret reveal) ───────────────────────────────
+
+export interface WebAuthnStatus {
+  enabled: boolean
+  has_passkeys: boolean
+  count: number
+  passkeys: { id: string; created_at: string | null; label?: string }[]
+  password_step_up_allowed?: boolean
+}
+
+export async function fetchWebAuthnStatus(): Promise<WebAuthnStatus> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/status`)
+  if (!res.ok) throw new Error(`WebAuthn status failed: ${res.status}`)
+  return res.json()
+}
+
+export async function webauthnRegisterOptions(): Promise<PublicKeyCredentialCreationOptionsJSON> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/register/options`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `register options failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function webauthnRegisterVerify(
+  response: unknown,
+  label?: string,
+): Promise<{ verified: boolean; passkeys?: WebAuthnStatus['passkeys'] }> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/register/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ response, label }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `register verify failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function webauthnAssertOptions(): Promise<PublicKeyCredentialRequestOptionsJSON> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/assert/options`, { method: 'POST' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `assert options failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function webauthnAssertVerify(
+  response: unknown,
+): Promise<{ verified: boolean; step_up_token: string; expires_in: number }> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/assert/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ response, purpose: 'secrets:reveal', ttl_seconds: 60 }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `assert verify failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function webauthnPasswordStepUp(
+  password: string,
+): Promise<{ verified: boolean; step_up_token: string; expires_in: number }> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/step-up/password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, purpose: 'secrets:reveal', ttl_seconds: 60 }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `password step-up failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deletePasskey(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/api/webauthn/credentials/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) throw new Error(`Delete passkey failed: ${res.status}`)
+}
+
+export async function revealSecretValue(
+  key: string,
+  stepUpToken: string,
+): Promise<{ key: string; value: string; revealed_at: string }> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/${encodeURIComponent(key)}/reveal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ step_up_token: stepUpToken }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `Reveal failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+/** Minimal JSON option types (compatible with @simplewebauthn/browser) */
+export type PublicKeyCredentialCreationOptionsJSON = Record<string, unknown>
+export type PublicKeyCredentialRequestOptionsJSON = Record<string, unknown>
+
 export async function connectClient(client: string, baseUrl: string): Promise<{ success: boolean; message: string }> {
   const res = await apiFetch(`${API_BASE}/api/integrations/connect`, {
     method: 'POST',
@@ -580,8 +959,11 @@ export async function resolveConflict(
 
 // ─── Memory Editor APIs ────────────────────────────────────────────────────────
 
-export async function saveMemory(slug: string, node: Partial<MemoryNode>): Promise<MemoryNode> {
-  const res = await apiFetch(`${API_BASE}/api/memory/${slug}`, {
+export async function saveMemory(slug: string, node: Partial<MemoryNode>, brainId?: string): Promise<MemoryNode> {
+  const params = new URLSearchParams()
+  if (brainId) params.set('brain', brainId)
+  const qs = params.toString()
+  const res = await apiFetch(`${API_BASE}/api/memory/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(node),
@@ -590,8 +972,11 @@ export async function saveMemory(slug: string, node: Partial<MemoryNode>): Promi
   return res.json()
 }
 
-export async function createMemory(node: Partial<MemoryNode> & { slug: string }): Promise<MemoryNode> {
-  const res = await apiFetch(`${API_BASE}/api/memory`, {
+export async function createMemory(node: Partial<MemoryNode> & { slug: string }, brainId?: string): Promise<MemoryNode> {
+  const params = new URLSearchParams()
+  if (brainId) params.set('brain', brainId)
+  const qs = params.toString()
+  const res = await apiFetch(`${API_BASE}/api/memory${qs ? `?${qs}` : ''}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(node),
@@ -600,8 +985,11 @@ export async function createMemory(node: Partial<MemoryNode> & { slug: string })
   return res.json()
 }
 
-export async function deleteMemory(slug: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/api/memory/${slug}`, {
+export async function deleteMemory(slug: string, brainId?: string): Promise<void> {
+  const params = new URLSearchParams()
+  if (brainId) params.set('brain', brainId)
+  const qs = params.toString()
+  const res = await apiFetch(`${API_BASE}/api/memory/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`, {
     method: "DELETE",
   })
   if (!res.ok) throw new Error(`Failed to delete memory: ${res.status}`)
@@ -810,11 +1198,87 @@ export async function triggerOkfExport(path: string, options: { stripSsss?: bool
 
 // ─── OpenWiki APIs ─────────────────────────────────────────────────────────────
 
-export async function fetchOpenWikiNodes(): Promise<import('./types').MemoryNode[]> {
-  const res = await apiFetch(`${API_BASE}/api/memory?tags=openwiki`)
-  if (!res.ok) throw new Error(`OpenWiki nodes error: ${res.status}`)
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.nodes ?? [])
+/**
+ * OpenWiki nodes for the selected brain(s) only.
+ * Scoped by x-total-recall-brain header (apiFetch) and explicit brain query.
+ */
+export async function fetchOpenWikiNodes(
+  brainId?: string | null,
+): Promise<import('./types').MemoryNode[]> {
+  const active =
+    brainId ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('total-recall-active-brain') : null) ||
+    'global'
+
+  // Reuse listMemory brain routing (global vs project:name), then keep openwiki-tagged only.
+  // Server also filters tag=openwiki when we hit /api/memory?tag=openwiki.
+  const params = new URLSearchParams({ tag: 'openwiki', limit: '500' })
+  const ids = active.split(',').map((s) => s.trim()).filter(Boolean)
+
+  if (ids.length === 0 || (ids.length === 1 && ids[0] === 'global')) {
+    const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+    if (!res.ok) throw new Error(`OpenWiki nodes error: ${res.status}`)
+    const data = await res.json()
+    const nodes = Array.isArray(data) ? data : (data.nodes ?? [])
+    return filterOpenWikiNodes(nodes)
+  }
+
+  // Multi / project brains — fetch each scope separately (same merge rules as Memory)
+  const fetchPromises = ids.map(async (id) => {
+    try {
+      if (id === 'global') {
+        const res = await apiFetch(`${API_BASE}/api/memory?${params}`)
+        if (!res.ok) return []
+        const data = await res.json()
+        return Array.isArray(data) ? data : (data.nodes ?? [])
+      }
+      // Project brain: list all nodes then filter openwiki (brains/:id/nodes may not support tag)
+      const res = await apiFetch(`${API_BASE}/api/brains/${encodeURIComponent(id)}/nodes`)
+      if (!res.ok) {
+        // Fallback: memory list with brain header already set by apiFetch
+        const res2 = await apiFetch(`${API_BASE}/api/memory?${params}&brain=${encodeURIComponent(id)}`)
+        if (!res2.ok) return []
+        const data2 = await res2.json()
+        return Array.isArray(data2) ? data2 : (data2.nodes ?? [])
+      }
+      const data = await res.json()
+      const nodes = Array.isArray(data) ? data : (data.nodes ?? [])
+      return filterOpenWikiNodes(nodes)
+    } catch {
+      return []
+    }
+  })
+
+  const results = await Promise.all(fetchPromises)
+  const merged: import('./types').MemoryNode[] = []
+  const seen = new Set<string>()
+  // Project overrides global on slug collision
+  const ordered = results
+    .map((nodes, i) => ({ nodes, id: ids[i] }))
+    .sort((a, b) => {
+      if (a.id === 'global') return 1
+      if (b.id === 'global') return -1
+      return 0
+    })
+  for (const { nodes } of ordered) {
+    for (const n of filterOpenWikiNodes(nodes)) {
+      if (!seen.has(n.slug)) {
+        seen.add(n.slug)
+        merged.push(n)
+      }
+    }
+  }
+  return merged
+}
+
+function filterOpenWikiNodes(
+  nodes: import('./types').MemoryNode[],
+): import('./types').MemoryNode[] {
+  return nodes.filter((n) => {
+    const tags = (n.tags || []).map((t) => String(t).toLowerCase())
+    const slug = String(n.slug || '').toLowerCase()
+    return tags.includes('openwiki') || slug.startsWith('openwiki-')
+  })
 }
 
 // UCW export/import/validate handled via runSandbox + @ssss/cli (SSSS §16)
@@ -939,7 +1403,7 @@ export async function deleteView(id: string) {
 }
 
 export async function postDecision(id: string, action: string, notes?: string): Promise<{ success: boolean; droplet_response?: unknown }> {
-  const res = await apiFetch(`${API_BASE}/api/sync/portfolio/proposals/${id}/decision`, {
+  const res = await apiFetch(`${API_BASE}/api/sync/remote-vault/proposals/${id}/decision`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, notes }),

@@ -59,6 +59,7 @@ const COMMANDS = {
   recall:   'recall.mjs',
   search:   'recall.mjs',
   research: 'research.mjs',
+  task:     'task.mjs',
   share:    'share.mjs',
   'generate-pat': 'generate-pat.mjs',
   'hash-password': 'hash-password.mjs',
@@ -77,6 +78,8 @@ const COMMANDS = {
   brain:    'brain.mjs',
   config:   'config.mjs',
   skill:    'skill.mjs',
+  secret:   'secret.mjs',
+  secrets:  'secret.mjs',
   help:     'help.mjs',
   collab:   'collab.mjs',
   command:  'command.mjs',
@@ -84,70 +87,42 @@ const COMMANDS = {
 };
 function printHelp() {
   console.log(`
-  total-recall — Sovereign AI System CLI
+  total-recall — Portable personal memory for any IDE
 
   Usage: total-recall <command> [options]
 
-  Commands:
-    init                Bootstrap Total Recall into an existing project repo
-    setup               Interactive wizard: provider → API key → provision → connect IDEs
-    start [--port N]    Start the brain server in the foreground (alias for running the server directly)
-    deploy              Provision a target machine (Caddy/TLS, system services, VFS setup, environment checks)
-    doctor              Run environment diagnostics and verify dependency health
-    dream               Manually trigger a dream cycle (Light → REM → Deep)
-    lint                Validate all vault nodes against SSSS schema v2
-    daemon <start|stop|status>  Manage the background daemon
-    status              Show server health, active deploy mode, dashboard URL, tunnel PID, and daemon state
-    backup [options]    Create encrypted VFS tarball, push git backup, or Obsidian sync
-    restore <path>      Restore from an encrypted backup
-    upgrade --model <n> Swap the kernel model (e.g., gemma5-32b)
-    friction            Analyze logs to detect workflow bottlenecks
-    chat                Interactive terminal chat with the Sovereign OS
-    remember            Remember new rules, preferences, or corrections in real time
-    forget <slug>       Delete a memory node by slug (with auto-recompile)
-    recall              Recall semantic memory or search existing knowledge/rules/session-history
-    map                 Visualize memory vault category trees and link relationships
-    brain <cmd>         Manage registered brains and context resolution (list, status, register, unregister)
-    research <command>  Manage/query ongoing autonomous research agenda (list, add, show, report, cancel)
-    share [url]         Share a URL or text snippet to the brain (auto-routes to remember or research)
-    config <get|set>    Read, write, and toggle UI, security, and budget settings
-    skill <command>     Manage AI agent skills: find, install, scan, list, remove
-    generate-pat        Issue a PAT; stores only a hash in keys.jsonl
-    hash-password       Generate a bcrypt dashboard password hash
-    reset-password      Reset the dashboard admin password and force a change on login
-    compile             Alias for rebuild: deterministically rebuild projections
-    rebuild [--check]   Detect index drift and deterministically rebuild projections
-    snapshot            Manage fast point-in-time VFS snapshots and rollbacks
-    migrate             Run backwards-incompatible SSSS schema migrations
-    import [--dir <path>] [--force]   Import existing AGENTS.md, .cursorrules, CLAUDE.md, etc.
-                                     into the vault (run before compile on first install)
-    ingest [--watch]    Ingest IDE conversation logs (Claude Code, Codex, Gemini, etc.)
-    ingest google-takeout <path>  Ingest Google Takeout export data
-    export <path> --okf Export memory vault as an OKF-compliant bundle
-    connect <client>    Configure Cursor, Claude Code, Codex, UltraChat, Gemini, etc.
-    sync [--watch]      Pull remote brain instructions into the current workspace
-    relay <cmd>         Local background relay: ship IDE sessions to remote brain
-                        Commands: start | stop | status | once | install | uninstall
-    uninstall           Completely uninstall all services, launchd agents, VFS, and shims
-    help <topic>        Interactive offline documentation, SSSS reference, and system help
-    collab              Start Express/WebSockets backend & React collab sandbox dev server
-    command <create|read|update|remove|list>  Manage custom project-local CLI commands
+  Core (default product path):
+    init [--project]    Bootstrap global or project brain + openwiki
+    connect <client>    Wire IDE / Obsidian / http-api host
+    remember / forget   Write-path memory (SSSS vault)
+    recall              Read-path hybrid search
+    compile             Rebuild instruction surfaces
+    dream               Memory consolidation cycle
+    task <cmd>          Enqueue daemon work (open envelope)
+    daemon <cmd>        Background worker (start|stop|status)
+    skill <cmd>         Skills registry, deploy, multi-repo sync
+    secret <cmd>        Secrets store + usage (not the vault)
+    brain <cmd>         Register / ensure any project brain
+    status / doctor     Health and diagnostics
 
+  Optional:
+    research, share, ingest, import, export, relay, setup, deploy,
+    start, backup, restore, config, map, generate-pat, lint, sync, …
 
-
-
-  Autonomous operations (sync, compile, backup) are now handled by the
-  Cloud Agent via SSSS task nodes in .agent/scheduler/queue/.
-  The agent cron trigger (every 5 min) processes these automatically.
-
-  Options:
-    --help, -h          Show this help message
-    --version, -v       Show version
+  Full inventory: docs/reference/CLI_INVENTORY.md
+  Default story: init → connect → remember/recall → dream (no LLM required)
 
   Examples:
-    npx total-recall deploy
+    npx total-recall init --project
+    npx total-recall connect claude-code
+    npx total-recall remember fact "The API uses port 3000."
     npx total-recall dream
-    npx total-recall daemon status
+    npx total-recall skill track .
+    npx total-recall secret list
+
+  Options:
+    --help, -h          Show this help
+    --version, -v       Show version
 `);
 }
 

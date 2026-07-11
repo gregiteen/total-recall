@@ -45,11 +45,11 @@ const PRESETS: Preset[] = [
     snippet: baseUrl => `Read AGENTS.md from the repo root.\nDiscovery: ${baseUrl}/.well-known/total-recall.json`
   },
   {
-    id: 'ultrachat',
-    name: 'UltraChat',
+    id: 'http-api',
+    name: 'HTTP host app',
     surface: 'OpenAI-compatible provider',
     scopes: 'models:read, chat:write, ssss:read',
-    command: 'npx total-recall connect ultrachat --brain <brain-url>',
+    command: 'npx total-recall connect http-api --brain <brain-url>',
     snippet: baseUrl => `Base URL: ${baseUrl}/v1\nModel: total-recall/gemma4\nModels: ${baseUrl}/v1/models`
   },
   {
@@ -104,7 +104,7 @@ export default function IntegrationsPage() {
   const filteredPresets = useMemo(() => {
     if (activeIdes.length === 0) return PRESETS
     return PRESETS.filter(preset => {
-      if (['ultrachat', 'generic'].includes(preset.id)) {
+      if (['http-api', 'generic'].includes(preset.id)) {
         return true
       }
       return activeIdes.includes(preset.id)
@@ -364,13 +364,24 @@ export default function IntegrationsPage() {
           const snippet = preset.snippet(baseUrl)
           
           // Match keys by name (e.g. "Cursor Link", "Claude Code Link", "Codex Link")
+          // Guard: some legacy rows stored a non-string name object
           const matchingKey = keys.find(k => {
-            if (preset.id === 'cursor') return k.name.toLowerCase().includes('cursor') && !k.revoked;
-            if (preset.id === 'claude-code') return k.name.toLowerCase().includes('claude') && !k.revoked;
-            if (preset.id === 'codex') return (k.name.toLowerCase().includes('codex') || k.name.toLowerCase().includes('agents')) && !k.revoked;
-            if (preset.id === 'antigravity') return k.name.toLowerCase().includes('antigravity') && !k.revoked;
-            if (preset.id === 'ultrachat') return k.name.toLowerCase().includes('ultrachat') && !k.revoked;
-            return false;
+            const rawName = k?.name
+            const name =
+              typeof rawName === 'string'
+                ? rawName
+                : rawName && typeof rawName === 'object' && typeof (rawName as { name?: unknown }).name === 'string'
+                  ? String((rawName as { name: string }).name)
+                  : ''
+            if (!name || k.revoked) return false
+            const n = name.toLowerCase()
+            if (preset.id === 'cursor') return n.includes('cursor')
+            if (preset.id === 'claude-code') return n.includes('claude')
+            if (preset.id === 'codex') return n.includes('codex') || n.includes('agents')
+            if (preset.id === 'antigravity') return n.includes('antigravity')
+            if (preset.id === 'grok') return n.includes('grok') || n.includes('xai')
+            if (preset.id === 'http-api') return n.includes('http') || n.includes('host')
+            return false
           })
 
           let statusBadge = (

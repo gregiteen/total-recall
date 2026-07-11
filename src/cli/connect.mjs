@@ -97,18 +97,15 @@ const CLIENTS = {
       '  - .aider.rules.md'
     ].join('\n')
   },
-  ultrachat: {
-    label: 'UltraChat',
-    mode: 'api'
-    // No file projection: UltraChat connects via the OpenAI-compatible API.
-    // The compiled INSTRUCTIONS.md is injected per-request by the server.
-    // See docs/guides/ultrachat.md for session sync via /api/sessions/*.
+  'http-api': {
+    label: 'HTTP host app',
+    mode: 'api',
+    // Any HTTP host: OpenAI-compatible API + PAT. Not tied to a product repo.
   },
   obsidian: {
     label: 'Obsidian',
     mode: 'vault',
-    // Symlinks ~/.agent/memory-vault/ into the Obsidian vault as "Total Recall/"
-    // Obsidian indexes all SSSS nodes natively — graph view, backlinks, search.
+    // Symlinks memory-vault into the Obsidian vault as "Total Recall/"
     folderName: 'Total Recall'
   },
   generic: {
@@ -158,7 +155,7 @@ function printHelp() {
     antigravity
     gemini
     aider
-    ultrachat
+    http-api
     obsidian
     generic
 
@@ -378,17 +375,12 @@ function writeVaultProjection(agentDir, preset, opts) {
   const isHome = cwd === os.homedir();
   let folderName = preset.folderName;
   if (!isHome) {
+    // Generic title-case of the current directory — never special-case product repos
     const base = path.basename(cwd);
-    if (base.toLowerCase() === 'ultrachat-ai-powered' || base.toLowerCase() === 'ultrachat') {
-      folderName = 'UltraChat';
-    } else if (base.toLowerCase() === 'total-recall') {
-      folderName = 'Total Recall';
-    } else {
-      folderName = base
-        .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-    }
+    folderName = base
+      .split(/[-_]/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   }
 
   const linkPath = path.join(vaultPath, folderName);

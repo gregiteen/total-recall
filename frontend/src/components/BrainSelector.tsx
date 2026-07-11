@@ -1,278 +1,290 @@
-import { useState, useEffect, useRef } from 'react';
-import { getApiBase } from '../api';
+import { useState, useEffect, useRef } from 'react'
+import { getApiBase } from '../api'
 
 interface BrainInfo {
-  id: string;
-  name: string;
-  layer: 'global' | 'project';
-  path: string;
-  project_root?: string;
-  exists: boolean;
-  node_count: number;
-  registered_at?: string;
-  last_compiled: string | null;
+  id: string
+  name: string
+  layer: 'global' | 'project'
+  path: string
+  project_root?: string
+  exists: boolean
+  node_count: number
+  registered_at?: string
+  last_compiled: string | null
 }
 
 interface BrainSelectorProps {
-  activeBrainId: string;
-  onBrainChange: (brainId: string) => void;
+  activeBrainId: string
+  onBrainChange: (brainId: string) => void
+}
+
+function layerDot(layer: string, multi = false): string {
+  if (multi) return 'linear-gradient(135deg, #60a5fa, #34d399)'
+  if (layer === 'global') return 'linear-gradient(135deg, #60a5fa, #2563eb)'
+  return 'linear-gradient(135deg, #34d399, #059669)'
 }
 
 export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSelectorProps) {
-  const [brains, setBrains] = useState<BrainInfo[]>([]);
-  const [expanded, setExpanded] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const selectorRef = useRef<HTMLDivElement>(null);
+  const [brains, setBrains] = useState<BrainInfo[]>([])
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const selectorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const base = getApiBase();
+    const base = getApiBase()
     fetch(`${base}/api/brains`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => {
-        setBrains(data.brains || []);
-        setLoading(false);
+      .then((r) => r.json())
+      .then((data) => {
+        setBrains(data.brains || [])
+        setLoading(false)
       })
-      .catch(() => setLoading(false));
-  }, []);
+      .catch(() => setLoading(false))
+  }, [])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (selectorRef.current && !selectorRef.current.contains(event.target as Node)) {
-        setExpanded(false);
+        setExpanded(false)
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
-  const selectedIds = activeBrainId.split(',').filter(Boolean);
-  const selectedBrains = brains.filter(b => selectedIds.includes(b.id));
-  
-  // Fallback to first brain if none selected
-  const activeBrain = selectedBrains.length > 0 ? selectedBrains[0] : brains[0];
-  
-  const totalNodes = selectedBrains.length > 0
-    ? selectedBrains.reduce((sum, b) => sum + b.node_count, 0)
-    : (activeBrain?.node_count || 0);
+  const selectedIds = activeBrainId.split(',').filter(Boolean)
+  const selectedBrains = brains.filter((b) => selectedIds.includes(b.id))
+  const primary = selectedBrains[0] || brains[0]
+  const isMulti = selectedIds.length > 1
+  const totalNodes = selectedBrains.reduce((sum, b) => sum + (b.node_count || 0), 0) || primary?.node_count || 0
 
-  const concatenatedNames = selectedBrains.length > 0
-    ? selectedBrains.map(b => b.name).join(' + ')
-    : (activeBrain?.name || 'No Brain');
+  const label = isMulti
+    ? `${selectedIds.length} brains`
+    : primary?.name || 'Brain'
 
-  const layerText = selectedBrains.length > 0
-    ? selectedBrains.map(b => b.layer).filter((v, i, a) => a.indexOf(v) === i).join('/')
-    : (activeBrain?.layer || 'global');
-
-  const isMulti = selectedIds.length > 1;
-
-  const dotBg = isMulti
-    ? 'linear-gradient(135deg, #a855f7, #6366f1, #10b981)'
-    : activeBrain?.layer === 'global'
-      ? 'linear-gradient(135deg, #818cf8, #6366f1)'
-      : 'linear-gradient(135deg, #34d399, #10b981)';
-
-  const dotShadow = isMulti
-    ? '0 0 8px rgba(168,85,247,0.6)'
-    : activeBrain?.layer === 'global'
-      ? '0 0 6px rgba(99,102,241,0.5)'
-      : '0 0 6px rgba(16,185,129,0.5)';
-
-  const handleRowClick = (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onBrainChange(id);
-  };
-
-  const handleToggle = (id: string, e?: React.SyntheticEvent) => {
-    if (e) {
-      e.stopPropagation();
-    }
+  const handleToggle = (id: string, e: React.SyntheticEvent) => {
+    e.stopPropagation()
     if (selectedIds.includes(id)) {
-      const nextIds = selectedIds.filter(x => x !== id);
-      onBrainChange(nextIds.join(','));
+      onBrainChange(selectedIds.filter((x) => x !== id).join(','))
     } else {
-      const nextIds = [...selectedIds, id];
-      onBrainChange(nextIds.join(','));
+      onBrainChange([...selectedIds, id].join(','))
     }
-  };
+  }
 
   if (loading) {
     return (
-      <div style={{
-        padding: '8px 10px',
-        background: 'var(--bg-tertiary)',
-        borderRadius: 8,
-        fontSize: 11,
-        color: 'var(--text-tertiary)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-      }}>
-        <span style={{ animation: 'spin 0.8s linear infinite', display: 'inline-block' }}>⟳</span>
-        Loading brains…
+      <div className="brain-selector-trigger" style={{ opacity: 0.6 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Brains…</span>
       </div>
-    );
+    )
   }
 
-  if (brains.length === 0) return null;
+  if (brains.length === 0) return null
 
   return (
-    <div ref={selectorRef} style={{ position: 'relative' }}>
-      {/* Active brain pill */}
+    <div ref={selectorRef} className="brain-selector" style={{ position: 'relative' }}>
       <button
-        onClick={() => setExpanded(!expanded)}
+        type="button"
+        className="brain-selector-trigger"
+        onClick={() => setExpanded((v) => !v)}
+        title="Select brain layers"
         style={{
           width: '100%',
-          padding: '8px 10px',
-          background: expanded ? 'var(--accent-faint)' : 'var(--bg-tertiary)',
-          border: `1px solid ${expanded ? 'var(--accent)' : 'var(--border)'}`,
-          borderRadius: 8,
-          cursor: 'pointer',
-          color: 'var(--text-primary)',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          fontSize: 12,
-          transition: 'all 0.15s',
+          padding: '6px 8px',
+          background: expanded ? 'rgba(59, 130, 246, 0.12)' : 'rgba(148, 163, 184, 0.06)',
+          border: `1px solid ${expanded ? 'var(--border-accent)' : 'var(--border)'}`,
+          borderRadius: 8,
+          cursor: 'pointer',
+          color: 'var(--text-primary)',
           textAlign: 'left',
+          transition: 'all 0.15s',
         }}
-        title="Switch brain layer"
       >
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: dotBg,
-          flexShrink: 0,
-          boxShadow: dotShadow,
-        }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {concatenatedNames}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>
-            {totalNodes} nodes · {layerText}
-          </div>
-        </div>
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0, opacity: 0.5 }}>
+        <span
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: '50%',
+            background: layerDot(primary?.layer || 'global', isMulti),
+            boxShadow: isMulti
+              ? '0 0 6px rgba(52, 211, 153, 0.5)'
+              : '0 0 6px rgba(59, 130, 246, 0.45)',
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '-0.01em',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', flexShrink: 0 }}>
+          {totalNodes}
+        </span>
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          style={{
+            opacity: 0.45,
+            transform: expanded ? 'rotate(180deg)' : 'none',
+            transition: 'transform 0.15s',
+            flexShrink: 0,
+          }}
+        >
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
 
-      {/* Dropdown */}
       {expanded && (
-        <div style={{
-          position: 'absolute',
-          bottom: '100%',
-          left: 0,
-          right: 0,
-          marginBottom: 4,
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
-          overflow: 'hidden',
-          zIndex: 1000,
-        }}>
-          <div style={{ padding: '8px 10px', fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 1 }}>
-            Brain Layers
+        <div
+          className="brain-selector-menu"
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            right: 0,
+            marginBottom: 6,
+            background: 'linear-gradient(165deg, rgba(18, 26, 43, 0.98), rgba(8, 12, 22, 0.99))',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            boxShadow: '0 -8px 28px rgba(0,0,0,0.45)',
+            overflow: 'hidden',
+            zIndex: 1000,
+            maxHeight: 280,
+            overflowY: 'auto',
+          }}
+        >
+          <div
+            style={{
+              padding: '6px 10px',
+              fontSize: 9,
+              fontWeight: 700,
+              color: 'var(--text-tertiary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              borderBottom: '1px solid var(--border)',
+            }}
+          >
+            Brains · multi-select
           </div>
-          {brains.map(brain => {
-            const isSelected = selectedIds.includes(brain.id);
+          {brains.map((brain) => {
+            const isSelected = selectedIds.includes(brain.id)
             return (
               <div
                 key={brain.id}
-                onClick={(e) => {
-                  if (brain.exists) {
-                    handleRowClick(brain.id, e);
-                    setExpanded(false); // Close dropdown on single selection
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  if (!brain.exists) return
+                  onBrainChange(brain.id)
+                  setExpanded(false)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && brain.exists) {
+                    onBrainChange(brain.id)
+                    setExpanded(false)
                   }
                 }}
                 style={{
-                  width: '100%',
-                  padding: '8px 10px',
-                  background: isSelected ? 'var(--accent-faint)' : 'transparent',
-                  border: 'none',
-                  cursor: brain.exists ? 'pointer' : 'not-allowed',
-                  color: brain.exists ? 'var(--text-primary)' : 'var(--text-tertiary)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
-                  fontSize: 12,
-                  textAlign: 'left',
-                  opacity: brain.exists ? 1 : 0.5,
+                  padding: '7px 10px',
+                  cursor: brain.exists ? 'pointer' : 'not-allowed',
+                  opacity: brain.exists ? 1 : 0.45,
+                  background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+                  borderLeft: isSelected ? '2px solid #3b82f6' : '2px solid transparent',
                   transition: 'background 0.1s',
                 }}
-                onMouseEnter={e => { if (brain.exists) (e.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = isSelected ? 'var(--accent-faint)' : 'transparent' }}
-                role="button"
-                tabIndex={0}
+                onMouseEnter={(e) => {
+                  if (brain.exists) e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isSelected ? 'rgba(59, 130, 246, 0.12)' : 'transparent'
+                }}
               >
                 <input
                   type="checkbox"
                   checked={isSelected}
                   disabled={!brain.exists}
-                  style={{
-                    accentColor: 'var(--accent)',
-                    cursor: brain.exists ? 'pointer' : 'not-allowed',
-                    marginRight: 4,
-                  }}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(e) => handleToggle(brain.id, e)}
+                  style={{
+                    width: 13,
+                    height: 13,
+                    accentColor: '#3b82f6',
+                    cursor: brain.exists ? 'pointer' : 'not-allowed',
+                    margin: 0,
+                    flexShrink: 0,
+                  }}
                 />
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: brain.layer === 'global'
-                    ? 'linear-gradient(135deg, #818cf8, #6366f1)'
-                    : 'linear-gradient(135deg, #34d399, #10b981)',
-                  flexShrink: 0,
-                }} />
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    background: layerDot(brain.layer),
+                    flexShrink: 0,
+                  }}
+                />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 11 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {brain.name}
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 1 }}>
-                    {brain.node_count} nodes
-                    {brain.layer === 'project' && brain.project_root && (
-                      <span> · {brain.project_root.split('/').pop()}</span>
-                    )}
-                    {!brain.exists && ' · not found'}
+                  <div style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 1 }}>
+                    {brain.node_count}n
+                    {brain.layer === 'project' && brain.project_root
+                      ? ` · ${brain.project_root.split('/').pop()}`
+                      : ''}
+                    {!brain.exists ? ' · missing' : ''}
                   </div>
                 </div>
-                <span style={{
-                  fontSize: 9,
-                  padding: '1px 5px',
-                  borderRadius: 4,
-                  background: brain.layer === 'global'
-                    ? 'rgba(99,102,241,0.15)'
-                    : 'rgba(16,185,129,0.15)',
-                  color: brain.layer === 'global' ? '#818cf8' : '#34d399',
-                  fontWeight: 600,
-                  flexShrink: 0,
-                }}>
-                  {brain.layer}
+                <span
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    padding: '2px 5px',
+                    borderRadius: 4,
+                    flexShrink: 0,
+                    background:
+                      brain.layer === 'global'
+                        ? 'rgba(59, 130, 246, 0.15)'
+                        : 'rgba(16, 185, 129, 0.12)',
+                    color: brain.layer === 'global' ? '#93c5fd' : '#6ee7b7',
+                  }}
+                >
+                  {brain.layer === 'global' ? 'G' : 'P'}
                 </span>
               </div>
-            );
+            )
           })}
         </div>
       )}
-
-      {/* Empty state when zero brains are selected */}
-      {selectedIds.length === 0 && !expanded && (
-        <div style={{
-          marginTop: 6,
-          padding: '8px 10px',
-          background: 'var(--bg-tertiary)',
-          borderRadius: 8,
-          fontSize: 11,
-          color: 'var(--text-tertiary)',
-          textAlign: 'center',
-        }}>
-          No brain selected. Select a brain to view its memories.
-        </div>
-      )}
     </div>
-  );
+  )
 }

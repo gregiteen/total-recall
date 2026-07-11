@@ -6,6 +6,13 @@ agents:
     enabled: true
     exec: flag
 
+  - name: grok
+    binary: grok
+    flags: --output-format plain --always-approve --permission-mode bypassPermissions
+    priority: 2
+    enabled: true
+    exec: flag
+
   - name: claude
     binary: claude
     flags: --output-format json --permission-mode bypassPermissions --setting-sources local --tools ""

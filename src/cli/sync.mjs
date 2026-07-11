@@ -312,13 +312,13 @@ function pushToFork() {
   const root = gitRun(['rev-parse', '--show-toplevel'], { silent: true, ignoreErrors: true });
   if (!root) throw new Error('Not inside a git repository.');
 
-  // Warn if origin appears to be the upstream (not a personal fork)
+  // Optional: refuse push when origin is the published upstream (set TR_UPSTREAM_REPO yourself)
   const originUrl = gitRun(['remote', 'get-url', 'origin'], { silent: true, ignoreErrors: true });
-  if (originUrl.includes('gregiteen/total-recall')) {
-    console.error('  ⚠️  origin is the upstream repo, not your personal fork.');
+  if (process.env.TR_UPSTREAM_REPO && originUrl && originUrl.includes(process.env.TR_UPSTREAM_REPO)) {
+    console.error('  ⚠️  origin matches TR_UPSTREAM_REPO (upstream), not your personal fork.');
     console.error('  Set up your fork first:');
     console.error('    git remote rename origin upstream');
-    console.error('    git remote add origin https://github.com/YOUR_USERNAME/total-recall.git');
+    console.error('    git remote add origin https://github.com/YOUR_USERNAME/<your-fork>.git');
     throw new Error('Configure your fork as origin before using sync --push.');
   }
 

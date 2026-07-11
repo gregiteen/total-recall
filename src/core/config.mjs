@@ -70,23 +70,38 @@ const configSchema = z.object({
     (val) => val || path.join(os.homedir(), '.config'),
     z.string()
   ),
-  portfolioSync: z.object({
-    enabled: z.boolean().default(true),
-    baseUrl: z.string().default(process.env.PORTFOLIO_SYNC_URL || 'https://gregiteen.xyz'),
-    tokenRef: z.string().default('PORTFOLIO_ADMIN_TOKEN'),
-    intervalMinutes: z.number().int().default(30),
-    vaultDir: z.string().default(path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'vault')),
-    assetsDir: z.string().default(path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'assets')),
-    keepAssets: z.number().int().default(7)
+  // Optional remote vault/content sync — env-driven only; no host-app or product defaults.
+  remoteVaultSync: z.object({
+    enabled: z.boolean().default(
+      process.env.TR_REMOTE_VAULT_SYNC === '1' || process.env.TR_REMOTE_VAULT_SYNC === 'true',
+    ),
+    baseUrl: z.string().default(process.env.TR_REMOTE_VAULT_URL || ''),
+    tokenRef: z.string().default(process.env.TR_REMOTE_VAULT_TOKEN_REF || 'TR_REMOTE_VAULT_TOKEN'),
+    intervalMinutes: z.number().int().default(
+      process.env.TR_REMOTE_VAULT_INTERVAL_MIN
+        ? parseInt(process.env.TR_REMOTE_VAULT_INTERVAL_MIN, 10)
+        : 30,
+    ),
+    vaultDir: z.string().default(
+      process.env.TR_REMOTE_VAULT_DIR ||
+        path.join(os.homedir(), '.agent', 'tenants', 'default', 'vault'),
+    ),
+    assetsDir: z.string().default(
+      process.env.TR_REMOTE_ASSETS_DIR ||
+        path.join(os.homedir(), '.agent', 'tenants', 'default', 'assets'),
+    ),
+    registryDir: z.string().default(process.env.TR_REMOTE_REGISTRY_DIR || ''),
+    keepAssets: z.number().int().default(7),
   }).default({
-    enabled: true,
-    baseUrl: process.env.PORTFOLIO_SYNC_URL || 'https://gregiteen.xyz',
-    tokenRef: 'PORTFOLIO_ADMIN_TOKEN',
+    enabled: false,
+    baseUrl: '',
+    tokenRef: 'TR_REMOTE_VAULT_TOKEN',
     intervalMinutes: 30,
-    vaultDir: path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'vault'),
-    assetsDir: path.join(os.homedir(), '.agent', 'tenants', 'portfolio-site', 'assets'),
-    keepAssets: 7
-  })
+    vaultDir: path.join(os.homedir(), '.agent', 'tenants', 'default', 'vault'),
+    assetsDir: path.join(os.homedir(), '.agent', 'tenants', 'default', 'assets'),
+    registryDir: '',
+    keepAssets: 7,
+  }),
 });
 
 // Resolve brainDir paths
@@ -140,12 +155,13 @@ try {
   // Ignore
 }
 
-// Tenant integrations keep their credentials in the same local secret store as
-// provider keys. Expose this one only to the running process: the portfolio
-// sync client reads it by configured reference and it is never returned by an
-// HTTP route or written into repository configuration.
-if (!process.env.PORTFOLIO_ADMIN_TOKEN && typeof secrets.portfolio_admin_token === 'string' && secrets.portfolio_admin_token) {
-  process.env.PORTFOLIO_ADMIN_TOKEN = secrets.portfolio_admin_token;
+// Optional remote-vault token from secrets store (generic key only)
+if (
+  !process.env.TR_REMOTE_VAULT_TOKEN &&
+  typeof secrets.remote_vault_token === 'string' &&
+  secrets.remote_vault_token
+) {
+  process.env.TR_REMOTE_VAULT_TOKEN = secrets.remote_vault_token;
 }
 
 // Capture raw configuration values from process.env and secrets.enc
@@ -221,7 +237,7 @@ export const {
   trBrain,
   trPat,
   xdgConfigHome,
-  portfolioSync
+  remoteVaultSync,
 } = config;
 
 export function getEnvVar(name) {

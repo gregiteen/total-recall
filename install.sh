@@ -3,14 +3,14 @@
 # Assumes nothing. Installs everything. Opens the wizard.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh | bash
+#   curl -fsSL ${TR_INSTALL_SCRIPT_URL:-} | bash
 #
 set -e
 
 # Ensure standard binary directories are in PATH (important for non-interactive shells)
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
-REPO_URL="https://github.com/gregiteen/total-recall.git"
+REPO_URL="${TR_GIT_URL:-}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/total-recall}"
 WIZARD_PORT=3001
 
@@ -125,26 +125,33 @@ if ! curl -s http://localhost:11434 &>/dev/null; then
   sleep 3
 fi
 
-# ── 4. Clone or update Total Recall ──────────────────────────────────────────────
-if [ -d "$INSTALL_DIR/.git" ]; then
-  if [ "$SKIP_PULL" = "1" ]; then
-    log "Skipping git pull (development/local test mode)..."
-    cd "$INSTALL_DIR"
+# ── 4. Install Total Recall package ─────────────────────────────────────────────
+# Prefer npm package (open-source default). Optional TR_GIT_URL for git clone.
+PKG_NAME="${TR_NPM_PACKAGE:-total-recall-brain}"
+if [ -n "$REPO_URL" ]; then
+  if [ -d "$INSTALL_DIR/.git" ]; then
+    if [ "$SKIP_PULL" = "1" ]; then
+      log "Skipping git pull (development/local test mode)..."
+      cd "$INSTALL_DIR"
+    else
+      log "Updating install dir $INSTALL_DIR..."
+      cd "$INSTALL_DIR" && git pull --ff-only
+    fi
   else
-    log "Updating Total Recall in $INSTALL_DIR..."
-    cd "$INSTALL_DIR" && git pull --ff-only
+    log "Cloning from TR_GIT_URL into $INSTALL_DIR..."
+    git clone "$REPO_URL" "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
   fi
+  log "Installing dependencies..."
+  npm install --quiet
+  ok "Dependencies installed"
 else
-  log "Cloning Total Recall to $INSTALL_DIR..."
-  git clone "$REPO_URL" "$INSTALL_DIR"
+  log "Installing $PKG_NAME from npm (set TR_GIT_URL to install from a git remote instead)..."
+  npm install -g "$PKG_NAME"
+  ok "Installed $PKG_NAME"
+  mkdir -p "$INSTALL_DIR"
   cd "$INSTALL_DIR"
 fi
-
-# ── 5. Install Node dependencies ─────────────────────────────────────────────────
-log "Installing dependencies..."
-cd "$INSTALL_DIR"
-npm install --quiet
-ok "Dependencies installed"
 
 # ── 6. Launch the Setup Wizard ───────────────────────────────────────────────────
 echo ""

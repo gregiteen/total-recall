@@ -11,14 +11,20 @@ function printHelp() {  console.log(`
   Commands:
     list                       List global and all registered project brains (default)
     status                     Show active context resolution paths and loaded layers
-    register <project-path>    Register a project directory path in the registry
+    register <project-path>    Track any project path (full brain + registry)
     unregister <project-path>  Remove a project directory path from the registry
+    ensure <project-path>      Ensure a full project brain layout + register
+
+  Any repo works — pass absolute or relative paths you choose. No product defaults.
 
   Examples:
-    npx total-recall brain
-    npx total-recall brain status
     npx total-recall brain register .
+    npx total-recall brain register /path/to/any-app
+    npx total-recall brain ensure ~/code/my-lib
+    npx total-recall brain list
     npx total-recall brain unregister /path/to/project
+
+  Skill multi-repo sync: registered projects + TR_SYNC_REPOS + skill track/--repo
   `);
 }
 
@@ -45,11 +51,41 @@ export default async function brain(args) {
     case 'unregister':
       await handleUnregister(registryPath, args.slice(1));
       break;
+    case 'ensure':
+      await handleEnsure(args.slice(1), globalBrainDir);
+      break;
     default:
       console.error(`  ⚠️  Unknown brain command: "${subcommand}". Run total-recall brain --help for details.`);
       process.exit(1);
   }
 }
+
+async function handleEnsure(targetArgs, globalBrainDir) {
+  const targetPath = targetArgs[0];
+  if (!targetPath) {
+    console.error('  ⚠️  Usage: npx total-recall brain ensure <project-path>');
+    process.exit(1);
+  }
+  const { ensureFullProjectBrain, inspectProjectBrain } = await import('../core/project-brain.mjs');
+  const abs = path.resolve(targetPath);
+  if (!fs.existsSync(abs)) {
+    console.error(`  ⚠️  Not found: ${abs}`);
+    process.exit(1);
+  }
+  const result = ensureFullProjectBrain(abs, {
+    globalBrainDir,
+    tags: ['project-brain', 'full-brain'],
+  });
+  const health = inspectProjectBrain(abs);
+  console.log(`\n  ✅ Full project brain ready`);
+  console.log(`     Repo:  ${result.repoRoot}`);
+  console.log(`     Brain: ${result.brainDir}`);
+  console.log(`     complete=${health.complete} full_brain=${health.full_brain}`);
+  console.log(`     openwiki files +${result.openwiki?.files_added || 0}, dirs +${result.dirs_created}`);
+  console.log('');
+}
+
+
 
 async function handleList(registryPath, globalBrainDir) {
   const brains = getBothBrains();
@@ -130,14 +166,36 @@ async function handleStatus() {
 async function handleRegister(registryPath, targetArgs) {
   const targetPath = targetArgs[0];
   if (!targetPath) {
-    console.error('  ⚠️  Missing project path. Usage: npx total-recall brain register <project-path>');
+    console.error('  ⚠️  Missing project path. Usage: npx total-recall brain register <any-project-path>');
+    console.error('     Works with any repo you choose (absolute or relative).');
     process.exit(1);
   }
 
-  const absoluteRoot = path.resolve(targetPath);
+  const absoluteRoot = path.resolve(
+    targetPath.startsWith('~/')
+      ? path.join(os.homedir(), targetPath.slice(2))
+      : targetPath === '~'
+        ? os.homedir()
+        : targetPath,
+  );
   if (!fs.existsSync(absoluteRoot) || !fs.statSync(absoluteRoot).isDirectory()) {
     console.error(`  ⚠️  Directory not found: "${absoluteRoot}"`);
     process.exit(1);
+  }
+
+  // Full project brain for any user repo (vault, openwiki, sessions, …)
+  try {
+    const { ensureFullProjectBrain } = await import('../core/project-brain.mjs');
+    const globalBrainDir = path.join(getGlobalAgentDir(), 'skills', 'total-recall');
+    ensureFullProjectBrain(absoluteRoot, {
+      name: path.basename(absoluteRoot),
+      tags: ['user-repo', 'full-brain', 'project-brain'],
+      globalBrainDir,
+      register: true,
+    });
+    console.log(`  ✅ Full project brain ready at ${path.join(absoluteRoot, '.agent', 'skills', 'total-recall')}`);
+  } catch (err) {
+    console.error(`  ⚠️  Could not fully provision brain layout: ${err.message}`);
   }
 
   const brainDir = path.join(absoluteRoot, '.agent', 'skills', 'total-recall');

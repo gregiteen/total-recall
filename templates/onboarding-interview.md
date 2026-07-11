@@ -2,7 +2,7 @@
 type: task
 slug: onboarding-interview
 category: onboarding
-title: "Conduct user onboarding interview"
+title: "Conduct portable-memory onboarding interview"
 status: pending
 priority: 1
 created: {{CREATED_AT}}
@@ -11,49 +11,59 @@ updated: {{CREATED_AT}}
 
 ## Objective
 
-Conduct a warm, conversational onboarding interview with the user to deeply understand who they are, what they care about, and how you can best serve them. This is the most important task in the queue.
+Conduct a warm, practical onboarding interview so Total Recall can store durable preferences and facts as Markdown memory nodes. This is personal portable memory — not an operating system takeover. Keep the tone helpful and concrete.
 
 ## Instructions for the Agent
 
-When the user starts their next chat session, you MUST conduct this interview BEFORE doing any other work. Do NOT dump all the questions at once. Ask them one at a time, naturally, like a thoughtful conversation. Acknowledge and reflect on each answer before asking the next question.
+When the user starts their next chat session (and they have no `user-profile` yet), conduct this interview BEFORE unrelated work. Do NOT dump all questions at once. Ask one at a time. Acknowledge each answer before the next.
 
-Once the user has answered all questions (or says they want to skip any), write their answers into the vault immediately using your file tools.
+Once the user has answered (or skipped any), write their answers into the vault using tools / CLI (`remember` or direct vault writes). Prefer CLI when available:
 
-## Interview Questions (ask one at a time, conversationally)
+```bash
+npx total-recall remember preference "..." --tags "user,profile,onboarding" --importance 5
+```
 
-1. **Who are you?** — "To get started, can you tell me a bit about yourself? What do you do for work or what are you most focused on in life right now?"
+## Interview Questions (ask one at a time)
 
-2. **What are you working on?** — "What are the main projects or goals you're working toward? These could be professional, personal, creative — anything you want me to help you with."
+1. **Who are you?** — "Quick intro: what do you do, and what are you most focused on right now?"
 
-3. **What do you want to remember?** — "What kinds of things are most important for me to keep track of for you? (Ideas, research, decisions, people, tasks, reading, etc.)"
+2. **What should I remember?** — "What kinds of things matter most for me to keep: decisions, preferences, project facts, people, or something else?"
 
-4. **What topics excite you?** — "What subjects, fields, or areas of knowledge do you find yourself coming back to? What should I research and follow for you automatically?"
+3. **Which tools do you use?** — "Which IDEs or agents should share this memory? (Claude Code, Cursor, Codex, Gemini, Aider, Obsidian, HTTP, etc.) I can guide you with `npx total-recall connect …`."
 
-5. **How do you like to communicate?** — "Do you prefer direct, brief answers or detailed explanations? Do you want me to push back on ideas or mostly support your thinking?"
+4. **How should I talk?** — "Prefer short answers or detailed ones? Should I push back or mostly support?"
 
-6. **What frustrates you?** — "Is there anything that drives you crazy — things you keep forgetting, information that's hard to find, tasks that slip through the cracks?"
+5. **Hard rules** — "Any absolute do's or don'ts I must always follow (style, tools, safety)?"
 
-7. **What would success look like?** — "Six months from now, if I've done my job perfectly, what would be different for you?"
+6. **Background work** — "Want dream consolidation and optional daemon tasks running in the background, or on-demand only?"
 
-8. **Telegram Notifications** — "Would you like me to message you on Telegram when I finish background tasks or find something interesting during my idle time? If yes, you'll need to create a bot on Telegram via BotFather and give me the Bot Token and your Chat ID."
+7. **Secrets** — "API keys never go in the vault. Use `npx total-recall secret set`. Any keys you want to set up next?"
+
+8. **Notifications (optional)** — "Want Telegram pings when background tasks finish? If yes, BotFather token + chat ID."
+
+## Product context to reinforce (lightly, not as a lecture)
+
+- **Write** → `remember` / session ingest  
+- **Sleep** → `dream` (consolidate, conflict-check, recompile)  
+- **Read** → `recall` + compiled surfaces in any connected IDE  
+- **Async** → open task queue / daemon under policy  
+- Hosts are equal — track any repo; no product-specific hardcoding
 
 ## After the Interview
 
-Write the following files using your terminal tools:
+Write (or update) these files:
 
-**`.agent/config/notifications.yml`** — If they provided Telegram details, write them exactly like this:
+**`.agent/config/notifications.yml`** — only if they provided Telegram details:
 ```yaml
 telegram_bot_token: "their-token-here"
 telegram_chat_id: "their-chat-id-here"
 ```
 
-**`.agent/memory-vault/preferences/user-profile.md`** — Full SSSS memory node with the user's identity, role, and communication style.
+**`.agent/memory-vault/preferences/user-profile.md`** — identity + communication style  
+**`.agent/memory-vault/preferences/user-priorities.md`** — goals and what they want from memory  
+**`.agent/memory-vault/preferences/user-interests.md`** — topics worth tracking
 
-**`.agent/memory-vault/preferences/user-priorities.md`** — SSSS memory node listing the user's top goals, active projects, and what they want from Total Recall.
-
-**`.agent/memory-vault/preferences/user-interests.md`** — SSSS memory node listing topics to research autonomously.
-
-Use this frontmatter template for each file:
+Frontmatter template:
 ```yaml
 ---
 type: memory
@@ -69,4 +79,4 @@ tags: [user, profile, onboarding]
 ---
 ```
 
-After writing the files, mark this task `status: done` and confirm to the user that their profile has been saved.
+Then mark this task `status: done` and confirm the profile was saved. Point them at the dashboard **Onboarding** page or `init → connect → remember → dream` if they prefer CLI-only.

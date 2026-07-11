@@ -110,20 +110,24 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
       .then(health => {
         const agents = health.cli_agents && health.cli_agents.length > 0
           ? health.cli_agents
-          : ['antigravity', 'claude', 'codex'];
+          : ['antigravity', 'grok', 'claude', 'codex'];
         setAvailableModels(agents);
         
         const saved = localStorage.getItem('selectedModel');
         if (saved && agents.includes(saved)) {
           setSelectedModel(saved);
         } else {
-          const defaultAgent = agents.includes('antigravity') ? 'antigravity' : agents[0];
+          const defaultAgent = agents.includes('antigravity')
+            ? 'antigravity'
+            : agents.includes('grok')
+              ? 'grok'
+              : agents[0];
           setSelectedModel(defaultAgent);
           localStorage.setItem('selectedModel', defaultAgent);
         }
       })
       .catch(() => {
-        const agents = ['antigravity', 'claude', 'codex'];
+        const agents = ['antigravity', 'grok', 'claude', 'codex'];
         setAvailableModels(agents);
         const saved = localStorage.getItem('selectedModel');
         if (saved && agents.includes(saved)) {
@@ -541,32 +545,36 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
       </aside>
 
       {/* Main Chat Area */}
-      <div className="chat-container" style={{ position: 'relative' }}>
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 0,
-          pointerEvents: messages.length > 0 ? 'none' : 'auto',
-          opacity: messages.length > 0 ? 0.35 : 1,
-          transition: 'opacity 0.3s ease'
-        }}>
+      <div className="chat-container" style={{ position: 'relative', overflow: 'hidden' }}>
+        {/* Decorative graph only — never intercepts clicks (was blocking model/provider UI) */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 0,
+            pointerEvents: 'none',
+            opacity: messages.length > 0 ? 0.22 : 0.55,
+            transition: 'opacity 0.3s ease',
+          }}
+        >
           <Graph3D
             threads={threads}
             memoryNodes={allMemoryNodes}
             researchItems={researchItems}
-            onOpenThread={(threadId) => setActiveThreadId(threadId)}
-            onGroundMemoryNode={(slug) => {
-              setSelectedGroundingNodes(prev =>
-                prev.includes(slug) ? prev.filter(s => s !== slug) : [...prev, slug]
-              )
-            }}
+            onOpenThread={() => {}}
+            onGroundMemoryNode={() => {}}
             selectedGroundingNodes={selectedGroundingNodes}
+            interactive={false}
           />
         </div>
-        <header className="chat-header animate-fade-in" style={{ position: 'relative', zIndex: 1 }}>
+        <header
+          className="chat-header animate-fade-in"
+          style={{ position: 'relative', zIndex: 40, overflow: 'visible' }}
+        >
           <div className="chat-header-title">
             <h2>Chat Session</h2>
             {activeThreadId && (
@@ -575,13 +583,17 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
               </span>
             )}
           </div>
-          <div className="chat-header-model-selector" ref={dropdownRef}>
-            <span className="selector-label">Model:</span>
-            <div className="model-selector-dropdown-wrapper">
+          <div className="chat-header-model-selector" ref={dropdownRef} style={{ position: 'relative', zIndex: 50 }}>
+            <span className="selector-label">Model / provider:</span>
+            <div className="model-selector-dropdown-wrapper" style={{ position: 'relative', zIndex: 50 }}>
               <button 
+                type="button"
                 className={`model-selector-dropdown-btn ${showModelDropdown ? 'active' : ''}`}
-                onClick={() => setShowModelDropdown(!showModelDropdown)}
-                title="Select CLI agent model"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowModelDropdown((v) => !v)
+                }}
+                title="Select CLI agent / provider"
               >
                 <span style={{ textTransform: 'capitalize' }}>{selectedModel || 'Select Model'}</span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -589,12 +601,19 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                 </svg>
               </button>
               {showModelDropdown && (
-                <div className="model-selector-menu glass">
+                <div
+                  className="model-selector-menu glass"
+                  style={{ zIndex: 200, pointerEvents: 'auto' }}
+                  role="listbox"
+                >
                   {availableModels.map(modelName => (
                     <div 
                       key={modelName} 
+                      role="option"
+                      aria-selected={selectedModel === modelName}
                       className={`model-selector-item ${selectedModel === modelName ? 'selected' : ''}`}
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setSelectedModel(modelName)
                         localStorage.setItem('selectedModel', modelName)
                         setSelectedSubModel('')
@@ -606,6 +625,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                         <span className="model-selector-item-name" style={{ textTransform: 'capitalize' }}>{modelName}</span>
                         <span className="model-selector-item-desc">
                           {modelName === 'antigravity' && 'Google Antigravity'}
+                          {modelName === 'grok' && 'xAI Grok Build CLI'}
                           {modelName === 'gemini' && 'Google Gemini CLI'}
                           {modelName === 'claude' && 'Anthropic Claude CLI'}
                           {modelName === 'codex' && 'Codex Coding Agent'}
@@ -718,7 +738,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
               style={{
                 flexShrink: 0,
                 padding: '6px 14px',
-                background: 'linear-gradient(135deg, #6c5ce7, #a29bfe)',
+                background: 'linear-gradient(135deg, #3b82f6, #93c5fd)',
                 color: '#fff',
                 borderRadius: 6,
                 fontWeight: 500,
@@ -749,7 +769,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
           </div>
         )}
 
-        <div className="chat-messages" style={{ position: 'relative', zIndex: 1 }}>
+        <div className="chat-messages" style={{ position: 'relative', zIndex: 1, pointerEvents: 'auto' }}>
           <div style={{
             position: 'relative',
             display: 'flex',
@@ -811,7 +831,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
           <div ref={messagesEnd} />
           </div>
         </div>
-        <div className="chat-input-bar" style={{ position: 'relative', zIndex: 1 }}>
+        <div className="chat-input-bar" style={{ position: 'relative', zIndex: 30, pointerEvents: 'auto' }}>
           {selectedGroundingNodes.length > 0 && (
             <div className="grounding-pills">
               {selectedGroundingNodes.map(slug => {

@@ -1,43 +1,45 @@
 import { Router } from 'express';
-import { runSync } from '../../core/portfolio-sync.mjs';
+import { runSync } from '../../core/remote-vault-sync.mjs';
 import config from '../../core/config.mjs';
 import { requireAuth } from '../auth.mjs';
 
 const router = Router();
 
-router.post('/api/sync/portfolio/proposals/:id/decision', requireAuth, async (req, res) => {
+/** Generic remote-vault proposal decision proxy (optional feature). */
+router.post('/api/sync/remote-vault/proposals/:id/decision', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { action, notes } = req.body;
-    
-    const token = process.env[config.portfolioSync.tokenRef];
+
+    const token = process.env[config.remoteVaultSync.tokenRef];
     if (!token) {
-      return res.status(500).json({ error: 'Missing sync token' });
+      return res.status(500).json({ error: 'Missing remote vault sync token' });
     }
 
-    const baseUrl = config.portfolioSync.baseUrl.replace(/\/+$/, '');
-    
-    // Server-side fetch to droplet
-    const dropletRes = await fetch(`${baseUrl}/api/admin/proposals/${id}/decision`, {
+    if (!config.remoteVaultSync.baseUrl) {
+      return res.status(500).json({ error: 'TR_REMOTE_VAULT_URL not configured' });
+    }
+
+    const baseUrl = config.remoteVaultSync.baseUrl.replace(/\/+$/, '');
+
+    const remoteRes = await fetch(`${baseUrl}/api/admin/proposals/${id}/decision`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ action, notes })
+      body: JSON.stringify({ action, notes }),
     });
 
-    if (!dropletRes.ok) {
-      const err = await dropletRes.text();
-      return res.status(dropletRes.status).json({ error: `Droplet rejected decision: ${err}` });
+    if (!remoteRes.ok) {
+      const err = await remoteRes.text();
+      return res.status(remoteRes.status).json({ error: `Remote rejected decision: ${err}` });
     }
 
-    const data = await dropletRes.json();
-
-    // Trigger sync to pull updated state
+    const data = await remoteRes.json();
     await runSync();
 
-    res.json({ success: true, droplet_response: data });
+    res.json({ success: true, remote_response: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

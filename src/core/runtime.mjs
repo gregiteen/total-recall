@@ -14,7 +14,13 @@ import { validateCommand } from './sandbox.mjs';
  */
 export function findBinaryInPath(binaryName) {
   const pathEnv = process.env.PATH || '';
-  const dirs = pathEnv.split(path.delimiter);
+  const extra = [
+    path.join(os.homedir(), '.local', 'bin'),
+    path.join(os.homedir(), '.grok', 'bin'),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ];
+  const dirs = [...new Set([...pathEnv.split(path.delimiter), ...extra].filter(Boolean))];
   for (const dir of dirs) {
     const fullPath = path.join(dir, binaryName);
     try {
@@ -43,6 +49,7 @@ export function findBinaryInPath(binaryName) {
 
 const DEFAULT_AGENTS = [
   { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 1, enabled: true, exec: 'flag' },
+  { name: 'grok',        binary: 'grok',        flags: '--output-format plain --always-approve --permission-mode bypassPermissions', priority: 2, enabled: true, exec: 'flag' },
   { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions --setting-sources local --tools ""', priority: 3, enabled: true, exec: 'flag' },
   { name: 'codex',       binary: 'codex',       flags: '--full-auto --json --skip-git-repo-check', priority: 4, enabled: true, exec: 'subcommand' },
 ];
@@ -199,7 +206,7 @@ export async function checkRuntimeHealth(config) {
   if (available.length === 0) {
     return {
       status: 'degraded',
-      reason: 'No CLI agents found. Install antigravity, claude, or codex.',
+      reason: 'No CLI agents found. Install antigravity, grok, claude, or codex.',
       available: [],
     };
   }
@@ -289,7 +296,7 @@ export async function callLocalRuntime(prompt, system, config) {
     });
 
     if (!agent) {
-      throw new Error('No CLI agents available. Install antigravity, claude, or codex.');
+      throw new Error('No CLI agents available. Install antigravity, grok, claude, or codex.');
     }
 
     const modelFlag = agent.model ? `-m ${agent.model}` : '';
@@ -298,6 +305,7 @@ export async function callLocalRuntime(prompt, system, config) {
     if (agent.exec === 'subcommand') {
       cmd = `${agent.binaryPath} exec "${escapeShell(fullPrompt)}" ${agent.flags} ${modelFlag}`.trim();
     } else {
+      // flag-style CLIs (antigravity, grok, claude, gemini): -p / --single prompt
       cmd = `${agent.binaryPath} -p "${escapeShell(fullPrompt)}" ${agent.flags} ${modelFlag}`.trim();
     }
 
@@ -310,12 +318,29 @@ export async function callLocalRuntime(prompt, system, config) {
     // Pre-flight command execution validation
     validateCommand(cmd);
 
+    const xaiKey =
+      process.env.XAI_API_KEY ||
+      process.env.GROK_API_KEY ||
+      dynamicSecrets.XAI_API_KEY ||
+      dynamicSecrets.xai_api_key ||
+      dynamicSecrets.GROK_API_KEY ||
+      dynamicSecrets.grok_api_key ||
+      '';
+
     const spawnEnv = {
       ...process.env,
+      // Ensure common CLI install dirs are visible (e.g. ~/.local/bin/grok)
+      PATH: [
+        path.join(os.homedir(), '.local', 'bin'),
+        path.join(os.homedir(), '.grok', 'bin'),
+        process.env.PATH || '',
+      ].filter(Boolean).join(path.delimiter),
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
       GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || dynamicSecrets.anthropic_api_key,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || dynamicSecrets.openai_api_key,
+      XAI_API_KEY: xaiKey || process.env.XAI_API_KEY,
+      GROK_API_KEY: xaiKey || process.env.GROK_API_KEY,
       TAVILY_API_KEY: process.env.TAVILY_API_KEY || dynamicSecrets.tavily_api_key || tavilyApiKey,
       BRAVE_API_KEY: process.env.BRAVE_API_KEY || dynamicSecrets.brave_api_key || braveApiKey,
       EXA_API_KEY: process.env.EXA_API_KEY || dynamicSecrets.exa_api_key || exaApiKey,

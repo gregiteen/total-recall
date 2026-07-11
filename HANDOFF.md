@@ -1,93 +1,55 @@
 # Total Recall — Developer Handoff
 
-## 1. Executive Summary
-In this session, we identified and patched a severe "context bloat" issue inside the Total Recall daemon that was effectively lobotomizing AI agents (like Antigravity) by pushing their required instructions, skills, and tools entirely out of the context window. The root cause was traced to a fallback loop in the `surface.mjs` compiler that was indiscriminately writing full copies of the active vault directives to multiple IDE shim files. We modified the compiler to be lean-by-default, established the required Kanban tracking, and laid out the next steps for testing and deployment.
+## Active project
 
----
+**`docs/projects/in-progress/TR_CORE_FOCUS/`**
 
-## 2. Root Cause Analysis: Context Exhaustion
-When an AI agent initializes in a workspace, it automatically scans for and loads relevant instruction files based on globs (e.g., `*.md`, `.cursorrules`, `CLAUDE.md`, `GEMINI.md`, `AGENTS.md`). 
+| Doc | Role |
+|-----|------|
+| `TR_CORE_FOCUS_PRD.md` | Product thesis |
+| `TR_CORE_FOCUS_ARCHITECTURE.md` | Memory loop, tasks, layout |
+| `TR_CORE_FOCUS_DEVELOPMENT_PLAN.md` | Phased plan |
+| `TR_CORE_FOCUS_PROJECT_TRACKER.md` | Checkbox SSOT |
 
-**The Bug in `total-recall compile`:**
-If a workspace lacked the `.agent/config/clients.json` file (which specifies which exact IDEs are active), the compiler's `compilePointers` function would fall back to a "spray-and-pray" approach. It iterated over the `CLIENT_SHIMS` dictionary and wrote the **entirety of the active rule blocks** (often 10KB to 15KB of text including full REST API templates and routing tables) to *every single supported client file*:
-- `AGENTS.md`
-- `GEMINI.md`
-- `CLAUDE.md`
-- `.cursorrules`
-- `.clauderules`
-- `.aider.rules.md`
-- `WINDSURF.md`
+## Product
 
-Because the agent framework eagerly loaded these identical files, the exact same rules block was injected into the system prompt 6-8 times redundantly, consuming upwards of 80KB to 100KB of the total context budget. This forced the eviction of the agent's `<skills>` and `<workflows>` sections, rendering it "deaf" to its own capabilities.
+**Portable personal memory for any IDE** — write → dream → read → open tasks; plus openwiki, skill deploy, secrets. Not a Sovereign AI OS product first. Host apps are equal implementations (no special-cased repos in core).
 
-Additionally, the `writeShim` function was aggressively `unlink`ing existing symbolic links and replacing them with hard-copied text files, further exacerbating the duplication.
+## Done (2026-07-10)
 
----
+- Phases **1–6**: modules/openwiki, skills registry + any-repo sync, secrets, dream + daemon tasks, README/CLI slim
+- Open-source purity: no third-party product repo hardcoding in `src/` / `frontend/src/`
+- Remote vault feature renamed to env-driven `TR_REMOTE_VAULT_*`
 
-## 3. Implemented Code Changes
-The following fixes have been applied locally to `src/core/surface.mjs` in the `total-recall` repository:
+## Core CLI story
 
-### A. Disabled Indiscriminate Shim Generation
-In `compilePointers()`, the fallback loop was stripped out.
-**Before:**
-```javascript
-  if (connectedClients === null) {
-    // No clients.json → backward compat: write ALL client shims
-    for (const files of Object.values(CLIENT_SHIMS)) {
-      for (const file of files) {
-        await writeShim(path.join(baseDir, file), skillsDir, nodes, { vaultDir, derivedDir });
-      }
-    }
-  }
-```
-**After:**
-```javascript
-  if (connectedClients === null) {
-    // Backward compat loop removed to prevent context exhaustion.
-    // By default, we only write INSTRUCTIONS.md.
-    // Users must explicitly use 'npx total-recall connect' to register client IDEs.
-  }
+```bash
+npx total-recall init --project
+npx total-recall connect claude-code
+npx total-recall remember fact "..."
+npx total-recall recall "..."
+npx total-recall dream
+npx total-recall skill track .
+npx total-recall secret list
 ```
 
-### B. Preserved Existing Symlinks
-In `writeShim()`, we added an early return to protect existing symlinks.
-**Before:**
-```javascript
-      if (stat.isSymbolicLink()) {
-        fs.unlinkSync(shimPath);
-        atomicWrite(shimPath, fullContent);
-      }
-```
-**After:**
-```javascript
-      if (stat.isSymbolicLink()) {
-        // If it's a symlink, DO NOT destroy it. It likely points to INSTRUCTIONS.md natively,
-        // and its content will update automatically when the target updates.
-        return;
-      }
-```
+Inventory: `docs/reference/CLI_INVENTORY.md` · README root.
 
----
+## Phase 7 verify (2026-07-10)
 
-## 4. Pending Tasks & Verification
+- **76/76** vitest (envelope, dream, scheduler, skills, secrets, remote-vault, project-brain, skill CLI)
+- Clean-machine smoke: ensure brain → remember → compile → dream → secret → task → skill track
+- Custom task dispatch → `memory-inbox/pending` draft
 
-### Code Validation
-The following must be run by the next developer picking this up:
-1. `npm run test` or `vitest run` in the `total-recall` repo to ensure no compiler unit tests were broken by the `surface.mjs` changes.
-2. `node .agent/skills/code-quality/scripts/start-here-ts.mjs` and linting to ensure clean compilation.
-3. Test `npx total-recall compile` locally on a dummy repo to confirm ONLY `INSTRUCTIONS.md` is generated by default.
-4. Test `npx total-recall connect cursor` to confirm targeted client shims still work correctly.
+### Next
 
-### Workspace Cleanup (ultrachat-ai-powered)
-To immediately recover the AI's capabilities in the `ultrachat-ai-powered` workspace, the redundant shim files need to be deleted.
-**Action:** Delete `AGENTS.md`, `GEMINI.md`, `CLAUDE.md`, `.cursorrules`, etc. from the root of the UltraChat repo, leaving only the canonical `INSTRUCTIONS.md` and perhaps the agent-specific ones you actually use (connected properly via `.agent/config/clients.json`).
+1. **Commit / push** large uncommitted branch when ready  
+2. Optional hygiene: remove root `fix-*.mjs` / `patch-*.mjs`  
+3. Optional: fix non-interactive `init --yes` hang; improve bare-install `recall` without embeddings
 
-### Release
-1. Update `version` in `package.json` to the next patch version (currently 3.6.6).
-2. Execute `npm publish` to push the update to the global npm registry.
+## Do not
 
----
-
-## 5. Project Tracking
-The full breakdown of tasks remains documented and in progress at:
-`docs/projects/in-progress/CONTEXT_BLOAT_FIX.md`
+- Hardcode or special-case any host product repository in TR core
+- Put secrets in vault markdown / openwiki / inject surfaces
+- Treat dream or open tasks as optional bloat
+- Plan under `.gemini/antigravity/brain/` — use `docs/projects/` only

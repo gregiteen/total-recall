@@ -290,7 +290,8 @@ function makeSlug(filename, absPath) {
 }
 
 function healSymlinkTarget(target) {
-  let healed = target.replace('/ultrachat/ultrachat-ai-powered/', '/ultrachat-ai-powered/');
+  // Generic heal only — never special-case product/repo path segments
+  let healed = target;
   if (fs.existsSync(healed)) return healed;
 
   const skillMatch = healed.match(/\/(\.agents?)\/skills\/([^\/]+)\/(SKILL\.md)$/i);

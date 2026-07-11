@@ -39,7 +39,7 @@ describe('SSSS 0.9 host inventory', () => {
     expect(listHostOnlyTypes()).toEqual(summary.host_only_types);
   });
 
-  it('composes package core + festech + total-recall host extension', () => {
+  it('composes package core + host extension registries', () => {
     const set = createTotalRecallRegistrySet();
     expect(set.types.has('memory')).toBe(true);
     expect(set.types.has('rule')).toBe(true);

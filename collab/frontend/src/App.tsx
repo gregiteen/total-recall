@@ -73,7 +73,7 @@ function App() {
       </main>
 
       <footer style={{ borderTop: '1px solid var(--border-light)', padding: '24px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)', background: 'rgba(10, 11, 16, 0.6)' }}>
-        <p>© 2026 Total Recall Sovereign OS Project. Local encryption, zero third-party tracking.</p>
+        <p>© 2026 Total Recall — portable personal memory. Local encryption, zero third-party tracking.</p>
       </footer>
     </>
   );

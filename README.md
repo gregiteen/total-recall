@@ -1,173 +1,156 @@
-# Total Recall — SSSS Sovereign AI OS
+# Total Recall
 
-[![Version](https://img.shields.io/badge/version-3.3.0-indigo.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-3.13.0-indigo.svg)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-emerald.svg)](LICENSE)
-[![Continuous Integration](https://img.shields.io/badge/CI-passing-teal.svg)](.github/workflows/test.yml)
 
-> **A database-free, filesystem-native AI memory layer.** Works in any IDE. Self-hosts on any VM. Costs nothing to store.
+**Portable personal memory for any IDE** — filesystem-native, database-free, open source.
 
-Total Recall is the open-source reference implementation of the **SSSS (Structured Semantic Syntax System)** — a specification for storing AI memory, skills, and workflows as plain Markdown files instead of opaque, hosted databases.
+Total Recall stores your rules, preferences, facts, and project knowledge as plain Markdown (SSSS). It compiles them into IDE instruction surfaces, runs a dream consolidation cycle, and lets agents enqueue background tasks. Host apps and product repos are equal implementations: **nothing is hard-coded to a specific codebase.**
 
 ```text
-your AI brain = ~/.agent/skills/total-recall/memory-vault/*.md
+write   →  remember / session ingest
+sleep   →  dream  (consolidate, conflict, compile, prune)
+read    →  recall + compiled surfaces
+async   →  daemon task queue (agents may enqueue anything under policy)
 ```
 
-No database overhead. No vendor lock-in. Your thoughts, on your machine.
+```text
+your brain  =  ~/.agent/skills/total-recall/
+your project  =  <repo>/.agent/skills/total-recall/
+```
 
 ---
 
-## 🚀 Choose Your Setup
+## Quick start (IDE memory, ~2 minutes)
 
-### 🖥️ 1. IDE Memory Only (2 minutes)
-
-Add persistent, highly contextual memory to **Claude Code**, **Cursor**, **Codex CLI**, or any IDE agent in your active workspace:
+No always-on LLM and no research daemon required.
 
 ```bash
-cd ~/my-project
-npx total-recall init                   # provision global brain and local project VFS shims
-npx total-recall connect claude-code     # symlink CLAUDE.md → INSTRUCTIONS.md
+cd /path/to/any-project
+npx total-recall init --project    # project brain + openwiki scaffold
+npx total-recall connect claude-code   # or: cursor | codex | gemini | aider | obsidian | http-api
+npx total-recall remember preference "Prefer clear, short answers."
+npx total-recall recall "short answers"
+npx total-recall compile           # rebuild INSTRUCTIONS.md inject blocks
 ```
 
-Supported IDEs and surfaces:
+Injected rules sit only between:
 
-| Client Command | Connection Mode | Targeted Projection Target |
-| :--- | :--- | :--- |
-| `npx total-recall connect claude-code` | Symlink | Symlinks `CLAUDE.md` to the compiled instruction surface |
-| `npx total-recall connect codex` | Symlink | Symlinks `AGENTS.md` to the compiled instruction surface |
-| `npx total-recall connect antigravity` | Symlink | Symlinks `AGENTS.md` to the compiled instruction surface |
-| `npx total-recall connect gemini` | Symlink | Symlinks `GEMINI.md` to the compiled instruction surface |
-| `npx total-recall connect cursor` | File Projection | Writes/updates `.cursor/rules/total-recall.mdc` with frontmatter rules |
-| `npx total-recall connect aider` | File Projection | Writes/updates `.aider.rules.md` file rules |
+```text
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+…
+<!-- END INJECTED MEMORY -->
+```
 
-> [!NOTE]
-> **Non-Destructive Integration:**
-> Your existing custom rules are **never overwritten**. Total Recall operates exclusively inside the clearly-marked comment bounds:  
-> `<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->`  
-> `...`  
-> `<!-- END INJECTED MEMORY -->`
+Existing local rules outside those markers are never clobbered.
 
 ---
 
-### 🧠 2. Full Sovereign Brain VM (10 minutes)
+## Core workflows
 
-Deploy the full autonomous stack — a secure OpenAI-compatible REST server, dynamic React dashboard, continuous Dream Cycle daemon, and local session relays — on your own VM.
+| Workflow | Commands |
+|----------|----------|
+| **Remember / recall** | `remember`, `forget`, `recall` |
+| **Dream (sleep)** | `dream` — or daemon system dream on empty queue |
+| **Defer work** | `task add "<intent>"` then `daemon start` |
+| **Skills across repos** | `skill track <path>`, `skill deploy`, `skill sync` |
+| **Secrets (not vault)** | `secret set\|list\|rotate\|usage\|check-surfaces` |
+| **Connect an IDE** | `connect <client>` |
 
-**Prerequisites:**
-- A standard Linux or macOS server/workstation.
-- Node.js ≥ 20.
-- A primary API Key (e.g. `GOOGLE_API_KEY` for high-speed Google `gemini-embedding-2` vectors, featuring OpenAI fallback).
+### Multi-repo skills (any path you choose)
 
 ```bash
-# Start the interactive configuration wizard:
-npx total-recall init
+npx total-recall skill track /path/to/any-app
+npx total-recall skill sync --repo /path/a --repo /path/b
+# or: export TR_SYNC_REPOS="/path/a:/path/b"
 ```
 
-The interactive wizard provisions the configuration, registers authorized Personal Access Tokens (PATs), configures secure Caddy reverse-proxying, and prompts you to choose your **Selectable UI Deployment Location**:
+Roots come only from: project registry, install map, `TR_SYNC_REPOS`, CLI `--repo`, and cwd when it looks like a project.
 
-| Mode | Target URL | Primary Target |
-| :--- | :--- | :--- |
-| **Local Bind** | `http://127.0.0.1:3000` | Local operations. Binds strictly to your loopback interface. |
-| **Quick Tunnel** | `https://*.trycloudflare.com` | Spawns a background Cloudflare tunnel for zero-configuration public URL access. |
-| **Named Tunnel** | `https://your-tunnel.domain.com` | Hooks up securely to a pre-registered Cloudflare tunnel daemon. |
-| **Custom Domain** | `https://your-domain.com` | Hooks up to your public DNS, reverse-proxied and secured by Caddy TLS. |
-
-To start the server daemon, run:
-```bash
-npm start
-```
-*Vite automatically installs and builds the beautiful Glassmorphic React SPA on first boot, serving the dashboard dynamically.*
-
----
-
-### 📔 3. Obsidian Integration
-
-Visualize your entire memory vault, rules network, and daily logs directly inside Obsidian with native backlinks and graphs:
+### Secrets
 
 ```bash
-npx total-recall connect obsidian
+npx total-recall secret set some_api_key "$KEY" --provider example
+npx total-recall secret list                 # metadata only
+npx total-recall secret check-surfaces       # fail if values leaked into surfaces
 ```
-*Auto-detects your vault path on macOS (or pass `--vault ~/path/to/vault` on Linux/other), symlinking your memory vault and installing interactive Dataview dashboard trackers.*
 
----
+Optional AES: `TR_SECRETS_PASSWORD`. Values never belong in vault markdown or openwiki.
 
-### 💬 4. UltraChat Integration
-
-UltraChat integrates securely with your brain via our OpenAI-compatible chat API, injecting active memory instructions into system prompts on the fly:
+### Optional background daemon
 
 ```bash
-npx total-recall connect ultrachat --brain https://your-server.com --token YOUR_PAT
-```
-*Generates the OpenAI-compatible configuration parameters (baseURL, model, token auth header).*
-
----
-
-## 🧠 Dual-Layer Brain Architecture
-
-Total Recall partitions your sovereign brain memory into two virtual layers:
-
-```
-                      ┌────────────────────────┐
-                      │      GLOBAL LAYER      │
-                      │  ~/.agent/skills/tr/   │
-                      └───────────┬────────────┘
-                                  │
-                                  ▼ Overridden by
-                      ┌────────────────────────┐
-                      │     PROJECT LAYER      │
-                      │  <repo>/.agent/skills/ │
-                      └────────────────────────┘
+npx total-recall daemon start    # idle invent OFF unless TR_IDLE_TASKS=1
+npx total-recall task add "Extract decisions from last session" --cap vault:write
 ```
 
-1. **Global Layer** (`~/.agent/skills/total-recall/`): Contains global user preferences, master API keys, global logs, and the baseline identity context (`SOUL.md`, `USER.md`).
-2. **Project Layer** (`<repo>/.agent/skills/total-recall/`): Contains local repository facts, project-specific habits, and specialized research agendas.
+---
 
-*When compiling rules or searching, project-level nodes take precedence and override global nodes on slug collisions. CLI operations like `remember`, `recall`, `research`, `backup`, and `restore` accept `--global` and `--project` flags to steer memories to the right layer.*
+## Dual-layer brain
+
+```text
+GLOBAL   ~/.agent/skills/total-recall/     identity, shared preferences
+PROJECT  <repo>/.agent/skills/total-recall/  repo facts, decisions, openwiki
+```
+
+CLI flags: `--global` / `--project`. Project wins on slug conflicts when both apply.
 
 ---
 
-## ⚡ CLI Command Reference
+## CLI inventory
 
-| Command | Description |
-| :--- | :--- |
-| `npx total-recall init` | Initialize the global or local project VFS memory schemas. |
-| `npx total-recall connect <client>` | Wire a local IDE, Obsidian vault, or UltraChat client to your brain. |
-| `npx total-recall deploy` | Configure startup services, Caddy proxy servers, and platform auto-starts. |
-| `npx total-recall compile` | Rebuild `INSTRUCTIONS.md` from merged global & project memory nodes. |
-| `npx total-recall dream` | Trigger a manual Dream Cycle (GC, pattern extraction, decay consolidation). |
-| `npx total-recall lint` | Validate vault nodes against the SSSS v2 frontmatter Zod schema. |
-| `npx total-recall backup` | Create password-encrypted tarballs, push git backups, or sync Obsidian. |
-| `npx total-recall restore <file>` | Restore your sovereign VFS from an encrypted tarball backup. |
-| `npx total-recall status` | Show brain health summary, connected client registries, and daemon status. |
-| `npx total-recall generate-pat` | Provision granular, label-based Personal Access Tokens (PATs) for auth. |
-| `npx total-recall daemon` | Manage the background Dream Cycle daemon (start / stop / status). |
-| `npx total-recall relay` | Manage background local session-sync relays watching IDE log files. |
-| `npx total-recall config` | Read or update system settings, Allowed Origins, or USD budget caps dynamically. |
-| `npx total-recall skill` | Search, install, security-audit, and remove packages from the skills.sh registry. |
-| `npx total-recall uninstall` | Completely stop background services and wipe Total Recall from the system. |
-| `npx total-recall friction` | Inspect watchdog telemetry logs to identify workflow latency bottlenecks. |
+Commands are classified as **core** (default product path), **optional** (power features), or **legacy** (still shipped, not the focus).
+
+Full table: [`docs/reference/CLI_INVENTORY.md`](docs/reference/CLI_INVENTORY.md)
+
+| Tier | Examples |
+|------|----------|
+| **Core** | `init`, `connect`, `remember`, `forget`, `recall`, `compile`, `dream`, `task`, `daemon`, `skill`, `secret`, `brain`, `status`, `doctor` |
+| **Optional** | `research`, `relay`, `deploy`, `setup`, `backup`/`restore`, `chat`, `map`, `export`/`import`, `ingest` |
+| **Legacy / niche** | `collab`, `friction`, `upgrade`, `migrate`, `snapshot`, `command` |
+
+Default install story: **init → connect → remember/recall → dream**. No LLM required.
 
 ---
 
-## 🔒 Security, Sandboxing, & Safety
+## Optional full server
 
-- **硬 Hardened VM Sandbox:** All subagent script executions run inside an isolated vm sandbox environment (`sandbox.mjs`) featuring POSIX namespace restrictions, strict memory/CPU bounds, and a command execution whitelist. The sandbox is **disabled by default** (`security.yml.sandbox.enabled: false`) for maximum security.
-- **Cost Watchdog & Limits:** Daily and weekly maximum cost thresholds (`config/budget.yml`) are enforced dynamically via a cost supervisor in `runtime.mjs` that instantly suspends subagent dispatches if budget caps are exceeded.
-- **OWASP-aligned scrypt Security:** Master credentials and API keys are AES-256-GCM encrypted under `secrets.enc` with OWASP-aligned scrypt key derivation.
-- **Privacy Redactions:** Memory nodes marked with `privacy: local_only` are automatically stripped before any external API dispatches or reasoning agent calls.
+For a local REST API + dashboard (not required for IDE memory):
+
+```bash
+npx total-recall start
+# or: npm start
+```
+
+Deploy/tunnels are optional (`deploy`, `setup`). Configure only what you need.
 
 ---
 
-## 🧹 Service Uninstallation
+## Architecture sketch
 
-To cleanly stop background daemons, unload platform agents (macOS launchd plists / Linux systemd services), remove symlink shims from all workspaces, and purge global configs:
+- **SSSS vault** — Markdown + YAML frontmatter (filesystem SSOT)
+- **Openwiki** — human/agent long-form docs (ships with init)
+- **Surfaces** — compiled inject blocks for IDEs
+- **Dream** — consolidation cycle (deterministic first)
+- **Daemon tasks** — open envelope + capability policy
+- **Secrets** — separate store from vault
+
+Host apps consume TR the same way: PAT + brain URL (`connect http-api`) or local files.
+
+---
+
+## Uninstall
 
 ```bash
 npx total-recall uninstall
 ```
-> [!IMPORTANT]
-> **Safety First:**
-> The uninstaller automatically detects version-controlled files, **preserving** local workspace `.agent/skills/` and `.agent/memory-vault/` directories inside active git project repositories to ensure you never lose custom rules and memories.
+
+Project brains inside git repos are preserved when possible so you do not lose custom rules and memories.
 
 ---
 
-*Sovereign. Database-free. Yours.*
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+*Portable memory. Your files. Any IDE.*

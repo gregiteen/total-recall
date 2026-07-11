@@ -53,6 +53,12 @@ function safeEqualHex(a, b) {
 
 function normalizeKey(raw) {
   const key = { ...raw };
+  // name must always be a string — guard against bad issueKey({ name }) calls
+  if (key.name && typeof key.name === 'object') {
+    key.name = String(key.name.name || key.name.label || 'Unnamed Key');
+  } else if (typeof key.name !== 'string' || !key.name.trim()) {
+    key.name = key.name == null ? 'Unnamed Key' : String(key.name);
+  }
   if (key.token && typeof key.token === 'string') {
     if (key.token === 'local') {
       key.revoked = true;
@@ -130,16 +136,35 @@ function saveKeys(keys) {
   fs.writeFileSync(KEYS_FILE, sanitized.map(k => JSON.stringify(k)).join('\n') + (sanitized.length ? '\n' : ''), { encoding: 'utf8', mode: 0o600 });
 }
 
-export function issueKey(name, options = {}) {
+/**
+ * Issue a PAT.
+ * @param {string|object} nameOrOpts - display name, or { name, scopes, expires_at }
+ * @param {object} [options]
+ */
+export function issueKey(nameOrOpts, options = {}) {
+  let name = nameOrOpts;
+  let opts = options;
+  // Accept issueKey({ name, scopes }) form safely
+  if (nameOrOpts && typeof nameOrOpts === 'object' && !Array.isArray(nameOrOpts)) {
+    name = nameOrOpts.name || nameOrOpts.label || 'Unnamed Key';
+    opts = {
+      scopes: nameOrOpts.scopes ?? options.scopes,
+      expires_at: nameOrOpts.expires_at ?? nameOrOpts.expiresAt ?? options.expires_at ?? options.expiresAt,
+    };
+  }
+  if (typeof name !== 'string' || !name.trim()) {
+    name = 'Unnamed Key';
+  }
+
   const keys = loadKeys();
   const token = `tr_${crypto.randomBytes(32).toString('base64url')}`;
   const key = {
     id: crypto.randomUUID(),
-    name: name || 'Unnamed Key',
+    name: name.trim(),
     token_hash: hashToken(token),
     token_prefix: token.slice(0, 8),
-    scopes: normalizeScopes(options.scopes),
-    expires_at: options.expires_at || options.expiresAt || null,
+    scopes: normalizeScopes(opts.scopes),
+    expires_at: opts.expires_at || opts.expiresAt || null,
     created_at: new Date().toISOString(),
     last_used_at: null,
     hit_count: 0,

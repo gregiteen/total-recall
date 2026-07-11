@@ -127,7 +127,7 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
         }
       }
     }
-    const { q, category, tag, status, limit = '200', offset = '0' } = req.query;
+    const { q, category, tag, tags, status, limit = '200', offset = '0' } = req.query;
 
     if (q) {
       const query = String(q).toLowerCase();
@@ -138,7 +138,20 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
     }
     if (category) list = list.filter(n => n.category === category);
     if (status) list = list.filter(n => n.status === status);
-    if (tag) list = list.filter(n => (n.tags || []).includes(tag));
+    // Accept tag= or tags= (comma-separated). OpenWiki UI uses tags=openwiki.
+    const tagFilter = tag || tags;
+    if (tagFilter) {
+      const wanted = String(tagFilter)
+        .split(',')
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      if (wanted.length) {
+        list = list.filter((n) => {
+          const nodeTags = (n.tags || []).map((t) => String(t).toLowerCase());
+          return wanted.every((t) => nodeTags.includes(t));
+        });
+      }
+    }
 
     const total = list.length;
     const off   = Math.max(0, parseInt(offset, 10) || 0);
@@ -178,9 +191,47 @@ router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, 
   }
 });
 
+/**
+ * Expand vault search: query brain(s) first, then global, then every registered
+ * project brain. Fixes dashboard 404s when the list came from a project vault
+ * but GET omitted ?brain=.
+ */
+function vaultDirsForSlugLookup(req) {
+  const dirs = [...resolveAllVaultsFromQuery(req)];
+  const seen = new Set(dirs);
+
+  const push = (dir) => {
+    if (dir && !seen.has(dir) && fs.existsSync(dir)) {
+      seen.add(dir);
+      dirs.push(dir);
+    }
+  };
+
+  push(VAULT_DIR);
+
+  try {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    const registryPath = path.join(home, '.agent', 'skills', 'total-recall', 'config', 'project-registry.json');
+    if (fs.existsSync(registryPath)) {
+      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      if (Array.isArray(registry)) {
+        for (const project of registry) {
+          if (project?.brainDir) {
+            push(path.join(project.brainDir, 'memory-vault'));
+          }
+        }
+      }
+    }
+  } catch {
+    // non-fatal
+  }
+
+  return dirs;
+}
+
 router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = vaultDirsForSlugLookup(req);
 
     for (const vaultDir of vaultDirs) {
       const node = nodes(vaultDir).find(n => n.slug === req.params.slug);
