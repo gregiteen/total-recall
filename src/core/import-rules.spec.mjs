@@ -98,23 +98,9 @@ describe('import-rules core', () => {
       fs.symlinkSync(path.join(tmpDir, 'does-not-exist.md'), brokenPath);
     } catch { /* skip if OS does not support */ }
 
-    // 4. Create a symlink that CAN be healed
-    // The target path contains the substring "/ultrachat/ultrachat-ai-powered/"
-    const wrongPath = `/Users/greg/Github/ultrachat/ultrachat-ai-powered/${path.relative('/Users/greg', targetFile)}`;
+    // 4. Valid symlink — broken sibling must not prevent detecting this file
     const healablePath = path.join(promptsDir, 'healable.md');
     try {
-      // In tests, we override the symlink target with a structure containing the expected substring
-      // But we place a local mock file so it heals to the actual targetFile path.
-      // Let's create a custom symlink target that resolves correctly:
-      const targetTypoPath = path.join(tmpDir, 'ultrachat', 'ultrachat-ai-powered', 'target.md');
-      fs.mkdirSync(path.dirname(targetTypoPath), { recursive: true });
-      fs.writeFileSync(targetTypoPath, '# Typo Target\nContent here.');
-      
-      const symlinkTarget = `/Users/greg/Github/ultrachat/ultrachat-ai-powered/${path.relative('/Users/greg', targetFile)}`;
-      // However, we want to mock healSymlinkTarget specifically. Let's make sure it works!
-      // In the mock environment, let's create a symlink to an old ultrachat directory pointing to a valid location.
-      // For testing, let's create a symlink to targetFile directly if auto-healing is not required,
-      // but let's test the error isolation: the completely-broken.md does not crash the scan of healable.md!
       fs.symlinkSync(targetFile, healablePath);
     } catch { /* skip if OS does not support */ }
 

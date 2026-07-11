@@ -463,11 +463,11 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     queue.enqueue(task);
   }
 
-  // Portfolio Sync Job
+  // Optional remote vault sync job (env-configured only)
   try {
-    const { portfolioSync } = config;
-    if (portfolioSync.enabled) {
-      const statusFile = path.join(path.dirname(portfolioSync.vaultDir), 'sync-status.json');
+    const { remoteVaultSync } = config;
+    if (remoteVaultSync.enabled) {
+      const statusFile = path.join(path.dirname(remoteVaultSync.vaultDir), 'sync-status.json');
       let lastRunMs = 0;
       if (fs.existsSync(statusFile)) {
         try {
@@ -475,24 +475,27 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
           lastRunMs = new Date(status.lastRunAt || 0).getTime();
         } catch {}
       }
-      
-      const SYNC_COOLDOWN_MS = portfolioSync.intervalMinutes * 60000;
+
+      const SYNC_COOLDOWN_MS = remoteVaultSync.intervalMinutes * 60000;
       if (Date.now() - lastRunMs >= SYNC_COOLDOWN_MS) {
         queue.enqueue({
           type: 'task',
-          slug: `portfolio-sync-${Date.now().toString(36)}`,
+          slug: `remote-vault-sync-${Date.now().toString(36)}`,
           priority: 90,
           category: 'memory-maintenance',
           status: 'pending',
           created_by: 'scheduler',
-          reason: 'Scheduled periodic portfolio sync.',
-          body: 'Run portfolio synchronization.',
-          _is_portfolio_sync: true
+          reason: 'Scheduled remote vault sync.',
+          body: 'Run remote vault content synchronization.',
+          _is_remote_vault_sync: true,
         });
       }
     }
   } catch (err) {
-    logger.error({ subsystem: 'scheduler', message: `Failed to load portfolio sync: ${err.message}` });
+    logger.error({
+      subsystem: 'scheduler',
+      message: `Failed to load remote vault sync: ${err.message}`,
+    });
   }
 
   // Load pending research queue tasks
@@ -610,11 +613,26 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     },
 
     /**
-     * Get the next task. If the queue is empty, generate an idle task.
+     * Get the next task.
+     *
+     * Default: only explicit (and research-queue) tasks — never invent work.
+     * Idle generation requires TR_IDLE_TASKS=1 or opts.allowIdle === true.
+     *
+     * @param {{ allowIdle?: boolean }} [opts]
+     * @returns {{ task: object|null, source: 'explicit'|'idle'|'empty' }}
      */
-    next() {
+    next(opts = {}) {
       const explicit = queue.dequeue();
       if (explicit) return { task: explicit, source: 'explicit' };
+
+      const allowIdle =
+        opts.allowIdle === true ||
+        process.env.TR_IDLE_TASKS === '1' ||
+        process.env.TR_IDLE_TASKS === 'true';
+
+      if (!allowIdle) {
+        return { task: null, source: 'empty' };
+      }
 
       const idle = generateIdleTask({ vaultDir, sessionsDir });
       persistTaskToDisk(idle, queueDir);

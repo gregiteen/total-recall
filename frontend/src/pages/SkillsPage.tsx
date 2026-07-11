@@ -15,11 +15,25 @@ import {
 import type { ResearchItem } from '../types';
 
 interface SkillItem {
+  id?: string;
   name: string;
+  repo?: string;
+  project_path?: string;
+  source?: string;
   size: number;
   modified: string;
   isDirectory: boolean;
   subSkills: string[];
+  has_skill_md?: boolean;
+}
+
+interface RepoSkillsGroup {
+  repo: string;
+  path: string | null;
+  skills: SkillItem[];
+  ok?: boolean;
+  count?: number;
+  error?: string;
 }
 
 interface RegistrySkill {
@@ -161,8 +175,10 @@ function generateSuggestions(skills: SkillItem[]): ImprovementSuggestion[] {
 
 export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillItem[]>([]);
+  const [repoGroups, setRepoGroups] = useState<RepoSkillsGroup[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
   const [skillContent, setSkillContent] = useState('');
+  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
   
   // Navigation tabs state
   const [activeTab, setActiveTab] = useState<TabId>('active');
@@ -203,25 +219,62 @@ export default function SkillsPage() {
   const improvementSuggestions = useMemo(() => skills.length > 0 ? generateSuggestions(skills) : [], [skills]);
 
   /**
-   * Syncs the locally installed skills from the backend active registry
+   * Syncs project skills by repo (excludes total-recall / tr-* system skills).
    */
-  const fetchSkillsList = async (selectName?: string) => {
+  const fetchSkillsList = async (selectName?: string, selectRepo?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const list = await listSkills() as unknown as SkillItem[];
-      setSkills(list || []);
-      
-      if (list && list.length > 0) {
-        const target = selectName ? list.find((s: SkillItem) => s.name === selectName) : list[0];
+      const data = await listSkills();
+      let list: SkillItem[] = [];
+      let groups: RepoSkillsGroup[] = [];
+
+      if (Array.isArray(data)) {
+        list = data as SkillItem[];
+        const map = new Map<string, SkillItem[]>();
+        for (const s of list) {
+          const r = s.repo || 'unknown';
+          if (!map.has(r)) map.set(r, []);
+          map.get(r)!.push(s);
+        }
+        groups = [...map.entries()].map(([repo, skills]) => ({
+          repo,
+          path: skills[0]?.project_path || null,
+          skills,
+          count: skills.length,
+          ok: true,
+        }));
+      } else {
+        list = (data.skills || []) as SkillItem[];
+        groups = (data.repos || []) as RepoSkillsGroup[];
+      }
+
+      setSkills(list);
+      setRepoGroups(groups);
+
+      // Expand repos that have skills (first 5 by default to keep UI light)
+      const withSkills = groups.filter((g) => (g.skills?.length || 0) > 0).map((g) => g.repo);
+      setExpandedRepos(new Set(withSkills.slice(0, 6)));
+
+      if (list.length > 0) {
+        const target = selectName
+          ? list.find(
+              (s) =>
+                s.name === selectName &&
+                (!selectRepo || s.repo === selectRepo),
+            )
+          : list[0];
         if (target) {
           setSelectedSkill(target);
-          const skillDetails = await fetchSkill(target.name);
+          const skillDetails = await fetchSkill(target.name, target.repo);
           setSkillContent(skillDetails.content || '');
         }
+      } else {
+        setSelectedSkill(null);
+        setSkillContent('');
       }
     } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to fetch active skills list.');
+      setError((err as Error).message || 'Failed to fetch skills by repo.');
     } finally {
       setLoading(false);
     }
@@ -243,7 +296,7 @@ export default function SkillsPage() {
     setPreviewFile(null);
     setExpandedSubDirs({});
     try {
-      const details = await fetchSkill(skill.name);
+      const details = await fetchSkill(skill.name, skill.repo);
       setSkillContent(details.content || '');
     } catch (err: unknown) {
       setError((err as Error).message || `Failed to fetch rules for skill "${skill.name}".`);
@@ -258,8 +311,10 @@ export default function SkillsPage() {
     setError(null);
     setSuccess(null);
     try {
-      await saveSkill(selectedSkill.name, skillContent);
-      setSuccess(`Skill "${selectedSkill.name}" rules sheet saved successfully!`);
+      await saveSkill(selectedSkill.name, skillContent, selectedSkill.repo);
+      setSuccess(
+        `Skill "${selectedSkill.name}"${selectedSkill.repo ? ` (${selectedSkill.repo})` : ''} saved successfully!`,
+      );
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to save skill changes.');
@@ -284,11 +339,16 @@ export default function SkillsPage() {
   };
 
   const handleDeleteSkill = async (skill: SkillItem) => {
-    if (!window.confirm(`Are you sure you want to permanently delete the skill "${skill.name}" and all its rules sheets?`)) return;
+    if (
+      !window.confirm(
+        `Delete skill "${skill.name}"${skill.repo ? ` from ${skill.repo}` : ''} permanently?`,
+      )
+    )
+      return;
     setError(null);
     setSuccess(null);
     try {
-      await deleteSkill(skill.name);
+      await deleteSkill(skill.name, skill.repo);
       setSuccess(`Skill "${skill.name}" successfully deleted.`);
       setTimeout(() => setSuccess(null), 5000);
       void fetchSkillsList();
@@ -302,9 +362,23 @@ export default function SkillsPage() {
     if (!newSkillName.trim()) return;
     setError(null);
     setSuccess(null);
+
+    // Prefer selected skill's repo, else first repo with a path
+    const targetRepo =
+      selectedSkill?.repo ||
+      repoGroups.find((g) => g.ok && g.path)?.repo ||
+      '';
+    if (!targetRepo) {
+      setError('No project repo available to create a skill in. Register a project first.');
+      return;
+    }
     
     // Normalize naming: alphanumeric and hyphens
     const cleanName = newSkillName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    if (cleanName.startsWith('tr-') || cleanName === 'total-recall') {
+      setError('Cannot create Total Recall system skills here.');
+      return;
+    }
     
     const initialContent = `---
 type: skill
@@ -318,7 +392,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
 `;
 
     try {
-      await saveSkill(cleanName, initialContent);
+      await saveSkill(cleanName, initialContent, targetRepo);
       setNewSkillName('');
       setNewSkillDesc('');
       setShowCreateForm(false);
@@ -390,7 +464,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     setExpandedSubDirs(prev => ({ ...prev, [dir]: !prev[dir] }));
     if (!subDirFiles[dir] && selectedSkill) {
       try {
-        const files = await fetchSkillFiles(selectedSkill.name, dir);
+        const files = await fetchSkillFiles(selectedSkill.name, dir, selectedSkill.repo);
         setSubDirFiles(prev => ({ ...prev, [dir]: files }));
       } catch (err) {
         console.error('Failed to fetch skill files', err);
@@ -460,48 +534,170 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
   // ─── Tab configuration ────────────────────────────────────────────────────────
 
   const tabs: { id: TabId; label: string; icon: string }[] = [
-    { id: 'active', label: 'Active Skills Registry', icon: '📂' },
+    { id: 'active', label: 'Skills by repo', icon: '📂' },
     { id: 'registry', label: 'skills.sh Registry Hub', icon: '✨' },
     { id: 'lifecycle', label: 'Lifecycle & Versioning', icon: '📋' },
     { id: 'network', label: 'P2P Skills Network', icon: '🌐' },
     { id: 'automation', label: 'Auto-Improvement', icon: '⚡' },
   ];
 
+  const skillKey = (s: SkillItem) => s.id || `${s.repo || '_'}::${s.name}`;
+  const isSkillSelected = (s: SkillItem) =>
+    selectedSkill?.name === s.name && (selectedSkill?.repo || '') === (s.repo || '');
+
+  const toggleRepo = (repo: string) => {
+    setExpandedRepos((prev) => {
+      const next = new Set(prev);
+      if (next.has(repo)) next.delete(repo);
+      else next.add(repo);
+      return next;
+    });
+  };
+
+  const renderRepoSkillList = (prefix: string) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
+      {repoGroups.length === 0 && (
+        <p style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: 8 }}>
+          No project repos with skills found.
+        </p>
+      )}
+      {repoGroups.map((group) => {
+        const open = expandedRepos.has(group.repo);
+        const count = group.skills?.length || 0;
+        return (
+          <div key={group.repo} style={{ borderBottom: '1px solid var(--border)' }}>
+            <button
+              type="button"
+              onClick={() => toggleRepo(group.repo)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700 }}>
+                {open ? '▾' : '▸'} {group.repo}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  borderRadius: 99,
+                  background: count ? 'rgba(59,130,246,0.15)' : 'rgba(148,163,184,0.1)',
+                  color: count ? '#93c5fd' : 'var(--text-tertiary)',
+                }}
+              >
+                {count}
+              </span>
+            </button>
+            {open && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 4px 10px' }}>
+                {count === 0 ? (
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', padding: '4px 8px' }}>
+                    {group.error || 'No app skills (TR skills hidden)'}
+                  </div>
+                ) : (
+                  group.skills.map((skill) => {
+                    const active = isSkillSelected(skill);
+                    return (
+                      <div
+                        key={skillKey(skill)}
+                        id={`${prefix}-skill-${skill.repo}-${skill.name}`}
+                        onClick={() => void handleSelectSkill(skill)}
+                        style={{
+                          background: active ? 'var(--accent-muted)' : 'var(--bg-tertiary)',
+                          border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: active ? 600 : 500,
+                              color: active ? 'var(--accent)' : 'var(--text-primary)',
+                            }}
+                          >
+                            {skill.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDeleteSkill(skill);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--text-tertiary)',
+                              fontSize: 12,
+                              cursor: 'pointer',
+                              padding: '2px 6px',
+                            }}
+                            title="Delete skill"
+                          >
+                            ✖
+                          </button>
+                        </div>
+                        {skill.source && (
+                          <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                            {skill.source}
+                          </div>
+                        )}
+                        {skill.subSkills && skill.subSkills.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                            {skill.subSkills.slice(0, 6).map((sd) => (
+                              <span
+                                key={sd}
+                                className="badge"
+                                style={{
+                                  fontSize: 9,
+                                  padding: '1px 5px',
+                                  background: 'var(--bg-elevated)',
+                                  color: 'var(--text-secondary)',
+                                  border: '1px solid var(--border)',
+                                }}
+                              >
+                                {sd}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   // ─── Render helpers ─────────────────────────────────────────────────────────
 
   const renderLifecycleTab = () => (
     <div style={{ display: 'flex', flex: 1, gap: 24, minHeight: 0, overflow: 'hidden', paddingBottom: 16 }}>
-      {/* Left: Skill selector (reused) */}
-      <div style={{ width: 260, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0, overflowY: 'auto' }}>
+      {/* Left: Skill selector by repo */}
+      <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0, overflowY: 'auto' }}>
         <div className="card" style={{ padding: 16, background: 'rgba(18, 18, 26, 0.5)', border: '1px solid var(--border)', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 12 }}>
-            Select Skill
+            Skills by repo
           </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto' }}>
-            {skills.map(skill => {
-              const isActive = selectedSkill?.name === skill.name;
-              return (
-                <div
-                  key={skill.name}
-                  id={`lifecycle-skill-${skill.name}`}
-                  onClick={() => void handleSelectSkill(skill)}
-                  style={{
-                    background: isActive ? 'var(--accent-muted)' : 'var(--bg-tertiary)',
-                    border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    fontSize: 13,
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? 'var(--accent)' : 'var(--text-primary)',
-                  }}
-                >
-                  {skill.name}
-                </div>
-              );
-            })}
-          </div>
+          {renderRepoSkillList('lifecycle')}
         </div>
       </div>
 
@@ -514,6 +710,11 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 <h3 id="lifecycle-version-title" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                   {selectedSkill.name}
+                  {selectedSkill.repo ? (
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-tertiary)', marginLeft: 8 }}>
+                      · {selectedSkill.repo}
+                    </span>
+                  ) : null}
                 </h3>
                 <span
                   id="lifecycle-version-badge"
@@ -1232,8 +1433,8 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     <div className="page" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1>Sovereign Skills Manager</h1>
-          <p>Read, write, edit, and organize system skill sheets and nested sub-skills dynamically</p>
+          <h1>Skills Manager</h1>
+          <p>Track, edit, and deploy agent skills across any repo — registry-based, no hardcoded hosts</p>
         </div>
         
         <div style={{ display: 'flex', gap: 10 }}>
@@ -1282,7 +1483,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
       {/* Creation Modal Form Overlay */}
       {showCreateForm && (
         <div className="card" style={{ marginBottom: 24, padding: 24, background: 'rgba(18, 18, 26, 0.9)', border: '1px solid var(--border)', backdropFilter: 'blur(10px)' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, borderBottom: '1px solid var(--border)', paddingBottom: 10, marginBottom: 14 }}>➕ Create New Sovereign Skill Capability</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 600, borderBottom: '1px solid var(--border)', paddingBottom: 10, marginBottom: 14 }}>➕ Create New Skill</h3>
           <form onSubmit={handleCreateSkill} style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label htmlFor="new_name" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>Skill Name (kebab-case)</label>
@@ -1346,70 +1547,16 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
         /* Original split layout: Active skills editor */
         <div style={{ display: 'flex', flex: 1, gap: 24, minHeight: 0, overflow: 'hidden', paddingBottom: 16 }}>
           
-          {/* Left column: Skills Sidebar */}
-          <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0, overflowY: 'auto' }}>
+          {/* Left column: Skills by repo */}
+          <div style={{ width: 300, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0, overflowY: 'auto' }}>
             <div className="card" style={{ padding: 16, background: 'rgba(18, 18, 26, 0.5)', border: '1px solid var(--border)', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 12 }}>
-                Active Skills Registry
+              <h3 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 8 }}>
+                Skills by repo
               </h3>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
-                {skills.map((skill) => {
-                  const isActive = selectedSkill?.name === skill.name;
-                  return (
-                    <div
-                      key={skill.name}
-                      onClick={() => void handleSelectSkill(skill)}
-                      style={{
-                        background: isActive ? 'var(--accent-muted)' : 'var(--bg-tertiary)',
-                        border: isActive ? '1px solid var(--accent)' : '1px solid var(--border)',
-                        padding: '12px 14px',
-                        borderRadius: 8,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        position: 'relative'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? 'var(--accent)' : 'var(--text-primary)' }}>
-                          {skill.name}
-                        </span>
-                        {skill.name !== 'total-recall' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleDeleteSkill(skill);
-                            }}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: 'var(--text-tertiary)',
-                              fontSize: 12,
-                              cursor: 'pointer',
-                              padding: '2px 6px'
-                            }}
-                            onMouseEnter={(e) => (e.currentTarget.style.color = '#ff6b6b')}
-                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-tertiary)')}
-                          >
-                            ✖
-                          </button>
-                        )}
-                      </div>
-                      
-                      {/* Sub Skills tags */}
-                      {skill.subSkills && skill.subSkills.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                          {skill.subSkills.map(sd => (
-                            <span key={sd} className="badge" style={{ fontSize: 9, padding: '1px 5px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
-                              🧩 {sd}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <p style={{ fontSize: 10, color: 'var(--text-tertiary)', margin: '0 0 10px', lineHeight: 1.4 }}>
+                Project skills only · total-recall / tr-* hidden · {skills.length} skill{skills.length === 1 ? '' : 's'}
+              </p>
+              {renderRepoSkillList('active')}
             </div>
           </div>
 

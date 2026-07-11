@@ -467,9 +467,9 @@ describe('API Proxy', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(3);
-      expect(res.body[0].title).toBe('🧠 Sovereign OS Operations');
-      expect(res.body[1].title).toBe('💡 Custom Agent Skills');
-      expect(res.body[2].title).toBe('❓ Brain Health & Scaling');
+      expect(res.body[0].title).toBe('🧠 Memory loop');
+      expect(res.body[1].title).toBe('💡 Skills across any repo');
+      expect(res.body[2].title).toBe('❓ Vault health');
     });
   });
 

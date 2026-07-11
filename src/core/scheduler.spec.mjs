@@ -272,21 +272,37 @@ describe('createScheduler', () => {
     expect(task.slug).toBe('urgent');
   });
 
-  it('falls back to idle tasks when queue is empty', () => {
+  it('returns empty when queue is empty (idle fill off by default)', () => {
+    const prev = process.env.TR_IDLE_TASKS;
+    delete process.env.TR_IDLE_TASKS;
     const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
     expect(sched.stats.explicitTasks).toBe(0);
 
     const { task, source } = sched.next();
+    expect(source).toBe('empty');
+    expect(task).toBeNull();
+    if (prev !== undefined) process.env.TR_IDLE_TASKS = prev;
+  });
+
+  it('falls back to idle tasks when TR_IDLE_TASKS=1', () => {
+    const prev = process.env.TR_IDLE_TASKS;
+    process.env.TR_IDLE_TASKS = '1';
+    const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
+    const { task, source } = sched.next();
     expect(source).toBe('idle');
     expect(task.type).toBe('task');
     expect(task.created_by).toContain('scheduler');
+    if (prev === undefined) delete process.env.TR_IDLE_TASKS;
+    else process.env.TR_IDLE_TASKS = prev;
   });
 
-  it('never returns null from next()', () => {
+  it('returns null from next() when empty without idle', () => {
+    delete process.env.TR_IDLE_TASKS;
     const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
-    for (let i = 0; i < 10; i++) {
-      const { task } = sched.next();
-      expect(task).toBeTruthy();
+    for (let i = 0; i < 5; i++) {
+      const { task, source } = sched.next();
+      expect(task).toBeNull();
+      expect(source).toBe('empty');
     }
   });
 });

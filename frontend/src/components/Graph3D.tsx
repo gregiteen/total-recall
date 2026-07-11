@@ -12,6 +12,8 @@ interface Graph3DProps {
   onOpenThread: (threadId: string) => void
   onGroundMemoryNode: (slug: string) => void
   selectedGroundingNodes: string[]
+  /** When false, canvas ignores pointer events (chat background decoration). Default true. */
+  interactive?: boolean
 }
 
 interface VisualNode {
@@ -48,6 +50,7 @@ export default function Graph3D({
   onOpenThread,
   onGroundMemoryNode,
   selectedGroundingNodes,
+  interactive = true,
 }: Graph3DProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -60,7 +63,7 @@ export default function Graph3D({
   const [visibleTypes, setVisibleTypes] = useState({
     research: true,
     observations: true,
-    rules: false,
+    rules: true,
     threads: false,
   })
 
@@ -191,7 +194,7 @@ export default function Graph3D({
                 source: nodeA,
                 target: targetNode,
                 opacity: 0.7,
-                color: "rgba(167, 139, 250, 0.55)"
+                color: "rgba(96, 165, 250, 0.55)"
               })
             }
           })
@@ -362,7 +365,7 @@ export default function Graph3D({
         }
 
         if (isHighlight) {
-          ctx.strokeStyle = color || (source.type === "memory" ? "rgba(139, 92, 246, 0.65)" : source.type === "thread" ? "rgba(6, 182, 212, 0.65)" : "rgba(245, 158, 11, 0.65)")
+          ctx.strokeStyle = color || (source.type === "memory" ? "rgba(96, 165, 250, 0.55)" : source.type === "thread" ? "rgba(34, 211, 238, 0.55)" : "rgba(251, 191, 36, 0.55)")
           ctx.lineWidth = 1.8
         } else {
           ctx.strokeStyle = color 
@@ -398,22 +401,37 @@ export default function Graph3D({
           size * (isHovered || isSelected ? 2.5 : 1.5)
         )
 
-        let color = "#8b5cf6" // memory observations (purple)
-        let glowColor = "rgba(139, 92, 246, 0.2)"
-        
+        // Brand-aligned palette: readable on dark, category-distinct
+        let color = "#60a5fa" // facts / default memory (sky)
+        let glowColor = "rgba(96, 165, 250, 0.28)"
+
         if (node.type === "memory") {
-          const category = ((node.originalData as MemoryNode).category || 'general').toLowerCase()
-          const isRule = ['invariants', 'preferences', 'patterns', 'anti-patterns'].includes(category)
-          if (isRule) {
-            color = "#6366f1" // developer rules (indigo)
-            glowColor = "rgba(99, 102, 241, 0.2)"
+          const category = ((node.originalData as MemoryNode).category || "general").toLowerCase()
+          const palette: Record<string, [string, string]> = {
+            invariants: ["#38bdf8", "rgba(56, 189, 248, 0.3)"], // cyan-bright — must-rules
+            preferences: ["#818cf8", "rgba(129, 140, 248, 0.28)"], // soft indigo
+            patterns: ["#34d399", "rgba(52, 211, 153, 0.28)"], // emerald
+            "anti-patterns": ["#f87171", "rgba(248, 113, 113, 0.28)"], // rose
+            facts: ["#60a5fa", "rgba(96, 165, 250, 0.28)"], // sky blue
+            concepts: ["#a78bfa", "rgba(167, 139, 250, 0.28)"], // violet
+            decisions: ["#fbbf24", "rgba(251, 191, 36, 0.28)"], // amber
+            lore: ["#c084fc", "rgba(192, 132, 252, 0.25)"], // orchid
+            corrections: ["#fb923c", "rgba(251, 146, 60, 0.28)"], // orange
+          }
+          const pair = palette[category]
+          if (pair) {
+            color = pair[0]
+            glowColor = pair[1]
+          } else if (["invariants", "preferences", "patterns", "anti-patterns"].includes(category)) {
+            color = "#818cf8"
+            glowColor = "rgba(129, 140, 248, 0.28)"
           }
         } else if (node.type === "thread") {
-          color = "#06b6d4" // thread nodes (cyan)
-          glowColor = "rgba(6, 182, 212, 0.2)"
+          color = "#22d3ee" // cyan — sessions
+          glowColor = "rgba(34, 211, 238, 0.28)"
         } else if (node.type === "research") {
-          color = "#f59e0b" // research nodes (gold)
-          glowColor = "rgba(245, 158, 11, 0.2)"
+          color = "#fbbf24" // amber — research
+          glowColor = "rgba(251, 191, 36, 0.28)"
         }
 
         gradient.addColorStop(0, color)
@@ -598,76 +616,110 @@ export default function Graph3D({
   }
 
   return (
-    <div className="graph-3d-wrapper" ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%', background: 'radial-gradient(circle at center, #0b0f19 0%, #030712 100%)', overflow: 'hidden' }}>
+    <div
+      className="graph-3d-wrapper"
+      ref={containerRef}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        background: 'radial-gradient(ellipse at 50% 40%, #0c1a33 0%, #070b14 55%, #030712 100%)',
+        overflow: 'hidden',
+        // Isolate stacking so UI chrome always sits above the canvas
+        isolation: 'isolate',
+      }}
+    >
       
-      {/* 3D Projection Canvas */}
+      {/* 3D Projection Canvas — always under UI chrome */}
       <canvas
         ref={canvasRef}
-        onMouseDown={(e) => handleStartDrag(e.clientX, e.clientY)}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleEndDrag}
-        onMouseLeave={handleEndDrag}
-        onClick={handleCanvasClick}
-        onWheel={handleWheel}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleEndDrag}
-        style={{ cursor: dragging ? "grabbing" : hoveredNode ? "pointer" : "grab", display: "block" }}
+        onMouseDown={interactive ? (e) => handleStartDrag(e.clientX, e.clientY) : undefined}
+        onMouseMove={interactive ? handleMouseMove : undefined}
+        onMouseUp={interactive ? handleEndDrag : undefined}
+        onMouseLeave={interactive ? handleEndDrag : undefined}
+        onClick={interactive ? handleCanvasClick : undefined}
+        onWheel={interactive ? handleWheel : undefined}
+        onTouchStart={interactive ? handleTouchStart : undefined}
+        onTouchMove={interactive ? handleTouchMove : undefined}
+        onTouchEnd={interactive ? handleEndDrag : undefined}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 1,
+          width: '100%',
+          height: '100%',
+          display: 'block',
+          pointerEvents: interactive ? 'auto' : 'none',
+          cursor: interactive
+            ? dragging
+              ? 'grabbing'
+              : hoveredNode
+                ? 'pointer'
+                : 'grab'
+            : 'default',
+        }}
       />
 
       {/* Cosmic Floating Background Dust overlay */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', background: 'radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.05) 0%, transparent 60%)' }} />
+      <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', background: 'radial-gradient(circle at 50% 45%, rgba(59, 130, 246, 0.08) 0%, transparent 55%)' }} />
 
       {/* Floating UI Elements */}
-      <div style={{ position: 'absolute', top: 20, left: 20, display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'none' }}>
-        <h3 style={{ margin: 0, fontSize: 18, color: '#fff', fontWeight: 700, letterSpacing: '0.5px' }}>Sovereign Mind Matrix</h3>
-        <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>3D Constellation of Research, Memory & Conversations</p>
+      <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 30, display: 'flex', flexDirection: 'column', gap: 6, pointerEvents: 'none', maxWidth: 280 }}>
+        <h3 style={{ margin: 0, fontSize: 18, color: '#f1f5f9', fontWeight: 700, letterSpacing: '-0.02em' }}>Memory Constellation</h3>
+        <p style={{ margin: 0, fontSize: 11, color: 'rgba(148,163,184,0.85)' }}>Vault · sessions · research — use filters to toggle types</p>
       </div>
 
       {/* Controls Overlay */}
-      <div style={{ position: 'absolute', bottom: 20, left: 20, display: 'flex', gap: 8 }}>
+      {interactive && (
+      <div style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 40, display: 'flex', gap: 8, pointerEvents: 'auto' }}>
         <button 
+          type="button"
           onClick={() => setZoom(prev => Math.min(3.0, prev + 0.2))} 
-          style={{ width: 32, height: 32, background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ width: 32, height: 32, background: 'rgba(15,23,42,0.85)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           title="Zoom In"
         >
           ＋
         </button>
         <button 
+          type="button"
           onClick={() => setZoom(prev => Math.max(0.5, prev - 0.2))} 
-          style={{ width: 32, height: 32, background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ width: 32, height: 32, background: 'rgba(15,23,42,0.85)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           title="Zoom Out"
         >
           －
         </button>
         <button 
+          type="button"
           onClick={() => { angleX.current = 0.3; angleY.current = 0.5; setZoom(1.2) }} 
-          style={{ width: 32, height: 32, background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ width: 32, height: 32, background: 'rgba(15,23,42,0.85)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#fff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           title="Reset Camera"
         >
           ⟲
         </button>
       </div>
+      )}
 
-      {/* Floating Filter Panel (Top Right) */}
+      {/* Floating Filter Panel — left side under title so node drawer (right) never covers it */}
+      {interactive && (
       <div 
-        className="glass"
+        className="glass graph-type-filters"
         style={{ 
           position: 'absolute', 
-          top: 20, 
-          right: 20, 
+          top: 72, 
+          left: 16, 
           display: 'flex', 
           flexDirection: 'column', 
           gap: 10, 
-          background: 'rgba(10, 15, 30, 0.75)', 
+          background: 'rgba(10, 15, 30, 0.92)', 
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           padding: '12px 16px', 
           borderRadius: 12, 
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
           width: 220,
-          zIndex: 90,
+          zIndex: 60,
+          pointerEvents: 'auto',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -680,63 +732,60 @@ export default function Graph3D({
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* 1. Research Projects */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-            <input 
-              type="checkbox" 
-              checked={visibleTypes.research} 
+            <input
+              type="checkbox"
+              checked={visibleTypes.research}
               onChange={() => setVisibleTypes(prev => ({ ...prev, research: !prev.research }))}
-              style={{ accentColor: '#f59e0b', cursor: 'pointer' }}
+              style={{ accentColor: '#fbbf24', cursor: 'pointer' }}
             />
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
-            <span style={{ flex: 1 }}>Research Projects</span>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', boxShadow: '0 0 6px rgba(251,191,36,0.5)' }} />
+            <span style={{ flex: 1 }}>Research</span>
             <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>({researchItems.length})</span>
           </label>
 
-          {/* 2. Observations & Facts */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-            <input 
-              type="checkbox" 
-              checked={visibleTypes.observations} 
+            <input
+              type="checkbox"
+              checked={visibleTypes.observations}
               onChange={() => setVisibleTypes(prev => ({ ...prev, observations: !prev.observations }))}
-              style={{ accentColor: '#8b5cf6', cursor: 'pointer' }}
+              style={{ accentColor: '#60a5fa', cursor: 'pointer' }}
             />
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6' }} />
-            <span style={{ flex: 1 }}>Observations</span>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#60a5fa', boxShadow: '0 0 6px rgba(96,165,250,0.5)' }} />
+            <span style={{ flex: 1 }}>Memory</span>
             <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
               ({memoryNodes.filter(m => !['invariants', 'preferences', 'patterns', 'anti-patterns'].includes((m.category || 'general').toLowerCase())).length})
             </span>
           </label>
 
-          {/* 3. Developer Rules */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-            <input 
-              type="checkbox" 
-              checked={visibleTypes.rules} 
+            <input
+              type="checkbox"
+              checked={visibleTypes.rules}
               onChange={() => setVisibleTypes(prev => ({ ...prev, rules: !prev.rules }))}
-              style={{ accentColor: '#6366f1', cursor: 'pointer' }}
+              style={{ accentColor: '#38bdf8', cursor: 'pointer' }}
             />
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#6366f1' }} />
-            <span style={{ flex: 1 }}>Developer Rules</span>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'linear-gradient(90deg,#38bdf8,#f87171)', boxShadow: '0 0 6px rgba(56,189,248,0.4)' }} />
+            <span style={{ flex: 1 }}>Rules</span>
             <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>
               ({memoryNodes.filter(m => ['invariants', 'preferences', 'patterns', 'anti-patterns'].includes((m.category || 'general').toLowerCase())).length})
             </span>
           </label>
 
-          {/* 4. Chat Threads */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-            <input 
-              type="checkbox" 
-              checked={visibleTypes.threads} 
+            <input
+              type="checkbox"
+              checked={visibleTypes.threads}
               onChange={() => setVisibleTypes(prev => ({ ...prev, threads: !prev.threads }))}
-              style={{ accentColor: '#06b6d4', cursor: 'pointer' }}
+              style={{ accentColor: '#22d3ee', cursor: 'pointer' }}
             />
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#06b6d4' }} />
-            <span style={{ flex: 1 }}>Conversations</span>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#22d3ee', boxShadow: '0 0 6px rgba(34,211,238,0.5)' }} />
+            <span style={{ flex: 1 }}>Sessions</span>
             <span style={{ fontSize: 9, color: 'var(--text-tertiary)' }}>({threads.length})</span>
           </label>
         </div>
       </div>
+      )}
 
       {/* Selected Node Glass detail overlay drawer */}
       {selectedNode && (

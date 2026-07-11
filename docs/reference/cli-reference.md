@@ -56,7 +56,7 @@ Wire an IDE editor or client application to your remote brain.
   ```bash
   npx total-recall connect <client> [options]
   ```
-- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `aider`, `ultrachat`, `obsidian`, `generic`
+- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `aider`, `http-api`, `obsidian`, `generic`
 - **Options**:
   - `--brain <url>`: remote brain API base URL.
   - `--token <pat>`: Personal Access Token to embed in generated config targets.

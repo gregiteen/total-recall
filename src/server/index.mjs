@@ -114,7 +114,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // CLI agent availability
   const { findBinaryInPath } = await import('../core/runtime.mjs');
   const cliAgents = [];
-  for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
+  for (const bin of ['antigravity', 'grok', 'gemini', 'claude', 'codex']) {
     if (findBinaryInPath(bin)) cliAgents.push(bin);
   }
 
@@ -179,7 +179,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
 app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res) => {
   const { findBinaryInPath } = await import('../core/runtime.mjs');
   const agents = [];
-  for (const bin of ['antigravity', 'gemini', 'claude', 'codex']) {
+  for (const bin of ['antigravity', 'grok', 'gemini', 'claude', 'codex']) {
     if (findBinaryInPath(bin)) agents.push(bin);
   }
 
@@ -189,7 +189,7 @@ app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res
       runtime: 'cli-agents',
       uptime_seconds: Math.floor(process.uptime()),
       capabilities: [],
-      reason: 'No CLI agents found. Install antigravity, claude, or codex.',
+      reason: 'No CLI agents found. Install antigravity, grok, claude, or codex.',
     });
   }
 

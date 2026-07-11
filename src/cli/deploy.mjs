@@ -490,22 +490,53 @@ export default async function deploy(args) {
           `${cmdPrefix} which node || (curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh -o nvm_install.sh && bash nvm_install.sh && rm nvm_install.sh && export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install 20)`
         ], { stdio: 'inherit' });
 
-        // Copy API Keys/secrets.enc to remote VM
+        // Deploy full secrets store (SSOT) + .env projection to remote TR brain
         try {
-          log('🔒 Persisting Google/OpenAI credentials on remote host...');
-          const configDir = `~/.agent/skills/total-recall/config`;
-          const secretsContent = JSON.stringify({
-            google_api_key: wizardOpts.googleApiKey || '',
-            openai_api_key: wizardOpts.openaiApiKey || ''
-          });
-          spawnSync('ssh', [
-            '-o', 'StrictHostKeyChecking=accept-new',
-            `${user}@${ip}`,
-            `mkdir -p ${configDir} && echo '${secretsContent}' > ${configDir}/secrets.enc && chmod 600 ${configDir}/secrets.enc`
-          ]);
-          logOk('Credentials written remotely.');
+          log('🔒 Syncing Total Recall secrets store to remote host...');
+          const { defaultBrainDir, resolveSecretsPath } = await import('../core/secrets-store.mjs');
+          const { buildDeploySecretsPayload } = await import('../core/secrets-env-export.mjs');
+          const localBrain = process.env.TR_BRAIN || defaultBrainDir();
+          const secretsPath = resolveSecretsPath(localBrain);
+          const remoteConfig = '.agent/skills/total-recall/config';
+          if (fs.existsSync(secretsPath)) {
+            spawnSync('ssh', [
+              '-o', 'StrictHostKeyChecking=accept-new',
+              `${user}@${ip}`,
+              `mkdir -p ~/${remoteConfig}`,
+            ]);
+            spawnSync(
+              'scp',
+              ['-o', 'StrictHostKeyChecking=accept-new', secretsPath, `${user}@${ip}:~/${remoteConfig}/secrets.enc`],
+              { stdio: 'inherit' },
+            );
+            try {
+              const payload = await buildDeploySecretsPayload(localBrain, { includeGlobal: true });
+              const b64 = Buffer.from(payload.dotenv, 'utf8').toString('base64');
+              spawnSync('ssh', [
+                '-o', 'StrictHostKeyChecking=accept-new',
+                `${user}@${ip}`,
+                `mkdir -p ~/.agent/skills/total-recall ~/${remoteConfig} && echo ${b64} | base64 -d > ~/.agent/skills/total-recall/.env && chmod 600 ~/.agent/skills/total-recall/.env ~/${remoteConfig}/secrets.enc`,
+              ]);
+            } catch {
+              /* optional env projection */
+            }
+            logOk('Secrets store + .env projection written remotely.');
+          } else if (wizardOpts.googleApiKey || wizardOpts.openaiApiKey) {
+            const secretsContent = JSON.stringify({
+              google_api_key: wizardOpts.googleApiKey || '',
+              openai_api_key: wizardOpts.openaiApiKey || '',
+            });
+            spawnSync('ssh', [
+              '-o', 'StrictHostKeyChecking=accept-new',
+              `${user}@${ip}`,
+              `mkdir -p ~/${remoteConfig} && printf '%s' '${secretsContent.replace(/'/g, "'\\''")}' > ~/${remoteConfig}/secrets.enc && chmod 600 ~/${remoteConfig}/secrets.enc`,
+            ]);
+            logOk('Wizard credentials written remotely (no local secrets.enc found).');
+          } else {
+            logWarn('No local secrets.enc — skip remote secret sync.');
+          }
         } catch (err) {
-          logWarn(`Could not save credentials remotely: ${err.message}`);
+          logWarn(`Could not sync secrets remotely: ${err.message}`);
         }
 
         logStep('3/3', 'Deploying Total Recall remotely...');
@@ -959,21 +990,47 @@ export default async function deploy(args) {
         }
         logOk('Node.js and nvm installed remotely');
 
-        // Copy API Keys/secrets.enc to remote VM
+        // Full secrets SSOT + .env projection (not a 2-key stub)
         try {
-          log('🔒 Persisting Google/OpenAI credentials on remote host...');
-          const configDir = `~/.agent/skills/total-recall/config`;
-          const secretsContent = JSON.stringify({
-            google_api_key: wizardOpts.googleApiKey || '',
-            openai_api_key: wizardOpts.openaiApiKey || ''
-          });
-          spawnSync('ssh', [
-            ...sshArgs,
-            `mkdir -p ${configDir} && echo '${secretsContent}' > ${configDir}/secrets.enc && chmod 600 ${configDir}/secrets.enc`
-          ]);
-          logOk('Credentials written remotely.');
+          log('🔒 Syncing Total Recall secrets store to remote VM...');
+          const { defaultBrainDir, resolveSecretsPath } = await import('../core/secrets-store.mjs');
+          const { buildDeploySecretsPayload } = await import('../core/secrets-env-export.mjs');
+          const localBrain = process.env.TR_BRAIN || defaultBrainDir();
+          const secretsPath = resolveSecretsPath(localBrain);
+          const remoteConfig = '/root/.agent/skills/total-recall/config';
+          if (fs.existsSync(secretsPath)) {
+            spawnSync('ssh', [...sshArgs, `mkdir -p ${remoteConfig}`]);
+            spawnSync(
+              'scp',
+              ['-i', privateKeyPath, '-o', 'StrictHostKeyChecking=accept-new', secretsPath, `root@${ip}:${remoteConfig}/secrets.enc`],
+              { stdio: 'inherit' },
+            );
+            try {
+              const payload = await buildDeploySecretsPayload(localBrain, { includeGlobal: true });
+              const b64 = Buffer.from(payload.dotenv, 'utf8').toString('base64');
+              spawnSync('ssh', [
+                ...sshArgs,
+                `mkdir -p /root/.agent/skills/total-recall && echo ${b64} | base64 -d > /root/.agent/skills/total-recall/.env && chmod 600 /root/.agent/skills/total-recall/.env ${remoteConfig}/secrets.enc`,
+              ]);
+            } catch {
+              /* optional */
+            }
+            logOk('Secrets store + .env projection written remotely.');
+          } else if (wizardOpts.googleApiKey || wizardOpts.openaiApiKey) {
+            const secretsContent = JSON.stringify({
+              google_api_key: wizardOpts.googleApiKey || '',
+              openai_api_key: wizardOpts.openaiApiKey || '',
+            });
+            spawnSync('ssh', [
+              ...sshArgs,
+              `mkdir -p ${remoteConfig} && printf '%s' '${secretsContent.replace(/'/g, "'\\''")}' > ${remoteConfig}/secrets.enc && chmod 600 ${remoteConfig}/secrets.enc`,
+            ]);
+            logOk('Wizard credentials written remotely.');
+          } else {
+            logWarn('No local secrets.enc — skip remote secret sync.');
+          }
         } catch (err) {
-          logWarn(`Could not save credentials remotely: ${err.message}`);
+          logWarn(`Could not sync secrets remotely: ${err.message}`);
         }
 
         log('🧠 Running Total Recall deploy remotely...');

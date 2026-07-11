@@ -84,8 +84,8 @@ export default function HelpPage() {
   return (
     <div className="page" style={{ padding: '24px', maxWidth: '1100px', margin: '0 auto' }}>
       <div className="page-header" style={{ marginBottom: '24px' }}>
-        <h1>Sovereign Help System</h1>
-        <p>Offline interactive documentation, CLI command references, and SSSS VFS specifications.</p>
+        <h1>Help & CLI Reference</h1>
+        <p>Offline docs for portable memory: CLI commands, vault layout, dream, tasks, and IDE connect.</p>
       </div>
 
       {error && <div className="badge badge-error" style={{ marginBottom: '16px' }}>⚠️ {error}</div>}

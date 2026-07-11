@@ -42,11 +42,11 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
   {
     id: 'in-progress',
     title: 'In Progress',
-    accent: '#6c5ce7',
+    accent: '#3b82f6',
     cards: [
       { id: 'auto-update', name: 'Auto Update Feature', emoji: '🔄' },
       { id: 'compaction-cache', name: 'Compaction Cache Bypass', emoji: '⚡' },
-      { id: 'sovereign-policy', name: 'Sovereign Policy Enforcement', emoji: '🛡️' },
+      { id: 'memory-policy', name: 'Memory Policy Enforcement', emoji: '🛡️' },
     ],
   },
   {
@@ -70,7 +70,7 @@ const KANBAN_COLUMNS: KanbanColumn[] = [
       { id: 'okf-integration', name: 'OKF Integration', emoji: '✅' },
       { id: 'byom-architecture', name: 'BYOM Architecture', emoji: '✅' },
       { id: 'cli-performance', name: 'CLI Performance Optimization', emoji: '✅' },
-      { id: 'ssss-sovereign', name: 'SSSS Sovereign AI OS', emoji: '✅' },
+      { id: 'ssss-portable-memory', name: 'SSSS Portable Memory', emoji: '✅' },
       { id: 'embedding-pipeline', name: 'Embedding Pipeline v2', emoji: '✅' },
       { id: 'surface-compiler', name: 'Surface Compiler', emoji: '✅' },
     ],

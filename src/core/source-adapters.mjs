@@ -58,7 +58,10 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
     githubToken: process.env.GITHUB_TOKEN || secrets.github_token || fileConfig.github_token || defaultGithubToken || null,
     fetchTimeoutMs: fileConfig.fetch_timeout_ms || 10000,
     maxResultsPerSource: fileConfig.max_results_per_source || 5,
-    userAgent: fileConfig.user_agent || 'TotalRecall/1.0 (knowledge-acquisition; +https://github.com/gregiteen/total-recall)',
+    userAgent:
+      fileConfig.user_agent ||
+      process.env.TR_USER_AGENT ||
+      'TotalRecall/1.0 (knowledge-acquisition)',
     // Daily cap: protects free-tier users from unexpected overage charges.
     // Default 50/day ≈ 1,500/month — within Brave/Tavily/Exa free tiers (~1,000/month each).
     // Set to 0 to disable (paid plans with high volume).

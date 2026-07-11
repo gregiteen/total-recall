@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
+import matter from 'gray-matter';
 import { writeNode, atomicWrite, walkMd } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
@@ -232,6 +234,139 @@ export function scanModifiedVault(vaultDir, sinceHours = 24) {
 }
 
 /**
+ * Load REM candidates from memory-inbox (pending + capture drafts).
+ */
+export function loadCandidatesFromInbox(brainDirPath) {
+  const candidates = [];
+  const roots = [
+    path.join(brainDirPath, 'memory-inbox', 'pending'),
+    path.join(brainDirPath, 'memory-inbox', 'capture'),
+  ];
+
+  for (const dir of roots) {
+    if (!fs.existsSync(dir)) continue;
+    let files = [];
+    try {
+      files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      try {
+        const raw = fs.readFileSync(path.join(dir, file), 'utf8');
+        const { data, content } = matter(raw);
+        if (!data || (!data.slug && !data.title && !String(content || '').trim())) continue;
+        const status = data.status || 'draft';
+        if (status === 'archived' || status === 'active') continue;
+        candidates.push({
+          ...data,
+          slug: data.slug || path.basename(file, '.md'),
+          category: data.category || 'facts',
+          title: data.title || data.slug || file,
+          status: 'draft',
+          confidence: data.confidence ?? 0.55,
+          importance: data.importance ?? 2,
+          evidence_count: data.evidence_count || data.source?.evidence_count || 1,
+          body: content,
+          _inbox_path: path.join(dir, file),
+        });
+      } catch (err) {
+        logger.warn('dream', `Inbox candidate skip ${file}: ${err.message}`);
+      }
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Lightweight session → candidate extraction (deterministic heuristics).
+ * User lines that signal durable preferences/rules become draft candidates.
+ */
+export function loadCandidatesFromSessions(sessionsDir, { maxFiles = 8, maxCandidates = 20 } = {}) {
+  const candidates = [];
+  if (!fs.existsSync(sessionsDir)) return candidates;
+
+  const signal =
+    /\b(always|never|prefer|remember|must not|must|invariant|don't|do not|from now on)\b/i;
+
+  let files = [];
+  try {
+    files = fs
+      .readdirSync(sessionsDir)
+      .filter((f) => f.endsWith('.jsonl'))
+      .map((f) => ({
+        name: f,
+        mtime: fs.statSync(path.join(sessionsDir, f)).mtimeMs,
+      }))
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, maxFiles);
+  } catch {
+    return candidates;
+  }
+
+  for (const file of files) {
+    let lines;
+    try {
+      lines = fs.readFileSync(path.join(sessionsDir, file.name), 'utf8').split('\n').filter(Boolean);
+    } catch {
+      continue;
+    }
+    for (const line of lines) {
+      if (candidates.length >= maxCandidates) return candidates;
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const content = entry.content || entry.text || '';
+      if (!content || content.length < 24 || content.length > 2000) continue;
+      if (entry.type === 'tool_call') continue;
+      const role = entry.role;
+      if (role && role !== 'user' && role !== 'human') continue;
+      if (!signal.test(content)) continue;
+
+      const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 10);
+      candidates.push({
+        slug: `session-extract-${hash}`,
+        category: 'preferences',
+        title: content.slice(0, 80).replace(/\s+/g, ' '),
+        status: 'draft',
+        confidence: 0.55,
+        importance: 3,
+        evidence_count: 1,
+        modality: /must not|never|don't|do not/i.test(content) ? 'must_not' : 'should',
+        subject: 'user',
+        predicate: 'prefers',
+        object: 'behavior',
+        tags: ['session-extract', 'dream-rem'],
+        source: {
+          type: 'session',
+          session_id: path.basename(file.name, '.jsonl'),
+          evidence_count: 1,
+        },
+        body: content,
+      });
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Collect all REM candidates (inbox + sessions). Dedupe by slug.
+ */
+export function collectRemCandidates({ brainDirPath, sessionsDir }) {
+  const bySlug = new Map();
+  for (const c of loadCandidatesFromInbox(brainDirPath)) {
+    bySlug.set(c.slug, c);
+  }
+  for (const c of loadCandidatesFromSessions(sessionsDir)) {
+    if (!bySlug.has(c.slug)) bySlug.set(c.slug, c);
+  }
+  return [...bySlug.values()];
+}
+
+/**
  * Phase 2: REM Sleep. Score nodes, check conflicts, promote/decay.
  */
 export function evaluateCandidates(candidates, existingNodes, conflictsDir) {
@@ -285,17 +420,43 @@ export async function runDreamCycle({
   const modified = scanModifiedVault(vaultDir);
   logger.info('dream', `Modified vault files: ${modified.length}`);
 
-  // In a real system, we'd extract candidates from sessions. For now, we simulate.
-  const candidates = []; 
+  const candidates = collectRemCandidates({
+    brainDirPath: brainDir,
+    sessionsDir,
+  });
+  logger.info('dream', `REM candidates collected: ${candidates.length}`);
 
   logger.info('dream', 'PHASE 2 — REM (Pattern Recognition)');
   const existingNodes = getNodes(vaultDir);
-  
-  if (candidates.length > 0) {
-    const { promoted, conflicted } = evaluateCandidates(candidates, existingNodes, conflictsDir);
+  const existingSlugs = new Set(existingNodes.map((n) => n.slug));
+  // Skip candidates already active in vault
+  const fresh = candidates.filter((c) => !existingSlugs.has(c.slug) || c.status === 'draft');
+
+  let promotedCount = 0;
+  let conflictedCount = 0;
+  if (fresh.length > 0) {
+    const { promoted, conflicted } = evaluateCandidates(fresh, existingNodes, conflictsDir);
+    promotedCount = promoted.length;
+    conflictedCount = conflicted.length;
     logger.info('dream', `Promoted: ${promoted.length} | Conflicts: ${conflicted.length}`);
     for (const node of promoted) {
-      await writeNode(node, vaultDir);
+      try {
+        // Strip inbox-only fields before vault write
+        const { body, _inbox_path, ...nodeFields } = node;
+        const toWrite = {
+          ...nodeFields,
+          status: 'active',
+          content: body || nodeFields.content,
+        };
+        await writeNode(toWrite, vaultDir);
+        if (_inbox_path && fs.existsSync(_inbox_path)) {
+          try {
+            fs.unlinkSync(_inbox_path);
+          } catch {}
+        }
+      } catch (err) {
+        logger.warn('dream', `Promote write failed for ${node.slug}: ${err.message}`);
+      }
     }
   } else {
     logger.info('dream', 'No new candidates to evaluate.');
@@ -337,6 +498,7 @@ export async function runDreamCycle({
     const existingNodes = getNodes(vaultDir);
     writeDailyNote(vaultDir, [
       `Modified vault files scanned: ${modified.length}`,
+      `REM candidates: ${candidates.length} (promoted ${promotedCount}, conflicted ${conflictedCount})`,
       `Active nodes: ${existingNodes.filter(n => n.status === 'active').length}`,
       `Proposals accepted: ${proposalCount}`,
     ]);

@@ -35,7 +35,11 @@ export default function FilesPage() {
         listSkills()
       ])
       setFiles(filesData)
-      setSkills(skillsData)
+      // Skills API returns { skills, repos } catalog — flatten for this page
+      const flat = Array.isArray(skillsData)
+        ? skillsData
+        : (skillsData?.skills || [])
+      setSkills(flat as import('../types').FileNode[])
       setError("")
     } catch (e) {
       setError((e as Error).message)
@@ -121,10 +125,10 @@ export default function FilesPage() {
     setScriptLoading(true)
     try {
       const defaultCode = name.endsWith(".py")
-        ? "#!/usr/bin/env python3\nprint('Hello from SSSS Sovereign Automation!')\n"
+        ? "#!/usr/bin/env python3\nprint('Hello from Total Recall automation!')\n"
         : name.endsWith(".sh")
-          ? "#!/bin/bash\necho 'Hello from SSSS Sovereign Automation!'\n"
-          : "/**\n * SSSS Skills Automation Script\n */\nconsole.log(\"Hello from SSSS Sovereign Automation!\");\n"
+          ? "#!/bin/bash\necho 'Hello from Total Recall automation!'\n"
+          : "/**\n * Total Recall skills automation script\n */\nconsole.log(\"Hello from Total Recall automation!\");\n"
           
       await saveScript(name, defaultCode)
       setNewScriptName("")
@@ -143,7 +147,7 @@ export default function FilesPage() {
       <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 }}>
         <div>
           <h1>Storage & Automations</h1>
-          <p>Manage sovereign files, runtime skills, and automation scripts</p>
+          <p>Manage local files, runtime skills, and automation scripts</p>
         </div>
         
         {/* Navigation Tabs */}
@@ -176,7 +180,7 @@ export default function FilesPage() {
 
       {activeTab === "files" && (
         <div className="health-log" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(12px)", border: "1px solid var(--border)", borderRadius: 12, padding: 24 }}>
-          <h2 style={{ fontSize: 16, marginBottom: 12, borderBottom: "1px solid var(--border)", paddingBottom: 8, color: "#fff" }}>Sovereign Files (~/.agent/files/)</h2>
+          <h2 style={{ fontSize: 16, marginBottom: 12, borderBottom: "1px solid var(--border)", paddingBottom: 8, color: "#fff" }}>Local Files (~/.agent/files/)</h2>
           <table style={{ width: "100%", textAlign: "left", borderCollapse: "collapse" }}>
             <thead>
               <tr>

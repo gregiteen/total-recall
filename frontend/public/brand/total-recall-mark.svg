@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#f4f1ea" />
+  <!-- Minimalist Archway representing a permanent memory vault -->
+  <path d="M 120 300 L 120 180 A 80 80 0 0 1 280 180 L 280 300 Z" fill="#2b2b2b" />
+  <!-- Elegant long shadow -->
+  <path d="M 280 300 L 280 180 A 80 80 0 0 0 200 100 L 350 250 L 350 300 Z" fill="#d9d4c7" />
+  <!-- Inner void -->
+  <path d="M 150 300 L 150 180 A 50 50 0 0 1 250 180 L 250 300 Z" fill="#f4f1ea" />
+</svg>

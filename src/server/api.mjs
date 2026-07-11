@@ -406,7 +406,7 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
 
 
     const dateStr = new Date().toLocaleString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZoneName: 'short' });
-    let baseSystemPrompt = `You are Total Recall, a Sovereign AI OS running a database-free, Markdown-first Structured Semantic Syntax System (SSSS) architecture. The current date and time is ${dateStr}.
+    let baseSystemPrompt = `You are Total Recall — portable personal memory for any IDE. Your brain is a database-free, Markdown-first Structured Semantic Syntax System (SSSS) vault on disk. Core loop: write (remember/session) → dream (consolidate) → read (recall + compiled surfaces) → optional daemon tasks. The current date and time is ${dateStr}.
 CRITICAL RULES — you have these tools and MUST use them:
 
 BROWSER TOOLS (headless Chromium — use for web tasks):
@@ -589,13 +589,14 @@ Use execute_code to call these endpoints with node's built-in fetch() — you ar
         // No profile yet — enter interview mode
         const interviewTask = fs.readFileSync(interviewTaskPath, 'utf8');
         baseSystemPrompt += `\n\n=== ONBOARDING INTERVIEW MODE ===
-This user has not been onboarded yet. You MUST conduct the onboarding interview before doing anything else.
-DO NOT answer any other questions until the interview is complete.
-Ask questions one at a time, warmly and conversationally. Listen carefully. Reflect back what you hear.
-After the interview, write the user's answers to:
+This user has no user-profile yet. Conduct the portable-memory onboarding interview before unrelated work.
+Total Recall is personal memory for any IDE (write → dream → read → optional tasks) — not a vendor OS takeover.
+Ask questions one at a time, warmly and conversationally. Reflect each answer before the next.
+After the interview, write answers to:
    - ${BRAIN_DIR}/memory-vault/preferences/user-profile.md
    - ${BRAIN_DIR}/memory-vault/preferences/user-priorities.md
    - ${BRAIN_DIR}/memory-vault/preferences/user-interests.md
+Prefer CLI when available: npx total-recall remember preference "..." --tags user,profile,onboarding
 Then mark ${interviewTaskPath} as status: done.
 
 INTERVIEW TASK:
@@ -652,7 +653,7 @@ ${interviewTask}`;
           // Overwrite system prompt to protect the CPU/memory footprint of the fallback model
           const systemMsgIdx = currentMessages.findIndex(m => m.role === 'system');
           if (systemMsgIdx !== -1) {
-            currentMessages[systemMsgIdx].content = `You are Total Recall, a Sovereign AI OS running a database-free, Markdown-first Structured Semantic Syntax System (SSSS) architecture. The current date and time is ${dateStr}.
+            currentMessages[systemMsgIdx].content = `You are Total Recall — portable personal memory (Markdown vault on disk). The current date and time is ${dateStr}.
 You are operating in a lightweight text-only mode. Answer the user's questions directly, concisely, and helpfully without using tools. Keep your responses short and complete.`;
           }
           
@@ -922,20 +923,20 @@ apiRouter.get('/v1/chat/suggestions', requireAuth, requireScope('chat:read'), (r
       const standardSuggestions = [
         {
           type: 'fact',
-          title: '🧠 Sovereign OS Operations',
-          text: 'Let\'s review the core architecture of your Sovereign OS and see how we can make memory vaults even more powerful.',
+          title: '🧠 Memory loop',
+          text: 'Walk the portable memory loop: remember → dream → recall, and connect an IDE so surfaces stay in sync.',
           nodes: []
         },
         {
           type: 'concept',
-          title: '💡 Custom Agent Skills',
-          text: 'What kind of specialized automation skills should we design next for developer productivity?',
+          title: '💡 Skills across any repo',
+          text: 'What skills should we track or deploy next? Hosts are equal — skill track any path via the registry.',
           nodes: []
         },
         {
           type: 'question',
-          title: '❓ Brain Health & Scaling',
-          text: 'Would you like to analyze system health indexes and run a memory compilation to ensure all search indexes are fully synchronized?',
+          title: '❓ Vault health',
+          text: 'Want a vault compile / dream pass so search indexes and instruction surfaces stay synchronized?',
           nodes: []
         }
       ];

@@ -58,11 +58,12 @@ function printHelp() {
     stop      Stop the background daemon
     status    Show daemon status + recent log entries
 
-  The daemon runs a continuous scheduler loop that:
+  The daemon runs a durable task loop that:
     • Ingests IDE conversation logs (Claude Code, Codex, Gemini, etc.)
-    • Dispatches tasks to cognitive layer engines (Conscious/System2/Research)
-    • Runs a full dream cycle every 20 tasks (surface recompile + conflict resolution)
-    • Keeps the local Gemma 4 LLM busy at all times (queue is never empty)
+    • Dispatches open task envelopes via the executor registry (fail-loud)
+    • Runs system dream periodically when the queue is empty (memory consolidation)
+    • Does NOT invent idle research/LLM work unless TR_IDLE_TASKS=1
+    • Agents enqueue work: npx total-recall task add "<intent>"
 
   On Linux with systemd, delegates to systemctl.
   On macOS with launchd (after deploy), delegates to launchctl.

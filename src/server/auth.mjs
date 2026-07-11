@@ -404,6 +404,57 @@ export async function changePasswordHandler(req, res) {
   res.json({ success: true });
 }
 
+/**
+ * Short-lived step-up token for high-risk actions (secret reveal / copy).
+ * Requires a fresh passkey assertion or password re-entry to mint.
+ *
+ * @param {{ purpose?: string, ttlSeconds?: number, actor?: string }} opts
+ */
+export function mintStepUpToken(opts = {}) {
+  const purpose = opts.purpose || 'secrets:reveal';
+  const ttl = Math.min(300, Math.max(15, opts.ttlSeconds || 60));
+  return jwt.sign(
+    {
+      purpose,
+      step_up: true,
+      actor: opts.actor || 'dashboard',
+    },
+    JWT_SECRET,
+    { expiresIn: ttl },
+  );
+}
+
+/**
+ * @param {string} token
+ * @param {string} expectedPurpose
+ * @returns {{ ok: true, payload: object } | { ok: false, error: string }}
+ */
+export function verifyStepUpToken(token, expectedPurpose = 'secrets:reveal') {
+  if (!token || typeof token !== 'string') {
+    return { ok: false, error: 'Step-up token required' };
+  }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!payload?.step_up || payload.purpose !== expectedPurpose) {
+      return { ok: false, error: 'Invalid step-up purpose' };
+    }
+    return { ok: true, payload };
+  } catch {
+    return { ok: false, error: 'Step-up token invalid or expired — re-authenticate with passkey' };
+  }
+}
+
+/**
+ * Re-check dashboard password (step-up when no passkey registered).
+ */
+export async function verifyDashboardPassword(password) {
+  if (!password) return false;
+  const config = loadSecurityConfig();
+  const passwordHash = config.dashboard?.password_hash;
+  if (!passwordHash) return false;
+  return bcrypt.compare(String(password), passwordHash);
+}
+
 export function logoutHandler(req, res) {
   res.clearCookie('session');
   res.json({ success: true });

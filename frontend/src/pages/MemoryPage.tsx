@@ -222,7 +222,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
         related: relatedArr,
         contradicts: contradictsArr,
         supersedes: supersedesArr
-      })
+      }, activeBrainId)
       setSelected(updated)
       setIsEditing(false)
       fetchNodes()
@@ -260,7 +260,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
         related: relatedArr,
         contradicts: contradictsArr,
         supersedes: supersedesArr
-      })
+      }, activeBrainId)
       setIsCreating(false)
       setSelected(created)
       setSearchParams({ slug: created.slug })
@@ -277,7 +277,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
     setLoading(true)
     setError("")
     try {
-      await deleteMemory(slug)
+      await deleteMemory(slug, activeBrainId)
       setSelected(null)
       setSearchParams({})
       fetchNodes()
@@ -339,14 +339,34 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
   useEffect(() => {
     if (urlSlug) {
       const loadUrlSlug = async () => {
+        // Prefer list payload (already loaded for the active brain) so project-brain
+        // nodes render even before a scoped GET completes.
+        const fromList = nodes.find((n) => n.slug === urlSlug)
+        if (fromList && (fromList.content || fromList.body)) {
+          setSelected(fromList)
+          setError("")
+          return
+        }
         setLoading(true)
         setError("")
         try {
-          const full = await readMemory(urlSlug)
-          setSelected(full)
+          const full = await readMemory(urlSlug, activeBrainId)
+          if (full) {
+            setSelected(full)
+          } else if (fromList) {
+            setSelected(fromList)
+          } else {
+            setError(`Memory node not found: ${urlSlug}`)
+            setSelected(null)
+          }
         } catch (e) {
-          setError(`Failed to load memory node '${urlSlug}': ${(e as Error).message}`)
-          setSelected(null)
+          if (fromList) {
+            setSelected(fromList)
+            setError("")
+          } else {
+            setError(`Failed to load memory node '${urlSlug}': ${(e as Error).message}`)
+            setSelected(null)
+          }
         } finally {
           setLoading(false)
         }
@@ -356,7 +376,7 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
       // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate reset on url change
       setSelected(null)
     }
-  }, [urlSlug])
+  }, [urlSlug, activeBrainId, nodes])
 
   // Wire SSE Live Agent Monitor Streaming (Port 9111)
   useEffect(() => {
@@ -390,6 +410,9 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
   }, [fetchNodes, fetchConflictsList])
 
   const handleSelect = (node: MemoryNode) => {
+    // Show immediately from list (includes body/content for the vault that listed it)
+    setSelected(node)
+    setError("")
     setSearchParams({ slug: node.slug })
   }
 

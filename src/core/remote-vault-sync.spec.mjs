@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { runSync } from './portfolio-sync.mjs';
-import { portfolioSync } from './config.mjs';
+import { runSync } from './remote-vault-sync.mjs';
 import https from 'https';
 import child_process from 'child_process';
 import { PassThrough } from 'stream';
@@ -11,18 +10,19 @@ vi.mock('child_process');
 vi.mock('https');
 vi.mock('./config.mjs', () => ({
   brainDir: '/tmp/test-brain',
-  portfolioSync: {
+  remoteVaultSync: {
     enabled: true,
-    baseUrl: 'https://test.com',
+    baseUrl: 'https://test.example',
     tokenRef: 'TEST_TOKEN',
     intervalMinutes: 30,
     vaultDir: '/tmp/test-vault',
     assetsDir: '/tmp/test-assets',
-    keepAssets: 7
-  }
+    registryDir: '/tmp/test-registry',
+    keepAssets: 7,
+  },
 }));
 
-describe('Portfolio Sync', () => {
+describe('Remote vault sync', () => {
   const tenantDir = path.dirname('/tmp/test-vault');
   const statusFile = path.join(tenantDir, 'sync-status.json');
 
@@ -36,15 +36,15 @@ describe('Portfolio Sync', () => {
     vi.clearAllMocks();
   });
 
-  it('fails gracefully if droplet is unreachable', async () => {
+  it('fails gracefully if remote is unreachable', async () => {
     https.get.mockImplementation((url, opts, cb) => {
       const req = { on: vi.fn() };
-      setTimeout(() => req.on.mock.calls.find(c => c[0] === 'error')?.[1](new Error('ECONNREFUSED')), 10);
+      setTimeout(() => req.on.mock.calls.find((c) => c[0] === 'error')?.[1](new Error('ECONNREFUSED')), 10);
       return req;
     });
 
     await runSync();
-    
+
     expect(fs.existsSync(statusFile)).toBe(true);
     const status = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
     expect(status.ok).toBe(false);
@@ -65,11 +65,11 @@ describe('Portfolio Sync', () => {
 
     child_process.spawnSync.mockReturnValue({
       status: 1,
-      stderr: 'validation error'
+      stderr: 'validation error',
     });
 
     await runSync();
-    
+
     const status = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
     expect(status.ok).toBe(false);
     expect(status.error).toMatch(/validation error/);
@@ -91,11 +91,13 @@ describe('Portfolio Sync', () => {
     child_process.spawn.mockReturnValue({
       stdout: new PassThrough(),
       stderr: { on: vi.fn() },
-      on: (evt, fn) => { if (evt === 'close') fn(0); }
+      on: (evt, fn) => {
+        if (evt === 'close') fn(0);
+      },
     });
 
     await runSync();
-    
+
     const status = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
     expect(status.ok).toBe(true);
     expect(status.nodeCounts.proposals).toBe(2);

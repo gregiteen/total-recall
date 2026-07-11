@@ -2,7 +2,7 @@
  * Total Recall host extension registry for SSSS 0.9.
  *
  * Core document primitives come from `@ssss/cli/registry/core.json`.
- * Package-shipped extensions (e.g. festech) are consumed as-is.
+ * Package-shipped SSSS extensions are consumed as-is.
  * Everything else in local Zod schemas becomes the TR host extension.
  */
 import { createRequire } from 'node:module';

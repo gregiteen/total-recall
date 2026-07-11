@@ -66,7 +66,7 @@ describe('Dynamic Integration Dispatcher', () => {
     });
 
     const result = await dispatchIntegrationCommand('github', 'list_issues', {
-      owner: 'gregiteen',
+      owner: 'example-org',
       repo: 'total-recall',
       state: 'open'
     });
@@ -74,7 +74,7 @@ describe('Dynamic Integration Dispatcher', () => {
     global.fetch = origFetch;
 
     // Check placeholder replacements & query params
-    expect(requestedUrl).toBe('https://api.github.com/repos/gregiteen/total-recall/issues?state=open');
+    expect(requestedUrl).toBe('https://api.github.com/repos/example-org/total-recall/issues?state=open');
     expect(requestedOpts.method).toBe('GET');
     
     // Check authentication token injection
@@ -122,7 +122,7 @@ describe('Dynamic Integration Dispatcher', () => {
 
   it('throws an error if a required path placeholder is missing', async () => {
     await expect(
-      dispatchIntegrationCommand('github', 'list_issues', { owner: 'gregiteen' })
+      dispatchIntegrationCommand('github', 'list_issues', { owner: 'example-org' })
     ).rejects.toThrow('Missing required path variable: --repo');
   });
 });

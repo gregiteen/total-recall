@@ -422,9 +422,12 @@ export default async function init(args) {
       }
     }
 
-    const runOpenwiki = (await ask('\n  [3.8] Would you like to initialize OpenWiki for auto-documentation? (Y/n): ')).trim().toLowerCase();
-    if (runOpenwiki !== 'n' && runOpenwiki !== 'no') {
-      console.error('\n  Starting OpenWiki interactive setup...');
+    // Optional LLM OpenWiki agent (interactive only). openwiki CLI has no --yes flag.
+    // Non-interactive init always uses TR template openwiki via ensureOpenWiki() below.
+    const runOpenwiki = (await ask('\n  [3.8] Run OpenWiki agent to auto-document this codebase? (y/N): ')).trim().toLowerCase();
+    if (runOpenwiki === 'y' || runOpenwiki === 'yes') {
+      console.error('\n  Starting OpenWiki agent (--init). This is interactive / network-using.');
+      console.error('  Tip: skip this and use TR template openwiki (step 3.6) for offline setup.');
       spawnSync('npx', ['-y', 'openwiki', '--init'], { stdio: 'inherit', cwd: process.cwd() });
     }
 
@@ -438,12 +441,13 @@ export default async function init(args) {
 
     rl.close();
   } else {
+    // Non-interactive (--yes / non-TTY): never call openwiki CLI (no --yes support; can hang).
+    // Step 3.6 ensureOpenWiki() ships portable template pages offline.
     if (!deployMode) {
       deployMode = 'local';
     }
     if (!opts.dryRun) {
-      console.error('\n  Starting OpenWiki automatic setup...');
-      spawnSync('npx', ['-y', 'openwiki', '--init', '--yes'], { stdio: 'inherit', cwd: process.cwd() });
+      log('Skipping external openwiki agent in non-interactive mode (templates via ensureOpenWiki).');
     }
   }
 
@@ -536,7 +540,9 @@ export default async function init(args) {
   // (TR_CORE_FOCUS). Implementation lives in total-recall/modules/. User skills are
   // only those with SKILL.md directly under .agent/skills/<name>/.
 
-  // ── Step 3.6: Ensure openwiki ships with the brain ──
+  // ── Step 3.6: Ensure openwiki ships with the brain (offline templates; always) ──
+  // This is the non-interactive openwiki path. External `openwiki --init` is optional
+  // and only offered interactively (that CLI has no --yes flag).
   logStep('3.6/4', 'Ensuring openwiki is present');
   ensureOpenWiki(brainDir, isProject, opts.dryRun);
 
@@ -836,10 +842,14 @@ export default async function init(args) {
     3. Run \`npx total-recall daemon start\` to enable the background Dream Cycle.${isProject ? '\n    4. Your project brain is registered in the global brain\'s project registry.' : ''}
 `);
 
-  // Automatically open the Dashboard UI in the user's browser
-  log("Launching Dashboard UI Walkthrough in your browser...");
-  const startCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-  exec(`${startCmd} "${dashboardUrl}"`, (err) => {
-    // Silently ignore browser opening failures
-  });
+  // Open dashboard only when interactive (non-interactive --yes must not hang on browser)
+  if (!opts.yes && isInteractive) {
+    log('Launching Dashboard UI in your browser...');
+    const startCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    exec(`${startCmd} "${dashboardUrl}"`, () => {
+      // Silently ignore browser opening failures
+    });
+  } else if (opts.yes) {
+    log(`Dashboard (when server running): ${dashboardUrl}`);
+  }
 }

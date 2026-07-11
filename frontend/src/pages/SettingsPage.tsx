@@ -307,7 +307,7 @@ export default function SettingsPage() {
                 <option value="claude">Claude Code (Anthropic CLI Agent)</option>
                 <option value="gemini">Gemini CLI (Google Developer Agent)</option>
                 <option value="codex">OpenAI Codex (OpenAI Workspace Suite)</option>
-                <option value="antigravity">Antigravity (Local Sovereign Agent)</option>
+                <option value="antigravity">Antigravity (Local Agent)</option>
               </select>
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Elevates selected agent as the active primary for all dispatches</span>
             </div>
@@ -318,7 +318,7 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
               <span style={{ fontSize: 20 }}>🪙</span>
               <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Sovereign Cost Supervisor</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Cost Supervisor</h3>
                 <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Track dollar cost consumption limits dynamically</p>
               </div>
             </div>
@@ -816,7 +816,7 @@ export default function SettingsPage() {
               alignItems: 'center',
               gap: 8,
               padding: '8px 16px',
-              background: 'linear-gradient(135deg, #6c5ce7, #a29bfe)',
+              background: 'linear-gradient(135deg, #3b82f6, #93c5fd)',
               color: '#fff',
               borderRadius: 8,
               fontWeight: 500,

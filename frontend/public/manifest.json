@@ -1,11 +1,11 @@
 {
-  "name": "Total Recall — Sovereign Brain",
+  "name": "Total Recall — Portable Memory",
   "short_name": "Total Recall",
-  "description": "Sovereign AI Memory System. Remember everything, recall anything.",
+  "description": "Portable personal memory for any IDE. Remember everything, recall anywhere.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0f",
-  "theme_color": "#0a0a0f",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
   "orientation": "any",
   "categories": ["productivity", "utilities"],
   "icons": [
@@ -14,6 +14,12 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/brand/total-recall-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

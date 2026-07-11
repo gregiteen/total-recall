@@ -1177,7 +1177,12 @@ export function startDeployUI(port = 3001) {
                 sshArgs.push(`${user}@${host}`);
 
                 // Execute the command remotely
-                const remoteCmd = `${cmdPrefix} cd /Users/gregoryiteen/github/total-recall && ${cmd}`;
+                // Remote cwd: env or home — never a personal clone path
+                const remoteCwd =
+                  process.env.TR_REMOTE_REPO_DIR ||
+                  process.env.TOTAL_RECALL_REMOTE_DIR ||
+                  '~';
+                const remoteCmd = `${cmdPrefix} cd ${remoteCwd} && ${cmd}`;
                 sshArgs.push(remoteCmd);
 
                 console.log(`[Proxy install-cli] Remote SSH command: ssh ${sshArgs.join(' ')}`);
@@ -1386,7 +1391,7 @@ export async function provisionVastAI(apiKey, instanceId = null, dashboardPasswo
         client_id: 'me',
         image: 'nvidia/cuda:12.1.1-runtime-ubuntu22.04',
         disk: 40,
-        onstart: 'export AUTO_DEPLOY=1; export HTTPS_METHOD=cloudflare-quick; (apt-get update && apt-get install -y zstd) >/dev/null 2>&1; curl -fsSL https://raw.githubusercontent.com/gregiteen/total-recall/main/install.sh -o /tmp/install.sh && bash /tmp/install.sh && rm /tmp/install.sh',
+        onstart: 'export AUTO_DEPLOY=1; export HTTPS_METHOD=cloudflare-quick; (apt-get update && apt-get install -y zstd) >/dev/null 2>&1; curl -fsSL "${TR_INSTALL_SCRIPT_URL:-https://www.npmjs.com/package/total-recall-brain}" -o /tmp/install.sh 2>/dev/null; if [ -f /tmp/install.sh ] && head -1 /tmp/install.sh | grep -q bash; then bash /tmp/install.sh; else npm i -g total-recall-brain && npx total-recall --help >/dev/null; fi',
         env: {},
         runtype: 'ssh',
         image_login: null,

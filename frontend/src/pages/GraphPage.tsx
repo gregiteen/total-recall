@@ -35,8 +35,10 @@ export default function GraphPage({ activeBrainId }: { activeBrainId?: string })
   return (
     <div className="page" style={{ padding: 0, height: 'calc(100vh - 1px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ padding: '16px 24px', background: 'rgba(18, 18, 26, 0.45)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <h1 style={{ fontSize: '18px', fontWeight: 700 }}>Sovereign Memory Network</h1>
-        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Interactive 3D constellation layout of your knowledge vault, sessions, and active thoughts.</p>
+        <h1 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.02em' }}>Memory Graph</h1>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+          3D vault map — facts (blue), rules (cyan/rose), research (amber), sessions (teal).
+        </p>
       </div>
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

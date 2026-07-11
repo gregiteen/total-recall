@@ -153,7 +153,7 @@ export function mapTrPrincipal(envelope, callOptions = {}, vaultRoot = '') {
 }
 
 /**
- * Package loadRegistries() already includes core + shipped extensions (festech).
+ * Package loadRegistries() already includes core + any shipped package extensions.
  * Re-compose so the Total Recall host extension attaches without colliding with
  * package-provided types.
  */
