@@ -322,7 +322,7 @@ export default async function remember(args) {
             }
             lines.push('---');
             lines.push(oldContent);
-            fs.writeFileSync(p, lines.join('\\n'));
+            fs.writeFileSync(p, lines.join('\n'));
           }
         }
       }

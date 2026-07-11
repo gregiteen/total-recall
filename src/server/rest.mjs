@@ -105,7 +105,7 @@ import {
   CONFIG_DIR
 } from './routes/_shared.mjs';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = process.env.TR_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
 
 function listFilesRecursive(root, predicate) {

@@ -237,6 +237,7 @@ function OnboardingRedirect() {
   if (!isOnboardingComplete() && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />
   }
+
   return null
 }
 
@@ -293,7 +294,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
       {(!isChat || floatingChat) && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <Routes>
-            <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory' : '/onboarding'} replace />} />
+            <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/openwiki' : '/onboarding'} replace />} />
             <Route path="/chat" element={<ChatPage activeBrainId={activeBrainId} />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />

@@ -389,6 +389,8 @@ export async function processViaPackageKernel(envelope, vaultRoot, options = {})
   }
   env = prepared.envelope;
 
+  const eventsDir = path.join(vaultRoot, '.events');
+  if (!env.dry_run && !fs.existsSync(eventsDir)) fs.mkdirSync(eventsDir, { recursive: true });
   const response = await engine.processOperation(env, vaultRoot, {
     ...options,
     vaultRoot,
@@ -401,6 +403,27 @@ export async function processViaPackageKernel(envelope, vaultRoot, options = {})
       ...prepared.warnings,
     ];
   }
+
+  // Handle successful commit TR-specific audit log
+  if (response.success && !env.dry_run) {
+    if (response.type !== 'event') {
+      const eventsDir = path.join(vaultRoot, '.events');
+      if (!fs.existsSync(eventsDir)) fs.mkdirSync(eventsDir, { recursive: true });
+      const auditLog = {
+        id: crypto.randomUUID(),
+        event_type: 'audit',
+        timestamp: new Date().toISOString(),
+        operation_id: response.operation_id,
+        path: response.path,
+        actor: env.actor?.role || 'system',
+        payload: {
+          resolved_type: response.validation?.type || 'memory'
+        }
+      };
+      fs.appendFileSync(path.join(eventsDir, 'audit.jsonl'), JSON.stringify(auditLog) + '\n');
+    }
+  }
+
   return response;
 }
 

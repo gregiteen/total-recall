@@ -17,7 +17,7 @@ function createTempBrain(prefix) {
   return { brainDir: dir, vaultDir };
 }
 
-function writeTestNode(vaultDir, slug, category, opts = {}) {
+async function writeTestNode(vaultDir, slug, category, opts = {}) {
   const node = {
     type: 'memory',
     slug,
@@ -32,7 +32,7 @@ function writeTestNode(vaultDir, slug, category, opts = {}) {
     source: { type: 'test', session_id: 'test', evidence_count: 1 },
     schema_version: 2,
   };
-  writeNode(node, vaultDir);
+  await writeNode(node, vaultDir);
   return node;
 }
 
@@ -50,25 +50,25 @@ describe('Layered Brain: loadMergedNodes', () => {
     fs.rmSync(projectBrain.brainDir, { recursive: true, force: true });
   });
 
-  it('returns global nodes when no project vault exists', () => {
-    writeTestNode(globalBrain.vaultDir, 'global-rule', 'invariants');
-    writeTestNode(globalBrain.vaultDir, 'global-pref', 'preferences');
+  it('returns global nodes when no project vault exists', async () => {
+    await writeTestNode(globalBrain.vaultDir, 'global-rule', 'invariants');
+    await writeTestNode(globalBrain.vaultDir, 'global-pref', 'preferences');
 
     const nodes = loadMergedNodes(globalBrain.vaultDir, null);
     expect(nodes).toHaveLength(2);
     expect(nodes.every(n => n._layer === 'global')).toBe(true);
   });
 
-  it('returns global nodes when project path does not exist', () => {
-    writeTestNode(globalBrain.vaultDir, 'test-node', 'facts');
+  it('returns global nodes when project path does not exist', async () => {
+    await writeTestNode(globalBrain.vaultDir, 'test-node', 'facts');
     const nodes = loadMergedNodes(globalBrain.vaultDir, '/nonexistent/vault');
     expect(nodes).toHaveLength(1);
     expect(nodes[0]._layer).toBe('global');
   });
 
-  it('returns both global and project nodes', () => {
-    writeTestNode(globalBrain.vaultDir, 'global-only', 'invariants');
-    writeTestNode(projectBrain.vaultDir, 'project-only', 'facts');
+  it('returns both global and project nodes', async () => {
+    await writeTestNode(globalBrain.vaultDir, 'global-only', 'invariants');
+    await writeTestNode(projectBrain.vaultDir, 'project-only', 'facts');
 
     const nodes = loadMergedNodes(globalBrain.vaultDir, projectBrain.vaultDir);
     expect(nodes).toHaveLength(2);
@@ -83,9 +83,9 @@ describe('Layered Brain: loadMergedNodes', () => {
     expect(projectNode._layer).toBe('project');
   });
 
-  it('project nodes override global nodes with same slug', () => {
-    writeTestNode(globalBrain.vaultDir, 'shared-slug', 'facts', { title: 'Global Version' });
-    writeTestNode(projectBrain.vaultDir, 'shared-slug', 'facts', { title: 'Project Version' });
+  it('project nodes override global nodes with same slug', async () => {
+    await writeTestNode(globalBrain.vaultDir, 'shared-slug', 'facts', { title: 'Global Version' });
+    await writeTestNode(projectBrain.vaultDir, 'shared-slug', 'facts', { title: 'Project Version' });
 
     const nodes = loadMergedNodes(globalBrain.vaultDir, projectBrain.vaultDir);
     expect(nodes).toHaveLength(1);
@@ -93,20 +93,20 @@ describe('Layered Brain: loadMergedNodes', () => {
     expect(nodes[0]._layer).toBe('project');
   });
 
-  it('handles empty vaults gracefully', () => {
+  it('handles empty vaults gracefully', async () => {
     const nodes = loadMergedNodes(globalBrain.vaultDir, projectBrain.vaultDir);
     expect(nodes).toHaveLength(0);
   });
 
-  it('merges many nodes from both layers correctly', () => {
+  it('merges many nodes from both layers correctly', async () => {
     // 3 global, 3 project, 1 overlap
-    writeTestNode(globalBrain.vaultDir, 'g1', 'invariants');
-    writeTestNode(globalBrain.vaultDir, 'g2', 'preferences');
-    writeTestNode(globalBrain.vaultDir, 'shared', 'facts', { title: 'Global Shared' });
+    await writeTestNode(globalBrain.vaultDir, 'g1', 'invariants');
+    await writeTestNode(globalBrain.vaultDir, 'g2', 'preferences');
+    await writeTestNode(globalBrain.vaultDir, 'shared', 'facts', { title: 'Global Shared' });
 
-    writeTestNode(projectBrain.vaultDir, 'p1', 'facts');
-    writeTestNode(projectBrain.vaultDir, 'p2', 'decisions');
-    writeTestNode(projectBrain.vaultDir, 'shared', 'facts', { title: 'Project Shared' });
+    await writeTestNode(projectBrain.vaultDir, 'p1', 'facts');
+    await writeTestNode(projectBrain.vaultDir, 'p2', 'decisions');
+    await writeTestNode(projectBrain.vaultDir, 'shared', 'facts', { title: 'Project Shared' });
 
     const nodes = loadMergedNodes(globalBrain.vaultDir, projectBrain.vaultDir);
     // g1 + g2 + shared(project) + p1 + p2 = 5
@@ -134,31 +134,31 @@ describe('Layered Brain: parseLayerFlag', () => {
     defaultLayerForCategory = mod.defaultLayerForCategory;
   });
 
-  it('extracts --global flag', () => {
+  it('extracts --global flag', async () => {
     const { layer, remainingArgs } = parseLayerFlag(['invariant', 'test', '--global']);
     expect(layer).toBe('global');
     expect(remainingArgs).toEqual(['invariant', 'test']);
   });
 
-  it('extracts --project flag', () => {
+  it('extracts --project flag', async () => {
     const { layer, remainingArgs } = parseLayerFlag(['--project', 'fact', 'test']);
     expect(layer).toBe('project');
     expect(remainingArgs).toEqual(['fact', 'test']);
   });
 
-  it('returns auto when no flag specified', () => {
+  it('returns auto when no flag specified', async () => {
     const { layer, remainingArgs } = parseLayerFlag(['fact', 'content', '--tags', 'x']);
     expect(layer).toBe('auto');
     expect(remainingArgs).toEqual(['fact', 'content', '--tags', 'x']);
   });
 
-  it('handles empty args', () => {
+  it('handles empty args', async () => {
     const { layer, remainingArgs } = parseLayerFlag([]);
     expect(layer).toBe('auto');
     expect(remainingArgs).toEqual([]);
   });
 
-  it('defaultLayerForCategory maps categories correctly', () => {
+  it('defaultLayerForCategory maps categories correctly', async () => {
     expect(defaultLayerForCategory('invariants')).toBe('project');
     expect(defaultLayerForCategory('preferences')).toBe('project');
     expect(defaultLayerForCategory('anti-patterns')).toBe('project');

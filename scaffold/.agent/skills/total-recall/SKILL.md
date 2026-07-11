@@ -41,6 +41,16 @@ You MUST actively reference and apply this skill under the following specific ru
 *   **Must NOT Trigger**: Do NOT use background research for quick searches of simple APIs, common code snippets, or basic web-related docs. Standard models have active web search capabilities that should be used for these quick, on-demand reference lookups.
 *   **Action**: Autonomously queue the topic to the background research agenda using the `/api/research` REST API POST endpoint to let the daemon build a high-confidence vault node.
 
+### 4b. When work should outlive this chat (daemon tasks — anything)
+*   **Trigger**: Long-running or deferred work: post-session extract, scheduled dream, custom maintenance, follow-ups the user wants the daemon to run later.
+*   **Action**: Enqueue an open task envelope (not only research):
+    ```bash
+    npx total-recall task add "<intent>" --cap vault:write --priority high --agent <your-id>
+    npx total-recall task list
+    npx total-recall task cancel <slug>
+    ```
+*   **Policy**: Default capabilities are `vault:read`. Use `--cap vault:write` to land drafts in `memory-inbox/pending` for dream promotion. Shell/net-post caps are denied. Do not assume idle auto-fill; the queue only runs what was enqueued (plus periodic system dream).
+
 ### 5. When you modify, add, or delete files in the memory vault
 *   **Trigger**: Immediately after performing any memory node writes.
 *   **Action**: Rebuild the instruction shims. If using CLI commands (`npx total-recall remember` / `forget`), recompilation runs automatically in the background (asynchronously via detached subprocesses) to minimize latency. If editing vault files directly, trigger manual compilation by sending a POST request to `/api/vault/compile` or running `npx total-recall compile`.

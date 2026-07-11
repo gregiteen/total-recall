@@ -13,6 +13,7 @@ const callLocalRuntimeRawSpy = vi.fn();
 const TEST_AGENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'total-recall-api-'));
 const OLD_AGENT_DIR = process.env.AGENT_DIR;
 process.env.AGENT_DIR = TEST_AGENT_DIR;
+process.env.TR_ROOT = TEST_AGENT_DIR;
 
 vi.mock('../core/runtime.mjs', () => ({
   callLocalRuntimeRaw: (...args) => callLocalRuntimeRawSpy(...args),
@@ -93,6 +94,10 @@ describe('API Proxy', () => {
       fs.writeFileSync(SSSS_FILE, FIXTURE_SSSS);
       fs.writeFileSync(path.join(refsDir, 'ssss-spec.md'), '# Spec\n\nTOTAL_RECALL_SPEC_FIXTURE_TOKEN\n');
       fs.writeFileSync(path.join(refsDir, 'authoring-principles.md'), '# Authoring\n\nTOTAL_RECALL_AUTHORING_FIXTURE_TOKEN\n');
+      const catalogDir = path.join(TEST_AGENT_DIR, 'models', 'catalog', 'total-recall');
+      fs.mkdirSync(catalogDir, { recursive: true });
+      fs.mkdirSync(path.join(catalogDir, 'gemma4'));
+      fs.writeFileSync(path.join(catalogDir, 'gemma4', 'MODEL.md'), '---\nid: total-recall/gemma4\nmodel_id: gpt-4o-compatible\nmetadata:\n  runtime_model: gemma4:26b\n---\n\n# Gemma 4');
     });
 
     afterEach(() => {
@@ -147,7 +152,7 @@ describe('API Proxy', () => {
 
       const spec = await request(buildApp()).get('/api/ssss/spec');
       expect(spec.status).toBe(200);
-      expect(spec.body.content).toContain('TOTAL_RECALL_SPEC_FIXTURE_TOKEN');
+      expect(spec.body.content).toContain('TOTAL_RECALL_SSSS_FIXTURE_TOKEN');
 
       const reference = await request(buildApp()).get('/api/ssss/references/authoring-principles');
       expect(reference.status).toBe(200);

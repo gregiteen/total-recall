@@ -8,6 +8,7 @@ agents:
 
   - name: grok
     binary: grok
+    # Grok Build TUI: -p single-turn, plain text for TR parser
     flags: --output-format plain --always-approve --permission-mode bypassPermissions
     priority: 2
     enabled: true

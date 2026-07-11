@@ -257,6 +257,74 @@
   },
   {
     "method": "GET",
+    "path": "/api/secrets"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/secrets/:key"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/secrets/:key"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/:key/reveal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/:key/rotate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/deploy-payload"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/export-env"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/export-env"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/import-env"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/parse-env"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/providers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/rotation-due"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/rotation-due/enqueue"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/scan-env"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/usage"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/usage"
+  },
+  {
+    "method": "GET",
     "path": "/api/sessions"
   },
   {
@@ -329,15 +397,15 @@
   },
   {
     "method": "POST",
-    "path": "/api/sync/portfolio/proposals/:id/decision"
+    "path": "/api/sync/remote-vault/proposals/:id/decision"
   },
   {
     "method": "POST",
-    "path": "/api/sync/portfolio/run"
+    "path": "/api/sync/remote-vault/run"
   },
   {
     "method": "GET",
-    "path": "/api/sync/portfolio/status"
+    "path": "/api/sync/remote-vault/status"
   },
   {
     "method": "GET",
@@ -406,6 +474,34 @@
   {
     "method": "DELETE",
     "path": "/api/views/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webauthn/assert/options"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webauthn/assert/verify"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/webauthn/credentials/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webauthn/register/options"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webauthn/register/verify"
+  },
+  {
+    "method": "GET",
+    "path": "/api/webauthn/status"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webauthn/step-up/password"
   },
   {
     "method": "POST",
