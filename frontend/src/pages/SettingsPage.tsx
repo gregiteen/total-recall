@@ -1,1039 +1,946 @@
-import { useState, useEffect } from 'react';
-import { fetchConfigJson, saveConfigJson, fetchConfig, saveConfig } from '../api';
+import React, { useState, useEffect } from 'react';
+import { fetchConfigJson, saveConfigJson, runSandbox, fetchHealth, runAgentDiagnostics } from '../api';
+import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
 
 export default function SettingsPage() {
-  const [viewMode, setViewMode] = useState<'visual' | 'yaml'>('visual');
-  const [activeYamlTab, setActiveYamlTab] = useState<'frontier.yml' | 'security.yml' | 'budget.yml'>('security.yml');
-  
-  // Visual Form State
   const [configData, setConfigData] = useState<ConfigJson | null>(null);
-  
-  // YAML Text Area State
-  const [yamlContent, setYamlContent] = useState('');
-  
-  // UI States
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [sandboxLog, setSandboxLog] = useState('');
+  const [domainToBlock, setDomainToBlock] = useState('');
 
-  // Load JSON for Visual Form
-  const loadVisualConfig = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchConfigJson();
-      // Enforce default structures if missing
-      if (!data.security) data.security = {};
-      if (!data.security.privacy) data.security.privacy = { enforce_local_only: true, allow_frontier_export: 'ask_per_skill' };
-      if (!data.security.dashboard) data.security.dashboard = { session_ttl_hours: 24 };
-      if (!data.security.bind) data.security.bind = { host: '127.0.0.1', port: 3000, allow_public_bind: false };
-      if (!data.security.network) data.security.network = { require_https: true, public_health: false, allowed_origins: [] };
-      if (!data.security.rate_limits) data.security.rate_limits = { api_requests_per_minute: 60, sandbox_requests_per_minute: 10, ingest_requests_per_minute: 120 };
-      if (!data.budget) data.budget = {};
-      if (!data.budget.budget) data.budget.budget = { daily_cap_usd: 5.0, weekly_cap_usd: 25.0, enabled: true };
-      if (!data.brain) data.brain = {};
-      if (!data.brain.preferred_agent) data.brain.preferred_agent = 'auto';
-      if (!data.secrets) data.secrets = {};
-      
-      setConfigData(data);
-    } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to load configuration.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [health, setHealth] = useState<HealthData | null>(null);
+  const [runningDiagnostics, setRunningDiagnostics] = useState(false);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<string | null>(null);
 
-  // Load YAML string for Raw Editor
-  const loadYamlConfig = async (name: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchConfig(name);
-      setYamlContent(data);
-    } catch (err: unknown) {
-      setError((err as Error).message || `Failed to load ${name}.`);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    if (viewMode === 'visual') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate config loader on visual active
-      void loadVisualConfig();
-    } else {
-       
-      void loadYamlConfig(activeYamlTab);
-    }
-  }, [viewMode, activeYamlTab]);
+    fetchHealth().then(setHealth).catch(console.error);
+    fetchConfigJson()
+      .then(data => {
+        // Ensure all nested structures exist for controlled inputs
+        if (!data.security) data.security = {};
+        if (!data.security.dashboard) data.security.dashboard = {};
+        if (!data.security.api) data.security.api = {};
+        if (!data.security.network) data.security.network = {};
+        if (!data.security.bind) data.security.bind = {};
+        if (!data.security.rate_limits) data.security.rate_limits = {};
+        if (!data.security.sandbox) data.security.sandbox = {};
+        if (!data.security.privacy) data.security.privacy = {};
+        if (!data.budget) data.budget = { budget: {} };
+        if (!data.budget.budget) data.budget.budget = {};
+        if (!data.brain) data.brain = {};
+        if (!data.secrets) data.secrets = {};
+        setConfigData(data);
+      })
+      .catch(console.error);
+  }, []);
 
-  // Save Visual Form JSON
+  
+  const AGENTS_LIST = [
+    { id: 'antigravity', name: 'Antigravity (Gemini SDK)', desc: 'Primary core developer agent' },
+    { id: 'gemini', name: 'Gemini CLI', desc: 'Direct Gemini assistant binary' },
+    { id: 'claude', name: 'Claude Code', desc: 'Anthropic developer CLI wrapper' },
+    { id: 'codex', name: 'Codex CLI', desc: 'OpenAI agent binary integration' }
+  ];
+
+  const handleRunDiagnostics = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRunningDiagnostics(true);
+    setDiagnosticLogs(null);
+    try {
+      const res = await runAgentDiagnostics();
+      setDiagnosticLogs(res.output);
+      fetchHealth().then(setHealth).catch(console.error);
+    } catch (err: any) {
+      setDiagnosticLogs('Error: ' + err.message);
+    } finally {
+      setRunningDiagnostics(false);
+    }
+  };
+
   const handleSaveVisual = async () => {
     if (!configData) return;
-    setSaving(true);
-    setError(null);
-    setSuccess(false);
+    setSaveStatus('saving');
     try {
       await saveConfigJson(configData);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 4000);
-    } catch (err: unknown) {
-      setError((err as Error).message || 'Failed to save configuration.');
-    } finally {
-      setSaving(false);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    } catch (err) {
+      console.error(err);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     }
   };
 
-  // Save YAML Text
-  const handleSaveYaml = async () => {
-    setSaving(true);
-    setError(null);
-    setSuccess(false);
-    try {
-      await saveConfig(activeYamlTab, yamlContent);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 4000);
-    } catch (err: unknown) {
-      setError((err as Error).message || `Failed to save ${activeYamlTab}.`);
-    } finally {
-      setSaving(false);
-    }
+  const executeSandboxCommand = async (command: string, description: string) => {
+    setSandboxLog(`[Running] ${description}...\n$ ${command}`);
+    const res = await runSandbox(`
+      const { execSync } = require('child_process');
+      try {
+        const out = execSync('${command}', { encoding: 'utf8' });
+        console.log(out);
+      } catch (e) {
+        console.error(e.stdout || e.message);
+      }
+    `);
+    setSandboxLog(`[Finished] ${description}\n\n` + res.output);
   };
 
-  // Safe mutators for deeply nested properties
-  const updateSecurityProp = (section: string, prop: string, value: unknown) => {
-    if (!configData) return;
-    setConfigData({
-      ...configData,
-      security: {
-        ...configData.security,
-        [section]: {
-          ...(configData.security[section] as Record<string, unknown>),
-          [prop]: value
+  // State Update Helpers
+  const updateSecurityProp = (key: string, value: any) => {
+    setConfigData(prev => prev ? { ...prev, security: { ...prev.security, [key]: value } } : null);
+  };
+
+  const updateSecurityNested = (category: string, key: string, value: any) => {
+    setConfigData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        security: {
+          ...prev.security,
+          [category]: {
+            ...((prev.security as any)[category] || {}),
+            [key]: value
+          }
         }
-      }
+      };
     });
   };
 
-  const updateRootSecurityProp = (prop: string, value: unknown) => {
-    if (!configData) return;
-    setConfigData({
-      ...configData,
-      security: {
-        ...configData.security,
-        [prop]: value
-      }
-    });
-  };
-
-  const updateBudgetProp = (prop: string, value: unknown) => {
-    if (!configData) return;
-    setConfigData({
-      ...configData,
-      budget: {
-        ...configData.budget,
+  const updateBudgetProp = (key: string, value: any) => {
+    setConfigData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
         budget: {
-          ...configData.budget.budget,
-          [prop]: value
+          ...prev.budget,
+          budget: {
+            ...(prev.budget.budget || {}),
+            [key]: value
+          }
         }
-      }
+      };
     });
   };
 
-  const updateBrainProp = (prop: string, value: unknown) => {
-    if (!configData) return;
-    setConfigData({
-      ...configData,
-      brain: {
-        ...configData.brain,
-        [prop]: value as string
-      }
-    });
+  const updateBrainProp = (key: string, value: any) => {
+    setConfigData(prev => prev ? { ...prev, brain: { ...prev.brain, [key]: value } } : null);
   };
 
-  const updateSecretsProp = (prop: string, value: string) => {
-    if (!configData) return;
-    setConfigData({
-      ...configData,
-      secrets: {
-        ...configData.secrets,
-        [prop]: value
-      }
-    });
+  const updateSecretProp = (key: string, value: any) => {
+    setConfigData(prev => prev ? { ...prev, secrets: { ...prev.secrets, [key]: value } } : null);
   };
+
+  const getCsv = (arr: any) => Array.isArray(arr) ? arr.join(', ') : '';
+  const setCsv = (val: string) => val.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (!configData) {
+    return (
+      <div style={{ padding: 40, color: 'var(--text-secondary)' }}>
+        <div className="glass-card" style={{ display: 'inline-block', padding: '12px 24px' }}>
+          Loading Settings...
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="page" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <h1>System Settings</h1>
-          <p>Read, write, and toggle UI and dashboard settings directly from the terminal or control panel</p>
-        </div>
+    <div className="settings-page-wrapper">
+      <style>{`
+        .settings-page-wrapper {
+          padding: 32px 40px 100px;
+          max-width: 1200px;
+          margin: 0 auto;
+          animation: fade-in 0.4s ease-out;
+        }
+
+        .settings-header-sticky {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+          background: rgba(13, 17, 23, 0.85);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          padding: 24px 0;
+          margin-bottom: 32px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .settings-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+          gap: 24px;
+        }
+
+        .settings-card {
+          background: rgba(23, 32, 51, 0.4);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 16px;
+          padding: 28px;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+        }
         
-        {/* Toggle Mode Button */}
-        <div style={{ display: 'flex', gap: 8, background: 'var(--bg-secondary)', padding: 4, borderRadius: 8, border: '1px solid var(--border)' }}>
-          <button
-            onClick={() => setViewMode('visual')}
-            className="btn btn-sm"
-            style={{
-              background: viewMode === 'visual' ? 'var(--accent)' : 'transparent',
-              color: viewMode === 'visual' ? '#fff' : 'var(--text-secondary)',
-              borderRadius: 6,
-              fontSize: 12
-            }}
-          >
-            🎛️ Control Panel
-          </button>
-          <button
-            onClick={() => setViewMode('yaml')}
-            className="btn btn-sm"
-            style={{
-              background: viewMode === 'yaml' ? 'var(--accent)' : 'transparent',
-              color: viewMode === 'yaml' ? '#fff' : 'var(--text-secondary)',
-              borderRadius: 6,
-              fontSize: 12
-            }}
-          >
-            📝 Raw YAML Editor
+        .settings-card::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0; height: 100%;
+          background: radial-gradient(circle at top right, rgba(255,255,255,0.03), transparent 60%);
+          pointer-events: none;
+        }
+
+        .settings-card:hover {
+          border-color: rgba(255, 255, 255, 0.12);
+          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+        }
+
+        .settings-icon-wrap {
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          border: 1px solid rgba(255,255,255,0.1);
+          flex-shrink: 0;
+        }
+
+        .field-col {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-top: 20px;
+        }
+
+        .field-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-top: 20px;
+          padding: 12px 16px;
+          background: rgba(0, 0, 0, 0.2);
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.03);
+          transition: border-color 0.2s ease;
+        }
+        
+        .field-row:hover {
+          border-color: rgba(255,255,255,0.1);
+        }
+
+        .field-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-secondary);
+          letter-spacing: 0.3px;
+          text-transform: uppercase;
+        }
+
+        .settings-input, .settings-select {
+          background: rgba(9, 13, 20, 0.6);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: var(--text-primary);
+          padding: 12px 16px;
+          border-radius: 10px;
+          font-size: 14px;
+          transition: all 0.2s ease;
+          width: 100%;
+          outline: none;
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .settings-input.secret {
+          font-family: 'JetBrains Mono', monospace;
+          letter-spacing: 1px;
+        }
+
+        .settings-input:focus, .settings-select:focus {
+          border-color: var(--accent);
+          box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .settings-checkbox {
+          appearance: none;
+          width: 44px;
+          height: 24px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 20px;
+          position: relative;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          outline: none;
+          border: 1px solid rgba(255,255,255,0.05);
+          flex-shrink: 0;
+        }
+
+        .settings-checkbox::after {
+          content: '';
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 18px;
+          height: 18px;
+          background: #fff;
+          border-radius: 50%;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .settings-checkbox:checked {
+          background: var(--accent);
+          border-color: var(--accent);
+          box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .settings-checkbox:checked::after {
+          transform: translateX(20px);
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, var(--accent), #2563eb);
+          color: #fff;
+          border: none;
+          padding: 10px 24px;
+          border-radius: 8px;
+          font-weight: 600;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-secondary {
+          background: rgba(255, 255, 255, 0.05);
+          color: var(--text-primary);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 8px 16px;
+          border-radius: 8px;
+          font-weight: 500;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .terminal-log {
+          background: rgba(0, 0, 0, 0.6);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px;
+          padding: 16px;
+          font-family: 'JetBrains Mono', 'Fira Code', monospace;
+          font-size: 12px;
+          color: #a8b2d1;
+          white-space: pre-wrap;
+          max-height: 200px;
+          overflow-y: auto;
+          margin-top: 16px;
+        }
+
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      <div className="settings-header-sticky">
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, background: 'linear-gradient(to right, #fff, #a8b2d1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            System Settings
+          </h1>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 14 }}>
+            Configure core OS behavior, security, API keys, and integration layers.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {saveStatus === 'saved' && <span style={{ color: '#34d399', fontSize: 14, fontWeight: 600 }}>✓ Saved successfully</span>}
+          {saveStatus === 'error' && <span style={{ color: '#ef4444', fontSize: 14, fontWeight: 600 }}>✗ Save failed</span>}
+          <button className="btn-primary" onClick={handleSaveVisual} disabled={saveStatus === 'saving'}>
+            {saveStatus === 'saving' ? 'Saving...' : 'Save Configuration'}
           </button>
         </div>
       </div>
 
-      {error && (
-        <div className="badge badge-error" style={{ marginBottom: 20, display: 'inline-flex', padding: '6px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#f87171' }}>
-          ⚠️ {error}
-        </div>
-      )}
-      {success && (
-        <div className="badge badge-success" style={{ marginBottom: 20, display: 'inline-flex', padding: '6px 12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#34d399' }}>
-          ✓ Saved successfully! The memory kernel will hot-reload configuration settings instantly.
-        </div>
-      )}
-
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }}>
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-          </svg>
-          <div>Retrieving brain configuration state...</div>
-        </div>
-      ) : viewMode === 'visual' && configData ? (
-        /* ==================== VISUAL CONTROL PANEL UI ==================== */
-        <form onSubmit={(e) => { e.preventDefault(); handleSaveVisual(); }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24, flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 24 }}>
-          
-          {/* Card 1: AI Reasoning & Autonomy */}
-          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <span style={{ fontSize: 20 }}>🧠</span>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Reasoning & Autonomy</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Control AI routing agent behaviors and local boundaries</p>
-              </div>
-            </div>
-
-            {/* YOLO Mode Switch */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <label htmlFor="yolo_mode" style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>YOLO Mode (Fully Autonomous)</label>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Execute workflows without prompt confirmation gates</span>
-              </div>
-              <input
-                id="yolo_mode"
-                type="checkbox"
-                checked={configData.security.yolo_mode || false}
-                onChange={(e) => updateRootSecurityProp('yolo_mode', e.target.checked)}
-                style={{ width: 44, height: 22, cursor: 'pointer', accentColor: 'var(--accent)' }}
-              />
-            </div>
-
-            {/* Local Privacy Switch */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <label htmlFor="enforce_local_only" style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>Local Privacy Isolation</label>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Enforce local execution; never stream to cloud APIs</span>
-              </div>
-              <input
-                id="enforce_local_only"
-                type="checkbox"
-                checked={configData.security.privacy?.enforce_local_only || false}
-                onChange={(e) => updateSecurityProp('privacy', 'enforce_local_only', e.target.checked)}
-                style={{ width: 44, height: 22, cursor: 'pointer', accentColor: 'var(--accent)' }}
-              />
-            </div>
-
-            {/* Export policy */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="allow_frontier_export" style={{ fontSize: 13, fontWeight: 500 }}>Frontier API Export Policy</label>
-              <select
-                id="allow_frontier_export"
-                value={configData.security.privacy?.allow_frontier_export || 'ask_per_skill'}
-                onChange={(e) => updateSecurityProp('privacy', 'allow_frontier_export', e.target.value)}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              >
-                <option value="always">Always Route (YOLO Mode)</option>
-                <option value="ask_per_skill">Ask Per Skill Trigger</option>
-                <option value="never">Never Route (Fully Air-Gapped)</option>
-              </select>
-            </div>
-
-            {/* Preferred CLI Agent Selector */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="preferred_agent" style={{ fontSize: 13, fontWeight: 500 }}>Preferred CLI Agent</label>
-              <select
-                id="preferred_agent"
-                value={configData.brain?.preferred_agent || 'auto'}
-                onChange={(e) => updateBrainProp('preferred_agent', e.target.value)}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              >
-                <option value="auto">Auto (Smart Routing / System Default)</option>
-                <option value="claude">Claude Code (Anthropic CLI Agent)</option>
-                <option value="gemini">Gemini CLI (Google Developer Agent)</option>
-                <option value="codex">OpenAI Codex (OpenAI Workspace Suite)</option>
-                <option value="antigravity">Antigravity (Local Agent)</option>
-              </select>
-              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Elevates selected agent as the active primary for all dispatches</span>
+      <div className="settings-grid">
+        
+        {/* Network & Binding */}
+        <div className="settings-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
+            <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.05))', borderColor: 'rgba(59, 130, 246, 0.2)' }}>🌐</div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Network & Binding</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Configure server host and ports</p>
             </div>
           </div>
 
-          {/* Card 2: Cost Control & Budget */}
-          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <span style={{ fontSize: 20 }}>🪙</span>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Cost Supervisor</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Track dollar cost consumption limits dynamically</p>
-              </div>
-            </div>
-
-            {/* Budget enabled Switch */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <label htmlFor="budget_enabled" style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>Supervision Active</label>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Block LLM requests if cap limits are exceeded</span>
-              </div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label htmlFor="bind_host" className="field-label">Bind Host</label>
               <input
-                id="budget_enabled"
-                type="checkbox"
-                checked={configData.budget.budget?.enabled !== false}
-                onChange={(e) => updateBudgetProp('enabled', e.target.checked)}
-                style={{ width: 44, height: 22, cursor: 'pointer', accentColor: 'var(--accent)' }}
+                id="bind_host"
+                type="text"
+                className="settings-input"
+                value={configData.security.bind?.host ?? '127.0.0.1'}
+                onChange={(e) => updateSecurityNested('bind', 'host', e.target.value)}
               />
             </div>
+            <div className="field-col" style={{ width: 100 }}>
+              <label htmlFor="bind_port" className="field-label">Port</label>
+              <input
+                id="bind_port"
+                type="number"
+                className="settings-input"
+                value={configData.security.bind?.port ?? 3000}
+                onChange={(e) => updateSecurityNested('bind', 'port', parseInt(e.target.value, 10))}
+              />
+            </div>
+          </div>
 
-            {/* Daily limit */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="daily_cap" style={{ fontSize: 13, fontWeight: 500 }}>Daily Capital Cap ($ USD)</label>
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Allow Public Bind</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Allow listening on 0.0.0.0 interfaces</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.bind?.allow_public_bind}
+              onChange={(e) => updateSecurityNested('bind', 'allow_public_bind', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Require HTTPS</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Reject insecure HTTP requests</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.network?.require_https}
+              onChange={(e) => updateSecurityNested('network', 'require_https', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Public Health Check</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Allow pinging /health without auth</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.network?.public_health}
+              onChange={(e) => updateSecurityNested('network', 'public_health', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-col">
+            <label className="field-label">Allowed Origins (CORS)</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={getCsv(configData.security.network?.allowed_origins)}
+              onChange={(e) => updateSecurityNested('network', 'allowed_origins', setCsv(e.target.value))}
+              placeholder="e.g. https://example.com, https://app.example.com"
+            />
+          </div>
+
+          <div className="field-col">
+            <label className="field-label">Trusted Proxies</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={getCsv(configData.security.network?.trusted_proxies)}
+              onChange={(e) => updateSecurityNested('network', 'trusted_proxies', setCsv(e.target.value))}
+              placeholder="e.g. 10.0.0.1, 192.168.1.1"
+            />
+          </div>
+          
+          <div className="field-col">
+            <label className="field-label">API Requests Per Minute (Rate Limit)</label>
+            <input
+              type="number"
+              className="settings-input"
+              value={configData.security.rate_limits?.api_requests_per_minute ?? 1200}
+              onChange={(e) => updateSecurityNested('rate_limits', 'api_requests_per_minute', parseInt(e.target.value, 10))}
+            />
+          </div>
+
+          <div className="field-col">
+            <label className="field-label">Sandbox Requests Per Minute</label>
+            <input
+              type="number"
+              className="settings-input"
+              value={configData.security.rate_limits?.sandbox_requests_per_minute ?? 60}
+              onChange={(e) => updateSecurityNested('rate_limits', 'sandbox_requests_per_minute', parseInt(e.target.value, 10))}
+            />
+          </div>
+
+          <div className="field-col">
+            <label className="field-label">Ingest Requests Per Minute</label>
+            <input
+              type="number"
+              className="settings-input"
+              value={configData.security.rate_limits?.ingest_requests_per_minute ?? 300}
+              onChange={(e) => updateSecurityNested('rate_limits', 'ingest_requests_per_minute', parseInt(e.target.value, 10))}
+            />
+          </div>
+
+
+        </div>
+
+        {/* Security & Privacy */}
+        <div className="settings-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
+            <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.05))', borderColor: 'rgba(16, 185, 129, 0.2)' }}>🛡️</div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Security & Privacy</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Data sovereignty protocols</p>
+            </div>
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>YOLO Mode</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Disable write protection for AI agents</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.yolo_mode}
+              onChange={(e) => updateSecurityProp('yolo_mode', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Sandbox Enabled</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Enforce strict code sandboxing</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.sandbox?.enabled}
+              onChange={(e) => updateSecurityNested('sandbox', 'enabled', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Enforce Local Only</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Force agents to run offline models</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.privacy?.enforce_local_only}
+              onChange={(e) => updateSecurityNested('privacy', 'enforce_local_only', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Force Password Reset</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Require password change on next login</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.dashboard?.force_password_reset}
+              onChange={(e) => updateSecurityNested('dashboard', 'force_password_reset', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Allow Static PATs</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Enable Personal Access Tokens</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.security.api?.allow_static_pats}
+              onChange={(e) => updateSecurityNested('api', 'allow_static_pats', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-col">
+            <label htmlFor="allow_frontier_export" className="field-label">Allow Frontier Export</label>
+            <select
+              id="allow_frontier_export"
+              className="settings-select"
+              value={configData.security.privacy?.allow_frontier_export || 'ask_per_skill'}
+              onChange={(e) => updateSecurityNested('privacy', 'allow_frontier_export', e.target.value)}
+            >
+              <option value="always">Always (Not Recommended)</option>
+              <option value="ask_per_skill">Ask Per Skill (Recommended)</option>
+              <option value="never">Never (Air-Gapped)</option>
+            </select>
+          </div>
+
+          <div className="field-col">
+            <label htmlFor="session_ttl_hours" className="field-label">Dashboard Session TTL (Hours)</label>
+            <input
+              id="session_ttl_hours"
+              type="number"
+              className="settings-input"
+              value={configData.security.dashboard?.session_ttl_hours ?? 24}
+              onChange={(e) => updateSecurityNested('dashboard', 'session_ttl_hours', parseInt(e.target.value, 10))}
+            />
+          </div>
+        </div>
+
+        {/* Budget Controls */}
+        <div className="settings-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
+            <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.05))', borderColor: 'rgba(245, 158, 11, 0.2)' }}>💰</div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Budget Limits</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Control AI spending dynamically</p>
+            </div>
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Enable Budget Caps</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Enforce hard limits on token spend</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.budget.budget?.enabled}
+              onChange={(e) => updateBudgetProp('enabled', e.target.checked)}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label htmlFor="daily_cap" className="field-label">Daily Cap ($)</label>
               <input
                 id="daily_cap"
                 type="number"
                 step="0.01"
-                min="0"
-                value={configData.budget.budget?.daily_cap_usd || ''}
-                onChange={(e) => updateBudgetProp('daily_cap_usd', Number(e.target.value))}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
+                className="settings-input"
+                value={configData.budget.budget?.daily_cap_usd ?? 5.0}
+                onChange={(e) => updateBudgetProp('daily_cap_usd', parseFloat(e.target.value))}
               />
             </div>
-
-            {/* Weekly limit */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="weekly_cap" style={{ fontSize: 13, fontWeight: 500 }}>Weekly Capital Cap ($ USD)</label>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label htmlFor="weekly_cap" className="field-label">Weekly Cap ($)</label>
               <input
                 id="weekly_cap"
                 type="number"
                 step="0.01"
-                min="0"
-                value={configData.budget.budget?.weekly_cap_usd || ''}
-                onChange={(e) => updateBudgetProp('weekly_cap_usd', Number(e.target.value))}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
+                className="settings-input"
+                value={configData.budget.budget?.weekly_cap_usd ?? 20.0}
+                onChange={(e) => updateBudgetProp('weekly_cap_usd', parseFloat(e.target.value))}
               />
             </div>
           </div>
+        </div>
 
-          {/* Card 3: Dashboard & Sessions */}
-          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <span style={{ fontSize: 20 }}>🔒</span>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>Security & Tunnels</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Manage network exposure, binding, and session lifetimes</p>
-              </div>
-            </div>
-
-            {/* Force Reset */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <label htmlFor="force_reset" style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>Force Password Change</label>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Prompt admin to reset credentials on next dashboard visit</span>
-              </div>
-              <input
-                id="force_reset"
-                type="checkbox"
-                checked={configData.security.dashboard?.force_password_reset || false}
-                onChange={(e) => updateSecurityProp('dashboard', 'force_password_reset', e.target.checked)}
-                style={{ width: 44, height: 22, cursor: 'pointer', accentColor: 'var(--accent)' }}
-              />
-            </div>
-
-            {/* Enforce HTTPS */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <label htmlFor="require_https" style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>Require HTTPS Tunneling</label>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Block non-localhost requests that arrive without SSL</span>
-              </div>
-              <input
-                id="require_https"
-                type="checkbox"
-                checked={configData.security.network?.require_https || false}
-                onChange={(e) => updateSecurityProp('network', 'require_https', e.target.checked)}
-                style={{ width: 44, height: 22, cursor: 'pointer', accentColor: 'var(--accent)' }}
-              />
-            </div>
-
-            {/* Public Health */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <label htmlFor="public_health" style={{ fontSize: 13, fontWeight: 500, display: 'block' }}>Public Health Route</label>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Keep /health status checker accessible to public probes</span>
-              </div>
-              <input
-                id="public_health"
-                type="checkbox"
-                checked={configData.security.network?.public_health || false}
-                onChange={(e) => updateSecurityProp('network', 'public_health', e.target.checked)}
-                style={{ width: 44, height: 22, cursor: 'pointer', accentColor: 'var(--accent)' }}
-              />
-            </div>
-
-            {/* Session TTL Slider */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label htmlFor="session_ttl" style={{ fontSize: 13, fontWeight: 500 }}>Session Lifetime (TTL)</label>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>{configData.security.dashboard?.session_ttl_hours || 24} hours</span>
-              </div>
-              <input
-                id="session_ttl"
-                type="range"
-                min="1"
-                max="168"
-                value={configData.security.dashboard?.session_ttl_hours || 24}
-                onChange={(e) => updateSecurityProp('dashboard', 'session_ttl_hours', Number(e.target.value))}
-                style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
-              />
+        {/* Brain & Agent Rules */}
+        <div className="settings-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
+            <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(147, 51, 234, 0.05))', borderColor: 'rgba(168, 85, 247, 0.2)' }}>🧠</div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Brain & Reasoning</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Core inference parameters</p>
             </div>
           </div>
 
-          {/* Card 4: Network & CORS Limits */}
-          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <span style={{ fontSize: 20 }}>🛡️</span>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>CORS & Traffic Gateways</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Adjust port bindings and enforce request quotas</p>
-              </div>
-            </div>
-
-            {/* Port input */}
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor="bind_host" style={{ fontSize: 12, fontWeight: 500 }}>Binding Host</label>
-                <input
-                  id="bind_host"
-                  type="text"
-                  value={configData.security.bind?.host || ''}
-                  onChange={(e) => updateSecurityProp('bind', 'host', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                />
-              </div>
-              <div style={{ width: 100, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor="bind_port" style={{ fontSize: 12, fontWeight: 500 }}>Port</label>
-                <input
-                  id="bind_port"
-                  type="number"
-                  value={configData.security.bind?.port || 3000}
-                  onChange={(e) => updateSecurityProp('bind', 'port', Number(e.target.value))}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Allowed origins input */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="allowed_origins" style={{ fontSize: 13, fontWeight: 500 }}>CORS Allowed Origins</label>
-              <input
-                id="allowed_origins"
-                type="text"
-                placeholder="e.g. http://localhost:5173,http://localhost:3000"
-                value={Array.isArray(configData.security.network?.allowed_origins) ? configData.security.network.allowed_origins.join(',') : ''}
-                onChange={(e) => updateSecurityProp('network', 'allowed_origins', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              />
-              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Separate multiple domains with commas</span>
-            </div>
-
-            {/* API Requests rate limit */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="api_requests" style={{ fontSize: 13, fontWeight: 500 }}>API Requests Rate Limit (/min)</label>
-              <input
-                id="api_requests"
-                type="number"
-                value={configData.security.rate_limits?.api_requests_per_minute || ''}
-                onChange={(e) => updateSecurityProp('rate_limits', 'api_requests_per_minute', Number(e.target.value))}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Card 5: API Keys & Integrations */}
-          <div className="card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-              <span style={{ fontSize: 20 }}>🔑</span>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 600 }}>API Keys & Integrations</h3>
-                <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Manage access keys and tokens for AI models and search providers</p>
-              </div>
-            </div>
-
-            {/* Google Gemini API Key */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="google_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Google Gemini API Key</label>
-              <input
-                id="google_api_key"
-                type="password"
-                placeholder="AIzaSy..."
-                value={configData.secrets?.google_api_key || ''}
-                onChange={(e) => updateSecretsProp('google_api_key', e.target.value)}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              />
-            </div>
-
-            {/* Anthropic API Key */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="anthropic_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Anthropic API Key (Claude Code)</label>
-              <input
-                id="anthropic_api_key"
-                type="password"
-                placeholder="sk-ant-..."
-                value={configData.secrets?.anthropic_api_key || ''}
-                onChange={(e) => updateSecretsProp('anthropic_api_key', e.target.value)}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              />
-              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Configuring this allows Claude Code CLI to run without prompting for OAuth login.</span>
-            </div>
-
-            {/* OpenAI API Key */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="openai_api_key" style={{ fontSize: 13, fontWeight: 500 }}>OpenAI API Key (Codex)</label>
-              <input
-                id="openai_api_key"
-                type="password"
-                placeholder="sk-proj-..."
-                value={configData.secrets?.openai_api_key || ''}
-                onChange={(e) => updateSecretsProp('openai_api_key', e.target.value)}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              />
-            </div>
-
-            {/* Tavily API Key */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label htmlFor="tavily_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Tavily Search API Key</label>
-              <input
-                id="tavily_api_key"
-                type="password"
-                placeholder="tvly-..."
-                value={configData.secrets?.tavily_api_key || ''}
-                onChange={(e) => updateSecretsProp('tavily_api_key', e.target.value)}
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  outline: 'none',
-                  fontSize: 13
-                }}
-              />
-            </div>
-
-            {/* Other Search Keys (Brave, Exa, Serper) */}
-            <details style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 500, outline: 'none', padding: '4px 0' }}>More Provider Keys (Brave, Exa, Serper, GitHub)</summary>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12, paddingLeft: 8, borderLeft: '2px solid var(--border)' }}>
-                {/* Brave Search Key */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="brave_api_key" style={{ fontSize: 12, fontWeight: 500 }}>Brave Search API Key</label>
-                  <input
-                    id="brave_api_key"
-                    type="password"
-                    value={configData.secrets?.brave_api_key || ''}
-                    onChange={(e) => updateSecretsProp('brave_api_key', e.target.value)}
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border)',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      outline: 'none',
-                      fontSize: 13
-                    }}
-                  />
-                </div>
-
-                {/* Exa Search Key */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="exa_api_key" style={{ fontSize: 12, fontWeight: 500 }}>Exa API Key</label>
-                  <input
-                    id="exa_api_key"
-                    type="password"
-                    value={configData.secrets?.exa_api_key || ''}
-                    onChange={(e) => updateSecretsProp('exa_api_key', e.target.value)}
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border)',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      outline: 'none',
-                      fontSize: 13
-                    }}
-                  />
-                </div>
-
-                {/* Serper API Key */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="serper_api_key" style={{ fontSize: 12, fontWeight: 500 }}>Serper (Google Search API) Key</label>
-                  <input
-                    id="serper_api_key"
-                    type="password"
-                    value={configData.secrets?.serper_api_key || ''}
-                    onChange={(e) => updateSecretsProp('serper_api_key', e.target.value)}
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border)',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      outline: 'none',
-                      fontSize: 13
-                    }}
-                  />
-                </div>
-
-                {/* GitHub Token */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <label htmlFor="github_token" style={{ fontSize: 12, fontWeight: 500 }}>GitHub Personal Access Token</label>
-                  <input
-                    id="github_token"
-                    type="password"
-                    placeholder="ghp_..."
-                    value={configData.secrets?.github_token || ''}
-                    onChange={(e) => updateSecretsProp('github_token', e.target.value)}
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border)',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      outline: 'none',
-                      fontSize: 13
-                    }}
-                  />
-                </div>
-              </div>
-            </details>
-          </div>
-
-        </form>
-      ) : (
-        /* ==================== RAW YAML EDITOR UI ==================== */
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          
-          {/* Sub tabs for config selection */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12, flexShrink: 0 }}>
-            <button 
-              className={`btn btn-sm ${activeYamlTab === 'frontier.yml' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setActiveYamlTab('frontier.yml')}
-              style={{ fontSize: 12 }}
-            >
-              🌐 Frontier (frontier.yml)
-            </button>
-            <button 
-              className={`btn btn-sm ${activeYamlTab === 'security.yml' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setActiveYamlTab('security.yml')}
-              style={{ fontSize: 12 }}
-            >
-              🔒 Security (security.yml)
-            </button>
-            <button 
-              className={`btn btn-sm ${activeYamlTab === 'budget.yml' ? 'btn-primary' : 'btn-ghost'}`}
-              onClick={() => setActiveYamlTab('budget.yml')}
-              style={{ fontSize: 12 }}
-            >
-              🪙 Budget (budget.yml)
-            </button>
-          </div>
-
-          {/* Code text editor */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <textarea
-              value={yamlContent}
-              onChange={(e) => setYamlContent(e.target.value)}
-              style={{
-                flex: 1,
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 14,
-                padding: 16,
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                resize: 'none',
-                outline: 'none',
-                lineHeight: 1.5,
-                whiteSpace: 'pre',
-                overflowWrap: 'normal',
-                overflowX: 'auto'
-              }}
-              spellCheck={false}
+          <div className="field-col">
+            <label className="field-label">Brain URL</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={configData.brain?.url || ''}
+              onChange={(e) => updateBrainProp('url', e.target.value)}
             />
           </div>
-        </div>
-      )}
 
-      {/* CHROME EXTENSION */}
-      <div style={{
-        marginTop: 24,
-        padding: 20,
-        background: 'linear-gradient(135deg, rgba(108, 92, 231, 0.08), rgba(99, 179, 237, 0.08))',
-        border: '1px solid rgba(108, 92, 231, 0.25)',
-        borderRadius: 12
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-          <span style={{ fontSize: 24 }}>🧩</span>
-          <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Chrome Extension</h3>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-              Browse with your brain — contextual memory, quick capture, and research from any page
-            </p>
+          <div className="field-col">
+            <label className="field-label">Brain Name</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={configData.brain?.name || ''}
+              onChange={(e) => updateBrainProp('name', e.target.value)}
+            />
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <a
-            href="/api/extension/download"
-            download
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 16px',
-              background: 'linear-gradient(135deg, #3b82f6, #93c5fd)',
-              color: '#fff',
-              borderRadius: 8,
-              fontWeight: 500,
-              fontSize: 13,
-              textDecoration: 'none',
-              transition: 'opacity 0.2s'
-            }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '0.85')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-          >
-            ⬇ Download Extension
-          </a>
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-            Unzip → chrome://extensions → Developer mode → Load unpacked
-          </span>
-        </div>
-      </div>
 
-      {/* UCW WORKSPACE EXPORT (SSSS §16 .ucw Bundle Format) */}
-      <div style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        padding: 20,
-        marginTop: 20,
-        backdropFilter: 'blur(12px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>UCW Bundle (SSSS §16)</h3>
-          <span className="badge badge-accent" style={{ fontSize: 10, padding: '2px 8px' }}>UltraChat Workspace</span>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-          Export your vault as a <code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 4, fontFamily: 'var(--font-mono, monospace)' }}>package.ucw.json</code> bundle 
-          per the SSSS §16 Universal Containerized Workspace format. Bundles can be backed up, shared, sold, and re-provisioned across any SSSS-compatible host.
-        </p>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>Export Profile</label>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label className="field-label">Role</label>
+              <input
+                type="text"
+                className="settings-input"
+                value={configData.brain?.role || ''}
+                onChange={(e) => updateBrainProp('role', e.target.value)}
+              />
+            </div>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label className="field-label">Layer</label>
+              <input
+                type="text"
+                className="settings-input"
+                value={configData.brain?.layer || ''}
+                onChange={(e) => updateBrainProp('layer', e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="field-col">
+            <label className="field-label">Tags (Comma-Separated)</label>
+            <input
+              type="text"
+              className="settings-input"
+              value={getCsv(configData.brain?.tags)}
+              onChange={(e) => updateBrainProp('tags', setCsv(e.target.value))}
+            />
+          </div>
+
+          <div className="field-row">
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Full Brain Mode</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Enable omni-directional indexing</div>
+            </div>
+            <input
+              type="checkbox"
+              className="settings-checkbox"
+              checked={!!configData.brain?.full_brain}
+              onChange={(e) => updateBrainProp('full_brain', e.target.checked)}
+            />
+          </div>
+
+          <div className="field-col">
+            <label htmlFor="preferred_agent" className="field-label">Preferred CLI Agent</label>
             <select
-              id="ucw-export-profile"
-              style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, outline: 'none' }}
+              id="preferred_agent"
+              className="settings-select"
+              value={configData.brain?.preferred_agent || 'auto'}
+              onChange={(e) => updateBrainProp('preferred_agent', e.target.value)}
             >
-              <option value="backup">backup — full vault snapshot</option>
-              <option value="template">template — strips tenant_private</option>
-              <option value="sale">sale — portable marketplace bundle</option>
+              <option value="auto">Auto-Select (Recommended)</option>
+              <option value="gemini">Gemini (Google Deepmind)</option>
+              <option value="claude">Claude (Anthropic)</option>
+              <option value="openai">OpenAI (O-Series)</option>
             </select>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px' }}>
-            <label style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>Output Filename</label>
-            <input
-              id="ucw-export-filename"
-              type="text"
-              defaultValue="package.ucw.json"
-              style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 12px', fontSize: 12, outline: 'none', fontFamily: 'var(--font-mono, monospace)' }}
-            />
-          </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            id="ucw-export-btn"
-            className="btn btn-primary"
-            style={{ background: 'linear-gradient(135deg, var(--accent), #5a4bd1)', color: '#fff', borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
-            onClick={async () => {
-              try {
-                const profile = (document.getElementById('ucw-export-profile') as HTMLSelectElement)?.value || 'backup';
-                const filename = (document.getElementById('ucw-export-filename') as HTMLInputElement)?.value || 'package.ucw.json';
-                const { runSandbox } = await import('../api');
-                const result = await runSandbox(`const { execSync } = require("child_process"); try { const out = execSync("npx ssss export . --profile ${profile} --out ${filename} 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }`, 60000);
-                if (result.success) {
-                  setSuccess(true);
-                  setTimeout(() => setSuccess(false), 5000);
-                } else {
-                  setError(result.output || 'UCW export failed');
-                }
-              } catch (err: unknown) {
-                setError((err as Error).message || 'Export failed');
-              }
-            }}
-          >
-            ⬇ Export .ucw Bundle
-          </button>
-          <button
-            id="ucw-validate-btn"
-            className="btn btn-ghost"
-            style={{ borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
-            onClick={async () => {
-              try {
-                const { runSandbox } = await import('../api');
-                const result = await runSandbox('const { execSync } = require("child_process"); try { const out = execSync("npx ssss validate package.ucw.json 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }', 30000);
-                if (result.success) {
-                  setSuccess(true);
-                  setTimeout(() => setSuccess(false), 5000);
-                } else {
-                  setError(result.output || 'Validation failed');
-                }
-              } catch (err: unknown) {
-                setError((err as Error).message || 'Validation failed');
-              }
-            }}
-          >
-            ✓ Validate Bundle
-          </button>
-          <button
-            id="ucw-import-btn"
-            className="btn btn-ghost"
-            style={{ borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
-            onClick={async () => {
-              try {
-                const { runSandbox } = await import('../api');
-                const result = await runSandbox('const { execSync } = require("child_process"); try { const out = execSync("npx ssss import package.ucw.json --vault . 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }', 60000);
-                if (result.success) {
-                  setSuccess(true);
-                  setTimeout(() => setSuccess(false), 5000);
-                } else {
-                  setError(result.output || 'Import failed');
-                }
-              } catch (err: unknown) {
-                setError((err as Error).message || 'Import failed');
-              }
-            }}
-          >
-            ⬆ Import .ucw Bundle
-          </button>
-          <button
-            id="ucw-inspect-btn"
-            className="btn btn-ghost"
-            style={{ borderRadius: 6, fontSize: 13, padding: '8px 20px' }}
-            onClick={async () => {
-              try {
-                const { runSandbox } = await import('../api');
-                const result = await runSandbox('const { execSync } = require("child_process"); try { const out = execSync("npx ssss inspect package.ucw.json --files 2>&1", { encoding: "utf-8", cwd: process.env.HOME + "/.agent/skills/total-recall" }); console.log(JSON.stringify({ success: true, output: out })); } catch(e) { console.log(JSON.stringify({ success: false, output: e.stdout || e.message })); }', 30000);
-                if (result.success) {
-                  setSuccess(true);
-                  setTimeout(() => setSuccess(false), 5000);
-                } else {
-                  setError(result.output || 'Inspect failed');
-                }
-              } catch (err: unknown) {
-                setError((err as Error).message || 'Inspect failed');
-              }
-            }}
-          >
-            🔍 Inspect Bundle
-          </button>
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 12 }}>
-          Powered by <code style={{ fontFamily: 'var(--font-mono, monospace)' }}>@ssss/cli</code> v0.7.0 — <code style={{ fontFamily: 'var(--font-mono, monospace)' }}>npx ssss export|import|validate|inspect</code>
-        </p>
-      </div>
 
-      {/* SECRETS.ENC KEY VIEWER */}
-      <div style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid var(--border)',
-        borderRadius: 10,
-        padding: 20,
-        marginTop: 16,
-        backdropFilter: 'blur(12px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0110 0v4" />
-          </svg>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>Stored Secrets (secrets.enc)</h3>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-          These credentials are stored in your encrypted secrets file. Values are masked for security.
-        </p>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {configData?.secrets && Object.entries(configData.secrets).map(([key, value]) => (
-            <div key={key} style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
-              background: 'rgba(255,255,255,0.02)',
-              borderRadius: 6,
-              border: '1px solid rgba(255,255,255,0.04)',
-            }}>
-              <span style={{ fontSize: 13, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-primary)' }}>
-                {key}
-              </span>
-              <span style={{ fontSize: 12, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-tertiary)' }}>
-                {value ? `${String(value).slice(0, 4)}${'•'.repeat(Math.min(20, String(value).length - 4))}` : '(not set)'}
-              </span>
+        {/* Extensions & Ecosystem */}
+        <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
+            <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(219, 39, 119, 0.05))', borderColor: 'rgba(236, 72, 153, 0.2)' }}>🧩</div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Ecosystem Integrations</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Chrome extensions, UCW bundles, and tools</p>
             </div>
-          ))}
-          {(!configData?.secrets || Object.keys(configData.secrets).length === 0) && (
-            <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '12px', textAlign: 'center' }}>
-              No secrets configured. Add API keys through the visual settings editor above.
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 20 }}>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 24, marginBottom: 12 }}>🦊</div>
+              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Total Recall Browser Extension</h4>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+                Capture context directly from your browser. Install from the Chrome Web Store or load unpacked from <code>/extension</code> directory.
+              </p>
+              <button className="btn-primary" style={{ width: '100%' }}>Download Extension</button>
+            </div>
+
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 24, marginBottom: 12 }}>📦</div>
+              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Sovereign Toolbox</h4>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
+                Execute quick administrative operations via the UCW toolkit and sandbox shell.
+              </p>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button 
+                  className="btn-secondary" 
+                  style={{ flex: 1 }}
+                  onClick={() => executeSandboxCommand('npx total-recall compile', 'Manual Index Recompilation')}
+                >
+                  Compile
+                </button>
+                <button 
+                  className="btn-primary" 
+                  style={{ flex: 1 }}
+                  onClick={() => executeSandboxCommand('npx @ssss/cli export ./bundle.ucw', 'Exporting UCW Bundle')}
+                >
+                  Export Bundle
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {sandboxLog && (
+            <div className="terminal-log">
+              {sandboxLog}
             </div>
           )}
         </div>
-      </div>
 
-      {/* FOOTER ACTIONS */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16, flexShrink: 0 }}>
-        <button 
-          className="btn btn-primary" 
-          onClick={viewMode === 'visual' ? handleSaveVisual : handleSaveYaml} 
-          disabled={loading || saving}
-          style={{
-            width: 140,
-            background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
-            color: '#fff',
-            fontWeight: 500,
-            borderRadius: 6
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
+      </div>
+        {/* Ollama Panel */}
+        <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+                <span style={{ fontSize: 20 }}>🦙</span>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>Local Provider</h3>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Connect Ollama, LM Studio, vLLM, or Llama.cpp</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label htmlFor="local_endpoint" style={{ fontSize: 13, fontWeight: 500 }}>Provider Base URL</label>
+                <input
+                  id="local_endpoint"
+                  type="text"
+                  placeholder="http://127.0.0.1:11434 or http://127.0.0.1:1234/v1"
+                  value={configData?.brain?.local_endpoint || ''}
+                  onChange={(e) => updateBrainProp('local_endpoint', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13
+                  }}
+                />
+                <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Leave blank to use the default localhost endpoint.</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                 <span className="badge" style={{
+                    background: health?.ollama === 'running' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    color: health?.ollama === 'running' ? '#10b981' : '#ef4444',
+                    border: health?.ollama === 'running' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                    fontSize: 10,
+                    padding: '4px 8px'
+                  }}>
+                    {health?.ollama === 'running' ? 'Connected' : 'Offline'}
+                  </span>
+                  {health?.ollama === 'running' && health?.ollama_models && (
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      {health.ollama_models.length} local models available
+                    </span>
+                  )}
+              </div>
+            </div>
+        {/* CLI Agents */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24 }}>
+            
+            {/* Catalog */}
+            <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+                <span style={{ fontSize: 20 }}>🧠</span>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>CLI Reasoning Agents</h3>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Headless CLI reasoning agents configured on system</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {AGENTS_LIST.map((a) => {
+                  const activeAgent = health?.cli_agents?.includes(a.id);
+                  return (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-tertiary)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</span>
+                          <span className="badge" style={{
+                            fontSize: 9,
+                            padding: '2px 6px',
+                            background: activeAgent ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            color: activeAgent ? '#10b981' : '#ef4444',
+                            border: activeAgent ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+                          }}>
+                            {activeAgent ? 'available' : 'missing'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>{a.desc}</div>
+                        <div style={{ fontSize: 9, color: 'var(--text-tertiary)', marginTop: 4 }}>Registry ID: {a.id}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Diagnostics Form */}
+            <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+                <span style={{ fontSize: 20 }}>📡</span>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>CLI Agent Diagnostics</h3>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Trigger active paths check and verify registered agents</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <p style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                  This executes a diagnostic check on registered reasoning agents (equivalent to running <code>npx total-recall upgrade --agents</code> in the background) to audit paths and verify binaries.
+                </p>
+
+                <button
+                  onClick={handleRunDiagnostics}
+                  disabled={runningDiagnostics}
+                  style={{
+                    background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
+                    color: '#fff',
+                    padding: '10px',
+                    borderRadius: 6,
+                    fontWeight: 500,
+                    border: 'none',
+                    marginTop: 8,
+                    cursor: runningDiagnostics ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {runningDiagnostics ? '⏳ Running Audit...' : '🚀 Run Diagnostics Audit'}
+                </button>
+              </div>
+
+              {diagnosticLogs && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>Diagnostics Console Output:</span>
+                  <pre style={{
+                    background: '#07070a',
+                    border: '1px solid var(--border)',
+                    padding: 10,
+                    borderRadius: 6,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: '#e6edf3',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: 150,
+                    overflowY: 'auto'
+                  }}>
+                    {diagnosticLogs}
+                  </pre>
+                </div>
+              )}
+            </div>
       </div>
     </div>
   );

@@ -1,0 +1,337 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.6 [39m[90m/Users/greg/Github/total-recall[39m
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mimports minimal bundle successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:34.954Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-0c322aff-a428-4746-85ad-ab078ccd6f70"}}
+{"timestamp":"2026-07-11T06:32:34.957Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-0c322aff-a428-4746-85ad-ab078ccd6f70"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mimports minimal bundle successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:34.987Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-0c322aff-a428-4746-85ad-ab078ccd6f70"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mimports full bundle successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:34.993Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-c6942435-1a48-44c0-8872-8e9508f00567"}}
+{"timestamp":"2026-07-11T06:32:34.993Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-c6942435-1a48-44c0-8872-8e9508f00567"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mimports full bundle successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:35.004Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-c6942435-1a48-44c0-8872-8e9508f00567"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mimports full bundle successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:35.020Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-c6942435-1a48-44c0-8872-8e9508f00567"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mrespects dryRun option without writing files
+[22m[39m{"timestamp":"2026-07-11T06:32:35.024Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-109f0fc1-031d-40e4-a675-6c96af61e76a"}}
+{"timestamp":"2026-07-11T06:32:35.025Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-109f0fc1-031d-40e4-a675-6c96af61e76a"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mrespects dryRun option without writing files
+[22m[39mWRITTEN FILES: [ [32m'.events'[39m ]
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mhandles slug conflicts per strategy option
+[22m[39m{"timestamp":"2026-07-11T06:32:35.088Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-273583ef-1e5e-4248-894e-76c98b625f63"}}
+{"timestamp":"2026-07-11T06:32:35.088Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-273583ef-1e5e-4248-894e-76c98b625f63"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mhandles slug conflicts per strategy option
+[22m[39m{"timestamp":"2026-07-11T06:32:35.102Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-273583ef-1e5e-4248-894e-76c98b625f63"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mhandles slug conflicts per strategy option
+[22m[39m{"timestamp":"2026-07-11T06:32:35.103Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-273583ef-1e5e-4248-894e-76c98b625f63"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mhandles slug conflicts per strategy option
+[22m[39m{"timestamp":"2026-07-11T06:32:35.104Z","level":"debug","subsystem":"Vault cache hit","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-273583ef-1e5e-4248-894e-76c98b625f63"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mhandles slug conflicts per strategy option
+[22m[39m{"timestamp":"2026-07-11T06:32:35.122Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-273583ef-1e5e-4248-894e-76c98b625f63"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mapplies category override to all nodes
+[22m[39m{"timestamp":"2026-07-11T06:32:35.128Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-7664d6ed-a361-4baa-a5de-fa881519c262"}}
+{"timestamp":"2026-07-11T06:32:35.129Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-7664d6ed-a361-4baa-a5de-fa881519c262"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mapplies category override to all nodes
+[22m[39m{"timestamp":"2026-07-11T06:32:35.142Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-7664d6ed-a361-4baa-a5de-fa881519c262"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mapplies category override to all nodes
+[22m[39m{"timestamp":"2026-07-11T06:32:35.150Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-7664d6ed-a361-4baa-a5de-fa881519c262"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mskips reserved index.md and log.md files
+[22m[39m{"timestamp":"2026-07-11T06:32:35.159Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-19e80dbc-9193-4b60-b87d-8092554b0e59"}}
+{"timestamp":"2026-07-11T06:32:35.160Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-19e80dbc-9193-4b60-b87d-8092554b0e59"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mskips reserved index.md and log.md files
+[22m[39m{"timestamp":"2026-07-11T06:32:35.168Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-19e80dbc-9193-4b60-b87d-8092554b0e59"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mskips plain markdown files without frontmatter or type
+[22m[39m{"timestamp":"2026-07-11T06:32:35.180Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-f46da190-1fda-4cc2-aa3d-45599f7ba95c"}}
+{"timestamp":"2026-07-11T06:32:35.180Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-f46da190-1fda-4cc2-aa3d-45599f7ba95c"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mverifies audit trail entries and V2 validation
+[22m[39m{"timestamp":"2026-07-11T06:32:35.192Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-eff04ae8-8818-4917-a111-47e5afc8d3e3"}}
+{"timestamp":"2026-07-11T06:32:35.192Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-eff04ae8-8818-4917-a111-47e5afc8d3e3"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mverifies audit trail entries and V2 validation
+[22m[39m{"timestamp":"2026-07-11T06:32:35.201Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-eff04ae8-8818-4917-a111-47e5afc8d3e3"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mimportBundle Integration[2m > [22m[2mverifies audit trail entries and V2 validation
+[22m[39m{"timestamp":"2026-07-11T06:32:35.211Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-eff04ae8-8818-4917-a111-47e5afc8d3e3"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports a vault successfully to a directory
+[22m[39m{"timestamp":"2026-07-11T06:32:35.218Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-20ae7385-8bbf-412b-b54d-8503b72b6466"}}
+{"timestamp":"2026-07-11T06:32:35.218Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-20ae7385-8bbf-412b-b54d-8503b72b6466"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports a vault successfully to a directory
+[22m[39m{"timestamp":"2026-07-11T06:32:35.227Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-20ae7385-8bbf-412b-b54d-8503b72b6466"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports a vault successfully to a directory
+[22m[39m{"timestamp":"2026-07-11T06:32:35.234Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-20ae7385-8bbf-412b-b54d-8503b72b6466"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports a vault successfully to a directory
+[22m[39m{"timestamp":"2026-07-11T06:32:35.235Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-20ae7385-8bbf-412b-b54d-8503b72b6466"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mstrips SSSS fields when stripSsss option is true
+[22m[39m{"timestamp":"2026-07-11T06:32:35.245Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-6b841cf7-cd1c-48b6-9e7f-e634fa32b490"}}
+{"timestamp":"2026-07-11T06:32:35.245Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-6b841cf7-cd1c-48b6-9e7f-e634fa32b490"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mstrips SSSS fields when stripSsss option is true
+[22m[39m{"timestamp":"2026-07-11T06:32:35.253Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-6b841cf7-cd1c-48b6-9e7f-e634fa32b490"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mstrips SSSS fields when stripSsss option is true
+[22m[39m{"timestamp":"2026-07-11T06:32:35.258Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-6b841cf7-cd1c-48b6-9e7f-e634fa32b490"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mstrips SSSS fields when stripSsss option is true
+[22m[39m{"timestamp":"2026-07-11T06:32:35.259Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-6b841cf7-cd1c-48b6-9e7f-e634fa32b490"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports to a tar.gz archive successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:35.267Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+{"timestamp":"2026-07-11T06:32:35.267Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports to a tar.gz archive successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:35.273Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports to a tar.gz archive successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:35.277Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mexports to a tar.gz archive successfully
+[22m[39m{"timestamp":"2026-07-11T06:32:35.277Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.326Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-cc83880c-51f6-41b4-845a-7c7f4335ec98"}}
+{"timestamp":"2026-07-11T06:32:35.327Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-cc83880c-51f6-41b4-845a-7c7f4335ec98"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.335Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-cc83880c-51f6-41b4-845a-7c7f4335ec98"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.340Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-cc83880c-51f6-41b4-845a-7c7f4335ec98"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.341Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-cc83880c-51f6-41b4-845a-7c7f4335ec98"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.345Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-fresh-vault-731b88d9-f870-42cb-b1de-a05da738c9a2"}}
+{"timestamp":"2026-07-11T06:32:35.345Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-fresh-vault-731b88d9-f870-42cb-b1de-a05da738c9a2"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.353Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-fresh-vault-731b88d9-f870-42cb-b1de-a05da738c9a2"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mexportBundle Integration[2m > [22m[2mpreserves content in export -> import roundtrip
+[22m[39m{"timestamp":"2026-07-11T06:32:35.362Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-fresh-vault-731b88d9-f870-42cb-b1de-a05da738c9a2"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports zero warnings/errors for a fully-populated node
+[22m[39m{"timestamp":"2026-07-11T06:32:35.371Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-fb5cbc95-afa1-482e-ae99-8f3a300cdb0c"}}
+{"timestamp":"2026-07-11T06:32:35.371Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-fb5cbc95-afa1-482e-ae99-8f3a300cdb0c"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports zero warnings/errors for a fully-populated node
+[22m[39m{"timestamp":"2026-07-11T06:32:35.379Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-fb5cbc95-afa1-482e-ae99-8f3a300cdb0c"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports zero warnings/errors for a fully-populated node
+[22m[39m{"timestamp":"2026-07-11T06:32:35.386Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-fb5cbc95-afa1-482e-ae99-8f3a300cdb0c"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports zero warnings/errors for a fully-populated node
+[22m[39m{"timestamp":"2026-07-11T06:32:35.387Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-fb5cbc95-afa1-482e-ae99-8f3a300cdb0c"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports warnings for missing description or tags
+[22m[39m{"timestamp":"2026-07-11T06:32:35.391Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-b8983d28-44d1-4595-9dda-e06117efb7c7"}}
+{"timestamp":"2026-07-11T06:32:35.391Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-b8983d28-44d1-4595-9dda-e06117efb7c7"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports warnings for missing description or tags
+[22m[39m{"timestamp":"2026-07-11T06:32:35.396Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-b8983d28-44d1-4595-9dda-e06117efb7c7"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports warnings for missing description or tags
+[22m[39m{"timestamp":"2026-07-11T06:32:35.396Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-b8983d28-44d1-4595-9dda-e06117efb7c7"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports errors instead of warnings in strict mode
+[22m[39m{"timestamp":"2026-07-11T06:32:35.406Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-8de0531c-3140-40fe-bfbf-788f8880e8ae"}}
+{"timestamp":"2026-07-11T06:32:35.406Z","level":"info","subsystem":"Starting filesystem watcher for vault cache","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-8de0531c-3140-40fe-bfbf-788f8880e8ae"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports errors instead of warnings in strict mode
+[22m[39m{"timestamp":"2026-07-11T06:32:35.412Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-8de0531c-3140-40fe-bfbf-788f8880e8ae"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs[2m > [22m[2mOKF Adapter Core Logic[2m > [22m[2mlintOkfCompliance Integration[2m > [22m[2mreports errors instead of warnings in strict mode
+[22m[39m{"timestamp":"2026-07-11T06:32:35.413Z","level":"info","subsystem":"Vault cache miss, loading nodes from disk","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-8de0531c-3140-40fe-bfbf-788f8880e8ae"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.425Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: patterns/playbook.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.426Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-eff04ae8-8818-4917-a111-47e5afc8d3e3"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.426Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: patterns/playbook.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.426Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-20ae7385-8bbf-412b-b54d-8503b72b6466"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.429Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: patterns/playbook.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.429Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-6b841cf7-cd1c-48b6-9e7f-e634fa32b490"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.434Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: patterns/playbook.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.434Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.438Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: facts/table.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.438Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-37e269e3-e825-4baf-a2f9-0e56cbcbc243"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.439Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: facts/facts-table.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.439Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-fresh-vault-731b88d9-f870-42cb-b1de-a05da738c9a2"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.441Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: patterns/playbook.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.441Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-fb5cbc95-afa1-482e-ae99-8f3a300cdb0c"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.442Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: concepts/concept.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.442Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-b8983d28-44d1-4595-9dda-e06117efb7c7"}}
+
+[90mstderr[2m | src/core/okf-adapter.spec.mjs
+[22m[39m{"timestamp":"2026-07-11T06:32:35.443Z","level":"info","subsystem":"system","message":"Vault filesystem change detected (rename: concepts/concept.md), invalidating cache"}
+{"timestamp":"2026-07-11T06:32:35.443Z","level":"info","subsystem":"Vault cache invalidated","message":{"vaultDir":"/var/folders/x8/7jyrw4n501v1rmbdr6lsfs4h0000gn/T/total-recall-test-vault-8de0531c-3140-40fe-bfbf-788f8880e8ae"}}
+
+ [31m❯[39m src/core/okf-adapter.spec.mjs [2m([22m[2m24 tests[22m[2m | [22m[31m5 failed[39m[2m)[22m[33m 491[2mms[22m[39m
+       [32m✓[39m produces a valid SSSS V2 node from full OKF fields[32m 15[2mms[22m[39m
+       [32m✓[39m produces a valid node from minimal OKF (only type)[32m 1[2mms[22m[39m
+       [32m✓[39m falls back to facts category for unknown OKF type[32m 0[2mms[22m[39m
+       [32m✓[39m derives slug correctly from nested paths[32m 0[2mms[22m[39m
+       [32m✓[39m returns null for null frontmatter[32m 4[2mms[22m[39m
+       [32m✓[39m maps all SSSS fields to OKF fields[32m 1[2mms[22m[39m
+       [32m✓[39m derives description from body when absent[32m 0[2mms[22m[39m
+       [32m✓[39m derives description correctly for single line without period[32m 0[2mms[22m[39m
+       [32m✓[39m preserves content from concept -> node -> concept[32m 1[2mms[22m[39m
+       [32m✓[39m imports minimal bundle successfully[32m 40[2mms[22m[39m
+       [32m✓[39m imports full bundle successfully[32m 30[2mms[22m[39m
+[31m       [31m×[31m respects dryRun option without writing files[39m[32m 65[2mms[22m[39m
+       [32m✓[39m handles slug conflicts per strategy option[32m 40[2mms[22m[39m
+       [32m✓[39m applies category override to all nodes[32m 27[2mms[22m[39m
+       [32m✓[39m skips reserved index.md and log.md files[32m 24[2mms[22m[39m
+       [32m✓[39m skips plain markdown files without frontmatter or type[32m 12[2mms[22m[39m
+[31m       [31m×[31m verifies audit trail entries and V2 validation[39m[32m 26[2mms[22m[39m
+[31m       [31m×[31m exports a vault successfully to a directory[39m[32m 27[2mms[22m[39m
+       [32m✓[39m strips SSSS fields when stripSsss option is true[32m 22[2mms[22m[39m
+       [32m✓[39m exports to a tar.gz archive successfully[32m 59[2mms[22m[39m
+       [32m✓[39m preserves content in export -> import roundtrip[32m 45[2mms[22m[39m
+       [32m✓[39m reports zero warnings/errors for a fully-populated node[32m 19[2mms[22m[39m
+[31m       [31m×[31m reports warnings for missing description or tags[39m[32m 16[2mms[22m[39m
+[31m       [31m×[31m reports errors instead of warnings in strict mode[39m[32m 14[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 5 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/core/okf-adapter.spec.mjs[2m > [22mOKF Adapter Core Logic[2m > [22mimportBundle Integration[2m > [22mrespects dryRun option without writing files
+[31m[1mAssertionError[22m: expected 1 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m src/core/okf-adapter.spec.mjs:[2m239:90[22m[39m
+    [90m237|[39m       [90m// Verify no files were written[39m
+    [90m238|[39m       [35mconst[39m files [33m=[39m fs[33m.[39m[34mreaddirSync[39m(tempVaultDir)[33m;[39m
+    [90m239|[39m       if (files.length > 0) console.error('WRITTEN FILES:', files); ex…
+    [90m   |[39m                                                                                          [31m^[39m
+    [90m240|[39m     })[33m;[39m
+    [90m241|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/okf-adapter.spec.mjs[2m > [22mOKF Adapter Core Logic[2m > [22mimportBundle Integration[2m > [22mverifies audit trail entries and V2 validation
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m src/core/okf-adapter.spec.mjs:[2m286:43[22m[39m
+    [90m284|[39m       [90m// Verify audit trail file[39m
+    [90m285|[39m       const auditLogPath = path.join(tempVaultDir, '.events', 'audit.j…
+    [90m286|[39m       [34mexpect[39m(fs[33m.[39m[34mexistsSync[39m(auditLogPath))[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                           [31m^[39m
+    [90m287|[39m
+    [90m288|[39m       const auditLines = fs.readFileSync(auditLogPath, 'utf8').trim().…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/okf-adapter.spec.mjs[2m > [22mOKF Adapter Core Logic[2m > [22mexportBundle Integration[2m > [22mexports a vault successfully to a directory
+[31m[1mAssertionError[22m: expected '# Bundle Update History\n\nNo update …' to contain 'Operation'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- Operation[39m
+[31m+ # Bundle Update History[39m
+[31m+[39m
+[31m+ No update history available.[39m
+[31m+[39m
+
+[36m [2m❯[22m src/core/okf-adapter.spec.mjs:[2m333:26[22m[39m
+    [90m331|[39m
+    [90m332|[39m       const logContent = fs.readFileSync(path.join(tempExportDir, 'log…
+    [90m333|[39m       [34mexpect[39m(logContent)[33m.[39m[34mtoContain[39m([32m'Operation'[39m)[33m;[39m
+    [90m   |[39m                          [31m^[39m
+    [90m334|[39m     })[33m;[39m
+    [90m335|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/okf-adapter.spec.mjs[2m > [22mOKF Adapter Core Logic[2m > [22mlintOkfCompliance Integration[2m > [22mreports warnings for missing description or tags
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m src/core/okf-adapter.spec.mjs:[2m418:38[22m[39m
+    [90m416|[39m       [34mexpect[39m(report[33m.[39mtotal)[33m.[39m[34mtoBe[39m([34m1[39m)[33m;[39m
+    [90m417|[39m       [34mexpect[39m(report[33m.[39mpass)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m418|[39m       [34mexpect[39m(report[33m.[39mwarnings[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m2[39m)[33m;[39m
+    [90m   |[39m                                      [31m^[39m
+    [90m419|[39m       expect(report.warnings[0].message).toContain('Missing descriptio…
+    [90m420|[39m       expect(report.warnings[1].message).toContain('Missing or empty t…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/core/okf-adapter.spec.mjs[2m > [22mOKF Adapter Core Logic[2m > [22mlintOkfCompliance Integration[2m > [22mreports errors instead of warnings in strict mode
+[31m[1mAssertionError[22m: expected 1 to be 2 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 2[39m
+[31m+ 1[39m
+
+[36m [2m❯[22m src/core/okf-adapter.spec.mjs:[2m431:36[22m[39m
+    [90m429|[39m       [34mexpect[39m(report[33m.[39mpass)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m430|[39m       [34mexpect[39m(report[33m.[39mwarnings[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m431|[39m       [34mexpect[39m(report[33m.[39merrors[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m2[39m)[33m;[39m
+    [90m   |[39m                                    [31m^[39m
+    [90m432|[39m       expect(report.errors[0].message).toContain('Missing description'…
+    [90m433|[39m       expect(report.errors[1].message).toContain('Missing or empty tag…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m5 failed[39m[22m[2m | [22m[1m[32m19 passed[39m[22m[90m (24)[39m
+[2m   Start at [22m 00:32:34
+[2m   Duration [22m 1.36s[2m (transform 215ms, setup 0ms, import 515ms, tests 491ms, environment 0ms)[22m
+

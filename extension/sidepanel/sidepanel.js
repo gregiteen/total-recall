@@ -558,8 +558,6 @@ Provide helpful analysis grounded on both the user's brain memory and this page 
   settingsTrackingToggle.addEventListener('change', async () => {
     const passiveTracking = settingsTrackingToggle.checked;
     await chrome.storage.sync.set({ passiveTracking });
-    // Signal active preference back to service worker
-    chrome.runtime.sendMessage({ type: 'UPDATE_PREFERENCES', passiveTracking });
     showToast(`Passive tracking ${passiveTracking ? 'enabled' : 'disabled'}`);
   });
 

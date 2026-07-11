@@ -1,130 +1,35 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   runSandbox,
   fetchOpenWikiNodes,
+  fetchHealth
 } from '../api';
 import type { MemoryNode } from '../types';
-
-// ─── Styles ────────────────────────────────────────────────────────────────────
-
-const inputStyle: React.CSSProperties = {
-  background: 'var(--bg-secondary)',
-  color: 'var(--text-primary)',
-  border: '1px solid var(--border)',
-  borderRadius: 6,
-  padding: '10px 14px',
-  fontSize: 14,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const cardStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.03)',
-  border: '1px solid var(--border)',
-  backdropFilter: 'blur(12px)',
-  borderRadius: 10,
-  padding: 24,
-};
-
-const outputStyle: React.CSSProperties = {
-  background: 'var(--bg-secondary)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
-  padding: 16,
-  fontFamily: 'var(--font-mono, monospace)',
-  fontSize: 13,
-  lineHeight: 1.6,
-  color: 'var(--text-secondary)',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  maxHeight: 280,
-  overflowY: 'auto',
-  marginTop: 16,
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
-  color: 'var(--text-secondary)',
-};
-
-const badgeStyle = (bg: string, fg: string): React.CSSProperties => ({
-  display: 'inline-block',
-  padding: '3px 10px',
-  borderRadius: 4,
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  background: bg,
-  color: fg,
-  letterSpacing: 0.4,
-});
-
-const nodeCardStyle: React.CSSProperties = {
-  ...cardStyle,
-  padding: 18,
-  cursor: 'pointer',
-  transition: 'border-color 0.2s, transform 0.15s',
-};
-
-const pillStyle: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 8px',
-  borderRadius: 3,
-  fontSize: 11,
-  fontWeight: 500,
-  background: 'rgba(108,92,231,0.15)',
-  color: 'var(--accent)',
-  marginRight: 4,
-  marginBottom: 4,
-};
-
-const drawerOverlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.5)',
-  zIndex: 8000,
-  display: 'flex',
-  justifyContent: 'flex-end',
-};
-
-const drawerPanel: React.CSSProperties = {
-  width: '100%',
-  maxWidth: 560,
-  height: '100%',
-  background: 'var(--bg-primary)',
-  borderLeft: '1px solid var(--border)',
-  overflowY: 'auto',
-  padding: 32,
-  animation: 'slideInRight 0.25s ease-out',
-};
+import type { HealthData } from '../types';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function excerpt(node: MemoryNode, maxLen = 200): string {
+function excerpt(node: MemoryNode, maxLen = 140): string {
   const text = node.body || node.content || node.excerpt || '';
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen).trimEnd() + '…';
 }
 
-function categoryColor(cat: string): { bg: string; fg: string } {
-  const map: Record<string, { bg: string; fg: string }> = {
-    invariant: { bg: 'rgba(255,107,107,0.15)', fg: 'var(--error)' },
-    preference: { bg: 'rgba(108,92,231,0.15)', fg: 'var(--accent)' },
-    fact: { bg: 'rgba(0,206,201,0.15)', fg: 'var(--success)' },
-    concept: { bg: 'rgba(253,203,110,0.15)', fg: 'var(--warning)' },
-    pattern: { bg: 'rgba(108,92,231,0.15)', fg: 'var(--accent)' },
-    decision: { bg: 'rgba(253,203,110,0.15)', fg: 'var(--warning)' },
-    lore: { bg: 'rgba(158,158,158,0.15)', fg: 'var(--text-secondary)' },
+function categoryColor(cat: string): { bg: string; fg: string; icon: string } {
+  const map: Record<string, { bg: string; fg: string; icon: string }> = {
+    invariant: { bg: 'rgba(239, 68, 68, 0.15)', fg: '#ef4444', icon: '⚡' },
+    preference: { bg: 'rgba(59, 130, 246, 0.15)', fg: '#3b82f6', icon: '⭐' },
+    fact: { bg: 'rgba(16, 185, 129, 0.15)', fg: '#10b981', icon: '📌' },
+    concept: { bg: 'rgba(245, 158, 11, 0.15)', fg: '#f59e0b', icon: '💡' },
+    pattern: { bg: 'rgba(139, 92, 246, 0.15)', fg: '#8b5cf6', icon: '🔄' },
+    decision: { bg: 'rgba(236, 72, 153, 0.15)', fg: '#ec4899', icon: '⚖️' },
+    lore: { bg: 'rgba(156, 163, 175, 0.15)', fg: '#9ca3af', icon: '📜' },
   };
-  return map[cat] || { bg: 'rgba(158,158,158,0.12)', fg: 'var(--text-secondary)' };
+  return map[cat] || { bg: 'rgba(148, 163, 184, 0.12)', fg: '#94a3b8', icon: '📄' };
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────────
-
 function brainLabel(brainId: string): string {
-  if (!brainId || brainId === 'global') return 'Global brain';
+  if (!brainId || brainId === 'global') return 'Global System Brain';
   return brainId
     .split(',')
     .map((id) => {
@@ -137,17 +42,21 @@ function brainLabel(brainId: string): string {
     .join(' + ');
 }
 
+// ─── Component ─────────────────────────────────────────────────────────────────
+
 export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrainId?: string }) {
-  // Status
+  // Status & Health
   const [initialized, setInitialized] = useState<boolean | null>(null);
   const [nodeCount, setNodeCount] = useState(0);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [health, setHealth] = useState<HealthData | null>(null);
 
   // Ingestion
   const [wikiPath, setWikiPath] = useState('.');
   const [cmdOutput, setCmdOutput] = useState('');
   const [cmdRunning, setCmdRunning] = useState(false);
   const [cmdError, setCmdError] = useState(false);
+  const [showIngestion, setShowIngestion] = useState(false);
 
   // Node Browser
   const [nodes, setNodes] = useState<MemoryNode[]>([]);
@@ -155,7 +64,7 @@ export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrain
   const [selectedNode, setSelectedNode] = useState<MemoryNode | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
-  // ── Data Fetching (scoped to selected brain / repos) ──
+  // ── Data Fetching ──
 
   const fetchNodes = async (brainId: string) => {
     setNodesLoading(true);
@@ -175,8 +84,20 @@ export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrain
     }
   };
 
+  const fetchHealthData = async () => {
+    try {
+      const data = await fetchHealth();
+      setHealth(data);
+    } catch {
+      setHealth(null);
+    }
+  };
+
   useEffect(() => {
     void fetchNodes(activeBrainId || 'global');
+    void fetchHealthData();
+    const interval = setInterval(fetchHealthData, 15000);
+    return () => clearInterval(interval);
   }, [activeBrainId]);
 
   // ── Ingestion Handlers ──
@@ -199,7 +120,6 @@ try {
       setCmdOutput(result.output);
       setCmdError(!result.success);
       if (result.success) {
-        // Refresh nodes after successful ingestion
         await fetchNodes(activeBrainId || 'global');
       }
     } catch (e) {
@@ -210,15 +130,6 @@ try {
     }
   };
 
-  const handleInit = () => {
-    runCliCommand('npx -y openwiki --init');
-  };
-
-  const handleIngest = () => {
-    const safePath = wikiPath.trim() || '.';
-    runCliCommand(`npx total-recall ingest openwiki ${JSON.stringify(safePath)}`);
-  };
-
   // ── Drawer close on outside click ──
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
@@ -226,185 +137,345 @@ try {
     }
   };
 
-  // ── Render ──
-
   return (
-    <div className="page">
-      {/* Inline keyframes for drawer animation */}
+    <div className="dashboard-wrapper">
       <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
+        .dashboard-wrapper {
+          padding: 32px 40px 100px;
+          max-width: 1400px;
+          margin: 0 auto;
+          animation: fade-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
-        .openwiki-node-card:hover {
-          border-color: var(--accent) !important;
+
+        .dashboard-header-sticky {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+          background: rgba(7, 11, 20, 0.85);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          padding: 24px 0;
+          margin-bottom: 32px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+        }
+
+        .stat-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          gap: 20px;
+          margin-bottom: 32px;
+        }
+
+        .stat-card {
+          background: rgba(23, 32, 51, 0.4);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 16px;
+          padding: 24px;
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+          transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+          border-color: rgba(255, 255, 255, 0.12);
           transform: translateY(-2px);
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0; height: 100%;
+          background: radial-gradient(circle at top right, rgba(255,255,255,0.03), transparent 60%);
+          pointer-events: none;
+        }
+
+        .node-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          gap: 16px;
+        }
+
+        .node-card {
+          background: rgba(23, 32, 51, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 14px;
+          padding: 20px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+        }
+
+        .node-card:hover {
+          background: rgba(36, 51, 82, 0.5);
+          border-color: rgba(59, 130, 246, 0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .node-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .drawer-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(4px);
+          z-index: 8000;
+          display: flex;
+          justify-content: flex-end;
+          animation: fade-in 0.2s ease-out;
+        }
+
+        .drawer-panel {
+          width: 100%;
+          maxWidth: 600px;
+          height: 100%;
+          background: var(--bg-primary);
+          border-left: 1px solid var(--border);
+          overflow-y: auto;
+          padding: 40px;
+          box-shadow: -8px 0 40px rgba(0,0,0,0.5);
+          animation: slide-in-right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, var(--accent), #2563eb);
+          color: #fff;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 8px;
+          font-weight: 600;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        .btn-primary:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+        }
+        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
+
+        .btn-ghost {
+          background: rgba(255, 255, 255, 0.05);
+          color: var(--text-primary);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 10px 20px;
+          border-radius: 8px;
+          font-weight: 500;
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .btn-ghost:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .pulse-dot {
+          width: 10px; height: 10px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+          animation: pulse 2s infinite;
+        }
+
+        .terminal-log {
+          background: rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 8px;
+          padding: 16px;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 12px;
+          color: #a8b2d1;
+          white-space: pre-wrap;
+          max-height: 240px;
+          overflow-y: auto;
+          margin-top: 16px;
+        }
+
+        @keyframes fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slide-in-right {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+          70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
       `}</style>
 
-      <div className="page-header">
-        <h1>📚 OpenWiki Browser</h1>
-        <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-          Auto-document your codebase with OpenWiki and ingest nodes into memory.
-          Scoped to <strong style={{ color: 'var(--text-primary)' }}>{brainLabel(activeBrainId)}</strong>
-          {' '}— change the brain selector to switch repos.
-        </p>
+      {/* ── Dashboard Header ── */}
+      <div className="dashboard-header-sticky">
+        <div>
+          <h1 style={{ fontSize: 32, fontWeight: 700, margin: 0, background: 'linear-gradient(to right, #fff, #93c5fd)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.5px' }}>
+            System Dashboard
+          </h1>
+          <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 15 }}>
+            Overview for <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{brainLabel(activeBrainId)}</strong>
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button className="btn-ghost" onClick={() => setShowIngestion(!showIngestion)}>
+            {showIngestion ? 'Hide Operations' : '⚙️ Operations'}
+          </button>
+        </div>
       </div>
 
-      {/* ── Status Banner ── */}
-      <div
-        id="openwiki-status-banner"
-        style={{
-          ...cardStyle,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-          marginBottom: 24,
-          padding: '16px 24px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {statusLoading ? (
-            <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Checking status…</span>
-          ) : initialized ? (
-            <>
-              <span style={badgeStyle('rgba(0,206,201,0.15)', 'var(--success)')}>Initialized</span>
-              <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                {nodeCount} node{nodeCount !== 1 ? 's' : ''} in {brainLabel(activeBrainId)}
+      {/* ── Top Level Stats ── */}
+      <div className="stat-grid">
+        <div className="stat-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🧠</div>
+            {statusLoading ? <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Syncing...</span> : (
+              <span style={{ fontSize: 12, fontWeight: 600, color: initialized ? '#10b981' : '#f59e0b', background: initialized ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', padding: '4px 10px', borderRadius: 20 }}>
+                {initialized ? 'Active' : 'Uninitialized'}
               </span>
-            </>
-          ) : (
-            <span style={badgeStyle('rgba(255,107,107,0.15)', 'var(--error)')}>Not Initialized</span>
+            )}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>OpenWiki Nodes</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{nodeCount}</div>
+        </div>
+
+        <div className="stat-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>⚡</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {health?.status !== 'unreachable' && <div className="pulse-dot" />}
+              <span style={{ fontSize: 12, fontWeight: 600, color: health?.status !== 'unreachable' ? '#10b981' : '#ef4444' }}>
+                {health?.status !== 'unreachable' ? 'Online' : 'Offline'}
+              </span>
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Server Status</div>
+          <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+            {health?.version ? `v${health.version}` : 'Unknown'}
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(139, 92, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🛡️</div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#8b5cf6', background: 'rgba(139,92,246,0.1)', padding: '4px 10px', borderRadius: 20 }}>
+              {health?.daemon === 'running' ? 'Protected' : 'Standard'}
+            </span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Daemon Process</div>
+          <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2, textTransform: 'capitalize' }}>
+            {health?.daemon || 'Offline'}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Operations / Ingestion (Collapsible) ── */}
+      {showIngestion && (
+        <div className="stat-card" style={{ marginBottom: 32, padding: 32, animation: 'fade-in 0.3s ease-out' }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 20px' }}>Repository Operations</h2>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <label style={{ display: 'block', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 500 }}>Target Directory</label>
+              <input
+                type="text"
+                placeholder="Path to directory (default: .)"
+                value={wikiPath}
+                onChange={e => setWikiPath(e.target.value)}
+                style={{ width: '100%', padding: '12px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: 'white', outline: 'none' }}
+              />
+            </div>
+            <button className="btn-ghost" onClick={() => runCliCommand('npx -y openwiki --init')} disabled={cmdRunning}>
+              {cmdRunning ? '⏳ Working...' : 'Initialize OpenWiki'}
+            </button>
+            <button className="btn-primary" onClick={() => runCliCommand(`npx total-recall ingest openwiki ${JSON.stringify(wikiPath.trim() || '.')}`)} disabled={cmdRunning}>
+              {cmdRunning ? '⏳ Ingesting...' : 'Ingest into Memory'}
+            </button>
+          </div>
+          {cmdOutput && (
+            <div className="terminal-log" style={{ borderColor: cmdError ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255,255,255,0.08)' }}>
+              {cmdOutput}
+            </div>
           )}
         </div>
-        <span style={{ color: 'var(--text-secondary)', fontSize: 12, fontFamily: 'var(--font-mono, monospace)' }}>
-          openwiki · total-recall integration
-        </span>
-      </div>
-
-      {/* ── Ingestion Section ── */}
-      <div style={{ ...cardStyle, marginBottom: 24 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>
-          Ingestion
-        </h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label htmlFor="openwiki-path" style={labelStyle}>OpenWiki Directory</label>
-            <input
-              id="openwiki-path"
-              type="text"
-              placeholder="Path to OpenWiki directory (default: current project root)"
-              value={wikiPath}
-              onChange={e => setWikiPath(e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button
-              id="openwiki-init"
-              className="btn btn-ghost"
-              onClick={handleInit}
-              disabled={cmdRunning}
-            >
-              {cmdRunning ? '⏳' : '⚙'} Initialize OpenWiki
-            </button>
-            <button
-              id="openwiki-ingest"
-              className="btn btn-primary"
-              onClick={handleIngest}
-              disabled={cmdRunning}
-            >
-              {cmdRunning ? '⏳ Ingesting…' : '📥 Ingest into Memory'}
-            </button>
-          </div>
-        </div>
-
-        {cmdOutput && (
-          <div
-            id="openwiki-cmd-output"
-            style={{ ...outputStyle, borderColor: cmdError ? 'var(--error)' : 'var(--border)' }}
-          >
-            {cmdOutput}
-          </div>
-        )}
-      </div>
+      )}
 
       {/* ── Node Browser ── */}
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>
-          Node Browser
-        </h2>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Knowledge Graph</h2>
+          <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{nodes.length} nodes loaded</span>
+        </div>
 
-        {nodesLoading && (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
-            Loading nodes…
+        {nodesLoading ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)', fontSize: 15 }}>
+            <div style={{ display: 'inline-block', width: 24, height: 24, border: '2px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: 16 }} />
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            <div>Syncing nodes...</div>
           </div>
-        )}
-
-        {!nodesLoading && nodes.length === 0 && (
-          <div
-            id="openwiki-empty-state"
-            style={{
-              ...cardStyle,
-              textAlign: 'center',
-              padding: '48px 24px',
-            }}
-          >
-            <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 15, maxWidth: 440, margin: '0 auto' }}>
-              No OpenWiki nodes for <strong>{brainLabel(activeBrainId)}</strong>. Switch the brain
-              selector, or initialize / ingest OpenWiki into this project’s vault.
+        ) : nodes.length === 0 ? (
+          <div className="stat-card" style={{ textAlign: 'center', padding: '64px 24px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.8 }}>📭</div>
+            <h3 style={{ fontSize: 18, margin: '0 0 8px' }}>No Knowledge Nodes Found</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.6 }}>
+              The vault for <strong>{brainLabel(activeBrainId)}</strong> is empty. Use the operations panel to ingest a repository or change your active brain.
             </p>
+            <button className="btn-primary" onClick={() => setShowIngestion(true)}>Open Operations</button>
           </div>
-        )}
-
-        {!nodesLoading && nodes.length > 0 && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: 14,
-            }}
-          >
+        ) : (
+          <div className="node-grid">
             {nodes.map(node => {
               const cc = categoryColor(node.category);
               return (
                 <div
                   key={node.slug}
-                  id={`openwiki-node-${node.slug}`}
-                  className="openwiki-node-card"
-                  style={nodeCardStyle}
+                  className="node-card"
                   onClick={() => setSelectedNode(node)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={e => { if (e.key === 'Enter') setSelectedNode(node); }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, lineHeight: 1.3, color: '#f8fafc' }}>
                       {node.title}
-                    </span>
-                    <span style={badgeStyle(cc.bg, cc.fg)}>{node.category}</span>
+                    </h3>
+                    <div className="node-badge" style={{ background: cc.bg, color: cc.fg }}>
+                      {cc.icon} {node.category}
+                    </div>
                   </div>
+                  
+                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.6, margin: '0 0 16px', flex: 1 }}>
+                    {excerpt(node)}
+                  </p>
 
                   {node.tags && node.tags.length > 0 && (
-                    <div style={{ marginBottom: 8 }}>
-                      {node.tags.slice(0, 5).map(tag => (
-                        <span key={tag} style={pillStyle}>{tag}</span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {node.tags.slice(0, 4).map(tag => (
+                        <span key={tag} style={{ fontSize: 11, background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: 4, color: 'var(--text-tertiary)' }}>
+                          #{tag}
+                        </span>
                       ))}
-                      {node.tags.length > 5 && (
-                        <span style={{ ...pillStyle, background: 'rgba(158,158,158,0.12)', color: 'var(--text-secondary)' }}>
-                          +{node.tags.length - 5}
+                      {node.tags.length > 4 && (
+                        <span style={{ fontSize: 11, background: 'rgba(255,255,255,0.02)', padding: '2px 8px', borderRadius: 4, color: 'var(--text-tertiary)' }}>
+                          +{node.tags.length - 4}
                         </span>
                       )}
                     </div>
                   )}
-
-                  <p style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5, margin: 0 }}>
-                    {excerpt(node)}
-                  </p>
                 </div>
               );
             })}
@@ -414,75 +485,72 @@ try {
 
       {/* ── Slide-out Drawer ── */}
       {selectedNode && (
-        <div style={drawerOverlay} onClick={handleOverlayClick}>
-          <div ref={drawerRef} style={drawerPanel} id="openwiki-node-drawer">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px', wordBreak: 'break-word' }}>
-                  {selectedNode.title}
-                </h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {(() => { const cc = categoryColor(selectedNode.category); return <span style={badgeStyle(cc.bg, cc.fg)}>{selectedNode.category}</span>; })()}
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
-                    {selectedNode.slug}
-                  </span>
+        <div className="drawer-overlay" onClick={handleOverlayClick}>
+          <div className="drawer-panel" ref={drawerRef}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                  {(() => { const cc = categoryColor(selectedNode.category); return <span className="node-badge" style={{ background: cc.bg, color: cc.fg }}>{cc.icon} {selectedNode.category}</span>; })()}
+                  <span style={{ fontSize: 13, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{selectedNode.slug}</span>
                 </div>
+                <h2 style={{ fontSize: 28, fontWeight: 700, margin: 0, lineHeight: 1.2 }}>{selectedNode.title}</h2>
               </div>
-              <button
-                id="openwiki-drawer-close"
-                className="btn btn-ghost"
-                onClick={() => setSelectedNode(null)}
-                style={{ fontSize: 18, padding: '4px 10px', flexShrink: 0 }}
-                aria-label="Close drawer"
-              >
-                ✕
-              </button>
+              <button className="btn-ghost" onClick={() => setSelectedNode(null)} style={{ padding: '8px 12px', fontSize: 16 }}>✕</button>
             </div>
 
-            {selectedNode.tags && selectedNode.tags.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                {selectedNode.tags.map(tag => (
-                  <span key={tag} style={pillStyle}>{tag}</span>
-                ))}
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: 16, marginBottom: 24, background: 'rgba(255,255,255,0.02)', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+              {selectedNode.importance !== undefined && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Importance</div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{selectedNode.importance}/5</div>
+                </div>
+              )}
+              {selectedNode.modality && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Modality</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{selectedNode.modality}</div>
+                </div>
+              )}
+              {selectedNode.priority && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', marginBottom: 4 }}>Priority</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{selectedNode.priority}</div>
+                </div>
+              )}
+            </div>
 
-            {selectedNode.importance && (
-              <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
-                <strong style={{ color: 'var(--text-primary)' }}>Importance:</strong> {selectedNode.importance}/5
-                {selectedNode.modality && (
-                  <span> · <strong style={{ color: 'var(--text-primary)' }}>Modality:</strong> {selectedNode.modality}</span>
-                )}
-                {selectedNode.priority && (
-                  <span> · <strong style={{ color: 'var(--text-primary)' }}>Priority:</strong> {selectedNode.priority}</span>
-                )}
-              </div>
-            )}
-
-            <div
-              style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                padding: 20,
-                fontSize: 14,
-                lineHeight: 1.7,
-                color: 'var(--text-primary)',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
+            <div style={{
+              background: 'rgba(0,0,0,0.2)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 12,
+              padding: 24,
+              fontSize: 15,
+              lineHeight: 1.8,
+              color: 'var(--text-primary)',
+              whiteSpace: 'pre-wrap',
+            }}>
               {selectedNode.body || selectedNode.content || selectedNode.excerpt || 'No content available.'}
             </div>
 
+            {selectedNode.tags && selectedNode.tags.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 8, fontWeight: 500 }}>TAGS</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedNode.tags.map(tag => (
+                    <span key={tag} style={{ fontSize: 12, background: 'rgba(255,255,255,0.08)', padding: '4px 10px', borderRadius: 6 }}>#{tag}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             {selectedNode.related && selectedNode.related.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' }}>Related: </span>
-                {selectedNode.related.map(slug => (
-                  <span key={slug} style={{ ...pillStyle, background: 'rgba(158,158,158,0.12)', color: 'var(--text-secondary)' }}>
-                    {slug}
-                  </span>
-                ))}
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 8, fontWeight: 500 }}>RELATED NODES</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedNode.related.map(slug => (
+                    <span key={slug} style={{ fontSize: 12, background: 'var(--bg-hover)', border: '1px solid var(--border)', padding: '4px 10px', borderRadius: 6, color: 'var(--text-secondary)' }}>{slug}</span>
+                  ))}
+                </div>
               </div>
             )}
           </div>

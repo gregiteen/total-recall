@@ -17,7 +17,8 @@
       chrome.storage.local.get(['brainUrl', 'pat']),
       chrome.storage.sync.get([
       'blocklist',
-      'captureGranularity'
+      'captureGranularity',
+      'passiveTracking'
       ])
     ]);
     const settings = { ...syncSettings, ...localSettings };
@@ -32,7 +33,10 @@
     }
 
     // Granularity radio
-    const granularity = settings.captureGranularity || 'minimal';
+    let granularity = settings.captureGranularity || 'minimal';
+    if (settings.passiveTracking === false) {
+      granularity = 'off';
+    }
     const radio = document.querySelector(`input[name="granularity"][value="${granularity}"]`);
     if (radio) radio.checked = true;
   }
@@ -49,6 +53,7 @@
       // Get selected granularity
       const granularityRadio = document.querySelector('input[name="granularity"]:checked');
       const captureGranularity = granularityRadio ? granularityRadio.value : 'minimal';
+      const passiveTracking = captureGranularity !== 'off';
 
       await chrome.storage.local.set({
         brainUrl: brainUrlInput.value.trim() || 'http://127.0.0.1:3000',
@@ -57,7 +62,8 @@
       await chrome.storage.sync.remove('pat');
       await chrome.storage.sync.set({
         blocklist,
-        captureGranularity
+        captureGranularity,
+        passiveTracking
       });
 
       showSaveStatus('Settings saved!', false);

@@ -40,7 +40,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await share({
         url: tab.url,
         title: tab.title,
-        action: 'research',
+        action: 'remember',
         source: 'chrome-extension'
       });
       showBadge('\u2713', '#22c55e');
