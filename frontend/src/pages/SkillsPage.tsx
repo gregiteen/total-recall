@@ -66,11 +66,6 @@ interface SubFileEntry {
 
 // ─── Automation tab types ───────────────────────────────────────────────────────
 
-interface ImprovementSuggestion {
-  skillName: string;
-  type: 'eval_gap' | 'missing_reference' | 'stale_script';
-  description: string;
-}
 
 type TabId = 'active' | 'registry' | 'lifecycle' | 'network' | 'automation';
 

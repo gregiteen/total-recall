@@ -2,6 +2,7 @@
 name: total-recall
 provenance: total-recall
 description: "Use this skill to operate Total Recall — portable memory, instructions, openwiki, skill deploy, and secrets. MANDATORY: Read this file before changing TR setup. Nested packages under modules/ are NOT agent skills."
+version: 3.14.1
 ---
 
 # Total Recall — Master Agent Skill
