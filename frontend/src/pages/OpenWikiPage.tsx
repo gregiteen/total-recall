@@ -93,8 +93,8 @@ export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrain
     }
   };
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchNodes(activeBrainId || 'global');
     void fetchHealthData();
     const interval = setInterval(fetchHealthData, 15000);

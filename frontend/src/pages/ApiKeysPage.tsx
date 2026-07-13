@@ -91,7 +91,7 @@ function ProviderLogo({ provider }: { provider?: string }) {
   return null;
 }
 
-export default function ApiKeysPage({ activeBrainId }: { activeBrainId?: string }) {
+export default function ApiKeysPage() {
   const [tab, setTab] = useState<Tab>('catalog')
 
   const [configData, setConfigData] = useState<ConfigJson | null>(null)
@@ -180,7 +180,7 @@ export default function ApiKeysPage({ activeBrainId }: { activeBrainId?: string 
     } finally {
       setLoading(false)
     }
-  }, [selected?.key])
+  }, [selected?.key, selected])
 
   const loadPats = useCallback(async () => {
     try {
