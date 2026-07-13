@@ -3,6 +3,8 @@ import path from 'path';
 import matter from 'gray-matter';
 import { logger } from './logger.mjs';
 
+const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
+
 /**
  * Atomic file write using write-then-rename to prevent partial corruption.
  */

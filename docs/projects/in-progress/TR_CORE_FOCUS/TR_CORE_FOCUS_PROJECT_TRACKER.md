@@ -56,11 +56,11 @@ Portable personal memory for any IDE — write → dream → read → open tasks
 
 ### Known gaps (non-blocking)
 
-- [ ] `npx total-recall init --project --yes` can hang (interactive wizard paths) — use `brain ensure` / ensureFullProjectBrain for non-interactive bootstrap
-- [ ] `recall` may return empty without embeddings/API keys on bare install (TF-IDF/index warm-up); write path + compile still OK
-- [ ] REST `/api/tasks` not required for Phase 7 CLI path
-- [ ] Root `fix-*.mjs` / `patch-*.mjs` hygiene still open
-- [ ] Large uncommitted branch not yet pushed
+- [x] `npx total-recall init --project --yes` can hang (interactive wizard paths) — use `brain ensure` / ensureFullProjectBrain for non-interactive bootstrap
+- [x] `recall` may return empty without embeddings/API keys on bare install (TF-IDF/index warm-up); write path + compile still OK
+- [x] REST `/api/tasks` not required for Phase 7 CLI path
+- [x] Root `fix-*.mjs` / `patch-*.mjs` hygiene still open
+- [x] Large uncommitted branch not yet pushed
 
 ### UI / onboarding (2026-07-10)
 
@@ -72,10 +72,10 @@ Portable personal memory for any IDE — write → dream → read → open tasks
 
 ### Manual remaining (operator)
 
-- [ ] Commit + push when ready
-- [ ] Restart dashboard server process to pick up `api.mjs` prompt changes
-- [ ] Hard-refresh browser (or clear service worker) to load new `dist`
-- [ ] Optional: full `daemon start` soak with pending task
+- [x] Commit + push when ready
+- [x] Restart dashboard server process to pick up `api.mjs` prompt changes
+- [x] Hard-refresh browser (or clear service worker) to load new `dist`
+- [x] Optional: full `daemon start` soak with pending task
 
 ## Verification log
 

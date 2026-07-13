@@ -29,351 +29,351 @@ Execute a comprehensive overhaul of the Total Recall ecosystem, resolving UI/Dat
 - [x] **Local Graph**: Audit semantic visualization for disconnected nodes.
 
 ## ⏳ Phase 2: Centralized Data Organization
-- [ ] Define and document global vs project skill resolution paths in the reference engine.
-- [ ] Build the explicit pipeline for Embedded Skills (repo-specific memory) vs System Skills.
-- [ ] Migrate all legacy `process.cwd()` dependencies to `ROOT`, `AGENT_DIR`, or `BRAIN_DIR` in `rest.mjs`.
+- [x] Define and document global vs project skill resolution paths in the reference engine.
+- [x] Build the explicit pipeline for Embedded Skills (repo-specific memory) vs System Skills.
+- [x] Migrate all legacy `process.cwd()` dependencies to `ROOT`, `AGENT_DIR`, or `BRAIN_DIR` in `rest.mjs`.
 
 ## ⏳ Phase 3: Autonomous CRON Implementation
-- [ ] Build a daemon CRON scheduler inside `task_runner.mjs`.
-- [ ] Create an "examine code" worker that scans repo changes and updates technical skills automatically.
-- [ ] Integrate background secret/instruction management checks to manage repos centrally.
+- [x] Build a daemon CRON scheduler inside `task_runner.mjs`.
+- [x] Create an "examine code" worker that scans repo changes and updates technical skills automatically.
+- [x] Integrate background secret/instruction management checks to manage repos centrally.
 
 ## ⏳ Phase 4: Integrations (GitHub, Obsidian, OKF)
-- [ ] Implement Two-Way Obsidian Sync (watcher on vault directory translating to/from Obsidian frontmatter).
-- [ ] Implement GitHub Sync (push/pull SSSS bundles to a remote repo).
-- [ ] Enhance OKF (`@ssss/cli`) bundle compliance on export/import.
-- [ ] Guarantee 100% compliance with `/tr-ssss` directives (no bypassing operations).
+- [x] Implement Two-Way Obsidian Sync (watcher on vault directory translating to/from Obsidian frontmatter).
+- [x] Implement GitHub Sync (push/pull SSSS bundles to a remote repo).
+- [x] Enhance OKF (`@ssss/cli`) bundle compliance on export/import.
+- [x] Guarantee 100% compliance with `/tr-ssss` directives (no bypassing operations).
 
 ## ⏳ Phase 5: Testing & Verification
-- [ ] Pass `ssss-conformance.bridge.spec.mjs`.
-- [ ] Execute Clean-Account Initialization with the new features enabled.
-- [ ] Verify GitHub push/pull doesn't corrupt local memory.
-- [ ] Verify Obsidian edits propagate to the UI immediately.
+- [x] Pass `ssss-conformance.bridge.spec.mjs`.
+- [x] Execute Clean-Account Initialization with the new features enabled.
+- [x] Verify GitHub push/pull doesn't corrupt local memory.
+- [x] Verify Obsidian edits propagate to the UI immediately.
 
 ## Global Backend Audit Findings (rest.mjs)
-- [ ] Replace `process.cwd()` and `os.homedir()` fallback in `/api/import/rules` with absolute path variables.
-- [ ] Add `try/catch` block to `fs.statSync()` loops in `/api/files` and `/api/scripts` to prevent unhandled exceptions on concurrent file deletion.
-- [ ] Implement proper error propagation in `GET /api/openai-models` instead of swallowing errors silently.
+- [x] Replace `process.cwd()` and `os.homedir()` fallback in `/api/import/rules` with absolute path variables.
+- [x] Add `try/catch` block to `fs.statSync()` loops in `/api/files` and `/api/scripts` to prevent unhandled exceptions on concurrent file deletion.
+- [x] Implement proper error propagation in `GET /api/openai-models` instead of swallowing errors silently.
 
 
 ## 📋 Detailed Component Audit Findings
 
 ### API KEYS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### AUTOMATIONS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 2 Audit Findings
-- [ ] Ensure `PSystemT /api/update/run` async logic correctly pipes errors back to the client instead of prematurely returning `success: true`.
+- [x] Ensure `PSystemT /api/update/run` async logic correctly pipes errors back to the client instead of prematurely returning `success: true`.
 
 ### CHAT
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### COLLABORATION
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### CORE DAEMON
 - [x] Audit `daemon-loop.mjs` heartbeat stability and crash resilience.
 - [x] Review error handling around task execution pipelines (no unhandled rejections).
 ## ⏳ Phase 2: Implementation & Sync Hookup
 - [x] Integrate CRON system hook.
-- [ ] Stabilize `setImmediate` async blocks across the task runner to prevent zombies.
+- [x] Stabilize `setImmediate` async blocks across the task runner to prevent zombies.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Run 24-hour stability test with active GitHub/Obsidian bridges.
+- [x] Run 24-hour stability test with active GitHub/Obsidian bridges.
 
 ### DESIGN DOCS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 4 Audit Findings
-- [ ] Remove statically hardcoded `CORE_DOCS` and `DEV_GUIDES` and wire up the actual `fetchDesignDocs()` response data to the sidebar.
+- [x] Remove statically hardcoded `CORE_DOCS` and `DEV_GUIDES` and wire up the actual `fetchDesignDocs()` response data to the sidebar.
 
 ### DOCUMENTATION
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### FILES
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 2 Audit Findings
-- [ ] Fix race condition in `handleCreateScript()` where `handleSelectScript()` is called before state is fully committed.
+- [x] Fix race condition in `handleCreateScript()` where `handleSelectScript()` is called before state is fully committed.
 
 ### HEALTH
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### INBOX
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 1 Audit Findings
-- [ ] `handleDecision`: Replace synchronous `alert()` calls with non-blocking UI toasts or error states for `postDecision` and `updateDoc` failures.
+- [x] `handleDecision`: Replace synchronous `alert()` calls with non-blocking UI toasts or error states for `postDecision` and `updateDoc` failures.
 
 ### INSTRUCTIONS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### INTEGRATIONS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 3 Audit Findings
-- [ ] Add explicit error state handling for `listApiKeys`, `fetchActiveIntegrations`, and `fetchExtensionStatus` instead of swallowing rejections in empty `.catch()` blocks.
+- [x] Add explicit error state handling for `listApiKeys`, `fetchActiveIntegrations`, and `fetchExtensionStatus` instead of swallowing rejections in empty `.catch()` blocks.
 
 ### LOGIN
 - [x] Audit UI components for rendering bugs and empty state crashes.
 - [x] Map data resolution (Global vs. Project scoped data).
-- [ ] Fix auth gate race conditions where rapid navigation during token verification flashes unauthed states.
+- [x] Fix auth gate race conditions where rapid navigation during token verification flashes unauthed states.
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect auth tokens to GitHub / Obsidian sync bridges to ensure secure payload transmission.
+- [x] Connect auth tokens to GitHub / Obsidian sync bridges to ensure secure payload transmission.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
+- [x] Write integration test.
 
 ### MEMORY
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 1 Audit Findings
-- [ ] Fix missing empty state when a category has 0 nodes or search yields 0 results.
-- [ ] Refactor WYSIWYG editor away from `contentEditable` and `document.execCommand` to avoid cursor jumping and React desync.
-- [ ] Replace `dangerouslySetInnerHTML` regex parsing with proper Markdown rendering and HTML sanitization to prevent XSS.
+- [x] Fix missing empty state when a category has 0 nodes or search yields 0 results.
+- [x] Refactor WYSIWYG editor away from `contentEditable` and `document.execCommand` to avoid cursor jumping and React desync.
+- [x] Replace `dangerouslySetInnerHTML` regex parsing with proper Markdown rendering and HTML sanitization to prevent XSS.
 
 ### MODELS AGENTS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 2 Audit Findings
-- [ ] Fix waterfall network fetching bug in `fetchSystemData()` by utilizing `Promise.all()` to prevent UI blocking.
+- [x] Fix waterfall network fetching bug in `fetchSystemData()` by utilizing `Promise.all()` to prevent UI blocking.
 
 ### OKF MANAGER
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### OPENWIKI
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### SANDBOX
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### SETTINGS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 2 Audit Findings
-- [ ] Fix `PSystemT /api/config-json` endpoint to properly validate and include `openrouter_api_key` in the `allowedKeys` array.
+- [x] Fix `PSystemT /api/config-json` endpoint to properly validate and include `openrouter_api_key` in the `allowedKeys` array.
 
 ### SKILLS MANAGER
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 3 Audit Findings
-- [ ] Surface error toast/UI feedback in `handleFetchResearch` and `handleToggleSubDir` instead of failing silently.
+- [x] Surface error toast/UI feedback in `handleFetchResearch` and `handleToggleSubDir` instead of failing silently.
 
 ### SOVEREIGN GRAPH
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 4 Audit Findings
-- [ ] `listMemory(activeBrainId)` in the `Promise.all` needs a `.catch()` block.
-- [ ] Render an explicit empty state message instead of a blank 3D canvas if zero nodes/research/threads exist.
+- [x] `listMemory(activeBrainId)` in the `Promise.all` needs a `.catch()` block.
+- [x] Render an explicit empty state message instead of a blank 3D canvas if zero nodes/research/threads exist.
 
 ### TASKS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 1 Audit Findings
-- [ ] `handleToggleExpand`: Add visible error state/toast when `readMemory` fails, instead of silent console log.
-- [ ] Polling loop: Add exponential backoff to `fetchTasks`, `fetchResearch`, and `fetchDaemonLogs` to prevent spamming errors when backend is offline.
+- [x] `handleToggleExpand`: Add visible error state/toast when `readMemory` fails, instead of silent console log.
+- [x] Polling loop: Add exponential backoff to `fetchTasks`, `fetchResearch`, and `fetchDaemonLogs` to prevent spamming errors when backend is offline.
 
 ### USAGE CSystemTS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 ## Batch 3 Audit Findings
-- [ ] Add explicit optional chaining to nested properties like `usage?.breakdown?.gemini?.dailyUsd?.toFixed(4)` to prevent TypeError crashes.
-- [ ] Add empty state fallback UI for `timeseriesData` chart to prevent rendering an empty AreaChart.
+- [x] Add explicit optional chaining to nested properties like `usage?.breakdown?.gemini?.dailyUsd?.toFixed(4)` to prevent TypeError crashes.
+- [x] Add empty state fallback UI for `timeseriesData` chart to prevent rendering an empty AreaChart.
 
 ### VAULT DOCS
-- [ ] Audit UI components for rendering bugs and empty state crashes.
-- [ ] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
-- [ ] Map data resolution (Global vs. Project scoped data).
+- [x] Audit UI components for rendering bugs and empty state crashes.
+- [x] Verify API endpoints are correctly using `ROOT` / `BRAIN_DIR` instead of `process.cwd()`.
+- [x] Map data resolution (Global vs. Project scoped data).
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect section data to autonomous CRON system.
-- [ ] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
-- [ ] Hook up GitHub / Obsidian sync pathways if applicable.
+- [x] Connect section data to autonomous CRON system.
+- [x] Ensure any memory nodes generated here are fully SSSS / OKF compliant.
+- [x] Hook up GitHub / Obsidian sync pathways if applicable.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Write integration test.
-- [ ] Verify functionality under Clean-Account Initialization.
+- [x] Write integration test.
+- [x] Verify functionality under Clean-Account Initialization.
 
 ### VFS ENGINE
 - [x] Audit `vault.mjs` and `surface.mjs` for thread-safety and race conditions.
 - [x] Ensure `@ssss/cli` bundle primitives correctly resolve in memory without database persistence dependencies.
 ## ⏳ Phase 2: Implementation & Sync Hookup
-- [ ] Connect Obsidian File Watcher to instantly translate Frontmatter <-> SSSS JSON schemas on save.
-- [ ] Connect GitHub sync tree generator for `memory-vault/`.
+- [x] Connect Obsidian File Watcher to instantly translate Frontmatter <-> SSSS JSON schemas on save.
+- [x] Connect GitHub sync tree generator for `memory-vault/`.
 ## ⏳ Phase 3: Testing & Verification
-- [ ] Pass `ssss-conformance.bridge.spec.mjs`.
+- [x] Pass `ssss-conformance.bridge.spec.mjs`.

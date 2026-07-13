@@ -1,28 +1,8 @@
 import fs from 'fs';
-let models = fs.readFileSync('frontend/src/pages/ModelsPage.tsx', 'utf8');
-const match = models.match(/\{\/\* Cloud API Keys Panel \*\/\}([\s\S]*?)<\/div>\s*<\/div>\s*<UsageChart/);
-let cloudPanel = match[0];
-// Wait, match[0] includes {/* Cloud API Keys Panel */} and ends up to <UsageChart.
-// Let's just manually slice it correctly.
-const startIdx = models.indexOf('{/* Cloud API Keys Panel */}');
-const endIdx = models.indexOf('<UsageChart');
-cloudPanel = models.substring(startIdx, endIdx);
-cloudPanel = cloudPanel.trim();
-if (cloudPanel.endsWith('</div>\n          </div>')) {
-  cloudPanel = cloudPanel.substring(0, cloudPanel.lastIndexOf('</div>')).trim(); // remove container </div>
-}
-
-// Check how many divs
-let d = cloudPanel;
-while (d.match(/<\/div>\s*<\/div>$/)) {
-  d = d.substring(0, d.lastIndexOf('</div>')).trim();
-}
-// Actually, ModelsPage has:
-//           <div style={{ display: 'grid'... }}>
-//             <div className="card"...> Ollama </div>
-//             <div className="card"...> Cloud API Keys Panel </div>
-//           </div>
-// So if we extract from {/* Cloud API Keys Panel */} to the end of that card, we need to stop before the container </div>.
+let panel = fs.readFileSync('test-panel.tsx', 'utf8');
+const startIdx = panel.indexOf('{/* Cloud API Keys Panel */}');
+const endIdx = panel.lastIndexOf('</div>');
+let cloudPanel = panel.substring(startIdx, endIdx + 6).trim();
 
 const extraKeysHtml = `
               {/* Search & Tool APIs */}
@@ -36,25 +16,9 @@ const extraKeysHtml = `
                 ))}
               </div>`;
 
-const spanTarget = '<span style={{ fontSize: 10, color: \'var(--text-tertiary)\' }}>\n                These keys are stored locally and injected into the CLI reasoning agents on dispatch.\n              </span>';
-
-if (!cloudPanel.includes(spanTarget)) {
-   throw new Error("Could not find spanTarget in cloudPanel");
-}
-cloudPanel = cloudPanel.replace(spanTarget, `${extraKeysHtml}\n              ${spanTarget}`);
+cloudPanel = cloudPanel.replace(/<span style=\{\{ fontSize: 10, color: 'var\(--text-tertiary\)' \}\}>/, `${extraKeysHtml}\n        <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>`);
+cloudPanel = cloudPanel.replace(/<span style=\{\{ fontSize: 10, color: "var\(--text-tertiary\)" \}\}>/, `${extraKeysHtml}\n        <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>`);
 cloudPanel = cloudPanel.replace(/Cloud Models \(API Keys\)/g, 'Cloud & Search APIs');
-
-// Ensure cloudPanel is balanced!
-const opens = (cloudPanel.match(/<div/g) || []).length;
-const closes = (cloudPanel.match(/<\/div>/g) || []).length;
-if (opens > closes) {
-  cloudPanel += '\n            </div>'.repeat(opens - closes);
-} else if (closes > opens) {
-  // remove extra closes at the end
-  for (let i = 0; i < closes - opens; i++) {
-     cloudPanel = cloudPanel.substring(0, cloudPanel.lastIndexOf('</div>'));
-  }
-}
 
 const fullInjection = `
       {tab === 'cloud' && (
@@ -74,6 +38,7 @@ const fullInjection = `
       )}`;
 
 let page = fs.readFileSync('frontend/src/pages/ApiKeysPage.tsx', 'utf8');
+
 const target = `      <p style={{ marginTop: 24, fontSize: 11, color: 'var(--text-tertiary)' }}>
         CLI: <code>secret catalog</code> · <code>secret meta KEY --repo app --tier pro --monthly-cost 25 --rotate-days 90</code> ·{' '}
         <code>secret rotation-due</code> · <code>secret usage</code> · <code>secret providers</code>
@@ -81,5 +46,11 @@ const target = `      <p style={{ marginTop: 24, fontSize: 11, color: 'var(--tex
     </div>
   )
 }`;
-page = page.replace(target, `${fullInjection}\n\n${target}`);
-fs.writeFileSync('frontend/src/pages/ApiKeysPage.tsx', page);
+
+if (!page.includes(target)) {
+  console.log('TARGET NOT FOUND');
+} else {
+  page = page.replace(target, `${fullInjection}\n\n${target}`);
+  fs.writeFileSync('frontend/src/pages/ApiKeysPage.tsx', page);
+  console.log('Injected successfully');
+}

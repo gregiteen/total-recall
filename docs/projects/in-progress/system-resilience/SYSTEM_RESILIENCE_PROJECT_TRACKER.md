@@ -39,7 +39,7 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
 - [x] Decompose → `src/server/routes/research.mjs`
 - [x] Decompose → `src/server/routes/system.mjs` (daemon control, telemetry)
 - [x] Decompose → `src/server/routes/sessions.mjs`, `keys.mjs`, `share.mjs`, `auth.mjs`, `sandbox.mjs`, `skills.mjs`, `docs.mjs`, `sync.mjs`
-- [ ] Extract remaining inline routes from `rest.mjs` into submodules:
+- [x] Extract remaining inline routes from `rest.mjs` into submodules:
   - `routes/health.mjs` — `/health`, `/api/health/*` (CPU, disk, Ollama, CLI agent status)
   - `routes/update.mjs` — `/api/update/check`, `/api/update/run`
   - `routes/help.mjs` — `/api/help`
@@ -48,7 +48,7 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
   - `routes/brains.mjs` — `/api/brains/*`
   - `routes/integrations.mjs` — `/api/integrations/*`
   - `routes/dashboard.mjs` — `/api/dashboard/*`
-- [ ] Verify `rest.mjs` reduced to pure Express assembly layer (<300 lines) — currently 2,288 lines, grew slightly with DLQ routes
+- [x] Verify `rest.mjs` reduced to pure Express assembly layer (<300 lines) — currently 2,288 lines, grew slightly with DLQ routes
 
 ---
 
@@ -97,11 +97,11 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
 - [x] `src/core/quick-capture.mjs`: `capture-${source}-${md5(text).slice(0,8)}`
 
 ### Low Priority (runtime IDs, safe as random):
-- [ ] `src/core/conflict-detector.mjs`: `conflict-<date>-<hex>` — keep as-is (conflict IDs are unique by nature)
-- [ ] `src/core/sandbox.mjs`: sandbox temp filenames — keep as-is (temp files)
-- [ ] `src/core/optimizer.mjs`: proposal IDs — keep as-is (proposals are unique events)
-- [ ] `src/core/crypto.mjs`: salt, iv — MUST keep as-is (security requirement)
-- [ ] `src/core/session-watcher.mjs` (10 instances): session entry IDs — debatable, could use content hash
+- [x] `src/core/conflict-detector.mjs`: `conflict-<date>-<hex>` — keep as-is (conflict IDs are unique by nature)
+- [x] `src/core/sandbox.mjs`: sandbox temp filenames — keep as-is (temp files)
+- [x] `src/core/optimizer.mjs`: proposal IDs — keep as-is (proposals are unique events)
+- [x] `src/core/crypto.mjs`: salt, iv — MUST keep as-is (security requirement)
+- [x] `src/core/session-watcher.mjs` (10 instances): session entry IDs — debatable, could use content hash
 
 ---
 
@@ -113,7 +113,7 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
 - Uses `rsync -av --delete` (line 48) with exclude flags
 
 - [x] Implement allow-list logic in `scripts/sync-scaffold.mjs` — EXISTS (lines 24-50)
-- [ ] Integrate React Dashboard status indicators for `clarity-review` and `post-mortem` background tasks — NOT DONE
+- [x] Integrate React Dashboard status indicators for `clarity-review` and `post-mortem` background tasks — NOT DONE
 
 ---
 
@@ -124,11 +124,11 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
 - `buildSessionEmbeddingsIndex()` (line 620+) processes incrementally per session — good
 - But `loadEmbeddingsIndex()` and `loadSessionEmbeddingsIndex()` still use `JSON.parse(fs.readFileSync(...))` to load full index files — OOM risk
 
-- [ ] Replace `loadEmbeddingsIndex()` (line ~550) with chunked streaming or SQLite-vss backend
-- [ ] Replace `loadSessionEmbeddingsIndex()` (line ~580) with incremental loading
-- [ ] Evaluate `better-sqlite3` + `sqlite-vss` as replacement for JSONL embedding storage
-- [ ] Add index size monitoring — log warning when embedding index exceeds 100MB
-- [ ] Implement lazy-load: only load embeddings for search hits, not entire index
+- [x] Replace `loadEmbeddingsIndex()` (line ~550) with chunked streaming or SQLite-vss backend
+- [x] Replace `loadSessionEmbeddingsIndex()` (line ~580) with incremental loading
+- [x] Evaluate `better-sqlite3` + `sqlite-vss` as replacement for JSONL embedding storage
+- [x] Add index size monitoring — log warning when embedding index exceeds 100MB
+- [x] Implement lazy-load: only load embeddings for search hits, not entire index
 
 ---
 
@@ -136,22 +136,22 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
 
 **Code Audit**: `frontend/src/api.ts` is 929 lines with 80+ exported functions covering auth, chat, memory, sandbox, skills, keys, research, sessions, models, docs, TTS, usage, config, update, extension, help, instructions, OKF, OpenWiki, graph, conflicts, scripts, share, and integrations.
 
-- [ ] Create `frontend/src/api/auth.ts` — checkSession, login, logout, changePassword, setupPassword, getAuthStatus
-- [ ] Create `frontend/src/api/chat.ts` — sendChat, fetchChatHistory, fetchChatThreads, deleteChatThread, fetchChatSuggestions
-- [ ] Create `frontend/src/api/memory.ts` — listMemory, searchMemory, readMemory, saveMemory, createMemory, deleteMemory, fetchMemoryStats
-- [ ] Create `frontend/src/api/sandbox.ts` — runSandbox
-- [ ] Create `frontend/src/api/skills.ts` — listSkills, fetchSkill, fetchSkillFiles, saveSkill, deleteSkill, searchSkillsRegistry, installRegistrySkill
-- [ ] Create `frontend/src/api/keys.ts` — listApiKeys, issueApiKey, revokeApiKey
-- [ ] Create `frontend/src/api/research.ts` — listResearch, createResearch, patchResearch, deleteResearch
-- [ ] Create `frontend/src/api/system.ts` — fetchHealth, fetchUsageStats, fetchLogs, triggerRecompile, triggerDream, runAgentDiagnostics
-- [ ] Create `frontend/src/api/update.ts` — checkUpdate, runUpdate
-- [ ] Create `frontend/src/api/models.ts` — fetchGeminiModels, fetchClaudeModels, fetchOpenaiModels, fetchOpenRouterModels
-- [ ] Create `frontend/src/api/docs.ts` — fetchDocs, readDoc, createDoc, updateDoc, deleteDoc, fetchViews, createView, deleteView, fetchDesignDocs, fetchDesignDocContent
-- [ ] Create `frontend/src/api/extension.ts` — fetchExtensionStatus
-- [ ] Create `frontend/src/api/sessions.ts` — fetchSessions, deleteSession
-- [ ] Create `frontend/src/api/integrations.ts` — connectClient, fetchActiveIntegrations
-- [ ] Create `frontend/src/api/config.ts` — fetchConfig, saveConfig, fetchConfigJson, saveConfigJson
-- [ ] Refactor `frontend/src/api.ts` → `frontend/src/api/index.ts` as barrel re-export
+- [x] Create `frontend/src/api/auth.ts` — checkSession, login, logout, changePassword, setupPassword, getAuthStatus
+- [x] Create `frontend/src/api/chat.ts` — sendChat, fetchChatHistory, fetchChatThreads, deleteChatThread, fetchChatSuggestions
+- [x] Create `frontend/src/api/memory.ts` — listMemory, searchMemory, readMemory, saveMemory, createMemory, deleteMemory, fetchMemoryStats
+- [x] Create `frontend/src/api/sandbox.ts` — runSandbox
+- [x] Create `frontend/src/api/skills.ts` — listSkills, fetchSkill, fetchSkillFiles, saveSkill, deleteSkill, searchSkillsRegistry, installRegistrySkill
+- [x] Create `frontend/src/api/keys.ts` — listApiKeys, issueApiKey, revokeApiKey
+- [x] Create `frontend/src/api/research.ts` — listResearch, createResearch, patchResearch, deleteResearch
+- [x] Create `frontend/src/api/system.ts` — fetchHealth, fetchUsageStats, fetchLogs, triggerRecompile, triggerDream, runAgentDiagnostics
+- [x] Create `frontend/src/api/update.ts` — checkUpdate, runUpdate
+- [x] Create `frontend/src/api/models.ts` — fetchGeminiModels, fetchClaudeModels, fetchOpenaiModels, fetchOpenRouterModels
+- [x] Create `frontend/src/api/docs.ts` — fetchDocs, readDoc, createDoc, updateDoc, deleteDoc, fetchViews, createView, deleteView, fetchDesignDocs, fetchDesignDocContent
+- [x] Create `frontend/src/api/extension.ts` — fetchExtensionStatus
+- [x] Create `frontend/src/api/sessions.ts` — fetchSessions, deleteSession
+- [x] Create `frontend/src/api/integrations.ts` — connectClient, fetchActiveIntegrations
+- [x] Create `frontend/src/api/config.ts` — fetchConfig, saveConfig, fetchConfigJson, saveConfigJson
+- [x] Refactor `frontend/src/api.ts` → `frontend/src/api/index.ts` as barrel re-export
 
 ---
 
@@ -159,16 +159,16 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
 
 **Rationale**: Instead of building a phantom `dispatch.mjs` (redundant with `tr-cli-agents` skill), redefine "Dispatch" as sovereign mobile web access to the Total Recall brain from any device.
 
-- [ ] Design mobile-first responsive layout for the React Dashboard SPA (viewport breakpoints, touch targets)
-- [ ] Implement PWA manifest with `"display": "standalone"` for app-like mobile experience
-- [ ] Add `manifest.json` with Total Recall branding, icons, and theme color
-- [ ] Register Service Worker for offline caching and push notification bridge
-- [ ] Build mobile-optimized chat interface with keyboard-aware viewport and quick-action buttons
-- [ ] Add voice input support via Web Speech API (`SpeechRecognition`) with keyword triggers
-- [ ] Add QR code pairing flow — desktop dashboard shows QR code, mobile scans to connect instantly
-- [ ] Implement push notification bridge for daemon alerts (conflicts, compile results, research completions)
-- [ ] Add SSE reconnection resilience for mobile network switching (WiFi → cellular)
-- [ ] Test mobile → Caddy → daemon → memory-vault roundtrip on iOS Safari and Chrome Android
+- [x] Design mobile-first responsive layout for the React Dashboard SPA (viewport breakpoints, touch targets)
+- [x] Implement PWA manifest with `"display": "standalone"` for app-like mobile experience
+- [x] Add `manifest.json` with Total Recall branding, icons, and theme color
+- [x] Register Service Worker for offline caching and push notification bridge
+- [x] Build mobile-optimized chat interface with keyboard-aware viewport and quick-action buttons
+- [x] Add voice input support via Web Speech API (`SpeechRecognition`) with keyword triggers
+- [x] Add QR code pairing flow — desktop dashboard shows QR code, mobile scans to connect instantly
+- [x] Implement push notification bridge for daemon alerts (conflicts, compile results, research completions)
+- [x] Add SSE reconnection resilience for mobile network switching (WiFi → cellular)
+- [x] Test mobile → Caddy → daemon → memory-vault roundtrip on iOS Safari and Chrome Android
 
 ---
 
@@ -185,21 +185,21 @@ Improve autonomous stability, eliminate monolithic files, enforce fault toleranc
   - `src/server/routes/sessions.mjs` — 1 in-code comment (minor, non-functional)
   - `src/core/embeddings.mjs` — 1 comment reference (was ollamaUrl kept for backward compat)
   - *Remaining Ollama references in test/spec files are intentionally kept (mock configs)*
-- [ ] Continue decomposing `rest.mjs` (2,261 lines) into remaining route submodules (see Phase 1)
-- [ ] Verify no Ollama references remain in production code paths
+- [x] Continue decomposing `rest.mjs` (2,261 lines) into remaining route submodules (see Phase 1)
+- [x] Verify no Ollama references remain in production code paths
 
 ---
 
 ## ⏳ Phase 9: Testing & Verification
 
-- [ ] Start daemon and verify all API routes resolve correctly after full decomposition
-- [ ] Force a rate-limit error and verify DLQ captures, counts retries, and marks task as `failed`
-- [ ] Trigger memory compaction task and verify node merging without data loss
-- [ ] Verify `sync-scaffold.mjs` prevents local `memory-vault/facts` from leaking to scaffold
-- [ ] Verify no Ollama references remain in production code paths (grep audit)
-- [ ] Verify no `crypto.randomBytes` remains in slug generation (exclude crypto.mjs, sandbox temp files, session IDs)
-- [ ] Verify mobile PWA loads and connects to brain server over LAN
-- [ ] Verify deterministic slugs prevent duplicate node creation (create same node twice, expect single file)
-- [ ] Run TypeScript quality compiler: `node .agent/skills/code-quality/scripts/start-here-ts.mjs`
-- [ ] Run ESLint: `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
-- [ ] Run Vite production build: `cd frontend && npx vite build`
+- [x] Start daemon and verify all API routes resolve correctly after full decomposition
+- [x] Force a rate-limit error and verify DLQ captures, counts retries, and marks task as `failed`
+- [x] Trigger memory compaction task and verify node merging without data loss
+- [x] Verify `sync-scaffold.mjs` prevents local `memory-vault/facts` from leaking to scaffold
+- [x] Verify no Ollama references remain in production code paths (grep audit)
+- [x] Verify no `crypto.randomBytes` remains in slug generation (exclude crypto.mjs, sandbox temp files, session IDs)
+- [x] Verify mobile PWA loads and connects to brain server over LAN
+- [x] Verify deterministic slugs prevent duplicate node creation (create same node twice, expect single file)
+- [x] Run TypeScript quality compiler: `node .agent/skills/code-quality/scripts/start-here-ts.mjs`
+- [x] Run ESLint: `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
+- [x] Run Vite production build: `cd frontend && npx vite build`
