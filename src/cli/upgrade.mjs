@@ -80,7 +80,7 @@ export default async function upgrade(args) {
         process.exit(1);
       }
 
-      // Hardcoded public key for the Sovereign AI OS core team
+      // Hardcoded public key for the Total Recall System core team
       const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEApT1OQ5B0qF2pPjD2uK9f7K8b/sW+v3X1tN0c5A9vGqg=
 -----END PUBLIC KEY-----`;

@@ -24,7 +24,7 @@ export const FILES_DIR    = path.join(BRAIN_DIR, 'files');
 export const TASKS_DIR    = path.join(BRAIN_DIR, 'scheduler', 'queue');
 export const CONFIG_DIR   = path.join(BRAIN_DIR, 'config');
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
 
 /**

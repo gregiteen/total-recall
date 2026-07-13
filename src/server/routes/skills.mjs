@@ -73,11 +73,9 @@ const SKILL_DIR_CANDIDATES = SKILL_ROOTS.map((r) => r.rel);
  */
 const TR_SKILL_EXCLUDE = new Set([
   'total-recall',
-  'tr-skill',
-  'tr-ssss',
-  'tr-research',
-  'tr-cli-agents',
-  'tr-cli-agent',
+  'skill',
+  'okf',
+  'research',
   'cli-agents', // TR CLI agent registry package, not an app skill
 ]);
 
@@ -334,8 +332,8 @@ function resolveTrSkillScript(scriptName) {
   const candidates = [
     path.join(AGENT_DIR, 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
     path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
-    path.join(AGENT_DIR, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
-    path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
+    path.join(AGENT_DIR, 'skills', 'skill', 'scripts', scriptName),
+    path.join(ROOT, 'scaffold', '.agent', 'skills', 'skill', 'scripts', scriptName),
   ];
   const found = candidates.find((candidate) => fs.existsSync(candidate));
   if (!found) {

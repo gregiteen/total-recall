@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchConfigJson, saveConfigJson, runSandbox, fetchHealth, runAgentDiagnostics } from '../api';
+import { fetchConfigJson, saveConfigJson, runSandbox, fetchHealth, runAgentDiagnostics, checkUpdate, runUpdate, fetchBrains } from '../api';
 import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
 
@@ -13,9 +13,17 @@ export default function SettingsPage() {
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<string | null>(null);
 
-
+  const [updateInfo, setUpdateInfo] = useState<{ updateAvailable: boolean, latestVersion?: string } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  
+  const [brains, setBrains] = useState<any[]>([]);
+  const activeBrain = localStorage.getItem('total-recall-active-brain') || '';
+  
   useEffect(() => {
     fetchHealth().then(setHealth).catch(console.error);
+    checkUpdate().then(setUpdateInfo).catch(console.error);
+    fetchBrains().then(setBrains).catch(console.error);
     fetchConfigJson()
       .then(data => {
         // Ensure all nested structures exist for controlled inputs
@@ -41,7 +49,8 @@ export default function SettingsPage() {
     { id: 'antigravity', name: 'Antigravity (Gemini SDK)', desc: 'Primary core developer agent' },
     { id: 'gemini', name: 'Gemini CLI', desc: 'Direct Gemini assistant binary' },
     { id: 'claude', name: 'Claude Code', desc: 'Anthropic developer CLI wrapper' },
-    { id: 'codex', name: 'Codex CLI', desc: 'OpenAI agent binary integration' }
+    { id: 'codex', name: 'Codex CLI', desc: 'OpenAI agent binary integration' },
+    { id: 'grok', name: 'Grok CLI', desc: 'xAI developer binary integration' }
   ];
 
   const handleRunDiagnostics = async (e: React.FormEvent) => {
@@ -56,6 +65,19 @@ export default function SettingsPage() {
       setDiagnosticLogs('Error: ' + err.message);
     } finally {
       setRunningDiagnostics(false);
+    }
+  };
+
+  const handleRunUpdate = async () => {
+    setUpdating(true);
+    setUpdateMessage(null);
+    try {
+      const res = await runUpdate();
+      setUpdateMessage(res.success ? 'Update complete. Restarting...' : 'Update failed: ' + res.message);
+    } catch (err: any) {
+      setUpdateMessage('Update error: ' + err.message);
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -132,8 +154,10 @@ export default function SettingsPage() {
     setConfigData(prev => prev ? { ...prev, secrets: { ...prev.secrets, [key]: value } } : null);
   };
 
+  // Instead of parsing it back and forth on every keystroke, 
+  // we just use simple helpers that don't aggressively trim trailing commas.
   const getCsv = (arr: any) => Array.isArray(arr) ? arr.join(', ') : '';
-  const setCsv = (val: string) => val.split(',').map(s => s.trim()).filter(Boolean);
+  const setCsv = (str: string) => str.split(',').map(s => s.trimStart());
 
   if (!configData) {
     return (
@@ -366,7 +390,7 @@ export default function SettingsPage() {
             System Settings
           </h1>
           <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 14 }}>
-            Configure core OS behavior, security, API keys, and integration layers.
+            Configure core system behavior, security, network bindings, and integration layers.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -513,21 +537,8 @@ export default function SettingsPage() {
             <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.05))', borderColor: 'rgba(16, 185, 129, 0.2)' }}>🛡️</div>
             <div>
               <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Security & Privacy</h3>
-              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Data sovereignty protocols</p>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Manage access control and local sandboxing</p>
             </div>
-          </div>
-
-          <div className="field-row">
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500 }}>YOLO Mode</div>
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Disable write protection for AI agents</div>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-checkbox"
-              checked={!!configData.security.yolo_mode}
-              onChange={(e) => updateSecurityProp('yolo_mode', e.target.checked)}
-            />
           </div>
 
           <div className="field-row">
@@ -540,19 +551,6 @@ export default function SettingsPage() {
               className="settings-checkbox"
               checked={!!configData.security.sandbox?.enabled}
               onChange={(e) => updateSecurityNested('sandbox', 'enabled', e.target.checked)}
-            />
-          </div>
-
-          <div className="field-row">
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500 }}>Enforce Local Only</div>
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Force agents to run offline models</div>
-            </div>
-            <input
-              type="checkbox"
-              className="settings-checkbox"
-              checked={!!configData.security.privacy?.enforce_local_only}
-              onChange={(e) => updateSecurityNested('privacy', 'enforce_local_only', e.target.checked)}
             />
           </div>
 
@@ -582,19 +580,7 @@ export default function SettingsPage() {
             />
           </div>
 
-          <div className="field-col">
-            <label htmlFor="allow_frontier_export" className="field-label">Allow Frontier Export</label>
-            <select
-              id="allow_frontier_export"
-              className="settings-select"
-              value={configData.security.privacy?.allow_frontier_export || 'ask_per_skill'}
-              onChange={(e) => updateSecurityNested('privacy', 'allow_frontier_export', e.target.value)}
-            >
-              <option value="always">Always (Not Recommended)</option>
-              <option value="ask_per_skill">Ask Per Skill (Recommended)</option>
-              <option value="never">Never (Air-Gapped)</option>
-            </select>
-          </div>
+
 
           <div className="field-col">
             <label htmlFor="session_ttl_hours" className="field-label">Dashboard Session TTL (Hours)</label>
@@ -657,24 +643,59 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Brain & Agent Rules */}
+        {/* Brain Configuration */}
         <div className="settings-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
             <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(147, 51, 234, 0.05))', borderColor: 'rgba(168, 85, 247, 0.2)' }}>🧠</div>
             <div>
-              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Brain & Reasoning</h3>
-              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Core inference parameters</p>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Brain Configuration</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Manage memory kernel identities</p>
             </div>
           </div>
 
           <div className="field-col">
-            <label className="field-label">Brain URL</label>
-            <input
-              type="text"
-              className="settings-input"
-              value={configData.brain?.url || ''}
-              onChange={(e) => updateBrainProp('url', e.target.value)}
-            />
+            <label className="field-label" style={{ color: 'var(--text-accent)', fontWeight: 600 }}>Select Active Brain</label>
+            <select
+              className="settings-select"
+              style={{ border: '1px solid var(--border-accent)', background: 'rgba(59, 130, 246, 0.05)' }}
+              value={activeBrain}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  localStorage.setItem('total-recall-active-brain', val);
+                } else {
+                  localStorage.removeItem('total-recall-active-brain');
+                }
+                window.location.reload();
+              }}
+            >
+              <option value="">Global Brain (Root)</option>
+              {brains.map((b: any) => (
+                <option key={b.name} value={b.name}>{b.name} ({b.role} - {b.nodes} nodes)</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label className="field-label">Brain URL</label>
+              <input
+                type="text"
+                className="settings-input"
+                value={configData.brain?.url || ''}
+                onChange={(e) => updateBrainProp('url', e.target.value)}
+              />
+            </div>
+            <div className="field-col" style={{ flex: 1 }}>
+              <label className="field-label">Brain Token</label>
+              <input
+                type="password"
+                className="settings-input"
+                placeholder={configData.brain?.has_token ? '•••••••••••••••• (Leave blank)' : 'No token set'}
+                value={configData.brain?.token || ''}
+                onChange={(e) => updateBrainProp('token', e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="field-col">
@@ -740,9 +761,11 @@ export default function SettingsPage() {
               onChange={(e) => updateBrainProp('preferred_agent', e.target.value)}
             >
               <option value="auto">Auto-Select (Recommended)</option>
-              <option value="gemini">Gemini (Google Deepmind)</option>
+              <option value="antigravity">Antigravity (Google Deepmind)</option>
+              <option value="gemini">Gemini (Google)</option>
               <option value="claude">Claude (Anthropic)</option>
               <option value="openai">OpenAI (O-Series)</option>
+              <option value="grok">Grok (xAI)</option>
             </select>
           </div>
         </div>
@@ -764,12 +787,12 @@ export default function SettingsPage() {
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
                 Capture context directly from your browser. Install from the Chrome Web Store or load unpacked from <code>/extension</code> directory.
               </p>
-              <button className="btn-primary" style={{ width: '100%' }}>Download Extension</button>
+              <a href="/api/extension/download" download className="btn-primary" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', boxSizing: 'border-box' }}>Download Extension</a>
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.03)', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontSize: 24, marginBottom: 12 }}>📦</div>
-              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Sovereign Toolbox</h4>
+              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Admin Toolbox</h4>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
                 Execute quick administrative operations via the UCW toolkit and sandbox shell.
               </p>
@@ -799,55 +822,43 @@ export default function SettingsPage() {
           )}
         </div>
 
-      </div>
-        {/* Ollama Panel */}
-        <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-                <span style={{ fontSize: 20 }}>🦙</span>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>Local Provider</h3>
-                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Connect Ollama, LM Studio, vLLM, or Llama.cpp</p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor="local_endpoint" style={{ fontSize: 13, fontWeight: 500 }}>Provider Base URL</label>
-                <input
-                  id="local_endpoint"
-                  type="text"
-                  placeholder="http://127.0.0.1:11434 or http://127.0.0.1:1234/v1"
-                  value={configData?.brain?.local_endpoint || ''}
-                  onChange={(e) => updateBrainProp('local_endpoint', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                />
-                <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Leave blank to use the default localhost endpoint.</span>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                 <span className="badge" style={{
-                    background: health?.ollama === 'running' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    color: health?.ollama === 'running' ? '#10b981' : '#ef4444',
-                    border: health?.ollama === 'running' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                    fontSize: 10,
-                    padding: '4px 8px'
-                  }}>
-                    {health?.ollama === 'running' ? 'Connected' : 'Offline'}
-                  </span>
-                  {health?.ollama === 'running' && health?.ollama_models && (
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      {health.ollama_models.length} local models available
-                    </span>
-                  )}
-              </div>
+        {/* System Updates */}
+        <div className="settings-card" style={{ gridColumn: '1 / -1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>
+            <div className="settings-icon-wrap" style={{ background: 'linear-gradient(135deg, rgba(63, 185, 80, 0.2), rgba(34, 197, 94, 0.05))', borderColor: 'rgba(63, 185, 80, 0.2)' }}>🚀</div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>System Update</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '4px 0 0' }}>Manage Total Recall version updates</p>
             </div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, padding: '16px 20px', background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                {updateInfo?.updateAvailable ? `Update Available (v${updateInfo.latestVersion})` : 'System is up to date'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                {updateInfo?.updateAvailable ? 'A new version of Total Recall is available for download.' : 'You are running the latest version.'}
+              </div>
+              {updateMessage && (
+                <div style={{ fontSize: 12, color: updateMessage.includes('error') || updateMessage.includes('failed') ? '#ef4444' : '#10b981', marginTop: 8 }}>
+                  {updateMessage}
+                </div>
+              )}
+            </div>
+            {updateInfo?.updateAvailable && (
+              <button 
+                className="btn-primary"
+                onClick={handleRunUpdate}
+                disabled={updating}
+                style={{ background: '#3fb950', border: 'none' }}
+              >
+                {updating ? 'Updating...' : 'Download & Restart'}
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* CLI Agents */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24 }}>
             

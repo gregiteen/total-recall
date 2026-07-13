@@ -2,7 +2,7 @@
  * total-recall backup
  *
  * Back up the meta-skill folder (the user's brain) to:
- *   - GitHub repo (diff-based, sovereign)
+ *   - GitHub repo (diff-based, persistent)
  *   - Encrypted/plain tarball
  *   - Obsidian vault (rsync)
  *
@@ -92,7 +92,7 @@ function printHelp() {
   Options:
     --output, -o <path>    Destination archive path (tarball mode)
     --no-encrypt           Write a plain .tar.gz archive (default: gpg-encrypted)
-    --push-git <remote>    Commit brain to a git remote (sovereign, diff-based)
+    --push-git <remote>    Commit brain to a git remote (persistent, diff-based)
                            e.g. git@github.com:you/total-recall-brain.git
                            Initialises the skill folder as a git repo on first run.
     --obsidian <path>      Rsync brain snapshot into an Obsidian vault folder.
@@ -431,7 +431,7 @@ export default async function backup(args) {
     return;
   }
 
-  // Git-push mode: sovereign diff-based backup
+  // Git-push mode: persistent diff-based backup
   if (opts.pushGit) {
     await pushGitBackup(opts.pushGit, opts.layer);
     return;

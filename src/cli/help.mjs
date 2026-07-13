@@ -35,7 +35,7 @@ export default async function run(argv) {
   if (!topic) {
     if (isJson) {
       console.log(JSON.stringify({
-        description: "Total Recall Sovereign OS Help System",
+        description: "Total Recall Total Recall System Help System",
         command_documentation_path: cliRefPath,
         available_sections: ["architecture", "ssss", "commands"]
       }, null, 2));

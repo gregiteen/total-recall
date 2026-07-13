@@ -82,7 +82,9 @@ export default function IntegrationsPage() {
       .then(res => {
         if (active) setKeys(res.keys || [])
       })
-      .catch(() => {})
+      .catch(e => {
+        if (active) setMessage({ type: 'error', text: `Failed to list API keys: ${(e as Error).message || 'Unknown error'}` })
+      })
 
     fetchActiveIntegrations()
       .then(res => {
@@ -90,13 +92,17 @@ export default function IntegrationsPage() {
           setActiveIdes(res.active)
         }
       })
-      .catch(() => {})
+      .catch(e => {
+        if (active) setMessage({ type: 'error', text: `Failed to fetch active integrations: ${(e as Error).message || 'Unknown error'}` })
+      })
 
     fetchExtensionStatus()
       .then(res => {
         if (active) setExtStatus(res)
       })
-      .catch(() => {})
+      .catch(e => {
+        if (active) setMessage({ type: 'error', text: `Failed to fetch extension status: ${(e as Error).message || 'Unknown error'}` })
+      })
 
     return () => { active = false }
   }, [])

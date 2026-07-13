@@ -11,7 +11,7 @@
 import express from 'express';
 import path from 'node:path';
 import { requireAuth, requireScope, verifyStepUpToken } from '../auth.mjs';
-import { badRequest, serverError, notFound, BRAIN_DIR, resolveVaultFromQuery } from './_shared.mjs';
+import { badRequest, serverError, notFound, BRAIN_DIR, resolveVaultFromQuery, ROOT } from './_shared.mjs';
 import {
   listSecretsMeta,
   setSecret,
@@ -161,7 +161,7 @@ router.post('/api/secrets/export-env', requireAuth, requireScope('keys:write', '
       return res.json({ results, store: path.join(brainDir, 'config', 'secrets.enc') });
     }
 
-    const targetPath = body.path || body.project_path || process.cwd();
+    const targetPath = body.path || body.project_path || ROOT;
     if (body.preview_only || body.previewOnly) {
       const projection = await buildEnvProjection(brainDir, {
         projectPath: targetPath,
@@ -194,7 +194,7 @@ router.post('/api/secrets/export-env', requireAuth, requireScope('keys:write', '
 router.get('/api/secrets/export-env', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
   try {
     const brainDir = brainDirFromReq(req);
-    const targetPath = req.query.path || process.cwd();
+    const targetPath = req.query.path || ROOT;
     const projection = await buildEnvProjection(brainDir, {
       projectPath: targetPath,
       includeGlobal: req.query.no_global !== '1',
@@ -236,7 +236,7 @@ router.get('/api/secrets/scan-env', requireAuth, requireScope('keys:write', 'con
     const scan = scanEnvSources({
       brainDir,
       includeProcessEnv: true,
-      cwd: process.cwd(),
+      cwd: ROOT,
     });
     res.json(publicScanResult(scan, existingSet));
   } catch (err) {

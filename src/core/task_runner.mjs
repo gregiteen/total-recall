@@ -103,11 +103,17 @@ async function handleSystem2Deliberation(task, context) {
   logger.info('task-runner', `Running System 2 deliberation for: ${task.target}`);
 }
 
+import { runCrons } from './crons.mjs';
+
 /**
  * Main loop for the task runner.
  */
 export async function runTaskQueue(queueDir, context) {
   logger.info('task-runner', 'Starting Task Runner...');
+  
+  // Run background daemon crons (examine code, sync, secret management)
+  await runCrons(context);
+
   const pending = loadPendingTasks(queueDir);
 
   if (pending.length === 0) {

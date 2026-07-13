@@ -312,7 +312,7 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
     combined = `## Total Recall — Active Memory Context\n\nYour memories and rules are loaded from the active brain vault.\n`;
   } else {
     // Compact CLI reference (OKF §6 progressive disclosure — summary, not full manual)
-    combined = `## Total Recall — Sovereign Memory System (Installed)
+    combined = `## Total Recall — Persistent Memory System (Installed)
 
 **Quick Reference:**
 - \`npx total-recall remember <category> "<content>" [options]\` — Save to memory (categories: invariant, preference, correction, fact, concept, pattern, anti-pattern, decision, lore; key flags: --importance, --priority, --modality, --tags, --global, --project)

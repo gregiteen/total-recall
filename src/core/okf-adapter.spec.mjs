@@ -21,7 +21,7 @@ describe('OKF Adapter Core Logic', () => {
         description: 'Retrieves user details from the DB',
         resource: 'https://api.example.com/users',
         tags: ['api', 'user'],
-        timestamp: '2026-06-17T12:00:00Z'
+        updated: '2026-06-17T12:00:00Z'
       };
       const body = 'This endpoint is used by the frontend to fetch user profiles.';
       
@@ -115,7 +115,7 @@ describe('OKF Adapter Core Logic', () => {
       expect(concept.frontmatter.description).toBe('Pattern description');
       expect(concept.frontmatter.resource).toBe('s3://my-bucket/patterns');
       expect(concept.frontmatter.tags).toEqual(['p1', 'p2']);
-      expect(concept.frontmatter.timestamp).toBe('2026-06-17T13:00:00Z');
+      expect(concept.frontmatter.updated).toBe('2026-06-17T13:00:00Z');
       expect(concept.frontmatter.slug).toBe('test-slug');
       expect(concept.body).toBe('Pattern body content goes here.');
     });
@@ -160,7 +160,7 @@ describe('OKF Adapter Core Logic', () => {
           description: 'Steps to deploy application',
           resource: 'https://docs.example.com',
           tags: ['deploy', 'prod'],
-          timestamp: '2026-06-17T12:00:00Z'
+          updated: '2026-06-17T12:00:00Z'
         },
         body: 'Step 1: Build\nStep 2: Deploy'
       };
@@ -175,7 +175,7 @@ describe('OKF Adapter Core Logic', () => {
       expect(conceptResult.frontmatter.description).toBe(conceptOrig.frontmatter.description);
       expect(conceptResult.frontmatter.resource).toBe(conceptOrig.frontmatter.resource);
       expect(conceptResult.frontmatter.tags).toEqual(conceptOrig.frontmatter.tags);
-      expect(conceptResult.frontmatter.timestamp).toBe(conceptOrig.frontmatter.timestamp);
+      expect(conceptResult.frontmatter.updated).toBe(conceptOrig.frontmatter.updated);
       expect(conceptResult.body).toBe(conceptOrig.body);
     });
   });

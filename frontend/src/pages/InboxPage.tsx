@@ -25,6 +25,7 @@ export default function InboxPage({ activeBrainId }: { activeBrainId?: string })
   }, [loadData])
 
   const handleDecision = async (path: string, action: string) => {
+    setError("")
     try {
       const doc = await readDoc(path, activeBrainId)
       // Extract proposal ID from path (e.g. proposals/p2.md -> p2)
@@ -40,7 +41,7 @@ export default function InboxPage({ activeBrainId }: { activeBrainId?: string })
       }
       loadData()
     } catch (err: unknown) {
-      alert("Decision failed: " + (err instanceof Error ? err.message : "Unknown error"))
+      setError("Decision failed: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 

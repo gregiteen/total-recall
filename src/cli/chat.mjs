@@ -5,7 +5,7 @@ import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core
 
 /**
  * Total Recall CLI Chat Interface
- * Allows direct conversation with the Sovereign OS kernel from the terminal.
+ * Allows direct conversation with the Total Recall System kernel from the terminal.
  */
 export default async function runChat(args) {
   console.log('🤖 Total Recall CLI Chat initialized. Type "exit" to quit.\n');
@@ -34,7 +34,7 @@ export default async function runChat(args) {
     prompt: 'You: '
   });
 
-  const systemMessage = 'You are the Total Recall Sovereign OS kernel. Keep responses concise and direct.';
+  const systemMessage = 'You are the Total Recall Total Recall System kernel. Keep responses concise and direct.';
   const messages = [];
 
   rl.prompt();

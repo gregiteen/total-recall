@@ -64,7 +64,7 @@ export default async function doctor() {
   console.log(`
   ┌─────────────────────────────────────────────────────────┐
   │  Total Recall System Doctor                             │
-  │  Pre-flighting sovereign runtime diagnostics...         │
+  │  Pre-flighting persistent runtime diagnostics...         │
   └─────────────────────────────────────────────────────────┘
 `);
 

@@ -179,7 +179,7 @@ function ssssReferenceDir() {
   const candidates = [
     path.join(SKILLS_DIR, 'total-recall', 'references'),
     path.join(SKILLS_DIR, 'total-recall', 'modules', 'ssss', 'references'),
-    path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references'),
+    path.join(SKILLS_DIR, 'okf', 'references'),
   ];
   return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }

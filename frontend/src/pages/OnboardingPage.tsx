@@ -140,8 +140,10 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (step.id !== 'import-env' || importMode !== 'scan') return
     let cancelled = false
-    setScanLoading(true)
-    setScanError('')
+    Promise.resolve().then(() => {
+      setScanLoading(true)
+      setScanError('')
+    })
     scanEnvSecrets()
       .then((data) => {
         if (cancelled) return

@@ -146,7 +146,7 @@ export default function UsagePage() {
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Daily Expenditure</h3>
               <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4, color: '#fff' }}>
-                ${usage?.dailyUsd.toFixed(4) || '0.0000'}
+                ${usage?.dailyUsd?.toFixed(4) ?? '0.0000'}
               </div>
             </div>
             <span className="badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: 11 }}>
@@ -181,7 +181,7 @@ export default function UsagePage() {
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Weekly Expenditure</h3>
               <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4, color: '#fff' }}>
-                ${usage?.weeklyUsd.toFixed(4) || '0.0000'}
+                ${usage?.weeklyUsd?.toFixed(4) ?? '0.0000'}
               </div>
             </div>
             <span className="badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', fontSize: 11 }}>
@@ -235,15 +235,15 @@ export default function UsagePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.gemini.dailyUsd.toFixed(4)}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.gemini?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.gemini.weeklyUsd.toFixed(4)}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.gemini?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
                 <span>Rolling Tokens:</span>
-                <span>{usage?.breakdown.gemini.dailyTokens?.toLocaleString() || 0} (24h)</span>
+                <span>{usage?.breakdown?.gemini?.dailyTokens?.toLocaleString() || 0} (24h)</span>
               </div>
             </div>
           </div>
@@ -263,15 +263,15 @@ export default function UsagePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.claude.dailyUsd.toFixed(4)}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.claude?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.claude.weeklyUsd.toFixed(4)}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.claude?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
                 <span>Rolling Tokens:</span>
-                <span>(Ingested stats-cache)</span>
+                <span>{usage?.breakdown?.claude?.dailyTokens?.toLocaleString() || 0} (24h)</span>
               </div>
             </div>
           </div>
@@ -291,15 +291,15 @@ export default function UsagePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.codex.dailyUsd.toFixed(4)}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.codex?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.codex.weeklyUsd.toFixed(4)}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.codex?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
                 <span>Rolling Tokens:</span>
-                <span>{usage?.breakdown.codex.dailyTokens?.toLocaleString() || 0} (24h)</span>
+                <span>{usage?.breakdown?.codex?.dailyTokens?.toLocaleString() || 0} (24h)</span>
               </div>
             </div>
           </div>
@@ -318,15 +318,15 @@ export default function UsagePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.openrouter?.dailyUsd.toFixed(4) || '0.0000'}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.openrouter?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
-                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown.openrouter?.weeklyUsd.toFixed(4) || '0.0000'}</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.openrouter?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
                 <span>Rolling Tokens:</span>
-                <span>{usage?.breakdown.openrouter?.dailyTokens?.toLocaleString() || 0} (24h)</span>
+                <span>{usage?.breakdown?.openrouter?.dailyTokens?.toLocaleString() || 0} (24h)</span>
               </div>
             </div>
           </div>
@@ -340,41 +340,47 @@ export default function UsagePage() {
         <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: '1px solid var(--border)', paddingBottom: 10, marginBottom: 20 }}>
           30-Day Cost Trend
         </h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={timeseriesData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <defs>
-              <linearGradient id="gradGemini" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gradClaude" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#e17055" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#e17055" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gradOpenRouter" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#74b9ff" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#74b9ff" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gradCodex" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#00cec9" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#00cec9" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-            <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
-            <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} tickFormatter={(v: number) => `$${v.toFixed(2)}`} />
-            <Tooltip
-              contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12, color: '#e8e8e8' }}
-              labelStyle={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}
-              formatter={(value: any, name: any) => [`$${Number(value).toFixed(3)}`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
-            />
-            <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />
-            <Area type="monotone" dataKey="gemini" stackId="1" stroke="#3b82f6" fill="url(#gradGemini)" strokeWidth={2} />
-            <Area type="monotone" dataKey="claude" stackId="1" stroke="#e17055" fill="url(#gradClaude)" strokeWidth={2} />
-            <Area type="monotone" dataKey="openrouter" stackId="1" stroke="#74b9ff" fill="url(#gradOpenRouter)" strokeWidth={2} />
-            <Area type="monotone" dataKey="codex" stackId="1" stroke="#00cec9" fill="url(#gradCodex)" strokeWidth={2} />
-          </AreaChart>
-        </ResponsiveContainer>
+        {timeseriesData.length === 0 ? (
+          <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+            No usage data available for the last 30 days.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={timeseriesData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="gradGemini" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradClaude" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#e17055" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#e17055" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradOpenRouter" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#74b9ff" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#74b9ff" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradCodex" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00cec9" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#00cec9" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={{ stroke: 'var(--border)' }} tickLine={false} tickFormatter={(v: number) => `$${v.toFixed(2)}`} />
+                <Tooltip
+                  contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12, color: '#e8e8e8' }}
+                  labelStyle={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}
+                  formatter={(value: any, name: any) => [`$${Number(value).toFixed(3)}`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
+                />
+                <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />
+                <Area type="monotone" dataKey="gemini" stackId="1" stroke="#3b82f6" fill="url(#gradGemini)" strokeWidth={2} />
+                <Area type="monotone" dataKey="claude" stackId="1" stroke="#e17055" fill="url(#gradClaude)" strokeWidth={2} />
+                <Area type="monotone" dataKey="openrouter" stackId="1" stroke="#74b9ff" fill="url(#gradOpenRouter)" strokeWidth={2} />
+                <Area type="monotone" dataKey="codex" stackId="1" stroke="#00cec9" fill="url(#gradCodex)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+        )}
       </div>
 
       {/* ── Provider Surface Cards ── */}
@@ -385,7 +391,7 @@ export default function UsagePage() {
           { name: 'OpenRouter', color: '#74b9ff', emoji: '🌐', key: 'openrouter' as const },
           { name: 'Codex', color: '#00cec9', emoji: '💻', key: 'codex' as const },
         ] as const).map((provider) => {
-          const data = provider.key === 'openrouter' ? usage?.breakdown.openrouter : usage?.breakdown[provider.key];
+          const data = provider.key === 'openrouter' ? usage?.breakdown?.openrouter : usage?.breakdown?.[provider.key];
           return (
             <div key={provider.key} style={{
               background: 'rgba(18, 18, 26, 0.6)',
@@ -409,11 +415,11 @@ export default function UsagePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Daily</span>
-                  <span style={{ fontWeight: 600, color: provider.color }}>${data?.dailyUsd.toFixed(4) || '0.0000'}</span>
+                  <span style={{ fontWeight: 600, color: provider.color }}>${data?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Weekly</span>
-                  <span style={{ fontWeight: 600, color: provider.color }}>${data?.weeklyUsd.toFixed(4) || '0.0000'}</span>
+                  <span style={{ fontWeight: 600, color: provider.color }}>${data?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
                 </div>
                 {data?.dailyTokens != null && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 2, fontSize: 11, color: 'var(--text-tertiary)' }}>
@@ -448,12 +454,12 @@ export default function UsagePage() {
                 { name: 'Codex', key: 'codex' as const, color: '#00cec9' },
                 { name: 'OpenRouter', key: 'openrouter' as const, color: '#74b9ff' },
               ] as const).map((row, idx) => {
-                const d = row.key === 'openrouter' ? usage?.breakdown.openrouter : usage?.breakdown[row.key];
+                const d = row.key === 'openrouter' ? usage?.breakdown?.openrouter : usage?.breakdown?.[row.key];
                 return (
                   <tr key={row.key} style={{ background: idx % 2 === 1 ? 'rgba(255,255,255,0.02)' : 'transparent', borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 12px', fontWeight: 600, color: row.color }}>{row.name}</td>
-                    <td style={{ padding: '10px 12px', color: '#fff' }}>${d?.dailyUsd.toFixed(4) || '0.0000'}</td>
-                    <td style={{ padding: '10px 12px', color: '#fff' }}>${d?.weeklyUsd.toFixed(4) || '0.0000'}</td>
+                    <td style={{ padding: '10px 12px', color: '#fff' }}>${d?.dailyUsd?.toFixed(4) ?? '0.0000'}</td>
+                    <td style={{ padding: '10px 12px', color: '#fff' }}>${d?.weeklyUsd?.toFixed(4) ?? '0.0000'}</td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{d?.dailyTokens?.toLocaleString() || '—'}</td>
                     <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{d?.weeklyTokens?.toLocaleString() || '—'}</td>
                   </tr>
@@ -464,34 +470,34 @@ export default function UsagePage() {
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: '#fff' }}>Total</td>
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: '#fff' }}>
                   ${(
-                    (usage?.breakdown.gemini.dailyUsd || 0) +
-                    (usage?.breakdown.claude.dailyUsd || 0) +
-                    (usage?.breakdown.codex.dailyUsd || 0) +
-                    (usage?.breakdown.openrouter?.dailyUsd || 0)
+                    (usage?.breakdown?.gemini?.dailyUsd || 0) +
+                    (usage?.breakdown?.claude?.dailyUsd || 0) +
+                    (usage?.breakdown?.codex?.dailyUsd || 0) +
+                    (usage?.breakdown?.openrouter?.dailyUsd || 0)
                   ).toFixed(4)}
                 </td>
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: '#fff' }}>
                   ${(
-                    (usage?.breakdown.gemini.weeklyUsd || 0) +
-                    (usage?.breakdown.claude.weeklyUsd || 0) +
-                    (usage?.breakdown.codex.weeklyUsd || 0) +
-                    (usage?.breakdown.openrouter?.weeklyUsd || 0)
+                    (usage?.breakdown?.gemini?.weeklyUsd || 0) +
+                    (usage?.breakdown?.claude?.weeklyUsd || 0) +
+                    (usage?.breakdown?.codex?.weeklyUsd || 0) +
+                    (usage?.breakdown?.openrouter?.weeklyUsd || 0)
                   ).toFixed(4)}
                 </td>
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
                   {(
-                    (usage?.breakdown.gemini.dailyTokens || 0) +
-                    (usage?.breakdown.claude.dailyTokens || 0) +
-                    (usage?.breakdown.codex.dailyTokens || 0) +
-                    (usage?.breakdown.openrouter?.dailyTokens || 0)
+                    (usage?.breakdown?.gemini?.dailyTokens || 0) +
+                    (usage?.breakdown?.claude?.dailyTokens || 0) +
+                    (usage?.breakdown?.codex?.dailyTokens || 0) +
+                    (usage?.breakdown?.openrouter?.dailyTokens || 0)
                   ).toLocaleString()}
                 </td>
                 <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
                   {(
-                    (usage?.breakdown.gemini.weeklyTokens || 0) +
-                    (usage?.breakdown.claude.weeklyTokens || 0) +
-                    (usage?.breakdown.codex.weeklyTokens || 0) +
-                    (usage?.breakdown.openrouter?.weeklyTokens || 0)
+                    (usage?.breakdown?.gemini?.weeklyTokens || 0) +
+                    (usage?.breakdown?.claude?.weeklyTokens || 0) +
+                    (usage?.breakdown?.codex?.weeklyTokens || 0) +
+                    (usage?.breakdown?.openrouter?.weeklyTokens || 0)
                   ).toLocaleString()}
                 </td>
               </tr>

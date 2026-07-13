@@ -1060,3 +1060,41 @@ export function pullAllSkills(brainDir, opts = {}) {
 export function defaultBrainDir() {
   return process.env._TR_TEST_BRAIN_DIR || path.join(os.homedir(), '.agent', 'skills', 'total-recall');
 }
+/**
+ * Pipeline to resolve skill locations across Embedded, Project, and Global scopes.
+ * Implements the SSOT for Embedded (repo) vs System (brain) priority.
+ *
+ * @param {string} skillName
+ * @param {string} [currentRepoPath] - Optional local project path (Embedded layer)
+ * @param {string} [projectBrainDir] - Optional project brain (Project layer)
+ * @param {string} [globalBrainDir] - Optional global brain (Global layer)
+ * @returns {{ type: 'embedded'|'project'|'global', path: string } | null}
+ */
+export function resolveSkillPipeline(skillName, currentRepoPath, projectBrainDir, globalBrainDir) {
+  // 1. Embedded Skills (Repo-specific memory)
+  if (currentRepoPath) {
+    const embeddedPath = path.join(currentRepoPath, '.agent', 'skills', skillName);
+    if (fs.existsSync(embeddedPath)) {
+      return { type: 'embedded', path: embeddedPath };
+    }
+  }
+
+  // 2. Project Skills (Context Layer)
+  if (projectBrainDir) {
+    const projectPath = path.join(projectBrainDir, '.agent', 'skills', skillName);
+    if (fs.existsSync(projectPath)) {
+      return { type: 'project', path: projectPath };
+    }
+  }
+
+  // 3. Global System Skills (Identity Layer)
+  if (globalBrainDir) {
+    // Standard system skills path inside the global brain registry
+    const globalPath = path.join(resolveRegistryDir(globalBrainDir), 'skills', skillName);
+    if (fs.existsSync(globalPath)) {
+      return { type: 'global', path: globalPath };
+    }
+  }
+
+  return null;
+}

@@ -558,7 +558,7 @@ Perform a POST request to \`${base}/api/memory/search/semantic\` with the body \
     },
     'brain.toml': {
       description: 'Show Total Recall brain status and health',
-      prompt: `Show the health, loaded model status, and statistics of the local Total Recall Sovereign OS brain.
+      prompt: `Show the health, loaded model status, and statistics of the local Total Recall Total Recall System brain.
 
 Instructions:
 Query the health of the local brain by sending a GET request to \`${base}/health\` with Authorization: Bearer ${token}.`
