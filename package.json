@@ -37,7 +37,7 @@
     "start": "node src/server/index.mjs",
     "test": "vitest run",
     "clean": "rm -rf scratch/* .remember/* *.log",
-    "version": "node .agent/skills/push/scripts/sync-skill-versions.mjs && git add -f .agent/skills/*/SKILL.md"
+    "version": "node .agent/skills/push/scripts/sync-skill-versions.mjs && git add scaffold/.agent/skills/total-recall/SKILL.md"
   },
   "repository": {
     "type": "git",
