@@ -66,9 +66,10 @@ const RULE_DIRECTORY_CANDIDATES = [
  * Returns a list of detected files with metadata (path, size, preview).
  *
  * @param {string[]} dirs  Directories to search (default: [cwd, homedir])
+ * @param {string} [vaultDir] Optional vault directory to check for existing nodes
  * @returns {{ filename, label, ide, absolutePath, size, preview, alreadyImported }[]}
  */
-export function detectRuleFiles(dirs) {
+export function detectRuleFiles(dirs, vaultDir = VAULT_DIR) {
   const searchDirs = dirs?.length ? dirs : [process.cwd(), os.homedir()];
   const seen = new Set();
   const detected = [];
@@ -76,7 +77,7 @@ export function detectRuleFiles(dirs) {
   // Load existing vault nodes to detect already-imported files
   let existingSlugs = new Set();
   try {
-    existingSlugs = new Set(getNodes(VAULT_DIR).map(n => n.slug));
+    existingSlugs = new Set(getNodes(vaultDir).map(n => n.slug));
   } catch { /* vault may not exist yet */ }
 
   for (const dir of searchDirs) {
@@ -269,7 +270,7 @@ export async function importRuleFiles(files, { force = false, vaultDir = VAULT_D
  * @param {{ dirs?: string[], force?: boolean, vaultDir?: string, dryRun?: boolean }} opts
  */
 export async function detectAndImport({ dirs, force = false, vaultDir = VAULT_DIR, dryRun = false } = {}) {
-  const detected = detectRuleFiles(dirs);
+  const detected = detectRuleFiles(dirs, vaultDir);
   const toImport = detected.filter(f => !f.alreadyImported || force);
 
   if (dryRun) {

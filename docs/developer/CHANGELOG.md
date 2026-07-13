@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.14.0] — 2026-07-13
+
+### ✨ Features
+- **Repo-Scoping Skill Controls**: Added UI toggles to the Skills Manager allowing users to copy global skills into specific repository `.agent/skills/` directories.
+- **AI Skill Auditor**: Replaced static regex-based skill improvement suggestions with an intelligent LLM-driven `POST /api/skills/audit` endpoint that uses the local runtime to identify outdated or problematic skill instructions.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.14.0`.
+
 ## [3.13.0] — 2026-07-06
 
 ### ✨ Features

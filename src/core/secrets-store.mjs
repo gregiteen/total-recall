@@ -404,6 +404,22 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     provider: secrets[META_KEY].keys[key].provider,
     actor: opts.actor || 'cli',
   });
+
+  if (!prev.created_at) {
+    try {
+      import('./research-queue.mjs').then(({ addToQueue }) => {
+        const topic = `Automated API Integration Build: ${key}`;
+        const notes = `The user added a new API key named "${key}" to the vault.\nPlease do the following:\n1. Scrape the official API documentation for "${key}" to learn how it works and what the endpoints are.\n2. Add the integration into the system (e.g. usage tracking in usage-tracker.mjs, allow the key in rest.mjs allowedKeys).\n3. Wire it up so the frontend and backend can use it seamlessly.`;
+        addToQueue({ topic, priority: 'normal', notes });
+      });
+      import('./logger.mjs').then(({ logger }) => {
+        logger.info('secrets', 'Queued agentic integration builder for new key', { key });
+      });
+    } catch (err) {
+      // Ignore background task failures
+    }
+  }
+
   return { key, set: true };
 }
 

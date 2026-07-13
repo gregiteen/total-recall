@@ -14,7 +14,7 @@ import ResearchAgendaTab from '../components/ResearchAgendaTab'
 import type { ResearchItem } from '../components/ResearchAgendaTab'
 import DaemonLogsTab from '../components/DaemonLogsTab'
 
-export default function TasksPage() {
+export default function TasksPage({ activeBrainId }: { activeBrainId?: string }) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([])
   const [researchCounts, setResearchCounts] = useState({ pending: 0, in_progress: 0, done: 0, failed: 0 })
@@ -64,54 +64,59 @@ export default function TasksPage() {
   const [showResearchForm, setShowResearchForm] = useState(false)
   const [researchTopic, setResearchTopic] = useState('')
   const [researchPriority, setResearchPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
+  const [researchDepth, setResearchDepth] = useState('1')
   const [researchNotes, setResearchNotes] = useState('')
   const [researchSubmitting, setResearchSubmitting] = useState(false)
 
   // Fetch Scheduler Tasks
   const fetchTasks = useCallback(async () => {
     try {
-      const data = await listTasks()
+      const data = await listTasks(activeBrainId)
       setTasks(data || [])
       setError('')
-      return true
     } catch (e) {
-      setError((e as Error).message)
-      return false
+      console.error(e)
+      setError(`Failed to fetch tasks: ${(e as Error).message}`)
     }
-  }, [])
+  }, [activeBrainId])
 
-  // Fetch Research Agenda
-  const fetchResearch = useCallback(async () => {
+  const fetchResearchItems = useCallback(async () => {
     try {
-      const res = await listResearch('all')
+      const res = await listResearch(activeBrainId)
       setResearchItems(res.items || [])
-      setResearchCounts(res.counts || { pending: 0, in_progress: 0, done: 0, failed: 0 })
+      const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 }
+      for (const item of (res.items || [])) {
+        if (counts[item.status as keyof typeof counts] !== undefined) {
+          counts[item.status as keyof typeof counts]++
+        }
+      }
+      setResearchCounts(counts)
       setError('')
-      return true
     } catch (e) {
-      setError((e as Error).message)
-      return false
+      console.error(e)
+      setError(`Failed to fetch research: ${(e as Error).message}`)
     }
-  }, [])
+  }, [activeBrainId])
 
   // Fetch Daemon (Cognitive Engine) Logs
   const fetchDaemonLogs = useCallback(async () => {
+    if (activeTab !== 'logs') return
     try {
-      const data = await fetchLogs('daemon')
+      const data = await fetchLogs(activeBrainId)
       setLogs(data.content || '(no logs streamed yet)')
       return true
     } catch (e) {
       setLogs(`Error connecting to cognitive logs: ${(e as Error).message}`)
       return false
     }
-  }, [])
+  }, [activeTab, activeBrainId])
 
   // Combined Refresh
   const refreshAll = useCallback(async () => {
     setLoading(true)
-    await Promise.all([fetchTasks(), fetchResearch(), fetchDaemonLogs()])
+    await Promise.all([fetchTasks(), fetchResearchItems(), fetchDaemonLogs()])
     setLoading(false)
-  }, [fetchTasks, fetchResearch, fetchDaemonLogs])
+  }, [fetchTasks, fetchResearchItems, fetchDaemonLogs])
 
   // Polling loop
   useEffect(() => {
@@ -122,7 +127,7 @@ export default function TasksPage() {
     const poll = async () => {
       if (!active) return
       
-      const results = await Promise.all([fetchTasks(), fetchResearch(), fetchDaemonLogs()])
+      const results = await Promise.all([fetchTasks(), fetchResearchItems(), fetchDaemonLogs()])
       const hasError = results.includes(false)
       
       if (hasError) {
@@ -138,7 +143,7 @@ export default function TasksPage() {
     }
 
     const init = async () => {
-      await Promise.all([fetchTasks(), fetchResearch(), fetchDaemonLogs()])
+      await Promise.all([fetchTasks(), fetchResearchItems(), fetchDaemonLogs()])
       setLoading(false)
       if (active) {
         timeoutId = setTimeout(poll, 3000)
@@ -150,20 +155,21 @@ export default function TasksPage() {
       active = false
       clearTimeout(timeoutId)
     }
-  }, [fetchTasks, fetchResearch, fetchDaemonLogs])
+  }, [fetchTasks, fetchResearchItems, fetchDaemonLogs])
 
   // Trigger Brain Recompilation
   const handleRecompile = async () => {
+    if (recompiling) return
     setRecompiling(true)
     setError('')
     setActionSuccess('')
     try {
-      const res = await triggerRecompile()
-      setActionSuccess(res.message || 'Brain surface recompiled successfully!')
+      await triggerRecompile(activeBrainId)
+      setActionSuccess('Surface projections recompiled successfully')
       setTimeout(() => setActionSuccess(''), 4000)
       void refreshAll()
     } catch (e) {
-      setError((e as Error).message)
+      setError(`Recompile failed: ${(e as Error).message}`)
     } finally {
       setRecompiling(false)
     }

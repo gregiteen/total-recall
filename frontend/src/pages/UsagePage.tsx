@@ -1,26 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchUsageStats, fetchConfigJson } from '../api';
-import type { ConfigJson } from '../types';
+import type { ConfigJson, UsageData } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-
-interface UsageBreakdown {
-  dailyUsd: number;
-  weeklyUsd: number;
-  dailyTokens?: number;
-  weeklyTokens?: number;
-}
-
-interface UsageData {
-  timestamp: string;
-  dailyUsd: number;
-  weeklyUsd: number;
-  breakdown: {
-    gemini: UsageBreakdown;
-    claude: UsageBreakdown;
-    codex: UsageBreakdown;
-    openrouter?: UsageBreakdown;
-  };
-}
 
 export default function UsagePage() {
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -65,7 +46,7 @@ export default function UsagePage() {
     return 'var(--success)';
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- usage reference is stable per fetch cycle
+   
   const timeseriesData = useMemo(() => {
     if ((usage as unknown as Record<string, unknown>)?.timeseries && Object.keys((usage as unknown as Record<string, unknown>).timeseries as Record<string, unknown>).length > 0) {
       const ts = (usage as unknown as Record<string, unknown>).timeseries as Record<string, Record<string, { provider: string; cost: number }>>;
@@ -225,7 +206,10 @@ export default function UsagePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 18 }}>♊</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Gemini</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Gemini CLI</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>~/.gemini/tmp</span>
+                </div>
               </div>
               <span className="badge" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                 Google API
@@ -253,7 +237,10 @@ export default function UsagePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 18 }}>🍊</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Claude</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Claude Code CLI</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>~/.claude</span>
+                </div>
               </div>
               <span className="badge" style={{ background: 'rgba(239, 107, 107, 0.1)', color: '#f87171', border: '1px solid rgba(239, 107, 107, 0.2)' }}>
                 Anthropic API
@@ -281,7 +268,10 @@ export default function UsagePage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 18 }}>💻</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Codex</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Codex CLI</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>~/.codex/sessions</span>
+                </div>
               </div>
               <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
                 OpenAI API
@@ -331,6 +321,117 @@ export default function UsagePage() {
             </div>
           </div>
 
+          {/* Tavily */}
+          <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: 16, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🔎</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Tavily Search</span>
+              </div>
+              <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                Web API
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.tavily?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.tavily?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                <span>Rolling Tokens:</span>
+                <span>{usage?.breakdown?.tavily?.dailyTokens?.toLocaleString() || 0} (24h)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Brave */}
+          <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: 16, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🦁</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Brave Search</span>
+              </div>
+              <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                Web API
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.brave?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.brave?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                <span>Rolling Tokens:</span>
+                <span>{usage?.breakdown?.brave?.dailyTokens?.toLocaleString() || 0} (24h)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Exa */}
+          <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: 16, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>✨</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Exa Search</span>
+              </div>
+              <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                Web API
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.exa?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.exa?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                <span>Rolling Tokens:</span>
+                <span>{usage?.breakdown?.exa?.dailyTokens?.toLocaleString() || 0} (24h)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Serper */}
+          <div style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: 16, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 18 }}>🔍</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Serper Search</span>
+              </div>
+              <span className="badge" style={{ background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                Web API
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Daily Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.serper?.dailyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Weekly Spend:</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>${usage?.breakdown?.serper?.weeklyUsd?.toFixed(4) ?? '0.0000'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 6, marginTop: 4, fontSize: 11, color: 'var(--text-tertiary)' }}>
+                <span>Rolling Tokens:</span>
+                <span>{usage?.breakdown?.serper?.dailyTokens?.toLocaleString() || 0} (24h)</span>
+              </div>
+            </div>
+          </div>
 
         </div>
       </div>
@@ -390,8 +491,12 @@ export default function UsagePage() {
           { name: 'Claude', color: '#e17055', emoji: '🍊', key: 'claude' as const },
           { name: 'OpenRouter', color: '#74b9ff', emoji: '🌐', key: 'openrouter' as const },
           { name: 'Codex', color: '#00cec9', emoji: '💻', key: 'codex' as const },
+          { name: 'Tavily', color: '#eab308', emoji: '🔎', key: 'tavily' as const },
+          { name: 'Brave', color: '#eab308', emoji: '🦁', key: 'brave' as const },
+          { name: 'Exa', color: '#eab308', emoji: '✨', key: 'exa' as const },
+          { name: 'Serper', color: '#eab308', emoji: '🔍', key: 'serper' as const },
         ] as const).map((provider) => {
-          const data = provider.key === 'openrouter' ? usage?.breakdown?.openrouter : usage?.breakdown?.[provider.key];
+          const data = usage?.breakdown?.[provider.key as keyof typeof usage.breakdown];
           return (
             <div key={provider.key} style={{
               background: 'rgba(18, 18, 26, 0.6)',

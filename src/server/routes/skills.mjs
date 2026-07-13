@@ -83,7 +83,6 @@ function isTrSkillName(name) {
   if (!name || typeof name !== 'string') return true;
   const n = name.toLowerCase();
   if (TR_SKILL_EXCLUDE.has(n)) return true;
-  if (n.startsWith('tr-')) return true;
   if (n.startsWith('total-recall')) return true;
   return false;
 }
@@ -185,10 +184,16 @@ function scanSkillRoot(skillsRoot, repo, projectPath, rootInfo) {
 
 /**
  * Collect skills for all registered projects, grouped by repo → IDE.
- * Excludes total-recall / tr-* system skills.
+ * Excludes total-recall system skills.
  */
 export function collectSkillsByRepo() {
   const registry = loadProjectRegistry();
+  // Inject the global homedir so global skills are also scanned and managed
+  registry.unshift({
+    name: 'Global',
+    path: os.homedir()
+  });
+
   const byRepo = new Map();
 
   for (const entry of registry) {
@@ -258,7 +263,7 @@ export function collectSkillsByRepo() {
       ide_label,
       docs,
     })),
-    excluded_note: 'total-recall and tr-* skills are hidden from this catalog',
+    excluded_note: 'total-recall skills are hidden from this catalog',
   };
 }
 
@@ -529,6 +534,85 @@ skillsRouter.delete('/api/skills/:name', requireAuth, requireScope('files:write'
     }
     fs.rmSync(skillDir, { recursive: true, force: true });
     res.json({ success: true, message: `Skill "${name}" deleted successfully` });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+import { callLocalRuntime, loadRuntimeConfig } from '../../core/runtime.mjs';
+
+skillsRouter.post('/api/skills/toggle', requireAuth, requireScope('ssss:write'), async (req, res) => {
+  try {
+    const { skillName, targetRepo, enabled } = req.body;
+    if (!skillName || !targetRepo || targetRepo === 'Global') {
+      return res.status(400).json({ error: 'Missing parameters or invalid target repo' });
+    }
+
+    const globalSkillPath = path.join(os.homedir(), '.agent', 'skills', skillName);
+    const targetSkillPath = path.join(targetRepo, '.agent', 'skills', skillName);
+
+    if (enabled) {
+      if (!fs.existsSync(globalSkillPath)) {
+        return res.status(400).json({ error: 'Global skill not found' });
+      }
+      fs.cpSync(globalSkillPath, targetSkillPath, { recursive: true });
+      
+      const targetSkillMd = path.join(targetSkillPath, 'SKILL.md');
+      if (fs.existsSync(targetSkillMd)) {
+        let content = fs.readFileSync(targetSkillMd, 'utf8');
+        content += `\n\n> **Repo Scope Override:** This skill was copied from the Global registry and is now scoped to \`${targetRepo}\`.\n`;
+        fs.writeFileSync(targetSkillMd, content, 'utf8');
+      }
+    } else {
+      if (fs.existsSync(targetSkillPath)) {
+        fs.rmSync(targetSkillPath, { recursive: true, force: true });
+      }
+    }
+
+    res.json({ success: true, message: `Skill ${skillName} ${enabled ? 'enabled' : 'disabled'} for ${targetRepo}` });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+skillsRouter.post('/api/skills/audit', requireAuth, requireScope('ssss:read'), async (req, res) => {
+  try {
+    const { skillName, repoPath } = req.body;
+    if (!skillName) return res.status(400).json({ error: 'skillName required' });
+
+    let skillDir;
+    try {
+      ({ skillDir } = resolveSkillDir(repoPath || 'Global', skillName, {}));
+    } catch (e) {
+      return res.status(404).json({ error: e.message });
+    }
+
+    const skillPath = path.join(skillDir, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) return res.status(404).json({ error: 'SKILL.md not found' });
+
+    const content = fs.readFileSync(skillPath, 'utf8');
+    const prompt = `Analyze this AI Agent SKILL.md document.
+Identify if it is outdated, incorrect, or problematic.
+Propose specific updates to improve it.
+If it looks perfect, say so.
+Return a JSON object: { "outdated": boolean, "problematic": boolean, "reason": string, "proposed_changes": string }
+
+SKILL DOCUMENT:
+${content}`;
+
+    const config = loadRuntimeConfig();
+    const result = await callLocalRuntime(prompt, "You are an expert AI agent capabilities auditor. Always return valid JSON matching the requested schema.", config);
+
+    // Extract JSON block
+    const match = result.match(/\{[\s\S]*\}/);
+    let auditData;
+    try {
+        auditData = JSON.parse(match ? match[0] : result);
+    } catch (e) {
+        auditData = { outdated: false, problematic: true, reason: 'Failed to parse AI response', proposed_changes: 'Check server logs. AI output was not valid JSON.' };
+    }
+
+    res.json({ success: true, audit: auditData });
   } catch (err) {
     serverError(res, err);
   }
