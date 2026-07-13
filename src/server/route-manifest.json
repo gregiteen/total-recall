@@ -368,6 +368,14 @@
     "path": "/api/skills/install"
   },
   {
+    "method": "POST",
+    "path": "/api/skills/toggle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/audit"
+  },
+  {
     "method": "GET",
     "path": "/api/skills/search"
   },

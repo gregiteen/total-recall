@@ -1,6 +1,12 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [3.14.1] — 2026-07-13
+
+### 🐛 Bug Fixes
+- **Route Manifest Sync**: Added the newly created `/api/skills/toggle` and `/api/skills/audit` routes to the Express route manifest to satisfy inventory tests.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.14.1`.
 
 ## [3.14.0] — 2026-07-13
 
