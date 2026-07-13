@@ -43,7 +43,7 @@ function renderMarkdown(md: string) {
   return <div dangerouslySetInnerHTML={{ __html: html }} className="markdown-preview-block" />
 }
 
-export default function HelpPage() {
+export default function HelpPage({ activeBrainId }: { activeBrainId?: string }) {
   const [topics, setTopics] = useState<HelpTopic[]>([])
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
   const [content, setContent] = useState<string>('')

@@ -71,7 +71,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
   // Fetch Scheduler Tasks
   const fetchTasks = useCallback(async () => {
     try {
-      const data = await listTasks(activeBrainId)
+      const data = await listTasks()
       setTasks(data || [])
       setError('')
     } catch (e) {
@@ -82,7 +82,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
 
   const fetchResearchItems = useCallback(async () => {
     try {
-      const res = await listResearch(activeBrainId)
+      const res = await listResearch()
       setResearchItems(res.items || [])
       const counts = { pending: 0, in_progress: 0, done: 0, failed: 0 }
       for (const item of (res.items || [])) {
@@ -102,7 +102,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
   const fetchDaemonLogs = useCallback(async () => {
     if (activeTab !== 'logs') return
     try {
-      const data = await fetchLogs(activeBrainId)
+      const data = await fetchLogs("server")
       setLogs(data.content || '(no logs streamed yet)')
       return true
     } catch (e) {
@@ -254,7 +254,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
       setShowResearchForm(false)
       setActionSuccess('Research project enqueued successfully!')
       setTimeout(() => setActionSuccess(''), 3000)
-      void fetchResearch()
+      void fetchResearchItems()
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -415,7 +415,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
           handleToggleExpand={handleToggleExpand}
           loadedDiscoveries={loadedDiscoveries}
           loadingNodeSlugs={loadingNodeSlugs}
-          refreshResearch={fetchResearch}
+          refreshResearch={fetchResearchItems}
         />
       )}
 

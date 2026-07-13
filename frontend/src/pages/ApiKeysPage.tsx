@@ -91,7 +91,7 @@ function ProviderLogo({ provider }: { provider?: string }) {
   return null;
 }
 
-export default function ApiKeysPage() {
+export default function ApiKeysPage({ activeBrainId }: { activeBrainId?: string }) {
   const [tab, setTab] = useState<Tab>('catalog')
 
   const [configData, setConfigData] = useState<ConfigJson | null>(null)
