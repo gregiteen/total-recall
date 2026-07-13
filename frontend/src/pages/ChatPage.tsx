@@ -210,7 +210,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
         ) {
           loadMemoryNodes()
         }
-      } catch (e) {
+      } catch {
         // ignore parsing errors from stream
       }
     }

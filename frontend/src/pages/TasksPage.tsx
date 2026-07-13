@@ -64,7 +64,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
   const [showResearchForm, setShowResearchForm] = useState(false)
   const [researchTopic, setResearchTopic] = useState('')
   const [researchPriority, setResearchPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
-  const [researchDepth, setResearchDepth] = useState('1')
+
   const [researchNotes, setResearchNotes] = useState('')
   const [researchSubmitting, setResearchSubmitting] = useState(false)
 
@@ -78,7 +78,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
       console.error(e)
       setError(`Failed to fetch tasks: ${(e as Error).message}`)
     }
-  }, [activeBrainId])
+  }, [])
 
   const fetchResearchItems = useCallback(async () => {
     try {
@@ -96,7 +96,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
       console.error(e)
       setError(`Failed to fetch research: ${(e as Error).message}`)
     }
-  }, [activeBrainId])
+  }, [])
 
   // Fetch Daemon (Cognitive Engine) Logs
   const fetchDaemonLogs = useCallback(async () => {
@@ -109,7 +109,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
       setLogs(`Error connecting to cognitive logs: ${(e as Error).message}`)
       return false
     }
-  }, [activeTab, activeBrainId])
+  }, [activeTab])
 
   // Combined Refresh
   const refreshAll = useCallback(async () => {

@@ -15,7 +15,8 @@ import SkillsPage from './pages/SkillsPage'
 import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
 import OpenWikiPage from './pages/OpenWikiPage'
-import OnboardingPage, { isOnboardingComplete } from './pages/OnboardingPage'
+import OnboardingPage from './pages/OnboardingPage'
+import { isOnboardingComplete } from './utils/onboarding'
 import BrandMark from './components/brand/BrandMark'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
@@ -303,7 +304,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
             <Route path="/openwiki" element={<OpenWikiPage activeBrainId={activeBrainId} />} />
             <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
-            <Route path="/keys" element={<ApiKeysPage activeBrainId={activeBrainId} />} />
+            <Route path="/keys" element={<ApiKeysPage />} />
             <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
             <Route path="/help" element={<HelpPage activeBrainId={activeBrainId} />} />
             {/* Legacy OS-control-plane routes → core product */}

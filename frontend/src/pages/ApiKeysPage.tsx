@@ -202,9 +202,9 @@ export default function ApiKeysPage({ activeBrainId }: { activeBrainId?: string 
   useEffect(() => {
     // eslint-disable-next-line
     void loadCatalog()
-    // eslint-disable-next-line
+     
     void loadPats()
-    // eslint-disable-next-line
+     
     void loadWebAuthn()
   }, [loadCatalog, loadPats, loadWebAuthn])
 
@@ -494,7 +494,7 @@ export default function ApiKeysPage({ activeBrainId }: { activeBrainId?: string 
     if (first) next.add(first.id)
     // eslint-disable-next-line
     setExpandedSections(next)
-    // eslint-disable-next-line
+     
     setSectionsInited(true)
   }, [repoSections, sectionsInited])
 

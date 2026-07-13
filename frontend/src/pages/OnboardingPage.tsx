@@ -67,14 +67,7 @@ function saveProgress(p: { step: number; fact?: string; complete?: boolean }) {
   if (p.complete) localStorage.setItem('tr-onboarding-complete', '1')
 }
 
-export function isOnboardingComplete(): boolean {
-  return localStorage.getItem('tr-onboarding-complete') === '1'
-}
-
-export function resetOnboarding() {
-  localStorage.removeItem(STORAGE_KEY)
-  localStorage.removeItem('tr-onboarding-complete')
-}
+import { isOnboardingComplete } from '../utils/onboarding'
 
 /** Client-side .env parse so we can re-send pairs on import without server holding paste. */
 function parseEnvClient(text: string): Record<string, string> {
