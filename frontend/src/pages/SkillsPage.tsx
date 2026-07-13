@@ -298,8 +298,8 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
     }
   }, [activeBrainId]);
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSkillsList();
   }, [fetchSkillsList]);
 
@@ -523,9 +523,9 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     }
   }, []);
 
-      // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (activeTab === 'automation') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void handleFetchResearch();
     }
   }, [activeTab, handleFetchResearch]);
