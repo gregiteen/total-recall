@@ -163,11 +163,18 @@ export interface ConfigJson {
       require_https?: boolean
       public_health?: boolean
       allowed_origins?: string[]
+      trusted_proxies?: string
     }
     rate_limits?: {
       api_requests_per_minute?: number
       sandbox_requests_per_minute?: number
       ingest_requests_per_minute?: number
+    }
+    auth?: {
+      allow_static_pats?: boolean
+    }
+    telemetry?: {
+      enabled?: boolean
     }
     [key: string]: unknown
   }
@@ -186,6 +193,12 @@ export interface ConfigJson {
     gemini_model?: string
     claude_model?: string
     openai_model?: string
+    url?: string
+    name?: string
+    role?: string
+    layer?: string
+    tags?: string
+    full_brain?: boolean
   }
   secrets?: {
     google_api_key?: string

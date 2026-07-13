@@ -7,8 +7,7 @@ export default function SettingsPage() {
   const [configData, setConfigData] = useState<ConfigJson | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [sandboxLog, setSandboxLog] = useState('');
-  const [domainToBlock, setDomainToBlock] = useState('');
-
+  
   const [health, setHealth] = useState<HealthData | null>(null);
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<string | null>(null);
@@ -128,9 +127,6 @@ export default function SettingsPage() {
     setConfigData(prev => prev ? { ...prev, brain: { ...prev.brain, [key]: value } } : null);
   };
 
-  const updateSecretProp = (key: string, value: any) => {
-    setConfigData(prev => prev ? { ...prev, secrets: { ...prev.secrets, [key]: value } } : null);
-  };
 
   const getCsv = (arr: any) => Array.isArray(arr) ? arr.join(', ') : '';
   const setCsv = (val: string) => val.split(',').map(s => s.trim()).filter(Boolean);
@@ -538,7 +534,7 @@ export default function SettingsPage() {
             <input
               type="checkbox"
               className="settings-checkbox"
-              checked={!!configData.security.sandbox?.enabled}
+              checked={!!(configData.security as any).sandbox?.enabled}
               onChange={(e) => updateSecurityNested('sandbox', 'enabled', e.target.checked)}
             />
           </div>
@@ -577,7 +573,7 @@ export default function SettingsPage() {
             <input
               type="checkbox"
               className="settings-checkbox"
-              checked={!!configData.security.api?.allow_static_pats}
+              checked={!!(configData.security as any).api?.allow_static_pats}
               onChange={(e) => updateSecurityNested('api', 'allow_static_pats', e.target.checked)}
             />
           </div>
