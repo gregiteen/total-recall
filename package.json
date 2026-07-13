@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.14.0",
+  "version": "3.14.1",
   "description": "Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.",
   "type": "module",
   "bin": {
@@ -37,7 +37,7 @@
     "start": "node src/server/index.mjs",
     "test": "vitest run",
     "clean": "rm -rf scratch/* .remember/* *.log",
-    "version": "node .agent/skills/push/scripts/sync-skill-versions.mjs && git add .agent/skills/*/SKILL.md"
+    "version": "node .agent/skills/push/scripts/sync-skill-versions.mjs && git add -f .agent/skills/*/SKILL.md"
   },
   "repository": {
     "type": "git",
