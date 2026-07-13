@@ -63,7 +63,7 @@ export const UsageChart: React.FC<UsageChartProps> = ({ usageData }) => {
             <Tooltip 
               contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
               itemStyle={{ fontSize: 12 }}
-              formatter={(value: any) => [`$${Number(value).toFixed(4)}`, undefined]}
+              formatter={(value: number | string) => [`$${Number(value).toFixed(4)}`, undefined]}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar isAnimationActive={false} dataKey="gemini" name="Gemini" stackId="a" fill="#10b981" radius={[0,0,0,0]} />

@@ -453,7 +453,7 @@ export async function fetchConfigJson(): Promise<ConfigJson> {
   return res.json()
 }
 
-export async function fetchBrains(): Promise<any[]> {
+export async function fetchBrains(): Promise<Record<string, unknown>[]> {
   const res = await apiFetch(`${API_BASE}/api/brains`)
   return res.json()
 }

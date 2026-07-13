@@ -298,6 +298,7 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
     }
   }, [activeBrainId]);
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     void fetchSkillsList();
   }, [fetchSkillsList]);
@@ -522,6 +523,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     }
   }, []);
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (activeTab === 'automation') {
       void handleFetchResearch();

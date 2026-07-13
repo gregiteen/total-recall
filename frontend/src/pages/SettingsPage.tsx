@@ -666,7 +666,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
               }}
             >
               <option value="">Global Brain (Root)</option>
-              {brains.map((b: any) => (
+              {brains.map((b: Record<string, unknown>) => (
                 <option key={b.name} value={b.name}>{b.name} ({b.role} - {b.nodes} nodes)</option>
               ))}
             </select>

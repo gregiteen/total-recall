@@ -268,7 +268,7 @@ export default function InstructionsPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- legitimate data fetch on mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetch on mount
     void loadSurfaces()
   }, [])
 
