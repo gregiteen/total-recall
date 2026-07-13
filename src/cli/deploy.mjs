@@ -1,7 +1,7 @@
 /**
  * total-recall deploy
  *
- * Provision a target machine with the full Sovereign AI stack:
+ * Provision a target machine with the full Total Recall stack:
  *   1. Detect host architecture (aarch64 / x86_64 / arm64)
  *   2. Install Ollama (if not present)
  *   3. Pull Gemma 4 26B model (~16GB)
@@ -213,7 +213,7 @@ function parseArgs(args) {
 
 function printHelp() {
   console.log(`
-  total-recall deploy — Provision a target machine with the Sovereign AI stack
+  total-recall deploy — Provision a target machine with the Total Recall stack
 
   Usage: total-recall deploy [options]
 

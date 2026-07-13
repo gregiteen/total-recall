@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "react-router-dom"
 import { listMemory, searchMemory, readMemory, fetchConflicts, resolveConflict, saveMemory, createMemory, deleteMemory, fetchSessions, deleteSession } from "../api"
 import type { MemoryNode, Conflict } from "../types"
@@ -41,70 +41,6 @@ function renderMarkdown(md: string) {
   return <div dangerouslySetInnerHTML={{ __html: html }} className="markdown-preview-block" />;
 }
 
-function markdownToHtml(md: string): string {
-  if (!md) return "";
-  let html = md
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  
-  // Headings
-  html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
-  html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
-  html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
-  
-  // Bold & Italic
-  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
-  
-  // Blockquotes
-  html = html.replace(/^> (.*$)/gim, "<blockquote>$1</blockquote>");
-  
-  // Lists
-  html = html.replace(/^- (.*$)/gim, "<li>$1</li>");
-  
-  // Newlines
-  html = html.replace(/\n/g, "<br />");
-  
-  return html;
-}
-
-function htmlToMarkdown(html: string): string {
-  if (!html) return "";
-  let md = html;
-  
-  // Replace <br> and <br /> with newline
-  md = md.replace(/<br\s*\/?>/gi, "\n");
-  
-  // Headings
-  md = md.replace(/<h1>(.*?)<\/h1>/gi, "# $1\n");
-  md = md.replace(/<h2>(.*?)<\/h2>/gi, "## $1\n");
-  md = md.replace(/<h3>(.*?)<\/h3>/gi, "### $1\n");
-  
-  // Bold & Italic
-  md = md.replace(/<strong>(.*?)<\/strong>/gi, "**$1**");
-  md = md.replace(/<b>(.*?)<\/b>/gi, "**$1**");
-  md = md.replace(/<em>(.*?)<\/em>/gi, "*$1*");
-  md = md.replace(/<i>(.*?)<\/i>/gi, "*$1*");
-  
-  // Blockquotes
-  md = md.replace(/<blockquote>(.*?)<\/blockquote>/gi, "> $1\n");
-  
-  // Lists
-  md = md.replace(/<li>(.*?)<\/li>/gi, "- $1\n");
-  
-  // Clean up any remaining HTML tags safely
-  md = md.replace(/<[^>]+>/g, "");
-  
-  // Decode HTML entities
-  md = md
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-    
-  return md.trim();
-}
-
 export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const urlSlug = searchParams.get("slug")
@@ -142,23 +78,6 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
   const [editRelated, setEditRelated] = useState("")
   const [editContradicts, setEditContradicts] = useState("")
   const [editSupersedes, setEditSupersedes] = useState("")
-
-  const editorRef = useRef<HTMLDivElement>(null)
-
-  const execCommand = (command: string, value: string = "") => {
-    document.execCommand(command, false, value)
-    editorRef.current?.focus()
-    if (editorRef.current) {
-      setEditContent(htmlToMarkdown(editorRef.current.innerHTML))
-    }
-  }
-
-  useEffect(() => {
-    if ((isEditing || isCreating) && editorRef.current) {
-      editorRef.current.innerHTML = markdownToHtml(editContent)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync editor HTML on toggle edit/create
-  }, [isEditing, isCreating])
 
   const fetchNodes = useCallback(async () => {
     setLoading(true)
@@ -584,42 +503,28 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
           </div>
         </div>
 
-        {/* WYSIWYG visual HTML Editor - NO RAW CODE PREVIEW! EDIT Styled preview DIRECTLY */}
+        {/* Markdown Content Editor */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Visual WYSIWYG Memory Content Editor</label>
-          <div style={{ background: "rgba(10,15,30,0.5)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
-            {/* Rich Formatting Toolbar */}
-            <div style={{ display: "flex", gap: 8, padding: 8, background: "rgba(255,255,255,0.03)", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("bold")} style={{ fontWeight: "bold", padding: "4px 10px" }}>B</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("italic")} style={{ fontStyle: "italic", padding: "4px 10px" }}>I</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("formatBlock", "<h1>")} style={{ padding: "4px 8px" }}>H1</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("formatBlock", "<h2>")} style={{ padding: "4px 8px" }}>H2</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("formatBlock", "<blockquote>")} style={{ padding: "4px 8px" }}>“ Quote</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("insertUnorderedList")} style={{ padding: "4px 8px" }}>• List</button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => execCommand("removeFormat")} style={{ padding: "4px 8px", fontSize: 11 }}>Clear</button>
-            </div>
-            
-            {/* Direct contentEditable Editor Pane */}
-            <div
-              ref={editorRef}
-              contentEditable
-              onInput={() => {
-                if (editorRef.current) {
-                  setEditContent(htmlToMarkdown(editorRef.current.innerHTML))
-                }
-              }}
-              style={{ 
-                minHeight: 300, 
-                padding: 16, 
-                color: "#fff", 
-                background: "#090d16", 
-                outline: "none", 
-                fontSize: 14, 
-                lineHeight: 1.6,
-                overflowY: "auto"
-              }}
-            />
-          </div>
+          <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>Memory Content</label>
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            placeholder="Write markdown here..."
+            style={{ 
+              minHeight: 300, 
+              padding: 16, 
+              color: "#fff", 
+              background: "#090d16",
+              border: "1px solid var(--border)", 
+              borderRadius: 8, 
+              outline: "none", 
+              fontSize: 14, 
+              lineHeight: 1.6,
+              resize: "vertical",
+              width: "100%",
+              boxSizing: "border-box"
+            }}
+          />
         </div>
 
         {/* Action Buttons */}
@@ -934,7 +839,11 @@ export default function MemoryPage({ activeBrainId }: { activeBrainId?: string }
               <div className="memory-list" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
                 {nodes.length === 0 && !loading && (
                   <div style={{ textAlign: "center", padding: 40, color: "var(--text-tertiary)" }}>
-                    {query ? "No matching nodes found." : "No memory nodes loaded. Is the backend running?"}
+                    {query 
+                      ? "No matching nodes found." 
+                      : category !== "all" 
+                        ? `No memory nodes found in category "${category}".`
+                        : "No memory nodes loaded. Is the backend running?"}
                   </div>
                 )}
                 {nodes.map(n => {

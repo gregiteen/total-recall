@@ -46,6 +46,7 @@ export default function TasksPage() {
         setLoadedDiscoveries(prev => ({ ...prev, [item.node_slug!]: node }))
       } catch (e) {
         console.error('Failed to load memory node for research', e)
+        setError(`Failed to load memory node: ${(e as Error).message}`)
       } finally {
         setLoadingNodeSlugs(prev => ({ ...prev, [item.node_slug!]: false }))
       }
@@ -72,8 +73,10 @@ export default function TasksPage() {
       const data = await listTasks()
       setTasks(data || [])
       setError('')
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
     }
   }, [])
 
@@ -84,8 +87,10 @@ export default function TasksPage() {
       setResearchItems(res.items || [])
       setResearchCounts(res.counts || { pending: 0, in_progress: 0, done: 0, failed: 0 })
       setError('')
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
     }
   }, [])
 
@@ -94,8 +99,10 @@ export default function TasksPage() {
     try {
       const data = await fetchLogs('daemon')
       setLogs(data.content || '(no logs streamed yet)')
+      return true
     } catch (e) {
       setLogs(`Error connecting to cognitive logs: ${(e as Error).message}`)
+      return false
     }
   }, [])
 
@@ -108,19 +115,41 @@ export default function TasksPage() {
 
   // Polling loop
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>
+    let active = true
+    let failCount = 0
+
+    const poll = async () => {
+      if (!active) return
+      
+      const results = await Promise.all([fetchTasks(), fetchResearch(), fetchDaemonLogs()])
+      const hasError = results.includes(false)
+      
+      if (hasError) {
+        failCount++
+      } else {
+        failCount = 0
+      }
+
+      if (active) {
+        const delay = Math.min(3000 * Math.pow(2, failCount), 60000)
+        timeoutId = setTimeout(poll, delay)
+      }
+    }
+
     const init = async () => {
       await Promise.all([fetchTasks(), fetchResearch(), fetchDaemonLogs()])
       setLoading(false)
+      if (active) {
+        timeoutId = setTimeout(poll, 3000)
+      }
     }
     void init()
 
-    const interval = setInterval(() => {
-      void fetchTasks()
-      void fetchResearch()
-      void fetchDaemonLogs()
-    }, 3000)
-
-    return () => clearInterval(interval)
+    return () => {
+      active = false
+      clearTimeout(timeoutId)
+    }
   }, [fetchTasks, fetchResearch, fetchDaemonLogs])
 
   // Trigger Brain Recompilation

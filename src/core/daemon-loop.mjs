@@ -98,14 +98,17 @@ export function writeInterrupt(message) {
 
 let taskCount = 0;
 let running = true;
+let vaultWatcher = null;
 
 process.on('SIGTERM', () => {
   logger.info({ subsystem: 'daemon-loop', message: 'SIGTERM received — shutting down gracefully' });
+  if (vaultWatcher) vaultWatcher.stop();
   running = false;
 });
 
 process.on('SIGINT', () => {
   logger.info({ subsystem: 'daemon-loop', message: 'SIGINT received — shutting down gracefully' });
+  if (vaultWatcher) vaultWatcher.stop();
   running = false;
 });
 
@@ -122,6 +125,14 @@ async function main() {
     subsystem: 'daemon-loop',
     message: `Daemon starting (open task envelope). Vault: ${VAULT_DIR} idle=${process.env.TR_IDLE_TASKS === '1' ? 'on' : 'off'}`,
   });
+
+  // Start vault watcher
+  try {
+    const { startVaultWatcher } = await import('./vault-watcher.mjs');
+    vaultWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Failed to start vault watcher: ${err.message}` });
+  }
 
   // Initial session ingest
   try {

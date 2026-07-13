@@ -245,15 +245,35 @@ Verify system health, connected clients registry, and daemon loops.
 
 ---
 
-### `generate-pat`
-Issue labels and grant scoped Bearer Personal Access Tokens.
+### `key`
+Issue labels and grant scoped Bearer Personal Access Tokens (PATs).
 - **Usage**:
   ```bash
-  npx total-recall generate-pat [options]
+  npx total-recall key create <name> [options]
+  npx total-recall key list
+  npx total-recall key rotate <id>
+  npx total-recall key revoke <id>
   ```
-- **Options**:
-  - `--scopes "<list>"`: Comma-separated scopes (e.g. `memory:read,chat:write`).
-  - `--label "<name>"`: Context label descriptor.
+- **Options for create**:
+  - `--scope <list>`: Comma-separated access scopes (e.g., `chat:read,memory:write`). Default: `*`.
+  - `--expires <date>`: ISO date (`2026-06-01`) or relative days (`30d`).
+
+---
+
+### `secret`
+Manage API keys and credentials (stored in `secrets.enc`, not in the memory vault).
+- **Usage**:
+  ```bash
+  npx total-recall secret set <key> <value> [options]
+  npx total-recall secret generate <key> [--bytes 32] [--format hex|base64url]
+  npx total-recall secret get <key>
+  npx total-recall secret list
+  npx total-recall secret rotate <key> <value>
+  npx total-recall secret delete <key>
+  ```
+- **Options for set**:
+  - `--provider <name>`: E.g., openai, anthropic.
+  - `--scope <global|project>`: Scope the secret.
 
 ---
 

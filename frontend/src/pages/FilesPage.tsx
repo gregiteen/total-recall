@@ -134,7 +134,12 @@ export default function FilesPage() {
       setNewScriptName("")
       setIsCreatingScript(false)
       await fetchScriptsList()
-      await handleSelectScript(name)
+      
+      // Yield to the event loop to ensure React state (scripts list) 
+      // is fully committed to the DOM before selecting it.
+      setTimeout(() => {
+        handleSelectScript(name).catch(console.error)
+      }, 0)
     } catch (e) {
       setError(`Failed to create script: ${(e as Error).message}`)
     } finally {

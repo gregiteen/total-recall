@@ -466,8 +466,9 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
       try {
         const files = await fetchSkillFiles(selectedSkill.name, dir, selectedSkill.repo);
         setSubDirFiles(prev => ({ ...prev, [dir]: files }));
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Failed to fetch skill files', err);
+        setError((err as Error).message || 'Failed to fetch skill files.');
         setSubDirFiles(prev => ({ ...prev, [dir]: [] }));
       }
     }
@@ -497,8 +498,8 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     try {
       const res = await listResearch();
       setResearchItems(res.items || []);
-    } catch {
-      // Silently handle — research API might not be available
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to fetch research items.');
     } finally {
       setResearchLoading(false);
     }

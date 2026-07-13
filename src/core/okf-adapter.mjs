@@ -99,12 +99,12 @@ export function okfConceptToSsssNode(okfFrontmatter, okfBody, conceptId, options
   const object = okfFrontmatter.type || 'concept';
 
   // Parse ISO 8601 timestamp
-  let timestamp = new Date().toISOString();
-  if (okfFrontmatter.timestamp) {
-    if (okfFrontmatter.timestamp instanceof Date) {
-      timestamp = okfFrontmatter.timestamp.toISOString();
-    } else if (typeof okfFrontmatter.timestamp === 'string') {
-      timestamp = okfFrontmatter.timestamp;
+  let updatedTimestamp = new Date().toISOString();
+  if (okfFrontmatter.updated) {
+    if (okfFrontmatter.updated instanceof Date) {
+      updatedTimestamp = okfFrontmatter.updated.toISOString();
+    } else if (typeof okfFrontmatter.updated === 'string') {
+      updatedTimestamp = okfFrontmatter.updated;
     }
   }
 
@@ -124,8 +124,8 @@ export function okfConceptToSsssNode(okfFrontmatter, okfBody, conceptId, options
     status: 'active',
     confidence: 0.8,
     importance,
-    created: timestamp,
-    updated: timestamp,
+    created: updatedTimestamp,
+    updated: updatedTimestamp,
     last_accessed: new Date().toISOString(),
     source: {
       type: 'okf-import',
@@ -173,7 +173,7 @@ export function ssssNodeToOkfConcept(ssssNode) {
     description: desc || undefined,
     resource: ssssNode.resource || undefined,
     tags: ssssNode.tags || [],
-    timestamp: ssssNode.updated || ssssNode.created || new Date().toISOString(),
+    updated: ssssNode.updated || ssssNode.created || new Date().toISOString(),
   };
 
   // Clean up SSSS node-specific keys we don't want as top-level frontmatter if they match the body/filepath fields
@@ -334,7 +334,7 @@ export async function exportBundle(vaultDir, outputDir, options = {}) {
     if (!concept) continue;
 
     if (stripSsss) {
-      const allowed = ['type', 'title', 'description', 'resource', 'tags', 'timestamp'];
+      const allowed = ['type', 'title', 'description', 'resource', 'tags', 'updated'];
       const stripped = {};
       for (const key of allowed) {
         if (concept.frontmatter[key] !== undefined) {

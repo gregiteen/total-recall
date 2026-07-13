@@ -34,6 +34,7 @@ function parseArgs(args) {
       case '--token': opts.token = args[++i]; break;
       case '--watch': opts.watch = true; break;
       case '--push': opts.push = true; break;
+      case '--pull': opts.pull = true; break;
       case '--interval': opts.intervalSeconds = Number(args[++i]) || 60; break;
       case '--help':
       case '-h':
@@ -57,6 +58,7 @@ function printHelp() {
     --watch             Keep syncing on an interval
     --interval <sec>    Watch interval in seconds (default: 60)
     --push              Back up vault to your GitHub fork (git add -f + push)
+    --pull              Pull latest vault changes from your GitHub fork
     --help, -h          Show this help
  
   Backup workflow (--push):
@@ -344,6 +346,17 @@ function pushToFork() {
   return { committed: true, timestamp };
 }
 
+function pullFromFork() {
+  const root = gitRun(['rev-parse', '--show-toplevel'], { silent: true, ignoreErrors: true });
+  if (!root) throw new Error('Not inside a git repository.');
+
+  console.error('  🔄 Pulling latest vault from origin...');
+  const output = gitRun(['pull', 'origin', 'main']);
+  console.error(`  ✅ Pull complete.`);
+  if (output) console.error(output);
+  console.error('  (Background vault-watcher will automatically rebuild indices if files changed)');
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default async function sync(args) {
@@ -356,6 +369,12 @@ export default async function sync(args) {
   // --push mode: back up vault to GitHub fork
   if (opts.push) {
     pushToFork();
+    return;
+  }
+
+  // --pull mode: pull vault from GitHub fork
+  if (opts.pull) {
+    pullFromFork();
     return;
   }
 

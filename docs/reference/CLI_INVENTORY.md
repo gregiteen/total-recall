@@ -42,7 +42,7 @@ Classification for the portable-memory product focus. Commands remain available 
 | `backup` / `restore` | Encrypted VFS backup |
 | `config` | security.yml / budget.yml style settings |
 | `map` | Vault category visualization |
-| `generate-pat` | Dashboard/API PATs |
+| `key` | Dashboard/API PATs |
 | `hash-password` / `reset-password` | Dashboard auth helpers |
 | `lint` | SSSS schema validation |
 | `sync` | Pull remote brain instructions / vault git helpers |

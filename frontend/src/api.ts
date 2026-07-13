@@ -453,6 +453,11 @@ export async function fetchConfigJson(): Promise<ConfigJson> {
   return res.json()
 }
 
+export async function fetchBrains(): Promise<any[]> {
+  const res = await apiFetch(`${API_BASE}/api/brains`)
+  return res.json()
+}
+
 export async function saveConfigJson(config: ConfigJson): Promise<void> {
   const res = await apiFetch(`${API_BASE}/api/config-json`, {
     method: 'POST',

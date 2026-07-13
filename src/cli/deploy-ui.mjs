@@ -954,7 +954,7 @@ export function startDeployUI(port = 3001) {
               body: JSON.stringify({
                 name: 'total-recall-brain',
                 private: true,
-                description: 'Total Recall Sovereign AI memory backup (encrypted VFS)',
+                description: 'Total Recall Total Recall memory backup (encrypted VFS)',
                 has_issues: false,
                 has_projects: false,
                 has_wiki: false

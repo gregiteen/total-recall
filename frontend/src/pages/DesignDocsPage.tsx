@@ -27,17 +27,6 @@ interface KanbanColumn {
 
 // ─── Static Data ────────────────────────────────────────────────────────────────
 
-const CORE_DOCS: DocItem[] = [
-  { name: 'ARCHITECTURE.md', path: 'docs/ARCHITECTURE.md', icon: '🏗️', category: 'Core Docs' },
-  { name: 'SSSS.md', path: 'docs/SSSS.md', icon: '🔐', category: 'Core Docs' },
-  { name: 'IDE_INTEGRATION.md', path: 'docs/IDE_INTEGRATION.md', icon: '🔌', category: 'Core Docs' },
-  { name: 'CHANGELOG.md', path: 'docs/CHANGELOG.md', icon: '📋', category: 'Core Docs' },
-];
-
-const DEV_GUIDES: DocItem[] = [
-  { name: 'README.md', path: 'README.md', icon: '📖', category: 'Developer Guides' },
-];
-
 const KANBAN_COLUMNS: KanbanColumn[] = [
   {
     id: 'in-progress',
@@ -173,11 +162,11 @@ export default function DesignDocsPage() {
   const [activeTab, setActiveTab] = useState<'architecture' | 'board'>('architecture');
 
   // Architecture docs state
-  const [selectedDoc, setSelectedDoc] = useState<DocItem>(CORE_DOCS[0]);
+  const [selectedDoc, setSelectedDoc] = useState<DocItem | null>(null);
   const [docContent, setDocContent] = useState<string>('');
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
-  const [, setDocsFromApi] = useState<Array<{ name: string; path: string; size: number; modified: string; category: string }>>([]);
+  const [docsFromApi, setDocsFromApi] = useState<DocItem[]>([]);
 
   // Kanban state
   const [expandedColumns, setExpandedColumns] = useState<Record<string, boolean>>({});
@@ -187,9 +176,18 @@ export default function DesignDocsPage() {
     async function loadDocsList() {
       try {
         const data = await fetchDesignDocs();
-        setDocsFromApi(data);
+        const docItems: DocItem[] = data.map(d => ({
+          name: d.name,
+          path: d.path,
+          category: d.category || 'Other',
+          icon: '📄',
+        }));
+        setDocsFromApi(docItems);
+        if (docItems.length > 0) {
+          setSelectedDoc(docItems[0]);
+        }
       } catch {
-        // Silently fall back to static doc list
+        // Silently fall back
       }
     }
     loadDocsList();
@@ -241,7 +239,7 @@ export default function DesignDocsPage() {
         {title}
       </div>
       {items.map(item => {
-        const isActive = selectedDoc.path === item.path;
+        const isActive = selectedDoc?.path === item.path;
         return (
           <button
             id={`doc-nav-${item.name.replace(/\./g, '-').toLowerCase()}`}
@@ -294,8 +292,17 @@ export default function DesignDocsPage() {
           overflowY: 'auto',
         }}
       >
-        {renderSidebarSection('Core Docs', CORE_DOCS)}
-        {renderSidebarSection('Developer Guides', DEV_GUIDES)}
+        {Object.entries(
+          docsFromApi.reduce((acc, doc) => {
+            acc[doc.category] = acc[doc.category] || [];
+            acc[doc.category].push(doc);
+            return acc;
+          }, {} as Record<string, DocItem[]>)
+        ).map(([category, items]) => (
+          <React.Fragment key={category}>
+            {renderSidebarSection(category, items)}
+          </React.Fragment>
+        ))}
       </div>
 
       {/* Main Viewer */}
@@ -328,7 +335,7 @@ export default function DesignDocsPage() {
           <span style={{ color: 'var(--text-tertiary)' }}>›</span>
           <span>docs</span>
           <span style={{ color: 'var(--text-tertiary)' }}>›</span>
-          <span style={{ color: 'var(--accent)' }}>{selectedDoc.name}</span>
+          <span style={{ color: 'var(--accent)' }}>{selectedDoc?.name}</span>
         </div>
 
         {/* Content */}

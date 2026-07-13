@@ -5,9 +5,6 @@ import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 
 // Pre-defined mapping of known settings
 const KEY_MAP = {
-  'yolo_mode': { file: 'security', path: 'yolo_mode', type: 'boolean' },
-  'enforce_local_only': { file: 'security', path: 'privacy.enforce_local_only', type: 'boolean' },
-  'allow_frontier_export': { file: 'security', path: 'privacy.allow_frontier_export', type: 'string', values: ['always', 'ask_per_skill', 'never'] },
   'password_hash': { file: 'security', path: 'dashboard.password_hash', type: 'string' },
   'session_ttl_hours': { file: 'security', path: 'dashboard.session_ttl_hours', type: 'number' },
   'force_password_reset': { file: 'security', path: 'dashboard.force_password_reset', type: 'boolean' },
@@ -117,7 +114,7 @@ export default async function configCommand(args) {
     console.log(`
   total-recall config [get|set] [key] [value] [options]
 
-  Manage Sovereign OS and Dashboard configuration settings directly from the CLI.
+  Manage Core OS and Dashboard configuration settings directly from the CLI.
 
   Commands:
     get [key]      Retrieve the value of a configuration key. If key is omitted, lists all keys.
@@ -128,8 +125,6 @@ export default async function configCommand(args) {
     --project      Explicitly target the project brain configuration (<cwd>/.agent/)
 
   Common Keys:
-    yolo_mode                    Fully autonomous mode (true | false)
-    allow_frontier_export        Frontier export policy (always | ask_per_skill | never)
     session_ttl_hours            Dashboard session TTL hours (number)
     api_requests_per_minute      Rate limit for API endpoints (number)
     daily_cap_usd                Cost-control daily cap (number)
@@ -139,8 +134,6 @@ export default async function configCommand(args) {
 
   Examples:
     npx total-recall config get
-    npx total-recall config get yolo_mode
-    npx total-recall config set yolo_mode true --project
     npx total-recall config set daily_cap_usd 10.0 --global
     npx total-recall config set allowed_origins "http://localhost:8000"
 `);
@@ -192,7 +185,7 @@ export default async function configCommand(args) {
       if (args.includes('--json') || args.includes('-j')) {
         console.log(JSON.stringify(allSettings, null, 2));
       } else {
-        console.log(`\n  ⚙️  Sovereign UI & Settings Configuration ${layerLabel}\n`);
+        console.log(`\n  ⚙️  Local UI & Settings Configuration ${layerLabel}\n`);
         for (const [k, v] of Object.entries(allSettings)) {
           const formattedValue = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
           console.log(`  • ${k.padEnd(30)}: ${formattedValue}`);

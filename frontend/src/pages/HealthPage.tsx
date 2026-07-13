@@ -186,7 +186,7 @@ export default function HealthPage() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1>System Health</h1>
-          <p>Live monitoring of your sovereign brain {lastPoll && <span>· Last poll: {lastPoll.toLocaleTimeString()}</span>}</p>
+          <p>Live monitoring of your memory brain {lastPoll && <span>· Last poll: {lastPoll.toLocaleTimeString()}</span>}</p>
         </div>
         {updateInfo?.updateAvailable ? (
           <div className="badge badge-success" style={{

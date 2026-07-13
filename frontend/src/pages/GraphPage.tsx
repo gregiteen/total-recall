@@ -16,7 +16,7 @@ export default function GraphPage({ activeBrainId }: { activeBrainId?: string })
       setLoading(true)
       try {
         const [nodes, researchRes, threadsRes] = await Promise.all([
-          listMemory(activeBrainId),
+          listMemory(activeBrainId).catch(() => []),
           listResearch().catch(() => ({ items: [] })),
           fetchChatThreads().catch(() => [])
         ])
@@ -44,6 +44,10 @@ export default function GraphPage({ activeBrainId }: { activeBrainId?: string })
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {loading ? (
           <div className="skeleton" style={{ width: '100%', height: '100%' }} />
+        ) : memoryNodes.length === 0 && researchItems.length === 0 && threads.length === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
+            No nodes found for graph
+          </div>
         ) : (
           <Graph3D
             threads={threads}

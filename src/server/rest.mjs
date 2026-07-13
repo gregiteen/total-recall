@@ -802,11 +802,11 @@ router.post('/api/integrations/connect', requireAuth, (req, res) => {
 /**
  * GET /api/import/rules
  * Detect existing rule files in given dirs.
- * Query: ?dir=/path  (repeatable, default: process.cwd())
+ * Query: ?dir=/path  (repeatable, default: ROOT)
  */
 router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const allowedRoots = [process.cwd(), os.homedir()];
+    const allowedRoots = [ROOT, VAULT_DIR];
     const rawDirs = req.query.dir ? (Array.isArray(req.query.dir) ? req.query.dir : [req.query.dir]) : allowedRoots;
     const dirs = rawDirs.filter(d => allowedRoots.some(root => path.resolve(d).startsWith(path.resolve(root))));
     if (dirs.length === 0) return badRequest(res, 'No permitted directories specified');
@@ -824,7 +824,7 @@ router.get('/api/import/rules', requireAuth, requireScope('memory:read'), (req, 
 router.post('/api/import/rules', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const { dirs, force = false, dryRun = false } = req.body || {};
-    const searchDirs = dirs?.length ? dirs : [process.cwd(), os.homedir()];
+    const searchDirs = dirs?.length ? dirs : [ROOT, VAULT_DIR];
     const detected = detectRuleFiles(searchDirs);
     const toImport = req.body?.files?.length
       ? detected.filter(f => req.body.files.includes(f.absolutePath))
@@ -1042,14 +1042,18 @@ router.get('/api/files', requireAuth, requireScope('files:read'), (req, res) => 
       fs.mkdirSync(FILES_DIR, { recursive: true });
     }
     const files = fs.readdirSync(FILES_DIR).map(file => {
-      const stats = fs.statSync(path.join(FILES_DIR, file));
-      return {
-        name: file,
-        size: stats.size,
-        modified: stats.mtime,
-        isDirectory: stats.isDirectory()
-      };
-    });
+      try {
+        const stats = fs.statSync(path.join(FILES_DIR, file));
+        return {
+          name: file,
+          size: stats.size,
+          modified: stats.mtime,
+          isDirectory: stats.isDirectory()
+        };
+      } catch (err) {
+        return null;
+      }
+    }).filter(Boolean);
     res.json(files);
     
   } catch (err) { serverError(res, err); }
@@ -1069,13 +1073,17 @@ router.get("/api/scripts", requireAuth, requireScope("files:read"), (req, res) =
     const files = fs.readdirSync(SCRIPTS_DIR).filter(file => 
       file.endsWith(".mjs") || file.endsWith(".js") || file.endsWith(".py") || file.endsWith(".sh")
     ).map(file => {
-      const stats = fs.statSync(path.join(SCRIPTS_DIR, file));
-      return {
-        name: file,
-        size: stats.size,
-        modified: stats.mtime
-      };
-    });
+      try {
+        const stats = fs.statSync(path.join(SCRIPTS_DIR, file));
+        return {
+          name: file,
+          size: stats.size,
+          modified: stats.mtime
+        };
+      } catch (err) {
+        return null;
+      }
+    }).filter(Boolean);
     res.json(files);
   } catch (err) {
     serverError(res, err);
@@ -1320,7 +1328,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
       delete safeBrain.token;
     }
 
-    const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
+    const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'openrouter_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
     const safeSecrets = {};
     for (const key of allowedKeys) {
       if (secrets[key] !== undefined) {
@@ -1372,7 +1380,7 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), (req,
           existingSecrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
         } catch {}
       }
-      const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
+      const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'openrouter_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
       for (const key of allowedKeys) {
         if (secrets[key] !== undefined) {
           if (secrets[key] === '') {
@@ -1626,7 +1634,7 @@ function ssssReferenceDir() {
   const candidates = [
     path.join(SKILLS_DIR, 'total-recall', 'references'),
     path.join(SKILLS_DIR, 'total-recall', 'modules', 'ssss', 'references'),
-    path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'references'),
+    path.join(SKILLS_DIR, 'okf', 'references'),
   ];
   return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
@@ -1636,7 +1644,7 @@ function ssssSkillDocPath() {
     path.join(SKILLS_DIR, 'total-recall', 'references', 'ssss-reference.md'),
     path.join(SKILLS_DIR, 'total-recall', 'SKILL.md'),
     path.join(SKILLS_DIR, 'total-recall', 'modules', 'ssss', 'MODULE.md'),
-    path.join(SKILLS_DIR, 'total-recall', 'skills', 'tr-ssss', 'SKILL.md'),
+    path.join(SKILLS_DIR, 'okf', 'SKILL.md'),
   ];
   return candidates.find((p) => fs.existsSync(p)) || candidates[0];
 }
@@ -2028,7 +2036,14 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
 
 
 
-    if (!apiKey) return res.json({ models: [], source: 'missing_key' });
+    const fallbackModels = [
+      { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', pricing: null },
+      { id: 'gemini-3.5-pro', displayName: 'Gemini 3.5 Pro', pricing: null },
+      { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', pricing: null },
+      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', pricing: null }
+    ];
+
+    if (!apiKey) return res.json({ models: fallbackModels, source: 'missing_key' });
 
     try {
       const controller = new AbortController();
@@ -2058,7 +2073,7 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
       }
     } catch {}
 
-    res.json({ models: [], source: 'api_error' });
+    res.json({ models: fallbackModels, source: 'api_error' });
   } catch (err) {
     serverError(res, err);
   }
@@ -2215,42 +2230,39 @@ router.get('/api/update/check', requireAuth, async (req, res) => {
  */
 router.post('/api/update/run', requireAuth, async (req, res) => {
   try {
-    res.json({ success: true, message: 'Update started. Server is updating and will restart shortly.' });
-
-    setImmediate(async () => {
-      logger.info('update', 'Starting auto-update process...');
-      try {
-        const { exec } = await import('node:child_process');
-        
-        const runCmd = (cmd, cwd) => new Promise((resolve, reject) => {
-          logger.info('update', `Running: ${cmd} in ${cwd}`);
-          exec(cmd, { cwd }, (err, stdout, stderr) => {
-            if (err) {
-              logger.error('update', `Command failed: ${cmd}. Error: ${err.message}`);
-              return reject(err);
-            }
-            resolve({ stdout, stderr });
-          });
-        });
-
-        // 1. git pull
-        await runCmd('git pull', ROOT);
-        // 2. npm install
-        await runCmd('npm install', ROOT);
-        // 3. build/install frontend if package.json exists
-        const frontendPath = path.join(ROOT, 'frontend');
-        if (fs.existsSync(path.join(frontendPath, 'package.json'))) {
-          await runCmd('npm install', frontendPath);
-          await runCmd('npm run build', frontendPath);
+    logger.info('update', 'Starting auto-update process...');
+    const { exec } = await import('node:child_process');
+    
+    const runCmd = (cmd, cwd) => new Promise((resolve, reject) => {
+      logger.info('update', `Running: ${cmd} in ${cwd}`);
+      exec(cmd, { cwd }, (err, stdout, stderr) => {
+        if (err) {
+          logger.error('update', `Command failed: ${cmd}. Error: ${err.message}`);
+          return reject(err);
         }
-
-        logger.info('update', 'Update successfully applied. Restarting server...');
-        process.exit(0);
-      } catch (err) {
-        logger.error('update', `Auto-update failed: ${err.message}`);
-      }
+        resolve({ stdout, stderr });
+      });
     });
+
+    // 1. git pull
+    await runCmd('git pull', ROOT);
+    // 2. npm install
+    await runCmd('npm install', ROOT);
+    // 3. build/install frontend if package.json exists
+    const frontendPath = path.join(ROOT, 'frontend');
+    if (fs.existsSync(path.join(frontendPath, 'package.json'))) {
+      await runCmd('npm install', frontendPath);
+      await runCmd('npm run build', frontendPath);
+    }
+
+    logger.info('update', 'Update successfully applied. Restarting server...');
+    res.json({ success: true, message: 'Update successfully applied. Server is restarting.' });
+    
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
   } catch (err) {
+    logger.error('update', `Auto-update failed: ${err.message}`);
     serverError(res, err);
   }
 });

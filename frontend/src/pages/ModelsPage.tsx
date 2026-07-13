@@ -126,7 +126,8 @@ export default function ModelsPage() {
     { id: 'antigravity', name: 'Antigravity (Gemini SDK)', desc: 'Primary core developer agent' },
     { id: 'gemini', name: 'Gemini CLI', desc: 'Direct Gemini assistant binary' },
     { id: 'claude', name: 'Claude Code', desc: 'Anthropic developer CLI wrapper' },
-    { id: 'codex', name: 'Codex CLI', desc: 'OpenAI agent binary integration' }
+    { id: 'codex', name: 'Codex CLI', desc: 'OpenAI agent binary integration' },
+    { id: 'grok', name: 'Grok CLI', desc: 'xAI developer binary integration' }
   ];
 
 
@@ -177,55 +178,6 @@ export default function ModelsPage() {
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 24 }}>
             
-            {/* Ollama Panel */}
-            <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-                <span style={{ fontSize: 20 }}>🦙</span>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>Local Provider</h3>
-                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Connect Ollama, LM Studio, vLLM, or Llama.cpp</p>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor="local_endpoint" style={{ fontSize: 13, fontWeight: 500 }}>Provider Base URL</label>
-                <input
-                  id="local_endpoint"
-                  type="text"
-                  placeholder="http://127.0.0.1:11434 or http://127.0.0.1:1234/v1"
-                  value={configData?.brain?.local_endpoint || ''}
-                  onChange={(e) => updateBrainProp('local_endpoint', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                />
-                <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>Leave blank to use the default localhost endpoint.</span>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-                 <span className="badge" style={{
-                    background: health?.ollama === 'running' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    color: health?.ollama === 'running' ? '#10b981' : '#ef4444',
-                    border: health?.ollama === 'running' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
-                    fontSize: 10,
-                    padding: '4px 8px'
-                  }}>
-                    {health?.ollama === 'running' ? 'Connected' : 'Offline'}
-                  </span>
-                  {health?.ollama === 'running' && health?.ollama_models && (
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-                      {health.ollama_models.length} local models available
-                    </span>
-                  )}
-              </div>
-            </div>
-
             {/* Cloud API Keys Panel */}
             <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
