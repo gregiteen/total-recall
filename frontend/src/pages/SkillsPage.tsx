@@ -10,7 +10,9 @@ import {
   installRegistrySkill,
   runSandbox,
   listResearch,
-  createResearch
+  createResearch,
+  toggleSkillRepo,
+  auditSkill
 } from '../api';
 import type { ResearchItem } from '../types';
 
@@ -150,30 +152,13 @@ function computeHealthChecks(skill: SkillItem, content: string): HealthCheck[] {
   return [hasSkillMd, ...dirChecks, hasEvals, descCheck];
 }
 
-// ─── Helper: generate improvement suggestions ───────────────────────────────────
-
-function generateSuggestions(skills: SkillItem[]): ImprovementSuggestion[] {
-  const suggestions: ImprovementSuggestion[] = [];
-  skills.forEach(s => {
-    const subs = (s.subSkills || []).map(x => x.toLowerCase());
-    if (!subs.includes('evals')) {
-      suggestions.push({ skillName: s.name, type: 'eval_gap', description: `Add evals directory with assertion tests for "${s.name}"` });
-    }
-    if (!subs.includes('references')) {
-      suggestions.push({ skillName: s.name, type: 'missing_reference', description: `Add reference documentation for "${s.name}"` });
-    }
-    if (!subs.includes('scripts')) {
-      suggestions.push({ skillName: s.name, type: 'stale_script', description: `Add automation scripts for "${s.name}"` });
-    }
-  });
-  return suggestions.slice(0, 15); // Cap at 15
-}
+// Removed generateSuggestions helper since we now use the backend AI audit
 
 // ─── Helper: format file sizes ──────────────────────────────────────────────────
 
 
 
-export default function SkillsPage() {
+export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }) {
   const [skills, setSkills] = useState<SkillItem[]>([]);
   const [repoGroups, setRepoGroups] = useState<RepoSkillsGroup[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
@@ -216,12 +201,45 @@ export default function SkillsPage() {
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([]);
   const [researchLoading, setResearchLoading] = useState(false);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
-  const improvementSuggestions = useMemo(() => skills.length > 0 ? generateSuggestions(skills) : [], [skills]);
+  const [aiSuggestions, setAiSuggestions] = useState<{skillName: string, description: string, problematic: boolean}[]>([]);
+  const [auditing, setAuditing] = useState(false);
+
+  const handleRunAudit = async () => {
+    if (auditing || skills.length === 0) return;
+    setAuditing(true);
+    setAiSuggestions([]);
+    try {
+      // Limit to max 5 to prevent long waits
+      const toAudit = skills.slice(0, 5);
+      const results = [];
+      for (const skill of toAudit) {
+        try {
+          const res = await auditSkill(skill.name, skill.repo || activeBrainId);
+          if (res.audit.outdated || res.audit.problematic) {
+            results.push({
+              skillName: skill.name,
+              description: res.audit.proposed_changes,
+              problematic: res.audit.problematic
+            });
+          }
+        } catch (e) {
+          console.error('Audit error for', skill.name, e);
+        }
+      }
+      setAiSuggestions(results);
+      if (results.length === 0) {
+        setSuccess('AI Audit complete: All checked skills are well-configured.');
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } finally {
+      setAuditing(false);
+    }
+  };
 
   /**
    * Syncs project skills by repo (excludes total-recall / tr-* system skills).
    */
-  const fetchSkillsList = async (selectName?: string, selectRepo?: string) => {
+  const fetchSkillsList = useCallback(async (selectName?: string, selectRepo?: string) => {
     setLoading(true);
     setError(null);
     try {
@@ -247,6 +265,11 @@ export default function SkillsPage() {
       } else {
         list = (data.skills || []) as SkillItem[];
         groups = (data.repos || []) as RepoSkillsGroup[];
+      }
+
+      if (activeBrainId) {
+        groups = groups.filter(g => g.repo === 'Global' || g.repo === activeBrainId);
+        list = groups.flatMap(g => g.skills || []);
       }
 
       setSkills(list);
@@ -278,12 +301,11 @@ export default function SkillsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeBrainId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate data fetch on mount
     void fetchSkillsList();
-  }, []);
+  }, [fetchSkillsList]);
 
 
 
@@ -633,7 +655,26 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
                           >
                             {skill.name}
                           </span>
-                          <button
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {activeBrainId && activeBrainId !== 'Global' && group.repo === 'Global' && (
+                              <input
+                                type="checkbox"
+                                checked={!!repoGroups.find(g => g.repo === activeBrainId)?.skills?.some(s => s.name === skill.name)}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    await toggleSkillRepo(skill.name, activeBrainId, e.target.checked);
+                                    void fetchSkillsList();
+                                  } catch (err) {
+                                    setError((err as Error).message);
+                                  }
+                                }}
+                                style={{ cursor: 'pointer' }}
+                                title="Enable/Disable skill for this repo"
+                              />
+                            )}
+                            <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -651,6 +692,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
                           >
                             ✖
                           </button>
+                          </div>
                         </div>
                         {skill.source && (
                           <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 4 }}>
@@ -1354,13 +1396,32 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
 
       {/* Skill Improvement Queue */}
       <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.5)', border: '1px solid var(--border)' }}>
-        <h3 id="automation-improvements-heading" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
-          💡 Skill Improvement Queue
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
+          <h3 id="automation-improvements-heading" style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            💡 AI Skill Improvement Queue
+          </h3>
+          <button
+            onClick={handleRunAudit}
+            disabled={auditing}
+            style={{
+              background: auditing ? 'var(--bg-secondary)' : 'linear-gradient(135deg, #10b981, #059669)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '6px 14px',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: auditing ? 'not-allowed' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {auditing ? '⏳ Auditing Skills...' : '🤖 Run AI Audit'}
+          </button>
+        </div>
 
-        {improvementSuggestions.length > 0 ? (
+        {aiSuggestions.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {improvementSuggestions.map((suggestion, idx) => (
+            {aiSuggestions.map((suggestion, idx) => (
               <div
                 key={idx}
                 id={`automation-suggestion-${idx}`}
@@ -1385,14 +1446,11 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
                       borderRadius: 10,
                       textTransform: 'uppercase',
                       letterSpacing: 0.3,
-                      background: suggestion.type === 'eval_gap' ? 'rgba(245, 158, 11, 0.1)' :
-                        suggestion.type === 'missing_reference' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(139, 92, 246, 0.1)',
-                      color: suggestion.type === 'eval_gap' ? '#f59e0b' :
-                        suggestion.type === 'missing_reference' ? '#60a5fa' : '#8b5cf6',
-                      border: `1px solid ${suggestion.type === 'eval_gap' ? 'rgba(245, 158, 11, 0.2)' :
-                        suggestion.type === 'missing_reference' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(139, 92, 246, 0.2)'}`,
+                      background: suggestion.problematic ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                      color: suggestion.problematic ? '#f87171' : '#f59e0b',
+                      border: `1px solid ${suggestion.problematic ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)'}`,
                     }}>
-                      {suggestion.type.replace(/_/g, ' ')}
+                      {suggestion.problematic ? 'Problematic' : 'Outdated'}
                     </span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

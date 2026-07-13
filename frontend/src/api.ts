@@ -1419,3 +1419,23 @@ export async function postDecision(id: string, action: string, notes?: string): 
   }
   return res.json()
 }
+
+export async function toggleSkillRepo(skillName: string, targetRepo: string, enabled: boolean): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch(`${API_BASE}/api/skills/toggle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skillName, targetRepo, enabled })
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function auditSkill(skillName: string, repoPath?: string): Promise<{ success: boolean; audit: { outdated: boolean; problematic: boolean; reason: string; proposed_changes: string } }> {
+  const res = await apiFetch(`${API_BASE}/api/skills/audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skillName, repoPath })
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}

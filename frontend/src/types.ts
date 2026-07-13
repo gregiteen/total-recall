@@ -129,6 +129,10 @@ export interface UsageData {
     claude: UsageBreakdown
     codex: UsageBreakdown
     openrouter?: UsageBreakdown
+    tavily?: UsageBreakdown
+    brave?: UsageBreakdown
+    exa?: UsageBreakdown
+    serper?: UsageBreakdown
   }
   timeseries?: {
     [dateStr: string]: {
@@ -163,11 +167,18 @@ export interface ConfigJson {
       require_https?: boolean
       public_health?: boolean
       allowed_origins?: string[]
+      trusted_proxies?: string[]
     }
     rate_limits?: {
       api_requests_per_minute?: number
       sandbox_requests_per_minute?: number
       ingest_requests_per_minute?: number
+    }
+    sandbox?: {
+      enabled?: boolean
+    }
+    api?: {
+      allow_static_pats?: boolean
     }
     [key: string]: unknown
   }
@@ -180,6 +191,14 @@ export interface ConfigJson {
     [key: string]: unknown
   }
   brain?: {
+    url?: string
+    has_token?: boolean
+    token?: string
+    name?: string
+    role?: string
+    layer?: string
+    tags?: string[]
+    full_brain?: boolean
     preferred_agent?: string
     local_endpoint?: string
     openrouter_model?: string

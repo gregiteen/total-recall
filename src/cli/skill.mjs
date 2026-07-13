@@ -32,9 +32,7 @@ export function resolveSkillScriptPath(scriptName, { agentDir = resolveAgentDir(
   const candidates = [
     path.join(agentDir, 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
     path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', scriptName),
-    path.join(agentDir, 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
     path.join(agentDir, 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
-    path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'tr-skill', 'scripts', scriptName),
     path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'skills', 'skill', 'scripts', scriptName),
   ];
   const found = candidates.find(candidate => fs.existsSync(candidate));

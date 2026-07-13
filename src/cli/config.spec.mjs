@@ -26,8 +26,7 @@ describe('config CLI command', () => {
       yaml.stringify({
         yolo_mode: false,
         privacy: {
-          enforce_local_only: true,
-          allow_frontier_export: 'ask_per_skill'
+          enforce_local_only: true
         },
         dashboard: {
           session_ttl_hours: 24
@@ -63,9 +62,9 @@ describe('config CLI command', () => {
   it('correctly retrieves individual keys', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Flat key yolo_mode
-    await configCommand(['get', 'yolo_mode']);
-    expect(consoleSpy).toHaveBeenLastCalledWith(false);
+    // Flat key force_password_reset
+    await configCommand(['get', 'force_password_reset']);
+    expect(consoleSpy).toHaveBeenLastCalledWith('undefined');
 
     // Dotted key dashboard.session_ttl_hours
     await configCommand(['get', 'dashboard.session_ttl_hours']);
@@ -85,12 +84,12 @@ describe('config CLI command', () => {
   it('correctly sets individual keys and preserves types', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Set yolo_mode to true (casts to boolean)
-    await configCommand(['set', 'yolo_mode', 'true']);
+    // Set force_password_reset to true (casts to boolean)
+    await configCommand(['set', 'force_password_reset', 'true']);
     
     const securityFilePath = path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'security.yml');
     let securityData = yaml.parse(fs.readFileSync(securityFilePath, 'utf8'));
-    expect(securityData.yolo_mode).toBe(true);
+    expect(securityData.dashboard.force_password_reset).toBe(true);
 
     // Set daily_cap_usd to 15.5 (casts to number, goes to budget.yml)
     await configCommand(['set', 'daily_cap_usd', '15.5']);
@@ -112,9 +111,9 @@ describe('config CLI command', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
 
-    // Invalid value for allow_frontier_export
-    await configCommand(['set', 'allow_frontier_export', 'sometimes']);
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Must be one of: always, ask_per_skill, never'));
+    // Invalid value for session_ttl_hours
+    await configCommand(['set', 'session_ttl_hours', 'sometimes']);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid number value: "sometimes"'));
     expect(exitSpy).toHaveBeenCalledWith(1);
 
     consoleSpy.mockRestore();
@@ -127,7 +126,7 @@ describe('config CLI command', () => {
 
     await configCommand(['get']);
     const allLogs = consoleSpy.mock.calls.flat().join('\n');
-    expect(allLogs).toContain('yolo_mode');
+    expect(allLogs).toContain('force_password_reset');
     expect(allLogs).toContain('daily_cap_usd');
     expect(allLogs).toContain('allowed_origins');
 

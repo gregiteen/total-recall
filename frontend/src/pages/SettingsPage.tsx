@@ -3,11 +3,11 @@ import { fetchConfigJson, saveConfigJson, runSandbox, fetchHealth, runAgentDiagn
 import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
 
-export default function SettingsPage() {
+export default function SettingsPage({ activeBrainId }: { activeBrainId?: string }) {
   const [configData, setConfigData] = useState<ConfigJson | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [sandboxLog, setSandboxLog] = useState('');
-  const [domainToBlock, setDomainToBlock] = useState('');
+
 
   const [health, setHealth] = useState<HealthData | null>(null);
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
@@ -17,8 +17,8 @@ export default function SettingsPage() {
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   
-  const [brains, setBrains] = useState<any[]>([]);
-  const activeBrain = localStorage.getItem('total-recall-active-brain') || '';
+  const [brains, setBrains] = useState<unknown[]>([]);
+  const activeBrain = activeBrainId || localStorage.getItem('total-recall-active-brain') || '';
   
   useEffect(() => {
     fetchHealth().then(setHealth).catch(console.error);
@@ -42,7 +42,7 @@ export default function SettingsPage() {
         setConfigData(data);
       })
       .catch(console.error);
-  }, []);
+  }, [activeBrainId]);
 
   
   const AGENTS_LIST = [
@@ -61,8 +61,8 @@ export default function SettingsPage() {
       const res = await runAgentDiagnostics();
       setDiagnosticLogs(res.output);
       fetchHealth().then(setHealth).catch(console.error);
-    } catch (err: any) {
-      setDiagnosticLogs('Error: ' + err.message);
+    } catch (err: unknown) {
+      setDiagnosticLogs('Error: ' + (err as Error).message);
     } finally {
       setRunningDiagnostics(false);
     }
@@ -74,8 +74,8 @@ export default function SettingsPage() {
     try {
       const res = await runUpdate();
       setUpdateMessage(res.success ? 'Update complete. Restarting...' : 'Update failed: ' + res.message);
-    } catch (err: any) {
-      setUpdateMessage('Update error: ' + err.message);
+    } catch (err: unknown) {
+      setUpdateMessage('Update error: ' + (err as Error).message);
     } finally {
       setUpdating(false);
     }
@@ -110,11 +110,9 @@ export default function SettingsPage() {
   };
 
   // State Update Helpers
-  const updateSecurityProp = (key: string, value: any) => {
-    setConfigData(prev => prev ? { ...prev, security: { ...prev.security, [key]: value } } : null);
-  };
 
-  const updateSecurityNested = (category: string, key: string, value: any) => {
+
+  const updateSecurityNested = (category: string, key: string, value: unknown) => {
     setConfigData(prev => {
       if (!prev) return prev;
       return {
@@ -122,7 +120,7 @@ export default function SettingsPage() {
         security: {
           ...prev.security,
           [category]: {
-            ...((prev.security as any)[category] || {}),
+            ...((prev.security as Record<string, unknown>)[category] as Record<string, unknown> || {}),
             [key]: value
           }
         }
@@ -130,7 +128,7 @@ export default function SettingsPage() {
     });
   };
 
-  const updateBudgetProp = (key: string, value: any) => {
+  const updateBudgetProp = (key: string, value: unknown) => {
     setConfigData(prev => {
       if (!prev) return prev;
       return {
@@ -146,17 +144,15 @@ export default function SettingsPage() {
     });
   };
 
-  const updateBrainProp = (key: string, value: any) => {
+  const updateBrainProp = (key: string, value: unknown) => {
     setConfigData(prev => prev ? { ...prev, brain: { ...prev.brain, [key]: value } } : null);
   };
 
-  const updateSecretProp = (key: string, value: any) => {
-    setConfigData(prev => prev ? { ...prev, secrets: { ...prev.secrets, [key]: value } } : null);
-  };
+
 
   // Instead of parsing it back and forth on every keystroke, 
   // we just use simple helpers that don't aggressively trim trailing commas.
-  const getCsv = (arr: any) => Array.isArray(arr) ? arr.join(', ') : '';
+  const getCsv = (arr: unknown) => Array.isArray(arr) ? arr.join(', ') : '';
   const setCsv = (str: string) => str.split(',').map(s => s.trimStart());
 
   if (!configData) {
@@ -626,7 +622,7 @@ export default function SettingsPage() {
                 step="0.01"
                 className="settings-input"
                 value={configData.budget.budget?.daily_cap_usd ?? 5.0}
-                onChange={(e) => updateBudgetProp('daily_cap_usd', parseFloat(e.target.value))}
+                onChange={(e) => updateBudgetProp('monthly_soft_cap', e.target.value === '' ? null : Number(e.target.value))}
               />
             </div>
             <div className="field-col" style={{ flex: 1 }}>
@@ -791,25 +787,18 @@ export default function SettingsPage() {
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.03)', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 24, marginBottom: 12 }}>📦</div>
-              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Admin Toolbox</h4>
+              <div style={{ fontSize: 24, marginBottom: 12 }}>🛠️</div>
+              <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Developer Utilities</h4>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
-                Execute quick administrative operations via the UCW toolkit and sandbox shell.
+                Run background maintenance tasks or re-index the local search tree.
               </p>
               <div style={{ display: 'flex', gap: 12 }}>
                 <button 
                   className="btn-secondary" 
                   style={{ flex: 1 }}
-                  onClick={() => executeSandboxCommand('npx total-recall compile', 'Manual Index Recompilation')}
+                  onClick={() => executeSandboxCommand('npx total-recall compile', 'Rebuilding Search Indexes')}
                 >
-                  Compile
-                </button>
-                <button 
-                  className="btn-primary" 
-                  style={{ flex: 1 }}
-                  onClick={() => executeSandboxCommand('npx @ssss/cli export ./bundle.ucw', 'Exporting UCW Bundle')}
-                >
-                  Export Bundle
+                  Rebuild Index
                 </button>
               </div>
             </div>
@@ -952,6 +941,7 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+        </div>
       </div>
     </div>
   );

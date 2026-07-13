@@ -216,14 +216,32 @@ export default async function init(args) {
 
   const scaffoldSkillsDir = path.join(ROOT, 'scaffold', '.agent', 'skills');
   let skillsToSeed = ['total-recall'];
+  
+  // Collect skills from scaffold
   if (fs.existsSync(scaffoldSkillsDir)) {
     try {
       skillsToSeed = fs.readdirSync(scaffoldSkillsDir).filter(f => fs.statSync(path.join(scaffoldSkillsDir, f)).isDirectory());
     } catch { /* fallback to default */ }
   }
 
+  // Also collect skills from the global skills dir if we are scaffolding a project
+  const globalSkillsDir = path.join(globalAgentDir, 'skills');
+  let globalSkills = [];
+  if (isProject && fs.existsSync(globalSkillsDir)) {
+    try {
+      globalSkills = fs.readdirSync(globalSkillsDir).filter(f => fs.statSync(path.join(globalSkillsDir, f)).isDirectory());
+      // Merge unique
+      skillsToSeed = [...new Set([...skillsToSeed, ...globalSkills])];
+    } catch { /* ignore */ }
+  }
+
   for (const skill of skillsToSeed) {
-    const skillSrc = path.join(scaffoldSkillsDir, skill);
+    let skillSrc = path.join(scaffoldSkillsDir, skill);
+    // If the skill isn't in scaffold but is in global, use global source
+    if (!fs.existsSync(skillSrc) && isProject) {
+      skillSrc = path.join(globalSkillsDir, skill);
+    }
+    
     const skillDest = path.join(agentDir, 'skills', skill);
 
     if (!fs.existsSync(skillSrc)) {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type CSSProperties, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
 import {
   listApiKeys,
   issueApiKey,
@@ -32,8 +32,9 @@ import {
 } from '../api'
 import type { ConfigJson, GeminiModelInfo } from '../types'
 import { startRegistration, startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
+import UsagePage from './UsagePage'
 
-type Tab = 'catalog' | 'pats' | 'import' | 'cloud'
+type Tab = 'catalog' | 'pats' | 'import' | 'cloud' | 'usage'
 
 /** Form state — string inputs; converted on save */
 type MetaEdit = {
@@ -50,6 +51,46 @@ type MetaEdit = {
   project_path: string
 }
 
+function metaForm(k: SecretCatalogKey): MetaEdit {
+  return {
+    label: k.label || '',
+    provider: k.provider || '',
+    repos: (k.repos || []).join(', '),
+    subscription_tier: k.subscription_tier || '',
+    monthly_cost_usd: k.monthly_cost_usd != null ? String(k.monthly_cost_usd) : '',
+    monthly_cap_usd: k.monthly_cap_usd != null ? String(k.monthly_cap_usd) : '',
+    api_docs_url: k.api_docs_url || '',
+    rotate_every_days: k.rotate_every_days != null ? String(k.rotate_every_days) : '',
+    auto_rotate: !!k.auto_rotate,
+    notes: k.notes || '',
+    project_path: k.project_path || '',
+  }
+}
+
+function groupKeysByProvider(keys: SecretCatalogKey[]) {
+  const groups = new Map<string, { id: string; label: string; kind: 'repo'; keys: SecretCatalogKey[] }>()
+
+  keys.forEach((k) => {
+    const provider = (k.provider || 'unknown').toLowerCase()
+    if (!groups.has(provider)) {
+      groups.set(provider, { id: provider, label: provider.toUpperCase(), kind: 'repo', keys: [] })
+    }
+    groups.get(provider)!.keys.push(k)
+  })
+
+  return [...groups.values()].sort((a, b) => a.id.localeCompare(b.id))
+}
+
+function ProviderLogo({ provider }: { provider?: string }) {
+  if (!provider) return null;
+  const p = provider.toLowerCase();
+  if (p === 'openai') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0462 6.0462 0 0 0 5.3-3.71 6.0415 6.0415 0 0 0 4.4646-6.4463A5.9847 5.9847 0 0 0 22.282 9.8211Z"/></svg>;
+  if (p === 'anthropic') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.433 2.115L15.939 12h3.048l1.494-9.885h-3.048zM14.616 2.115l-1.392 9.885h3.048l1.392-9.885h-3.048zM10.371 14.542l-5.637 7.343H7.78l3.966-5.166 2.766 5.166h3.018l-7.159-12.836-5.836 12.836h3.043l1.838-4.043h4.636l-3.681-3.3z"/></svg>;
+  if (p === 'google') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/></svg>;
+  if (p === 'github') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd"/></svg>;
+  return null;
+}
+
 export default function ApiKeysPage() {
   const [tab, setTab] = useState<Tab>('catalog')
 
@@ -64,6 +105,7 @@ export default function ApiKeysPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const [groupBy, setGroupBy] = useState<'repo' | 'api'>('repo')
   const [selected, setSelected] = useState<SecretCatalogKey | null>(null)
   const [edit, setEdit] = useState<MetaEdit>({
     label: '',
@@ -122,9 +164,11 @@ export default function ApiKeysPage() {
       setOpenaiModels(open)
       const or = await fetchOpenRouterModels().catch(() => [])
       setOrModels(or)
-    } catch(e) {}
+    } catch {
+      // ignore fetching models error
+    }
 
-      const data = await fetchSecretsCatalog()
+    const data = await fetchSecretsCatalog()
       setCatalog(data)
       if (selected) {
         const fresh = data.keys.find((k) => k.key === selected.key)
@@ -156,10 +200,13 @@ export default function ApiKeysPage() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line
     void loadCatalog()
+    // eslint-disable-next-line
     void loadPats()
+    // eslint-disable-next-line
     void loadWebAuthn()
-  }, [])
+  }, [loadCatalog, loadPats, loadWebAuthn])
 
   
   const updateSecretsProp = (prop: string, value: string) => {
@@ -194,21 +241,7 @@ export default function ApiKeysPage() {
     }
   };
 
-  function metaForm(k: SecretCatalogKey): MetaEdit {
-    return {
-      label: k.label || '',
-      provider: k.provider || '',
-      repos: (k.repos || []).join(', '),
-      subscription_tier: k.subscription_tier || '',
-      monthly_cost_usd: k.monthly_cost_usd != null ? String(k.monthly_cost_usd) : '',
-      monthly_cap_usd: k.monthly_cap_usd != null ? String(k.monthly_cap_usd) : '',
-      api_docs_url: k.api_docs_url || '',
-      rotate_every_days: k.rotate_every_days != null ? String(k.rotate_every_days) : '',
-      auto_rotate: !!k.auto_rotate,
-      notes: k.notes || '',
-      project_path: k.project_path || '',
-    }
-  }
+  // metaForm hoisted
 
   function openKey(k: SecretCatalogKey, sectionId?: string) {
     setSelected(k)
@@ -437,7 +470,18 @@ export default function ApiKeysPage() {
   })
 
   /** Group filtered keys into repo sections (one key → one repo; multi = error; none = developer). */
-  const repoSections = groupKeysByRepo(keys)
+  const repoSections = useMemo<{ id: string; label: string; kind: 'error' | 'developer' | 'repo'; keys: SecretCatalogKey[] }[]>(() => {
+    if (!catalog?.keys) return []
+    const f = filter.toLowerCase()
+    const filtered = catalog.keys.filter(
+      (k) =>
+        k.key.toLowerCase().includes(f) ||
+        (k.provider || '').toLowerCase().includes(f) ||
+        (k.repos || []).some((r) => r.toLowerCase().includes(f)) ||
+        (k.label || '').toLowerCase().includes(f)
+    )
+    return groupBy === 'api' ? groupKeysByProvider(filtered) : groupKeysByRepo(filtered)
+  }, [catalog, filter, groupBy])
 
   // Default accordion: open errors + first product/developer section only
   useEffect(() => {
@@ -448,7 +492,9 @@ export default function ApiKeysPage() {
     }
     const first = repoSections.find((s) => s.kind !== 'error')
     if (first) next.add(first.id)
+    // eslint-disable-next-line
     setExpandedSections(next)
+    // eslint-disable-next-line
     setSectionsInited(true)
   }, [repoSections, sectionsInited])
 
@@ -707,6 +753,12 @@ export default function ApiKeysPage() {
         ))}
       </div>
 
+{tab === 'usage' && (
+        <div style={{ height: 'calc(100vh - 280px)', minHeight: 420, position: 'relative', overflowY: 'auto' }}>
+          <UsagePage />
+        </div>
+      )}
+
       {tab === 'catalog' && (
         <div
           style={{
@@ -722,13 +774,34 @@ export default function ApiKeysPage() {
           <div
             style={{
               display: 'flex',
-              gap: 8,
-              flexWrap: 'wrap',
+              gap: 12,
               alignItems: 'center',
-              marginBottom: 8,
-              flexShrink: 0,
+              marginBottom: 16,
+              flexWrap: 'wrap',
             }}
           >
+            <div style={{ display: 'flex', background: 'var(--bg-tertiary)', borderRadius: 6, padding: 2 }}>
+              <button
+                onClick={() => setGroupBy('repo')}
+                style={{
+                  padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 4, cursor: 'pointer', border: 'none',
+                  background: groupBy === 'repo' ? 'var(--bg-active)' : 'transparent',
+                  color: groupBy === 'repo' ? 'var(--text-primary)' : 'var(--text-secondary)'
+                }}
+              >
+                By Repo
+              </button>
+              <button
+                onClick={() => setGroupBy('api')}
+                style={{
+                  padding: '4px 10px', fontSize: 11, fontWeight: 500, borderRadius: 4, cursor: 'pointer', border: 'none',
+                  background: groupBy === 'api' ? 'var(--bg-active)' : 'transparent',
+                  color: groupBy === 'api' ? 'var(--text-primary)' : 'var(--text-secondary)'
+                }}
+              >
+                By API
+              </button>
+            </div>
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
@@ -741,9 +814,21 @@ export default function ApiKeysPage() {
                 border: '1px solid var(--border)',
                 background: 'var(--bg-primary)',
                 color: 'var(--text-primary)',
-                fontSize: 13,
+                outline: 'none',
               }}
             />
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              marginBottom: 8,
+              flexShrink: 0,
+            }}
+          >
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -801,6 +886,7 @@ export default function ApiKeysPage() {
                     title={open ? 'Currently expanded' : 'Expand this repo only'}
                   >
                     {open ? '▾ ' : '▸ '}
+                    {groupBy === 'api' && <ProviderLogo provider={sec.id} />}
                     {sec.label}
                     <span style={{ marginLeft: 6, opacity: 0.7 }}>{sec.keys.length}</span>
                   </button>
@@ -873,7 +959,7 @@ export default function ApiKeysPage() {
                             color: sec.kind === 'error' ? '#f87171' : 'var(--text-primary)',
                           }}
                         >
-                          {open ? '▾' : '▸'} {sec.label}
+                          {open ? '▾' : '▸'} {groupBy === 'api' && <ProviderLogo provider={sec.id} />} {sec.label}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
                           {sec.kind === 'error'
@@ -1367,6 +1453,319 @@ export default function ApiKeysPage() {
           ))}
         </div>
       )}
+      {tab === 'cloud' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+             <button onClick={handleSaveConfig} disabled={saving} className="btn btn-primary" style={{ minWidth: 120 }}>
+               {saving ? 'Saving...' : 'Save Configuration'}
+             </button>
+          </div>
+          {configSuccess && (
+            <div className="badge badge-success" style={{ padding: '6px 12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#34d399' }}>
+              ✓ {configSuccess}
+            </div>
+          )}
+          <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+                <span style={{ fontSize: 20 }}>🔑</span>
+                <div>
+                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>Cloud & Search APIs</h3>
+                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bring your own cloud models</p>
+                </div>
+              </div>
+
+              {/* Google Gemini API Key */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label htmlFor="google_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Google Gemini API Key</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'gemini' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
+                    <input 
+                      type="radio" 
+                      name="preferred_agent" 
+                      checked={configData?.brain?.preferred_agent === 'gemini'} 
+                      onChange={() => updateBrainProp('preferred_agent', 'gemini')}
+                    />
+                    Set Active
+                  </label>
+                </div>
+                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="google_api_key"
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={configData?.secrets?.google_api_key || ''}
+                  onChange={(e) => updateSecretsProp('google_api_key', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13
+                  }}
+                /></form>
+                
+                <select
+                  disabled={!configData?.secrets?.google_api_key}
+                  value={configData?.brain?.gemini_model || ''}
+                  onChange={(e) => updateBrainProp('gemini_model', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13,
+                    marginTop: 4
+                  }}
+                >
+                  <option value="">Default Gemini Model</option>
+                  {geminiModels.map(m => {
+                    let costStr = '';
+                    if (m.pricing && m.pricing.prompt && m.pricing.completion) {
+                      const promptCost = (parseFloat(m.pricing.prompt as string) * 1000000).toFixed(2);
+                      const compCost = (parseFloat(m.pricing.completion as string) * 1000000).toFixed(2);
+                      costStr = ` - ${promptCost}/${compCost} per 1M`;
+                    }
+                    return (
+                      <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
+                    );
+                  })}
+                </select>
+                  {!configData?.secrets?.google_api_key && (
+                    <div style={{ fontSize: 11, color: 'var(--text-error, #f44336)', marginTop: 8 }}>
+                      ⚠ API Key required to unlock model selection
+                    </div>
+                  )}
+                </div>
+
+              {/* Anthropic API Key */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label htmlFor="anthropic_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Anthropic API Key (Claude)</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'claude' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
+                    <input 
+                      type="radio" 
+                      name="preferred_agent" 
+                      checked={configData?.brain?.preferred_agent === 'claude'} 
+                      onChange={() => updateBrainProp('preferred_agent', 'claude')}
+                    />
+                    Set Active
+                  </label>
+                </div>
+                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="anthropic_api_key"
+                  type="password"
+                  placeholder="sk-ant-..."
+                  value={configData?.secrets?.anthropic_api_key || ''}
+                  onChange={(e) => updateSecretsProp('anthropic_api_key', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13
+                  }}
+                /></form>
+                
+                <select
+                  disabled={!configData?.secrets?.anthropic_api_key}
+                  value={configData?.brain?.claude_model || ''}
+                  onChange={(e) => updateBrainProp('claude_model', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13,
+                    marginTop: 4
+                  }}
+                >
+                  <option value="">Default Claude Model</option>
+                  {claudeModels.map(m => {
+                    let costStr = '';
+                    if (m.pricing && m.pricing.prompt && m.pricing.completion) {
+                      const promptCost = (parseFloat(m.pricing.prompt as string) * 1000000).toFixed(2);
+                      const compCost = (parseFloat(m.pricing.completion as string) * 1000000).toFixed(2);
+                      costStr = ` - ${promptCost}/${compCost} per 1M`;
+                    }
+                    return (
+                      <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
+                    );
+                  })}
+                </select>
+                  {!configData?.secrets?.anthropic_api_key && (
+                    <div style={{ fontSize: 11, color: 'var(--text-error, #f44336)', marginTop: 8 }}>
+                      ⚠ API Key required to unlock model selection
+                    </div>
+                  )}
+                </div>
+
+              {/* OpenAI API Key */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label htmlFor="openai_api_key" style={{ fontSize: 13, fontWeight: 500 }}>OpenAI API Key (Codex)</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'codex' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
+                    <input 
+                      type="radio" 
+                      name="preferred_agent" 
+                      checked={configData?.brain?.preferred_agent === 'codex'} 
+                      onChange={() => updateBrainProp('preferred_agent', 'codex')}
+                    />
+                    Set Active
+                  </label>
+                </div>
+                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="openai_api_key"
+                  type="password"
+                  placeholder="sk-proj-..."
+                  value={configData?.secrets?.openai_api_key || ''}
+                  onChange={(e) => updateSecretsProp('openai_api_key', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13
+                  }}
+                /></form>
+                
+                <select
+                  disabled={!configData?.secrets?.openai_api_key}
+                  value={configData?.brain?.openai_model || ''}
+                  onChange={(e) => updateBrainProp('openai_model', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13,
+                    marginTop: 4
+                  }}
+                >
+                  <option value="">Default OpenAI Model</option>
+                  {openaiModels.map(m => {
+                    let costStr = '';
+                    if (m.pricing && m.pricing.prompt && m.pricing.completion) {
+                      const promptCost = (parseFloat(m.pricing.prompt as string) * 1000000).toFixed(2);
+                      const compCost = (parseFloat(m.pricing.completion as string) * 1000000).toFixed(2);
+                      costStr = ` - ${promptCost}/${compCost} per 1M`;
+                    }
+                    return (
+                      <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
+                    );
+                  })}
+                </select>
+                  {!configData?.secrets?.openai_api_key && (
+                    <div style={{ fontSize: 11, color: 'var(--text-error, #f44336)', marginTop: 8 }}>
+                      ⚠ API Key required to unlock model selection
+                    </div>
+                  )}
+                </div>
+
+              {/* OpenRouter API Key */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label htmlFor="openrouter_api_key" style={{ fontSize: 13, fontWeight: 500 }}>OpenRouter API Key</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'openrouter' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
+                    <input 
+                      type="radio" 
+                      name="preferred_agent" 
+                      checked={configData?.brain?.preferred_agent === 'openrouter'} 
+                      onChange={() => updateBrainProp('preferred_agent', 'openrouter')}
+                    />
+                    Set Active
+                  </label>
+                </div>
+                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="openrouter_api_key"
+                  type="password"
+                  placeholder="sk-or-..."
+                  value={configData?.secrets?.openrouter_api_key || ''}
+                  onChange={(e) => updateSecretsProp('openrouter_api_key', e.target.value)}
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border)',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    outline: 'none',
+                    fontSize: 13
+                  }}
+                /></form>
+                
+                
+                
+                {loading && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', padding: '0 4px' }}>Fetching models...</div>}
+
+                {!loading && orModels.length === 0 && configData?.secrets?.openrouter_api_key?.startsWith('sk-or-') && (
+                  <div style={{ fontSize: 11, color: 'var(--accent-red)', padding: '0 4px' }}>Failed to fetch OpenRouter models.</div>
+                )}
+                {!loading && orModels.length > 0 && (
+                  <select
+                    id="openrouter_model"
+                    value={configData?.brain?.openrouter_model || ''}
+                    onChange={(e) => updateBrainProp('openrouter_model', e.target.value)}
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      outline: 'none',
+                      fontSize: 13,
+                      marginTop: 4
+                    }}
+                  >
+                    <option value="">Default OpenRouter Model</option>
+                    {(() => {
+                      const groups: Record<string, typeof orModels> = {};
+                      orModels.forEach(m => {
+                        const provider = m.id.split('/')[0].toUpperCase();
+                        if (!groups[provider]) groups[provider] = [];
+                        groups[provider].push(m);
+                      });
+                      
+                      // Sort providers alphabetically
+                      const sortedProviders = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+                      
+                      return sortedProviders.map(provider => {
+                        // Sort models within provider by ID alphabetically
+                        const sortedModels = groups[provider].sort((a, b) => a.id.localeCompare(b.id));
+                        return (
+                        <optgroup key={provider} label={provider}>
+                          {sortedModels.map(m => {
+                            let costStr = '';
+                            if (m.pricing && m.pricing.prompt && m.pricing.completion) {
+                              const promptCost = (parseFloat(m.pricing.prompt) * 1000000).toFixed(2);
+                              const compCost = (parseFloat(m.pricing.completion) * 1000000).toFixed(2);
+                              costStr = ` - ${promptCost}/${compCost} per 1M`;
+                            }
+                            return (
+                              <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
+                            );
+                          })}
+                        </optgroup>
+                        );
+                      });
+                    })()}
+                  </select>
+                )}
+              </div>
+              
+              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                These keys are stored locally and injected into the CLI reasoning agents on dispatch.
+              </span>
+          </div>
+        </div>
+      )}
+
+
 
       <p style={{ marginTop: 24, fontSize: 11, color: 'var(--text-tertiary)' }}>
         CLI: <code>secret catalog</code> · <code>secret meta KEY --repo app --tier pro --monthly-cost 25 --rotate-days 90</code> ·{' '}
@@ -1626,316 +2025,3 @@ const inputStyle: CSSProperties = {
   color: 'var(--text-primary)',
   fontSize: 12,
 }
-
-
-      {tab === 'cloud' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-             <button onClick={handleSaveConfig} disabled={saving} className="btn btn-primary" style={{ minWidth: 120 }}>
-               {saving ? 'Saving...' : 'Save Configuration'}
-             </button>
-          </div>
-          {configSuccess && (
-            <div className="badge badge-success" style={{ padding: '6px 12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#34d399' }}>
-              ✓ {configSuccess}
-            </div>
-          )}
-          <div className="card" style={{ padding: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
-                <span style={{ fontSize: 20 }}>🔑</span>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>Cloud & Search APIs</h3>
-                  <p style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Bring your own cloud models</p>
-                </div>
-              </div>
-
-              {/* Google Gemini API Key */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label htmlFor="google_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Google Gemini API Key</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'gemini' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
-                    <input 
-                      type="radio" 
-                      name="preferred_agent" 
-                      checked={configData?.brain?.preferred_agent === 'gemini'} 
-                      onChange={() => updateBrainProp('preferred_agent', 'gemini')}
-                    />
-                    Set Active
-                  </label>
-                </div>
-                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="google_api_key"
-                  type="password"
-                  placeholder="AIzaSy..."
-                  value={configData?.secrets?.google_api_key || ''}
-                  onChange={(e) => updateSecretsProp('google_api_key', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                /></form>
-                
-                <select
-                  disabled={!configData?.secrets?.google_api_key}
-                  value={configData?.brain?.gemini_model || ''}
-                  onChange={(e) => updateBrainProp('gemini_model', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13,
-                    marginTop: 4
-                  }}
-                >
-                  <option value="">Default Gemini Model</option>
-                  {geminiModels.map(m => {
-                    let costStr = '';
-                    if (m.pricing && m.pricing.prompt && m.pricing.completion) {
-                      const promptCost = (parseFloat(m.pricing.prompt as string) * 1000000).toFixed(2);
-                      const compCost = (parseFloat(m.pricing.completion as string) * 1000000).toFixed(2);
-                      costStr = ` - $${promptCost}/$${compCost} per 1M`;
-                    }
-                    return (
-                      <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
-                    );
-                  })}
-                </select>
-                  {!configData?.secrets?.google_api_key && (
-                    <div style={{ fontSize: 11, color: 'var(--text-error, #f44336)', marginTop: 8 }}>
-                      ⚠ API Key required to unlock model selection
-                    </div>
-                  )}
-                </div>
-
-              {/* Anthropic API Key */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label htmlFor="anthropic_api_key" style={{ fontSize: 13, fontWeight: 500 }}>Anthropic API Key (Claude)</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'claude' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
-                    <input 
-                      type="radio" 
-                      name="preferred_agent" 
-                      checked={configData?.brain?.preferred_agent === 'claude'} 
-                      onChange={() => updateBrainProp('preferred_agent', 'claude')}
-                    />
-                    Set Active
-                  </label>
-                </div>
-                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="anthropic_api_key"
-                  type="password"
-                  placeholder="sk-ant-..."
-                  value={configData?.secrets?.anthropic_api_key || ''}
-                  onChange={(e) => updateSecretsProp('anthropic_api_key', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                /></form>
-                
-                <select
-                  disabled={!configData?.secrets?.anthropic_api_key}
-                  value={configData?.brain?.claude_model || ''}
-                  onChange={(e) => updateBrainProp('claude_model', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13,
-                    marginTop: 4
-                  }}
-                >
-                  <option value="">Default Claude Model</option>
-                  {claudeModels.map(m => {
-                    let costStr = '';
-                    if (m.pricing && m.pricing.prompt && m.pricing.completion) {
-                      const promptCost = (parseFloat(m.pricing.prompt as string) * 1000000).toFixed(2);
-                      const compCost = (parseFloat(m.pricing.completion as string) * 1000000).toFixed(2);
-                      costStr = ` - $${promptCost}/$${compCost} per 1M`;
-                    }
-                    return (
-                      <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
-                    );
-                  })}
-                </select>
-                  {!configData?.secrets?.anthropic_api_key && (
-                    <div style={{ fontSize: 11, color: 'var(--text-error, #f44336)', marginTop: 8 }}>
-                      ⚠ API Key required to unlock model selection
-                    </div>
-                  )}
-                </div>
-
-              {/* OpenAI API Key */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label htmlFor="openai_api_key" style={{ fontSize: 13, fontWeight: 500 }}>OpenAI API Key (Codex)</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'codex' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
-                    <input 
-                      type="radio" 
-                      name="preferred_agent" 
-                      checked={configData?.brain?.preferred_agent === 'codex'} 
-                      onChange={() => updateBrainProp('preferred_agent', 'codex')}
-                    />
-                    Set Active
-                  </label>
-                </div>
-                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="openai_api_key"
-                  type="password"
-                  placeholder="sk-proj-..."
-                  value={configData?.secrets?.openai_api_key || ''}
-                  onChange={(e) => updateSecretsProp('openai_api_key', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                /></form>
-                
-                <select
-                  disabled={!configData?.secrets?.openai_api_key}
-                  value={configData?.brain?.openai_model || ''}
-                  onChange={(e) => updateBrainProp('openai_model', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13,
-                    marginTop: 4
-                  }}
-                >
-                  <option value="">Default OpenAI Model</option>
-                  {openaiModels.map(m => {
-                    let costStr = '';
-                    if (m.pricing && m.pricing.prompt && m.pricing.completion) {
-                      const promptCost = (parseFloat(m.pricing.prompt as string) * 1000000).toFixed(2);
-                      const compCost = (parseFloat(m.pricing.completion as string) * 1000000).toFixed(2);
-                      costStr = ` - $${promptCost}/$${compCost} per 1M`;
-                    }
-                    return (
-                      <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
-                    );
-                  })}
-                </select>
-                  {!configData?.secrets?.openai_api_key && (
-                    <div style={{ fontSize: 11, color: 'var(--text-error, #f44336)', marginTop: 8 }}>
-                      ⚠ API Key required to unlock model selection
-                    </div>
-                  )}
-                </div>
-
-              {/* OpenRouter API Key */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label htmlFor="openrouter_api_key" style={{ fontSize: 13, fontWeight: 500 }}>OpenRouter API Key</label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer', color: configData?.brain?.preferred_agent === 'openrouter' ? 'var(--accent)' : 'var(--text-tertiary)' }}>
-                    <input 
-                      type="radio" 
-                      name="preferred_agent" 
-                      checked={configData?.brain?.preferred_agent === 'openrouter'} 
-                      onChange={() => updateBrainProp('preferred_agent', 'openrouter')}
-                    />
-                    Set Active
-                  </label>
-                </div>
-                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="openrouter_api_key"
-                  type="password"
-                  placeholder="sk-or-..."
-                  value={configData?.secrets?.openrouter_api_key || ''}
-                  onChange={(e) => updateSecretsProp('openrouter_api_key', e.target.value)}
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border)',
-                    padding: '8px 12px',
-                    borderRadius: 6,
-                    outline: 'none',
-                    fontSize: 13
-                  }}
-                /></form>
-                
-                
-                
-                {loading && <div style={{ fontSize: 11, color: 'var(--text-tertiary)', padding: '0 4px' }}>Fetching models...</div>}
-
-                {!loading && orModels.length === 0 && configData?.secrets?.openrouter_api_key?.startsWith('sk-or-') && (
-                  <div style={{ fontSize: 11, color: 'var(--accent-red)', padding: '0 4px' }}>Failed to fetch OpenRouter models.</div>
-                )}
-                {!loading && orModels.length > 0 && (
-                  <select
-                    id="openrouter_model"
-                    value={configData?.brain?.openrouter_model || ''}
-                    onChange={(e) => updateBrainProp('openrouter_model', e.target.value)}
-                    style={{
-                      background: 'var(--bg-tertiary)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border)',
-                      padding: '8px 12px',
-                      borderRadius: 6,
-                      outline: 'none',
-                      fontSize: 13,
-                      marginTop: 4
-                    }}
-                  >
-                    <option value="">Default OpenRouter Model</option>
-                    {(() => {
-                      const groups: Record<string, typeof orModels> = {};
-                      orModels.forEach(m => {
-                        const provider = m.id.split('/')[0].toUpperCase();
-                        if (!groups[provider]) groups[provider] = [];
-                        groups[provider].push(m);
-                      });
-                      
-                      // Sort providers alphabetically
-                      const sortedProviders = Object.keys(groups).sort((a, b) => a.localeCompare(b));
-                      
-                      return sortedProviders.map(provider => {
-                        // Sort models within provider by ID alphabetically
-                        const sortedModels = groups[provider].sort((a, b) => a.id.localeCompare(b.id));
-                        return (
-                        <optgroup key={provider} label={provider}>
-                          {sortedModels.map(m => {
-                            let costStr = '';
-                            if (m.pricing && m.pricing.prompt && m.pricing.completion) {
-                              const promptCost = (parseFloat(m.pricing.prompt) * 1000000).toFixed(2);
-                              const compCost = (parseFloat(m.pricing.completion) * 1000000).toFixed(2);
-                              costStr = ` - ${promptCost}/${compCost} per 1M`;
-                            }
-                            return (
-                              <option key={m.id} value={m.id}>{m.displayName} ({m.id}){costStr}</option>
-                            );
-                          })}
-                        </optgroup>
-                        );
-                      });
-                    })()}
-                  </select>
-                )}
-              </div>
-              
-              <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-                These keys are stored locally and injected into the CLI reasoning agents on dispatch.
-              </span>
-        </div>
-      )}
-undefinedundefined

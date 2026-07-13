@@ -62,7 +62,7 @@ const PRESETS: Preset[] = [
   }
 ]
 
-export default function IntegrationsPage() {
+export default function IntegrationsPage({ activeBrainId }: { activeBrainId?: string }) {
   const [copied, setCopied] = useState<string | null>(null)
   const [connecting, setConnecting] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -105,7 +105,7 @@ export default function IntegrationsPage() {
       })
 
     return () => { active = false }
-  }, [])
+  }, [activeBrainId])
 
   const filteredPresets = useMemo(() => {
     if (activeIdes.length === 0) return PRESETS

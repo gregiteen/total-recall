@@ -6,18 +6,22 @@ import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
 
 // Standard pricing constants ($ per million tokens)
+// Pricing verified via web search (July 2026)
 export const PRICING = {
   claude: {
+    // Claude 3.5 Sonnet Standard Pricing
     input: 3.00 / 1000000,
     output: 15.00 / 1000000,
-    cacheRead: 0.30 / 1000000,
-    cacheCreation: 3.75 / 1000000
+    cacheRead: 0.30 / 1000000, // 0.1x base
+    cacheCreation: 3.75 / 1000000 // 1.25x base
   },
   gemini: {
+    // Gemini 1.5 Flash (legacy)
     input: 0.075 / 1000000,
     output: 0.30 / 1000000
   },
   codex: {
+    // GPT-4o Standard (used by Codex CLI)
     input: 2.50 / 1000000,
     output: 10.00 / 1000000
   }
@@ -269,9 +273,18 @@ export function calculateCurrentCost() {
         weeklyUsd: codexWeeklyCost,
         dailyTokens: codex.dailyInput + codex.dailyOutput,
         weeklyTokens: codex.weeklyInput + codex.weeklyOutput
-      }
+      },
+      openrouter: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
+      tavily: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
+      brave: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
+      exa: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 },
+      serper: { dailyUsd: 0, weeklyUsd: 0, dailyTokens: 0, weeklyTokens: 0 }
     }
   };
+}
+
+export function syncUsageLedger(pricingMap) {
+  // Currently a no-op hook for future backend usage ledger syncing.
 }
 
 /**

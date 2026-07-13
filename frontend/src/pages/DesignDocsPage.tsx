@@ -202,11 +202,11 @@ export default function DesignDocsPage() {
       setDocLoading(true);
       setDocError(null);
       try {
-        const data = await fetchDesignDocContent(selectedDoc.path);
+        const data = await fetchDesignDocContent(selectedDoc!.path);
         if (!cancelled) setDocContent(data.content);
       } catch {
         if (!cancelled) {
-          setDocError(selectedDoc.path);
+          setDocError(selectedDoc!.path);
           setDocContent('');
         }
       } finally {

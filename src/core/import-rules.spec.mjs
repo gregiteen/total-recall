@@ -28,7 +28,9 @@ describe('import-rules core', () => {
     // And some files that are NOT candidates
     fs.writeFileSync(path.join(tmpDir, 'RANDOM.md'), '# Random File');
 
-    const detected = detectRuleFiles([tmpDir]);
+    const vaultDir = path.join(tmpDir, 'vault');
+    fs.mkdirSync(vaultDir, { recursive: true });
+    const detected = detectRuleFiles([tmpDir], vaultDir);
     expect(detected.length).toBe(2);
 
     const claude = detected.find(d => d.filename === 'CLAUDE.md');
@@ -59,7 +61,9 @@ describe('import-rules core', () => {
     fs.mkdirSync(skillDir, { recursive: true });
     fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# MCP Expert Skill\nTest skill.');
 
-    const detected = detectRuleFiles([tmpDir]);
+    const vaultDir = path.join(tmpDir, 'vault');
+    fs.mkdirSync(vaultDir, { recursive: true });
+    const detected = detectRuleFiles([tmpDir], vaultDir);
     
     // We expect naming.md, styles.md under .claude/rules and api.md/default.rules under .codex/rules and SKILL.md under .agent/skills to be detected
     const names = detected.map(d => d.filename);
@@ -104,7 +108,9 @@ describe('import-rules core', () => {
       fs.symlinkSync(targetFile, healablePath);
     } catch { /* skip if OS does not support */ }
 
-    const detected = detectRuleFiles([tmpDir]);
+    const vaultDir = path.join(tmpDir, 'vault');
+    fs.mkdirSync(vaultDir, { recursive: true });
+    const detected = detectRuleFiles([tmpDir], vaultDir);
     const names = detected.map(d => d.filename);
 
     // If symlinks are supported by this test OS and created successfully:
@@ -117,11 +123,11 @@ describe('import-rules core', () => {
   it('imports detected rules correctly into vault', async () => {
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Claude Rules\nAlways compile.');
     
-    const detected = detectRuleFiles([tmpDir]);
-    expect(detected.length).toBe(1);
-
     const vaultDir = path.join(tmpDir, 'vault');
     fs.mkdirSync(vaultDir, { recursive: true });
+    
+    const detected = detectRuleFiles([tmpDir], vaultDir);
+    expect(detected.length).toBe(1);
 
     const result = await importRuleFiles(detected, { vaultDir });
     expect(result.imported.length).toBe(1);

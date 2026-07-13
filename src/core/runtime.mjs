@@ -61,9 +61,7 @@ function getAgentsConfigPath() {
   // Prefer modules/agents (TR_CORE_FOCUS). Fall back to legacy nested-skill paths.
   const candidates = [
     path.join(agentDir, 'skills', 'total-recall', 'modules', 'agents', 'agents.yml'),
-    path.join(agentDir, 'skills', 'total-recall', 'skills', 'tr-cli-agents', 'agents.yml'),
     path.join(agentDir, 'skills', 'total-recall', 'skills', 'cli-agents', 'agents.yml'),
-    path.join(agentDir, 'skills', 'tr-cli-agents', 'agents.yml'),
     path.join(agentDir, 'skills', 'cli-agents', 'agents.yml'),
   ];
   for (const p of candidates) {
