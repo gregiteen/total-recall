@@ -62,4 +62,36 @@ export async function runCrons(options) {
       logger.error({ subsystem: 'cron', message: `Secret/Instruction Check Failed: ${err.message}` });
     }
   }
+
+  // 5. Global Repo Auto-Discovery & Skill Sync (Every 1 Hour)
+  if (!global.lastSkillSyncTime || now - global.lastSkillSyncTime > ONE_HOUR) {
+    logger.info({ subsystem: 'cron', message: 'Running Global Auto-Discovery and Skill Sync...' });
+    try {
+      const githubDir = path.join(process.env.HOME || process.env.USERPROFILE || '', 'Github');
+      if (fs.existsSync(githubDir)) {
+        logger.info({ subsystem: 'cron', message: `Scanning ${githubDir} for repos to track...` });
+        const dirs = fs.readdirSync(githubDir);
+        for (const dir of dirs) {
+          const fullPath = path.join(githubDir, dir);
+          if (fs.statSync(fullPath).isDirectory() && !dir.startsWith('.')) {
+            // Track the repo silently
+            try {
+              execFileSync('npx', ['total-recall', 'skill', 'track', fullPath, '--register'], { stdio: 'ignore' });
+            } catch (e) {
+              // Ignore tracking errors for individual repos
+            }
+          }
+        }
+        
+        // Push the latest skills to all tracked repos
+        logger.info({ subsystem: 'cron', message: 'Pushing latest skills to all tracked repos...' });
+        execFileSync('npx', ['total-recall', 'skill', 'push'], { stdio: 'ignore' });
+        logger.info({ subsystem: 'cron', message: 'Global Skill Sync completed successfully.' });
+      }
+      global.lastSkillSyncTime = now;
+    } catch (err) {
+      logger.error({ subsystem: 'cron', message: `Global Skill Sync Failed: ${err.message}` });
+    }
+  }
 }
+
