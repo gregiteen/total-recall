@@ -169,7 +169,7 @@ describe('VectorStore', () => {
       expect(results[0].slug).toBe('doc-a');
       // Scores must be in descending order
       for (let i = 1; i < results.length; i++) {
-        expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score);
+        expect(results[i - 1].similarity).toBeGreaterThanOrEqual(results[i].similarity);
       }
     });
 
@@ -227,19 +227,19 @@ describe('VectorStore', () => {
 
       expect(chunkDoc).toBeDefined();
       if (noChunkDoc) {
-        expect(chunkDoc.score).toBeGreaterThan(noChunkDoc.score);
+        expect(chunkDoc.similarity).toBeGreaterThan(noChunkDoc.similarity);
       }
     });
 
-    it('result entries include slug and score fields', () => {
+    it('result entries include slug and similarity fields', () => {
       store.add('doc-1', [1, 0], []);
 
       const results = store.search([1, 0], 5, null, cosineSim);
 
       expect(results.length).toBe(1);
       expect(results[0]).toHaveProperty('slug', 'doc-1');
-      expect(results[0]).toHaveProperty('score');
-      expect(typeof results[0].score).toBe('number');
+      expect(results[0]).toHaveProperty('similarity');
+      expect(typeof results[0].similarity).toBe('number');
     });
 
     it('vector most similar to query is ranked first', () => {

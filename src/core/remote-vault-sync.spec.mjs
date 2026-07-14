@@ -2,12 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { runSync } from './remote-vault-sync.mjs';
-import https from 'https';
-import child_process from 'child_process';
+import { get } from 'node:https';
+import { spawn, spawnSync } from 'node:child_process';
 import { PassThrough } from 'stream';
 
-vi.mock('child_process');
-vi.mock('https');
+vi.mock('node:child_process', () => {
+  const spawnSyncMock = vi.fn();
+  const spawnMock = vi.fn();
+  return { default: { spawnSync: spawnSyncMock, spawn: spawnMock }, spawnSync: spawnSyncMock, spawn: spawnMock };
+});
+
+vi.mock('node:https', () => {
+  const getMock = vi.fn();
+  return { default: { get: getMock }, get: getMock };
+});
+
 vi.mock('./config.mjs', () => ({
   brainDir: '/tmp/test-brain',
   remoteVaultSync: {
@@ -37,9 +46,10 @@ describe('Remote vault sync', () => {
   });
 
   it('fails gracefully if remote is unreachable', async () => {
-    https.get.mockImplementation((url, opts, cb) => {
+    get.mockImplementation((url, opts, cb) => {
       const req = { on: vi.fn() };
-      setTimeout(() => req.on.mock.calls.find((c) => c[0] === 'error')?.[1](new Error('ECONNREFUSED')), 10);
+      req.on.mock.calls = [];
+      setTimeout(() => req.on.mock.calls.find((c) => c[0] === 'error')?.[1](new Error('ECONNREFUSED')), 5);
       return req;
     });
 
@@ -52,7 +62,7 @@ describe('Remote vault sync', () => {
   });
 
   it('fails gracefully if bundle is invalid', async () => {
-    https.get.mockImplementation((url, opts, cb) => {
+    get.mockImplementation((url, opts, cb) => {
       const res = new PassThrough();
       res.statusCode = 200;
       const req = { on: vi.fn() };
@@ -63,7 +73,7 @@ describe('Remote vault sync', () => {
       return req;
     });
 
-    child_process.spawnSync.mockReturnValue({
+    spawnSync.mockReturnValue({
       status: 1,
       stderr: 'validation error',
     });
@@ -76,7 +86,7 @@ describe('Remote vault sync', () => {
   });
 
   it('succeeds on happy path', async () => {
-    https.get.mockImplementation((url, opts, cb) => {
+    get.mockImplementation((url, opts, cb) => {
       const res = new PassThrough();
       res.statusCode = 200;
       const req = { on: vi.fn() };
@@ -87,8 +97,8 @@ describe('Remote vault sync', () => {
       return req;
     });
 
-    child_process.spawnSync.mockReturnValue({ status: 0 });
-    child_process.spawn.mockReturnValue({
+    spawnSync.mockReturnValue({ status: 0 });
+    spawn.mockReturnValue({
       stdout: new PassThrough(),
       stderr: { on: vi.fn() },
       on: (evt, fn) => {

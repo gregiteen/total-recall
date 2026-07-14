@@ -14,7 +14,14 @@ vi.mock('./embeddings.mjs', () => ({
   buildEmbeddingsIndex: vi.fn().mockResolvedValue(undefined),
   buildSessionEmbeddingsIndex: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('node:fs');
+
+const mockFs = {
+  existsSync: vi.fn(() => false),
+  mkdirSync: vi.fn(),
+  watch: vi.fn()
+};
+vi.mock('node:fs', () => ({ default: mockFs, ...mockFs }));
+
 
 // ---------------------------------------------------------------------------
 // Helpers — resolved after each vi.resetModules() call
@@ -65,11 +72,12 @@ beforeEach(async () => {
   // Re-import the module under test
   const mod = await import('./vault-watcher.mjs');
   startVaultWatcher = mod.startVaultWatcher;
+  startVaultWatcher('/fake/vault', '/fake/skills', '/fake/derived', '/fake/sessions', '/fake/instructions.md').stop();
 
   // Default fs stubs
-  fs.existsSync = vi.fn(() => false);
-  fs.mkdirSync = vi.fn();
-  fs.watch = vi.fn();
+  fs.existsSync.mockImplementation(() => false);
+  fs.mkdirSync.mockClear();
+  fs.watch.mockClear();
 
   // Clear any captured callback from previous test
   setupFsWatch._lastCallback = null;
@@ -77,12 +85,15 @@ beforeEach(async () => {
   // Reset all mock call counts
   vi.clearAllMocks();
   // Restore stubs on fresh references
-  fs.existsSync = vi.fn(() => false);
-  fs.mkdirSync = vi.fn();
-  fs.watch = vi.fn();
+  fs.existsSync.mockImplementation(() => false);
+  fs.mkdirSync.mockClear();
+  fs.watch.mockClear();
 });
 
+let currentWatcher;
 afterEach(() => {
+  if (currentWatcher) currentWatcher.stop();
+  currentWatcher = null;
   vi.useRealTimers();
 });
 
@@ -90,19 +101,19 @@ afterEach(() => {
 
 describe('startVaultWatcher', () => {
   it('creates vaultDir with mkdirSync if it does not exist', () => {
-    fs.existsSync = vi.fn(() => false);
+    fs.existsSync.mockImplementation(() => false);
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     expect(fs.mkdirSync).toHaveBeenCalledWith(VAULT_DIR, expect.objectContaining({ recursive: true }));
   });
 
   it('does NOT call mkdirSync if vaultDir already exists', () => {
-    fs.existsSync = vi.fn(() => true);
+    fs.existsSync.mockImplementation(() => true);
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     expect(fs.mkdirSync).not.toHaveBeenCalled();
   });
@@ -110,7 +121,7 @@ describe('startVaultWatcher', () => {
   it('calls fs.watch with the vaultDir and recursive: false', () => {
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     expect(fs.watch).toHaveBeenCalledWith(
       VAULT_DIR,
@@ -122,7 +133,7 @@ describe('startVaultWatcher', () => {
   it('returns an object with a stop() method', () => {
     setupFsWatch();
 
-    const result = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    const result = currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     expect(result).toBeDefined();
     expect(typeof result.stop).toBe('function');
@@ -131,7 +142,7 @@ describe('startVaultWatcher', () => {
   it('stop() calls watcher.close()', () => {
     const mockWatcher = setupFsWatch();
 
-    const result = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    const result = currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
     result.stop();
 
     expect(mockWatcher.close).toHaveBeenCalledTimes(1);
@@ -140,8 +151,8 @@ describe('startVaultWatcher', () => {
   it('returns the existing singleton on subsequent calls without re-watching', () => {
     setupFsWatch();
 
-    const first = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
-    const second = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    const first = currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    const second = currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     // fs.watch should only have been called once (singleton)
     expect(fs.watch).toHaveBeenCalledTimes(1);
@@ -151,7 +162,7 @@ describe('startVaultWatcher', () => {
   it('callback ignores non-.md files — invalidate is NOT called for .txt files', () => {
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     const cb = setupFsWatch._lastCallback;
     expect(cb).toBeDefined();
@@ -164,7 +175,7 @@ describe('startVaultWatcher', () => {
   it('callback calls invalidate(vaultDir) when a .md file changes', () => {
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     const cb = setupFsWatch._lastCallback;
     cb('change', 'README.md');
@@ -176,7 +187,7 @@ describe('startVaultWatcher', () => {
     vi.useFakeTimers();
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     const cb = setupFsWatch._lastCallback;
     cb('change', 'page.md');
@@ -194,7 +205,7 @@ describe('startVaultWatcher', () => {
     vi.useFakeTimers();
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     const cb = setupFsWatch._lastCallback;
     cb('change', 'notes.md');
@@ -209,7 +220,7 @@ describe('startVaultWatcher', () => {
     vi.useFakeTimers();
     setupFsWatch();
 
-    startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+    currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
 
     const cb = setupFsWatch._lastCallback;
     cb('change', 'a.md');
@@ -230,7 +241,7 @@ describe('startVaultWatcher', () => {
 
     let result;
     expect(() => {
-      result = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
+      result = currentWatcher = startVaultWatcher(VAULT_DIR, SKILLS_DIR, DERIVED_DIR, SESSIONS_DIR, INSTRUCTIONS_FILE);
     }).not.toThrow();
 
     // stop() must not throw even when fs.watch failed

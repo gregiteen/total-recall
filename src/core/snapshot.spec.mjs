@@ -39,6 +39,7 @@ describe('snapshot module', () => {
   let fsMock, spawnSyncMock;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     vi.resetModules();
 
     // Re-register mocks after resetModules
