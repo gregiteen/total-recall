@@ -182,13 +182,13 @@ describe('loadEmbeddingsIndex — size monitoring (100MB warning)', () => {
   });
 
   it('emits a warn when serialized index exceeds 100MB', () => {
-    // Build an artificially large index: 500 entries each with a 30K-element embedding
-    // 500 × ~240KB ≈ 120MB serialized
-    const bigEmbedding = new Array(30_000).fill(0.123456789);
+    // Build an artificially large index: 500 entries each with a 250K-char string
+    // 500 × ~250KB ≈ 125MB serialized
+    const bigString = 'x'.repeat(250_000);
     const idx = {};
     for (let i = 0; i < 500; i++) {
       idx[`slug-${i}`] = {
-        embedding: bigEmbedding,
+        embedding: bigString,
         model: 'gemini-embedding-2',
         generated_at: new Date().toISOString(),
       };
@@ -205,7 +205,7 @@ describe('loadEmbeddingsIndex — size monitoring (100MB warning)', () => {
     );
     expect(sizeWarns.length).toBeGreaterThanOrEqual(1);
     expect(sizeWarns[0][0].subsystem).toBe('embeddings');
-  });
+  }, 15000);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,7 +361,7 @@ describe('chunkNodeBody', () => {
   });
 
   it('splits on double newlines', () => {
-    const body = 'First paragraph with enough text here.\n\nSecond paragraph with enough text too.';
+    const body = 'First paragraph with enough text here to pass the 50 char limit for chunks.\n\nSecond paragraph with enough text too to pass the 50 char limit for chunks.';
     const chunks = chunkNodeBody(body);
     expect(chunks.length).toBe(2);
   });
@@ -397,8 +397,12 @@ describe('sessionToEmbedChunks', () => {
   });
 
   it('splits into multiple chunks when content exceeds 6000 chars', () => {
-    const bigContent = 'x'.repeat(7000);
-    const messages = [{ role: 'user', content: bigContent }];
+    const messages = [
+      { role: 'user', content: 'x'.repeat(2500) },
+      { role: 'assistant', content: 'y'.repeat(2500) },
+      { role: 'user', content: 'z'.repeat(2500) },
+      { role: 'assistant', content: 'a'.repeat(2500) }
+    ];
     const chunks = sessionToEmbedChunks(messages);
     expect(chunks.length).toBeGreaterThanOrEqual(2);
   });

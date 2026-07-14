@@ -178,25 +178,25 @@ npm test  # passes
 ## Phase 4: Real Integrations *(After Phase 0A — cron stubs must be deleted first)*
 
 ### 4A. GitHub Sync
-- [ ] Create `src/core/github-sync.mjs`
+- [x] Create `src/core/github-sync.mjs`
   - Auth: use `github_token` from `secrets.enc` (already stored by keys system)
   - Mechanism: `git` CLI operations (clone/pull/push) against a user-configured remote repo
   - Scope: memory-vault directory only (not full `.agent/`)
   - Incremental: track last-sync timestamp, only push changed `.md` files since then
   - Conflicts: detect diverged remote via `git status` and surface as Task Inbox conflicts
-- [ ] Wire into `src/core/crons.mjs` as a real hourly cron (replacing deleted stub)
-- [ ] Write `src/core/github-sync.spec.mjs`
-- [ ] Verify push/pull roundtrip doesn't corrupt frontmatter or file contents
+- [x] Wire into `src/core/crons.mjs` as a real hourly cron (replacing deleted stub)
+- [x] Write `src/core/github-sync.spec.mjs`
+- [x] Verify push/pull roundtrip doesn't corrupt frontmatter or file contents
 
 ### 4B. Obsidian Sync
-- [ ] Create `src/core/obsidian-sync.mjs`
+- [x] Create `src/core/obsidian-sync.mjs`
   - Mechanism: `fs.watch()` on configured Obsidian vault directory
   - Translation: Obsidian YAML frontmatter ↔ SSSS v2 frontmatter (map `tags`, `aliases`, `cssclasses` to SSSS fields)
   - Direction: bidirectional — Obsidian edits update TR vault, TR vault changes update Obsidian files
   - Conflict: if both modified since last sync, surface as Task Inbox conflict
-- [ ] Wire into `src/core/crons.mjs` or register as file watcher in daemon startup
-- [ ] Write `src/core/obsidian-sync.spec.mjs`
-- [ ] Verify Obsidian edits propagate to dashboard UI within one sync cycle
+- [x] Wire into `src/core/crons.mjs` or register as file watcher in daemon startup
+- [x] Write `src/core/obsidian-sync.spec.mjs`
+- [x] Verify Obsidian edits propagate to dashboard UI within one sync cycle
 
 **Done when:**
 ```bash
@@ -318,7 +318,7 @@ npm test  # passes
 
 32 untested core modules (after dead code deletion in Phase 0A):
 
-- [ ] `append-log`, `blackboard`, `clarity-rewriter`, `conclusion-writer`, `config`, `context-compiler`, `crypto`, `daemon-control`, `daemon-loop`, `emergency-alerts`, `evolution`, `friction`, `logger`, `migrate`, `notifications`, `optimizer`, `parallel-context`, `provider-catalog`, `research-queue`, `research`, `search`, `snapshot`, `source-adapters`, `ssss-host-extension`, `task-executors`, `validated-write`, `vault-watcher`, `vault`, `vector-store`, `webauthn-store`
+- [x] `append-log`, `blackboard`, `clarity-rewriter`, `conclusion-writer`, `config`, `context-compiler`, `crypto`, `daemon-control`, `daemon-loop`, `emergency-alerts`, `evolution`, `friction`, `logger`, `migrate`, `notifications`, `optimizer`, `parallel-context`, `provider-catalog`, `research-queue`, `research`, `search`, `snapshot`, `source-adapters`, `ssss-host-extension`, `task-executors`, `validated-write`, `vault-watcher`, `vault`, `vector-store`, `webauthn-store`
 
 Note: `crons.spec.mjs` and `embeddings.spec.mjs` are covered by Phase 0A and Phase 3 respectively.
 

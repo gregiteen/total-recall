@@ -24,6 +24,7 @@ describe('logger', () => {
   let fsMock;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     vi.resetModules();
 
     // Re-apply mocks after resetModules

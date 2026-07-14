@@ -51,8 +51,8 @@ describe('runCrons', () => {
     await runCrons(minimalOptions);
     // execFileSync mock would throw if called — it wasn't, so we additionally
     // verify no info log contains "skill push"
-    const infoCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls;
-    const hasSkillPush = infoCalls.some(([arg]: [{ message?: string }]) =>
+    const infoCalls = logger.info.mock.calls;
+    const hasSkillPush = infoCalls.some(([arg]) =>
       typeof arg?.message === 'string' && arg.message.includes('skill push')
     );
     expect(hasSkillPush).toBe(false);
@@ -60,9 +60,9 @@ describe('runCrons', () => {
 
   it('logs a single info message indicating no active cron jobs', async () => {
     await runCrons(minimalOptions);
-    const infoCalls = (logger.info as ReturnType<typeof vi.fn>).mock.calls;
+    const infoCalls = logger.info.mock.calls;
     expect(infoCalls.length).toBeGreaterThanOrEqual(1);
-    const hasNoActiveCronMsg = infoCalls.some(([arg]: [{ message?: string; subsystem?: string }]) =>
+    const hasNoActiveCronMsg = infoCalls.some(([arg]) =>
       arg?.subsystem === 'cron' && typeof arg?.message === 'string'
     );
     expect(hasNoActiveCronMsg).toBe(true);

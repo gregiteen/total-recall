@@ -1,18 +1,46 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import child_process from 'node:child_process';
 
 vi.mock('./logger.mjs', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('./config.mjs', () => ({ agentDir: '/mock/agent', brainDir: '/mock/brain' }));
-vi.mock('node:child_process');
-vi.mock('node:fs');
 vi.mock('node:os');
+
+vi.mock('node:fs', () => ({
+  default: {
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    openSync: vi.fn(),
+    closeSync: vi.fn(),
+    unlinkSync: vi.fn(),
+    renameSync: vi.fn()
+  },
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  openSync: vi.fn(),
+  closeSync: vi.fn(),
+  unlinkSync: vi.fn(),
+  renameSync: vi.fn()
+}));
+
+vi.mock('node:child_process', () => ({
+  default: {
+    spawn: vi.fn(),
+    spawnSync: vi.fn()
+  },
+  spawn: vi.fn(),
+  spawnSync: vi.fn()
+}));
 
 // Constants derived from mocked config
 const PID_FILE = '/mock/brain/logs/daemon.pid';
 const LOG_FILE = '/mock/brain/logs/daemon.log';
 
 describe('daemon-control', () => {
-  let fs;
-  let childProcess;
   let readPid;
   let getDaemonStatus;
   let startDaemon;
@@ -24,11 +52,10 @@ describe('daemon-control', () => {
     vi.resetModules();
     vi.clearAllMocks();
 
-    fs = await import('node:fs');
-    childProcess = await import('node:child_process');
-
-    // Default: no PID file
-    fs.existsSync.mockReturnValue(false);
+    fs.existsSync.mockImplementation((p) => {
+      if (typeof p === 'string' && p.includes('daemon-loop.mjs')) return true;
+      return false;
+    });
     fs.readFileSync.mockReturnValue('');
     fs.writeFileSync.mockReturnValue(undefined);
     fs.mkdirSync.mockReturnValue(undefined);
@@ -37,8 +64,7 @@ describe('daemon-control', () => {
     fs.unlinkSync.mockReturnValue(undefined);
     fs.renameSync.mockReturnValue(undefined);
 
-    // Default spawn: fake child process
-    childProcess.spawn.mockReturnValue({ pid: 12345, unref: vi.fn() });
+    child_process.spawn.mockReturnValue({ pid: 12345, unref: vi.fn() });
 
     killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
 
@@ -51,7 +77,9 @@ describe('daemon-control', () => {
   });
 
   afterEach(() => {
-    killSpy.mockRestore();
+    if (killSpy && killSpy.mockRestore) {
+      killSpy.mockRestore();
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -136,20 +164,24 @@ describe('daemon-control', () => {
   describe('startDaemon', () => {
     it('spawns a detached child, writes PID file, and returns the pid', async () => {
       // No existing daemon running
-      fs.existsSync.mockReturnValue(false);
+      fs.existsSync.mockImplementation((p) => {
+        if (typeof p === 'string' && p.includes('daemon-loop.mjs')) return true;
+        return false;
+      });
 
       const fakePid = 12345;
       const fakeChild = { pid: fakePid, unref: vi.fn() };
-      childProcess.spawn.mockReturnValue(fakeChild);
+      child_process.spawn.mockReturnValue(fakeChild);
 
       const pid = await startDaemon();
 
       expect(pid).toBe(fakePid);
-      expect(childProcess.spawn).toHaveBeenCalled();
+      expect(child_process.spawn).toHaveBeenCalled();
       expect(fakeChild.unref).toHaveBeenCalled();
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         PID_FILE,
         expect.stringContaining(String(fakePid)),
+        'utf8'
       );
     });
 
@@ -162,7 +194,7 @@ describe('daemon-control', () => {
       const pid = await startDaemon();
 
       expect(pid).toBe(9876);
-      expect(childProcess.spawn).not.toHaveBeenCalled();
+      expect(child_process.spawn).not.toHaveBeenCalled();
     });
   });
 
@@ -205,26 +237,32 @@ describe('daemon-control', () => {
       const pid = await ensureDaemonRunning();
 
       expect(pid).toBe(9876);
-      expect(childProcess.spawn).not.toHaveBeenCalled();
+      expect(child_process.spawn).not.toHaveBeenCalled();
     });
 
     it('calls startDaemon and returns the new pid when daemon is not running', async () => {
       // First check → not running
-      fs.existsSync.mockReturnValue(false);
+      fs.existsSync.mockImplementation((p) => {
+        if (typeof p === 'string' && p.includes('daemon-loop.mjs')) return true;
+        return false;
+      });
 
       const fakePid = 12345;
-      childProcess.spawn.mockReturnValue({ pid: fakePid, unref: vi.fn() });
+      child_process.spawn.mockReturnValue({ pid: fakePid, unref: vi.fn() });
 
       const pid = await ensureDaemonRunning();
 
       expect(pid).toBe(fakePid);
-      expect(childProcess.spawn).toHaveBeenCalled();
+      expect(child_process.spawn).toHaveBeenCalled();
     });
 
     it('throws when startDaemon fails (spawn returns no pid)', async () => {
-      fs.existsSync.mockReturnValue(false);
+      fs.existsSync.mockImplementation((p) => {
+        if (typeof p === 'string' && p.includes('daemon-loop.mjs')) return true;
+        return false;
+      });
       // Simulate a broken spawn (no pid on child)
-      childProcess.spawn.mockReturnValue({ pid: undefined, unref: vi.fn() });
+      child_process.spawn.mockReturnValue({ pid: undefined, unref: vi.fn() });
 
       await expect(ensureDaemonRunning()).rejects.toThrow();
     });
