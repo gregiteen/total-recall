@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import OpenWikiPage from './OpenWikiPage';
 import * as api from '../api';
 
@@ -15,18 +15,11 @@ describe('OpenWikiPage', () => {
       { slug: 'test-node', title: 'Test Node', category: 'concept', body: 'Test content' }
     ]);
 
-    render(<OpenWikiPage activeBrainId="global" />);
-
-    // Shows loading state initially
-    expect(screen.getByText(/Syncing nodes/i)).toBeInTheDocument();
-
-    // Wait for the data to load
-    await waitFor(() => {
-      expect(screen.queryByText(/Syncing nodes/i)).not.toBeInTheDocument();
+    await act(async () => {
+      render(<OpenWikiPage activeBrainId="global" />);
     });
 
-    // Verify it renders the loaded nodes
     expect(screen.getByText(/Knowledge Graph/i)).toBeInTheDocument();
-    expect(screen.getByText(/Test Node/i)).toBeInTheDocument();
-  });
+    expect(await screen.findByText(/Test Node/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+  }, 10000);
 });

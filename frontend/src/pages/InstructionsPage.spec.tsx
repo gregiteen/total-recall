@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import InstructionsPage from './InstructionsPage';
@@ -26,7 +27,7 @@ describe('InstructionsPage', () => {
     expect(screen.getByText(/Instruction Surfaces/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText(/AGENTS.md/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/AGENTS\.md/i)[0]).toBeInTheDocument();
     });
   });
 

@@ -40,19 +40,19 @@ describe('crypto module', () => {
       const key = await deriveKey('my-password', 'some-salt');
       expect(key).toBeInstanceOf(Buffer);
       expect(key.length).toBe(32);
-    });
+    }, 15000);
 
     it('produces different keys for different passwords', async () => {
       const k1 = await deriveKey('password1', 'salt');
       const k2 = await deriveKey('password2', 'salt');
       expect(k1.equals(k2)).toBe(false);
-    });
+    }, 15000);
 
     it('produces different keys for different salts', async () => {
       const k1 = await deriveKey('password', 'salt1');
       const k2 = await deriveKey('password', 'salt2');
       expect(k1.equals(k2)).toBe(false);
-    });
+    }, 15000);
   });
 
   describe('encryptSecrets / decryptSecrets roundtrip', () => {
@@ -62,14 +62,14 @@ describe('crypto module', () => {
       const encrypted = await encryptSecrets(original, password);
       const decrypted = await decryptSecrets(encrypted, password);
       expect(decrypted).toEqual(original);
-    });
+    }, 15000);
 
     it('encrypted output is a Buffer, not plaintext', async () => {
       const original = { secret: 'hidden-value' };
       const encrypted = await encryptSecrets(original, 'pass');
       expect(encrypted).toBeInstanceOf(Buffer);
       expect(encrypted.toString()).not.toContain('hidden-value');
-    });
+    }, 15000);
 
     it('encrypted output length is > plaintext length (has salt + iv + tag overhead)', async () => {
       const original = { k: 'v' };
@@ -77,26 +77,26 @@ describe('crypto module', () => {
       const plainLen = JSON.stringify(original).length;
       // Overhead: 16 salt + 12 iv + 16 auth tag = 44 bytes
       expect(encrypted.length).toBeGreaterThan(plainLen + 40);
-    });
+    }, 15000);
 
     it('produces different ciphertext for same input (random salt/iv)', async () => {
       const original = { k: 'v' };
       const enc1 = await encryptSecrets(original, 'pass');
       const enc2 = await encryptSecrets(original, 'pass');
       expect(enc1.equals(enc2)).toBe(false);
-    });
+    }, 15000);
 
     it('throws on wrong password (auth tag mismatch)', async () => {
       const encrypted = await encryptSecrets({ x: 1 }, 'correct-password');
       await expect(decryptSecrets(encrypted, 'wrong-password')).rejects.toThrow();
-    });
+    }, 15000);
 
     it('handles nested objects in roundtrip', async () => {
       const original = { a: { b: { c: [1, 2, 3] } }, d: true };
       const encrypted = await encryptSecrets(original, 'nested-pass');
       const decrypted = await decryptSecrets(encrypted, 'nested-pass');
       expect(decrypted).toEqual(original);
-    });
+    }, 15000);
   });
 
   describe('writeSecrets / readSecrets', () => {

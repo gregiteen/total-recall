@@ -472,7 +472,7 @@ export default function UsagePage() {
                 <Tooltip
                   contentStyle={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12, color: '#e8e8e8' }}
                   labelStyle={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}
-                  formatter={(value: number | string, name: string) => [`$${Number(value).toFixed(3)}`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
+                  formatter={(value: any, name: any) => [`$${Number(value).toFixed(3)}`, String(name).charAt(0).toUpperCase() + String(name).slice(1)]}
                 />
                 <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)' }} />
                 <Area type="monotone" dataKey="gemini" stackId="1" stroke="#3b82f6" fill="url(#gradGemini)" strokeWidth={2} />

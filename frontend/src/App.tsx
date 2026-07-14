@@ -300,13 +300,13 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
             <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
-            <Route path="/tasks" element={<TasksPage activeBrainId={activeBrainId} />} />
+            <Route path="/tasks" element={<TasksPage />} />
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
-            <Route path="/openwiki" element={<OpenWikiPage activeBrainId={activeBrainId} />} />
+            <Route path="/openwiki" element={<OpenWikiPage />} />
             <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
             <Route path="/keys" element={<ApiKeysPage />} />
             <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
-            <Route path="/help" element={<HelpPage activeBrainId={activeBrainId} />} />
+            <Route path="/help" element={<HelpPage />} />
             {/* Legacy OS-control-plane routes → core product */}
             <Route path="/vault" element={<Navigate to="/memory" replace />} />
             <Route path="/inbox" element={<Navigate to="/tasks" replace />} />

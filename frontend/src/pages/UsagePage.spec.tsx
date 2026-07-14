@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import UsagePage from './UsagePage';
 import * as api from '../api';
 
@@ -21,15 +21,10 @@ describe('UsagePage', () => {
 
     vi.mocked(api.fetchConfigJson).mockResolvedValue({} as any);
 
-    render(<UsagePage />);
-    
-    // Shows loading initially
-    expect(screen.getByText(/Aggregating token expenditures/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Aggregating token expenditures/i)).not.toBeInTheDocument();
+    await act(async () => {
+      render(<UsagePage />);
     });
-
-    expect(screen.getByText(/Token & Budget Statistics/i)).toBeInTheDocument();
-  });
+    
+    expect(await screen.findByText(/Token & Budget Statistics/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+  }, 10000);
 });

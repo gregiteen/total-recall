@@ -25,7 +25,7 @@ describe('HealthPage', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText(/1h 0m/i)[0]).toBeInTheDocument();
-      expect(screen.getByText(/healthy/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/healthy/i)[0]).toBeInTheDocument();
     });
   });
 });

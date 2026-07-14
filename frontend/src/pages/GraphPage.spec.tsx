@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import GraphPage from './GraphPage';
 import * as api from '../api';
 
@@ -11,10 +11,9 @@ describe('GraphPage', () => {
   });
 
   it('renders without crashing', async () => {
-    vi.mocked(api.fetchGraphData).mockResolvedValue({
-      nodes: [{ id: 'test', label: 'Test', size: 10, category: 'test' }],
-      links: []
-    });
+    vi.mocked(api.listMemory).mockResolvedValue([]);
+    vi.mocked(api.listResearch).mockResolvedValue({ items: [] } as any);
+    vi.mocked(api.fetchChatThreads).mockResolvedValue([]);
 
     render(<GraphPage activeBrainId="global" />);
     

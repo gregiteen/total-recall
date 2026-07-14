@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 class MockEventSource {
-  constructor(url: string) {}
+  constructor(_url: string) {}
   close() {}
   onmessage: ((event: any) => void) | null = null;
   onerror: ((event: any) => void) | null = null;

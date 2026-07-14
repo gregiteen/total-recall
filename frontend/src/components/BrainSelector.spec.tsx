@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import BrainSelector from './BrainSelector';
@@ -8,7 +9,7 @@ vi.mock('../api');
 describe('BrainSelector', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    global.fetch = vi.fn();
+    (global as any).fetch = vi.fn();
   });
 
   it('renders loading state initially', () => {

@@ -22,7 +22,7 @@ describe('Graph3D', () => {
     });
     
     // Mock requestAnimationFrame
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((_cb) => {
       // Don't actually loop, just call once for coverage
       return 1;
     });
