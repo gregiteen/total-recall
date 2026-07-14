@@ -13,6 +13,7 @@ import {
   unregisterSkill,
   adaptSkillDescription,
   hashSkillContent,
+  readSkillMeta,
   syncSkillTwoWay,
   syncAllSkillsTwoWay,
   discoverSkillsInRepo,
@@ -292,5 +293,45 @@ describe('skills-registry', () => {
     } finally {
       process.chdir(prev);
     }
+  });
+
+  it('readSkillMeta returns repo_scoped: true when SKILL.md has repo_scoped: true', () => {
+    const skillDir = path.join(workspace, 'scoped-skill');
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      `---\nname: scoped-skill\ndescription: "A repo-scoped skill."\nversion: "1.0.0"\nrepo_scoped: true\n---\n\n# Scoped\n`,
+      'utf8',
+    );
+    const meta = readSkillMeta(skillDir);
+    expect(meta.repo_scoped).toBe(true);
+  });
+
+  it('readSkillMeta returns repo_scoped: false when field is absent', () => {
+    const skillDir = writeSkill(workspace, 'plain-skill');
+    const meta = readSkillMeta(skillDir);
+    expect(meta.repo_scoped).toBe(false);
+  });
+
+  it('syncAllSkillsTwoWay skips repo_scoped skills', () => {
+    // Register a normal skill and a repo-scoped skill
+    const normalDir = writeSkill(workspace, 'normal-skill');
+    registerSkill(brain, normalDir);
+
+    const scopedDir = path.join(workspace, 'repo-scoped-skill');
+    fs.mkdirSync(scopedDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scopedDir, 'SKILL.md'),
+      `---\nname: repo-scoped-skill\ndescription: "Must not be synced globally."\nversion: "1.0.0"\nrepo_scoped: true\n---\n\n# Scoped Skill\n`,
+      'utf8',
+    );
+    registerSkill(brain, scopedDir);
+
+    const report = syncAllSkillsTwoWay(brain, { dryRun: true, skipDiscover: true });
+    const skipped = report.results.filter((r) => r.skipped && r.reason === 'repo_scoped');
+    expect(skipped.length).toBeGreaterThanOrEqual(1);
+    expect(skipped.some((r) => r.skillId === 'repo-scoped-skill')).toBe(true);
+    // Normal skill should NOT be in the repo_scoped-skipped list
+    expect(skipped.some((r) => r.skillId === 'normal-skill')).toBe(false);
   });
 });

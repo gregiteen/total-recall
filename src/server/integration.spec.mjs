@@ -133,7 +133,7 @@ describe('UltraChat session sync — POST /api/sessions/ingest', () => {
       source: 'http-api',
       messages: [
         { role: 'user', content: 'What is Total Recall?' },
-        { role: 'assistant', content: 'A sovereign AI OS.' }
+        { role: 'assistant', content: 'A local-first AI OS.' }
       ]
     };
 
