@@ -194,7 +194,29 @@ export default function InstructionsPage() {
 
   // ─── Data Loading ─────────────────────────────────────────────────────────────
 
-  const loadSurfaces = async () => {
+  const applyFallback = useCallback(() => {
+    setSurfaces(FALLBACK_SURFACES)
+    setIsFallback(true)
+    setLastCompiled('')
+    setTotalNodes(0)
+    const first = FALLBACK_SURFACES[0]
+    setSelected(first)
+    setContent('Content unavailable — recompile to regenerate')
+  }, [])
+
+  const loadContent = useCallback(async (name: string) => {
+    setContentLoading(true)
+    try {
+      const data = await fetchInstructionContent(name)
+      setContent(data.content || 'Empty surface — no compiled content yet.')
+    } catch {
+      setContent('Content unavailable — recompile to regenerate')
+    } finally {
+      setContentLoading(false)
+    }
+  }, [])
+
+  const loadSurfaces = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -220,29 +242,7 @@ export default function InstructionsPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const applyFallback = () => {
-    setSurfaces(FALLBACK_SURFACES)
-    setIsFallback(true)
-    setLastCompiled('')
-    setTotalNodes(0)
-    const first = FALLBACK_SURFACES[0]
-    setSelected(first)
-    setContent('Content unavailable — recompile to regenerate')
-  }
-
-  const loadContent = async (name: string) => {
-    setContentLoading(true)
-    try {
-      const data = await fetchInstructionContent(name)
-      setContent(data.content || 'Empty surface — no compiled content yet.')
-    } catch {
-      setContent('Content unavailable — recompile to regenerate')
-    } finally {
-      setContentLoading(false)
-    }
-  }
+  }, [applyFallback, loadContent])
 
   const handleSelect = (surface: Surface) => {
     setSelected(surface)

@@ -180,7 +180,7 @@ export default function ApiKeysPage() {
     } finally {
       setLoading(false)
     }
-  }, [selected?.key, selected])
+  }, [selected])
 
   const loadPats = useCallback(async () => {
     try {

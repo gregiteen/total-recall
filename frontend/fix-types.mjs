@@ -78,12 +78,12 @@ for (let i = 0; i < lines.length; i++) {
   if (lines[i].includes('placeholder="Filter key, provider, repo, tier…"')) {
     // found the input
     let target = i;
-    while (!lines[target].includes('<div style={{ display: \\'flex\\', gap: 12, alignItems: \\'center\\', marginBottom: 20 }}>')) {
+    while (!lines[target].includes('<div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 20 }}>')) {
       target--;
     }
     // We found the start of the filter block
     // Inject the buttons right after this target line
-    lines.splice(target + 1, 0, \`
+    lines.splice(target + 1, 0, `
             <div style={{ display: 'flex', background: 'var(--bg-tertiary)', borderRadius: 6, padding: 2 }}>
               <button
                 onClick={() => setGroupBy('repo')}
@@ -106,7 +106,7 @@ for (let i = 0; i < lines.length; i++) {
                 By API
               </button>
             </div>
-\`);
+`);
     replaced = true;
     break;
   }
