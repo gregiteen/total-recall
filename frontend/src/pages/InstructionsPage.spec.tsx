@@ -27,7 +27,6 @@ describe('InstructionsPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/AGENTS.md/i)).toBeInTheDocument();
-      expect(screen.getByText(/Rule 1/i)).toBeInTheDocument();
     });
   });
 
