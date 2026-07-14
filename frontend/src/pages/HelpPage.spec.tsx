@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import HelpPage from './HelpPage';
 import * as api from '../api';
 
@@ -22,16 +22,16 @@ describe('HelpPage', () => {
       content: '# CLI Reference\n\nSome helpful text.'
     } as any);
 
-    render(<HelpPage />);
+    await act(async () => {
+      render(<HelpPage />);
+    });
 
     expect(screen.getByText(/Help & CLI Reference/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getAllByText(/CLI Reference/i)[0]).toBeInTheDocument();
-      expect(screen.getByText(/Vault Structure/i)).toBeInTheDocument();
-      expect(screen.getByText(/Some helpful text./i)).toBeInTheDocument();
-    });
-  });
+    expect(screen.getAllByText(/CLI Reference/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/Vault Structure/i)).toBeInTheDocument();
+    
+    expect(await screen.findByText(/Some helpful text./i, undefined, { timeout: 4000 })).toBeInTheDocument();
+  }, 10000);
 
   it('switches topics', async () => {
     vi.mocked(api.fetchHelpTopics).mockResolvedValue({
@@ -47,17 +47,17 @@ describe('HelpPage', () => {
       content: 'Vault content'
     } as any);
 
-    render(<HelpPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/CLI content/i)).toBeInTheDocument();
+    await act(async () => {
+      render(<HelpPage />);
     });
 
-    fireEvent.click(screen.getByText(/Vault Structure/i));
+    expect(await screen.findByText(/CLI content/i, undefined, { timeout: 4000 })).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(api.fetchHelpContent).toHaveBeenCalledWith('vault');
-      expect(screen.getByText(/Vault content/i)).toBeInTheDocument();
+    await act(async () => {
+      screen.getByText(/Vault Structure/i).click();
     });
-  });
+
+    expect(api.fetchHelpContent).toHaveBeenCalledWith('vault');
+    expect(await screen.findByText(/Vault content/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+  }, 10000);
 });

@@ -10,6 +10,11 @@ vi.mock('./logger.mjs', () => ({
   },
 }));
 
+vi.mock('./github-sync.mjs', () => ({
+  getGitHubSyncStatus: vi.fn().mockResolvedValue({ configured: false }),
+  runGitHubSync: vi.fn().mockResolvedValue(true),
+}));
+
 // Mock child_process to ensure execFileSync is never called
 vi.mock('child_process', () => ({
   execFileSync: vi.fn(() => {

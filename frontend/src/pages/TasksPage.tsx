@@ -14,7 +14,7 @@ import ResearchAgendaTab from '../components/ResearchAgendaTab'
 import type { ResearchItem } from '../components/ResearchAgendaTab'
 import DaemonLogsTab from '../components/DaemonLogsTab'
 
-export default function TasksPage({ activeBrainId }: { activeBrainId?: string }) {
+export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [researchItems, setResearchItems] = useState<ResearchItem[]>([])
   const [researchCounts, setResearchCounts] = useState({ pending: 0, in_progress: 0, done: 0, failed: 0 })
@@ -164,7 +164,7 @@ export default function TasksPage({ activeBrainId }: { activeBrainId?: string })
     setError('')
     setActionSuccess('')
     try {
-      await triggerRecompile(activeBrainId)
+      await triggerRecompile()
       setActionSuccess('Surface projections recompiled successfully')
       setTimeout(() => setActionSuccess(''), 4000)
       void refreshAll()

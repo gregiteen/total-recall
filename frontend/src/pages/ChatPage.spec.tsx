@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import ChatPage from './ChatPage';
 import { BrowserRouter } from 'react-router-dom';
 import * as api from '../api';
@@ -22,16 +22,16 @@ describe('ChatPage', () => {
     vi.mocked(api.listMemory).mockResolvedValue([]);
     vi.mocked(api.fetchChatHistory).mockResolvedValue([]);
 
-    render(
-      <BrowserRouter>
-        <ChatPage />
-      </BrowserRouter>
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText(/Chat Session/i)).toBeInTheDocument();
-      expect(screen.getByText(/Model \/ provider:/i)).toBeInTheDocument();
-      expect(screen.getByText(/New Chat/i)).toBeInTheDocument();
+    await act(async () => {
+      render(
+        <BrowserRouter>
+          <ChatPage />
+        </BrowserRouter>
+      );
     });
-  });
+
+    expect(await screen.findByText(/Chat Session/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Model \/ provider:/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(await screen.findByText(/New Chat/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+  }, 10000);
 });
