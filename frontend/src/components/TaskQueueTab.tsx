@@ -156,7 +156,15 @@ export default function TaskQueueTab(props: TaskQueueTabProps) {
             }}>
               <div style={{ flex: 1, marginRight: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span className="badge badge-accent" style={{ fontSize: 11 }}>{t.category}</span>
+                  <span className={`badge ${
+                    t.category.includes('clarity') ? 'badge-primary' :
+                    t.category.includes('post-mortem') ? 'badge-error' :
+                    'badge-accent'
+                  }`} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {t.category.includes('clarity') && <span>✨</span>}
+                    {t.category.includes('post-mortem') && <span>💀</span>}
+                    {t.category}
+                  </span>
                   <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{t.target}</h4>
                 </div>
                 {t.body && (

@@ -1629,3 +1629,117 @@ Output ONLY valid JSON.`;
     return { success: false, error: `Tangent expansion failed: ${err.message}` };
   }
 }
+
+/**
+ * Phase 6: Memory Compaction (Consolidation)
+ * Finds redundant or overlapping fact nodes and merges them into a consolidated node.
+ */
+export async function runMemoryCompaction({ vaultDir, inboxDir, runtimeConfig }) {
+  const nodes = getNodes(vaultDir);
+  const factNodes = nodes.filter(n => n.status === 'active' && n.category === 'facts');
+
+  if (factNodes.length < 2) {
+    return { success: true, consolidatedCount: 0 };
+  }
+
+  // Generate a list of facts for the LLM to analyze for overlaps
+  const factsList = factNodes.map(n => `- [${n.slug}] ${n.title}\n  Snippet: ${n.body.slice(0, 200).replace(/\n/g, ' ')}`).join('\n\n');
+
+  const today = getLocalizedDateTime();
+  const prompt = `Today's Date/Time: ${today}
+
+Here are the active fact nodes in the vault:
+${factsList}
+
+Identify any groups of 2 or more nodes that are heavily overlapping, redundant, or should be consolidated into a single master node. 
+Provide the slugs of the nodes to merge, a title for the new consolidated node, and a synthesized markdown body combining their key points.`;
+
+  const systemPrompt = `You are a Memory Compaction Engine. Your job is to find heavily overlapping or redundant fact nodes and merge them.
+Output ONLY valid JSON in this format:
+{
+  "consolidations": [
+    {
+      "old_slugs": ["slug1", "slug2"],
+      "new_title": "string (title for the new merged node)",
+      "new_body": "string (markdown body synthesizing all facts from the old nodes)",
+      "tags": ["tag1", "tag2"]
+    }
+  ]
+}
+If no nodes need consolidation, return {"consolidations": []}.
+Output ONLY valid JSON.`;
+
+  try {
+    const raw = await callLocalRuntime(prompt, systemPrompt, runtimeConfig);
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in compaction response');
+    const parsed = cleanAndParseJSON(match[0]);
+    const consolidations = parsed.consolidations || [];
+
+    let consolidatedCount = 0;
+
+    for (const cons of consolidations) {
+      if (!cons.old_slugs || cons.old_slugs.length < 2) continue;
+
+      const nodesToMerge = cons.old_slugs.map(slug => factNodes.find(n => n.slug === slug)).filter(Boolean);
+      if (nodesToMerge.length < 2) continue;
+
+      const newSlug = `fact-consolidated-${crypto.createHash('md5').update(cons.new_title + Date.now()).digest('hex').slice(0, 10)}`;
+      const now = new Date().toISOString();
+      
+      const newTags = [...new Set([...(cons.tags || []), 'consolidated'])];
+      nodesToMerge.forEach(n => {
+        if (n.tags) n.tags.forEach(t => newTags.push(t));
+      });
+
+      // Generate the new consolidated node
+      const newNode = {
+        type: 'memory',
+        slug: newSlug,
+        category: 'facts',
+        title: cons.new_title || 'Consolidated Fact',
+        status: 'active',
+        confidence: 0.8,
+        importance: 4,
+        created: now,
+        updated: now,
+        last_accessed: now,
+        source: {
+          type: 'memory-compaction',
+          agent: 'fact-seeker-compaction',
+          evidence_count: nodesToMerge.length
+        },
+        supersedes: nodesToMerge.map(n => n.slug),
+        superseded_by: null,
+        contradicts: [],
+        tags: [...new Set(newTags)],
+        related: [],
+        routes_to_skills: [],
+        schema_version: 2,
+        body: cons.new_body || 'Consolidated content.'
+      };
+
+      await writeNode(newNode, vaultDir);
+
+      // Archive old nodes and point them to the new consolidated node
+      for (const old of nodesToMerge) {
+        old.status = 'archived';
+        old.superseded_by = newSlug;
+        old.updated = now;
+        await writeNode(old, vaultDir);
+      }
+
+      consolidatedCount += nodesToMerge.length;
+      
+      logger.info({
+        subsystem: 'fact-seeker',
+        message: `Consolidated ${nodesToMerge.length} nodes into ${newSlug}`
+      });
+    }
+
+    return { success: true, consolidatedCount };
+  } catch (err) {
+    logger.info({ subsystem: 'fact-seeker', message: `Memory compaction failed: ${err.message}` });
+    return { success: false, error: err.message, consolidatedCount: 0 };
+  }
+}

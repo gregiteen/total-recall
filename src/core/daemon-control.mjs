@@ -97,6 +97,11 @@ export function startDaemon() {
     },
   });
 
+  if (!child || !child.pid) {
+    fs.closeSync(logFd);
+    throw new Error('Failed to spawn daemon process (no pid returned)');
+  }
+
   child.unref();
   
   // Write the PID file

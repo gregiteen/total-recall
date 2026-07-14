@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { restRouter } from './rest.mjs';
+import restRouter from './rest.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MANIFEST_PATH = path.join(__dirname, 'route-manifest.json');

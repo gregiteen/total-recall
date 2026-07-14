@@ -29,6 +29,34 @@
   },
   {
     "method": "GET",
+    "path": "/api/collab/annotations"
+  },
+  {
+    "method": "POST",
+    "path": "/api/collab/annotations"
+  },
+  {
+    "method": "POST",
+    "path": "/api/collab/auth/login"
+  },
+  {
+    "method": "POST",
+    "path": "/api/collab/auth/register"
+  },
+  {
+    "method": "GET",
+    "path": "/api/collab/groups"
+  },
+  {
+    "method": "POST",
+    "path": "/api/collab/groups"
+  },
+  {
+    "method": "POST",
+    "path": "/api/collab/groups/join"
+  },
+  {
+    "method": "GET",
     "path": "/api/config"
   },
   {
@@ -365,19 +393,23 @@
   },
   {
     "method": "POST",
+    "path": "/api/skills/audit"
+  },
+  {
+    "method": "POST",
     "path": "/api/skills/install"
+  },
+  {
+    "method": "GET",
+    "path": "/api/skills/search"
   },
   {
     "method": "POST",
     "path": "/api/skills/toggle"
   },
   {
-    "method": "POST",
-    "path": "/api/skills/audit"
-  },
-  {
     "method": "GET",
-    "path": "/api/skills/search"
+    "path": "/api/ssss"
   },
   {
     "method": "GET",
@@ -389,6 +421,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/ssss/instructions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ssss/references"
+  },
+  {
+    "method": "GET",
     "path": "/api/ssss/references"
   },
   {
@@ -397,7 +437,19 @@
   },
   {
     "method": "GET",
+    "path": "/api/ssss/references/:name"
+  },
+  {
+    "method": "GET",
     "path": "/api/ssss/skill/ssss"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ssss/skill/ssss"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ssss/spec"
   },
   {
     "method": "GET",

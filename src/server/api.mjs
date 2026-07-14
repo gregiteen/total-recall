@@ -571,7 +571,7 @@ CHAT (OpenAI-compatible):
   GET    ${selfBase}/v1/models                     — list available models
 
 OTHER:
-  GET    ${selfBase}/health                        — health check (vault stats, embedding index sizes, ollama status)
+  GET    ${selfBase}/health                        — health check (vault stats, embedding index sizes, local_llm status)
   GET    ${selfBase}/.well-known/total-recall.json — discovery manifest
   GET    ${selfBase}/api/keys                      — list API keys (admin)
 

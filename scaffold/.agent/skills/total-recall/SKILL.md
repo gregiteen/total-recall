@@ -1,21 +1,12 @@
 ---
 name: total-recall
 provenance: total-recall
-description: "Use this skill to operate Total Recall — portable memory, instructions, openwiki, skill deploy, and secrets. MANDATORY: Read this file before changing TR setup. Nested packages under modules/ are NOT agent skills."
-version: 3.14.5
-skill_dependencies:
-  ssss:
-    source: npm
-    package: "@ssss/cli"
-    note: "Extract skill from node_modules/@ssss/cli/skills/ssss/ at init time"
-  okf:
-    source: github
-    repo: "GoogleCloudPlatform/knowledge-catalog"
-    note: "Do NOT use okf@0.0.0 npm package (squatter, not Google). Spec is read from disk via okf-adapter.mjs."
-  openwiki:
-    source: npm
-    package: "openwiki"
-    note: "LangChain package. Installed via npx openwiki --init during setup."
+description: >-
+  Use this skill to operate Total Recall — portable memory, instructions,
+  openwiki, skill deploy, and secrets. MANDATORY: Read this file before changing
+  TR setup. Nested packages under modules/ are NOT agent skills.
+version: 3.14.1
+repo_scoped: true
 ---
 
 # Total Recall — Master Agent Skill

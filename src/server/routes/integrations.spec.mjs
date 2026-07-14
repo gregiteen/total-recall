@@ -21,13 +21,7 @@ vi.mock('../../cli/connect.mjs', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('./_shared.mjs', async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    BRAIN_DIR: '/mock/brain',
-  };
-});
+
 
 import { issueKey } from '../keys.mjs';
 import connect from '../../cli/connect.mjs';
@@ -74,8 +68,7 @@ describe('Integrations Router', () => {
       connect.mockResolvedValue(undefined);
 
       const res = await request(app)
-        .post('/api/integrations/connect')
-        .send({ client: 'cursor' });
+        .post('/api/integrations/connect?client=cursor');
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -85,8 +78,7 @@ describe('Integrations Router', () => {
 
     it('returns 400 when client is missing', async () => {
       const res = await request(app)
-        .post('/api/integrations/connect')
-        .send({});
+        .post('/api/integrations/connect');
 
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/client is required/);
@@ -94,8 +86,7 @@ describe('Integrations Router', () => {
 
     it('returns 400 for unknown client', async () => {
       const res = await request(app)
-        .post('/api/integrations/connect')
-        .send({ client: 'unknown-ide' });
+        .post('/api/integrations/connect?client=unknown-ide');
 
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/Unknown client/);
@@ -105,8 +96,7 @@ describe('Integrations Router', () => {
       connect.mockResolvedValue(undefined);
 
       await request(app)
-        .post('/api/integrations/connect')
-        .send({ client: 'vscode', baseUrl: 'http://localhost:3000' });
+        .post('/api/integrations/connect?client=vscode&baseUrl=http://localhost:3000');
 
       expect(connect).toHaveBeenCalledWith(
         expect.arrayContaining(['--brain', 'http://localhost:3000'])

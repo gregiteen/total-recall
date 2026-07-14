@@ -21,8 +21,8 @@ vi.mock('./_shared.mjs', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    BRAIN_DIR: '/mock/brain',
-    CONFIG_DIR: '/mock/brain/config',
+    BRAIN_DIR: '/tmp/mock-brain',
+    CONFIG_DIR: '/tmp/mock-brain/config',
     AGENT_DIR: '/mock/agent',
     serverError: (res, err) => res.status(500).json({ error: err.message }),
     badRequest: (res, msg) => res.status(400).json({ error: msg }),

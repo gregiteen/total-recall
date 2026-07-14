@@ -78,7 +78,8 @@ router.get('/api/integrations/active', requireAuth, (req, res) => {
  */
 router.post('/api/integrations/connect', requireAuth, (req, res) => {
   try {
-    const { client, baseUrl } = req.body || {};
+    const client = req.body?.client || req.query?.client;
+    const baseUrl = req.body?.baseUrl || req.query?.baseUrl;
     if (!client) return badRequest(res, 'client is required');
 
     const validClients = [

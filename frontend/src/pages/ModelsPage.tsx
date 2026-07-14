@@ -26,27 +26,34 @@ export default function ModelsPage() {
 
   const fetchSystemData = useCallback(async () => {
     try {
-      const systemHealth = await fetchHealth();
+      const [
+        systemHealth,
+        data,
+        stats,
+        gemModels,
+        claModels,
+        openModels,
+        openRouterModels
+      ] = await Promise.all([
+        fetchHealth(),
+        fetchConfigJson(),
+        fetchUsageStats().catch(() => null),
+        fetchGeminiModels().catch(() => []),
+        fetchClaudeModels().catch(() => []),
+        fetchOpenaiModels().catch(() => []),
+        fetchOpenRouterModels().catch(() => [])
+      ]);
+
       setHealth(systemHealth);
       
-      const data = await fetchConfigJson();
       if (!data.secrets) data.secrets = {};
       if (!data.brain) data.brain = {};
       setConfigData(data);
       
-      const stats = await fetchUsageStats().catch(() => null);
       setUsageStats(stats);
-      
-      const gemModels = await fetchGeminiModels().catch(() => []);
       setGeminiModels(gemModels);
-
-      const claModels = await fetchClaudeModels().catch(() => []);
       setClaudeModels(claModels);
-
-      const openModels = await fetchOpenaiModels().catch(() => []);
       setOpenaiModels(openModels);
-      
-      const openRouterModels = await fetchOpenRouterModels().catch(() => []);
       setOrModels(openRouterModels);
       
       setError(null);

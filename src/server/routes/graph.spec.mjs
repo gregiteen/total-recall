@@ -1,8 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+
+const {
+  TEST_DIR,
+  VAULT_DIR,
+  PREF_DIR,
+  BRAIN_DIR,
+  DERIVED_DIR,
+  SKILLS_DIR,
+  INSTRUCTIONS,
+  ROOT,
+} = await vi.hoisted(async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const os = await import('node:os');
+  const tDir = fs.mkdtempSync(path.join(os.tmpdir(), 'total-recall-graph-'));
+  const sDir = path.join(tDir, 'skills');
+  return {
+    TEST_DIR: tDir,
+    VAULT_DIR: path.join(tDir, 'vault'),
+    PREF_DIR: path.join(tDir, 'preferences'),
+    BRAIN_DIR: path.join(tDir, 'brain'),
+    DERIVED_DIR: path.join(tDir, 'derived'),
+    SKILLS_DIR: sDir,
+    INSTRUCTIONS: path.join(tDir, 'INSTRUCTIONS.md'),
+    ROOT: tDir,
+  };
+});
+
+[VAULT_DIR, PREF_DIR, BRAIN_DIR, DERIVED_DIR, SKILLS_DIR, path.join(SKILLS_DIR, 'total-recall', 'references')].forEach(d => fs.mkdirSync(d, { recursive: true }));
 
 // Mock dependencies
 vi.mock('../auth.mjs', () => ({
@@ -24,12 +54,12 @@ vi.mock('./_shared.mjs', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    VAULT_DIR: '/mock/vault',
-    BRAIN_DIR: '/mock/brain',
-    DERIVED_DIR: '/mock/derived',
-    SKILLS_DIR: '/mock/skills',
-    INSTRUCTIONS: '/mock/INSTRUCTIONS.md',
-    ROOT: '/mock/root',
+    VAULT_DIR,
+    BRAIN_DIR,
+    DERIVED_DIR,
+    SKILLS_DIR,
+    INSTRUCTIONS,
+    ROOT,
   };
 });
 
@@ -42,33 +72,34 @@ app.use(express.json());
 app.use(graphRouter);
 
 describe('Graph Router', () => {
-  let actualFs;
-
   beforeEach(async () => {
-    actualFs = await vi.importActual('node:fs');
     vi.clearAllMocks();
     getNodes.mockReturnValue([]);
+    
+    // Clean up files before each test
+    [
+      path.join(PREF_DIR, 'dashboard-enhanced.md'),
+      path.join(DERIVED_DIR, 'graph-index.jsonl'),
+      path.join(SKILLS_DIR, 'total-recall', 'references', 'valid-name.md')
+    ].forEach(f => {
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    });
+  });
+  
+  afterAll(() => {
+    fs.rmSync(TEST_DIR, { recursive: true, force: true });
   });
 
   describe('GET /api/graph', () => {
     it('returns 404 when dashboard-enhanced flag is not set', async () => {
-      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-
       const res = await request(app).get('/api/graph');
       expect(res.status).toBe(404);
       expect(res.body.error).toMatch(/dashboard-enhanced/);
     });
 
     it('returns graph nodes and routes when flag is enabled', async () => {
-      vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-        if (typeof p === 'string' && p.includes('dashboard-enhanced.md')) return true;
-        if (typeof p === 'string' && p.includes('graph-index.jsonl')) return true;
-        return false;
-      });
-      vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
-        if (typeof p === 'string' && p.includes('graph-index.jsonl')) return '{"id":"node-1"}\n';
-        return actualFs.readFileSync(p);
-      });
+      fs.writeFileSync(path.join(PREF_DIR, 'dashboard-enhanced.md'), '');
+      fs.writeFileSync(path.join(DERIVED_DIR, 'graph-index.jsonl'), '{"id":"node-1"}\n');
 
       const res = await request(app).get('/api/graph');
       expect(res.status).toBe(200);
@@ -79,17 +110,12 @@ describe('Graph Router', () => {
 
   describe('GET /api/conflicts', () => {
     it('returns 404 when dashboard-enhanced flag is not set', async () => {
-      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-
       const res = await request(app).get('/api/conflicts');
       expect(res.status).toBe(404);
     });
 
     it('returns merged conflicts list', async () => {
-      vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-        if (typeof p === 'string' && p.includes('dashboard-enhanced.md')) return true;
-        return false;
-      });
+      fs.writeFileSync(path.join(PREF_DIR, 'dashboard-enhanced.md'), '');
       getNodes.mockReturnValue([]);
 
       const res = await request(app).get('/api/conflicts');
@@ -132,8 +158,6 @@ describe('Graph Router', () => {
 
   describe('GET /api/ssss', () => {
     it('returns SSSS resource index', async () => {
-      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-
       const res = await request(app).get('/api/ssss');
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('ssss');
@@ -150,8 +174,6 @@ describe('Graph Router', () => {
     });
 
     it('returns 404 for non-existent reference', async () => {
-      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
-
       const res = await request(app).get('/api/ssss/references/valid-name');
       expect(res.status).toBe(404);
     });

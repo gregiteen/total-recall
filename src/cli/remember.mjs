@@ -237,7 +237,8 @@ export default async function remember(args) {
   }
 
   // Create individual SSSS v2 node in the vault
-  const finalSlug = slug || `${category}-${crypto.randomBytes(4).toString('hex')}`;
+  const contentHash = crypto.createHash('md5').update(bodyContent).digest('hex').slice(0, 8);
+  const finalSlug = slug || `${category}-${contentHash}`;
   const truncatedContent = bodyContent.slice(0, 50) + (bodyContent.length > 50 ? '...' : '');
   const finalTitle = title || `Self-captured memory: ${truncatedContent.replace(/\n/g, ' ')}`;
 

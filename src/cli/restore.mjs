@@ -125,8 +125,8 @@ export default async function restore(args) {
 
     // Reindex after restore
     console.error('  🔄 Rebuilding indexes...');
-    const { default: compile } = await import('./compile.mjs');
-    await compile(['--quiet']);
+    const { default: rebuild } = await import('./rebuild.mjs');
+    await rebuild(['--quiet']);
     console.error('  ✅ Restore complete\n');
   } catch (err) {
     console.error(`  ❌ Restore failed: ${err.message}`);

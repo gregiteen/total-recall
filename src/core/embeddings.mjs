@@ -2,151 +2,92 @@
  * src/core/embeddings.mjs
  *
  * Google AI embedding generation + cosine similarity for semantic vault search.
+ * Migrated to better-sqlite3 + sqlite-vss to prevent OOM on large vaults.
  *
- * Index file: .agent/memory-derived/embeddings.json
- *   { [slug]: { embedding: number[], model: string, generated_at: string } }
+ * Index file: .agent/memory-derived/embeddings.db
  *
  * Embedding model: gemini-embedding-2 (Google, 768 dims, free tier)
  *   Auth: GOOGLE_API_KEY env var
- *
- * Fallback: If GOOGLE_API_KEY is not set, tries OpenAI's text-embedding-3-small
- *   via OPENAI_API_KEY env var.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import Database from 'better-sqlite3';
+import * as sqliteVss from 'sqlite-vss';
 
-import { googleApiKey, embedModel, brainDir } from './config.mjs';
+import { googleApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
 const DEFAULT_EMBED_MODEL = embedModel;
 const GOOGLE_API_KEY = googleApiKey || process.env.GOOGLE_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const BRAIN_DIR = brainDir;
-const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
-const CACHE_DIR = path.join(DERIVED_DIR, 'embeddings-cache');
+let dbInstance = null;
+let currentDbPath = null;
 
-// ─── Hot process-level in-memory cache Map (max size 500) ────────────────────
-const IN_MEMORY_CACHE = new Map();
-const MAX_IN_MEMORY_SIZE = 500;
-
-function getInMemory(key) {
-  if (!IN_MEMORY_CACHE.has(key)) return null;
-  const value = IN_MEMORY_CACHE.get(key);
-  // Refresh position for LRU
-  IN_MEMORY_CACHE.delete(key);
-  IN_MEMORY_CACHE.set(key, value);
-  return value;
-}
-
-function setInMemory(key, embedding) {
-  if (IN_MEMORY_CACHE.has(key)) {
-    IN_MEMORY_CACHE.delete(key);
-  } else if (IN_MEMORY_CACHE.size >= MAX_IN_MEMORY_SIZE) {
-    const oldestKey = IN_MEMORY_CACHE.keys().next().value;
-    IN_MEMORY_CACHE.delete(oldestKey);
+/**
+ * Get or initialize the SQLite database connection with sqlite-vss loaded.
+ */
+function getDb(derivedDir) {
+  const dbPath = path.join(derivedDir, 'embeddings.db');
+  if (dbInstance && currentDbPath === dbPath) {
+    return dbInstance;
   }
-  IN_MEMORY_CACHE.set(key, embedding);
-}
+  
+  if (dbInstance) {
+    dbInstance.close();
+  }
 
-// ─── Query Embedding Cache Helpers (Partitioned 256-Dir Layout) ──────────────
+  fs.mkdirSync(derivedDir, { recursive: true });
+  
+  const db = new Database(dbPath);
+  
+  // Load sqlite-vss extension
+  sqliteVss.load(db);
+
+  // Initialize schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vault_embeddings (
+      slug TEXT PRIMARY KEY,
+      model TEXT,
+      generated_at TEXT,
+      content_sha256 TEXT,
+      embedding_json TEXT
+    );
+    
+    CREATE TABLE IF NOT EXISTS session_embeddings (
+      key TEXT PRIMARY KEY,
+      session_id TEXT,
+      chunk INTEGER,
+      total_chunks INTEGER,
+      snippet TEXT,
+      model TEXT,
+      generated_at TEXT,
+      embedding_json TEXT
+    );
+    
+    -- Virtual tables for VSS
+    CREATE VIRTUAL TABLE IF NOT EXISTS vss_vault_embeddings USING vss0(
+      embedding(768)
+    );
+    
+    CREATE VIRTUAL TABLE IF NOT EXISTS vss_session_embeddings USING vss0(
+      embedding(768)
+    );
+  `);
+
+  dbInstance = db;
+  currentDbPath = dbPath;
+  return db;
+}
 
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-function getCachePartitionPath(key) {
-  const hash = sha256(key);
-  const prefix = hash.slice(0, 2);
-  const suffix = hash.slice(2, 4);
-  return {
-    dir: path.join(CACHE_DIR, prefix),
-    file: path.join(CACHE_DIR, prefix, `${suffix}.json`),
-    hash
-  };
-}
-
-export function getCachedEmbedding(key) {
-  if (process.env.NODE_ENV === 'test' && !global.__TEST_CACHE_OVERRIDE__) return null;
-  // Tier 1: Hot In-Memory LRU Cache
-  const hit = getInMemory(key);
-  if (hit) return hit;
-
-  // Tier 2: Partitioned Disk Cache
-  try {
-    const { file, hash } = getCachePartitionPath(key);
-    if (fs.existsSync(file)) {
-      const partition = JSON.parse(fs.readFileSync(file, 'utf8') || '{}');
-      const entry = partition[hash];
-      if (!entry) return null;
-
-      let embedding;
-      if (Array.isArray(entry)) {
-        embedding = entry;
-      } else if (entry && typeof entry === 'object' && Array.isArray(entry.embedding)) {
-        embedding = entry.embedding;
-        // Non-destructively update lastUsed time
-        entry.lastUsed = Date.now();
-        fs.writeFileSync(file, JSON.stringify(partition), 'utf8');
-      }
-
-      if (embedding) {
-        setInMemory(key, embedding);
-        return embedding;
-      }
-    }
-  } catch {}
-  return null;
-}
-
-export function saveCachedEmbedding(key, embedding) {
-  if (process.env.NODE_ENV === 'test' && !global.__TEST_CACHE_OVERRIDE__) return;
-  // Tier 1 sync
-  setInMemory(key, embedding);
-
-  // Tier 2 sync
-  try {
-    const { dir, file, hash } = getCachePartitionPath(key);
-    fs.mkdirSync(dir, { recursive: true });
-    const partition = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8') || '{}') : {};
-    
-    // Save in upgraded object format non-destructively
-    partition[hash] = {
-      embedding,
-      lastUsed: Date.now()
-    };
-
-    // Partition Cache Auto-Pruning
-    const keys = Object.keys(partition);
-    if (keys.length > 500) {
-      const entries = keys.map(k => {
-        const entry = partition[k];
-        let lastUsed = 0;
-        if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
-          lastUsed = entry.lastUsed || 0;
-        }
-        return { k, lastUsed };
-      });
-      // Sort oldest first
-      entries.sort((a, b) => a.lastUsed - b.lastUsed);
-      // Evict oldest, keeping 400 keys
-      const toPrune = entries.slice(0, keys.length - 400);
-      for (const p of toPrune) {
-        delete partition[p.k];
-      }
-    }
-
-    fs.writeFileSync(file, JSON.stringify(partition), 'utf8');
-  } catch {}
-}
-
 // ─── Embedding generation ────────────────────────────────────────────────────
 
-/**
- * Resolve the embedding model dynamically from the active API registry list.
- */
 async function resolveEmbeddingModel(selectedModel = embedModel) {
   if (selectedModel !== 'gemini-embedding-2' && selectedModel !== 'default') {
     return selectedModel;
@@ -181,9 +122,6 @@ async function resolveEmbeddingModel(selectedModel = embedModel) {
   return 'gemini-embedding-2';
 }
 
-/**
- * Get an embedding from Google's embedding API.
- */
 async function getGoogleEmbedding(text, model) {
   if (!GOOGLE_API_KEY) {
     throw new Error('GOOGLE_API_KEY not set. Cannot generate embeddings.');
@@ -215,9 +153,6 @@ async function getGoogleEmbedding(text, model) {
   return data.embedding.values;
 }
 
-/**
- * Fallback: Get an embedding from OpenAI's text-embedding-3-small API.
- */
 async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
   if (!OPENAI_API_KEY) {
     throw new Error('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is set. Cannot generate embeddings.');
@@ -246,27 +181,10 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
   return data.data[0].embedding;
 }
 
-/**
- * Get an embedding vector for the given text.
- * Tries Google first, falls back to OpenAI.
- *
- * @param {string} text
- * @param {string} [_unused]   — kept for backward compatibility (was ollamaUrl)
- * @param {string} [model]
- * @returns {Promise<number[]>}
- */
 export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
-  const input = String(text).slice(0, 8000); // cap at 8k chars
-
-  const cacheKey = `${model}:${sha256(input)}`;
-  const cached = getCachedEmbedding(cacheKey);
-  if (cached) {
-    return cached;
-  }
+  const input = String(text).slice(0, 8000);
 
   let embedding;
-
-  // Try Google first
   if (GOOGLE_API_KEY) {
     try {
       embedding = await getGoogleEmbedding(input, model);
@@ -275,7 +193,6 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
     }
   }
 
-  // Fallback to OpenAI
   if (!embedding && OPENAI_API_KEY) {
     try {
       embedding = await getOpenAIEmbedding(input);
@@ -289,22 +206,9 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
     throw new Error('No embedding provider available. Set GOOGLE_API_KEY or OPENAI_API_KEY.');
   }
 
-  // Save to cache
-  saveCachedEmbedding(cacheKey, embedding);
-
   return embedding;
 }
 
-// ─── Cosine similarity ───────────────────────────────────────────────────────
-
-/**
- * Compute cosine similarity between two equal-length vectors.
- * Returns a value in [-1, 1] where 1 = identical direction.
- *
- * @param {number[]} a
- * @param {number[]} b
- * @returns {number}
- */
 export function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
   let dot = 0, magA = 0, magB = 0;
@@ -319,125 +223,54 @@ export function cosineSimilarity(a, b) {
 
 // ─── Index file helpers ──────────────────────────────────────────────────────
 
-// TODO: Replace JSONL-based embedding storage with better-sqlite3 + sqlite-vss
-// for O(log n) nearest-neighbor search and chunked loading.
-// better-sqlite3 is already installed in node_modules.
-// See: https://github.com/asg017/sqlite-vss
-// This would eliminate OOM risk from loading the full index into memory.
-
-const MAX_INDEX_ENTRIES = 50_000;
-
-function indexPath(derivedDir) {
-  return path.join(derivedDir, 'embeddings.json');
-}
-
-let cachedIndex = null;
-let cachedIndexPath = null;
-let cachedIndexMtime = 0;
-
-/**
- * Load the full embeddings index from disk.
- * Returns {} if the file doesn't exist or is corrupt.
- *
- * Caps loaded entries at MAX_INDEX_ENTRIES (50,000) to prevent OOM crashes
- * on large vaults. A warning is emitted if the cap is hit.
- * Also warns if the serialized index exceeds 100MB.
- *
- * @param {string} derivedDir
- * @returns {Record<string, { embedding: number[], model: string, generated_at: string }>}
- */
 export function loadEmbeddingsIndex(derivedDir) {
-  const p = indexPath(derivedDir);
-  if (!fs.existsSync(p)) return {};
-  try {
-    const stat = fs.statSync(p);
-    if (cachedIndex && cachedIndexPath === p && cachedIndexMtime === stat.mtimeMs) {
-      return cachedIndex;
-    }
-    let data = JSON.parse(fs.readFileSync(p, 'utf8'));
-
-    // Cap entries to prevent OOM on large vaults
-    const keys = Object.keys(data);
-    if (keys.length > MAX_INDEX_ENTRIES) {
-      logger.warn({
-        subsystem: 'embeddings',
-        message: `Embedding index has ${keys.length} entries, capping at ${MAX_INDEX_ENTRIES} to prevent OOM. Consider SQLite-vss migration.`
-      });
-      // Keep the most recently generated entries (sort desc by generated_at)
-      const capped = {};
-      const sorted = keys.sort((a, b) => {
-        const ta = data[a]?.generated_at || '';
-        const tb = data[b]?.generated_at || '';
-        return tb.localeCompare(ta);
-      });
-      for (const k of sorted.slice(0, MAX_INDEX_ENTRIES)) {
-        capped[k] = data[k];
-      }
-      data = capped;
-    }
-
-    // Size monitoring: warn if index exceeds 100MB in memory
-    const sizeBytes = Buffer.byteLength(JSON.stringify(data));
-    if (sizeBytes > 100 * 1024 * 1024) { // 100MB
-      logger.warn({
-        subsystem: 'embeddings',
-        message: `Embedding index size ${(sizeBytes / 1024 / 1024).toFixed(1)}MB exceeds 100MB threshold. Consider SQLite-vss migration.`
-      });
-    }
-
-    cachedIndex = data;
-    cachedIndexPath = p;
-    cachedIndexMtime = stat.mtimeMs;
-    return data;
+  const db = getDb(derivedDir);
+  const rows = db.prepare('SELECT slug, embedding_json, model, generated_at, content_sha256 FROM vault_embeddings').all();
+  const index = {};
+  for (const row of rows) {
+    index[row.slug] = {
+      embedding: JSON.parse(row.embedding_json),
+      model: row.model,
+      generated_at: row.generated_at,
+      content_sha256: row.content_sha256
+    };
   }
-  catch { return {}; }
+  return index;
 }
 
-/**
- * Write one slug's embedding into the index (merges, does not replace whole file).
- *
- * @param {string} derivedDir
- * @param {string} slug
- * @param {number[]} embedding
- * @param {string} [model]
- */
 export function saveEmbeddingToIndex(derivedDir, slug, embedding, model = DEFAULT_EMBED_MODEL) {
-  const p = indexPath(derivedDir);
-  const index = loadEmbeddingsIndex(derivedDir);
-  index[slug] = { embedding, model, generated_at: new Date().toISOString() };
-  fs.mkdirSync(derivedDir, { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(index), 'utf8');
-  cachedIndex = index;
-  cachedIndexPath = p;
-  cachedIndexMtime = fs.statSync(p).mtimeMs;
+  const db = getDb(derivedDir);
+  const now = new Date().toISOString();
+  const embeddingJson = JSON.stringify(embedding);
+  
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO vault_embeddings (slug, model, generated_at, embedding_json)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(slug) DO UPDATE SET
+        model=excluded.model,
+        generated_at=excluded.generated_at,
+        embedding_json=excluded.embedding_json
+    `).run(slug, model, now, embeddingJson);
+    
+    // Add to vss index
+    const rowId = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(slug).rowid;
+    db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(rowId);
+    db.prepare('INSERT INTO vss_vault_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+  })();
 }
 
-/**
- * Remove a slug from the embeddings index (called when a node is deleted).
- *
- * @param {string} derivedDir
- * @param {string} slug
- */
 export function removeEmbeddingFromIndex(derivedDir, slug) {
-  const p = indexPath(derivedDir);
-  const index = loadEmbeddingsIndex(derivedDir);
-  delete index[slug];
-  fs.mkdirSync(derivedDir, { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(index), 'utf8');
-  cachedIndex = index;
-  cachedIndexPath = p;
-  cachedIndexMtime = fs.statSync(p).mtimeMs;
+  const db = getDb(derivedDir);
+  db.transaction(() => {
+    const row = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(slug);
+    if (row) {
+      db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(row.rowid);
+      db.prepare('DELETE FROM vault_embeddings WHERE slug = ?').run(slug);
+    }
+  })();
 }
 
-// ─── Text representation ─────────────────────────────────────────────────────
-
-/**
- * Build the rich text string used for embedding a vault node.
- * Combines title, category, tags, and body for best semantic representation.
- *
- * @param {{ slug: string, title?: string, category?: string, tags?: string[], body?: string }} node
- * @returns {string}
- */
 export function nodeToEmbedText(node) {
   const parts = [];
   const title = node.title || node.slug;
@@ -448,45 +281,41 @@ export function nodeToEmbedText(node) {
   return parts.join('\n\n');
 }
 
-/**
- * Split a node's body into paragraph chunks for hierarchical child matching.
- */
 export function chunkNodeBody(body) {
   if (!body) return [];
   return body
     .split(/\n\n+/)
     .map(p => p.trim())
-    .filter(p => p.length > 50); // only chunk substantial paragraphs
+    .filter(p => p.length > 50);
 }
 
-// ─── Bulk index builder ──────────────────────────────────────────────────────
-
-/**
- * Build or refresh the embeddings index for a set of vault nodes.
- * Skips nodes that already have an entry in the index (incremental by default).
- * Pass force=true to re-embed all nodes.
- *
- * @param {object[]} nodes
- * @param {string} derivedDir
- * @param {{ model?: string, force?: boolean, onProgress?: Function }} [opts]
- * @returns {Promise<{ built: number, skipped: number, failed: number }>}
- */
 export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
-  const {
-    model = DEFAULT_EMBED_MODEL,
-    force = false,
-    onProgress,
-  } = opts;
+  const { model = DEFAULT_EMBED_MODEL, force = false, onProgress } = opts;
+  const db = getDb(derivedDir);
+
+  if (force) {
+    db.exec('DELETE FROM vss_vault_embeddings; DELETE FROM vault_embeddings;');
+  }
 
   const existing = force ? {} : loadEmbeddingsIndex(derivedDir);
-  const index = { ...existing };
-
-  // Remove any stale keys in the index that are not present in nodes (stale clean-up)
+  
+  // Clean up stale
   const activeSlugs = new Set(nodes.map(n => n.slug));
-  for (const slug of Object.keys(index)) {
-    if (!activeSlugs.has(slug)) {
-      delete index[slug];
-    }
+  const toDelete = [];
+  for (const slug of Object.keys(existing)) {
+    if (!activeSlugs.has(slug)) toDelete.push(slug);
+  }
+  
+  if (toDelete.length > 0) {
+    db.transaction(() => {
+      for (const slug of toDelete) {
+        const row = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(slug);
+        if (row) {
+          db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(row.rowid);
+          db.prepare('DELETE FROM vault_embeddings WHERE slug = ?').run(slug);
+        }
+      }
+    })();
   }
 
   let built = 0, skipped = 0, failed = 0;
@@ -495,7 +324,6 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
     const text = nodeToEmbedText(node);
     const contentHash = crypto.createHash('sha256').update(text).digest('hex');
 
-    // Skip if existing entry has matching content hash (content unchanged)
     if (!force && existing[node.slug]) {
       const cachedHash = existing[node.slug].content_sha256;
       if (cachedHash && cachedHash === contentHash) {
@@ -506,30 +334,25 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
 
     try {
       const parentEmbedding = await getEmbedding(text, undefined, model);
-      
-      // Calculate embeddings for children chunks
-      const childChunks = chunkNodeBody(node.body);
-      const chunks = [];
-      
-      for (const chunkText of childChunks) {
-        try {
-          const chunkEmb = await getEmbedding(`Parent: ${node.title}\nChunk: ${chunkText}`, undefined, model);
-          chunks.push({
-            text: chunkText,
-            embedding: chunkEmb
-          });
-        } catch {
-          // Ignore failures for individual chunks
-        }
-      }
+      const now = new Date().toISOString();
+      const embeddingJson = JSON.stringify(parentEmbedding);
 
-      index[node.slug] = {
-        embedding: parentEmbedding,
-        chunks,
-        model,
-        generated_at: new Date().toISOString(),
-        content_sha256: contentHash
-      };
+      db.transaction(() => {
+        db.prepare(`
+          INSERT INTO vault_embeddings (slug, model, generated_at, content_sha256, embedding_json)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(slug) DO UPDATE SET
+            model=excluded.model,
+            generated_at=excluded.generated_at,
+            content_sha256=excluded.content_sha256,
+            embedding_json=excluded.embedding_json
+        `).run(node.slug, model, now, contentHash, embeddingJson);
+        
+        const rowId = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(node.slug).rowid;
+        db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(rowId);
+        db.prepare('INSERT INTO vss_vault_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+      })();
+
       built++;
       onProgress?.({ slug: node.slug, built, skipped, failed });
     } catch (err) {
@@ -538,89 +361,65 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
     }
   }
 
-  fs.mkdirSync(derivedDir, { recursive: true });
-  fs.writeFileSync(indexPath(derivedDir), JSON.stringify(index), 'utf8');
   return { built, skipped, failed };
 }
 
 // ─── Session index ───────────────────────────────────────────────────────────
 
-const SESSION_INDEX_FILE = 'session-embeddings.json';
-
-function sessionIndexPath(derivedDir) {
-  return path.join(derivedDir, SESSION_INDEX_FILE);
-}
-
-let cachedSessionIndex = null;
-let cachedSessionIndexPath = null;
-let cachedSessionIndexMtime = 0;
-
 export function loadSessionEmbeddingsIndex(derivedDir) {
-  const p = sessionIndexPath(derivedDir);
-  if (!fs.existsSync(p)) return {};
-  try {
-    const stat = fs.statSync(p);
-    if (cachedSessionIndex && cachedSessionIndexPath === p && cachedSessionIndexMtime === stat.mtimeMs) {
-      return cachedSessionIndex;
-    }
-    let data = JSON.parse(fs.readFileSync(p, 'utf8'));
-
-    // Cap entries to prevent OOM on large session vaults
-    const keys = Object.keys(data);
-    if (keys.length > MAX_INDEX_ENTRIES) {
-      logger.warn({
-        subsystem: 'embeddings',
-        message: `Session embedding index has ${keys.length} entries, capping at ${MAX_INDEX_ENTRIES} to prevent OOM. Consider SQLite-vss migration.`
-      });
-      const capped = {};
-      for (const k of keys.slice(0, MAX_INDEX_ENTRIES)) {
-        capped[k] = data[k];
-      }
-      data = capped;
-    }
-
-    // Size monitoring: warn if index exceeds 100MB in memory
-    const sizeBytes = Buffer.byteLength(JSON.stringify(data));
-    if (sizeBytes > 100 * 1024 * 1024) { // 100MB
-      logger.warn({
-        subsystem: 'embeddings',
-        message: `Session embedding index size ${(sizeBytes / 1024 / 1024).toFixed(1)}MB exceeds 100MB threshold. Consider SQLite-vss migration.`
-      });
-    }
-
-    cachedSessionIndex = data;
-    cachedSessionIndexPath = p;
-    cachedSessionIndexMtime = stat.mtimeMs;
-    return data;
+  const db = getDb(derivedDir);
+  const rows = db.prepare('SELECT key, embedding_json, model, generated_at, session_id, chunk, total_chunks, snippet FROM session_embeddings').all();
+  const index = {};
+  for (const row of rows) {
+    index[row.key] = {
+      embedding: JSON.parse(row.embedding_json),
+      model: row.model,
+      generated_at: row.generated_at,
+      session_id: row.session_id,
+      chunk: row.chunk,
+      total_chunks: row.total_chunks,
+      snippet: row.snippet
+    };
   }
-  catch { return {}; }
-}
-
-function saveSessionIndex(derivedDir, index) {
-  fs.mkdirSync(derivedDir, { recursive: true });
-  fs.writeFileSync(sessionIndexPath(derivedDir), JSON.stringify(index), 'utf8');
+  return index;
 }
 
 export function saveSessionEmbeddingToIndex(derivedDir, key, snippet, embedding, model = DEFAULT_EMBED_MODEL) {
-  const index = loadSessionEmbeddingsIndex(derivedDir);
-  index[key] = { embedding, snippet: snippet.slice(0, 300), model, generated_at: new Date().toISOString() };
-  saveSessionIndex(derivedDir, index);
+  const db = getDb(derivedDir);
+  const now = new Date().toISOString();
+  const embeddingJson = JSON.stringify(embedding);
+  const session_id = key.split(':')[0];
+  const chunkMatch = key.match(/chunk-(\d+)/);
+  const chunk = chunkMatch ? parseInt(chunkMatch[1], 10) : 0;
+
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO session_embeddings (key, session_id, chunk, total_chunks, snippet, model, generated_at, embedding_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        snippet=excluded.snippet,
+        model=excluded.model,
+        generated_at=excluded.generated_at,
+        embedding_json=excluded.embedding_json
+    `).run(key, session_id, chunk, 1, snippet.slice(0, 300), model, now, embeddingJson);
+    
+    const rowId = db.prepare('SELECT rowid FROM session_embeddings WHERE key = ?').get(key).rowid;
+    db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(rowId);
+    db.prepare('INSERT INTO vss_session_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+  })();
 }
 
 export function removeSessionEmbeddingFromIndex(derivedDir, sessionId) {
-  const index = loadSessionEmbeddingsIndex(derivedDir);
-  for (const key of Object.keys(index)) {
-    if (key === sessionId || key.startsWith(`${sessionId}:chunk-`)) {
-      delete index[key];
+  const db = getDb(derivedDir);
+  db.transaction(() => {
+    const rows = db.prepare('SELECT rowid, key FROM session_embeddings WHERE session_id = ?').all(sessionId);
+    for (const row of rows) {
+      db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(row.rowid);
+      db.prepare('DELETE FROM session_embeddings WHERE key = ?').run(row.key);
     }
-  }
-  saveSessionIndex(derivedDir, index);
+  })();
 }
 
-/**
- * Build a readable text representation of a session for embedding.
- * Concatenates role:content pairs. Returns array of chunks (each ≤ 6000 chars).
- */
 export function sessionToEmbedChunks(messages) {
   const CHUNK_SIZE = 6000;
   const full = messages
@@ -637,9 +436,6 @@ export function sessionToEmbedChunks(messages) {
   return chunks;
 }
 
-/**
- * Parse a session JSONL file into an array of message objects.
- */
 export function parseSessionFile(filePath) {
   try {
     const raw = fs.readFileSync(filePath, 'utf8').trim();
@@ -653,20 +449,9 @@ export function parseSessionFile(filePath) {
   } catch { return []; }
 }
 
-/**
- * Embed all sessions in sessionsDir that are not yet in the index.
- *
- * @param {string} sessionsDir
- * @param {string} derivedDir
- * @param {{ force?: boolean, model?: string, onProgress?: Function }} [opts]
- * @returns {Promise<{ indexed: number, skipped: number, failed: number, chunks: number }>}
- */
 export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts = {}) {
-  const {
-    force = false,
-    model = DEFAULT_EMBED_MODEL,
-    onProgress,
-  } = opts;
+  const { force = false, model = DEFAULT_EMBED_MODEL, onProgress } = opts;
+  const db = getDb(derivedDir);
 
   if (!fs.existsSync(sessionsDir)) return { indexed: 0, skipped: 0, failed: 0, chunks: 0 };
 
@@ -675,37 +460,11 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
 
   if (files.length === 0) return { indexed: 0, skipped: 0, failed: 0, chunks: 0 };
 
-  let existing = force ? {} : loadSessionEmbeddingsIndex(derivedDir);
-
-  // Probe resolved model embedding dimension
-  let newDim = 0;
-  try {
-    const probe = await getEmbedding("test probe", undefined, model);
-    newDim = probe.length;
-  } catch (err) {
-    // If the probe fails, we cannot resolve/access the API, so skip gracefully
-    return { indexed: 0, skipped: files.length, failed: files.length, chunks: 0 };
+  if (force) {
+    db.exec('DELETE FROM vss_session_embeddings; DELETE FROM session_embeddings;');
   }
 
-  // Check for dimension mismatch against existing cached session embeddings
-  if (Object.keys(existing).length > 0) {
-    const firstKey = Object.keys(existing)[0];
-    const firstVal = existing[firstKey];
-    const existingDim = firstVal && Array.isArray(firstVal.embedding) ? firstVal.embedding.length : 0;
-
-    if (existingDim > 0 && existingDim !== newDim) {
-      // Dimension mismatch detected! Wipe the old index to re-embed everything
-      existing = {};
-      try {
-        const file = sessionIndexPath(derivedDir);
-        if (fs.existsSync(file)) {
-          fs.unlinkSync(file);
-        }
-      } catch {}
-    }
-  }
-
-  const index = { ...existing };
+  const existing = force ? {} : loadSessionEmbeddingsIndex(derivedDir);
   let indexed = 0, skipped = 0, failed = 0, totalChunks = 0;
 
   for (const file of files) {
@@ -723,15 +482,24 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
       for (let i = 0; i < chunks.length; i++) {
         const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
         const embedding = await getEmbedding(chunks[i], undefined, model);
-        index[key] = {
-          embedding,
-          snippet: chunks[i].slice(0, 300),
-          model,
-          session_id: sessionId,
-          chunk: i,
-          total_chunks: chunks.length,
-          generated_at: new Date().toISOString(),
-        };
+        const snippet = chunks[i].slice(0, 300);
+        
+        db.transaction(() => {
+          db.prepare(`
+            INSERT INTO session_embeddings (key, session_id, chunk, total_chunks, snippet, model, generated_at, embedding_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+              snippet=excluded.snippet,
+              model=excluded.model,
+              generated_at=excluded.generated_at,
+              embedding_json=excluded.embedding_json
+          `).run(key, sessionId, i, chunks.length, snippet, model, new Date().toISOString(), JSON.stringify(embedding));
+          
+          const rowId = db.prepare('SELECT rowid FROM session_embeddings WHERE key = ?').get(key).rowid;
+          db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(rowId);
+          db.prepare('INSERT INTO vss_session_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, JSON.stringify(embedding));
+        })();
+
         totalChunks++;
       }
 
@@ -743,6 +511,5 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
     }
   }
 
-  saveSessionIndex(derivedDir, index);
   return { indexed, skipped, failed, chunks: totalChunks };
 }

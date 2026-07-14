@@ -3,7 +3,7 @@
  *
  * Provision a target machine with the full Total Recall stack:
  *   1. Detect host architecture (aarch64 / x86_64 / arm64)
- *   2. Install Ollama (if not present)
+ *   2. Install local_llm (if not present)
  *   3. Pull Gemma 4 26B model (~16GB)
  *   4. Pull Kokoro-82M voice model (~200MB)
  *   4.5. Install SearXNG (native Python, no Docker) for web search on port 8888
@@ -20,7 +20,7 @@
  *   npx total-recall deploy [options]
  *
  * Options:
- *   --skip-ollama       Skip Ollama installation
+ *   --skip-local_llm       Skip local_llm installation
  *   --skip-searxng      Skip SearXNG installation
  *   --skip-models       Skip model pulling
  *   --skip-caddy        Skip Caddy installation
@@ -165,7 +165,7 @@ function installPlist(templateName, dryRun) {
 
 function parseArgs(args) {
   const opts = {
-    skipOllama: false,
+    skiplocal_llm: false,
     skipSearxng: false,
     skipModels: false,
     skipCaddy: false,
@@ -187,7 +187,7 @@ function parseArgs(args) {
   };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case '--skip-ollama': opts.skipOllama = true; break;
+      case '--skip-local_llm': opts.skiplocal_llm = true; break;
       case '--skip-searxng': opts.skipSearxng = true; break;
       case '--skip-models': opts.skipModels = true; break;
       case '--skip-caddy': opts.skipCaddy = true; break;
@@ -218,7 +218,7 @@ function printHelp() {
   Usage: total-recall deploy [options]
 
   Options:
-    --skip-ollama       Skip Ollama installation
+    --skip-local_llm       Skip local_llm installation
     --skip-searxng      Skip SearXNG installation
     --skip-models       Skip model pulling
     --skip-caddy        Skip Caddy installation
@@ -1147,9 +1147,9 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
   // ── Step 1: Detect architecture ──
   logStep('1/12', `Architecture detected: ${arch} (${platform})`);
 
-  // ── Step 2: Install Ollama (DEPRECATED) ──
-  logStep('2/12', 'Ollama installation (Deprecated)');
-  logSkip('Skipped: Local GPU-heavy LLM model hosting via Ollama is fully deprecated in Total Recall.');
+  // ── Step 2: Install local_llm (DEPRECATED) ──
+  logStep('2/12', 'local_llm installation (Deprecated)');
+  logSkip('Skipped: Local GPU-heavy LLM model hosting via local_llm is fully deprecated in Total Recall.');
 
   // ── Step 3: Pull Gemma 4 model (DEPRECATED) ──
   logStep('3/12', 'Pulling Gemma 4 26B model (Deprecated)');

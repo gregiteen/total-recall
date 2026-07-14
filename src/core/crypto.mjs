@@ -90,18 +90,14 @@ export function generateSignatureKeyPair() {
  * Signs a payload using an Ed25519 private key.
  */
 export function signPayload(payload, privateKeyPem) {
-  const sign = crypto.createSign('sha512');
-  sign.update(payload);
-  sign.end();
-  return sign.sign(privateKeyPem, 'base64');
+  const signature = crypto.sign(null, Buffer.from(payload), privateKeyPem);
+  return signature.toString('base64');
 }
 
 /**
  * Verifies a signature using an Ed25519 public key.
  */
 export function verifySignature(payload, signatureBase64, publicKeyPem) {
-  const verify = crypto.createVerify('sha512');
-  verify.update(payload);
-  verify.end();
-  return verify.verify(publicKeyPem, signatureBase64, 'base64');
+  const signature = Buffer.from(signatureBase64, 'base64');
+  return crypto.verify(null, Buffer.from(payload), publicKeyPem, signature);
 }

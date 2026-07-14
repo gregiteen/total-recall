@@ -629,7 +629,7 @@ export default async function init(args) {
     const { compileSurface } = await import('../core/surface.mjs');
     const result = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
     if (result.semanticUnavailable) {
-      logWarn("Semantic index build is temporarily unavailable (missing API credentials or Ollama offline).");
+      logWarn("Semantic index build is temporarily unavailable (missing API credentials or local_llm offline).");
       logWarn("Please set GOOGLE_API_KEY or OPENAI_API_KEY, or run 'npx total-recall setup' later to enable full semantic search.");
     }
     logOk(`Compile complete — ${result.nodesProcessed} nodes processed`);

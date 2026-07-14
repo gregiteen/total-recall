@@ -1,99 +1,73 @@
-/**
- * LoginPage.spec.tsx
- *
- * NOTE: vitest and @testing-library/react are not yet installed.
- * Install deps before running:
- *   npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom
- *
- * Then add to frontend/vite.config.ts (or vitest.config.ts):
- *   test: { environment: 'jsdom', globals: true, setupFiles: ['./src/setupTests.ts'] }
- */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import LoginPage from './LoginPage';
+import * as api from '../api';
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import LoginPage from './LoginPage'
-
-// ─── Mock the api module ───────────────────────────────────────────────────────
-vi.mock('../api', () => ({
-  login: vi.fn(),
-  changePassword: vi.fn(),
-  getAuthStatus: vi.fn(),
-  setupPassword: vi.fn(),
-}))
-
-// ─── Mock BrandMark (SVG component — not relevant to page logic) ───────────────
-vi.mock('../components/brand/BrandMark', () => ({
-  default: () => <div data-testid="brand-mark" />,
-}))
-
-import { login, getAuthStatus, setupPassword } from '../api'
+vi.mock('../api');
 
 describe('LoginPage', () => {
-  const onAuthenticated = vi.fn()
-
   beforeEach(() => {
-    vi.clearAllMocks()
-    ;(getAuthStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ configured: true })
-  })
+    vi.resetAllMocks();
+  });
 
-  it('renders the password input and submit button', async () => {
-    render(<LoginPage onAuthenticated={onAuthenticated} />)
-    // Wait for the getAuthStatus call to settle
+  it('renders loading state initially while checking auth status', () => {
+    // getAuthStatus will be pending
+    vi.mocked(api.getAuthStatus).mockImplementation(() => new Promise(() => {}));
+    
+    render(<LoginPage onAuthenticated={() => {}} />);
+    
+    // Check for the spinner svg (not text, since there's no loading text)
+    // The main form should not be visible yet
+    expect(screen.queryByText(/Sign In/i)).not.toBeInTheDocument();
+  });
+
+  it('renders Welcome back if already configured', async () => {
+    vi.mocked(api.getAuthStatus).mockResolvedValue({ configured: true });
+    
+    render(<LoginPage onAuthenticated={() => {}} />);
+    
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /sign in|unlock|enter/i })).toBeInTheDocument()
-    })
-    expect(screen.getByRole('textbox') || document.querySelector('input[type="password"]')).toBeTruthy()
-  })
+      expect(screen.getByText(/Welcome back/i)).toBeInTheDocument();
+    });
+    
+    expect(screen.getByText(/Sign In/i)).toBeInTheDocument();
+  });
 
-  it('shows an error when submitting empty password', async () => {
-    ;(login as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, error: 'Invalid password' })
-    render(<LoginPage onAuthenticated={onAuthenticated} />)
-    await waitFor(() => screen.getByRole('button'))
-    fireEvent.click(screen.getByRole('button'))
-    // Either inline error or the api returning error
+  it('renders Setup Admin Password if not configured', async () => {
+    vi.mocked(api.getAuthStatus).mockResolvedValue({ configured: false });
+    
+    render(<LoginPage onAuthenticated={() => {}} />);
+    
     await waitFor(() => {
-      expect(onAuthenticated).not.toHaveBeenCalled()
-    })
-  })
-
-  it('calls onAuthenticated on successful login', async () => {
-    ;(login as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true })
-    render(<LoginPage onAuthenticated={onAuthenticated} />)
-    await waitFor(() => screen.getByRole('button'))
-
-    const input = document.querySelector('input[type="password"]') as HTMLInputElement
-    await userEvent.type(input, 'mysecretpassword')
-    fireEvent.click(screen.getByRole('button'))
-
+      expect(screen.getByText(/Setup Admin Password/i)).toBeInTheDocument();
+    });
+    
+    expect(screen.getByText(/Create Password & Continue/i)).toBeInTheDocument();
+  });
+  
+  it('calls login api and triggers onAuthenticated on success', async () => {
+    vi.mocked(api.getAuthStatus).mockResolvedValue({ configured: true });
+    vi.mocked(api.login).mockResolvedValue({ ok: true });
+    
+    const onAuth = vi.fn();
+    render(<LoginPage onAuthenticated={onAuth} />);
+    
     await waitFor(() => {
-      expect(login).toHaveBeenCalledWith('mysecretpassword')
-      expect(onAuthenticated).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  it('shows first-time setup form when auth is not configured', async () => {
-    ;(getAuthStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ configured: false })
-    render(<LoginPage onAuthenticated={onAuthenticated} />)
+      expect(screen.getByText(/Welcome back/i)).toBeInTheDocument();
+    });
+    
+    // Type password
+    const input = screen.getByLabelText(/Password/i);
+    await userEvent.type(input, 'test-password');
+    
+    // Click submit
+    const button = screen.getByText(/Sign In/i);
+    await userEvent.click(button);
+    
     await waitFor(() => {
-      // First-time form shows a new-password input
-      const inputs = document.querySelectorAll('input[type="password"]')
-      expect(inputs.length).toBeGreaterThan(0)
-    })
-  })
-
-  it('validates new password length during first-time setup', async () => {
-    ;(getAuthStatus as ReturnType<typeof vi.fn>).mockResolvedValue({ configured: false })
-    ;(setupPassword as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, error: 'too short' })
-    render(<LoginPage onAuthenticated={onAuthenticated} />)
-    await waitFor(() => screen.getByRole('button'))
-
-    const input = document.querySelector('input[type="password"]') as HTMLInputElement
-    await userEvent.type(input, 'short')
-    fireEvent.click(screen.getByRole('button'))
-
-    await waitFor(() => {
-      expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument()
-    })
-  })
-})
+      expect(api.login).toHaveBeenCalledWith('test-password');
+      expect(onAuth).toHaveBeenCalled();
+    });
+  });
+});

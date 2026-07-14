@@ -50,7 +50,7 @@ vi.mock('./tools.mjs', () => ({
 }));
 
 const { apiRouter } = await import('./api.mjs');
-const { restRouter } = await import('./rest.mjs');
+const { default: restRouter } = await import('./rest.mjs');
 
 const AGENT_DIR = TEST_AGENT_DIR;
 const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
