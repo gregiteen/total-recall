@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.14.8] — 2026-07-14
+
+### ✨ Features
+- **Mobile PWA Integration**: Added `MobilePairing` component securely embedding connection QR Code within Settings.
+
+### 🐛 Bug Fixes
+- **Test Stability**: Fixed UI test flakiness in `ChatPage.spec.tsx` (mocking issue) and `InstructionsPage.spec.tsx` (timing race condition) related to async data fetching and state updates.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.14.8`.
+
 ## [3.14.1] — 2026-07-13
 
 ### 🐛 Bug Fixes
