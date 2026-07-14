@@ -359,15 +359,15 @@ Wire all verification into `release.mjs` so no release can ship without proof:
 
 ## Phase 10: Final Verification and Ship *(Last — requires all phases complete)*
 
-- [ ] Start daemon, verify all API routes resolve correctly
-- [ ] Force rate-limit error → verify DLQ captures, retries, marks `failed`
-- [ ] Trigger memory compaction → verify node merging without data loss
+- [x] Start daemon, verify all API routes resolve correctly
+- [x] Force rate-limit error → verify DLQ captures, retries, marks `failed`
+- [x] Trigger memory compaction → verify node merging without data loss
 - [x] Verify `sync-scaffold.mjs` prevents `memory-vault/facts` leaking to scaffold
 - [x] Verify deterministic slugs prevent duplicate node creation (create same node twice → single file)
 - [x] Execute Clean-Account Initialization on a temp `HOME`
-- [ ] Pass `ssss-conformance.bridge.spec.mjs`
-- [ ] Run full push gate → all 8 gates green
-- [ ] `npm version patch` + `node .agent/skills/push/scripts/publish.mjs`
+- [x] Pass `ssss-conformance.bridge.spec.mjs`
+- [x] Run full push gate → all 8 gates green
+- [x] `npm version patch` + `node .agent/skills/push/scripts/publish.mjs`
 
 ---
 

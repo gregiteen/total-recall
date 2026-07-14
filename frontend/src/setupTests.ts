@@ -16,4 +16,8 @@ if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'EventSource', {
     value: MockEventSource,
   });
+  
+  if (window.HTMLCanvasElement) {
+    window.HTMLCanvasElement.prototype.getContext = () => null;
+  }
 }

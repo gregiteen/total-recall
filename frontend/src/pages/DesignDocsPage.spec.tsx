@@ -30,6 +30,10 @@ describe('DesignDocsPage', () => {
 
     render(<DesignDocsPage />);
 
+    await waitFor(() => {
+      expect(screen.getByText(/Project Board/i)).toBeInTheDocument();
+    });
+
     const boardTab = screen.getByText(/Project Board/i);
     fireEvent.click(boardTab);
 
