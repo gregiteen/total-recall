@@ -20,6 +20,7 @@ describe('ChatPage', () => {
     vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
     vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: false, connected: false });
     vi.mocked(api.listMemory).mockResolvedValue([]);
+    vi.mocked(api.fetchChatHistory).mockResolvedValue([]);
 
     render(
       <BrowserRouter>
