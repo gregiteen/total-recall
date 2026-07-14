@@ -16,6 +16,7 @@ import path from 'node:path';
 import { createMemoryNode, walkMd } from '../../core/vault.mjs';
 import { writeNodeValidatedAsync } from '../../core/validated-write.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
+import { semanticSearch } from '../../core/search.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { compileSurface } from '../../core/surface.mjs';
 import { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } from '../../core/embeddings.mjs';
@@ -86,7 +87,7 @@ async function triggerMutation(node, vaultDir = VAULT_DIR) {
         await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
         await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
       } catch (embedErr) {
-        // Ollama/embeddings offline non-fatal
+        // local_llm/embeddings offline non-fatal
       }
     } catch (err) {
       // Non-fatal background log
@@ -400,6 +401,23 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
     }
 
     res.json({ deleted: true, slug: req.params.slug });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/memory/search/semantic
+ * Body: { query: string, top_k?: number }
+ * Returns top-k vault nodes ranked by vector similarity to the query.
+ */
+router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:read'), async (req, res) => {
+  try {
+    const { query, top_k, include_sessions = true } = req.body || {};
+    if (!query) return badRequest(res, 'query is required');
+    const results = await semanticSearch(query, { vaultDir: VAULT_DIR, derivedDir: DERIVED_DIR, top_k, includeSessions: include_sessions });
+    if (results.length === 0) return res.status(503).json({ error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.' });
+    res.json({ query, top_k: Math.min(Number(top_k) || 5, 20), results });
   } catch (err) {
     serverError(res, err);
   }

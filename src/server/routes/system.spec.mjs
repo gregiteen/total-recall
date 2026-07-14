@@ -13,7 +13,7 @@ vi.mock('./_shared.mjs', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,
-    BRAIN_DIR: '/mock/brain',
+    BRAIN_DIR: '/tmp/mock-brain',
     serverError: (res, err) => res.status(500).json({ error: err.message }),
   };
 });

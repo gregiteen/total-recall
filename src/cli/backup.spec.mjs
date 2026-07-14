@@ -5,9 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('node:child_process', () => ({
-  spawnSync: vi.fn(() => ({ status: 0, stdout: Buffer.from(''), stderr: Buffer.from('') })),
-}));
+vi.mock('node:child_process', () => {
+  const m = {
+    spawnSync: vi.fn(() => ({ status: 0, stdout: Buffer.from(''), stderr: Buffer.from('') })),
+  };
+  return { ...m, default: m };
+});
 
 describe('CLI Backup — tarball mode', () => {
   it('calls tar command for unencrypted backup', async () => {

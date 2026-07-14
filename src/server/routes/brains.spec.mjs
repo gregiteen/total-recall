@@ -20,7 +20,7 @@ vi.mock('../../core/config.mjs', () => ({
   default: { remoteVaultSync: { enabled: false } },
   remoteVaultSync: { enabled: false },
   agentDir: '/mock/agent',
-  brainDir: '/mock/brain',
+  brainDir: '/tmp/mock-brain',
 }));
 
 import { getNodes } from '../../core/vault-cache.mjs';

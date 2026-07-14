@@ -3,12 +3,12 @@
  * All endpoints/paths come from config / env — no product or host-app assumptions.
  */
 
-import fs from 'fs';
-import path from 'path';
-import { spawnSync } from 'child_process';
-import http from 'http';
-import https from 'https';
-import { createHash } from 'crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import http from 'node:http';
+import https from 'node:https';
+import { createHash } from 'node:crypto';
 import { createEngine } from '@ssss/cli/engine';
 import { remoteVaultSync } from './config.mjs';
 import { logger } from './logger.mjs';

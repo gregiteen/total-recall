@@ -14,9 +14,10 @@ import { logger } from './logger.mjs';
 let recompileTimer = null;
 const RECOMPILE_DEBOUNCE_MS = 2000;
 let watcher = null;
+let stopWrapper = null;
 
 export function startVaultWatcher(vaultDir, skillsDir, derivedDir, sessionsDir, instructionsFile) {
-  if (watcher) return watcher;
+  if (watcher && stopWrapper) return stopWrapper;
   
   if (!fs.existsSync(vaultDir)) {
     fs.mkdirSync(vaultDir, { recursive: true });
@@ -52,7 +53,7 @@ export function startVaultWatcher(vaultDir, skillsDir, derivedDir, sessionsDir, 
           await buildEmbeddingsIndex(vaultNodes, derivedDir);
           await buildSessionEmbeddingsIndex(sessionsDir, derivedDir);
         } catch (embedErr) {
-          // Ollama/embeddings offline non-fatal
+          // local_llm/embeddings offline non-fatal
         }
 
         logger.info({
@@ -81,12 +82,14 @@ export function startVaultWatcher(vaultDir, skillsDir, derivedDir, sessionsDir, 
     });
   }
 
-  return {
+  stopWrapper = {
     stop() {
       if (watcher) {
         try { watcher.close(); } catch {}
         watcher = null;
+        stopWrapper = null;
       }
     }
   };
+  return stopWrapper;
 }

@@ -4,6 +4,7 @@ import { sendChat, createTask, listTasks, fetchTtsStatus, fetchTtsAudio, fetchCh
 import type { ChatThread } from '../api'
 import type { ChatMessage, MemoryNode, ResearchItem, UpdateCheckResult } from '../types'
 import Graph3D from '../components/Graph3D'
+import { VoiceInput } from '../components/VoiceInput'
 
 
 let msgId = 0
@@ -944,6 +945,19 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
               )}
             </div>
 
+            <VoiceInput 
+              onTranscript={(text) => {
+                setInput(prev => prev + (prev.endsWith(' ') || prev === '' ? '' : ' ') + text);
+                setTimeout(() => {
+                  if (textareaRef.current) {
+                    textareaRef.current.focus();
+                    // trigger auto-resize
+                    const evt = new Event('input', { bubbles: true });
+                    textareaRef.current.dispatchEvent(evt);
+                  }
+                }, 10);
+              }}
+            />
             <textarea
               ref={textareaRef}
               id="chat-input"

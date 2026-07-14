@@ -123,6 +123,7 @@ export default async function recall(args) {
   try {
     // Search all target brains and merge results
     let allResults = [];
+    let isDegraded = false;
 
     for (const target of searchTargets) {
       const vaultDir = path.join(target.brainDir, 'memory-vault');
@@ -140,6 +141,7 @@ export default async function recall(args) {
           importance,
           priority
         });
+        if (results.degradedTextSearch) isDegraded = true;
         // Tag each result with its layer
         for (const r of results) {
           r._layer = target.label;
@@ -163,7 +165,7 @@ export default async function recall(args) {
       console.log('\n  🔍 No matching memory nodes found.');
       return;
     }
-    if (allResults.degradedTextSearch) {
+    if (isDegraded) {
       console.log('\n  ⚠️  WARNING: Embedding API unreachable or unconfigured. Cos-similarity vector search is disabled.');
       console.log('              Running basic text keyword search instead. Configure GOOGLE_API_KEY or OPENAI_API_KEY.');
     }

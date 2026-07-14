@@ -391,7 +391,7 @@ const HIGH_DRIFT_DOMAINS = [
   'npm', 'package', 'library', 'framework', 'model', 'pricing', 'rate limit',
   'token limit', 'context window', 'benchmark', 'leaderboard', 'sota',
   'openai', 'anthropic', 'google', 'gemini', 'claude', 'gpt', 'llama',
-  'ollama', 'hugging face', 'github', 'docker', 'kubernetes', 'terraform',
+  'local_llm', 'hugging face', 'github', 'docker', 'kubernetes', 'terraform',
   'aws', 'gcp', 'azure', 'cloudflare', 'vercel', 'next.js', 'react', 'vite',
 ];
 
@@ -611,7 +611,7 @@ Your job is to write an honest, explicit correction record. The system must be a
 
 Output valid JSON:
 {
-  "correction_title": "string (concise, e.g. 'Ollama API endpoint changed in v0.2.0')",
+  "correction_title": "string (concise, e.g. 'local_llm API endpoint changed in v0.2.0')",
   "was_wrong_about": "string (precise description of what was incorrect)",
   "actual_truth": "string (what is actually true, with citation)",
   "correction_body": "string (full markdown explanation including the correction narrative)",

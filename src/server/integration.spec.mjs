@@ -42,7 +42,7 @@ vi.mock('./auth.mjs', () => ({
 vi.mock('./tools.mjs', () => ({ AVAILABLE_TOOLS: [], handleToolCall: vi.fn() }));
 
 const { apiRouter } = await import('./api.mjs');
-const { restRouter } = await import('./rest.mjs');
+const { default: restRouter } = await import('./rest.mjs');
 
 function buildApp() {
   const app = express();

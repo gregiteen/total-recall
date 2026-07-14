@@ -13,6 +13,7 @@ export default function LoginPage({ onAuthenticated }: Props) {
   const [loading, setLoading] = useState(false)
   const [needsReset, setNeedsReset] = useState(false)
   const [isFirstTime, setIsFirstTime] = useState(false)
+  const [statusLoading, setStatusLoading] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -24,6 +25,8 @@ export default function LoginPage({ onAuthenticated }: Props) {
         }
       } catch {
         // ignore network error
+      } finally {
+        setStatusLoading(false)
       }
     }
     checkConfig()
@@ -90,6 +93,23 @@ export default function LoginPage({ onAuthenticated }: Props) {
   }
 
   const disabled = loading || ((isFirstTime || needsReset) ? !newPassword : !password)
+
+  if (statusLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-primary)',
+      }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
 
   return (
     <div className="login-shell">

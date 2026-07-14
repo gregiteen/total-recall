@@ -21,6 +21,14 @@ if (!runCommand('npm', ['test'])) {
 }
 console.error('✅ Tests passed successfully.');
 
+// 1.5 Run Project Verification Gate
+console.error('\n🔍 Phase 1.5: Running project structure verification gate...');
+if (!runCommand('node', ['scripts/verify-projects.mjs'])) {
+  console.error('❌ Project verification failed! Every .mjs and .tsx must have a test spec.');
+  process.exit(1);
+}
+console.error('✅ Project verification gate passed.');
+
 // 2. Run Lint checks
 console.error('\n🔍 Phase 2: Running code quality lint checks...');
 if (!runCommand('node', ['.agent/skills/code-quality/scripts/start-here-lint.mjs'])) {

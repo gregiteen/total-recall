@@ -243,7 +243,7 @@ function resolveAgent(config) {
 
 /**
  * Execute a prompt against the best available CLI agent headlessly.
- * Drop-in replacement for the old Ollama callLocalRuntime().
+ * Drop-in replacement for the old local_llm callLocalRuntime().
  *
  * @param {string} prompt - The user prompt
  * @param {string} system - System prompt (prepended to the user prompt)

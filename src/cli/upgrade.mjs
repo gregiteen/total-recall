@@ -1,13 +1,13 @@
 /**
  * total-recall upgrade
  *
- * Swap the kernel model used by Ollama.
+ * Swap the kernel model used by local_llm.
  *
  * Usage:
  *   npx total-recall upgrade --model <name>
  *
  * Options:
- *   --model <name>     Ollama model tag to pull (e.g., gemma2:27b)
+ *   --model <name>     local_llm model tag to pull (e.g., gemma2:27b)
  *   --help             Show this help
  */
 

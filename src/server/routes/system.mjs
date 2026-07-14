@@ -3,8 +3,7 @@
  *
  * GET  /api/logs/:type           — Read last 200 lines of server or daemon log
  * POST /api/diagnostics/agents   — Run upgrade --agents diagnostics
- * GET  /api/update/check         — Check npm for latest version
- * POST /api/update/run           — Apply git pull + npm install update
+ * POST /api/diagnostics/agents   — Run upgrade --agents diagnostics
  * GET  /api/tasks/failed         — List failed tasks from the DLQ
  * POST /api/tasks/:id/retry      — Re-queue a failed task
  * GET  /api/usage                — Usage ledger + cost summary
@@ -112,74 +111,7 @@ router.post('/api/diagnostics/agents', requireAuth, requireScope('health:read'),
   }
 });
 
-/**
- * GET /api/update/check
- */
-router.get('/api/update/check', requireAuth, async (req, res) => {
-  try {
-    const localPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    const currentVersion = localPkg.version || '0.0.0';
 
-    const registryRes = await fetch('https://registry.npmjs.org/total-recall-brain/latest');
-    if (!registryRes.ok) {
-      throw new Error(`Failed to fetch latest version from npm: ${registryRes.status}`);
-    }
-    const registryData = await registryRes.json();
-    const latestVersion = registryData.version || '0.0.0';
-
-    const updateAvailable = latestVersion !== currentVersion;
-
-    res.json({
-      currentVersion,
-      latestVersion,
-      updateAvailable
-    });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * POST /api/update/run
- */
-router.post('/api/update/run', requireAuth, async (req, res) => {
-  try {
-    logger.info('update', 'Starting auto-update process...');
-    const { exec } = await import('node:child_process');
-
-    const runCmd = (cmd, cwd) => new Promise((resolve, reject) => {
-      logger.info('update', `Running: ${cmd} in ${cwd}`);
-      exec(cmd, { cwd }, (err, stdout, stderr) => {
-        if (err) {
-          logger.error('update', `Command failed: ${cmd}. Error: ${err.message}`);
-          return reject(err);
-        }
-        resolve({ stdout, stderr });
-      });
-    });
-
-    // 1. git pull
-    await runCmd('git pull', ROOT);
-    // 2. npm install
-    await runCmd('npm install', ROOT);
-    // 3. build/install frontend if package.json exists
-    const frontendPath = path.join(ROOT, 'frontend');
-    if (fs.existsSync(path.join(frontendPath, 'package.json'))) {
-      await runCmd('npm install', frontendPath);
-      await runCmd('npm run build', frontendPath);
-    }
-
-    logger.info('update', 'Update successfully applied. Restarting server...');
-    res.json({ success: true, message: 'Update successfully applied. Server is restarting.' });
-
-    setTimeout(() => {
-      process.exit(0);
-    }, 1000);
-  } catch (err) {
-    logger.error('update', `Auto-update failed: ${err.message}`);
-    serverError(res, err);
-  }
-});
 
 /**
  * GET /api/tasks/failed

@@ -309,7 +309,7 @@ router.post('/api/sessions/ingest', ingestRateLimiter(), requireAuth, requireSco
           saveSessionEmbeddingToIndex(DERIVED_DIR, key, chunks[i], embedding);
         }
       } catch (err) {
-        /* Ollama may not be running — non-fatal */
+        /* local_llm may not be running — non-fatal */
       }
     })();
 

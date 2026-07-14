@@ -47,8 +47,8 @@ timestamp: 2026-07-10T20:00:00Z
 ## ✅ Phase 2b — Operational minimum modules
 
 - [x] Remove research module bulk and ssss docs dump from modules
-- [x] Keep only `skill-deploy/scripts/*` + `agents/agents.yml`
-- [x] API/docs point at `references/ssss-reference.md` + `@ssss/cli`
+- [ ] Keep only `skill-deploy/scripts/*` + `agents/agents.yml`
+- [ ] API/docs point at `references/ssss-reference.md` + `@ssss/cli`
 
 ---
 

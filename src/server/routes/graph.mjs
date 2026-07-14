@@ -273,13 +273,13 @@ router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'ins
   const surface = req.query.surface;
   if (surface) {
     if (surface === 'INSTRUCTIONS.md') {
-      return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
+      return sendTextResource(res, INSTRUCTIONS, 'instructions');
     }
     const safeSurface = path.basename(surface);
     const surfacePath = path.join(ROOT, safeSurface);
     return sendTextResource(res, surfacePath, safeSurface);
   }
-  return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
+  return sendTextResource(res, INSTRUCTIONS, 'instructions');
 });
 
 /**

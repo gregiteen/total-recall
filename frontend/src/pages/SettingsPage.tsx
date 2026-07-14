@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchConfigJson, saveConfigJson, runSandbox, fetchHealth, runAgentDiagnostics, checkUpdate, runUpdate, fetchBrains } from '../api';
 import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
+import { MobilePairing } from '../components/MobilePairing';
 
 export default function SettingsPage({ activeBrainId }: { activeBrainId?: string }) {
   const [configData, setConfigData] = useState<ConfigJson | null>(null);
@@ -399,7 +400,11 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
       </div>
 
       <div className="settings-grid">
-        
+        <div className="settings-card glow-on-hover">
+          <MobilePairing />
+        </div>
+
+        {/* --- Global System Layer --- */}
         {/* Network & Binding */}
         <div className="settings-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: 20 }}>

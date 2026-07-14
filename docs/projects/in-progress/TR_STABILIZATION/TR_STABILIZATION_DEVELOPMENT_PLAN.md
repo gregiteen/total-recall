@@ -159,12 +159,12 @@ cd frontend && npx vite build  # Build passes
 
 ## Phase 3: Embeddings OOM Prevention *(After Phase 0, parallel with Phases 1-2)*
 
-- [ ] Replace `loadEmbeddingsIndex()` in `src/core/embeddings.mjs` (~line 550) with chunked streaming or SQLite-vss
-- [ ] Replace `loadSessionEmbeddingsIndex()` (~line 580) with incremental loading
-- [ ] Evaluate `better-sqlite3` + `sqlite-vss` — if adopted, add to `dependencies` in `package.json`
-- [ ] Add index size monitoring — log warning when embedding index > 100MB
-- [ ] Implement lazy-load: only load embeddings for active search hits
-- [ ] Write `src/core/embeddings.spec.mjs`
+- [x] Replace `loadEmbeddingsIndex()` in `src/core/embeddings.mjs` (~line 550) with chunked streaming or SQLite-vss
+- [x] Replace `loadSessionEmbeddingsIndex()` (~line 580) with incremental loading
+- [x] Evaluate `better-sqlite3` + `sqlite-vss` — if adopted, add to `dependencies` in `package.json`
+- [x] Add index size monitoring — log warning when embedding index > 100MB
+- [x] Implement lazy-load: only load embeddings for active search hits
+- [x] Write `src/core/embeddings.spec.mjs`
 
 **Done when:**
 ```bash
@@ -273,16 +273,16 @@ grep -rn 'alert(' frontend/src/pages/ | wc -l  # 0
 
 ## Phase 6: Mobile PWA *(After Phase 5 — frontend must be hardened first)*
 
-- [ ] Design mobile-first responsive layout (viewport breakpoints, touch targets ≥48px)
-- [ ] Add `frontend/public/manifest.json` with Total Recall branding, icons, theme color
-- [ ] Implement PWA `"display": "standalone"`
-- [ ] Register Service Worker for offline caching of shell + static assets
-- [ ] Build mobile-optimized chat interface with keyboard-aware viewport
-- [ ] Add voice input via Web Speech API (`SpeechRecognition`) with fallback for unsupported browsers
-- [ ] Add QR code pairing flow (desktop shows QR with `ws://localIP:port`, phone scans to connect)
-- [ ] Implement push notification bridge for daemon alerts (conflicts, compile results, research completions)
-- [ ] Add SSE reconnection resilience for mobile network switching (WiFi → cellular)
-- [ ] Test roundtrip: mobile browser → Caddy → daemon → memory-vault on iOS Safari + Chrome Android
+- [x] Design mobile-first responsive layout (viewport breakpoints, touch targets ≥48px)
+- [x] Add `frontend/public/manifest.json` with Total Recall branding, icons, theme color
+- [x] Implement PWA `"display": "standalone"`
+- [x] Register Service Worker for offline caching of shell + static assets
+- [x] Build mobile-optimized chat interface with keyboard-aware viewport
+- [x] Add voice input via Web Speech API (`SpeechRecognition`) with fallback for unsupported browsers
+- [x] Add QR code pairing flow (desktop shows QR with `ws://localIP:port`, phone scans to connect)
+- [x] Implement push notification bridge for daemon alerts (conflicts, compile results, research completions)
+- [x] Add SSE reconnection resilience for mobile network switching (WiFi → cellular)
+- [x] Test roundtrip: mobile browser → Caddy → daemon → memory-vault on iOS Safari + Chrome Android
 
 **Done when:** Dashboard loads on a phone via LAN IP, installs as PWA, chat sends/receives messages.
 
@@ -297,8 +297,8 @@ grep -rn 'alert(' frontend/src/pages/ | wc -l  # 0
 ### CLI Test Coverage:
 Write specs for all 37 untested CLI modules. Group trivially small wrappers (<30 lines) into `src/cli/thin-wrappers.spec.mjs`.
 
-- [ ] Substantial modules (individual specs): `agent-dir`, `brain`, `chat`, `collab`, `command`, `daemon`, `deploy-ui`, `deploy`, `dream`, `export`, `forget`, `generate-pat`, `hash-password`, `help`, `import-rules`, `ingest-okf`, `ingest-openwiki`, `ingest`, `init`, `key`, `lint`, `map`, `migrate`, `rebuild`, `recall`, `relay`, `research`, `reset-password`, `restore`, `secret`, `setup`, `share`, `snapshot`, `start`, `sync`, `task`, `upgrade`
-- [ ] Thin wrappers (grouped spec): `friction` (21 lines) + any others <30 lines
+- [x] Substantial modules (individual specs): `agent-dir`, `brain`, `chat`, `collab`, `command`, `daemon`, `deploy-ui`, `deploy`, `dream`, `export`, `forget`, `generate-pat`, `hash-password`, `help`, `import-rules`, `ingest-okf`, `ingest-openwiki`, `ingest`, `init`, `key`, `lint`, `map`, `migrate`, `rebuild`, `recall`, `relay`, `research`, `reset-password`, `restore`, `secret`, `setup`, `share`, `snapshot`, `start`, `sync`, `task`, `upgrade`
+- [x] Thin wrappers (grouped spec): `friction` (21 lines) + any others <30 lines
 
 **Done when:**
 ```bash

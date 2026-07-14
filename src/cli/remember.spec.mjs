@@ -143,7 +143,7 @@ Core Invariants`
 
     const outputs = consoleSpy.mock.calls.flat().join('\n');
     expect(outputs).toContain('Vault Match');
-    expect(outputs).toContain('Invariant Rules');
+    expect(outputs).toContain('Never run tsc directly');
 
     global.fetch = origFetch;
     consoleSpy.mockRestore();
