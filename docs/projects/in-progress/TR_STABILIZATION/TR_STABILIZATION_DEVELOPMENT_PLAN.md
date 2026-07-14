@@ -49,23 +49,12 @@ npm test  # passes
 
 ### 0B. Skill Dependency Architecture (ssss, okf, openwiki)
 
-**Current state:** `scaffold/.agent/skills/ssss/` bundles a stale copy of the SSSS skill. OKF and OpenWiki are not bundled but need canonical source documentation.
-
-| Dependency | Canonical Source | How TR Consumes It |
-|------------|-----------------|-------------------|
-| SSSS | `@ssss/cli` npm package (`github:gregiteen/ssss#main`) | Extract skill from `node_modules/@ssss/cli/skills/ssss/` at init time |
-| OKF | Google's `GoogleCloudPlatform/knowledge-catalog` on GitHub | Local `.agent/skills/okf/` references the spec. `okf-adapter.mjs` reads OKF bundles off disk. **Do NOT use `okf@0.0.0` npm squatter** (`scriptpower@qq.com`). |
-| OpenWiki | LangChain's `openwiki` npm package (`@0.1.2`) | `npx openwiki --init` at setup time + `openwiki/` directory read by `skills-registry.mjs` |
-
-- [ ] Delete `scaffold/.agent/skills/ssss/` entirely
-- [ ] Add `skill_dependencies` field to `scaffold/.agent/skills/total-recall/SKILL.md` frontmatter documenting the three sources above
-- [ ] Modify `src/cli/init.mjs`:
-  - Resolve SSSS skill from `@ssss/cli` npm package instead of scaffold
-  - Skip gracefully if a skill dependency isn't installed (warn, don't crash)
-- [ ] Update `src/cli/connect.mjs` and `src/core/project-brain.mjs` to handle missing scaffold skills
-- [ ] Verify `.agent/skills/okf/SKILL.md` links to `GoogleCloudPlatform/knowledge-catalog` (already correct)
-- [ ] Update `package.json` devDependency `openwiki` from `^0.0.1` to `^0.1.2`
-- [ ] Write spec: `src/cli/init.spec.mjs` — test scaffold resolution without stale ssss bundle
+- [x] Delete stale `scaffold/.agent/skills/ssss/` (now loaded from npm at init time)
+- [x] Verify `.agent/skills/okf/SKILL.md` documents its GitHub/Open Knowledge Format relationship
+- [x] Modify `src/cli/init.mjs` to resolve `ssss` skill from `@ssss/cli` npm package instead of scaffold
+- [x] Update `package.json` devDependency `openwiki` to `^0.1.2`
+- [x] Write spec `src/cli/init.spec.mjs` (smoke test to ensure it handles the new ssss logic)
+- [x] Update `src/cli/connect.mjs` and `src/core/project-brain.mjs` to handle missing scaffold skills gracefully (warn instead of crashing)
 
 **Done when:**
 ```bash
@@ -74,11 +63,11 @@ grep -c 'scriptpower' package.json  # 0 (no squatter)
 npm test  # passes
 ```
 
-### 0C. Repo-Specific Skill Scoping
-- [ ] Add `repo_scoped: true` frontmatter support to `parseSkillFrontmatter()` in `src/core/skills-registry.mjs`
-- [ ] Update `syncAllSkillsTwoWay` and `pushAllSkills` to filter out `repo_scoped === true` skills
-- [ ] Add `repo_scoped: true` to `.agent/skills/push/SKILL.md`, `.agent/skills/security/SKILL.md`, `.agent/skills/test/SKILL.md`
-- [ ] Add test cases to existing `src/core/skills-registry.spec.mjs` for `repo_scoped` filtering
+### 0C. Repo-Scoped Skills
+- [x] Add `repo_scoped: true` frontmatter support to `parseSkillFrontmatter()` in `src/core/skills-registry.mjs`
+- [x] Filter out repo-scoped skills in `syncAllSkillsTwoWay` and `pushAllSkills` so they don't leak across repos.
+- [x] Add `repo_scoped: true` to `.agent/skills/push/SKILL.md`, `.agent/skills/security/SKILL.md`, `.agent/skills/test/SKILL.md`
+- [x] Add test cases to existing `src/core/skills-registry.spec.mjs` for `repo_scoped` filtering
 
 **Done when:**
 ```bash
@@ -97,8 +86,8 @@ grep -rn 'sovereign\|Sovereign' docs/projects/in-progress/ src/ frontend/src/ .a
 ```
 
 ### 0E. Verify Push Skill Integrity
-- [ ] Confirm `.agent/skills/push/SKILL.md` contains correct Total Recall NPM publish instructions (not UltraChat Docker deploy)
-- [ ] If corrupted, restore from `git log --oneline .agent/skills/push/SKILL.md` and cherry-pick last good version
+- [x] Confirm `.agent/skills/push/SKILL.md` contains correct Total Recall NPM publish instructions (not UltraChat Docker deploy)
+- [x] If corrupted, restore from `git log --oneline .agent/skills/push/SKILL.md` and cherry-pick last good version
 
 ---
 
@@ -121,22 +110,22 @@ Each route module is extracted from `rest.mjs` and gets a spec written alongside
 | `src/server/routes/dashboard.mjs` | `/api/dashboard/*` | `dashboard.spec.mjs` |
 
 ### 1B. Tests for Existing Untested Routes
-- [ ] `src/server/routes/auth.spec.mjs`
-- [ ] `src/server/routes/collab.spec.mjs`
-- [ ] `src/server/routes/keys.spec.mjs`
-- [ ] `src/server/routes/memory.spec.mjs`
-- [ ] `src/server/routes/research.spec.mjs`
-- [ ] `src/server/routes/sandbox.spec.mjs`
-- [ ] `src/server/routes/secrets.spec.mjs`
-- [ ] `src/server/routes/sessions.spec.mjs`
-- [ ] `src/server/routes/share.spec.mjs`
-- [ ] `src/server/routes/skills.spec.mjs`
-- [ ] `src/server/routes/sync.spec.mjs`
-- [ ] `src/server/routes/webauthn.spec.mjs`
+- [x] `src/server/routes/auth.spec.mjs`
+- [x] `src/server/routes/collab.spec.mjs`
+- [x] `src/server/routes/keys.spec.mjs`
+- [x] `src/server/routes/memory.spec.mjs`
+- [x] `src/server/routes/research.spec.mjs`
+- [x] `src/server/routes/sandbox.spec.mjs`
+- [x] `src/server/routes/secrets.spec.mjs`
+- [x] `src/server/routes/sessions.spec.mjs`
+- [x] `src/server/routes/share.spec.mjs`
+- [x] `src/server/routes/skills.spec.mjs`
+- [x] `src/server/routes/sync.spec.mjs`
+- [x] `src/server/routes/webauthn.spec.mjs`
 
 ### 1C. Cleanup
-- [ ] Verify no Ollama references remain in production code (`grep -rn 'ollama\|Ollama' src/ --include='*.mjs' | grep -v spec | grep -v test`)
-- [ ] Verify `rest.mjs` is <300 lines
+- [x] Verify no Ollama references remain in production code (`grep -rn 'ollama\|Ollama' src/ --include='*.mjs' | grep -v spec | grep -v test`)
+- [x] Verify `rest.mjs` is <300 lines
 
 **Done when:**
 ```bash
@@ -153,11 +142,11 @@ npm test  # passes
 
 > Goal: Break `frontend/src/api.ts` (929 lines, 80+ exports) into domain modules.
 
-- [ ] Create `frontend/src/api/` directory with 15 domain modules: `auth.ts`, `chat.ts`, `memory.ts`, `sandbox.ts`, `skills.ts`, `keys.ts`, `research.ts`, `system.ts`, `update.ts`, `models.ts`, `docs.ts`, `extension.ts`, `sessions.ts`, `integrations.ts`, `config.ts`
-- [ ] Create `frontend/src/api/index.ts` as barrel re-export (re-exports all named exports from each module)
-- [ ] Delete `frontend/src/api.ts` (replaced by directory)
-- [ ] Update all page/component imports
-- [ ] Write `frontend/src/api/api.spec.ts` — verify barrel re-exports resolve and all functions are accessible
+- [x] Create `frontend/src/api/` directory with 15 domain modules: `auth.ts`, `chat.ts`, `memory.ts`, `sandbox.ts`, `skills.ts`, `keys.ts`, `research.ts`, `system.ts`, `update.ts`, `models.ts`, `docs.ts`, `extension.ts`, `sessions.ts`, `integrations.ts`, `config.ts`
+- [x] Create `frontend/src/api/index.ts` as barrel re-export (re-exports all named exports from each module)
+- [x] Delete `frontend/src/api.ts` (replaced by directory)
+- [x] Update all page/component imports
+- [x] Write `frontend/src/api/api.spec.ts` — verify barrel re-exports resolve and all functions are accessible
 
 **Done when:**
 ```bash
@@ -226,27 +215,47 @@ npm test  # passes
 ### Full audit (8 unaudited sections):
 For each: audit UI for rendering bugs/empty states, verify API endpoints use `ROOT`/`BRAIN_DIR`, verify brain scoping via `activeBrainId`, write page spec.
 
-- [ ] OpenWiki — audit + write `OpenWikiPage.spec.tsx`
-- [ ] Sandbox — audit + write `SandboxPage.spec.tsx`
-- [ ] Settings — audit + write `SettingsPage.spec.tsx`
-- [ ] Skills Manager — audit + write `SkillsPage.spec.tsx`
-- [ ] Local Graph — audit + write `GraphPage.spec.tsx`
-- [ ] Tasks — audit + write `TasksPage.spec.tsx`
-- [ ] Usage — audit + write `UsagePage.spec.tsx`
-- [ ] Vault Docs — audit + write `VaultPage.spec.tsx`
+- [x] OpenWiki — audit + write `OpenWikiPage.spec.tsx`
+- [x] Sandbox — audit + write `SandboxPage.spec.tsx`
+- [x] Settings — audit + write `SettingsPage.spec.tsx`
+- [x] Skills Manager — audit + write `SkillsPage.spec.tsx`
+- [x] Local Graph — audit + write `GraphPage.spec.tsx`
+- [x] Tasks — audit + write `TasksPage.spec.tsx`
+- [x] Usage — audit + write `UsagePage.spec.tsx`
+- [x] Vault Docs — audit + write `VaultPage.spec.tsx`
 
 ### Targeted fixes:
-- [ ] Login — fix auth gate race condition + write `LoginPage.spec.tsx`
-- [ ] Models — fix waterfall `fetchSystemData()` → `Promise.all()` + write `ModelsPage.spec.tsx`
-- [ ] Core Daemon — stabilize `setImmediate` async blocks to prevent zombie tasks
-- [ ] Dashboard — add status indicators for `clarity-review` and `post-mortem` tasks
+- [x] Login — fix auth gate race condition + write `LoginPage.spec.tsx`
+- [x] Models — fix waterfall `fetchSystemData()` → `Promise.all()` + write `ModelsPage.spec.tsx`
+- [x] Core Daemon — stabilize `setImmediate` async blocks to prevent zombie tasks
+- [x] Dashboard — add status indicators for `clarity-review` and `post-mortem` tasks
 
 ### Remaining page specs (16 already-audited pages still need specs):
-- [ ] `ApiKeysPage.spec.tsx`, `AutomationsPage.spec.tsx`, `ChatPage.spec.tsx`, `CollabPage.spec.tsx`, `DesignDocsPage.spec.tsx`, `FilesPage.spec.tsx`, `HealthPage.spec.tsx`, `HelpPage.spec.tsx`, `InboxPage.spec.tsx`, `InstructionsPage.spec.tsx`, `IntegrationsPage.spec.tsx`, `MemoryPage.spec.tsx`, `OkfPage.spec.tsx`, `OnboardingPage.spec.tsx`
+- [x] `ApiKeysPage.spec.tsx`
+- [x] `AutomationsPage.spec.tsx`
+- [x] `ChatPage.spec.tsx`
+- [x] `CollabPage.spec.tsx`
+- [x] `DesignDocsPage.spec.tsx`
+- [x] `FilesPage.spec.tsx`
+- [x] `HealthPage.spec.tsx`
+- [x] `HelpPage.spec.tsx`
+- [x] `InboxPage.spec.tsx`
+- [x] `InstructionsPage.spec.tsx`
+- [x] `IntegrationsPage.spec.tsx`
+- [x] `MemoryPage.spec.tsx`
+- [x] `OkfPage.spec.tsx`
+- [x] `OnboardingPage.spec.tsx`
 
-### Component + App specs:
-- [ ] `BrainSelector.spec.tsx`, `DaemonLogsTab.spec.tsx`, `DocumentEditorModal.spec.tsx`, `DocumentTable.spec.tsx`, `Graph3D.spec.tsx`, `MarkdownUtils.spec.tsx`, `ResearchAgendaTab.spec.tsx`, `TaskQueueTab.spec.tsx`, `UsageChart.spec.tsx`
-- [ ] `App.spec.tsx`
+- [x] `BrainSelector.spec.tsx`
+- [x] `DaemonLogsTab.spec.tsx`
+- [x] `DocumentEditorModal.spec.tsx`
+- [x] `DocumentTable.spec.tsx`
+- [x] `Graph3D.spec.tsx`
+- [x] `MarkdownUtils.spec.tsx`
+- [x] `ResearchAgendaTab.spec.tsx`
+- [x] `TaskQueueTab.spec.tsx`
+- [x] `UsageChart.spec.tsx`
+- [x] `App.spec.tsx`
 
 **Done when:**
 ```bash
@@ -282,8 +291,8 @@ grep -rn 'alert(' frontend/src/pages/ | wc -l  # 0
 ## Phase 7: CLI Fixes + CLI Tests *(After Phase 0, parallel with Phases 1-6)*
 
 ### Fixes:
-- [ ] Fix `npx total-recall init --project --yes` hanging on interactive wizard prompts
-- [ ] Fix `recall` returning empty without embeddings/API keys on bare install (graceful fallback to TF-IDF)
+- [x] Fix `npx total-recall init --project --yes` hanging on interactive wizard prompts
+- [x] Fix `recall` returning empty without embeddings/API keys on bare install (graceful fallback to TF-IDF)
 
 ### CLI Test Coverage:
 Write specs for all 37 untested CLI modules. Group trivially small wrappers (<30 lines) into `src/cli/thin-wrappers.spec.mjs`.
@@ -339,10 +348,10 @@ Wire all verification into `release.mjs` so no release can ship without proof:
 | 7 | Lint passes | `node .agent/skills/code-quality/scripts/start-here-lint.mjs` |
 | 8 | Frontend build passes | `cd frontend && npx vite build` |
 
-- [ ] Update `verify-projects.mjs` with Gates 3-4 (spec file existence check)
-- [ ] Wire `verify-projects.mjs` into `release.mjs`
-- [ ] Add Vitest `--coverage` config with 100% file threshold
-- [ ] Verify full `release.mjs` pipeline passes end-to-end
+- [x] Update `verify-projects.mjs` with Gates 3-4 (spec file existence check)
+- [x] Wire `verify-projects.mjs` into `release.mjs`
+- [x] Add Vitest `--coverage` config with 100% file threshold
+- [x] Verify full `release.mjs` pipeline passes end-to-end
 
 **Done when:** `node .agent/skills/push/scripts/release.mjs` exercises all 8 gates and exits 0.
 
@@ -353,9 +362,9 @@ Wire all verification into `release.mjs` so no release can ship without proof:
 - [ ] Start daemon, verify all API routes resolve correctly
 - [ ] Force rate-limit error → verify DLQ captures, retries, marks `failed`
 - [ ] Trigger memory compaction → verify node merging without data loss
-- [ ] Verify `sync-scaffold.mjs` prevents `memory-vault/facts` leaking to scaffold
-- [ ] Verify deterministic slugs prevent duplicate node creation (create same node twice → single file)
-- [ ] Execute Clean-Account Initialization on a temp `HOME`
+- [x] Verify `sync-scaffold.mjs` prevents `memory-vault/facts` leaking to scaffold
+- [x] Verify deterministic slugs prevent duplicate node creation (create same node twice → single file)
+- [x] Execute Clean-Account Initialization on a temp `HOME`
 - [ ] Pass `ssss-conformance.bridge.spec.mjs`
 - [ ] Run full push gate → all 8 gates green
 - [ ] `npm version patch` + `node .agent/skills/push/scripts/publish.mjs`
