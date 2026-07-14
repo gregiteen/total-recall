@@ -9,7 +9,7 @@ import { brainDir as configBrainDir } from '../../core/config.mjs';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'total-recall-collab-secret-key-1234';
 
-// Setup database paths in sovereign brainDir
+// Setup database paths in brainDir
 const DATA_DIR = path.join(configBrainDir, 'collab');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });

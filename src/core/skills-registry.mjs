@@ -116,6 +116,7 @@ export function readSkillMeta(skillDir) {
     description: data.description || content.slice(0, 200).trim(),
     version: String(data.version || data.schema_version || '0.0.0'),
     tags: Array.isArray(data.tags) ? data.tags : [],
+    repo_scoped: Boolean(data.repo_scoped),
     content_hash: hashSkillContent(skillDir),
     source_path: path.resolve(skillDir),
   };
@@ -145,6 +146,7 @@ export function registerSkill(brainDir, skillPath, opts = {}) {
     description: meta.description,
     version: meta.version,
     tags: opts.tags || meta.tags || prev.tags || [],
+    repo_scoped: meta.repo_scoped || false,
     source: opts.source || prev.source || abs,
     source_type: opts.source_type || prev.source_type || 'local',
     source_path: abs,
@@ -1010,6 +1012,15 @@ export function syncAllSkillsTwoWay(brainDir, opts = {}) {
       results.push({ skillId: id, skipped: true, reason: 'core' });
       continue;
     }
+    // Skip repo-scoped skills — they must not be pushed to other repos
+    try {
+      const registry = loadRegistry(brainDir);
+      const entry = registry.skills[id];
+      if (entry?.repo_scoped) {
+        results.push({ skillId: id, skipped: true, reason: 'repo_scoped' });
+        continue;
+      }
+    } catch { /* if registry read fails, proceed normally */ }
     results.push(
       syncSkillTwoWay(brainDir, id, {
         prefer,

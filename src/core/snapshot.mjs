@@ -8,7 +8,7 @@ import { logger } from './logger.mjs';
 /**
  * SSSS Snapshot & Rollback
  *
- * Implements local VFS snapshotting for the Sovereign AI OS.
+ * Implements local VFS snapshotting for the Total Recall OS.
  * Since the memory-vault is excluded from git, we use fast local
  * tarballs to provide point-in-time recovery for the vault.
  */

@@ -2,6 +2,7 @@
 name: push
 description: "Use this skill when preparing, testing, version-bumping, and publishing a new release of the Total Recall package to npm and GitHub. Do NOT use for regular local feature commits."
 version: 3.14.1
+repo_scoped: true
 ---
 
 # Push Skill — Package Release Automation

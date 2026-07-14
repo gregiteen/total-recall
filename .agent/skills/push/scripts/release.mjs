@@ -83,6 +83,20 @@ if (fs.existsSync(path.join(frontendDir, 'package.json'))) {
   console.error('⏭️  No frontend/package.json — skipping.');
 }
 
+// 7. Check Project Trackers for unfinished work
+console.error('\n🔍 Phase 7: Checking project trackers for unfinished tasks...');
+const trackerCheck = spawnSync('grep', ['-rn', '\\[ \\]', 'docs/projects/in-progress/'], { encoding: 'utf8', cwd: ROOT });
+
+// grep exits 0 if it finds matches (meaning we HAVE unchecked boxes)
+if (trackerCheck.status === 0) {
+  console.error('❌ FATAL: Found unfinished tasks in active project trackers!');
+  console.error('   You cannot release until all projects are completed (or tasks are formally deferred out of in-progress).');
+  console.error('\nUnfinished tasks found:');
+  console.error(trackerCheck.stdout.trim().split('\n').map(l => `   ${l}`).join('\n'));
+  process.exit(1);
+}
+console.error('✅ All active project trackers are marked complete.');
+
 console.error('\n🎉 Pre-release quality checks complete! You are ready to run:');
 console.error('  1. npm version <patch|minor|major>');
 console.error('  2. node .agent/skills/push/scripts/publish.mjs');

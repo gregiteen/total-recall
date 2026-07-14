@@ -7,7 +7,7 @@ import { scanFile, runScan } from '../../.agent/skills/total-recall/modules/skil
 import { installSkill, validateSkillSource, inferSkillName } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/install-skill.mjs';
 import { resolveSkillScriptPath } from './skill.mjs';
 
-describe('Sovereign Skill Manager', () => {
+describe('Skill Manager', () => {
   let tempDir;
 
   beforeEach(() => {

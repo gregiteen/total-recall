@@ -112,7 +112,8 @@ export function ensureCoreSkillPackage(brainDir) {
     copyDirMerge(scaffold, brainDir);
     return { seeded: true, from: 'scaffold' };
   }
-  // Minimal SKILL.md so agents recognize the brain package
+  // Scaffold directory missing — warn and fall back to a minimal SKILL.md
+  console.error('  ⚠️  project-brain: scaffold/.agent/skills/total-recall not found — seeding minimal SKILL.md');
   fs.writeFileSync(
     skillMd,
     `---

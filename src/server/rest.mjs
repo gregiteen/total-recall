@@ -91,6 +91,14 @@ import { researchRouter } from './routes/research.mjs';
 import { skillsRouter }   from './routes/skills.mjs';
 import { docsRouter }     from './routes/docs.mjs';
 import syncRouter         from './routes/sync.mjs';
+import extensionRouter    from './routes/extension.mjs';
+import systemRouter       from './routes/system.mjs';
+import configRouter       from './routes/config.mjs';
+import helpRouter         from './routes/help.mjs';
+import brainsRouter       from './routes/brains.mjs';
+import integrationsRouter from './routes/integrations.mjs';
+import modelsRouter       from './routes/models.mjs';
+import graphRouter        from './routes/graph.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -175,29 +183,23 @@ router.use(researchRouter);
 router.use(skillsRouter);
 router.use(docsRouter);
 router.use(syncRouter);
+router.use(extensionRouter);
+router.use(systemRouter);
+router.use(configRouter);
+router.use(helpRouter);
+router.use(brainsRouter);
+router.use(integrationsRouter);
+router.use(modelsRouter);
+router.use(graphRouter);
 
 // ─── Brain Routing Middleware ──────────────────────────────────────────────────────────────────
-
-function notFound(res, msg) {
-  return res.status(404).json({ error: msg || 'Not found' });
-}
-
-function badRequest(res, msg) {
-  return res.status(400).json({ error: msg });
-}
-
-function serverError(res, err) {
-  logger.error('rest', 'Internal server error', { error: err.message, stack: err.stack });
-  return res.status(500).json({ error: 'Internal server error' });
-}
 
 function nodes() {
   return getNodes(VAULT_DIR);
 }
 
-function sanitizeNode({ body, ...rest }) {
-  return { ...rest, content: body };
-}
+// notFound, badRequest, serverError, sanitizeNode are imported from ./routes/_shared.mjs
+const { notFound, badRequest, serverError, sanitizeNode } = await import('./routes/_shared.mjs');
 
 // ─── Memory CRUD ───  (moved to ./routes/memory.mjs)
 // ─── Vault ────────────────────────────────────────────────────────────────────
@@ -482,23 +484,7 @@ router.get('/api/vault/status', requireAuth, requireScope('memory:read'), async 
   }
 });
 
-/**
- * POST /api/diagnostics/agents
- * Run `upgrade --agents` diagnostics checks and return the console text output.
- */
-router.post('/api/diagnostics/agents', requireAuth, requireScope('health:read'), async (req, res) => {
-  try {
-    const result = spawnSync('node', [path.join(ROOT, 'bin', 'total-recall.mjs'), 'upgrade', '--agents'], {
-      encoding: 'utf8',
-      cwd: ROOT,
-      env: { ...process.env }
-    });
-    const output = (result.stdout || '') + (result.stderr || '');
-    res.json({ success: result.status === 0, output });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
+// POST /api/diagnostics/agents → moved to ./routes/system.mjs
 
 
 // ─── Keys ─────────── (moved to ./routes/keys.mjs)
@@ -506,295 +492,16 @@ router.post('/api/diagnostics/agents', requireAuth, requireScope('health:read'),
 // ─── Sandbox ──────────────────────────────────────────────────────────────────
 // Moved to routes/sandbox.mjs
 
-// ─── Config ───────────────────────────────────────────────────────────────────
+// ─── Config ─── (moved to ./routes/config.mjs) ───────────────────────────────
 
-/**
- * GET /api/config
- * Returns sanitized config (no secrets, no tokens)
- */
-router.get('/api/config', requireAuth, requireScope('config:read'), async (req, res) => {
-  try {
-    const sec = loadSecurityConfig();
-    // Scrub anything that looks like a secret
-    const safe = JSON.parse(JSON.stringify(sec));
-    if (safe.api) { safe.api.pats = '[redacted]'; }
+// ─── Models (OpenAI-compatible) ──── moved to routes/models.mjs
 
-    // Runtime config (sanitized)
-    const runtimePath = path.join(BRAIN_DIR, 'config', 'runtime.yml');
-    let runtime = null;
-    if (fs.existsSync(runtimePath)) {
-      try {
-        const { default: yaml } = await import('yaml');
-        runtime = yaml.parse(fs.readFileSync(runtimePath, 'utf8'));
-        // Remove any api_key fields
-        for (const key of ['api_key', 'apiKey', 'secret', 'token']) {
-          if (runtime[key]) runtime[key] = '[redacted]';
-        }
-      } catch {}
-    }
-
-    res.json({ security: safe, runtime });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-// ─── Models (OpenAI-compatible) ───────────────────────────────────────────────
-
-/**
- * GET /v1/models
- */
-router.get('/v1/models', requireAuthOrLocal, async (req, res) => {
-  try {
-    const runtimeConfig = loadRuntimeConfig(path.join(CONFIG_DIR, 'runtime.yml'));
-    const catalogModels = loadCatalogModels(runtimeConfig);
-    const data = catalogModels.length > 0
-      ? catalogModels
-      : [{
-          id: runtimeConfig.model,
-          object: 'model',
-          created: 0,
-          owned_by: 'total-recall',
-          root: runtimeConfig.model,
-          parent: null,
-          aliases: [runtimeConfig.model],
-          metadata: {
-            provider: 'total-recall',
-            provider_type: runtimeConfig.runtime || 'local-runtime',
-            display_name: runtimeConfig.model,
-            model_id: runtimeConfig.model,
-            runtime_model: runtimeConfig.model,
-            pricing_prompt: 0,
-            pricing_completion: 0,
-            supports_tools: true,
-            supports_vision: false,
-            supports_code: true
-          }
-        }];
-
-    res.json({ object: 'list', data });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-// ─── Discovery manifest ────────────────────────────────────────────────────────
-
-/**
- * GET /.well-known/total-recall.json
- * Used by UltraChat and other clients for auto-configuration.
- */
-router.get('/.well-known/total-recall.json', (req, res) => {
-  try {
-    const proto  = req.secure ? 'https' : 'http';
-    const host   = req.headers.host || 'localhost:3000';
-    const base   = `${proto}://${host}`;
-    const sec    = loadSecurityConfig();
-
-    res.json({
-      name:          'Total Recall',
-      version:       '3.0.0',
-      base_url:      base,
-      api:           `${base}/v1`,
-      health:        `${base}/health`,
-      models:        `${base}/v1/models`,
-      auth: {
-        type:        'bearer',
-        token_prefix: 'tr_',
-        scopes: ['chat:read', 'chat:write', 'memory:read', 'memory:write'],
-      },
-      capabilities:  ['chat', 'memory', 'sandbox', 'sessions'],
-      rate_limits: {
-        api: sec.rate_limits?.api_requests_per_minute || 60,
-      },
-    });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-// ─── API reference (human-readable) ───────────────────────────────────────────
-
-/**
- * GET /api
- * Returns the full API reference as JSON (machine + human readable).
- */
-router.get('/api', (req, res) => {
-  const proto = req.secure ? 'https' : 'http';
-  const base  = `${proto}://${req.headers.host || 'localhost:3000'}`;
-
-  res.json({
-    name:    'Total Recall REST API',
-    version: '3.0.0',
-    base_url: base,
-    auth: {
-      description: 'All endpoints require a Bearer PAT (Personal Access Token).',
-      header:      'Authorization: Bearer tr_<token>',
-      issue:       'npx total-recall generate-pat --scopes "*" --label myapp',
-      endpoint:    'POST /api/keys',
-    },
-    endpoints: {
-      memory: {
-        'GET /api/memory':                        'List nodes (q, category, tag, limit, offset)',
-        'GET /api/memory/stats':                  'Node counts by category',
-        'GET /api/memory/:slug':                  'Get node by slug',
-        'POST /api/memory':                       'Create node (slug, title, category, content)',
-        'POST /api/memory/search/semantic':       'Semantic search by meaning (query, top_k)',
-        'PUT /api/memory/:slug':                  'Replace node',
-        'PATCH /api/memory/:slug':                'Partial update',
-        'DELETE /api/memory/:slug':               'Delete node',
-      },
-      vault: {
-        'POST /api/vault/compile':          'Recompile SSSS surface (INSTRUCTIONS.md)',
-        'POST /api/vault/compact':          'Compact all active append-only log files',
-        'GET /api/vault/status':            'Node count, skill count, last compile time',
-      },
-      keys: {
-        'GET /api/keys':                    'List PATs (no raw tokens)',
-        'POST /api/keys':                   'Issue new PAT (name, scopes[], expires_at)',
-        'DELETE /api/keys/:id':             'Revoke PAT',
-      },
-      sessions: {
-        'GET /api/sessions':                'List ingested sessions',
-        'GET /api/sessions/:id':            'Get session entries',
-        'POST /api/sessions/ingest':        'Ingest session {id, source, messages[]}',
-        'DELETE /api/sessions/:id':         'Delete session',
-      },
-      sandbox: {
-        'POST /api/sandbox':                'Execute Node.js code {code}',
-      },
-      config: {
-        'GET /api/config':                  'Sanitized runtime + security config',
-      },
-      models: {
-        'GET /v1/models':                   'OpenAI-compatible model list',
-        'POST /v1/chat/completions':        'OpenAI-compatible chat (streaming supported)',
-      },
-      discovery: {
-        'GET /.well-known/total-recall.json': 'Client auto-config manifest',
-        'GET /health':                      'System health (disk, embedding service, vault)',
-      },
-    },
-    scopes: {
-      '*':              'All permissions',
-      'chat:read':      'Read chat completions',
-      'chat:write':     'Create chat completions',
-      'memory:read':    'Read memory nodes and sessions',
-      'memory:write':   'Write/delete memory nodes and sessions',
-      'memory:recompile': 'Trigger vault recompile',
-      'keys:read':      'List API keys',
-      'keys:write':     'Issue/revoke API keys',
-      'sandbox:run':    'Execute code in sandbox',
-      'config:read':    'Read sanitized config',
-      'health:read':    'Read health endpoints',
-    },
-  });
-});
+// ─── Discovery / Help / API index ─── (moved to ./routes/help.mjs) ────────────
 
 // ─── Research Queue ───────────────────────────────────────────────────────────
 // Moved to routes/research.mjs
-// ─── Active Integrations ──────────────────────────────────────────────────────
-
-/**
- * GET /api/integrations/active
- */
-router.get('/api/integrations/active', requireAuth, (req, res) => {
-  try {
-    const HOME = os.homedir();
-    const configDir = path.join(BRAIN_DIR, 'config');
-    const configFile = path.join(configDir, 'wizard-config.json');
-
-    let configuredIdes = [];
-    if (fs.existsSync(configFile)) {
-      try {
-        const parsed = JSON.parse(fs.readFileSync(configFile, 'utf8'));
-        if (Array.isArray(parsed.configuredIdes)) {
-          configuredIdes = parsed.configuredIdes;
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    // Fallback detection (filesystem probing) if configuredIdes is empty
-    if (configuredIdes.length === 0) {
-      const checks = {
-        'claude-code': [path.join(HOME, '.claude', 'projects'), path.join(HOME, '.claude', 'CLAUDE.md')],
-        'codex':       [path.join(HOME, '.codex', 'sessions'), path.join(HOME, '.codex', 'AGENTS.md')],
-        'cursor':      [path.join(HOME, '.cursor', 'projects'), path.join(HOME, '.cursor')],
-        'antigravity': [path.join(HOME, '.gemini', 'antigravity')],
-        'vscode':      [path.join(HOME, 'Library', 'Application Support', 'Code'), path.join(HOME, '.vscode')],
-        'gemini':      [path.join(HOME, '.gemini')],
-        'pi':          [path.join(HOME, '.pi', 'agent')],
-        'hermes':      [path.join(HOME, '.hermes')],
-        'openclaw':    [path.join(HOME, '.openclaw')],
-      };
-
-      for (const [ide, paths] of Object.entries(checks)) {
-        if (paths.some(p => { try { return fs.existsSync(p); } catch { return false; } })) {
-          configuredIdes.push(ide);
-        }
-      }
-    }
-
-    res.json({ success: true, active: configuredIdes });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// ─── Integrations Connection ──────────────────────────────────────────────────
-
-
-/**
- * POST /api/integrations/connect
- * Body: { client: string, baseUrl?: string }
- */
-router.post('/api/integrations/connect', requireAuth, (req, res) => {
-  try {
-    const { client, baseUrl } = req.body || {};
-    if (!client) return badRequest(res, 'client is required');
-
-    const validClients = [
-      'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'claude-code',
-      'codex', 'gemini', 'aider', 'http-api', 'obsidian',
-      'generic', 'antigravity'
-    ];
-
-    if (!validClients.includes(client)) {
-      return badRequest(res, `Unknown client: ${client}`);
-    }
-
-    // Generate a fresh key for this client
-    const scopes = ['ssss:read', 'memory:read'];
-    const keyName = `${client.charAt(0).toUpperCase() + client.slice(1)} Link`;
-    const newKey = issueKey(keyName, { scopes });
-    const token = newKey.token;
-
-    // Call the connect function from cli/connect.mjs
-    const args = [client, '--token', token];
-    if (baseUrl) {
-      args.push('--brain', baseUrl);
-    }
-
-    // Run the connection logic asynchronously in the background so it doesn't block,
-    // or run it synchronously (it is extremely fast as it just writes a few local files).
-    connect(args)
-      .then(() => {
-        res.json({
-          success: true,
-          message: `Successfully connected ${client}`,
-          token_preview: newKey.token_prefix,
-          key_id: newKey.id
-        });
-      })
-      .catch(err => {
-        serverError(res, err);
-      });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
+// ─── Active Integrations ──── moved to routes/integrations.mjs
+// ─── Integrations Connection ──── moved to routes/integrations.mjs
 
 // ─── Rule File Import ─────────────────────────────────────────────────────────
 // Thin wrappers over src/core/import-rules.mjs
@@ -871,168 +578,9 @@ router.get('/api/brain/export', requireAuth, requireScope('brain:export'), async
   } catch (err) { serverError(res, err); }
 });
 
-// ─── Chrome Extension Download ───────────────────────────────────────────────
+// ─── Chrome Extension ─── (moved to ./routes/extension.mjs) ─────────────────
 
-router.get('/api/extension/download', requireAuth, requireScope('config:read'), async (_req, res) => {
-  try {
-    // Extension lives at <package-root>/extension/
-    const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
-    if (!fs.existsSync(extDir) || !fs.existsSync(path.join(extDir, 'manifest.json'))) {
-      return res.status(404).json({ error: 'Chrome extension not found in this installation.' });
-    }
-
-    // Never inject PATs into packaged extension source. Pair from the extension
-    // options page so secrets stay in extension-local storage.
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.zip"');
-
-    // Use zip if available, fall back to tar
-    const zip = spawn('zip', ['-r', '-', '.'], { cwd: extDir, stdio: ['ignore', 'pipe', 'ignore'] });
-    zip.stdout.pipe(res);
-    zip.on('error', () => {
-      // zip not available — try tar
-      if (!res.headersSent) {
-        res.setHeader('Content-Type', 'application/gzip');
-        res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.tar.gz"');
-        const tar = spawn('tar', ['czf', '-', '-C', path.dirname(extDir), 'extension'], { stdio: ['ignore', 'pipe', 'ignore'] });
-        tar.stdout.pipe(res);
-        tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
-        tar.on('close', () => { if (!res.writableEnded) res.end(); });
-      }
-    });
-    zip.on('close', code => {
-      if (code !== 0 && !res.writableEnded) res.end();
-    });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * GET /api/extension/status
- * Returns whether the extension is available (packaged) and connected (has sent captures).
- */
-router.get('/api/extension/status', requireAuth, requireScope('config:read'), async (_req, res) => {
-  try {
-    const extDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../extension');
-    const available = fs.existsSync(path.join(extDir, 'manifest.json'));
-    let version = '0.0.0';
-    if (available) {
-      try {
-        const manifest = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
-        version = manifest.version || '0.0.0';
-      } catch {}
-    }
-
-    // Check if extension has ever connected by looking for the marker file
-    const markerPath = path.join(BRAIN_DIR, 'config', '.extension-connected');
-    const connected = fs.existsSync(markerPath);
-
-    res.json({ available, connected, version });
-    
-  } catch (err) { serverError(res, err); }
-});
-
-// ─── Dashboard Intelligence Endpoints (feature-flagged) ──────────────────────────
-// Feature flag: presence of ~/.agent/memory-vault/preferences/dashboard-enhanced.md
-
-function isDashboardEnhanced() {
-  return fs.existsSync(path.join(VAULT_DIR, '..', 'preferences', 'dashboard-enhanced.md'));
-}
-
-router.get('/api/graph', requireAuth, requireScope('ssss:read'), (req, res) => {
-  if (!isDashboardEnhanced()) {
-    return res.status(404).json({ error: 'dashboard-enhanced feature flag not enabled' });
-  }
-  try {
-    const graphFile = path.join(DERIVED_DIR, 'graph-index.jsonl');
-    const routesFile = path.join(DERIVED_DIR, 'skill-routes.jsonl');
-    const nodes = fs.existsSync(graphFile)
-      ? fs.readFileSync(graphFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
-      : [];
-    const routes = fs.existsSync(routesFile)
-      ? fs.readFileSync(routesFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
-      : [];
-    res.json({ nodes, routes });
-    
-  } catch (err) { serverError(res, err); }
-});
-
-router.get("/api/conflicts", requireAuth, requireScope("ssss:read"), async (req, res) => {
-  if (!isDashboardEnhanced()) {
-    return res.status(404).json({ error: "dashboard-enhanced feature flag not enabled" });
-  }
-  try {
-    const conflictsDir = path.join(BRAIN_DIR, "memory-inbox", "conflicts");
-    const conflicts = [];
-
-    if (fs.existsSync(conflictsDir)) {
-      const files = fs.readdirSync(conflictsDir).filter(f => f.endsWith(".md"));
-      for (const file of files) {
-        try {
-          const raw = fs.readFileSync(path.join(conflictsDir, file), "utf8");
-          const parsed = matter(raw);
-          conflicts.push({
-            ...parsed.data,
-            body: parsed.content
-          });
-        } catch (e) {
-          // ignore malformed
-        }
-      }
-    }
-
-    // Also run a dynamic scan just in case
-    const { detectSemanticConflicts } = await import("../core/conflict-detector.mjs");
-    const list = nodes();
-    const dynamicConflicts = [];
-    for (let i = 0; i < list.length; i++) {
-      const found = detectSemanticConflicts(list[i], list.slice(0, i));
-      dynamicConflicts.push(...found);
-    }
-
-    // Merge them: if a conflict is already on disk, don't duplicate it.
-    const merged = [...conflicts];
-    for (const dc of dynamicConflicts) {
-      const exists = merged.some(c =>
-        (c.new_slug === dc.new_slug && c.existing_slug === dc.existing_slug) ||
-        (c.new_slug === dc.existing_slug && c.existing_slug === dc.new_slug)
-      );
-      if (!exists) {
-        merged.push(dc);
-      }
-    }
-
-    res.json({ conflicts: merged });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-router.post("/api/conflicts/resolve", requireAuth, requireScope("memory:write"), async (req, res) => {
-  try {
-    const { conflict_id, action, winner_slug } = req.body || {};
-    if (!conflict_id || !action || !winner_slug) {
-      return badRequest(res, "Required fields: conflict_id, action, winner_slug");
-    }
-    if (action !== "keep" && action !== "supersede") {
-      return badRequest(res, "action must be either 'keep' or 'supersede'");
-    }
-
-    const inboxDir = path.join(BRAIN_DIR, "memory-inbox");
-    const { resolveConflict } = await import("../core/conflict-detector.mjs");
-    const result = resolveConflict(conflict_id, inboxDir, action, winner_slug);
-    if (!result.resolved) {
-      return badRequest(res, result.error || "Failed to resolve conflict");
-    }
-
-    invalidate(); // clear cache
-    res.json({ success: true, conflict_id });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
+// ─── Dashboard Intelligence / Graph / Conflicts ──── moved to routes/graph.mjs
 
 // ─── Files, Skills & Tasks ───────────────────────────────────────────────────
 
@@ -1162,37 +710,7 @@ router.post("/api/scripts/:name/run", sandboxRateLimiter(), requireAuth, require
 
 
 
-router.get('/api/logs/:type', requireAuth, requireScope('health:read'), (req, res) => {
-  try {
-    const { type } = req.params;
-    if (type !== 'server' && type !== 'daemon') {
-      return res.status(400).json({ error: 'Invalid log type. Must be "server" or "daemon"' });
-    }
-    const logPath = path.join(BRAIN_DIR, 'logs', `${type}.log`);
-    if (!fs.existsSync(logPath)) {
-      return res.json({ content: '(no logs yet)' });
-    }
-
-    const stat = fs.statSync(logPath);
-    const maxReadBytes = 50000;
-    let content = '';
-
-    if (stat.size > maxReadBytes) {
-      const fd = fs.openSync(logPath, 'r');
-      const buffer = Buffer.alloc(maxReadBytes);
-      fs.readSync(fd, buffer, 0, maxReadBytes, stat.size - maxReadBytes);
-      fs.closeSync(fd);
-      content = buffer.toString('utf8');
-    } else {
-      content = fs.readFileSync(logPath, 'utf8');
-    }
-
-    const lines = content.split('\n');
-    const lastLines = lines.slice(-200).join('\n');
-    res.json({ content: lastLines });
-    
-  } catch (err) { serverError(res, err); }
-});
+// GET /api/logs/:type → moved to ./routes/system.mjs
 
 
 
@@ -1279,165 +797,8 @@ router.post('/api/tasks', requireAuth, requireScope('tasks:write'), (req, res) =
   } catch (err) { serverError(res, err); }
 });
 
-// ─── Config & Sandbox ─────────────────────────────────────────────────────────
-
-function safeConfigName(name) {
-  // Allow alphanumeric, hyphens, underscores, and dots (for file extensions like .yml)
-  if (!/^[a-zA-Z0-9_.-]+$/.test(name) || name.includes('..')) {
-    return null;
-  }
-  return path.join(CONFIG_DIR, name);
-}
-
-router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, res) => {
-  try {
-    const securityPath = path.join(CONFIG_DIR, 'security.yml');
-    const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
-    const brainPath = path.join(CONFIG_DIR, 'brain.json');
-    const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
-
-    let security = {};
-    let budget = {};
-    let brain = {};
-    let secrets = {};
-
-    if (fs.existsSync(securityPath)) {
-      try {
-        security = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
-      } catch {}
-    }
-    if (fs.existsSync(budgetPath)) {
-      try {
-        budget = yaml.parse(fs.readFileSync(budgetPath, 'utf8')) || {};
-      } catch {}
-    }
-    if (fs.existsSync(brainPath)) {
-      try {
-        brain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {};
-      } catch {}
-    }
-    if (fs.existsSync(secretsPath)) {
-      try {
-        secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
-      } catch {}
-    }
-
-    const safeBrain = { ...brain };
-    if (safeBrain.token) {
-      safeBrain.has_token = true;
-      delete safeBrain.token;
-    }
-
-    const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'openrouter_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
-    const safeSecrets = {};
-    for (const key of allowedKeys) {
-      if (secrets[key] !== undefined) {
-        safeSecrets[key] = secrets[key];
-      }
-    }
-
-    res.json({ security, budget, brain: safeBrain, secrets: safeSecrets });
-    
-  } catch (err) { serverError(res, err); }
-});
-
-router.post('/api/config-json', requireAuth, requireScope('config:write'), (req, res) => {
-  try {
-    const { security, budget, brain, secrets } = req.body;
-    const securityPath = path.join(CONFIG_DIR, 'security.yml');
-    const budgetPath = path.join(CONFIG_DIR, 'budget.yml');
-    const brainPath = path.join(CONFIG_DIR, 'brain.json');
-    const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
-
-    if (!fs.existsSync(CONFIG_DIR)) {
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    }
-
-    if (security) {
-      fs.writeFileSync(securityPath, yaml.stringify(security), { encoding: 'utf8', mode: 0o600 });
-    }
-    if (budget) {
-      fs.writeFileSync(budgetPath, yaml.stringify(budget), { encoding: 'utf8', mode: 0o600 });
-    }
-    if (brain) {
-      let existingBrain = {};
-      if (fs.existsSync(brainPath)) {
-        try {
-          existingBrain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {};
-        } catch {}
-      }
-      const nextBrain = { ...existingBrain, ...brain };
-      if ((brain.token === undefined || brain.token === '') && existingBrain.token) {
-        nextBrain.token = existingBrain.token;
-      }
-      delete nextBrain.has_token;
-      fs.writeFileSync(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
-    }
-    if (secrets) {
-      let existingSecrets = {};
-      if (fs.existsSync(secretsPath)) {
-        try {
-          existingSecrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
-        } catch {}
-      }
-      const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'openrouter_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
-      for (const key of allowedKeys) {
-        if (secrets[key] !== undefined) {
-          if (secrets[key] === '') {
-            delete existingSecrets[key];
-          } else {
-            existingSecrets[key] = secrets[key];
-          }
-        }
-      }
-      fs.writeFileSync(secretsPath, JSON.stringify(existingSecrets, null, 2), { encoding: 'utf8', mode: 0o600 });
-    }
-
-    res.json({ success: true });
-    
-  } catch (err) { serverError(res, err); }
-});
-
-router.get('/api/usage', requireAuth, async (req, res) => {
-  try {
-    const { syncUsageLedger, calculateCurrentCost } = await import('../core/usage-tracker.mjs');
-    
-    // Sync the ledger first to capture new logs and lock in current prices
-    const pricingMap = await getPricingMap();
-    syncUsageLedger(pricingMap);
-    
-    res.json(calculateCurrentCost());
-  } catch (err) { serverError(res, err); }
-});
-
-router.get('/api/config/:name', requireAuth, requireScope('config:read'), (req, res) => {
-  try {
-    const filePath = safeConfigName(req.params.name);
-    if (!filePath) return badRequest(res, 'Invalid config name');
-    if (!fs.existsSync(filePath)) {
-      if (req.params.name === 'DESIGN.md') {
-        return res.json({ content: '# Design System\n\nPreview your markdown here.' });
-      }
-      return res.json({ content: '' });
-    }
-    const content = fs.readFileSync(filePath, 'utf8');
-    res.json({ content });
-    
-  } catch (err) { serverError(res, err); }
-});
-
-router.put('/api/config/:name', requireAuth, requireScope('config:write'), (req, res) => {
-  try {
-    const filePath = safeConfigName(req.params.name);
-    if (!filePath) return badRequest(res, 'Invalid config name');
-    if (!fs.existsSync(CONFIG_DIR)) {
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    }
-    fs.writeFileSync(filePath, req.body.content, 'utf8');
-    res.json({ success: true });
-    
-  } catch (err) { serverError(res, err); }
-});
+// ─── Config (GET/POST /api/config-json, GET/PUT /api/config/:name, GET /api/usage)
+// All moved to ./routes/config.mjs and ./routes/system.mjs
 
 
 
@@ -2189,6 +1550,8 @@ router.get('/api/openai-models', requireAuth, async (req, res) => {
 });
 
 
+// ─── Update, DLQ, Help ─── (moved to ./routes/system.mjs and ./routes/help.mjs) ───
+
 function getLastModified(filePath) {
   try {
     if (fs.existsSync(filePath)) {
@@ -2197,144 +1560,5 @@ function getLastModified(filePath) {
   } catch {}
   return null;
 }
-
-/**
- * GET /api/update/check
- */
-router.get('/api/update/check', requireAuth, async (req, res) => {
-  try {
-    const localPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    const currentVersion = localPkg.version || '0.0.0';
-
-    const registryRes = await fetch('https://registry.npmjs.org/total-recall-brain/latest');
-    if (!registryRes.ok) {
-      throw new Error(`Failed to fetch latest version from npm: ${registryRes.status}`);
-    }
-    const registryData = await registryRes.json();
-    const latestVersion = registryData.version || '0.0.0';
-
-    const updateAvailable = latestVersion !== currentVersion;
-
-    res.json({
-      currentVersion,
-      latestVersion,
-      updateAvailable
-    });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-/**
- * POST /api/update/run
- */
-router.post('/api/update/run', requireAuth, async (req, res) => {
-  try {
-    logger.info('update', 'Starting auto-update process...');
-    const { exec } = await import('node:child_process');
-    
-    const runCmd = (cmd, cwd) => new Promise((resolve, reject) => {
-      logger.info('update', `Running: ${cmd} in ${cwd}`);
-      exec(cmd, { cwd }, (err, stdout, stderr) => {
-        if (err) {
-          logger.error('update', `Command failed: ${cmd}. Error: ${err.message}`);
-          return reject(err);
-        }
-        resolve({ stdout, stderr });
-      });
-    });
-
-    // 1. git pull
-    await runCmd('git pull', ROOT);
-    // 2. npm install
-    await runCmd('npm install', ROOT);
-    // 3. build/install frontend if package.json exists
-    const frontendPath = path.join(ROOT, 'frontend');
-    if (fs.existsSync(path.join(frontendPath, 'package.json'))) {
-      await runCmd('npm install', frontendPath);
-      await runCmd('npm run build', frontendPath);
-    }
-
-    logger.info('update', 'Update successfully applied. Restarting server...');
-    res.json({ success: true, message: 'Update successfully applied. Server is restarting.' });
-    
-    setTimeout(() => {
-      process.exit(0);
-    }, 1000);
-  } catch (err) {
-    logger.error('update', `Auto-update failed: ${err.message}`);
-    serverError(res, err);
-  }
-});
-
-// ─── DLQ Admin Routes ────────────────────────────────────────────────────────────
-const QUEUE_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
-
-router.get('/api/tasks/failed', requireAuth, async (req, res) => {
-  try {
-    const { loadPendingTasks } = await import('../core/scheduler.mjs');
-    const allTasks = loadPendingTasks(QUEUE_DIR);
-    const failed = allTasks.filter(t => t.status === 'failed');
-    res.json({ total: failed.length, tasks: failed });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-router.post('/api/tasks/:id/retry', requireAuth, async (req, res) => {
-  try {
-    const taskId = req.params.id;
-    const { loadPendingTasks, updateTaskStatus } = await import('../core/scheduler.mjs');
-    const allTasks = loadPendingTasks(QUEUE_DIR);
-    const task = allTasks.find(t => t.slug === taskId);
-    if (!task) return res.status(404).json({ error: 'Task not found in queue' });
-    if (task.status !== 'failed') return res.status(400).json({ error: 'Task is not in failed state' });
-    updateTaskStatus(task, 'pending', QUEUE_DIR);
-    res.json({ success: true, message: `Task ${taskId} re-queued` });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-router.get('/api/help', requireAuth, (req, res) => {
-  const { topic } = req.query;
-  const docsDir = path.join(ROOT, 'docs');
-  const referenceDir = path.join(docsDir, 'reference');
-
-  if (!topic) {
-    return res.json({
-      topics: [
-        { id: 'cli-reference', title: 'CLI Reference Guide', description: 'npx total-recall command catalog and flags' },
-        { id: 'ssss', title: 'SSSS Specifications', description: 'Structured Semantic Syntax System guide' },
-        { id: 'architecture', title: 'System Architecture', description: 'System topology and VFS structures' },
-        { id: 'collab', title: 'Collaboration Guide', description: 'Collaborative workspaces and team annotations' }
-      ]
-    });
-  }
-
-  try {
-    let filePath = '';
-    if (topic === 'cli-reference') {
-      filePath = path.join(referenceDir, 'cli-reference.md');
-    } else if (topic === 'ssss') {
-      filePath = path.join(docsDir, 'SSSS.md');
-    } else if (topic === 'architecture') {
-      filePath = path.join(docsDir, 'ARCHITECTURE.md');
-    } else if (topic === 'collab') {
-      filePath = path.join(referenceDir, 'collab.md');
-    } else {
-      return res.status(404).json({ error: 'Help topic not found' });
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Help topic document not found on server' });
-    }
-
-    const content = fs.readFileSync(filePath, 'utf8');
-    res.json({ topic, content });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
 
 export { router as restRouter };

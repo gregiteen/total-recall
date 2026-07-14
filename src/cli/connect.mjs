@@ -231,7 +231,13 @@ function bootstrapAgentDir(agentDir) {
   for (const skill of skillsToCopy) {
     const skillSrc = path.join(scaffoldSkillsDir, skill);
     const skillDest = path.join(agentDir, 'skills', skill);
-    if (fs.existsSync(skillSrc) && !fs.existsSync(path.join(skillDest, 'SKILL.md'))) {
+    if (!fs.existsSync(skillSrc)) {
+      // Warn but don't crash — scaffold skill may have been removed intentionally
+      // (e.g. ssss is now sourced from @ssss/cli npm package, not scaffold)
+      console.error(`  ⚠️  Bootstrap: scaffold skill source not found, skipping: ${skill}`);
+      continue;
+    }
+    if (!fs.existsSync(path.join(skillDest, 'SKILL.md'))) {
       copyDirRecursive(skillSrc, skillDest);
     }
   }

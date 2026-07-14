@@ -319,6 +319,14 @@ export function cosineSimilarity(a, b) {
 
 // ─── Index file helpers ──────────────────────────────────────────────────────
 
+// TODO: Replace JSONL-based embedding storage with better-sqlite3 + sqlite-vss
+// for O(log n) nearest-neighbor search and chunked loading.
+// better-sqlite3 is already installed in node_modules.
+// See: https://github.com/asg017/sqlite-vss
+// This would eliminate OOM risk from loading the full index into memory.
+
+const MAX_INDEX_ENTRIES = 50_000;
+
 function indexPath(derivedDir) {
   return path.join(derivedDir, 'embeddings.json');
 }
@@ -331,6 +339,10 @@ let cachedIndexMtime = 0;
  * Load the full embeddings index from disk.
  * Returns {} if the file doesn't exist or is corrupt.
  *
+ * Caps loaded entries at MAX_INDEX_ENTRIES (50,000) to prevent OOM crashes
+ * on large vaults. A warning is emitted if the cap is hit.
+ * Also warns if the serialized index exceeds 100MB.
+ *
  * @param {string} derivedDir
  * @returns {Record<string, { embedding: number[], model: string, generated_at: string }>}
  */
@@ -342,7 +354,37 @@ export function loadEmbeddingsIndex(derivedDir) {
     if (cachedIndex && cachedIndexPath === p && cachedIndexMtime === stat.mtimeMs) {
       return cachedIndex;
     }
-    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    let data = JSON.parse(fs.readFileSync(p, 'utf8'));
+
+    // Cap entries to prevent OOM on large vaults
+    const keys = Object.keys(data);
+    if (keys.length > MAX_INDEX_ENTRIES) {
+      logger.warn({
+        subsystem: 'embeddings',
+        message: `Embedding index has ${keys.length} entries, capping at ${MAX_INDEX_ENTRIES} to prevent OOM. Consider SQLite-vss migration.`
+      });
+      // Keep the most recently generated entries (sort desc by generated_at)
+      const capped = {};
+      const sorted = keys.sort((a, b) => {
+        const ta = data[a]?.generated_at || '';
+        const tb = data[b]?.generated_at || '';
+        return tb.localeCompare(ta);
+      });
+      for (const k of sorted.slice(0, MAX_INDEX_ENTRIES)) {
+        capped[k] = data[k];
+      }
+      data = capped;
+    }
+
+    // Size monitoring: warn if index exceeds 100MB in memory
+    const sizeBytes = Buffer.byteLength(JSON.stringify(data));
+    if (sizeBytes > 100 * 1024 * 1024) { // 100MB
+      logger.warn({
+        subsystem: 'embeddings',
+        message: `Embedding index size ${(sizeBytes / 1024 / 1024).toFixed(1)}MB exceeds 100MB threshold. Consider SQLite-vss migration.`
+      });
+    }
+
     cachedIndex = data;
     cachedIndexPath = p;
     cachedIndexMtime = stat.mtimeMs;
@@ -521,7 +563,31 @@ export function loadSessionEmbeddingsIndex(derivedDir) {
     if (cachedSessionIndex && cachedSessionIndexPath === p && cachedSessionIndexMtime === stat.mtimeMs) {
       return cachedSessionIndex;
     }
-    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+    let data = JSON.parse(fs.readFileSync(p, 'utf8'));
+
+    // Cap entries to prevent OOM on large session vaults
+    const keys = Object.keys(data);
+    if (keys.length > MAX_INDEX_ENTRIES) {
+      logger.warn({
+        subsystem: 'embeddings',
+        message: `Session embedding index has ${keys.length} entries, capping at ${MAX_INDEX_ENTRIES} to prevent OOM. Consider SQLite-vss migration.`
+      });
+      const capped = {};
+      for (const k of keys.slice(0, MAX_INDEX_ENTRIES)) {
+        capped[k] = data[k];
+      }
+      data = capped;
+    }
+
+    // Size monitoring: warn if index exceeds 100MB in memory
+    const sizeBytes = Buffer.byteLength(JSON.stringify(data));
+    if (sizeBytes > 100 * 1024 * 1024) { // 100MB
+      logger.warn({
+        subsystem: 'embeddings',
+        message: `Session embedding index size ${(sizeBytes / 1024 / 1024).toFixed(1)}MB exceeds 100MB threshold. Consider SQLite-vss migration.`
+      });
+    }
+
     cachedSessionIndex = data;
     cachedSessionIndexPath = p;
     cachedSessionIndexMtime = stat.mtimeMs;

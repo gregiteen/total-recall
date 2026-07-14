@@ -237,11 +237,21 @@ export default async function init(args) {
 
   for (const skill of skillsToSeed) {
     let skillSrc = path.join(scaffoldSkillsDir, skill);
-    // If the skill isn't in scaffold but is in global, use global source
-    if (!fs.existsSync(skillSrc) && isProject) {
+
+    // For ssss: prefer the npm-installed @ssss/cli package over scaffold
+    if (skill === 'ssss') {
+      const npmSsssSrc = path.join(ROOT, 'node_modules', '@ssss', 'cli', 'skills', 'ssss');
+      if (fs.existsSync(npmSsssSrc)) {
+        skillSrc = npmSsssSrc;
+      } else if (!fs.existsSync(skillSrc)) {
+        logWarn('ssss skill not found in @ssss/cli npm package or scaffold — skipping.');
+        continue;
+      }
+    } else if (!fs.existsSync(skillSrc) && isProject) {
+      // If the skill isn't in scaffold but is in global, use global source
       skillSrc = path.join(globalSkillsDir, skill);
     }
-    
+
     const skillDest = path.join(agentDir, 'skills', skill);
 
     if (!fs.existsSync(skillSrc)) {
