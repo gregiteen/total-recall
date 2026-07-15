@@ -1,12 +1,12 @@
 # SSSS — Structured Semantic Syntax System
 
-The official database-free schema specification utilized by the **Total Recall Sovereign AI OS** for SSSS memory vaults, conflict quarantine files, session traces, and background research queue manifests.
+The official database-free schema specification utilized by the **Total Recall Local AI OS** for SSSS memory vaults, conflict quarantine files, session traces, and background research queue manifests.
 
 ---
 
 ## ⚡ 1. Core Principles
 
-The SSSS specification operates strictly on the following sovereign architecture:
+The SSSS specification operates strictly on the following local architecture:
 
 | Principle | Specification |
 | :--- | :--- |

@@ -90,7 +90,7 @@ export default function FilesPage() {
     try {
       await saveScript(selectedScript, scriptContent)
       setError("")
-      alert(`Script "${selectedScript}" saved successfully!`)
+      setError(`✓ Script "${selectedScript}" saved successfully!`)
       void fetchScriptsList()
     } catch (e) {
       setError(`Failed to save script: ${(e as Error).message}`)

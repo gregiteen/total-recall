@@ -116,11 +116,31 @@ export async function toggleSkillRepo(skillName: string, targetRepo: string, ena
   return res.json();
 }
 
+export async function previewSkillRepo(skillName: string, targetRepo: string): Promise<{ success: boolean; original: string; preview: string; signals: string[] }> {
+  const res = await apiFetch(`${API_BASE}/api/skills/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skillName, targetRepo })
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
 export async function auditSkill(skillName: string, repoPath?: string): Promise<{ success: boolean; audit: { outdated: boolean; problematic: boolean; reason: string; proposed_changes: string } }> {
   const res = await apiFetch(`${API_BASE}/api/skills/audit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ skillName, repoPath })
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+export async function generateExpert(repoPath: string, force?: boolean): Promise<{ success: boolean; message: string; stats: Record<string, number> }> {
+  const res = await apiFetch(`${API_BASE}/api/skills/generate-expert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repoPath, force })
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();

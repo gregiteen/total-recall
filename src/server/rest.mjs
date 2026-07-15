@@ -115,6 +115,7 @@ import instructionsRouter from './routes/instructions.mjs';
 import scriptsRouter      from './routes/scripts.mjs';
 import ttsRouter          from './routes/tts.mjs';
 import updateRouter       from './routes/update.mjs';
+import { rulesRouter }    from './routes/rules.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -223,5 +224,7 @@ router.use(scriptsRouter);
 router.use(ttsRouter);
 router.use(updateRouter);
 router.use(ssssRouter);
+router.use(rulesRouter);
 
+export { router as restRouter };
 export default router;

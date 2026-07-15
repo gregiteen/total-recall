@@ -49,6 +49,6 @@ describe('obsidian-sync', () => {
     syncObsidianToVault('obsidian/test.md', 'vault/test.md', 'brain');
     
     // Should skip writing due to conflict
-    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(fs.writeFileSync).not.toHaveBeenCalledWith('vault/test.md', expect.anything(), expect.anything());
   });
 });

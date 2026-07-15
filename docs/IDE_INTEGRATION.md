@@ -1,6 +1,6 @@
 # Total Recall — IDE & Agent Integration Guide
 
-Total Recall serves as the core sovereign memory kernel. **Claude Code**, **Cursor**, **Codex CLI**, **Antigravity CLI**, **Aider**, and **VS Code Copilot** act as specialized interfaces on top of it. This guide details how to seamlessly wire each client to the brain.
+Total Recall serves as the core memory kernel. **Claude Code**, **Cursor**, **Codex CLI**, **Antigravity CLI**, **Aider**, and **VS Code Copilot** act as specialized interfaces on top of it. This guide details how to seamlessly wire each client to the brain.
 
 ---
 

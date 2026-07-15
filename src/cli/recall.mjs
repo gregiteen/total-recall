@@ -18,6 +18,7 @@ function printHelp() {
     --modality, -m <type>      Filter results by modality
     --importance, -i <1-5>     Filter results by minimum numerical importance
     --priority, -p <level>     Filter results by priority level
+    --fast                     Force frontmatter-only search without semantic fallback
 
   Examples:
     npx total-recall recall "Never run tsc directly"
@@ -49,6 +50,7 @@ export default async function recall(args) {
   let modality = null;
   let importance = null;
   let priority = null;
+  let forceFast = false;
 
   for (let i = 1; i < remainingArgs.length; i++) {
     const arg = remainingArgs[i];
@@ -97,6 +99,8 @@ export default async function recall(args) {
         priority = val.toLowerCase();
         i++;
       }
+    } else if (arg === '--fast') {
+      forceFast = true;
     }
   }
 
@@ -130,17 +134,34 @@ export default async function recall(args) {
       const derivedDir = path.join(target.brainDir, 'memory-derived');
 
       try {
-        const results = await semanticSearch(query, {
-          vaultDir,
+        let results = [];
+        const { fastSearch } = await import('../core/fast-recall.mjs');
+        const fastResults = fastSearch(query, {
           derivedDir,
+          vaultDir,
           top_k,
-          includeSessions: includeSessions && target.label !== 'global', // sessions only in project/local
           category,
           tags,
           modality,
           importance,
           priority
         });
+
+        if (fastResults.length >= top_k || forceFast) {
+          results = fastResults;
+        } else {
+          results = await semanticSearch(query, {
+            vaultDir,
+            derivedDir,
+            top_k,
+            includeSessions: includeSessions && target.label !== 'global', // sessions only in project/local
+            category,
+            tags,
+            modality,
+            importance,
+            priority
+          });
+        }
         if (results.degradedTextSearch) isDegraded = true;
         // Tag each result with its layer
         for (const r of results) {

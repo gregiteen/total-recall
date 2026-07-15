@@ -1,6 +1,6 @@
 # Total Recall — Dual-Layer Brain Architecture
 
-This document details the design, orchestration, file resolution precedence, and conflict detection structures of the **Dual-Layer Sovereign Memory System** in the Total Recall OS.
+This document details the design, orchestration, file resolution precedence, and conflict detection structures of the **Dual-Layer Memory System** in the Total Recall OS.
 
 ---
 

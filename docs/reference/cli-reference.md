@@ -1,6 +1,6 @@
 # Total Recall — CLI Reference Guide
 
-Comprehensive reference manual for all `npx total-recall` commands, parameters, environment overrides, and configuration files in the Sovereign OS.
+Comprehensive reference manual for all `npx total-recall` commands, parameters, environment overrides, and configuration files in the AI OS.
 
 ---
 
@@ -14,7 +14,7 @@ Comprehensive reference manual for all `npx total-recall` commands, parameters, 
 ## 🛠️ CLI Command Catalog
 
 ### `init`
-Configure and provision the initial sovereign virtual file system schemas.
+Configure and provision the initial local virtual file system schemas.
 - **What it does**: Prompts for model preferences, issues authorized Bearer PAT tokens, builds setup configs, and copies master control skills into place.
 - **Usage**:
   ```bash
@@ -107,15 +107,24 @@ Perform Vector Semantic Search or exact keyword queries across memory layers.
 ---
 
 ### `compile`
-Re-compile vault memory nodes into active instruction shims.
-- **What it does**: Reads and merges both global and project SSSS vaults, runs deduplication on slug conflicts (project wins), and compiles the compact **5-line pointer shim** inside `INSTRUCTIONS.md`. Also rebuilds custom Obsidian dashboards and graphs.
-- **Alias**: `rebuild`
+Rebuilds the `INSTRUCTIONS.md` and associated IDE client shims from the canonical memory vault nodes.
+- **What it does**: Reads all valid `invariant`, `preference`, and `correction` nodes. Discards expired notes. Injects the entire **Installed Agent Skills** inventory (`.agent/skills/`) and the OpenWiki summary. Automatically updates `.cursorrules`, `CLAUDE.md`, `AGENTS.md`, and all other active environment shims.
 - **Usage**:
   ```bash
   npx total-recall compile [options]
   ```
 - **Options**:
   - `--force`: Force overwrite immutable invariants and shims.
+
+---
+
+### `rebuild`
+Performs a deep, cold-start re-compilation of the surface projection.
+- **What it does**: Completely discards the `memory-derived/` cached indexes. Parses the entire `memory-vault/` from scratch, rebuilds the embedding indexes asynchronously, and then triggers `compile` to inject the instructions, skills, and OpenWiki summaries.
+- **Usage**:
+  ```bash
+  npx total-recall rebuild
+  ```
 
 ---
 
@@ -362,6 +371,76 @@ Start the Express + WebSockets collaboration server and Vite/React browser simul
   ```bash
   npx total-recall collab
   ```
+
+---
+
+### `brain`
+Switch the active memory vault or display the current context.
+- **Usage**: `npx total-recall brain [switch <path>]`
+
+### `chat`
+Launch an interactive CLI agent session connected to the active brain.
+- **Usage**: `npx total-recall chat`
+
+### `deploy-ui`
+Build and deploy the React frontend dashboard locally.
+- **Usage**: `npx total-recall deploy-ui`
+
+### `doctor`
+Run comprehensive health checks on the agent environment and repair broken symlinks or missing configurations.
+- **Usage**: `npx total-recall doctor`
+
+### `forget`
+Delete a specific memory node from the vault.
+- **Usage**: `npx total-recall forget <slug>`
+
+### `friction`
+Record a developer friction event or annoyance for the agent to optimize later.
+- **Usage**: `npx total-recall friction "The build takes too long"`
+
+### `generate-pat`
+Generate a new Personal Access Token (PAT) for API usage.
+- **Usage**: `npx total-recall generate-pat`
+
+### `hash-password`
+Hash a plaintext password for manual entry into `security.yml`.
+- **Usage**: `npx total-recall hash-password <password>`
+
+### `import-rules`
+Import legacy markdown rules or `.cursorrules` into the structured memory vault.
+- **Usage**: `npx total-recall import-rules <path>`
+
+### `map`
+Generate a visual CLI tree map of the current memory vault structure.
+- **Usage**: `npx total-recall map`
+
+### `migrate`
+Run schema migrations to upgrade older SSSS layouts to the current specification.
+- **Usage**: `npx total-recall migrate`
+
+### `reset-password`
+Reset the admin UI dashboard password interactively.
+- **Usage**: `npx total-recall reset-password`
+
+### `share`
+Export a specific memory node to a shareable markdown format.
+- **Usage**: `npx total-recall share <slug>`
+
+### `snapshot`
+Create a point-in-time archive of the current memory vault state.
+- **Usage**: `npx total-recall snapshot`
+
+### `start`
+Start the primary REST API daemon process in the foreground.
+- **Usage**: `npx total-recall start`
+
+### `task`
+Manage background CLI agent tasks.
+- **Usage**: `npx total-recall task [list|kill]`
+
+### `upgrade`
+Pull the latest Total Recall system version and run self-update routines.
+- **Usage**: `npx total-recall upgrade`
 
 ---
 

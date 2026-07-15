@@ -248,7 +248,7 @@ export async function evaluateProposalGate(proposal, runtimeConfig) {
 
 // ─── Smart Decay ────────────────────────────────────────────────────────────────
 
-const DECAY_SYSTEM = `You are a Memory Retention Analyst for a sovereign AI memory system.
+const DECAY_SYSTEM = `You are a Memory Retention Analyst for an AI memory system.
 
 Given a memory node that has not been accessed recently, evaluate whether it should be:
 1. RETAINED — still relevant and valuable

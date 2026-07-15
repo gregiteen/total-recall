@@ -44,7 +44,7 @@ describe('protect-instructions core', () => {
 2. Read skills when required.
 
 ## 🧠 Total Recall System
-This is local sovereign memory.
+This is local local memory.
 `.trim();
 
     fs.writeFileSync(path.join(derivedDir, 'INSTRUCTIONS.system.md'), systemContent, 'utf8');
@@ -59,7 +59,7 @@ This is local sovereign memory.
 2. Read skills when required.
 
 ## 🧠 Total Recall System
-This is local sovereign memory.
+This is local local memory.
 
 # 🔒 Custom User Heading
 Here is a normal paragraph about rules.

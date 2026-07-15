@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { logger } from '../../core/logger.mjs';
 import { AGENT_DIR, SKILLS_DIR } from './_shared.mjs';
+import { deploySkill } from '../../core/skills-registry.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -59,9 +60,27 @@ const SKILL_ROOTS = [
   {
     rel: '.agent/skills',
     ide: 'total-recall',
-    ide_label: 'Total Recall / .agent',
+    ide_label: 'Total Recall / Antigravity',
     docs: null,
   },
+  {
+    rel: '.grok/skills',
+    ide: 'grok',
+    ide_label: 'Grok Build',
+    docs: 'https://x.ai/grok',
+  },
+  {
+    rel: '.windsurf/skills',
+    ide: 'windsurf',
+    ide_label: 'Windsurf 2.0',
+    docs: 'https://docs.windsurf.com',
+  },
+  {
+    rel: '.github/skills',
+    ide: 'copilot-workspace',
+    ide_label: 'GitHub Copilot Workspace',
+    docs: 'https://github.com/features/copilot',
+  }
 ];
 
 // Back-compat alias for older callers
@@ -532,8 +551,15 @@ skillsRouter.delete('/api/skills/:name', requireAuth, requireScope('files:write'
     } catch (e) {
       return res.status(404).json({ error: e.message });
     }
-    fs.rmSync(skillDir, { recursive: true, force: true });
-    res.json({ success: true, message: `Skill "${name}" deleted successfully` });
+    
+    const baseAgentDir = path.dirname(path.dirname(skillDir));
+    const trashDir = path.join(baseAgentDir, '.trash', 'skills');
+    fs.mkdirSync(trashDir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const trashPath = path.join(trashDir, `${name}_${timestamp}`);
+    fs.renameSync(skillDir, trashPath);
+    
+    res.json({ success: true, message: `Skill "${name}" deleted (moved to trash) successfully` });
   } catch (err) {
     serverError(res, err);
   }
@@ -555,21 +581,94 @@ skillsRouter.post('/api/skills/toggle', requireAuth, requireScope('ssss:write'),
       if (!fs.existsSync(globalSkillPath)) {
         return res.status(400).json({ error: 'Global skill not found' });
       }
-      fs.cpSync(globalSkillPath, targetSkillPath, { recursive: true });
       
-      const targetSkillMd = path.join(targetSkillPath, 'SKILL.md');
-      if (fs.existsSync(targetSkillMd)) {
-        let content = fs.readFileSync(targetSkillMd, 'utf8');
-        content += `\n\n> **Repo Scope Override:** This skill was copied from the Global registry and is now scoped to \`${targetRepo}\`.\n`;
-        fs.writeFileSync(targetSkillMd, content, 'utf8');
+      const brainDir = path.join(AGENT_DIR, 'skills', 'total-recall');
+      try {
+        deploySkill(brainDir, skillName, {
+          repo: targetRepo,
+          agentSkillsDir: path.join(targetRepo, '.agent', 'skills'),
+          adapt: true,
+          force: true
+        });
+      } catch (err) {
+        return res.status(500).json({ error: `Deploy failed: ${err.message}` });
       }
     } else {
       if (fs.existsSync(targetSkillPath)) {
-        fs.rmSync(targetSkillPath, { recursive: true, force: true });
+        const baseAgentDir = path.dirname(path.dirname(targetSkillPath));
+        const trashDir = path.join(baseAgentDir, '.trash', 'skills');
+        fs.mkdirSync(trashDir, { recursive: true });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const trashPath = path.join(trashDir, `${skillName}_${timestamp}`);
+        fs.renameSync(targetSkillPath, trashPath);
       }
     }
 
     res.json({ success: true, message: `Skill ${skillName} ${enabled ? 'enabled' : 'disabled'} for ${targetRepo}` });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+import matter from 'gray-matter';
+
+skillsRouter.post('/api/skills/preview', requireAuth, requireScope('ssss:read'), async (req, res) => {
+  try {
+    const { skillName, targetRepo } = req.body;
+    if (!skillName || !targetRepo || targetRepo === 'Global') {
+      return res.status(400).json({ error: 'Missing parameters or invalid target repo' });
+    }
+
+    const globalSkillPath = path.join(os.homedir(), '.agent', 'skills', skillName);
+    if (!fs.existsSync(globalSkillPath)) {
+      return res.status(400).json({ error: 'Global skill not found' });
+    }
+
+    const skillMd = fs.existsSync(path.join(globalSkillPath, 'SKILL.md')) 
+      ? path.join(globalSkillPath, 'SKILL.md') 
+      : path.join(globalSkillPath, 'skill.md');
+      
+    if (!fs.existsSync(skillMd)) {
+      return res.status(400).json({ error: 'SKILL.md not found in global template' });
+    }
+
+    const raw = fs.readFileSync(skillMd, 'utf8');
+    const { data, content } = matter(raw);
+
+    const repoRoot = path.resolve(targetRepo);
+    const signals = [];
+    
+    // Simulate adapt logic
+    const pkgPath = path.join(repoRoot, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        if (pkg.name) signals.push(`repo package: ${pkg.name}`);
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+        const keys = Object.keys(deps || {}).slice(0, 12);
+        if (keys.length) signals.push(`stack: ${keys.join(', ')}`);
+      } catch {}
+    }
+
+    const openwikiDir = path.join(repoRoot, 'openwiki');
+    if (fs.existsSync(openwikiDir)) {
+      try {
+        const pages = fs.readdirSync(openwikiDir).filter((f) => f.endsWith('.md')).slice(0, 5);
+        if (pages.length) signals.push(`openwiki: ${pages.map((p) => p.replace(/\.md$/, '')).join(', ')}`);
+      } catch {}
+    }
+
+    let adaptedContent = raw;
+    if (signals.length) {
+      const note = ` [Deployed for: ${signals.join(' | ')}]`;
+      const desc = String(data.description || '');
+      if (!desc.includes('[Deployed for:')) {
+        data.description = (desc + note).slice(0, 500);
+        adaptedContent = matter.stringify(content, data);
+      }
+    }
+
+    res.json({ success: true, original: raw, preview: adaptedContent, signals });
   } catch (err) {
     serverError(res, err);
   }
@@ -613,6 +712,34 @@ ${content}`;
     }
 
     res.json({ success: true, audit: auditData });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+skillsRouter.post('/api/skills/generate-expert', requireAuth, requireScope('files:write', 'ssss:write'), async (req, res) => {
+  try {
+    const { repoPath, force } = req.body;
+    if (!repoPath) {
+      return res.status(400).json({ error: 'Missing required `repoPath` body parameter.' });
+    }
+
+    // Verify the repo exists and is in the project registry
+    const project = resolveRegisteredProject(path.basename(repoPath)) || { path: repoPath };
+    const targetRoot = path.resolve(project.path || repoPath);
+
+    if (!fs.existsSync(targetRoot)) {
+      return res.status(404).json({ error: `Repository path not found: ${targetRoot}` });
+    }
+
+    const { generateRepoExpert, scanRepo } = await import('../../cli/repo-expert-generate.mjs');
+    const result = generateRepoExpert(targetRoot, { force: !!force });
+
+    res.json({
+      success: true,
+      message: `repo-expert generated for ${result.stats.name}`,
+      ...result,
+    });
   } catch (err) {
     serverError(res, err);
   }

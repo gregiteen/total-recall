@@ -145,9 +145,22 @@ function printGeneralHelp() {
     npx total-recall help settings
     npx total-recall help architecture
 
-  \x1b[1mAll Commands Available:\x1b[0m
-    \x1b[33minit\x1b[0m, \x1b[33msetup\x1b[0m, \x1b[33mstart\x1b[0m, \x1b[33mdeploy\x1b[0m, \x1b[33mdoctor\x1b[0m, \x1b[33mdream\x1b[0m, \x1b[33mlint\x1b[0m, \x1b[33mdaemon\x1b[0m, \x1b[33mbackup\x1b[0m, \x1b[33mrestore\x1b[0m, \x1b[33msync\x1b[0m, \x1b[33mstatus\x1b[0m,
-    \x1b[33mgenerate-pat\x1b[0m, \x1b[33mhash-password\x1b[0m, \x1b[33mreset-password\x1b[0m, \x1b[33mcompile\x1b[0m, \x1b[33mrebuild\x1b[0m, \x1b[33msnapshot\x1b[0m, \x1b[33mmigrate\x1b[0m,
-    \x1b[33mimport\x1b[0m, \x1b[33mingest\x1b[0m, \x1b[33mconnect\x1b[0m, \x1b[33mrelay\x1b[0m, \x1b[33muninstall\x1b[0m, \x1b[33mchat\x1b[0m, \x1b[33mremember\x1b[0m, \x1b[33mrecall\x1b[0m, \x1b[33mresearch\x1b[0m, \x1b[33mmap\x1b[0m, \x1b[33mbrain\x1b[0m, \x1b[33mskill\x1b[0m, \x1b[33mcollab\x1b[0m
+  \x1b[1mCore Memory Operations:\x1b[0m
+    \x1b[33mremember\x1b[0m, \x1b[33mrecall\x1b[0m, \x1b[33mforget\x1b[0m, \x1b[33mbrain\x1b[0m, \x1b[33mmap\x1b[0m
+
+  \x1b[1mCompilation & System Rules:\x1b[0m
+    \x1b[33mcompile\x1b[0m, \x1b[33mrebuild\x1b[0m, \x1b[33mconnect\x1b[0m, \x1b[33mskill\x1b[0m, \x1b[33mimport-rules\x1b[0m
+
+  \x1b[1mAgentic & Chat Operations:\x1b[0m
+    \x1b[33mchat\x1b[0m, \x1b[33mcollab\x1b[0m, \x1b[33mcommand\x1b[0m, \x1b[33mresearch\x1b[0m, \x1b[33mdream\x1b[0m, \x1b[33mtask\x1b[0m, \x1b[33mshare\x1b[0m, \x1b[33mfriction\x1b[0m
+
+  \x1b[1mData Ingestion & Portability:\x1b[0m
+    \x1b[33mingest\x1b[0m, \x1b[33mexport\x1b[0m, \x1b[33mbackup\x1b[0m, \x1b[33mrestore\x1b[0m, \x1b[33msnapshot\x1b[0m, \x1b[33msync\x1b[0m, \x1b[33mmigrate\x1b[0m
+
+  \x1b[1mSystem Lifecycle & Services:\x1b[0m
+    \x1b[33minit\x1b[0m, \x1b[33msetup\x1b[0m, \x1b[33mstart\x1b[0m, \x1b[33mdaemon\x1b[0m, \x1b[33mstatus\x1b[0m, \x1b[33mrelay\x1b[0m, \x1b[33mdeploy\x1b[0m, \x1b[33mdeploy-ui\x1b[0m, \x1b[33muninstall\x1b[0m, \x1b[33mupgrade\x1b[0m
+
+  \x1b[1mSecurity & Maintenance:\x1b[0m
+    \x1b[33mdoctor\x1b[0m, \x1b[33mlint\x1b[0m, \x1b[33mconfig\x1b[0m, \x1b[33mkey\x1b[0m, \x1b[33msecret\x1b[0m, \x1b[33mgenerate-pat\x1b[0m, \x1b[33mhash-password\x1b[0m, \x1b[33mreset-password\x1b[0m
 `);
 }

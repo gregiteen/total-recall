@@ -681,6 +681,8 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
             display: 'flex',
             alignItems: 'center',
             gap: 12,
+            position: 'relative',
+            zIndex: 40,
           }}>
             <span style={{ fontSize: 22, flexShrink: 0 }}>🚀</span>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -722,7 +724,9 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
             display: 'flex',
             alignItems: 'center',
             gap: 12,
-            animation: 'fadeIn 0.3s ease'
+            animation: 'fadeIn 0.3s ease',
+            position: 'relative',
+            zIndex: 40,
           }}>
             <span style={{ fontSize: 22, flexShrink: 0 }}>🧩</span>
             <div style={{ flex: 1, minWidth: 0 }}>

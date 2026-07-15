@@ -439,6 +439,12 @@ const SKILL_SCAN_REL = [
   path.join('.agent', 'skills'),
   path.join('.agents', 'skills'),
   path.join('.claude', 'skills'),
+  path.join('.grok', 'skills'),
+  path.join('.windsurf', 'skills'),
+  path.join('.github', 'skills'),
+  path.join('.cursor', 'skills'),
+  path.join('.codex', 'skills'),
+  path.join('.gemini', 'skills'),
 ];
 
 /**

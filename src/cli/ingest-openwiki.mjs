@@ -54,6 +54,8 @@ export async function runOpenWikiIngest(args) {
   function scanDir(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.agent') continue;
+      
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         scanDir(fullPath);
@@ -79,7 +81,9 @@ export async function runOpenWikiIngest(args) {
         title = titleMatch[1].trim();
       }
 
-      const slug = 'openwiki-' + path.basename(file, '.md').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const relPath = path.relative(openwikiPath, file);
+      const slugBase = relPath.replace(/\.md$/, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const slug = 'openwiki-' + slugBase.toLowerCase();
 
       if (dryRun) {
         console.log(`  🟢 [DRY RUN] Would import: ${slug} ("${title}")`);

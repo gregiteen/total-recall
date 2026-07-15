@@ -90,6 +90,7 @@ export function buildMemoryLayerIndex(nodes) {
     confidence: node.confidence,
     importance: node.importance,
     title: node.title,
+    tags: Array.isArray(node.tags) ? node.tags : [],
     updated: node.updated || null,
     routes_to_skills: Array.isArray(node.routes_to_skills) ? node.routes_to_skills : [],
   }));

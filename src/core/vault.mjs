@@ -51,8 +51,10 @@ export function walkMd(dir) {
   for (const entry of list) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results = results.concat(walkMd(fullPath));
-    } else if (entry.name.endsWith('.md')) {
+      if (!entry.name.startsWith('.') && entry.name !== 'proposals') {
+        results = results.concat(walkMd(fullPath));
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
       results.push(fullPath);
     }
   }

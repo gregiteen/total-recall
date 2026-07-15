@@ -55,6 +55,7 @@ export const MemoryNodeSchema = z.object({
   }).optional(),
   schema_version: z.literal(2),
   x_memory_layer: z.enum(MEMORY_LAYERS).optional(),
+  project: z.string().optional(),
   x_temporal_context: z.preprocess((val) => (val instanceof Date ? val.toISOString() : val), z.string()).optional(),
   x_citations: z.array(
     z.object({
@@ -149,6 +150,7 @@ export const TaskSchema = z.object({
   workflow_id: z.string().optional(),
   progress: z.number().optional(),
   x_memory_layer: z.enum(MEMORY_LAYERS).optional(),
+  project: z.string().optional(),
 });
 
 export const SkillSchema = z.object({

@@ -12,7 +12,9 @@ import {
   listResearch,
   createResearch,
   toggleSkillRepo,
-  auditSkill
+  previewSkillRepo,
+  auditSkill,
+  generateExpert
 } from '../api';
 import type { ResearchItem } from '../types';
 
@@ -170,6 +172,11 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Preview Modal state
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<{ skillName: string, targetRepo: string, original: string, preview: string, signals: string[] } | null>(null);
+
   // New Skill scaffolds state
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newSkillName, setNewSkillName] = useState('');
@@ -263,7 +270,12 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
       }
 
       if (activeBrainId) {
-        groups = groups.filter(g => g.repo === 'Global' || g.repo === activeBrainId);
+        groups = groups.filter(
+          g => g.repo === 'Global' || 
+               g.repo === activeBrainId || 
+               activeBrainId.endsWith(`/${g.repo}`) || 
+               g.repo.endsWith(`/${activeBrainId}`)
+        );
         list = groups.flatMap(g => g.skills || []);
       }
 
@@ -574,6 +586,24 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
     });
   };
 
+  const handleGenerateExpert = async (e: React.MouseEvent, repoPath: string) => {
+    e.stopPropagation();
+    try {
+      setLoading(true);
+      const res = await generateExpert(repoPath, true);
+      if (res.success) {
+        setSuccess(`Generated repo-expert. Modules: ${res.stats?.coreModules || 0}`);
+      } else {
+        setError(res.message || 'Failed to generate repo-expert');
+      }
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      setError(err.message || 'Error generating repo-expert');
+    } finally {
+      void fetchSkillsList(selectedSkill?.name, selectedSkill?.repo);
+    }
+  };
+
   const renderRepoSkillList = (prefix: string) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, overflowY: 'auto' }}>
       {repoGroups.length === 0 && (
@@ -606,18 +636,37 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
               <span style={{ fontSize: 12, fontWeight: 700 }}>
                 {open ? '▾' : '▸'} {group.repo}
               </span>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  borderRadius: 99,
-                  background: count ? 'rgba(59,130,246,0.15)' : 'rgba(148,163,184,0.1)',
-                  color: count ? '#93c5fd' : 'var(--text-tertiary)',
-                }}
-              >
-                {count}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: 99,
+                    background: count ? 'rgba(59,130,246,0.15)' : 'rgba(148,163,184,0.1)',
+                    color: count ? '#93c5fd' : 'var(--text-tertiary)',
+                  }}
+                >
+                  {count}
+                </span>
+                {group.path && (
+                  <button
+                    onClick={(e) => void handleGenerateExpert(e, group.path!)}
+                    title="Auto-generate repo-expert for this repository"
+                    style={{
+                      background: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-secondary)',
+                      borderRadius: '4px',
+                      padding: '2px 6px',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Generate Expert
+                  </button>
+                )}
+              </div>
             </button>
             {open && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 4px 10px' }}>
@@ -660,11 +709,35 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={async (e) => {
                                   e.stopPropagation();
-                                  try {
-                                    await toggleSkillRepo(skill.name, activeBrainId, e.target.checked);
-                                    void fetchSkillsList();
-                                  } catch (err) {
-                                    setError((err as Error).message);
+                                  const checked = e.target.checked;
+                                  if (checked) {
+                                    // Open preview modal instead of instantly deploying
+                                    setPreviewModalOpen(true);
+                                    setPreviewLoading(true);
+                                    setPreviewData(null);
+                                    try {
+                                      const res = await previewSkillRepo(skill.name, activeBrainId);
+                                      setPreviewData({
+                                        skillName: skill.name,
+                                        targetRepo: activeBrainId,
+                                        original: res.original,
+                                        preview: res.preview,
+                                        signals: res.signals
+                                      });
+                                    } catch (err) {
+                                      setError((err as Error).message);
+                                      setPreviewModalOpen(false);
+                                    } finally {
+                                      setPreviewLoading(false);
+                                    }
+                                  } else {
+                                    // Uncheck (disable) happens immediately
+                                    try {
+                                      await toggleSkillRepo(skill.name, activeBrainId, false);
+                                      void fetchSkillsList();
+                                    } catch (err) {
+                                      setError((err as Error).message);
+                                    }
                                   }
                                 }}
                                 style={{ cursor: 'pointer' }}
@@ -731,6 +804,73 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
 
   const renderLifecycleTab = () => (
     <div style={{ display: 'flex', flex: 1, gap: 24, minHeight: 0, overflow: 'hidden', paddingBottom: 16 }}>
+      
+      {/* Preview Modal Overlay */}
+      {previewModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', 
+          justifyContent: 'center', alignItems: 'center'
+        }}>
+          <div className="card" style={{
+            background: 'var(--bg-primary)', border: '1px solid var(--border)',
+            borderRadius: 12, padding: 24, width: '80%', maxWidth: 900,
+            maxHeight: '90vh', display: 'flex', flexDirection: 'column'
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: 12 }}>Skill Adaptation Preview</h2>
+            {previewLoading ? (
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <p>Generating adaptive preview for {activeBrainId}...</p>
+              </div>
+            ) : previewData ? (
+              <>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 13 }}>
+                  This skill will be explicitly rewritten and bound to this project repository.<br/>
+                  Detected adaptation signals: <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{previewData.signals.join(' | ') || 'None (Template copied as-is)'}</span>
+                </p>
+                <div style={{ display: 'flex', flex: 1, gap: 16, overflow: 'hidden', minHeight: 0 }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <h3 style={{ fontSize: 13, marginBottom: 8 }}>Global Template</h3>
+                    <textarea readOnly value={previewData.original} style={{
+                      flex: 1, width: '100%', background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border)', color: 'var(--text-tertiary)',
+                      padding: 12, borderRadius: 8, fontFamily: 'monospace', fontSize: 12,
+                      resize: 'none', whiteSpace: 'pre-wrap'
+                    }} />
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <h3 style={{ fontSize: 13, marginBottom: 8, color: 'var(--accent)' }}>Adapted Target (SKILL.md)</h3>
+                    <textarea readOnly value={previewData.preview} style={{
+                      flex: 1, width: '100%', background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border)', color: 'var(--text-primary)',
+                      padding: 12, borderRadius: 8, fontFamily: 'monospace', fontSize: 12,
+                      resize: 'none', whiteSpace: 'pre-wrap'
+                    }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                  <button className="btn" onClick={() => setPreviewModalOpen(false)}>Cancel</button>
+                  <button className="btn btn-primary" onClick={async () => {
+                    setPreviewLoading(true);
+                    try {
+                      await toggleSkillRepo(previewData.skillName, previewData.targetRepo, true);
+                      setPreviewModalOpen(false);
+                      void fetchSkillsList();
+                    } catch (err) {
+                      setError((err as Error).message);
+                    } finally {
+                      setPreviewLoading(false);
+                    }
+                  }}>Deploy to Project</button>
+                </div>
+              </>
+            ) : (
+              <p>Failed to load preview data.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Left: Skill selector by repo */}
       <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 16, flexShrink: 0, overflowY: 'auto' }}>
         <div className="card" style={{ padding: 16, background: 'rgba(18, 18, 26, 0.5)', border: '1px solid var(--border)', flex: 1, display: 'flex', flexDirection: 'column' }}>

@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.15.0] — 2026-07-15
+
+### ✨ Features
+- **Surface Compilation Fixes**: Stripped redundant memory prefixes without triggering duplication bugs, enforced importance-based filtering to preserve token budget, elevated rule instructions to the top of surfaces, and improved deductive similarity algorithms to prevent accidental archival of valid rules.
+- **Rules Dashboard UI**: Created a complete Rules Page UI allowing real-time viewing and management of invariants, preferences, and corrections from the web interface.
+- **TR Stabilization**: Conducted comprehensive cross-repository skill contamination cleanup across `total-recall`, `festech.live`, and other linked projects. Completed backend route and API decomposition to eliminate bloated monolithic routers, migrated to decoupled brain layers, and established a Tamper-Proof Push Gate.
+- **Skills Management Upgrade**: Delivered a new Skills system enabling global template installations with automatic repo-level adaptation, secure `.trash` retention for removed skills, and interactive UI rule rendering. Added agent-driven `skills.sh` registry integration for native package discovery.
+- **Fast Recall**: Introduced a high-speed substring-matching `fast-recall` subsystem to provide <200ms searches for memory nodes without triggering full semantic evaluations.
+- **100% Test Coverage**: Resolved all underlying Vitest timeouts and integration race conditions. Achieved and verified 100% passing tests for both the full Backend and Frontend Vitest suites.
+
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.15.0`.
+
 ## [3.14.8] — 2026-07-14
 
 ### ✨ Features

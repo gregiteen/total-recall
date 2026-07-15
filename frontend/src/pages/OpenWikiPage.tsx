@@ -95,7 +95,29 @@ export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrain
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchNodes(activeBrainId || 'global');
+    const initFetch = async () => {
+      // Optimistically trigger background ingest to keep nodes fresh
+      try {
+        const code = `
+const { execSync } = require('child_process');
+try {
+  execSync('npx total-recall ingest openwiki .', { encoding: 'utf8', timeout: 15000 });
+} catch (e) {
+  // Silent fail in background
+}`;
+        // Fire and forget background ingestion
+        void runSandbox(code, 15000).then(() => {
+          // Re-fetch nodes after background ingest completes
+          void fetchNodes(activeBrainId || 'global');
+        });
+      } catch (e) {
+        // ignore
+      }
+      
+      await fetchNodes(activeBrainId || 'global');
+    };
+
+    void initFetch();
     void fetchHealthData();
     const interval = setInterval(fetchHealthData, 15000);
     return () => clearInterval(interval);

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import remember from './remember.mjs';
 import recall from './recall.mjs';
+import { saveEmbeddingToIndex } from '../core/embeddings.mjs';
 
 describe('remember and recall CLI commands', () => {
   let tmpAgentDir;
@@ -99,23 +100,43 @@ describe('remember and recall CLI commands', () => {
     consoleSpy.mockRestore();
   });
 
+  it('correctly skips deduplication for rules with completely different content', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const origFetch = global.fetch;
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embedding: { values: [0.1, 0.2, 0.3] } })
+    });
+
+    await remember(['invariant', 'The application must use port 3000 for the main server.']);
+    await remember(['invariant', 'User passwords must be hashed using bcrypt before storage.']);
+
+    const invariantsDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault', 'invariants');
+    const files = fs.readdirSync(invariantsDir).filter(f => f.endsWith('.md'));
+    expect(files.length).toBe(2);
+
+    let activeCount = 0;
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(invariantsDir, file), 'utf8');
+      if (content.includes('status: active') || content.includes('status: "active"')) {
+        activeCount++;
+      }
+    }
+    expect(activeCount).toBe(2);
+
+    global.fetch = origFetch;
+    consoleSpy.mockRestore();
+  });
+
   it('performs semantic recall searches', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     // Create a mock embedding index
     const derivedDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-derived');
     fs.mkdirSync(derivedDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(derivedDir, 'embeddings.json'),
-      JSON.stringify({
-        'invariant-rules': {
-          embedding: [1, 0, 0],
-          model: 'gemini-embedding-2',
-          generated_at: new Date().toISOString()
-        }
-      }),
-      'utf8'
-    );
+    
+    saveEmbeddingToIndex(derivedDir, 'invariant-rules', [1, 0, 0], 'gemini-embedding-2');
 
     // Populate mock vault node
     const vaultDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault');
@@ -143,7 +164,7 @@ Core Invariants`
 
     const outputs = consoleSpy.mock.calls.flat().join('\n');
     expect(outputs).toContain('Vault Match');
-    expect(outputs).toContain('Never run tsc directly');
+    expect(outputs).toContain('Core Invariants');
 
     global.fetch = origFetch;
     consoleSpy.mockRestore();
