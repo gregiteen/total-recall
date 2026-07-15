@@ -254,7 +254,7 @@ export default async function remember(args) {
     slug: finalSlug,
     category,
     title: finalTitle,
-    project: (layer === 'project' && project) ? require('path').basename(project.projectRoot) : undefined,
+    project: (layer === 'project' && project) ? path.basename(project.projectRoot) : undefined,
     status,
     confidence,
     importance,
