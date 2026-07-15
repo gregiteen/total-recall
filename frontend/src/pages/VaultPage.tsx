@@ -48,7 +48,7 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       await createView(name, { q, type, portability, status })
       loadData()
     } catch (err: unknown) {
-      alert("Failed to save view: " + (err instanceof Error ? err.message : "Unknown error"))
+      setError("Failed to save view: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -69,7 +69,7 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       await deleteView(id)
       loadData()
     } catch (err: unknown) {
-      alert("Delete failed: " + (err instanceof Error ? err.message : "Unknown error"))
+      setError("Delete failed: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -81,7 +81,7 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       setIsNew(false)
       setNewPath(path)
     } catch (err: unknown) {
-      alert("Failed to load document: " + (err instanceof Error ? err.message : "Unknown error"))
+      setError("Failed to load document: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
@@ -91,12 +91,12 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       await deleteDoc(path, activeBrainId)
       loadData()
     } catch (err: unknown) {
-      alert("Delete failed: " + (err instanceof Error ? err.message : "Unknown error"))
+      setError("Delete failed: " + (err instanceof Error ? err.message : "Unknown error"))
     }
   }
 
   const handleSave = async () => {
-    if (!newPath) return alert("Path is required")
+    if (!newPath) { setError("Path is required"); return }
     setSaving(true)
     try {
       if (isNew) {
@@ -107,7 +107,7 @@ export default function VaultPage({ activeBrainId }: { activeBrainId?: string })
       setEditingPath(null)
       loadData()
     } catch (err: unknown) {
-      alert("Save failed: " + (err instanceof Error ? err.message : "Unknown error"))
+      setError("Save failed: " + (err instanceof Error ? err.message : "Unknown error"))
     } finally {
       setSaving(false)
     }

@@ -21,7 +21,7 @@ import { logger } from './logger.mjs';
  * This prevents research hallucinations from polluting working memory.
  */
 
-const VALIDATION_SYSTEM = `You are a Fact Validation Gate for a sovereign AI memory system called Total Recall.
+const VALIDATION_SYSTEM = `You are a Fact Validation Gate for an AI memory system called Total Recall.
 
 You will be given a draft memory node and a list of related active nodes. Determine if the draft should be promoted to active memory.
 

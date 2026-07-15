@@ -264,6 +264,10 @@
     "path": "/api/research/:id"
   },
   {
+    "method": "GET",
+    "path": "/api/rules"
+  },
+  {
     "method": "POST",
     "path": "/api/sandbox"
   },
@@ -397,7 +401,15 @@
   },
   {
     "method": "POST",
+    "path": "/api/skills/generate-expert"
+  },
+  {
+    "method": "POST",
     "path": "/api/skills/install"
+  },
+  {
+    "method": "POST",
+    "path": "/api/skills/preview"
   },
   {
     "method": "GET",

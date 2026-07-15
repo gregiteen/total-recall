@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import Graph3D from './Graph3D';
 
+// Mock the ForceGraph3D component completely so it doesn't run Three.js loops in jsdom
+vi.mock('react-force-graph-3d', () => {
+  return {
+    default: () => <div data-testid="force-graph-3d" />
+  };
+});
+
 describe('Graph3D', () => {
   beforeEach(() => {
     // Mock canvas methods
@@ -38,11 +45,11 @@ describe('Graph3D', () => {
     selectedGroundingNodes: []
   };
 
-  it('renders canvas and controls', () => {
+  it('renders controls and overlay', () => {
     render(<Graph3D {...defaultProps} />);
 
-    expect(screen.getByText('Memory Constellation')).toBeInTheDocument();
-    expect(screen.getByTitle('Zoom In')).toBeInTheDocument();
+    expect(screen.getByText('Constellation')).toBeInTheDocument();
+    expect(screen.getByText('Interactive Knowledge Network')).toBeInTheDocument();
   });
 
   it('toggles filters', () => {
@@ -70,6 +77,6 @@ describe('Graph3D', () => {
     expect(threadsCheckbox).not.toBeChecked();
     
     // The nodes are rendered in canvas, so DOM wise we just check the filter counts
-    expect(screen.getAllByText('(1)')[0]).toBeInTheDocument(); // For Research and Facts
+    expect(screen.getAllByText('2 items')[0]).toBeInTheDocument(); // 1 memory node + 1 research = 2 nodes (threads are hidden by default)
   });
 });

@@ -41,7 +41,7 @@ describe('IntegrationsPage', () => {
       render(<IntegrationsPage />);
     });
 
-    const connectButtons = await screen.findAllByText('Connect', undefined, { timeout: 4000 });
+    const connectButtons = await screen.findAllByText(/Enable Injection/i, undefined, { timeout: 4000 });
     expect(connectButtons.length).toBeGreaterThan(0);
 
     await act(async () => {
@@ -49,6 +49,6 @@ describe('IntegrationsPage', () => {
     });
 
     expect(api.connectClient).toHaveBeenCalled();
-    expect(await screen.findByText(/Successfully connected/i, undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Successfully enabled/i, undefined, { timeout: 4000 })).toBeInTheDocument();
   }, 10000);
 });

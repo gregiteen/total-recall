@@ -42,7 +42,8 @@ export async function runAgentDiagnostics(): Promise<{ success: boolean; output:
 
 export async function fetchBrains(): Promise<Record<string, unknown>[]> {
   const res = await apiFetch(`${API_BASE}/api/brains`)
-  return res.json()
+  const data = await res.json()
+  return data.brains || []
 }
 
 // ─── Tasks ────────────────────────────────────────────────────────────────────

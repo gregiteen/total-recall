@@ -1,6 +1,6 @@
-# Total Recall — Sovereign OS Installation & Setup
+# Total Recall — AI OS Installation & Setup
 
-This guide details the complete installation pipeline, environment initialization, and selectable deployment strategies for the **Total Recall Sovereign AI OS**.
+This guide details the complete installation pipeline, environment initialization, and selectable deployment strategies for the **Total Recall Local AI OS**.
 
 ---
 
@@ -68,7 +68,7 @@ sequenceDiagram
 
 ## 🧠 4. Dual-Layer Brain Provisioning
 
-During the initialization phase, the system configures the brain to operate as a **Dual-Layer Sovereign Memory System**:
+During the initialization phase, the system configures the brain to operate as a **Dual-Layer Memory System**:
 
 ### Global Layer (`~/.agent/`)
 - Contains global preferences, master API keys, global logs, and the identity layer (`SOUL.md`, `USER.md`).

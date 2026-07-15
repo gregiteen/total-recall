@@ -105,10 +105,11 @@ export default async function remember(args) {
 
   // Resolve layer: explicit flag > category heuristic > auto-detect
   let layer = explicitLayer;
+  const project = getBothBrains().project;
   if (layer === 'auto') {
     layer = defaultLayerForCategory(category);
     // Fall back to global if no project brain exists
-    const project = getBothBrains().project;
+    // const project moved up
     if (layer === 'project' && !project) {
       layer = 'global';
     }
@@ -128,6 +129,7 @@ export default async function remember(args) {
   let object = 'brain';
   let related = [];
   let expiresAt = null;
+  let noDedup = false;
 
   for (let i = 2; i < layerArgs.length; i++) {
     const arg = layerArgs[i];
@@ -205,6 +207,8 @@ export default async function remember(args) {
         }
         i++;
       }
+    } else if (arg === '--no-dedup') {
+      noDedup = true;
     }
   }
 
@@ -250,6 +254,7 @@ export default async function remember(args) {
     slug: finalSlug,
     category,
     title: finalTitle,
+    project: (layer === 'project' && project) ? require('path').basename(project.projectRoot) : undefined,
     status,
     confidence,
     importance,
@@ -290,46 +295,51 @@ export default async function remember(args) {
   }
 
   // --- START AUTOMATIC DEDUPLICATION ---
-  try {
-    const catDir = path.join(vaultDir, category);
-    if (fs.existsSync(catDir)) {
-      const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md'));
-      for (const f of files) {
-        const p = path.join(catDir, f);
-        const raw = fs.readFileSync(p, 'utf8');
-        const { data, content: oldContent } = matter(raw);
-        
-        if (data.status === 'active' && data.slug !== finalSlug) {
-          const oldTitle = (data.title || '').trim().toLowerCase();
-          const newTitle = finalTitle.trim().toLowerCase();
+  if (!noDedup) {
+    try {
+      const catDir = path.join(vaultDir, category);
+      if (fs.existsSync(catDir)) {
+        const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md'));
+        for (const f of files) {
+          const p = path.join(catDir, f);
+          const raw = fs.readFileSync(p, 'utf8');
+          const { data, content: oldContent } = matter(raw);
           
-          const words1 = new Set(bodyContent.toLowerCase().match(/\\b\\w+\\b/g) || []);
-          const words2 = new Set((oldContent || '').toLowerCase().match(/\\b\\w+\\b/g) || []);
-          const intersection = new Set([...words1].filter(x => words2.has(x)));
-          const union = new Set([...words1, ...words2]);
-          const similarity = union.size === 0 ? 1 : intersection.size / union.size;
-          
-          if (oldTitle === newTitle || similarity > 0.8) {
-            console.log(`  ♻️  Archiving duplicate node: ${data.slug} (similarity: ${Math.round(similarity * 100)}%)`);
-            data.status = 'archived';
-            data.x_archived_reason = 'superseded_by_duplicate';
-            data.superseded_by = finalSlug;
-            data.updated = now;
-            node.supersedes = [...(node.supersedes || []), data.slug];
+          if (data.status === 'active' && data.slug !== finalSlug) {
+            const oldTitle = (data.title || '').trim().toLowerCase();
+            const newTitle = finalTitle.trim().toLowerCase();
             
-            const lines = ['---'];
-            for (const key of Object.keys(data)) {
-              lines.push(`${key}: ${JSON.stringify(data[key])}`);
+            const words1 = new Set(bodyContent.toLowerCase().match(/\\b\\w+\\b/g) || []);
+            const words2 = new Set((oldContent || '').toLowerCase().match(/\\b\\w+\\b/g) || []);
+            const intersection = new Set([...words1].filter(x => words2.has(x)));
+            const union = new Set([...words1, ...words2]);
+            const similarity = union.size === 0 ? 0 : intersection.size / union.size;
+            
+            if (oldTitle === newTitle || similarity > 0.9) {
+              console.log(`  ⚠️  AUTO-ARCHIVING duplicate node: ${data.slug}`);
+              console.log(`      Similarity: ${Math.round(similarity * 100)}%`);
+              console.log(`      OLD rule: "${(oldContent || '').trim().substring(0, 200)}"`);
+              console.log(`      NEW rule: "${bodyContent.substring(0, 200)}"`);
+              data.status = 'archived';
+              data.x_archived_reason = 'superseded_by_duplicate';
+              data.superseded_by = finalSlug;
+              data.updated = now;
+              node.supersedes = [...(node.supersedes || []), data.slug];
+              
+              const lines = ['---'];
+              for (const key of Object.keys(data)) {
+                lines.push(`${key}: ${JSON.stringify(data[key])}`);
+              }
+              lines.push('---');
+              lines.push(oldContent);
+              fs.writeFileSync(p, lines.join('\n'));
             }
-            lines.push('---');
-            lines.push(oldContent);
-            fs.writeFileSync(p, lines.join('\n'));
           }
         }
       }
+    } catch (err) {
+      console.warn(`  ⚠️  Deduplication check failed: ${err.message}`);
     }
-  } catch (err) {
-    console.warn(`  ⚠️  Deduplication check failed: ${err.message}`);
   }
   // --- END AUTOMATIC DEDUPLICATION ---
 

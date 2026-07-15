@@ -2,7 +2,7 @@
 
 - **Plan**: How-To
 - **Last Updated**: May 25, 2026
-- **Summary**: Step-by-step guide to deploying a Total Recall Sovereign Brain on a lightweight cloud VM.
+- **Summary**: Step-by-step guide to deploying a Total Recall AI Brain on a lightweight cloud VM.
 
 ---
 
@@ -101,7 +101,7 @@ npx total-recall generate-pat
 # → prints: tr_xxxxxxxxxxxx
 ```
 
-Back on your **local workstation**, configure your IDE agents and Relays to sync with your remote sovereign brain:
+Back on your **local workstation**, configure your IDE agents and Relays to sync with your remote AI brain:
 
 ```bash
 # Configure Claude Code CLI

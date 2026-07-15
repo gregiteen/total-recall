@@ -108,6 +108,7 @@ const PASSTHROUGH_FIELDS = [
   'supersedes',
   'superseded_by',
   'contradicts',
+  'project',
 ];
 
 router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
@@ -263,6 +264,11 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), async (req
 
     for (const key of PASSTHROUGH_FIELDS) {
       if (req.body[key] !== undefined) node[key] = req.body[key];
+    }
+    
+    const rawBrainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
+    if (rawBrainId && rawBrainId.startsWith('project:')) {
+      node.project = rawBrainId.slice('project:'.length);
     }
 
     const vaultResult = await writeNodeValidatedAsync(node, vaultDir);

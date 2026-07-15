@@ -13,8 +13,11 @@ describe('doctor command', () => {
   let logSpy, errorSpy;
   let totalMemSpy, cpusSpy;
   let execSyncSpy, execFileSyncSpy;
+  let origEnv;
 
   beforeEach(() => {
+    origEnv = { ...process.env };
+    process.env.GOOGLE_API_KEY = 'mock-key';
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     totalMemSpy = vi.spyOn(os, 'totalmem').mockReturnValue(16 * 1024 * 1024 * 1024); // 16GB default
@@ -34,6 +37,7 @@ describe('doctor command', () => {
   });
 
   afterEach(() => {
+    process.env = origEnv;
     vi.restoreAllMocks();
   });
 

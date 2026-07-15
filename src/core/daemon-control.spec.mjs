@@ -27,14 +27,18 @@ vi.mock('node:fs', () => ({
   renameSync: vi.fn()
 }));
 
-vi.mock('node:child_process', () => ({
-  default: {
-    spawn: vi.fn(),
-    spawnSync: vi.fn()
-  },
-  spawn: vi.fn(),
-  spawnSync: vi.fn()
-}));
+vi.mock('node:child_process', () => {
+  const spawnMock = vi.fn();
+  const spawnSyncMock = vi.fn();
+  return {
+    default: {
+      spawn: spawnMock,
+      spawnSync: spawnSyncMock
+    },
+    spawn: spawnMock,
+    spawnSync: spawnSyncMock
+  };
+});
 
 // Constants derived from mocked config
 const PID_FILE = '/mock/brain/logs/daemon.pid';

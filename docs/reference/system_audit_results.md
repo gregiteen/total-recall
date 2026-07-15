@@ -1,4 +1,4 @@
-# Total Recall — Sovereign OS Master System Audit Report
+# Total Recall — AI OS Master System Audit Report
 
 - **Document Level**: Architecture & System Integrity Reference
 - **Status**: Completed System-Wide Audit
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Total Recall is engineered as a highly lightweight, **sovereign developer memory OS** prioritizing a database-free, markdown-native filesystem architecture. In keeping with this thesis, all observations, memory nodes, settings, and skills are persisted directly as human-readable Markdown files. 
+Total Recall is engineered as a highly lightweight, **local developer memory OS** prioritizing a database-free, markdown-native filesystem architecture. In keeping with this thesis, all observations, memory nodes, settings, and skills are persisted directly as human-readable Markdown files. 
 
 This audit is a system-wide security, platform-compatibility, API-integrity, and test-suite inspection. We have evaluated the active codebase against structural documentation and found **critical containment gaps** in sandbox isolation, **major cross-platform blockers** in the session shipping relay, and **endpoint redundancies/shadowing** across Express routers. 
 
@@ -208,7 +208,7 @@ gantt
 2. **Replace Recursive Watch**: In Linux environments, fall back to recursive directory polling or introduce a cross-platform filesystem utility like `chokidar` that handles system-level recursive watcher translation natively.
 
 ### Stage 3: Express Router Consolidation
-1. **Single Router Topology**: Merge the active endpoints in `api.mjs` into `rest.mjs`, making `rest.mjs` the sole REST routing engine for the Sovereign OS server.
+1. **Single Router Topology**: Merge the active endpoints in `api.mjs` into `rest.mjs`, making `rest.mjs` the sole REST routing engine for the AI OS server.
 2. **Purge Redundancies**: Delete the duplicated endpoints, validation blocks, and helper functions in `api.mjs`. Rename `rest.mjs` to a unified `router.mjs` to cleanly reflect its single-component authority.
 
 ### Stage 4: Test Suite Corrections

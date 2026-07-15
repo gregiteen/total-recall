@@ -27,7 +27,7 @@ const MAX_ENTRIES_PER_SESSION = 100;
 
 // ─── Prompts ────────────────────────────────────────────────────────────────────
 
-const POST_MORTEM_SYSTEM = `You are a Session Post-Mortem Analyst for a sovereign AI memory system called Total Recall.
+const POST_MORTEM_SYSTEM = `You are a Session Post-Mortem Analyst for an AI memory system called Total Recall.
 
 Your job is to read a conversation transcript between a user and an AI agent, then extract structured insights.
 
@@ -289,7 +289,7 @@ function writeSkillGapTask(queueDir, { topic, description, sourceSession }) {
 
 // ─── Rule Compliance Auditor ────────────────────────────────────────────────────
 
-const COMPLIANCE_SYSTEM = `You are a Rule Compliance Auditor for a sovereign AI memory system.
+const COMPLIANCE_SYSTEM = `You are a Rule Compliance Auditor for an AI memory system.
 
 Given a list of rules and a conversation transcript, identify any rules the agent violated.
 

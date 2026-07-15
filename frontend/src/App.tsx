@@ -12,12 +12,14 @@ import ApiKeysPage from './pages/ApiKeysPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import BrainSelector from './components/BrainSelector'
 import SkillsPage from './pages/SkillsPage'
+import RulesPage from './pages/RulesPage'
 import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
 import OpenWikiPage from './pages/OpenWikiPage'
 import OnboardingPage from './pages/OnboardingPage'
 import { isOnboardingComplete } from './utils/onboarding'
 import BrandMark from './components/brand/BrandMark'
+import ContextualHelp from './components/ContextualHelp'
 
 // ─── Auth state type ──────────────────────────────────────────────────────────
 type AuthState = 'loading' | 'authed' | 'unauthed'
@@ -81,6 +83,13 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
           </svg>
           Vault
+        </NavLink>
+        <NavLink to="/rules" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-rules">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
+            <path d="M14 3v5h5M16 13H8M16 17H8M10 9H8" />
+          </svg>
+          Rules
         </NavLink>
         <NavLink to="/graph" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-graph">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -299,6 +308,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/chat" element={<ChatPage activeBrainId={activeBrainId} />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
+            <Route path="/rules" element={<RulesPage activeBrainId={activeBrainId} />} />
             <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
@@ -411,6 +421,7 @@ function App() {
         <Sidebar onLogout={handleLogout} health={health} activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
         <MainContent activeBrainId={activeBrainId} onBrainChange={setActiveBrainId} />
       </div>
+      <ContextualHelp />
     </BrowserRouter>
   )
 }

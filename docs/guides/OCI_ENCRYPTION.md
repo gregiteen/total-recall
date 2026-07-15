@@ -1,6 +1,6 @@
 # OCI Block Volume Encryption for Total Recall
 
-Total Recall requires a Sovereign Virtual File System (VFS) to function securely. When deploying to Oracle Cloud Infrastructure (OCI) Ampere A1 instances, you must ensure the block volume is fully encrypted at rest using a Customer Managed Key (CMK) via the OCI Vault.
+Total Recall requires a Local Virtual File System (VFS) to function securely. When deploying to Oracle Cloud Infrastructure (OCI) Ampere A1 instances, you must ensure the block volume is fully encrypted at rest using a Customer Managed Key (CMK) via the OCI Vault.
 
 ## Configuration Steps
 

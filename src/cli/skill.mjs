@@ -60,6 +60,8 @@ function printHelp() {
     scan <name>           Security audit on installed skill dir
     list                  List local brain skills with SKILL.md (alias: ls)
     remove <name>         Delete skill from brain skills dir (alias: rm)
+    publish <name>        Publish and share your skill to the skills.sh open registry
+    generate-expert       Auto-generate repo-expert SKILL.md from codebase analysis
 
   Registry / deploy / multi-repo sync (TR_CORE_FOCUS):
     register <path|name>  Add skill to global skills-registry (from path or local name)
@@ -227,9 +229,18 @@ export default async function skillCli(args) {
             source_type: 'registry',
           });
           console.log(`📇 Registered in catalog: ${entry.id} → ${resolveRegistryPath(brainDir)}`);
+          
+          // Trigger universal sync
+          console.log(`🌍 Triggering universal sync for ${entry.id}...`);
+          const syncResult = syncSkillTwoWay(brainDir, entry.id, { prefer: 'registry' });
+          if (syncResult.actions?.length) {
+            console.log(`   ✅ Synced ${entry.id} to ${syncResult.actions.length} locations`);
+          } else {
+            console.log(`   ✅ Universal sync complete (no new copies needed)`);
+          }
         }
       } catch (regErr) {
-        console.warn(`⚠️  Installed but registry update skipped: ${regErr.message}`);
+        console.warn(`⚠️  Installed but registry update/sync skipped: ${regErr.message}`);
       }
     } catch (err) {
       console.error('❌ Loading skill failed:', err.message);
@@ -688,6 +699,37 @@ Provide a high-level explanation of the skill's capabilities and context.
         ? '\n  Dry-run only. Re-run without --dry-run to apply.\n'
         : '\n  ✅ Sync finished. Check: npx total-recall skill status\n',
     );
+  }
+
+  else if (command === 'generate-expert') {
+    const { default: generateExpertCmd } = await import('./repo-expert-generate.mjs');
+    const repo = parseFlagValue(remainingArgs, '--repo') || process.cwd();
+    const expertArgs = [repo];
+    if (remainingArgs.includes('--force')) expertArgs.push('--force');
+    generateExpertCmd(expertArgs);
+  }
+
+  else if (command === 'publish') {
+    const target = remainingArgs[1];
+    if (!target) {
+      console.error('❌ You must specify a skill name to publish.');
+      console.error('Usage: npx total-recall skill publish <skill-name>');
+      process.exit(1);
+    }
+    
+    const targetDir = path.join(skillsDir, target);
+    if (!fs.existsSync(targetDir)) {
+      console.error(`❌ Skill "${target}" not found at ${targetDir}`);
+      process.exit(1);
+    }
+    
+    console.log(`🚀 Preparing to publish "${target}" to the skills.sh open registry...`);
+    console.log(`\nℹ️  The skills.sh registry relies on GitHub repositories.`);
+    console.log(`To complete publication of this skill:`);
+    console.log(`  1. Ensure this skill is tracked in a public GitHub repository.`);
+    console.log(`  2. Submit your skill to the official skills.sh registry.`);
+    console.log(`  3. Users can then install it via: npx total-recall skill install <github-username>/<repo>@${target}`);
+    console.log(`\nFor more details, visit: https://skills.sh/\n`);
   }
 
   else {

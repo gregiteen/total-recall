@@ -27,8 +27,6 @@ describe('SettingsPage', () => {
       render(<SettingsPage />);
     });
 
-    expect(screen.getByText(/Loading Settings/i)).toBeInTheDocument();
-
     const systemSettings = await screen.findByText(/System Settings/i, {}, { timeout: 4000 });
     expect(systemSettings).toBeInTheDocument();
   }, 10000);

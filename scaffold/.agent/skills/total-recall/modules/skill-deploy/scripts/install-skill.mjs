@@ -76,9 +76,18 @@ export function installSkill(source, options = {}) {
     return { success: true, source: normalized, command };
   }
 
+  // 1. Setup Quarantine Environment
+  const quarantineBase = path.join(agentDir, '.quarantine');
+  const quarantineId = `quarantine_${Date.now()}`;
+  const quarantineCwd = path.join(quarantineBase, quarantineId);
+  fs.mkdirSync(quarantineCwd, { recursive: true });
+
+  console.log(`🛡️  Setting up safety gatekeeper in quarantine...`);
   console.log(`📦 Installing skill: ${normalized}`);
+  
+  // 2. Download into quarantine
   const child = spawnSync(command[0], command.slice(1), {
-    cwd,
+    cwd: quarantineCwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -87,22 +96,52 @@ export function installSkill(source, options = {}) {
   if (child.stderr) process.stderr.write(child.stderr);
 
   if (child.error || child.status !== 0) {
+    fs.rmSync(quarantineCwd, { recursive: true, force: true });
     const error = child.error?.message || `skills CLI exited with status ${child.status}`;
     console.error(`❌ Skill installation failed: ${error}`);
     return { success: false, source: normalized, command, error };
   }
 
-  const installedDirs = uniqueExistingDirs(installedSkillCandidates(normalized, { cwd, agentDir }));
+  // 3. Find installed skills inside quarantine
+  const quarantineAgentDir = path.join(quarantineCwd, '.agent');
+  const installedDirs = uniqueExistingDirs(installedSkillCandidates(normalized, { cwd: quarantineCwd, agentDir: quarantineAgentDir }));
+  
+  // 4. Static Analysis / Scan
+  console.log(`🔍 Running static analysis on quarantined files...`);
   const findings = installedDirs.flatMap(dir => scanDirectory(dir));
   const report = formatReport(findings);
   console.log(report.trimEnd());
 
   if (findings.some(f => f.severity === 'CRITICAL')) {
-    const error = 'Installed skill contains critical scanner findings.';
+    const error = 'Installed skill contains critical scanner findings. Quarantine blocked promotion.';
     console.error(`❌ ${error}`);
+    console.log(`🗑️  Cleaning up quarantine directory...`);
+    fs.rmSync(quarantineCwd, { recursive: true, force: true });
     return { success: false, source: normalized, command, findings, error };
   }
 
+  // 5. Promote passed skills to real destination
+  console.log(`✅ Safety scan passed. Promoting to active skills registry...`);
+  const promotedDirs = [];
+  
+  for (const qDir of installedDirs) {
+    const skillName = path.basename(qDir);
+    const destDir = path.join(agentDir, 'skills', skillName);
+    
+    // Move from quarantine to actual agentDir
+    fs.mkdirSync(path.dirname(destDir), { recursive: true });
+    if (fs.existsSync(destDir)) {
+      fs.rmSync(destDir, { recursive: true, force: true });
+    }
+    fs.renameSync(qDir, destDir);
+    promotedDirs.push(destDir);
+  }
+
+  // Clean up empty quarantine
+  fs.rmSync(quarantineCwd, { recursive: true, force: true });
+
+  // 6. Trigger universal recompile
+  console.log(`🔄 Triggering universal surface recompile...`);
   const compile = spawnSync('npx', ['total-recall', 'compile'], {
     cwd,
     encoding: 'utf8',
@@ -110,8 +149,8 @@ export function installSkill(source, options = {}) {
     env: { ...process.env, AGENT_DIR: agentDir },
   });
   if (compile.status !== 0) {
-    console.warn('⚠️  Skill installed, but surface recompilation returned a warning.');
+    console.warn('⚠️  Skill promoted, but surface recompilation returned a warning.');
   }
 
-  return { success: true, source: normalized, command, findings };
+  return { success: true, source: normalized, command, findings, promotedDirs };
 }

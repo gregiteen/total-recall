@@ -290,69 +290,99 @@ app.get('/chat', (req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Total Recall — Chat</title>
 <style>
-  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--blue:#58a6ff;--green:#3fb950;--purple:#bc8cff;--orange:#f0883e;--red:#f85149;}
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;}
-  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
-  header h1{font-size:16px;font-weight:700;letter-spacing:-0.3px;}
-  .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(88,166,255,0.15);color:var(--blue);border:1px solid rgba(88,166,255,0.3);}
-  .mode-bar{display:flex;gap:4px;margin-left:auto;align-items:center;}
-  .mode-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;transition:all 0.15s;}
-  .mode-btn.active{background:var(--blue);border-color:var(--blue);color:#0d1117;font-weight:600;}
-  .search-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;margin-left:12px;border-left:1px solid var(--border);padding-left:12px;}
-  .search-toggle input{width:14px;height:14px;cursor:pointer;accent-color:var(--blue);}
-  .search-toggle.on{color:var(--green);}
-  .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;}
-  .msg{display:flex;gap:12px;max-width:780px;width:100%;margin:0 auto;}
-  .msg.user{flex-direction:row-reverse;}
-  .avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
-  .msg.user .avatar{background:var(--blue);color:#0d1117;}
-  .msg.assistant .avatar{background:var(--purple);color:#0d1117;}
-  .bubble{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:14px;line-height:1.6;max-width:calc(100% - 44px);}
-  .msg.user .bubble{background:rgba(88,166,255,0.1);border-color:rgba(88,166,255,0.2);}
-  .bubble pre{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:6px;padding:10px;overflow-x:auto;margin:8px 0;}
-  .bubble code{font-family:'SF Mono',Menlo,monospace;font-size:12px;}
-  .bubble p{margin-bottom:8px;}
-  .bubble p:last-child{margin-bottom:0;}
-  .typing{display:flex;gap:4px;align-items:center;padding:4px 0;}
-  .typing span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bounce 1.2s infinite;}
-  .typing span:nth-child(2){animation-delay:0.2s;}
-  .typing span:nth-child(3){animation-delay:0.4s;}
-  @keyframes bounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-6px);}}
-  .input-area{border-top:1px solid var(--border);padding:16px 20px;background:var(--surface);flex-shrink:0;}
-  .input-row{max-width:780px;margin:0 auto;display:flex;gap:10px;align-items:flex-end;}
-  textarea{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;resize:none;min-height:44px;max-height:180px;line-height:1.5;font-family:inherit;outline:none;transition:border-color 0.15s;}
-  textarea:focus{border-color:var(--blue);}
-  .send-btn{background:var(--blue);color:#0d1117;border:none;border-radius:10px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;transition:opacity 0.15s;}
-  .send-btn:disabled{opacity:0.4;cursor:not-allowed;}
-  .status-bar{text-align:center;font-size:11px;color:var(--muted);margin-top:8px;}
-  .token-prompt{position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:100;}
-  .token-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:400px;width:90%;}
-  .token-card h2{margin-bottom:8px;}
-  .token-card p{color:var(--muted);font-size:13px;margin-bottom:16px;}
-  .token-card input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-family:monospace;font-size:13px;margin-bottom:12px;outline:none;}
-  .token-card input:focus{border-color:var(--blue);}
-  .token-card button{background:var(--blue);color:#0d1117;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;width:100%;}
-  .system-notice{background:rgba(188,140,255,0.08);border:1px solid rgba(188,140,255,0.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted);max-width:780px;margin:0 auto 4px;display:flex;gap:8px;align-items:flex-start;}
-  .system-notice strong{color:var(--purple);}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  :root {
+    --bg: #09090b;
+    --surface: rgba(24, 24, 27, 0.6);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #fafafa;
+    --muted: #a1a1aa;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.2);
+    --user-msg: rgba(59, 130, 246, 0.1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    background-image: radial-gradient(circle at 50% 0%, rgba(59,130,246,0.1), transparent 50%);
+    color: var(--text);
+    height: 100vh; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    background: rgba(9, 9, 11, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+    z-index: 10;
+  }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.5px; background: linear-gradient(to right, #fff, #93c5fd); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(147,197,253,0.2); }
+  .mode-bar { display: flex; gap: 8px; margin-left: auto; align-items: center; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 12px; border: 1px solid var(--border); }
+  .mode-btn { background: transparent; border: none; color: var(--muted); padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+  .mode-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+  .mode-btn.active { background: var(--text); color: var(--bg); box-shadow: 0 4px 12px rgba(255,255,255,0.1); }
+  .search-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; margin-left: 16px; transition: color 0.2s; }
+  .search-toggle input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  .search-toggle.on { color: #34d399; }
+  .messages { flex: 1; overflow-y: auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
+  .msg { display: flex; gap: 16px; max-width: 840px; width: 100%; margin: 0 auto; animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes slide-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .msg.user { flex-direction: row-reverse; }
+  .avatar { width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .msg.user .avatar { background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; }
+  .msg.assistant .avatar { background: linear-gradient(135deg, #a855f7, #7e22ce); color: white; }
+  .bubble { background: var(--surface); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 16px; padding: 16px 20px; font-size: 15px; line-height: 1.6; max-width: calc(100% - 52px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+  .msg.user .bubble { background: var(--user-msg); border-color: rgba(59,130,246,0.3); border-top-right-radius: 4px; }
+  .msg.assistant .bubble { border-top-left-radius: 4px; }
+  .bubble pre { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 12px 0; }
+  .bubble code { font-family: 'SF Mono', Menlo, monospace; font-size: 13px; }
+  .bubble p { margin-bottom: 12px; }
+  .bubble p:last-child { margin-bottom: 0; }
+  .typing { display: flex; gap: 6px; align-items: center; padding: 8px 4px; }
+  .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--text); animation: bounce 1.4s infinite ease-in-out both; opacity: 0.5; }
+  .typing span:nth-child(1) { animation-delay: -0.32s; }
+  .typing span:nth-child(2) { animation-delay: -0.16s; }
+  @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); opacity: 1; } }
+  .input-area { background: rgba(9, 9, 11, 0.8); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--border); padding: 24px; flex-shrink: 0; }
+  .input-row { max-width: 840px; margin: 0 auto; display: flex; gap: 12px; align-items: flex-end; position: relative; }
+  textarea { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 60px 16px 20px; color: var(--text); font-size: 15px; resize: none; min-height: 56px; max-height: 200px; line-height: 1.5; font-family: inherit; outline: none; transition: all 0.2s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+  textarea:focus { border-color: var(--accent); background: rgba(255,255,255,0.05); box-shadow: 0 0 0 4px var(--accent-glow); }
+  .send-btn { position: absolute; right: 8px; bottom: 8px; background: var(--text); color: var(--bg); border: none; border-radius: 12px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px; transition: all 0.2s; font-weight: 600; }
+  .send-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 4px 12px rgba(255,255,255,0.2); }
+  .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .status-bar { text-align: center; font-size: 12px; color: var(--muted); margin-top: 12px; font-weight: 500; }
+  .token-prompt { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 100; animation: fade-in 0.3s; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .token-card { background: var(--bg); border: 1px solid var(--border); border-radius: 24px; padding: 40px; max-width: 440px; width: 90%; box-shadow: 0 24px 48px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1); text-align: center; }
+  .token-card h2 { margin-bottom: 12px; font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
+  .token-card p { color: var(--muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+  .token-card input { width: 100%; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 14px 16px; color: var(--text); font-family: 'SF Mono', Menlo, monospace; font-size: 14px; margin-bottom: 16px; outline: none; transition: border-color 0.2s; text-align: center; }
+  .token-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+  .token-card button { background: var(--text); color: var(--bg); border: none; border-radius: 12px; padding: 14px 24px; font-weight: 600; font-size: 15px; cursor: pointer; width: 100%; transition: all 0.2s; }
+  .token-card button:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(255,255,255,0.1); }
+  .system-notice { background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.2); border-radius: 12px; padding: 12px 16px; font-size: 13px; color: #e9d5ff; max-width: 840px; margin: 0 auto 12px; display: flex; gap: 12px; align-items: flex-start; line-height: 1.5; backdrop-filter: blur(4px); }
+  .system-notice strong { color: #c084fc; font-weight: 600; }
   #no-token{display:${hasInstructions ? 'none' : 'none'};} /* always hidden initially */
 </style>
 </head>
 <body>
 
 <header>
-  <span>⚡</span>
+  <span style="font-size: 20px;">⚡</span>
   <h1>Total Recall</h1>
   <span class="badge">${nodeCount} memories</span>
   <div class="mode-bar">
-    <button class="mode-btn active" id="mode-knowledge" onclick="setMode('knowledge')">🧠 Knowledge</button>
-    <button class="mode-btn" id="mode-journal" onclick="setMode('journal')">📓 Journal</button>
-    <button class="mode-btn" id="mode-reflect" onclick="setMode('reflect')">🔮 Reflect</button>
-    <label class="search-toggle" id="search-toggle-label" title="Let the AI search the web during this conversation">
-      <input type="checkbox" id="search-toggle" onchange="updateSearchToggle()">
-      🌐 Web search
-    </label>
+    <button class="mode-btn active" id="mode-knowledge" onclick="setMode('knowledge')">Knowledge</button>
+    <button class="mode-btn" id="mode-journal" onclick="setMode('journal')">Journal</button>
+    <button class="mode-btn" id="mode-reflect" onclick="setMode('reflect')">Reflect</button>
   </div>
+  <label class="search-toggle" id="search-toggle-label" title="Let the AI search the web during this conversation">
+    <input type="checkbox" id="search-toggle" onchange="updateSearchToggle()">
+    Web search
+  </label>
 </header>
 
 <div class="messages" id="messages">
@@ -363,23 +393,24 @@ app.get('/chat', (req, res) => {
 
 <div class="input-area">
   <div class="input-row">
-    <textarea id="input" placeholder="Ask anything…" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-    <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send (Enter)">↑</button>
+    <textarea id="input" placeholder="Ask anything..." rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()" title="Send (Enter)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+    </button>
   </div>
   <div class="status-bar" id="status-bar">Connected to brain at ${req.headers.host || 'localhost:3000'}</div>
 </div>
 
 <div class="token-prompt" id="token-prompt" style="display:none">
   <div class="token-card">
-    <h2>🔑 Access Token</h2>
-    <p>Enter your Personal Access Token to start chatting.</p>
-    <p style="font-size:12px;color:#8b949e;margin-top:6px">
-      Don't have one? Run this in your terminal:<br>
-      <code style="display:block;margin-top:6px;padding:6px 10px;background:#010409;border-radius:4px;font-size:11px;color:#58a6ff">npx total-recall generate-pat</code>
-      Then paste the token starting with <code>tr-</code> below.
+    <div style="font-size: 48px; margin-bottom: 16px;">🔐</div>
+    <h2>Access Token Required</h2>
+    <p>Please enter your Personal Access Token to authenticate with your autonomous memory system.</p>
+    <input type="password" id="token-input" placeholder="tr-..." autocomplete="off">
+    <button onclick="saveToken()">Authenticate</button>
+    <p style="font-size:12px;color:var(--muted);margin-top:24px;margin-bottom:0">
+      Run <code style="padding:4px 8px;background:rgba(255,255,255,0.05);border-radius:6px;color:var(--accent)">npx total-recall generate-pat</code> in your terminal.
     </p>
-    <input type="password" id="token-input" placeholder="tr-…" autocomplete="off">
-    <button onclick="saveToken()">Connect →</button>
   </div>
 </div>
 

@@ -134,6 +134,18 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Failed to start vault watcher: ${err.message}` });
   }
 
+  // Start source watcher (auto-regenerates repo-expert on code changes)
+  try {
+    const { detectProjectBrain } = await import('./config.mjs');
+    const project = detectProjectBrain();
+    if (project && project.projectRoot) {
+      const { startSourceWatcher } = await import('./source-watcher.mjs');
+      startSourceWatcher(project.projectRoot, SKILLS_DIR);
+    }
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Failed to start source watcher: ${err.message}` });
+  }
+
   // Initial session ingest
   try {
     const ingestResult = scanAndIngest(SESSIONS_DIR);

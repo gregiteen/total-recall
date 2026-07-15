@@ -2,7 +2,7 @@
 
 > **Time:** ~3 minutes | **Client/Watcher:** `antigravity` / `gemini-cli` | **Surface:** `GEMINI.md` / `AGENTS.md`
 
-This guide explains how to connect the **Antigravity CLI** (`antigravity`) and the standard **Gemini CLI** to the Total Recall Sovereign Brain.
+This guide explains how to connect the **Antigravity CLI** (`antigravity`) and the standard **Gemini CLI** to the Total Recall AI Brain.
 
 ---
 

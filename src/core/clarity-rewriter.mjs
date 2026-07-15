@@ -23,7 +23,7 @@ import { logger } from './logger.mjs';
 
 // ─── Clarity Rewriter ───────────────────────────────────────────────────────────
 
-const CLARITY_SYSTEM = `You are a Memory Quality Inspector for a sovereign AI memory system called Total Recall.
+const CLARITY_SYSTEM = `You are a Memory Quality Inspector for an AI memory system called Total Recall.
 
 You will be given a memory node. Evaluate its quality and suggest improvements.
 
@@ -142,7 +142,7 @@ export async function runClarityReview(slug, { vaultDir, inboxDir, runtimeConfig
 
 // ─── Staleness Verifier ─────────────────────────────────────────────────────────
 
-const STALENESS_SYSTEM = `You are a Knowledge Currency Analyst for a sovereign AI memory system.
+const STALENESS_SYSTEM = `You are a Knowledge Currency Analyst for an AI memory system.
 
 Given a memory node with its age and domain, assess whether the information is still current.
 
@@ -270,7 +270,7 @@ export async function runStalenessCheck(slug, { vaultDir, queueDir, runtimeConfi
 
 // ─── Fact Seeker ─────────────────────────────────────────────────────────────────
 
-const FACT_SEEKER_SYSTEM = `You are a Knowledge Gap Analyst for a sovereign AI memory system called Total Recall.
+const FACT_SEEKER_SYSTEM = `You are a Knowledge Gap Analyst for an AI memory system called Total Recall.
 
 Given a summary of what the vault currently knows, identify knowledge gaps that would make the system more useful.
 
@@ -395,7 +395,7 @@ const HIGH_DRIFT_DOMAINS = [
   'aws', 'gcp', 'azure', 'cloudflare', 'vercel', 'next.js', 'react', 'vite',
 ];
 
-const CUTOFF_AUDIT_SYSTEM = `You are a Knowledge Cutoff Auditor for a sovereign AI memory system.
+const CUTOFF_AUDIT_SYSTEM = `You are a Knowledge Cutoff Auditor for an AI memory system.
 
 Your job is to identify claims in a memory node that are almost certainly based on the LLM's TRAINING DATA ONLY (intrinsic knowledge) and have a HIGH PROBABILITY of being outdated since the model's knowledge cutoff.
 
@@ -601,7 +601,7 @@ async function stampCutoffRisk(node, riskLevel, claimCount) {
 
 // ─── Correction Writer ───────────────────────────────────────────────────────────
 
-const CORRECTION_SYSTEM = `You are a Knowledge Correction Writer for a sovereign AI memory system.
+const CORRECTION_SYSTEM = `You are a Knowledge Correction Writer for an AI memory system.
 
 You will be given:
 1. An ORIGINAL memory node (what the system previously believed)

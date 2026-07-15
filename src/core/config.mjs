@@ -272,7 +272,7 @@ export function detectProjectBrain(startDir = process.cwd()) {
     if (fs.existsSync(path.join(candidate, 'SKILL.md'))) {
       return {
         agentDir: path.join(dir, '.agent'),
-        brainDir: candidate,
+        brainDir: globalBrainDir,
         projectRoot: dir,
       };
     }
@@ -287,9 +287,9 @@ export function detectProjectBrain(startDir = process.cwd()) {
  * @returns {{ global: { agentDir: string, brainDir: string, layer: 'global' },
  *             project: { agentDir: string, brainDir: string, projectRoot: string, layer: 'project' } | null }}
  */
-export function getActiveBrains() {
+export function getActiveBrains(targetPath = process.cwd()) {
   const global = { agentDir: globalAgentDir, brainDir: globalBrainDir, layer: 'global' };
-  const project = detectProjectBrain();
+  const project = detectProjectBrain(targetPath);
   return {
     global,
     project: project ? { ...project, layer: 'project' } : null,
@@ -303,8 +303,8 @@ export function getActiveBrains() {
  * @param {string} [category] - Memory category (used for auto-detect heuristic)
  * @returns {{ agentDir: string, brainDir: string, layer: 'global' | 'project' }}
  */
-export function resolveBrainLayer(layer = 'auto', category) {
-  const { global, project } = getActiveBrains();
+export function resolveBrainLayer(layer = 'auto', category, targetPath = process.cwd()) {
+  const { global, project } = getActiveBrains(targetPath);
 
   if (layer === 'global') return global;
   if (layer === 'project') {
@@ -321,5 +321,5 @@ export function resolveBrainLayer(layer = 'auto', category) {
   }
 
   // Default: project if exists, else global
-  return project || global;
+  return global;
 }

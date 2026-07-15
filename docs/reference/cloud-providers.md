@@ -1,6 +1,6 @@
 # Total Recall — Cloud Provider Guide
 
-Comprehensive pricing, VM sizing, and deployment recommendations for hosting a **Total Recall Sovereign Brain**.
+Comprehensive pricing, VM sizing, and deployment recommendations for hosting a **Total Recall AI Brain**.
 
 ---
 
@@ -25,7 +25,7 @@ You **DO NOT** need to rent expensive GPU VM clusters or large-RAM instances. Th
 
 ### Hetzner ⭐ Best Value Overall
 
-Hetzner is the absolute winner for always-on sovereign servers, providing blistering speeds and premium network routing at hobbyist prices:
+Hetzner is the absolute winner for always-on local servers, providing blistering speeds and premium network routing at hobbyist prices:
 
 | Instance | vCPU | RAM | SSD Disk | Price/mo | Suitability |
 | :--- | :--- | :--- | :--- | :--- | :--- |

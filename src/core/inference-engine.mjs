@@ -23,7 +23,7 @@ import { brainDir } from './config.mjs';
 
 // ─── Prompts ────────────────────────────────────────────────────────────────────
 
-const INFERENCE_SYSTEM = `You are a System 2 Reasoning Engine for a sovereign AI memory system called Total Recall.
+const INFERENCE_SYSTEM = `You are a System 2 Reasoning Engine for an AI memory system called Total Recall.
 
 You will be given a cluster of related memory nodes. Your job is to reason deeply about them and produce higher-level conclusions.
 
@@ -287,7 +287,7 @@ function writeMergeProposal(proposalsDir, candidate) {
 
 // ─── Memory Synthesizer ─────────────────────────────────────────────────────────
 
-const SYNTHESIS_SYSTEM = `You are a Memory Synthesizer for a sovereign AI memory system.
+const SYNTHESIS_SYSTEM = `You are a Memory Synthesizer for an AI memory system.
 
 Given two memory nodes that may be similar, determine:
 1. Are they saying the same thing? → "MERGE"

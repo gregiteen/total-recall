@@ -42,15 +42,26 @@ export function getGlobalBrainDir() {
  * Detect a project-level brain by checking <cwd>/.agent/skills/total-recall/.
  * Returns { agentDir, brainDir } or null.
  */
-export function detectProjectBrain() {
+export function detectProjectBrain(startDir = process.cwd()) {
   if (process.env._TR_TEST_AGENT_DIR) return null;
-  const cwd = process.cwd();
+  let dir = startDir;
   const homeDir = os.homedir();
-  if (cwd === homeDir) return null; // don't detect global as project
-  const localAgentDir = path.join(cwd, '.agent');
-  const localBrainDir = path.join(localAgentDir, 'skills', 'total-recall');
-  if (fs.existsSync(path.join(localBrainDir, 'memory-vault'))) {
-    return { agentDir: localAgentDir, brainDir: localBrainDir };
+  while (dir !== path.dirname(dir)) {
+    if (dir === homeDir) break; // don't detect global as project
+    const candidates = [
+      { dir: path.join(dir, '.agent'), candidate: path.join(dir, '.agent', 'skills', 'total-recall') },
+      { dir: path.join(dir, '.agents'), candidate: path.join(dir, '.agents', 'skills', 'total-recall') }
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(path.join(c.candidate, 'SKILL.md')) || fs.existsSync(path.join(c.candidate, 'memory-vault'))) {
+        return {
+          agentDir: c.dir,
+          brainDir: getGlobalBrainDir(),
+          projectRoot: dir,
+        };
+      }
+    }
+    dir = path.dirname(dir);
   }
   return null;
 }
@@ -59,18 +70,18 @@ export function detectProjectBrain() {
  * Resolve agent dir based on explicit layer or auto-detect.
  * @param {'global' | 'project' | 'auto'} [layer='auto']
  */
-export function resolveAgentDir(layer = 'auto') {
+export function resolveAgentDir(layer = 'auto', targetPath = process.cwd()) {
   if (process.env.AGENT_DIR) {
     return process.env.AGENT_DIR;
   }
   if (layer === 'global') return getGlobalAgentDir();
   if (layer === 'project') {
-    const project = detectProjectBrain();
+    const project = detectProjectBrain(targetPath);
     if (!project) throw new Error('No project brain found. Run `npx total-recall init --project` to create one.');
     return project.agentDir;
   }
   // Auto: project-local wins if it exists
-  const project = detectProjectBrain();
+  const project = detectProjectBrain(targetPath);
   return project ? project.agentDir : getGlobalAgentDir();
 }
 
@@ -78,18 +89,18 @@ export function resolveAgentDir(layer = 'auto') {
  * Resolve the brain directory for a specific layer.
  * @param {'global' | 'project' | 'auto'} [layer='auto']
  */
-export function resolveBrainDir(layer = 'auto') {
-  return path.join(resolveAgentDir(layer), 'skills', 'total-recall');
+export function resolveBrainDir(layer = 'auto', targetPath = process.cwd()) {
+  return getGlobalBrainDir();
 }
 
 /**
  * Get both brain layers for the current context.
  * @returns {{ global: { agentDir: string, brainDir: string }, project: { agentDir: string, brainDir: string } | null }}
  */
-export function getBothBrains() {
+export function getBothBrains(targetPath = process.cwd()) {
   const globalAgentDir = getGlobalAgentDir();
   const globalBrainDir = getGlobalBrainDir();
-  const project = detectProjectBrain();
+  const project = detectProjectBrain(targetPath);
   return {
     global: { agentDir: globalAgentDir, brainDir: globalBrainDir },
     project,
