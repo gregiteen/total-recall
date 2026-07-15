@@ -3,6 +3,10 @@ import path from 'path';
 import matter from 'gray-matter';
 import { logger } from './logger.mjs';
 
+// Slug allowlist shared with validated-write.mjs — a slug is a filename;
+// anything outside this set risks path traversal on delete.
+const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
+
 /**
  * Atomic file write using write-then-rename to prevent partial corruption.
  */
