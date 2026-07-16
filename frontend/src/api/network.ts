@@ -1,3 +1,5 @@
+import { get, post, del, apiFetch, API_BASE } from './_base';
+
 export interface NetworkStats {
   total: number;
   blocked: number;
@@ -41,51 +43,42 @@ export interface AuditLogEntry {
   error?: string;
 }
 
+export async function getNetworkStats(): Promise<{ stats: NetworkStats, audit_count: number }> {
+  return get('/api/network/stats');
+}
+
+export async function getNetworkPolicy(): Promise<NetworkPolicy> {
+  return get('/api/network/policy');
+}
+
+export async function updateNetworkPolicy(patch: Partial<NetworkPolicy>): Promise<any> {
+  const res = await apiFetch(API_BASE + '/api/network/policy', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`PUT /api/network/policy failed: ${res.status}`);
+  return res.json();
+}
+
+export async function blockDomain(domain: string): Promise<any> {
+  return post('/api/network/block', { domain });
+}
+
+export async function unblockDomain(domain: string): Promise<any> {
+  return del(`/api/network/block/${encodeURIComponent(domain)}`);
+}
+
+export async function getAuditLog(params?: { domain?: string; status?: string; since?: string }): Promise<{ audit: AuditLogEntry[] }> {
+  const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
+  return get(`/api/network/audit${query}`);
+}
+
 export const networkApi = {
-  getStats: async (): Promise<{ stats: NetworkStats, audit_count: number }> => {
-    const res = await fetch('/api/network/stats');
-    if (!res.ok) throw new Error('Failed to fetch network stats');
-    return res.json();
-  },
-
-  getPolicy: async (): Promise<NetworkPolicy> => {
-    const res = await fetch('/api/network/policy');
-    if (!res.ok) throw new Error('Failed to fetch network policy');
-    return res.json();
-  },
-
-  updatePolicy: async (patch: Partial<NetworkPolicy>): Promise<any> => {
-    const res = await fetch('/api/network/policy', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch)
-    });
-    if (!res.ok) throw new Error('Failed to update network policy');
-    return res.json();
-  },
-
-  blockDomain: async (domain: string): Promise<any> => {
-    const res = await fetch('/api/network/block', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domain })
-    });
-    if (!res.ok) throw new Error('Failed to block domain');
-    return res.json();
-  },
-
-  unblockDomain: async (domain: string): Promise<any> => {
-    const res = await fetch(`/api/network/block/${encodeURIComponent(domain)}`, {
-      method: 'DELETE'
-    });
-    if (!res.ok) throw new Error('Failed to unblock domain');
-    return res.json();
-  },
-
-  getAuditLog: async (params?: { domain?: string; status?: string; since?: string }): Promise<{ audit: AuditLogEntry[] }> => {
-    const query = new URLSearchParams(params as any).toString();
-    const res = await fetch(`/api/network/audit?${query}`);
-    if (!res.ok) throw new Error('Failed to fetch audit log');
-    return res.json();
-  }
+  getStats: getNetworkStats,
+  getPolicy: getNetworkPolicy,
+  updateNetworkPolicy,
+  blockDomain,
+  unblockDomain,
+  getAuditLog,
 };

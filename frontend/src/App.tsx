@@ -9,7 +9,7 @@ import MemoryPage from './pages/MemoryPage'
 import SettingsPage from './pages/SettingsPage'
 import NetworkPage from './pages/NetworkPage'
 import TasksPage from './pages/TasksPage'
-import ApiKeysPage from './pages/ApiKeysPage'
+import SecretsPage from './pages/SecretsPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import { MeshPage } from './pages/MeshPage'
 import { WebhooksPage } from './pages/WebhooksPage'
@@ -20,6 +20,7 @@ import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
 import OpenWikiPage from './pages/OpenWikiPage'
 import OnboardingPage from './pages/OnboardingPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { isOnboardingComplete } from './utils/onboarding'
 import BrandMark from './components/brand/BrandMark'
 import ContextualHelp from './components/ContextualHelp'
@@ -56,6 +57,8 @@ interface SidebarProps {
   onBrainChange: (id: string) => void
 }
 
+const getNavLinkClass = ({ isActive }: { isActive: boolean }) => `nav-link ${isActive ? 'active' : ''}`;
+
 function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProps) {
   return (
     <aside className="sidebar">
@@ -68,40 +71,40 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
       <nav className="sidebar-nav">
         <div className="nav-section-label">Memory</div>
         {!isOnboardingComplete() && (
-          <NavLink to="/onboarding" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-onboarding">
+          <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
             </svg>
             Setup
           </NavLink>
         )}
-        <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-chat">
+        <NavLink to="/" end className={getNavLinkClass} id="nav-chat">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
           </svg>
           Chat
         </NavLink>
-        <NavLink to="/memory" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-memory">
+        <NavLink to="/memory" className={getNavLinkClass} id="nav-memory">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" />
           </svg>
           Vault
         </NavLink>
-        <NavLink to="/rules" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-rules">
+        <NavLink to="/rules" className={getNavLinkClass} id="nav-rules">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
             <path d="M14 3v5h5M16 13H8M16 17H8M10 9H8" />
           </svg>
           Rules
         </NavLink>
-        <NavLink to="/graph" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-graph">
+        <NavLink to="/graph" className={getNavLinkClass} id="nav-graph">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" />
             <path d="M7 7l4 9M17 7l-4 9" />
           </svg>
           Graph
         </NavLink>
-        <NavLink to="/tasks" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-tasks">
+        <NavLink to="/tasks" className={getNavLinkClass} id="nav-tasks">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
           </svg>
@@ -109,20 +112,20 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
         </NavLink>
 
         <div className="nav-section-label">Connect</div>
-        <NavLink to="/integrations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-integrations">
+        <NavLink to="/integrations" className={getNavLinkClass} id="nav-integrations">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
             <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
           </svg>
           IDEs
         </NavLink>
-        <NavLink to="/skills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-skills">
+        <NavLink to="/skills" className={getNavLinkClass} id="nav-skills">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
           Skills
         </NavLink>
-        <NavLink to="/openwiki" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-openwiki">
+        <NavLink to="/openwiki" className={getNavLinkClass} id="nav-openwiki">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
             <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
@@ -131,13 +134,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
         </NavLink>
 
         <div className="nav-section-label">Account</div>
-        <NavLink to="/keys" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-keys">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-          </svg>
-          Keys & Usage
-        </NavLink>
-        <NavLink to="/network" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-network">
+        <NavLink to="/network" className={getNavLinkClass} id="nav-network">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
             <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
@@ -146,25 +143,37 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           </svg>
           Network
         </NavLink>
-        <NavLink to="/mesh" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-mesh">
+        <NavLink to="/mesh" className={getNavLinkClass} id="nav-mesh">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
           </svg>
           Mesh
         </NavLink>
-        <NavLink to="/webhooks" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-webhooks">
+        <NavLink to="/webhooks" className={getNavLinkClass} id="nav-webhooks">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
           Webhooks
         </NavLink>
-        <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-settings">
+        <NavLink to="/secrets" className={getNavLinkClass} id="nav-secrets">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          Secrets & Keys
+        </NavLink>
+        <NavLink to="/notifications" className={getNavLinkClass} id="nav-notifications">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
+          </svg>
+          Notifications
+        </NavLink>
+        <NavLink to="/settings" className={getNavLinkClass} id="nav-settings">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
           </svg>
           Settings
         </NavLink>
-        <NavLink to="/help" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-help">
+        <NavLink to="/help" className={getNavLinkClass} id="nav-help">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
@@ -173,7 +182,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           Help
         </NavLink>
         {isOnboardingComplete() && (
-          <NavLink to="/onboarding" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-onboarding-replay" style={{ opacity: 0.75 }}>
+          <NavLink to="/onboarding" className={getNavLinkClass} id="nav-onboarding-replay" style={{ opacity: 0.75 }}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
             </svg>
@@ -338,11 +347,13 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
             <Route path="/openwiki" element={<OpenWikiPage activeBrainId={activeBrainId} />} />
             <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
-            <Route path="/keys" element={<ApiKeysPage />} />
+            <Route path="/keys" element={<Navigate to="/secrets" replace />} />
             <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/mesh" element={<MeshPage />} />
             <Route path="/webhooks" element={<WebhooksPage />} />
+            <Route path="/secrets" element={<SecretsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/help" element={<HelpPage />} />
             {/* Legacy OS-control-plane routes → core product */}
             <Route path="/vault" element={<Navigate to="/memory" replace />} />

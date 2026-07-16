@@ -37,7 +37,7 @@ export async function sendChat(
   })
   if (!res.ok) throw new Error(`Chat API error: ${res.status}`)
   const data = await res.json()
-  return data.choices?.[0]?.message?.content ?? '(empty response)'
+  return data.choices?.[0]?.message?.content || '(empty response)'
 }
 
 export async function fetchChatHistory(sessionId?: string): Promise<{ role: string; content: string }[]> {

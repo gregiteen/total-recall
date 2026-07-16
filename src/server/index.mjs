@@ -865,7 +865,7 @@ if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
       logger.error('server', `Failed to auto-start Cloudflare Tunnel: ${err.message}`);
     }
   })();
-});
+
 
 let shutdownInProgress = false;
 

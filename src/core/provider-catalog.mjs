@@ -282,6 +282,19 @@ export const PROVIDER_CATALOG = [
     default_monthly_cap_usd: 0,
     tiers: [{ id: 'self-hosted', label: 'Self-hosted', monthly_usd: 0 }],
   },
+  {
+    id: 'headscale',
+    name: 'Headscale',
+    docs_url: 'https://github.com/juanfont/headscale',
+    key_patterns: ['HEADSCALE_API_KEY', 'HEADSCALE_KEY'],
+    schema: {
+      auth: 'bearer',
+      header: 'Authorization: Bearer <key>',
+      env_keys: ['HEADSCALE_API_KEY'],
+    },
+    default_monthly_cap_usd: 0,
+    tiers: [{ id: 'self-hosted', label: 'Self-hosted', monthly_usd: 0 }],
+  },
 ];
 
 const byId = new Map(PROVIDER_CATALOG.map((p) => [p.id, p]));

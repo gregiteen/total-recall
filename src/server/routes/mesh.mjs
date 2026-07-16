@@ -1,10 +1,11 @@
 import { Router } from 'express';
+import { requireAuth } from '../auth.mjs';
 import { getLeaderInfo, isLeader } from '../../core/leader-election.mjs';
 import { getMeshPeers } from '../../core/mesh.mjs';
 
 const router = Router();
 
-router.get('/leader', async (req, res) => {
+router.get('/leader', requireAuth, async (req, res) => {
   const leaderInfo = await getLeaderInfo();
   const leader = await isLeader();
   res.json({
@@ -13,8 +14,7 @@ router.get('/leader', async (req, res) => {
   });
 });
 
-router.get('/nodes', async (req, res) => {
-  // Return the mesh peers
+router.get('/nodes', requireAuth, async (req, res) => {
   const peers = getMeshPeers();
   res.json({
     nodes: peers

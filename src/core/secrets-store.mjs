@@ -228,6 +228,7 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   assign('auto_rotate', (v) => !!v);
   assign('notes', (v) => (v == null || v === '' ? null : String(v)));
   assign('project_path', (v) => (v == null || v === '' ? null : String(v)));
+  assign('headscale_url', (v) => (v == null || v === '' ? null : String(v)));
   if (patch.updated_at) next.updated_at = patch.updated_at;
   if (patch.rotated_at) next.rotated_at = patch.rotated_at;
   if (patch.created_at && !next.created_at) next.created_at = patch.created_at;
@@ -310,6 +311,7 @@ export async function listSecretsMeta(brainDir) {
       created_at: m.created_at || null,
       updated_at: m.updated_at || null,
       rotated_at: m.rotated_at || null,
+      headscale_url: m.headscale_url || null,
       usage_30d: usage,
       tiers: catalog?.tiers || [],
     };

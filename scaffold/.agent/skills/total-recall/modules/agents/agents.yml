@@ -22,7 +22,7 @@ agents:
     exec: flag
   - name: codex
     binary: codex
-    flags: --full-auto --json --skip-git-repo-check
+    flags: --sandbox workspace-write --json --skip-git-repo-check
     priority: 4
     enabled: true
     exec: subcommand

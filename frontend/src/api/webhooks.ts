@@ -3,6 +3,9 @@ import { get, post, del } from './_base';
 export interface WebhookConfig {
   provider: string;
   status: 'active' | 'inactive';
+  secret?: string;
+  endpoint_url?: string;
+  events?: string[];
   lastReceived?: string;
   totalCount?: number;
 }
@@ -12,6 +15,7 @@ export interface WebhookEvent {
   provider: string;
   event_type: string;
   received_at: string;
+  payload?: any;
 }
 
 export async function fetchWebhookConfigs(): Promise<WebhookConfig[]> {

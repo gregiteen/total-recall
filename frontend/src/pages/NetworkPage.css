@@ -1,36 +1,280 @@
+/* ─── NetworkPage ─────────────────────────────────────────────────────────────── */
+
 .network-page {
-  animation: fade-in 0.3s ease-out;
+  animation: page-fade-in 0.35s ease-out;
+}
+
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Stat Cards ─────────────────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
 }
 
 .stat-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl);
   text-align: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.stat-label {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--spacing-sm);
+  padding: 24px 16px;
 }
 
 .stat-value {
-  font-size: 2.5rem;
+  font-size: 32px;
   font-weight: 700;
-  color: var(--text);
-  line-height: 1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  transition: color 0.3s ease;
 }
 
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.stat-value.error { color: var(--error); }
+.stat-value.success { color: var(--success); }
+.stat-value.accent { color: var(--accent); }
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 8px;
+}
+
+/* ─── Section Layout ─────────────────────────────────────────────────────────── */
+
+.network-sections {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.network-section-full {
+  margin-bottom: 32px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ─── Blocklist ──────────────────────────────────────────────────────────────── */
+
+.blocklist-items {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.blocklist-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.blocklist-item:hover {
+  background: var(--bg-hover);
+}
+
+.blocklist-item:last-child {
+  border-bottom: none;
+}
+
+.blocklist-remove {
+  background: none;
+  color: var(--error);
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.blocklist-remove:hover {
+  opacity: 1;
+  background: var(--error-muted);
+}
+
+.blocklist-add {
+  display: flex;
+  gap: 8px;
+}
+
+.blocklist-add .input {
+  flex: 1;
+}
+
+/* ─── Limits Editor ──────────────────────────────────────────────────────────── */
+
+.limits-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.limits-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.limits-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.limits-input {
+  width: 100px;
+  text-align: right;
+}
+
+.limits-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* ─── Audit Log ──────────────────────────────────────────────────────────────── */
+
+.audit-filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.audit-filters .input,
+.audit-filters .select {
+  flex: 1;
+  min-width: 140px;
+}
+
+.audit-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.audit-status-badge.success {
+  background: var(--success-muted);
+  color: var(--success);
+}
+
+.audit-status-badge.error {
+  background: var(--error-muted);
+  color: var(--error);
+}
+
+.audit-status-badge.timeout {
+  background: var(--warning-muted);
+  color: var(--warning);
+}
+
+/* ─── Whitelist Mode ─────────────────────────────────────────────────────────── */
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: var(--bg-hover);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.toggle-switch.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(20px);
+}
+
+.toggle-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ─── Refresh Controls ───────────────────────────────────────────────────────── */
+
+.refresh-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refresh-controls .select {
+  width: auto;
+  padding: 6px 28px 6px 10px;
+  font-size: 12px;
+}
+
+/* ─── Empty States ───────────────────────────────────────────────────────────── */
+
+.empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .network-sections {
+    grid-template-columns: 1fr;
+  }
 }

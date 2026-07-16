@@ -355,6 +355,156 @@ code, pre { font-family: var(--font-mono); }
 
 .btn-sm { padding: 6px 11px; font-size: 12px; }
 
+/* ─── Alerts ─────────────────────────────────────────────────────────────────── */
+
+.alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.alert-error {
+  background: var(--error-muted);
+  border-color: rgba(248, 113, 113, 0.25);
+  color: var(--error);
+}
+
+.alert-success {
+  background: var(--success-muted);
+  border-color: rgba(52, 211, 153, 0.25);
+  color: var(--success);
+}
+
+/* ─── Form Controls ──────────────────────────────────────────────────────────── */
+
+.input, .select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input:focus, .select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+/* ─── Data Tables ────────────────────────────────────────────────────────────── */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.data-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.data-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.data-table tr.is-leader td {
+  background: var(--accent-soft);
+}
+
+/* ─── Page Layout ────────────────────────────────────────────────────────────── */
+
+.page-container {
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.badge-online, .badge-active {
+  background: var(--success-muted);
+  color: var(--success);
+}
+
+.badge-offline, .badge-inactive {
+  background: var(--error-muted);
+  color: var(--error);
+}
+
+.badge-leader {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-hover);
+}
+
+.badge-follower {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.badge-warning {
+  background: var(--warning-muted);
+  color: var(--warning);
+}
+
 /* Premium surfaces */
 .surface-premium {
   background: linear-gradient(165deg, rgba(23, 32, 51, 0.92), rgba(12, 18, 32, 0.96));

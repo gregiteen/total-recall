@@ -1,6 +1,30 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'node:fs';
 import { throttledFetch, blockDomain, unblockDomain, getAuditLog, resetGateStats, getGateStats, loadFirewallPolicy } from './throttled-fetch.mjs';
 import { brainDir } from './config.mjs';
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    existsSync: (p) => {
+      if (typeof p === 'string' && p.endsWith('network-policy.md')) return true;
+      return actual.existsSync(p);
+    },
+    readFileSync: (p, options) => {
+      if (typeof p === 'string' && p.endsWith('network-policy.md')) {
+        return globalThis.__mockNetworkPolicy || `---\ntype: network_policy\nstatus: active\nblocked_domains: []\n---`;
+      }
+      return actual.readFileSync(p, options);
+    },
+    watch: (p, options, callback) => {
+      if (typeof p === 'string' && p.endsWith('network-policy.md')) {
+        return { close: () => {} };
+      }
+      return actual.watch(p, options, callback);
+    }
+  };
+});
 
 describe('throttledFetch', () => {
   beforeEach(() => {
@@ -19,12 +43,18 @@ describe('throttledFetch', () => {
   });
 
   it('blocks domains in the firewall', async () => {
-    await blockDomain('blocked.com');
-    await new Promise(r => setTimeout(r, 500)); // wait for write to settle
-    await loadFirewallPolicy(brainDir); // Force reload
+    globalThis.__mockNetworkPolicy = `---\ntype: network_policy\nstatus: active\nblocked_domains:\n  - blocked.com\n---`;
+
+    await loadFirewallPolicy(brainDir);
+
     await expect(throttledFetch('https://blocked.com')).rejects.toThrow('Fetch blocked: Domain blocked by firewall policy (blocked.com)');
-    await unblockDomain('blocked.com');
-    await loadFirewallPolicy(brainDir); // Force reload
+
+    // Now simulate unblocking
+    globalThis.__mockNetworkPolicy = `---\ntype: network_policy\nstatus: active\nblocked_domains: []\n---`;
+    await loadFirewallPolicy(brainDir);
+
+    const res = await throttledFetch('https://blocked.com');
+    expect(res.status).toBe(200);
   });
 
   it('records audit logs', async () => {

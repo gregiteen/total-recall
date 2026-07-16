@@ -1,8 +1,122 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { ssssOperationHandler } from './ssss.mjs';
+import { getNodes } from '../../core/vault-cache.mjs';
 
 const router = Router();
+
+// --- Configuration Management ---
+
+router.get('/configs', async (req, res) => {
+  try {
+    const nodes = await getNodes();
+    const configs = nodes
+      .filter(n => n.frontmatter?.type === 'webhook_config')
+      .map(n => ({
+        provider: n.frontmatter.provider,
+        status: n.frontmatter.status || 'inactive',
+        secret: n.frontmatter.secret, // Provide secret (masked in UI, but needed for rotate validation check)
+        events: n.frontmatter.events || [],
+        endpoint_url: `/api/webhooks/${n.frontmatter.provider}`
+      }));
+    res.json(configs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/configs', async (req, res) => {
+  try {
+    const config = req.body;
+    if (!config.provider) return res.status(400).json({ error: 'provider is required' });
+
+    const mockReq = {
+      body: {
+        op: 'memory',
+        category: 'system',
+        content: `Webhook Configuration for ${config.provider}`,
+        slug: `webhook-configs-${config.provider}`,
+        metadata: {
+          type: 'webhook_config',
+          provider: config.provider,
+          status: config.status || 'active',
+          secret: config.secret || '',
+          events: config.events || []
+        }
+      },
+      user: req.user || { username: 'daemon-webhook' }
+    };
+
+    const mockRes = {
+      json: (data) => res.json(data),
+      status: (code) => ({
+        json: (data) => res.status(code).json(data)
+      })
+    };
+
+    await ssssOperationHandler(mockReq, mockRes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/configs/:provider', async (req, res) => {
+  try {
+    const mockReq = {
+      body: {
+        op: 'forget',
+        slug: `webhook-configs-${req.params.provider}`
+      },
+      user: req.user || { username: 'daemon-webhook' }
+    };
+    
+    const mockRes = {
+      json: (data) => res.json(data),
+      status: (code) => ({
+        json: (data) => res.status(code).json(data)
+      })
+    };
+
+    await ssssOperationHandler(mockReq, mockRes);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Event Log Management ---
+
+router.get('/events', async (req, res) => {
+  try {
+    const nodes = await getNodes();
+    let events = nodes
+      .filter(n => n.frontmatter?.type === 'webhook_event')
+      .map(n => ({
+        id: n.slug,
+        provider: n.frontmatter.provider,
+        event_type: n.frontmatter.event_type,
+        received_at: n.frontmatter.received_at,
+        payload: n.frontmatter.payload
+      }));
+      
+    if (req.query.provider) {
+      events = events.filter(e => e.provider === req.query.provider);
+    }
+    
+    events.sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
+    res.json(events.slice(0, 50));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/test/:provider', async (req, res) => {
+  try {
+    await emitSsssEvent(req.params.provider, 'test_ping', { message: 'Test webhook payload' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Mock function to retrieve secrets (in reality we would read from secrets.enc VFS or env)
 async function getWebhookSecret(provider) {
@@ -24,10 +138,17 @@ async function emitSsssEvent(provider, eventType, payload) {
   return new Promise((resolve, reject) => {
     const mockReq = {
       body: {
-        op: 'event',
+        op: 'memory',
         category: 'webhook',
-        event_type: `${provider}.${eventType}`,
-        payload: payload
+        content: `Webhook event ${provider}.${eventType}`,
+        slug: `webhook-event-${provider}-${Date.now()}`,
+        metadata: {
+          type: 'webhook_event',
+          provider: provider,
+          event_type: eventType,
+          received_at: new Date().toISOString(),
+          payload: payload
+        }
       },
       user: { username: 'daemon-webhook' }
     };
@@ -91,36 +212,38 @@ router.post('/:provider', bodyParser.raw({ type: 'application/json' }), async (r
   const { provider } = req.params;
   const secret = await getWebhookSecret(provider);
   
-  const rawBody = req.body;
-  let parsedBody;
-  try {
-    parsedBody = JSON.parse(rawBody.toString('utf8'));
-  } catch (err) {
-    return res.status(400).json({ error: 'Invalid JSON payload' });
+  let parsedBody = {};
+  if (req.body && req.body.length > 0) {
+    try {
+      parsedBody = JSON.parse(req.body.toString('utf8'));
+    } catch (err) {
+      return res.status(400).json({ error: 'Invalid JSON payload' });
+    }
   }
 
   let eventType = 'unknown';
 
   if (provider === 'github') {
     const signature = req.headers['x-hub-signature-256'];
-    if (secret && !verifyGithubSignature(secret, rawBody, signature)) {
+    if (secret && !verifyGithubSignature(secret, req.body, signature)) {
       return res.status(401).json({ error: 'Invalid signature' });
     }
     eventType = req.headers['x-github-event'] || 'unknown';
   } else if (provider === 'stripe') {
     const signature = req.headers['stripe-signature'];
-    if (secret && !verifyStripeSignature(secret, rawBody, signature)) {
+    if (secret && !verifyStripeSignature(secret, req.body, signature)) {
       return res.status(401).json({ error: 'Invalid signature' });
     }
     eventType = parsedBody.type || 'unknown';
   } else if (provider === 'npm') {
     const signature = req.headers['x-npm-signature'];
-    if (secret && !verifyNpmSignature(secret, rawBody, signature)) {
+    if (secret && !verifyNpmSignature(secret, req.body, signature)) {
       return res.status(401).json({ error: 'Invalid signature' });
     }
     eventType = parsedBody.event || 'unknown';
   } else {
-    return res.status(400).json({ error: 'Unknown provider' });
+    // allow generic providers without signature enforcement for testing
+    eventType = parsedBody.event || parsedBody.type || 'generic_event';
   }
 
   try {

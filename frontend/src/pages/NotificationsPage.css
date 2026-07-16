@@ -1,0 +1,219 @@
+/* ─── NotificationsPage-specific styles ──────────────────────────────────────── */
+/* Global classes (card, data-table, badge, btn, input, select, page-container, page-header) live in index.css */
+
+.notifications-page {
+  animation: notif-fade-in 0.35s ease-out;
+}
+
+@keyframes notif-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Rules Table Overrides ──────────────────────────────────────────────────── */
+
+.notif-rules-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.notif-rules-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ─── Priority Badges ────────────────────────────────────────────────────────── */
+
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.priority-badge.critical {
+  background: var(--error-muted);
+  color: var(--error);
+}
+
+.priority-badge.high {
+  background: var(--warning-muted);
+  color: var(--warning);
+}
+
+.priority-badge.low {
+  background: var(--success-muted);
+  color: var(--success);
+}
+
+/* ─── Enabled Toggle ─────────────────────────────────────────────────────────── */
+
+.notif-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--bg-hover);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.notif-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.notif-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.notif-toggle.active::after {
+  transform: translateX(18px);
+}
+
+/* ─── History Section ────────────────────────────────────────────────────────── */
+
+.notif-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.notif-history-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.notif-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.notif-history-entry {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.notif-history-entry:hover {
+  background: var(--bg-secondary);
+}
+
+.notif-entry-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-entry-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.notif-entry-message {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notif-entry-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+.notif-entry-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.notif-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.notif-status-badge.delivered {
+  background: var(--success-muted);
+  color: var(--success);
+}
+
+.notif-status-badge.failed {
+  background: var(--error-muted);
+  color: var(--error);
+}
+
+/* ─── Add Rule Form ──────────────────────────────────────────────────────────── */
+
+.notif-quiet-hours-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.notif-quiet-hours-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* ─── Empty States ───────────────────────────────────────────────────────────── */
+
+.notif-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .notif-history-entry {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .notif-entry-meta {
+    flex-direction: row;
+    align-items: center;
+    margin-left: 0;
+  }
+}

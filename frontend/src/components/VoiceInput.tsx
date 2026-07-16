@@ -50,7 +50,12 @@ export function VoiceInput({ onTranscript, isRecording = false }: VoiceInputProp
 
   if (!supported) {
     return (
-      <button disabled className="p-2 bg-gray-200 text-gray-500 rounded-full" title="Voice input not supported">
+      <button 
+        disabled 
+        className="chat-send-btn" 
+        style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-tertiary)', opacity: 0.5, cursor: 'not-allowed' }}
+        title="Voice input not supported"
+      >
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
       </button>
     );
@@ -59,7 +64,13 @@ export function VoiceInput({ onTranscript, isRecording = false }: VoiceInputProp
   return (
     <button 
       onClick={toggleRecording}
-      className={`p-2 rounded-full transition-colors ${recording ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+      className="chat-send-btn"
+      style={{
+        background: recording ? 'var(--error)' : 'var(--bg-tertiary)',
+        border: '1px solid var(--border)',
+        color: recording ? '#fff' : 'var(--text-secondary)',
+        transition: 'all var(--transition-fast)'
+      }}
       title={recording ? "Stop recording" : "Start voice input"}
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>

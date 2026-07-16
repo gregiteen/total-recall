@@ -14,6 +14,10 @@ vi.mock('../../core/vault-cache.mjs', () => ({
   getNodes: vi.fn(),
 }));
 
+vi.mock('../../core/webhook-handlers.mjs', () => ({
+  handleWebhook: vi.fn(),
+}));
+
 const app = express();
 app.use('/api/webhooks', webhooksRouter);
 
