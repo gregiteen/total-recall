@@ -125,7 +125,7 @@ export function startDeployUI(port = 3001) {
       if (url === '/api/start-install' && req.method === 'POST') {
         let body = '';
         req.on('data', d => { body += d; });
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const opts = JSON.parse(body || '{}');
             _log = [];
@@ -147,7 +147,8 @@ export function startDeployUI(port = 3001) {
               if (opts.openaiApiKey) {
                 secrets.openai_api_key = opts.openaiApiKey.trim();
               }
-              fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+              const { saveSecrets } = await import('../core/secrets-store.mjs');
+              await saveSecrets(configDir.replace(/\/config$/, ''), secrets);
             } catch (e) {
               console.error('Failed to save API keys to secrets.enc:', e);
             }
@@ -1096,7 +1097,8 @@ export function startDeployUI(port = 3001) {
               try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}'); } catch {}
             }
             secrets.github_token = token;
-            fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+            const { saveSecrets } = await import('../core/secrets-store.mjs');
+            await saveSecrets(configDir.replace(/\/config$/, ''), secrets);
 
             // Persist to wizard-config.json
             const configFile = path.join(configDir, 'wizard-config.json');

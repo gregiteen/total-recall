@@ -1,6 +1,6 @@
 # Total Recall — Diagnostic & Troubleshooting Reference
 
-Use this reference to diagnose and repair failures in the **Total Recall Sovereign AI OS** environment.
+Use this reference to diagnose and repair failures in the **Total Recall Autonomous AI OS** environment.
 
 ---
 

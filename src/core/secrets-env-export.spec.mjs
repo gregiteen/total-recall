@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -10,6 +10,22 @@ import {
   projectSlugFromPath,
 } from './secrets-env-export.mjs';
 import { setSecret } from './secrets-store.mjs';
+
+vi.mock('./research-queue.mjs', () => ({
+  enqueueResearch: vi.fn().mockResolvedValue({ id: 'mock-research-id' }),
+  listResearch: vi.fn().mockResolvedValue([]),
+  getResearch: vi.fn().mockResolvedValue(null),
+  addToQueue: vi.fn().mockResolvedValue({ id: 'mock-queue-id' })
+}));
+
+vi.mock('./logger.mjs', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }
+}));
 
 const BEGIN = '# BEGIN TOTAL-RECALL-SECRETS';
 const END = '# END TOTAL-RECALL-SECRETS';

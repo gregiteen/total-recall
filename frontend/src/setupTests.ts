@@ -28,7 +28,7 @@ class MockResizeObserver {
   unobserve() {}
   disconnect() {}
 }
-global.ResizeObserver = MockResizeObserver;
+(globalThis as any).ResizeObserver = MockResizeObserver;
 
 // Mock localStorage
 const localStorageMock = (function () {

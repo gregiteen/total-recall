@@ -2,7 +2,7 @@
  * find-skills.mjs — skills.sh Registry Search & Parser
  *
  * Parses the raw CLI output from `npx skills find <query>` into
- * structured skill records. Used by the Sovereign Skill Manager to
+ * structured skill records. Used by the Local Skill Manager to
  * search, rank, and install community skills from skills.sh.
  *
  * Output format from `skills find`:

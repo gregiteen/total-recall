@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
 import {
   listApiKeys,
   issueApiKey,
@@ -68,27 +68,78 @@ function metaForm(k: SecretCatalogKey): MetaEdit {
 }
 
 function groupKeysByProvider(keys: SecretCatalogKey[]) {
-  const groups = new Map<string, { id: string; label: string; kind: 'repo'; keys: SecretCatalogKey[] }>()
+  const groups = new Map<string, { id: string; label: string; kind: 'provider'; keys: SecretCatalogKey[] }>()
 
   keys.forEach((k) => {
-    const provider = (k.provider || 'unknown').toLowerCase()
+    let pStr = k.provider_name || k.provider;
+    if (!pStr) {
+      const kl = k.key.toLowerCase();
+      if (kl.includes('smtp2go')) pStr = 'SMTP2GO';
+      else if (kl.includes('stripe')) pStr = 'Stripe';
+      else if (kl.includes('supabase')) pStr = 'Supabase';
+      else if (kl.includes('openai')) pStr = 'OpenAI';
+      else if (kl.includes('anthropic')) pStr = 'Anthropic';
+      else if (kl.includes('github')) pStr = 'GitHub';
+      else if (kl.includes('google')) pStr = 'Google';
+      else if (kl.includes('aws')) pStr = 'AWS';
+      else pStr = 'Unknown';
+    }
+    const provider = pStr.toLowerCase()
     if (!groups.has(provider)) {
-      groups.set(provider, { id: provider, label: provider.toUpperCase(), kind: 'repo', keys: [] })
+      groups.set(provider, { id: provider, label: pStr.toUpperCase(), kind: 'provider', keys: [] })
     }
     groups.get(provider)!.keys.push(k)
   })
 
-  return [...groups.values()].sort((a, b) => a.id.localeCompare(b.id))
+  return [...groups.values()].sort((a, b) => {
+    if (a.id === 'unknown') return 1;
+    if (b.id === 'unknown') return -1;
+    return a.id.localeCompare(b.id);
+  })
 }
 
 function ProviderLogo({ provider }: { provider?: string }) {
+  const [error, setError] = useState(false);
   if (!provider) return null;
-  const p = provider.toLowerCase();
-  if (p === 'openai') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0462 6.0462 0 0 0 5.3-3.71 6.0415 6.0415 0 0 0 4.4646-6.4463A5.9847 5.9847 0 0 0 22.282 9.8211Z"/></svg>;
-  if (p === 'anthropic') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.433 2.115L15.939 12h3.048l1.494-9.885h-3.048zM14.616 2.115l-1.392 9.885h3.048l1.392-9.885h-3.048zM10.371 14.542l-5.637 7.343H7.78l3.966-5.166 2.766 5.166h3.018l-7.159-12.836-5.836 12.836h3.043l1.838-4.043h4.636l-3.681-3.3z"/></svg>;
-  if (p === 'google') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/></svg>;
-  if (p === 'github') return <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd"/></svg>;
-  return null;
+  const p = provider.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const st = { width: 14, height: 14, flexShrink: 0, borderRadius: 2 };
+  
+  // Known colors
+  const colors: Record<string, string> = {
+    openai: '10a37f',
+    anthropic: 'd97757',
+    google: '4285F4',
+    github: '181717',
+    supabase: '3ECF8E',
+    elevenlabs: '000000',
+    sendgrid: '00B3E3',
+    digitalocean: '0080FF',
+    aws: '232F3E',
+    gcp: '4285F4',
+    stripe: '008CDD',
+    mailcow: 'FFC107',
+    resend: '000000'
+  };
+
+  const isKnown = p in colors;
+  const c = colors[p] || '64748b'; // default slate color
+  
+  if (error || !isKnown) {
+    return (
+      <span style={{ ...st, background: '#' + c, color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 'bold', verticalAlign: 'middle' }}>
+        {provider.charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+
+  return (
+    <img 
+      src={`https://cdn.simpleicons.org/${p}/${c}`} 
+      style={{ ...st, verticalAlign: 'middle', display: 'inline-block' }} 
+      alt={provider} 
+      onError={() => setError(true)} 
+    />
+  );
 }
 
 export default function ApiKeysPage() {
@@ -107,6 +158,7 @@ export default function ApiKeysPage() {
   const [filter, setFilter] = useState('')
   const [groupBy, setGroupBy] = useState<'repo' | 'api'>('repo')
   const [selected, setSelected] = useState<SecretCatalogKey | null>(null)
+  const selectedKeyRef = useRef<string | null>(null)
   const [edit, setEdit] = useState<MetaEdit>({
     label: '',
     provider: '',
@@ -170,17 +222,22 @@ export default function ApiKeysPage() {
 
     const data = await fetchSecretsCatalog()
       setCatalog(data)
-      if (selected) {
-        const fresh = data.keys.find((k) => k.key === selected.key)
+      const skey = selectedKeyRef.current
+      if (skey) {
+        const fresh = data.keys.find((k) => k.key === skey)
         setSelected(fresh || null)
-        if (fresh) setEdit(metaForm(fresh))
+        if (fresh) {
+          setEdit(metaForm(fresh))
+        } else {
+          selectedKeyRef.current = null
+        }
       }
     } catch (e: unknown) {
       setError((e as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [selected])
+  }, [])
 
   const loadPats = useCallback(async () => {
     try {
@@ -244,6 +301,7 @@ export default function ApiKeysPage() {
   // metaForm hoisted
 
   function openKey(k: SecretCatalogKey, sectionId?: string) {
+    selectedKeyRef.current = k.key
     setSelected(k)
     setEdit(metaForm(k))
     setRotateVal('')
@@ -413,6 +471,7 @@ export default function ApiKeysPage() {
     try {
       await deleteProviderSecret(selected.key)
       setSelected(null)
+      selectedKeyRef.current = null
       await loadCatalog()
     } catch (e: unknown) {
       setError((e as Error).message)
@@ -470,7 +529,7 @@ export default function ApiKeysPage() {
   })
 
   /** Group filtered keys into repo sections (one key → one repo; multi = error; none = developer). */
-  const repoSections = useMemo<{ id: string; label: string; kind: 'error' | 'developer' | 'repo'; keys: SecretCatalogKey[] }[]>(() => {
+  const repoSections = useMemo<{ id: string; label: string; kind: 'error' | 'developer' | 'repo' | 'provider'; keys: SecretCatalogKey[] }[]>(() => {
     if (!catalog?.keys) return []
     const f = filter.toLowerCase()
     const filtered = catalog.keys.filter(
@@ -880,9 +939,17 @@ export default function ApiKeysPage() {
                           : open
                             ? 'var(--border-accent)'
                             : 'var(--border)',
-                      color: sec.kind === 'error' ? '#f87171' : undefined,
+                      color: sec.kind === 'error' ? '#f87171' : 'var(--text-primary)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
                     }}
-                    onClick={() => expandOnly(sec.id)}
+                    onClick={() => {
+                      if (open && expandedSections.size === 1) {
+                        expandAllSections(repoSections.map((s) => s.id))
+                      } else {
+                        expandOnly(sec.id)
+                      }
+                    }}
                     title={open ? 'Currently expanded' : 'Expand this repo only'}
                   >
                     {open ? '▾ ' : '▸ '}
@@ -966,7 +1033,9 @@ export default function ApiKeysPage() {
                             ? 'Fix: one repo only, or clear for Developer secrets'
                             : sec.kind === 'developer'
                               ? 'Tooling / unbound'
-                              : 'Product repo'}
+                              : sec.kind === 'provider'
+                                ? [...new Set(sec.keys.flatMap(k => k.repos || []))].join(', ') || 'Global'
+                                : 'Product repo'}
                         </div>
                       </div>
                       <span
@@ -994,6 +1063,7 @@ export default function ApiKeysPage() {
                             k={k}
                             selected={selected?.key === k.key}
                             onOpen={() => openKey(k, sec.id)}
+                            groupBy={groupBy}
                           />
                         ))}
                       </div>
@@ -1057,7 +1127,7 @@ export default function ApiKeysPage() {
                     {selected.monthly_cost_usd != null ? ` · $${selected.monthly_cost_usd}/mo` : ''}
                   </div>
                 </div>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelected(null)}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(null); selectedKeyRef.current = null; }}>
                   ✕
                 </button>
               </div>
@@ -1089,16 +1159,15 @@ export default function ApiKeysPage() {
                     Reveal with passkey
                   </button>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      type="password"
-                      value={revealPassword}
-                      onChange={(e) => setRevealPassword(e.target.value)}
-                      placeholder="Or re-enter dashboard password"
-                      style={{ ...inputStyle, flex: 1, marginTop: 0 }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void doReveal('password')
-                      }}
-                    />
+                    <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,flex:1}}>
+                      <input
+                        type="password"
+                        value={revealPassword}
+                        onChange={(e) => setRevealPassword(e.target.value)}
+                        placeholder="Or re-enter dashboard password"
+                        style={{ ...inputStyle, width: '100%', marginTop: 0 }}
+                      />
+                    </form>
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
@@ -1292,13 +1361,15 @@ export default function ApiKeysPage() {
 
               <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Rotate value</div>
-                <input
-                  type="password"
-                  value={rotateVal}
-                  onChange={(e) => setRotateVal(e.target.value)}
-                  placeholder="New secret value"
-                  style={inputStyle}
-                />
+                <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}>
+                  <input
+                    type="password"
+                    value={rotateVal}
+                    onChange={(e) => setRotateVal(e.target.value)}
+                    placeholder="New secret value"
+                    style={inputStyle}
+                  />
+                </form>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
@@ -1490,6 +1561,7 @@ export default function ApiKeysPage() {
                 </div>
                 <form onSubmit={e => e.preventDefault()} style={{display:'inline',margin:0,padding:0,width:'100%'}}><input id="google_api_key"
                   type="password"
+                  autoComplete="off"
                   placeholder="AIzaSy..."
                   value={configData?.secrets?.google_api_key || ''}
                   onChange={(e) => updateSecretsProp('google_api_key', e.target.value)}
@@ -1849,10 +1921,12 @@ function SecretKeyRow({
   k,
   selected,
   onOpen,
+  groupBy,
 }: {
   k: SecretCatalogKey
   selected: boolean
   onOpen: () => void
+  groupBy?: 'repo' | 'api'
 }) {
   return (
     <button
@@ -1906,7 +1980,9 @@ function SecretKeyRow({
             whiteSpace: 'nowrap',
           }}
         >
-          {k.provider_name || k.provider || '—'} · {k.masked || '••••'}
+          {groupBy === 'api' 
+            ? (k.repos?.length ? k.repos.join(', ') : 'Developer') 
+            : (k.provider_name || k.provider || '—')} · {k.masked || '••••'}
           {k.multi_repo_error ? ` · ${k.repos.join(', ')}` : ''}
         </div>
       </div>
@@ -1917,6 +1993,10 @@ function SecretKeyRow({
         {' · '}
         <span style={{ color: k.monthly_cost_usd != null ? '#34d399' : 'var(--text-tertiary)' }}>
           {k.monthly_cost_usd != null ? `$${k.monthly_cost_usd}/mo` : 'no $/mo'}
+        </span>
+        {' · '}
+        <span style={{ color: k.usage_30d?.cost_usd > 0 ? '#22d3ee' : 'var(--text-tertiary)' }} title={`${k.usage_30d?.events || 0} events`}>
+          {k.usage_30d?.cost_usd > 0 ? `$${k.usage_30d.cost_usd.toFixed(2)} used` : 'no usage'}
         </span>
       </div>
       <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>›</span>

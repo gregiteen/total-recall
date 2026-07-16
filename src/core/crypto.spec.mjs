@@ -21,7 +21,6 @@ vi.mock('fs', () => ({
 
 describe('crypto module', () => {
   let encryptSecrets, decryptSecrets, deriveKey, generateSignatureKeyPair, signPayload, verifySignature;
-  let writeSecrets, readSecrets;
 
   beforeEach(async () => {
     const mod = await import('./crypto.mjs');
@@ -31,8 +30,6 @@ describe('crypto module', () => {
     generateSignatureKeyPair = mod.generateSignatureKeyPair;
     signPayload = mod.signPayload;
     verifySignature = mod.verifySignature;
-    writeSecrets = mod.writeSecrets;
-    readSecrets = mod.readSecrets;
   });
 
   describe('deriveKey', () => {
@@ -99,21 +96,6 @@ describe('crypto module', () => {
     }, 15000);
   });
 
-  describe('writeSecrets / readSecrets', () => {
-    it('readSecrets returns null when secrets file does not exist', async () => {
-      const fs = (await import('fs')).default;
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      const result = await readSecrets('pass');
-      expect(result).toBeNull();
-    });
-
-    it('writeSecrets calls fs.writeFileSync', async () => {
-      const fs = (await import('fs')).default;
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      await writeSecrets({ key: 'val' }, 'pass');
-      expect(fs.writeFileSync).toHaveBeenCalled();
-    });
-  });
 
   describe('Ed25519 signature keypair', () => {
     it('generates keypair with publicKey and privateKey strings', () => {

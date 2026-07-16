@@ -16,7 +16,7 @@ repo_scoped: true
 > Openwiki ships with the brain at `openwiki/`.
 
 
-Welcome to the master control skill for the **Total Recall Sovereign AI OS**. > [!NOTE]
+Welcome to the master control skill for the **Total Recall Autonomous AI OS**. > [!NOTE]
 > **Total Recall Architecture:**
 > The Total Recall memory kernel runs as a standalone REST service. Agents interact with the memory vault, perform semantic searches, and compile rules directly using lightweight, filesystem-native REST API calls via standard shell `curl` commands.
 
@@ -68,7 +68,7 @@ You MUST actively reference and apply this skill under the following specific ru
 
 ## ⚡ Core Directives for IDE Agents
 
-### 1. Zero-Database Sovereign Integrity
+### 1. Zero-Database Integrity
 Total Recall operates **entirely database-free**. The local filesystem is the source of truth. Every rule, pattern, decision, concept, preference, and fact exists as a plain Markdown file with semantic YAML frontmatter. Derived indexes are disposable caches. While the internal Vector Store engine is pluggable and ready for native drop-in indexing engines (such as SQLite-VSS or HNSWLib), the canonical source of truth remains filesystem flat files. Do not look for PostgreSQL or traditional SQL databases.
 
 ### 2. Precise Tool & API Selection Heuristics

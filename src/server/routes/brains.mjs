@@ -82,9 +82,10 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, re
         for (const project of registry) {
           const projectVaultDir = path.join(project.brainDir, 'memory-vault');
           let nodeCount = 0;
-          const exists = fs.existsSync(project.brainDir);
+          const exists = fs.existsSync(project.path);
+          if (!exists) continue; // Hide non-existent projects automatically
 
-          if (exists && fs.existsSync(projectVaultDir)) {
+          if (fs.existsSync(projectVaultDir)) {
             nodeCount = countMd(projectVaultDir);
           }
 
@@ -94,7 +95,7 @@ router.get('/api/brains', requireAuth, requireScope('ssss:read'), async (req, re
             layer: 'project',
             path: project.brainDir,
             project_root: project.path,
-            exists,
+            exists: true,
             node_count: nodeCount,
             registered_at: project.registered_at,
             last_compiled: project.last_compiled || getLastModified(path.join(project.brainDir, 'memory-derived', 'graph-index.jsonl')),
@@ -206,6 +207,24 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
     if (tag) nodes = nodes.filter(n => (n.tags || []).includes(tag));
 
     res.json({ nodes, brain_id: brainId, count: nodes.length });
+  } catch (err) { serverError(res, err); }
+});
+
+/**
+ * POST /api/brains/sync
+ * Trigger a repo-sync across all registered repos.
+ * Returns sync results per repo.
+ */
+router.post('/api/brains/sync', requireAuth, requireScope('memory:write'), async (req, res) => {
+  try {
+    const { syncAllRepos } = await import('../../core/repo-sync.mjs');
+    const result = syncAllRepos();
+    res.json({
+      ok: true,
+      totalIngested: result.totalIngested,
+      totalSkipped: result.totalSkipped,
+      repos: result.repos,
+    });
   } catch (err) { serverError(res, err); }
 });
 

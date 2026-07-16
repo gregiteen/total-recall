@@ -269,12 +269,14 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
         groups = (data.repos || []) as RepoSkillsGroup[];
       }
 
-      if (activeBrainId) {
+      if (activeBrainId && activeBrainId !== 'global') {
+        const targetRepoId = activeBrainId.startsWith('project:') ? activeBrainId.replace('project:', '') : activeBrainId;
         groups = groups.filter(
           g => g.repo === 'Global' || 
-               g.repo === activeBrainId || 
-               activeBrainId.endsWith(`/${g.repo}`) || 
-               g.repo.endsWith(`/${activeBrainId}`)
+               g.repo === targetRepoId || 
+               targetRepoId.endsWith(`/${g.repo}`) || 
+               g.repo.endsWith(`/${targetRepoId}`) ||
+               activeBrainId === `project:${g.repo}`
         );
         list = groups.flatMap(g => g.skills || []);
       }
@@ -296,8 +298,17 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
           : list[0];
         if (target) {
           setSelectedSkill(target);
-          const skillDetails = await fetchSkill(target.name, target.repo);
-          setSkillContent(skillDetails.content || '');
+          if (target.has_skill_md) {
+            try {
+              const skillDetails = await fetchSkill(target.name, target.repo);
+              setSkillContent(skillDetails.content || '');
+            } catch (err) {
+              console.warn(`Could not load SKILL.md for ${target.name}`);
+              setSkillContent('');
+            }
+          } else {
+            setSkillContent('');
+          }
         }
       } else {
         setSelectedSkill(null);

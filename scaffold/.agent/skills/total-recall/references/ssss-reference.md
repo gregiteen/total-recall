@@ -69,7 +69,7 @@ immutable: true         # (Optional) Refuses overwrite without --force
 
 ## 3. Cognitive Layers Mapping
 
-Memory nodes map to three distinct cognitive layers of the Sovereign OS:
+Memory nodes map to three distinct cognitive layers of the Autonomous OS:
 
 1. **Conscious Layer**: Surfaced context (Tier 1 absolute invariants, active workspace goals, and steering parameters).
 2. **System 2 Layer**: Deliberate thinking structures (architectural decisions, resolved conflicts, and tested plans).

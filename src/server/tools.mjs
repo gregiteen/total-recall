@@ -5,6 +5,7 @@ import { execSync, execFileSync } from 'node:child_process';
 import { searxngBaseUrl, display, brainDir } from '../core/config.mjs';
 import { runInSandbox } from '../core/sandbox.mjs';
 import { logger } from '../core/logger.mjs';
+import { throttledFetch } from '../core/throttled-fetch.mjs';
 
 // ─── Browser Session (persistent across tool calls in a process) ──────────────
 
@@ -162,7 +163,7 @@ export async function executeWebSearch(query) {
     const url = new URL(`${searxngUrl}/search`);
     url.searchParams.append('q', query);
     url.searchParams.append('format', 'json');
-    const res = await fetch(url.toString(), {
+    const res = await throttledFetch(url.toString(), {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(8000),
     });

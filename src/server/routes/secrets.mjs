@@ -62,6 +62,33 @@ function brainDirFromReq(req) {
   return secretsBrainDir(req);
 }
 
+router.get('/api/secrets/checksum', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
+  try {
+    const { getSecretsChecksum } = await import('../../core/secrets-sync.mjs');
+    const checksum = getSecretsChecksum();
+    res.json({ checksum });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.get('/api/secrets/sync', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { agentDir } = await import('../../core/config.mjs');
+    const SECRETS_FILE = path.join(agentDir, 'secrets.enc');
+    if (!fs.existsSync(SECRETS_FILE)) {
+      return res.status(404).json({ error: 'Secrets file not found' });
+    }
+    const blob = fs.readFileSync(SECRETS_FILE);
+    res.set('Content-Type', 'application/octet-stream');
+    res.send(blob);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
 router.get('/api/secrets/providers', requireAuth, requireScope('keys:read', 'config:read'), (_req, res) => {
   res.json({ providers: listProviders() });
 });

@@ -31,6 +31,7 @@ import path from 'node:path';
 import yaml from 'yaml';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
+import { throttledFetch } from './throttled-fetch.mjs';
 
 const VOICE_CONFIG = path.join(brainDir, 'config', 'voice.yml');
 
@@ -102,7 +103,7 @@ export async function synthesize(text, opts = {}) {
   const start = Date.now();
   let res;
   try {
-    res = await fetch(cfg.endpoint, {
+    res = await throttledFetch(cfg.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)

@@ -43,7 +43,7 @@ x_temporal_context: 2026-05-26T23:05:06.474Z
 ---
 # Total Recall Command & Architecture Help Reference
 
-To guarantee perfect system awareness and eliminate unexpected retrieval latency, this semantic node documents the entire layout, core commands, internal features, and the interactive help subsystems of the **Total Recall Sovereign OS**.
+To guarantee perfect system awareness and eliminate unexpected retrieval latency, this semantic node documents the entire layout, core commands, internal features, and the interactive help subsystems of the **Total Recall Autonomous OS**.
 
 ---
 

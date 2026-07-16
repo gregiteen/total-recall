@@ -1,6 +1,6 @@
 # Total Recall — CLI & REST API Manual
 
-This reference manual documents the complete CLI commands and REST API endpoints available inside the **Total Recall Sovereign AI OS**.
+This reference manual documents the complete CLI commands and REST API endpoints available inside the **Total Recall Autonomous AI OS**.
 
 ---
 

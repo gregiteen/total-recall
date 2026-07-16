@@ -855,25 +855,6 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
             </div>
           )}
           <div className="chat-input-wrapper">
-            <button 
-              className={`btn btn-ghost ${voiceMode ? 'active' : ''}`} 
-              style={{ width: 44, height: 44, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: voiceMode ? 'var(--accent)' : 'var(--text-tertiary)', borderColor: voiceMode ? 'var(--accent)' : 'var(--border)' }}
-              onClick={() => {
-                setVoiceMode(!voiceMode)
-                if (voiceMode && 'speechSynthesis' in window) window.speechSynthesis.cancel()
-              }}
-              title={voiceMode ? "Voice Mode On" : "Voice Mode Off"}
-            >
-              {voiceMode ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
-                  <line x1="1" x2="23" y1="1" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.88"/><path d="M19 10v2a7 7 0 0 1-1.39 4.2M5 10v2a7 7 0 0 0 1.93 4.88"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
-                </svg>
-              )}
-            </button>
 
             <button 
               className={`btn btn-ghost ${deepResearchMode ? 'active' : ''}`} 
@@ -962,16 +943,38 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                 }, 10);
               }}
             />
-            <textarea
-              ref={textareaRef}
-              id="chat-input"
-              value={input}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              placeholder="Message your brain…"
-              rows={1}
-              disabled={loading}
-            />
+            <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+              <textarea
+                ref={textareaRef}
+                id="chat-input"
+                value={input}
+                onChange={handleInput}
+                onKeyDown={handleKeyDown}
+                placeholder="Message your brain…"
+                rows={1}
+                disabled={loading}
+                style={{ paddingRight: 44 }}
+              />
+              <button 
+                className={`btn btn-ghost ${voiceMode ? 'active' : ''}`} 
+                style={{ position: 'absolute', right: 4, bottom: 4, width: 36, height: 36, padding: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', color: voiceMode ? '#ef4444' : 'var(--text-tertiary)', border: 'none', background: 'transparent' }}
+                onClick={() => {
+                  setVoiceMode(!voiceMode)
+                  if (voiceMode && 'speechSynthesis' in window) window.speechSynthesis.cancel()
+                }}
+                title={voiceMode ? "Voice Mode On" : "Voice Mode Off"}
+              >
+                {voiceMode ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18 }}>
+                    <line x1="1" x2="23" y1="1" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.88"/><path d="M19 10v2a7 7 0 0 1-1.39 4.2M5 10v2a7 7 0 0 0 1.93 4.88"/><line x1="12" x2="12" y1="19" y2="22"/><line x1="8" x2="16" y1="22" y2="22"/>
+                  </svg>
+                )}
+              </button>
+            </div>
             {loading ? (
               <button className="chat-send-btn" onClick={handleStop} id="chat-stop" style={{ background: 'var(--error)', color: '#fff' }} title="Stop Generation">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style={{ width: 20, height: 20 }}>

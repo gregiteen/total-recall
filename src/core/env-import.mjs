@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { setSecret, listSecretsMeta } from './secrets-store.mjs';
+import { setSecret, listSecretsMeta, updateSecretMeta } from './secrets-store.mjs';
 
 /**
  * @deprecated Kept as empty/export for older callers. Import does NOT use this
@@ -264,10 +264,18 @@ function mergeCandidates(map, source, into) {
     const existing = into.get(key);
     // Prefer first non-process.env file sources over later process.env unless only env
     if (existing && existing.source !== 'process.env' && source === 'process.env') continue;
-    if (existing && existing.source === source) continue;
+    if (existing) {
+      if (!existing.sources) existing.sources = [existing.source];
+      if (!existing.sources.includes(source)) existing.sources.push(source);
+      if (existing.source === 'process.env' && source !== 'process.env') {
+        existing.source = source;
+      }
+      continue;
+    }
     into.set(key, {
       key,
       source,
+      sources: [source],
       provider: inferProvider(key),
       masked: maskSecret(value),
       length: String(value).length,
@@ -354,6 +362,7 @@ export async function importEnvSecrets(brainDir, opts = {}) {
   const actor = opts.actor || 'import';
   const existing = await listSecretsMeta(brainDir);
   const existingSet = new Set(existing.map((e) => e.key));
+  const existingByKey = new Map(existing.map((e) => [e.key, e]));
 
   /** @type {Record<string, string>} */
   let values = {};
@@ -366,6 +375,8 @@ export async function importEnvSecrets(brainDir, opts = {}) {
 
   /** @type {Record<string, string>} */
   const sourceByKey = { ...(opts.sourceByKey || {}) };
+  /** @type {Record<string, string[]>} */
+  const sourcesByKey = {};
 
   if (Array.isArray(opts.keys) && opts.keys.length) {
     const scan = scanEnvSources({ brainDir, includeProcessEnv: true });
@@ -375,6 +386,7 @@ export async function importEnvSecrets(brainDir, opts = {}) {
       if (c?._value) {
         values[k] = c._value;
         sourceByKey[k] = c.source;
+        sourcesByKey[k] = c.sources || [c.source];
       }
     }
   }
@@ -386,6 +398,7 @@ export async function importEnvSecrets(brainDir, opts = {}) {
       if (c._value) {
         values[c.key] = c._value;
         sourceByKey[c.key] = c.source;
+        sourcesByKey[c.key] = c.sources || [c.source];
       }
     }
   }
@@ -395,26 +408,44 @@ export async function importEnvSecrets(brainDir, opts = {}) {
   const errors = [];
 
   for (const [key, value] of Object.entries(values)) {
-    if (existingSet.has(key) && !overwrite) {
-      skipped.push({ key, reason: 'already_set' });
-      continue;
-    }
-    try {
-      const src = sourceByKey[key];
-      let repos;
+    const isSet = existingSet.has(key);
+
+    const sources = sourcesByKey[key] || (sourceByKey[key] ? [sourceByKey[key]] : []);
+    let computedRepos = [];
+    for (const src of sources) {
       if (src && typeof src === 'string' && src !== 'process.env' && src !== 'paste') {
-        // e.g. .../Github/ultrachat-ai-powered/.env → ultrachat-ai-powered
         const parts = src.replace(/\\/g, '/').split('/');
         const envIdx = parts.findIndex((p) => p.startsWith('.env'));
-        if (envIdx > 0) repos = [parts[envIdx - 1]];
+        if (envIdx > 0) computedRepos.push(parts[envIdx - 1]);
       }
+    }
+    const existingEntry = existingByKey.get(key);
+    const existingRepos = existingEntry?.repos || [];
+    const finalRepos = [...new Set([...existingRepos, ...computedRepos])].filter(Boolean);
+
+    // If already set and not overwriting, we only append repos
+    if (isSet && !overwrite) {
+      if (finalRepos.length > existingRepos.length) {
+        try {
+          await updateSecretMeta(brainDir, key, { repos: finalRepos }, { actor });
+          imported.push({ key, provider: inferProvider(key), repos: finalRepos, meta_only: true });
+        } catch (err) {
+          errors.push({ key, error: err.message });
+        }
+      } else {
+        skipped.push({ key, reason: 'already_set' });
+      }
+      continue;
+    }
+
+    try {
       await setSecret(brainDir, key, value, {
         provider: inferProvider(key),
         scope: 'global',
-        repos,
+        repos: finalRepos.length > 0 ? finalRepos : undefined,
         actor,
       });
-      imported.push({ key, provider: inferProvider(key), repos });
+      imported.push({ key, provider: inferProvider(key), repos: finalRepos });
       existingSet.add(key);
     } catch (err) {
       errors.push({ key, error: err.message });

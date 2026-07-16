@@ -277,7 +277,10 @@ export async function callLocalRuntime(prompt, system, config) {
     for (const p of pathsToCheck) {
       if (fs.existsSync(p)) {
         try {
-          dynamicSecrets = JSON.parse(fs.readFileSync(p, 'utf8') || '{}');
+          const { loadSecretsSync } = await import('./secrets-store.mjs');
+          const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
+          const brainDir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
+          dynamicSecrets = loadSecretsSync(brainDir);
           if (Object.keys(dynamicSecrets).length > 0) {
             break;
           }

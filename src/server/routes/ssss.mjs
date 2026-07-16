@@ -169,5 +169,10 @@ router.get('/api/ssss/references/:name', requireAuth, requireScope('ssss:read'),
 });
 
 
+// TODO: Implement actual SSSS operation handler or route to operation-validator.mjs
+export const ssssOperationHandler = async (req, res) => {
+  return res.status(501).json({ error: 'Not implemented' });
+};
+
 export { router as ssssRouter };
 export default router;

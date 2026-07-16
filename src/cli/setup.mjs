@@ -21,6 +21,7 @@ import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { loadSecrets, saveSecrets } from '../core/secrets-store.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -372,7 +373,7 @@ async function getGitHubUser(githubToken) {
 
 // ─── Store brain config ───────────────────────────────────────────────────────
 
-function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
+async function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) {
   const configDir = path.join(brDir, 'config');
   fs.mkdirSync(configDir, { recursive: true });
 
@@ -383,14 +384,11 @@ function storeBrainConfig(brDir, brainUrl, token, provider, apiKey, extra = {}) 
     'utf8'
   );
 
-  // secrets.enc (plaintext for now — encrypt in future)
-  const secretsPath = path.join(configDir, 'secrets.enc');
+  // secrets.enc
   let secrets = {};
-  if (fs.existsSync(secretsPath)) {
-    try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')); } catch {}
-  }
+  try { secrets = await loadSecrets(brDir); } catch {}
   if (apiKey) secrets[`${provider}_api_key`] = apiKey;
-  fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+  await saveSecrets(brDir, secrets);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -469,12 +467,11 @@ export default async function setup(args) {
           );
         }
         // Store GitHub token for sync --push
-        const secretsPath = path.join(resolveBrainDir(), 'config', 'secrets.enc');
-        fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
+        const brainDir = resolveBrainDir();
         let secrets = {};
-        if (fs.existsSync(secretsPath)) { try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')); } catch {} }
+        try { secrets = await loadSecrets(brainDir); } catch {}
         secrets.github_token = githubToken;
-        if (!dryRun) fs.writeFileSync(secretsPath, JSON.stringify(secrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+        if (!dryRun) await saveSecrets(brainDir, secrets);
       } else {
         warn('Could not authenticate with that token — skipping GitHub backup.');
       }
@@ -604,7 +601,7 @@ export default async function setup(args) {
   // ── Step 5: Store config locally ─────────────────────────────────────────────
 
   if (brainUrl && !dryRun) {
-    storeBrainConfig(brDir, brainUrl, pat, deployTarget, apiKey);
+    await storeBrainConfig(brDir, brainUrl, pat, deployTarget, apiKey);
     ok(`Brain config saved to ${path.join(brDir, 'config', 'brain.json')}`);
   }
 

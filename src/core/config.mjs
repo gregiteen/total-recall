@@ -139,11 +139,16 @@ try {
   }
   pathsToCheck.push(path.join(tempGlobalBrainDir, 'config', 'secrets.enc'));
   pathsToCheck.push(path.join(resolvedAgentDir, 'skills', 'total-recall', 'config', 'secrets.enc'));
-
   for (const p of pathsToCheck) {
     if (fs.existsSync(p)) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(p, 'utf8') || '{}');
+        const { loadSecretsSync } = await import('./secrets-store.mjs');
+        // Actually, loadSecretsSync expects brainDir (e.g. /config/secrets.enc -> parent of config)
+        // Let's pass the exact brainDir derived from p.
+        // p is something like <brainDir>/config/secrets.enc or <brainDir>/secrets.enc
+        const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
+        const brainDir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
+        const parsed = loadSecretsSync(brainDir);
         if (Object.keys(parsed).length > 0) {
           secrets = parsed;
           break; // Found valid secrets!

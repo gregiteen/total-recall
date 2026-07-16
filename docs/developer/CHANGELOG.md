@@ -1,5 +1,16 @@
 # Changelog
 
+
+## [3.16.0] — 2026-07-15
+
+### 🚀 Features
+- **Headscale Mesh Integration**: Added a new UI and backend primitive to securely provision Total Recall instances into a Headscale WireGuard mesh network.
+- **Webhooks & Network Policies**: Added a Webhooks UI for API integration, and established default firewall policies to gate all outbound fetch traffic from Total Recall agents.
+- **Network Safety**: Centralized `secrets-store` and `throttled-fetch` utilities to ensure safe and rate-limited cross-node communication.
+
+### 🐛 Bug Fixes
+- **Skill Sync Fix**: Fixed a severe bug where `skill sync` would pollute `.agent` directory with global `.claude` and `.agents` fallback directories.
+
 ## [3.15.0] — 2026-07-15
 
 ### ✨ Features

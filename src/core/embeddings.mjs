@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { throttledFetch } from './throttled-fetch.mjs';
 import Database from 'better-sqlite3';
 import * as sqliteVss from 'sqlite-vss';
 
@@ -98,7 +99,7 @@ async function resolveEmbeddingModel(selectedModel = embedModel) {
   }
 
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GOOGLE_API_KEY}`, {
+    const res = await throttledFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GOOGLE_API_KEY}`, {
       signal: AbortSignal.timeout(5000)
     });
     if (res.ok) {
@@ -130,7 +131,7 @@ async function getGoogleEmbedding(text, model) {
   const resolved = await resolveEmbeddingModel(model);
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolved}:embedContent?key=${GOOGLE_API_KEY}`;
 
-  const res = await fetch(url, {
+  const res = await throttledFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -158,7 +159,7 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
     throw new Error('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is set. Cannot generate embeddings.');
   }
 
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
+  const res = await throttledFetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
