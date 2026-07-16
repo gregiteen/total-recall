@@ -37,6 +37,7 @@ vi.mock('./pages/OnboardingPage', () => ({ default: () => <div data-testid="onbo
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState({}, '', '/');
   });
 
   it('renders loading state initially', () => {

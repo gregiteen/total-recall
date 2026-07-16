@@ -22,6 +22,11 @@ vi.mock('../../core/logger.mjs', () => ({
   logger: { info: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock('../../core/usage-tracker.mjs', () => ({
+  syncUsageLedger: vi.fn(),
+  calculateCurrentCost: vi.fn().mockReturnValue({ total_cost: 0, sessions: [] }),
+}));
+
 import { systemRouter } from './system.mjs';
 
 const app = express();
@@ -34,13 +39,6 @@ describe('System Router', () => {
   });
 
   it('GET /api/usage route exists and calls usage-tracker', async () => {
-    const mockCalculate = vi.fn().mockReturnValue({ total_cost: 0, sessions: [] });
-    const mockSync = vi.fn();
-
-    vi.doMock('../../core/usage-tracker.mjs', () => ({
-      syncUsageLedger: mockSync,
-      calculateCurrentCost: mockCalculate,
-    }));
 
     // Route exists — we just check it returns a response (even 500 if tracker not found)
     const res = await request(app).get('/api/usage');

@@ -53,3 +53,7 @@ if (typeof window !== 'undefined') {
     value: localStorageMock,
   });
 }
+
+import { vi } from 'vitest';
+vi.mock('react-force-graph-3d', () => ({ default: () => null }));
+
