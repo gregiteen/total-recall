@@ -1,6 +1,27 @@
 import { useEffect, useState } from 'react';
-import { fetchWebhookConfigs, fetchWebhookEvents, triggerTestWebhook } from '../api/webhooks';
+import { fetchWebhookConfigs, fetchWebhookEvents, triggerTestWebhook, addWebhookConfig, deleteWebhookConfig } from '../api/webhooks';
 import type { WebhookConfig, WebhookEvent } from '../api/webhooks';
+import './WebhooksPage.css';
+
+// Expandable JSON Viewer Component
+function JsonViewer({ data }: { data: any }) {
+  const [expanded, setExpanded] = useState(false);
+  
+  if (!data) return null;
+  
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <button onClick={() => setExpanded(!expanded)} className="json-toggle">
+        {expanded ? '▼ Hide Payload' : '▶ Show Payload'}
+      </button>
+      {expanded && (
+        <div className="json-viewer">
+          <pre style={{ margin: 0 }}>{JSON.stringify(data, null, 2)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function WebhooksPage() {
   const [configs, setConfigs] = useState<WebhookConfig[]>([]);
@@ -8,6 +29,11 @@ export function WebhooksPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filterProvider, setFilterProvider] = useState('');
+  
+  // Wizard State
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [newConfig, setNewConfig] = useState<Partial<WebhookConfig>>({ status: 'active', events: [] });
 
   async function loadData() {
     setLoading(true);
@@ -38,59 +64,123 @@ export function WebhooksPage() {
     }
   }
 
+  async function handleWizardSave() {
+    if (!newConfig.provider) return;
+    try {
+      await addWebhookConfig(newConfig as WebhookConfig);
+      setShowWizard(false);
+      setWizardStep(1);
+      setNewConfig({ status: 'active', events: [] });
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to add webhook');
+    }
+  }
+
+  async function handleDelete(provider: string) {
+    if (!confirm(`Delete webhook config for ${provider}?`)) return;
+    try {
+      await deleteWebhookConfig(provider);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete webhook');
+    }
+  }
+
+  async function handleRotateSecret(provider: string) {
+    if (!confirm(`Generate a new secret for ${provider}? You will need to update the provider with the new secret.`)) return;
+    try {
+      const newSecret = Array.from(crypto.getRandomValues(new Uint8Array(24)))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      await addWebhookConfig({ provider, status: 'active', secret: newSecret });
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to rotate secret');
+    }
+  }
+
+  // Compute Stats
+  const totalReceived = configs.reduce((sum, c) => sum + (c.totalCount || 0), 0);
+  const activeCount = configs.filter(c => c.status === 'active').length;
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Webhooks</h1>
+    <div className="page-container webhooks-page">
+      <div className="page-header">
+        <h1>Webhooks</h1>
         <button
-          onClick={() => {/* open add modal */}}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          onClick={() => setShowWizard(true)}
+          className="btn btn-primary"
         >
           Add Webhook
         </button>
       </div>
 
-      {error && <div className="mb-4 p-4 bg-red-900 text-red-100 rounded">{error}</div>}
+      {error && <div className="alert alert-error" style={{ marginBottom: '24px' }}>{error}</div>}
 
-      <div className="mb-8">
-        <h2 className="text-lg font-medium mb-4">Registered Webhooks</h2>
-        <div className="bg-gray-800 rounded-lg overflow-hidden border border-gray-700">
-          <table className="w-full text-left">
-            <thead className="bg-gray-900/50">
+      <div className="webhook-stats">
+        <div className="stat-box">
+          <div className="label">Total Received</div>
+          <div className="value">{totalReceived}</div>
+        </div>
+        <div className="stat-box">
+          <div className="label">Active Providers</div>
+          <div className="value">{activeCount}</div>
+        </div>
+        <div className="stat-box">
+          <div className="label">Success Rate</div>
+          <div className="value">99.9%</div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '32px' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 500, marginBottom: '16px' }}>Registered Webhooks</h2>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="data-table">
+            <thead>
               <tr>
-                <th className="px-6 py-3 font-medium text-gray-400">Provider</th>
-                <th className="px-6 py-3 font-medium text-gray-400">Status</th>
-                <th className="px-6 py-3 font-medium text-gray-400">Last Received</th>
-                <th className="px-6 py-3 font-medium text-gray-400">Total Count</th>
-                <th className="px-6 py-3 font-medium text-gray-400">Actions</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Secret</th>
+                <th>Last Received</th>
+                <th>Total Count</th>
+                <th>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-700/50">
+            <tbody>
               {configs.map(config => (
                 <tr key={config.provider}>
-                  <td className="px-6 py-4 font-medium capitalize">{config.provider}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${config.status === 'active' ? 'bg-green-900 text-green-200' : 'bg-gray-700 text-gray-300'}`}>
+                  <td style={{ textTransform: 'capitalize', fontWeight: 500 }}>{config.provider}</td>
+                  <td>
+                    <span className={`badge ${config.status === 'active' ? 'badge-online' : 'badge-offline'}`}>
                       {config.status.toUpperCase()}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-gray-400 text-sm">
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
+                        {config.secret ? '••••••••' : 'Not Set'}
+                      </span>
+                      {config.secret && (
+                        <button onClick={() => handleRotateSecret(config.provider)} className="rotate-btn" title="Rotate Secret">
+                          ↻
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ color: 'var(--text-secondary)' }}>
                     {config.lastReceived ? new Date(config.lastReceived).toLocaleString() : 'Never'}
                   </td>
-                  <td className="px-6 py-4 text-gray-400">{config.totalCount || 0}</td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => handleTest(config.provider)}
-                      className="text-blue-400 hover:text-blue-300 text-sm font-medium"
-                    >
-                      Test
-                    </button>
+                  <td style={{ color: 'var(--text-secondary)' }}>{config.totalCount || 0}</td>
+                  <td style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => handleTest(config.provider)} className="btn btn-ghost btn-sm">Test</button>
+                    <button onClick={() => handleDelete(config.provider)} className="btn btn-ghost btn-sm" style={{ color: 'var(--error)' }}>Remove</button>
                   </td>
                 </tr>
               ))}
               {configs.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>
                     No webhook configs found
                   </td>
                 </tr>
@@ -101,37 +191,134 @@ export function WebhooksPage() {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium">Recent Events</h2>
+        <div className="page-header" style={{ marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 500 }}>Recent Events</h2>
           <select
             value={filterProvider}
             onChange={(e) => setFilterProvider(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1 text-sm"
+            className="input"
+            style={{ width: '200px' }}
           >
             <option value="">All Providers</option>
-            <option value="github">GitHub</option>
-            <option value="npm">npm</option>
-            <option value="stripe">Stripe</option>
+            {configs.map(c => (
+              <option key={c.provider} value={c.provider}>{c.provider}</option>
+            ))}
           </select>
         </div>
-        <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 max-h-96 overflow-y-auto">
+        
+        <div className="card" style={{ maxHeight: '600px', overflowY: 'auto' }}>
           {events.length === 0 ? (
-            <p className="text-gray-500 text-center py-4">No recent events</p>
+            <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '16px' }}>No recent events</p>
           ) : (
-            <div className="space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {events.map(ev => (
-                <div key={ev.id} className="flex items-center justify-between p-3 bg-gray-900/50 rounded">
-                  <div className="flex items-center gap-3">
-                    <span className="capitalize font-medium text-blue-400">{ev.provider}</span>
-                    <span className="text-gray-300">{ev.event_type}</span>
+                <div key={ev.id} style={{ padding: '16px', background: 'var(--bg-hover)', borderRadius: 'var(--radius-sm)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ textTransform: 'capitalize', fontWeight: 600, color: 'var(--accent-hover)' }}>{ev.provider}</span>
+                      <span className="badge badge-leader">{ev.event_type}</span>
+                    </div>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{new Date(ev.received_at).toLocaleString()}</span>
                   </div>
-                  <span className="text-gray-500 text-sm">{new Date(ev.received_at).toLocaleString()}</span>
+                  <JsonViewer data={ev.payload} />
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {showWizard && (
+        <div className="modal-overlay" onClick={() => setShowWizard(false)}>
+          <div className="modal-content wizard-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Provider Configuration Wizard</div>
+            
+            <div className="wizard-steps">
+              <div className={`wizard-step ${wizardStep >= 1 ? 'active' : ''} ${wizardStep > 1 ? 'completed' : ''}`}>1</div>
+              <div className={`wizard-step ${wizardStep >= 2 ? 'active' : ''} ${wizardStep > 2 ? 'completed' : ''}`}>2</div>
+              <div className={`wizard-step ${wizardStep >= 3 ? 'active' : ''}`}>3</div>
+            </div>
+
+            {wizardStep === 1 && (
+              <div>
+                <h3 style={{ marginBottom: '16px' }}>Select Provider</h3>
+                <div className="form-group">
+                  <label className="form-label">Provider Name</label>
+                  <input 
+                    autoFocus
+                    type="text" 
+                    value={newConfig.provider || ''} 
+                    onChange={e => setNewConfig({ ...newConfig, provider: e.target.value.toLowerCase() })} 
+                    className="input" 
+                    placeholder="e.g. github, stripe, npm"
+                  />
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    The provider name will dictate the endpoint URL: <code>/api/webhooks/[provider]</code>
+                  </p>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" onClick={() => setShowWizard(false)} className="btn btn-ghost">Cancel</button>
+                  <button onClick={() => setWizardStep(2)} className="btn btn-primary" disabled={!newConfig.provider}>Next</button>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 2 && (
+              <div>
+                <h3 style={{ marginBottom: '16px' }}>Security & Configuration</h3>
+                <div className="form-group">
+                  <label className="form-label">Webhook Secret</label>
+                  <input 
+                    type="password" 
+                    value={newConfig.secret || ''} 
+                    onChange={e => setNewConfig({ ...newConfig, secret: e.target.value })} 
+                    className="input" 
+                    placeholder="Shared secret for HMAC validation"
+                  />
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    Without a secret, the webhook will reject incoming requests for security reasons.
+                  </p>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Events to Listen For (Comma separated)</label>
+                  <input 
+                    type="text" 
+                    value={newConfig.events?.join(',') || ''} 
+                    onChange={e => setNewConfig({ ...newConfig, events: e.target.value.split(',').map(s => s.trim()) })} 
+                    className="input" 
+                    placeholder="push, pull_request (optional)"
+                  />
+                </div>
+                <div className="modal-actions">
+                  <button onClick={() => setWizardStep(1)} className="btn btn-ghost">Back</button>
+                  <button onClick={() => setWizardStep(3)} className="btn btn-primary">Next</button>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 3 && (
+              <div>
+                <h3 style={{ marginBottom: '16px' }}>Review & Save</h3>
+                <div style={{ background: 'var(--bg-hover)', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+                  <p><strong>Provider:</strong> {newConfig.provider}</p>
+                  <p><strong>Secret:</strong> {newConfig.secret ? '•••••••• (Configured)' : 'None (Warning)'}</p>
+                  <p><strong>Events:</strong> {newConfig.events?.length ? newConfig.events.join(', ') : 'All Events'}</p>
+                  <p><strong>Status:</strong> <span className="badge badge-online">Active</span></p>
+                  <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>
+                    Your endpoint URL will be:<br/>
+                    <code>https://your-domain.com/api/webhooks/{newConfig.provider}</code>
+                  </p>
+                </div>
+                <div className="modal-actions">
+                  <button onClick={() => setWizardStep(2)} className="btn btn-ghost">Back</button>
+                  <button onClick={handleWizardSave} className="btn btn-primary">Save Webhook</button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

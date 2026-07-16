@@ -62,7 +62,19 @@ function brainDirFromReq(req) {
   return secretsBrainDir(req);
 }
 
-router.get('/api/secrets/checksum', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
+function requireAuthOrMesh(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress;
+  const cleanIp = ip.includes(':') ? ip.split(':').pop() : ip;
+  const isFromMesh = cleanIp && (cleanIp.startsWith('100.') || cleanIp === '127.0.0.1' || cleanIp === '::1');
+  if (isFromMesh) {
+    return next();
+  }
+  return requireAuth(req, res, () => {
+    return requireScope('keys:read', 'config:read')(req, res, next);
+  });
+}
+
+router.get('/api/secrets/checksum', requireAuthOrMesh, async (req, res) => {
   try {
     const { getSecretsChecksum } = await import('../../core/secrets-sync.mjs');
     const checksum = getSecretsChecksum();
@@ -72,7 +84,7 @@ router.get('/api/secrets/checksum', requireAuth, requireScope('keys:read', 'conf
   }
 });
 
-router.get('/api/secrets/sync', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
+router.get('/api/secrets/sync', requireAuthOrMesh, async (req, res) => {
   try {
     const fs = await import('node:fs');
     const path = await import('node:path');
@@ -86,6 +98,148 @@ router.get('/api/secrets/sync', requireAuth, requireScope('keys:read', 'config:r
     res.send(blob);
   } catch (err) {
     serverError(res, err);
+  }
+});
+
+router.get('/api/secrets/list', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
+  try {
+    const brainDir = brainDirFromReq(req);
+    const keys = await listSecretsMeta(brainDir);
+    res.json({ keys, store: path.join(brainDir, 'config', 'secrets.enc') });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.get('/api/secrets/sync/status', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
+  try {
+    const { getSecretsChecksum } = await import('../../core/secrets-sync.mjs');
+    const { getMeshPeers } = await import('../../core/mesh.mjs');
+    
+    const localChecksum = getSecretsChecksum();
+    const peers = getMeshPeers();
+    
+    const nodes = await Promise.all(peers.map(async (peer) => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        
+        const response = await fetch(`http://${peer.ip}:3100/api/secrets/checksum`, {
+          signal: controller.signal,
+          headers: {
+            ...(req.headers['authorization'] ? { 'Authorization': req.headers['authorization'] } : {})
+          }
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const { checksum } = await response.json();
+          return {
+            hostname: peer.hostname,
+            ip: peer.ip,
+            status: checksum === localChecksum ? 'synced' : 'out_of_sync',
+            checksum
+          };
+        }
+      } catch (e) {
+        // ignore
+      }
+      return {
+        hostname: peer.hostname,
+        ip: peer.ip,
+        status: 'unreachable',
+        checksum: null
+      };
+    }));
+
+    res.json({
+      localChecksum,
+      nodes
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.post('/api/secrets/sync/trigger', requireAuth, requireScope('keys:write', 'config:write'), async (req, res) => {
+  try {
+    const { getMeshPeers } = await import('../../core/mesh.mjs');
+    const peers = getMeshPeers();
+    
+    const results = await Promise.all(peers.map(async (peer) => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        
+        const response = await fetch(`http://${peer.ip}:3100/api/secrets/sync/trigger-pull`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(req.headers['authorization'] ? { 'Authorization': req.headers['authorization'] } : {})
+          }
+        });
+        clearTimeout(timeoutId);
+        
+        return {
+          hostname: peer.hostname,
+          ip: peer.ip,
+          success: response.ok
+        };
+      } catch (e) {
+        return {
+          hostname: peer.hostname,
+          ip: peer.ip,
+          success: false,
+          error: e.message
+        };
+      }
+    }));
+
+    res.json({ success: true, results });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+router.post('/api/secrets/sync/trigger-pull', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  const cleanIp = ip.includes(':') ? ip.split(':').pop() : ip;
+  const isFromMesh = cleanIp && (cleanIp.startsWith('100.') || cleanIp === '127.0.0.1' || cleanIp === '::1');
+  
+  if (!isFromMesh) {
+    return requireAuth(req, res, () => {
+      return requireScope('keys:write', 'config:write')(req, res, async () => {
+        await runPull(res);
+      });
+    });
+  }
+  
+  await runPull(res);
+  
+  async function runPull(response) {
+    try {
+      const { getLeaderInfo, isLeader } = await import('../../core/leader-election.mjs');
+      const { pullSecretsFromLeader } = await import('../../core/secrets-sync.mjs');
+      
+      if (await isLeader()) {
+        return response.json({ success: true, message: 'Current node is leader, skip pull' });
+      }
+      
+      const leaderInfo = await getLeaderInfo();
+      if (!leaderInfo || !leaderInfo.ip) {
+        return response.status(400).json({ error: 'Leader IP not found' });
+      }
+      
+      const ok = await pullSecretsFromLeader(leaderInfo.ip);
+      if (ok) {
+        response.json({ success: true });
+      } else {
+        response.status(500).json({ error: 'Failed to pull secrets from leader' });
+      }
+    } catch (err) {
+      serverError(response, err);
+    }
   }
 });
 

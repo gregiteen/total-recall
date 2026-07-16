@@ -3,6 +3,11 @@ import request from 'supertest';
 import express from 'express';
 import meshRouter from './mesh.mjs';
 
+vi.mock('../auth.mjs', () => ({
+  requireAuth: (req, res, next) => next(),
+  requireScope: () => (req, res, next) => next()
+}));
+
 vi.mock('../../core/leader-election.mjs', () => ({
   getLeaderInfo: vi.fn().mockResolvedValue({ id: 'leader-1' }),
   isLeader: vi.fn().mockResolvedValue(true)

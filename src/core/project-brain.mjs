@@ -60,6 +60,7 @@ function copyDirMerge(src, dest) {
   let n = 0;
   ensureDir(dest);
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.name === '.git' || entry.name === 'node_modules') continue;
     const from = path.join(src, entry.name);
     const to = path.join(dest, entry.name);
     if (entry.isDirectory()) {

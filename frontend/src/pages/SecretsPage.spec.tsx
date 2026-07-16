@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import ApiKeysPage from './ApiKeysPage';
+import SecretsPage from './SecretsPage';
 import { BrowserRouter } from 'react-router-dom';
 import * as api from '../api';
 
 vi.mock('../api');
 
-describe('ApiKeysPage', () => {
+describe('SecretsPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -20,10 +20,11 @@ describe('ApiKeysPage', () => {
     vi.mocked(api.fetchClaudeModels).mockResolvedValue([]);
     vi.mocked(api.fetchOpenaiModels).mockResolvedValue([]);
     vi.mocked(api.fetchOpenRouterModels).mockResolvedValue([]);
+    vi.mocked(api.getSyncStatus).mockResolvedValue({ nodes: [], localChecksum: 'abc' } as any);
 
     render(
       <BrowserRouter>
-        <ApiKeysPage />
+        <SecretsPage />
       </BrowserRouter>
     );
 

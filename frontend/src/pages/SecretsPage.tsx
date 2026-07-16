@@ -28,13 +28,18 @@ import {
   fetchGeminiModels,
   fetchClaudeModels,
   fetchOpenaiModels,
-  fetchOpenRouterModels
+  fetchOpenRouterModels,
+  addSecret,
+  triggerSync,
+  getSyncStatus,
+  type SyncNodeStatus
 } from '../api'
 import type { ConfigJson, GeminiModelInfo } from '../types'
 import { startRegistration, startAuthentication, browserSupportsWebAuthn } from '@simplewebauthn/browser'
 import UsagePage from './UsagePage'
+import './SecretsPage.css'
 
-type Tab = 'catalog' | 'pats' | 'import' | 'cloud' | 'usage'
+type Tab = 'catalog' | 'pats' | 'import' | 'cloud' | 'usage' | 'sync'
 
 /** Form state — string inputs; converted on save */
 type MetaEdit = {
@@ -142,7 +147,7 @@ function ProviderLogo({ provider }: { provider?: string }) {
   );
 }
 
-export default function ApiKeysPage() {
+export default function SecretsPage() {
   const [tab, setTab] = useState<Tab>('catalog')
 
   const [configData, setConfigData] = useState<ConfigJson | null>(null)
@@ -196,6 +201,92 @@ export default function ApiKeysPage() {
     { key: string; masked: string; already_set?: boolean; provider: string | null; source_label: string }[]
   >([])
   const [importSel, setImportSel] = useState<Set<string>>(new Set())
+
+  // Creation panel state
+  const [isCreating, setIsCreating] = useState(false)
+  const [newSecretKeyName, setNewSecretKeyName] = useState('')
+  const [newSecretVal, setNewSecretVal] = useState('')
+
+  // Sync state
+  const [syncNodes, setSyncNodes] = useState<SyncNodeStatus[]>([])
+  const [localChecksum, setLocalChecksum] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncLogs, setSyncLogs] = useState<{ time: string; event: string; status: 'info' | 'success' | 'error' }[]>([
+    { time: new Date().toLocaleTimeString(), event: 'Secrets system initialized', status: 'info' }
+  ])
+
+  const loadSyncData = useCallback(async () => {
+    try {
+      const syncData = await getSyncStatus()
+      setSyncNodes(syncData.nodes || [])
+      setLocalChecksum(syncData.localChecksum)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load sync status')
+    }
+  }, [])
+
+  const handleTriggerSync = async () => {
+    setSyncing(true)
+    setError(null)
+    const timeStr = new Date().toLocaleTimeString()
+    setSyncLogs(prev => [{ time: timeStr, event: 'Initiating mesh secrets synchronization...', status: 'info' }, ...prev])
+    try {
+      const res = await triggerSync()
+      const succeeded = res.results.filter(r => r.success).length
+      const total = res.results.length
+      const msg = `Mesh sync complete: ${succeeded}/${total} nodes responded successfully.`
+      setSyncLogs(prev => [{ time: new Date().toLocaleTimeString(), event: msg, status: 'success' }, ...prev])
+      setSuccessMsg(`Mesh sync complete. ${succeeded}/${total} nodes synced.`)
+      await loadSyncData()
+    } catch (err: any) {
+      const msg = `Sync trigger failed: ${err.message || err}`
+      setSyncLogs(prev => [{ time: new Date().toLocaleTimeString(), event: msg, status: 'error' }, ...prev])
+      setError(err.message || 'Failed to trigger synchronization')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleCreateSecret = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newSecretKeyName.trim() || !newSecretVal.trim()) {
+      setError('Key name and secret value are required')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const reposArr = edit.repos ? edit.repos.split(',').map(r => r.trim()).filter(Boolean) : []
+      await addSecret(newSecretKeyName.trim(), newSecretVal.trim(), {
+        provider: edit.provider || 'openai',
+        scope: edit.repos ? 'project' : 'global',
+        repos: reposArr,
+        subscription_tier: edit.subscription_tier || undefined,
+        monthly_cost_usd: edit.monthly_cost_usd ? parseFloat(edit.monthly_cost_usd) : undefined,
+        monthly_cap_usd: edit.monthly_cap_usd ? parseFloat(edit.monthly_cap_usd) : undefined,
+        api_docs_url: edit.api_docs_url || undefined,
+        rotate_every_days: edit.rotate_every_days ? parseInt(edit.rotate_every_days, 10) : undefined,
+        auto_rotate: !!edit.auto_rotate,
+        notes: edit.notes || undefined,
+        project_path: edit.project_path || undefined,
+        label: edit.label || undefined,
+      })
+      setIsCreating(false)
+      setNewSecretKeyName('')
+      setNewSecretVal('')
+      await loadCatalog()
+    } catch (err: any) {
+      setError(err.message || 'Failed to create secret')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'sync') {
+      void loadSyncData()
+    }
+  }, [tab, loadSyncData])
 
   const loadCatalog = useCallback(async () => {
     setLoading(true)
@@ -799,6 +890,7 @@ export default function ApiKeysPage() {
             { id: 'import' as Tab, label: 'Import from env' },
             { id: 'cloud' as Tab, label: 'Cloud Models (API)' },
             { id: 'pats' as Tab, label: 'TR PATs (key generator)' },
+            { id: 'sync' as Tab, label: 'Mesh Sync Status' },
           ] as const
         ).map((t) => (
           <button
@@ -826,7 +918,7 @@ export default function ApiKeysPage() {
             /* Keep list in a fixed viewport so editor never requires page-top scroll */
             height: 'calc(100vh - 280px)',
             minHeight: 420,
-            marginRight: selected ? 440 : 0,
+            marginRight: (selected || isCreating) ? 440 : 0,
             transition: 'margin 0.15s ease',
           }}
         >
@@ -876,6 +968,32 @@ export default function ApiKeysPage() {
                 outline: 'none',
               }}
             />
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ padding: '8px 16px', fontSize: 13, borderRadius: 10, cursor: 'pointer' }}
+              onClick={() => {
+                setSelected(null)
+                setIsCreating(true)
+                setEdit({
+                  label: '',
+                  provider: 'openai',
+                  repos: '',
+                  subscription_tier: '',
+                  monthly_cost_usd: '',
+                  monthly_cap_usd: '',
+                  api_docs_url: '',
+                  rotate_every_days: '',
+                  auto_rotate: false,
+                  notes: '',
+                  project_path: ''
+                })
+                setNewSecretKeyName('')
+                setNewSecretVal('')
+              }}
+            >
+              + Create Secret
+            </button>
           </div>
 
           <div
@@ -1075,10 +1193,10 @@ export default function ApiKeysPage() {
           )}
 
           {/* Fixed viewport drawer — no scroll-to-top */}
-          {selected && (
+          {(selected || isCreating) && (
             <div
               role="dialog"
-              aria-label={`Edit ${selected.key}`}
+              aria-label={selected ? `Edit ${selected.key}` : 'Create Secret'}
               style={{
                 position: 'fixed',
                 top: 0,
@@ -1108,7 +1226,7 @@ export default function ApiKeysPage() {
               >
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 10, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Edit secret
+                    {selected ? 'Edit secret' : 'Create secret'}
                   </div>
                   <strong
                     style={{
@@ -1119,24 +1237,150 @@ export default function ApiKeysPage() {
                       marginTop: 2,
                     }}
                   >
-                    {selected.key}
+                    {selected ? selected.key : 'New Secret'}
                   </strong>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                    {selected.masked || '••••'}
-                    {selected.subscription_tier ? ` · ${selected.subscription_tier}` : ''}
-                    {selected.monthly_cost_usd != null ? ` · $${selected.monthly_cost_usd}/mo` : ''}
-                  </div>
+                  {selected && (
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                      {selected.masked || '••••'}
+                      {selected.subscription_tier ? ` · ${selected.subscription_tier}` : ''}
+                      {selected.monthly_cost_usd != null ? ` · $${selected.monthly_cost_usd}/mo` : ''}
+                    </div>
+                  )}
                 </div>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(null); selectedKeyRef.current = null; }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setSelected(null); selectedKeyRef.current = null; setIsCreating(false); }}>
                   ✕
                 </button>
               </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+               <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+                {isCreating && (
+                  <form onSubmit={(e) => { void handleCreateSecret(e) }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <PanelSection title="Credentials">
+                      <div>
+                        <label htmlFor="secret-key-name" className="field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Secret Key Name
+                        </label>
+                        <input
+                          id="secret-key-name"
+                          className="input font-mono"
+                          placeholder="e.g. OPENAI_API_KEY"
+                          value={newSecretKeyName}
+                          onChange={e => setNewSecretKeyName(e.target.value)}
+                          style={{
+                            background: 'var(--bg-tertiary)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border)',
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            outline: 'none',
+                            fontSize: 13,
+                            width: '100%',
+                            marginTop: 4,
+                            boxSizing: 'border-box'
+                          }}
+                          required
+                        />
+                      </div>
+                      <div style={{ marginTop: 12 }}>
+                        <label htmlFor="secret-value" className="field-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          Secret Value
+                        </label>
+                        <input
+                          id="secret-value"
+                          type="password"
+                          className="input"
+                          placeholder="Enter credential value"
+                          value={newSecretVal}
+                          onChange={e => setNewSecretVal(e.target.value)}
+                          style={{
+                            background: 'var(--bg-tertiary)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border)',
+                            padding: '8px 12px',
+                            borderRadius: 6,
+                            outline: 'none',
+                            fontSize: 13,
+                            width: '100%',
+                            marginTop: 4,
+                            boxSizing: 'border-box'
+                          }}
+                          required
+                        />
+                      </div>
+                    </PanelSection>
 
-              <PanelSection
-                title="Reveal value (passkey)"
-                hint="Full secret values require step-up auth — passkey preferred, password fallback"
-              >
+                    <PanelSection title="Identity">
+                      <Field label="Label" value={edit.label} onChange={(v) => setEdit({ ...edit, label: v })} />
+                      <Field label="Provider" value={edit.provider} onChange={(v) => setEdit({ ...edit, provider: v })} />
+                    </PanelSection>
+
+                    <PanelSection title="Binding (one repo max)">
+                      <Field
+                        label="Product repo (exactly one name, or empty = Developer secrets)"
+                        value={edit.repos}
+                        onChange={(v) => setEdit({ ...edit, repos: v })}
+                      />
+                      {edit.repos.split(/[,]+/).map((s) => s.trim()).filter(Boolean).length > 1 && (
+                        <div style={{ fontSize: 11, color: '#f87171', marginBottom: 10 }}>
+                          Error: only one repo allowed. Remove extras before save.
+                        </div>
+                      )}
+                      <Field label="Project path (optional)" value={edit.project_path} onChange={(v) => setEdit({ ...edit, project_path: v })} />
+                    </PanelSection>
+
+                    <PanelSection title="Subscription & cost">
+                      <Field
+                        label="Subscription level / tier"
+                        value={edit.subscription_tier}
+                        onChange={(v) => setEdit({ ...edit, subscription_tier: v })}
+                        placeholder="e.g. free, pro, team, enterprise, payg"
+                      />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
+                        <Field
+                          label="Monthly cost $"
+                          value={edit.monthly_cost_usd}
+                          onChange={(v) => setEdit({ ...edit, monthly_cost_usd: v })}
+                          placeholder="20"
+                        />
+                        <Field
+                          label="Monthly cap $ (budget)"
+                          value={edit.monthly_cap_usd}
+                          onChange={(v) => setEdit({ ...edit, monthly_cap_usd: v })}
+                          placeholder="100"
+                        />
+                      </div>
+                    </PanelSection>
+
+                    <PanelSection title="Docs & rotation">
+                      <Field label="API docs URL" value={edit.api_docs_url} onChange={(v) => setEdit({ ...edit, api_docs_url: v })} />
+                      <Field label="Rotate every (days)" value={edit.rotate_every_days} onChange={(v) => setEdit({ ...edit, rotate_every_days: v })} />
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={!!edit.auto_rotate}
+                          onChange={(e) => setEdit({ ...edit, auto_rotate: e.target.checked })}
+                        />
+                        Auto-rotate when due
+                      </label>
+                      <Field label="Notes" value={edit.notes} onChange={(v) => setEdit({ ...edit, notes: v })} />
+                    </PanelSection>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
+                        {saving ? 'Creating...' : 'Create Secret'}
+                      </button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setIsCreating(false)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {selected && (
+                  <>
+                    <PanelSection
+                      title="Reveal value (passkey)"
+                      hint="Full secret values require step-up auth — passkey preferred, password fallback"
+                    >
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8 }}>
                   Passkeys: {webauthn?.count ?? 0}
                   {!browserSupportsWebAuthn() && ' · browser unsupported'}
@@ -1414,6 +1658,8 @@ export default function ApiKeysPage() {
               <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'monospace' }}>
                 CLI: secret meta {selected.key} --repo my-app --tier pro --monthly-cost 25 --rotate-days 90
               </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1833,6 +2079,92 @@ export default function ApiKeysPage() {
               <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
                 These keys are stored locally and injected into the CLI reasoning agents on dispatch.
               </span>
+          </div>
+        </div>
+      )}
+
+      {tab === 'sync' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600 }}>Mesh Secrets Sync Status</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                Checksum of local encrypted secrets database. Sync pushes updates to all configured mesh nodes.
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {localChecksum && (
+                <div className="badge" style={{ padding: '6px 12px', fontSize: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)' }}>
+                  Local Checksum: <code style={{ color: 'var(--accent)' }}>{localChecksum.slice(0, 8)}</code>
+                </div>
+              )}
+              <button 
+                onClick={handleTriggerSync} 
+                disabled={syncing} 
+                className="btn btn-primary" 
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                {syncing && (
+                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" style={{ width: 12, height: 12, border: '2px solid currentColor', borderRightColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.75s linear infinite' }} />
+                )}
+                {syncing ? 'Syncing...' : 'Trigger Sync'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {/* Sync Nodes List */}
+            <div className="card" style={{ padding: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <h4 style={{ fontSize: 14, fontWeight: 600, borderBottom: '1px solid var(--border)', paddingBottom: 10, margin: 0 }}>
+                Mesh Nodes ({syncNodes.length})
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto' }}>
+                {syncNodes.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center', margin: '20px 0' }}>
+                    No mesh nodes configured or reachable.
+                  </p>
+                ) : (
+                  syncNodes.map(node => (
+                    <div key={node.hostname} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{node.hostname}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{node.ip}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {node.checksum && (
+                          <code style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{node.checksum.slice(0, 8)}</code>
+                        )}
+                        <span 
+                          style={{ 
+                            width: 8, 
+                            height: 8, 
+                            borderRadius: '50%', 
+                            background: node.status === 'synced' ? '#22c55e' : node.status === 'out_of_sync' ? '#eab308' : '#ef4444',
+                            boxShadow: node.status === 'synced' ? '0 0 6px rgba(34,197,94,0.5)' : node.status === 'out_of_sync' ? '0 0 6px rgba(234,179,8,0.5)' : '0 0 6px rgba(239,68,68,0.5)'
+                          }} 
+                          title={node.status}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Sync Logs */}
+            <div className="card" style={{ padding: 20, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <h4 style={{ fontSize: 14, fontWeight: 600, borderBottom: '1px solid var(--border)', paddingBottom: 10, margin: 0 }}>
+                Sync Activity Log
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto', fontFamily: 'monospace', fontSize: 11 }}>
+                {syncLogs.map((log, idx) => (
+                  <div key={idx} style={{ color: log.status === 'success' ? '#34d399' : log.status === 'error' ? '#f87171' : 'var(--text-secondary)' }}>
+                    <span style={{ color: 'var(--text-tertiary)', marginRight: 8 }}>[{log.time}]</span>
+                    {log.event}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

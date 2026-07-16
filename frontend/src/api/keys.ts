@@ -143,6 +143,7 @@ export interface SecretCatalogKey {
   created_at: string | null
   updated_at: string | null
   rotated_at: string | null
+  headscale_url?: string | null
   usage_30d: { events: number; cost_usd: number; input_tokens: number; output_tokens: number }
   tiers: { id: string; label: string; monthly_usd?: number | null }[]
 }

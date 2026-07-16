@@ -105,7 +105,13 @@ async function staleWhileRevalidate(request) {
       }
       return response;
     })
-    .catch(() => cached);
+    .catch((err) => {
+      if (cached) return cached;
+      return new Response(JSON.stringify({ error: 'Network error and no cache available' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    });
 
   return cached || fetchPromise;
 }

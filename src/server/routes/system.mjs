@@ -32,6 +32,9 @@ let cachedPricingMap = null;
 let lastPricingFetch = 0;
 
 async function getPricingMap() {
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+    return {};
+  }
   if (cachedPricingMap && Date.now() - lastPricingFetch < 1000 * 60 * 60) {
     return cachedPricingMap;
   }

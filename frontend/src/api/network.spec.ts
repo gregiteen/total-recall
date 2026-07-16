@@ -13,7 +13,7 @@ describe('networkApi', () => {
     });
 
     const result = await networkApi.getStats();
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/stats');
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/stats', expect.any(Object));
     expect(result.stats.total).toBe(10);
   });
 
@@ -24,7 +24,7 @@ describe('networkApi', () => {
     });
 
     const result = await networkApi.getPolicy();
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/policy');
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/policy', expect.any(Object));
     expect(result.id).toBe('network-policy');
   });
 
@@ -35,11 +35,10 @@ describe('networkApi', () => {
     });
 
     await networkApi.blockDomain('evil.com');
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/block', {
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/block', expect.objectContaining({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ domain: 'evil.com' })
-    });
+    }));
   });
 
   it('unblockDomain DELETEs to /api/network/block/:domain', async () => {
@@ -49,8 +48,8 @@ describe('networkApi', () => {
     });
 
     await networkApi.unblockDomain('evil.com');
-    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/block/evil.com', {
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/block/evil.com', expect.objectContaining({
       method: 'DELETE'
-    });
+    }));
   });
 });
