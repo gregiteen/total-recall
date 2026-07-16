@@ -18,6 +18,17 @@ function tmpBrain() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tr-secrets-'));
 }
 
+vi.mock('./research-queue.mjs', () => ({
+  addToQueue: vi.fn()
+}));
+
+vi.mock('./logger.mjs', () => ({
+  logger: {
+    info: vi.fn(),
+    error: vi.fn()
+  }
+}));
+
 describe('secrets-store', () => {
   let brain;
   const prevPass = process.env.TR_SECRETS_PASSWORD;

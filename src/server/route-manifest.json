@@ -1,5 +1,9 @@
 [
   {
+    "method": "POST",
+    "path": "/:provider"
+  },
+  {
     "method": "GET",
     "path": "/.well-known/total-recall.json"
   },
@@ -18,6 +22,10 @@
   {
     "method": "GET",
     "path": "/api/brains/:id/nodes"
+  },
+  {
+    "method": "POST",
+    "path": "/api/brains/sync"
   },
   {
     "method": "POST",
@@ -241,6 +249,30 @@
   },
   {
     "method": "GET",
+    "path": "/api/network/audit"
+  },
+  {
+    "method": "POST",
+    "path": "/api/network/block"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/network/block/:domain"
+  },
+  {
+    "method": "GET",
+    "path": "/api/network/policy"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/network/policy"
+  },
+  {
+    "method": "GET",
+    "path": "/api/network/stats"
+  },
+  {
+    "method": "GET",
     "path": "/api/openai-models"
   },
   {
@@ -312,6 +344,10 @@
     "path": "/api/secrets/:key/rotate"
   },
   {
+    "method": "GET",
+    "path": "/api/secrets/checksum"
+  },
+  {
     "method": "POST",
     "path": "/api/secrets/deploy-payload"
   },
@@ -346,6 +382,10 @@
   {
     "method": "GET",
     "path": "/api/secrets/scan-env"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/sync"
   },
   {
     "method": "GET",
@@ -598,6 +638,14 @@
   {
     "method": "GET",
     "path": "/auth/status"
+  },
+  {
+    "method": "GET",
+    "path": "/leader"
+  },
+  {
+    "method": "GET",
+    "path": "/nodes"
   },
   {
     "method": "GET",

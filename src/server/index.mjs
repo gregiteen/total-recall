@@ -178,6 +178,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
 
 app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res) => {
   const { findBinaryInPath } = await import('../core/runtime.mjs');
+  const { getGateStats } = await import('../core/throttled-fetch.mjs');
   const agents = [];
   for (const bin of ['antigravity', 'grok', 'gemini', 'claude', 'codex']) {
     if (findBinaryInPath(bin)) agents.push(bin);
@@ -189,6 +190,7 @@ app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res
       runtime: 'cli-agents',
       uptime_seconds: Math.floor(process.uptime()),
       capabilities: [],
+      fetch_gate: getGateStats(),
       reason: 'No CLI agents found. Install antigravity, grok, claude, or codex.',
     });
   }
@@ -204,6 +206,7 @@ app.get('/api/health', requireAuth, requireScope('health:read'), async (req, res
       'research-synthesis',
       'structured-output',
     ],
+    fetch_gate: getGateStats(),
   });
 });
 
@@ -621,7 +624,20 @@ app.get(/^(.*)$/, (req, res) => {
 
 const serverSecurityConfig = loadSecurityConfig();
 const PORT = configPort || serverSecurityConfig.bind?.port || 3000;
-const configuredHost = configHost || serverSecurityConfig.bind?.host || '127.0.0.1';
+import { getMeshIp } from '../core/mesh.mjs';
+
+let configuredHost = configHost || serverSecurityConfig.bind?.host;
+const meshIp = getMeshIp();
+
+if (!configuredHost) {
+  if (meshIp) {
+    configuredHost = meshIp;
+  } else {
+    configuredHost = '0.0.0.0';
+    logger.warn("server", "No mesh IP found. Binding to 0.0.0.0 as fallback.");
+  }
+}
+
 const publicBindRequested = configuredHost === '0.0.0.0' || configuredHost === '::';
 const HOST = nodeEnv === 'production' && publicBindRequested && serverSecurityConfig.bind?.allow_public_bind !== true
   ? '127.0.0.1'
@@ -630,8 +646,8 @@ const HOST = nodeEnv === 'production' && publicBindRequested && serverSecurityCo
 import { WebSocketServer } from 'ws';
 const collabWss = new WebSocketServer({ noServer: true });
 
-const server = app.listen(PORT, HOST, () => {
-  server.on('upgrade', async (request, socket, head) => {
+function setupUpgradeHandler(srv) {
+  srv.on('upgrade', async (request, socket, head) => {
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
     if (url.pathname === '/collab-ws') {
       try {
@@ -643,11 +659,23 @@ const server = app.listen(PORT, HOST, () => {
       }
     }
   });
+}
 
+const server = app.listen(PORT, HOST, () => {
+  setupUpgradeHandler(server);
   if (HOST !== configuredHost) {
     logger.error("server", `Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
   }
   logger.info("server", `Total Recall Brain v3.0.0 is listening on http://${HOST}:${PORT}`);
+});
+
+// If bound to a mesh IP, also bind to 127.0.0.1 so local CLI/Dashboard works
+if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
+  const localServer = app.listen(PORT, '127.0.0.1', () => {
+    setupUpgradeHandler(localServer);
+    logger.info("server", `Total Recall Brain v3.0.0 is ALSO listening on http://127.0.0.1:${PORT}`);
+  });
+}
 
   logger.info("server", "┌─────────────────────────────────────────────┐");
   logger.info("server", "│  Total Recall Brain v3.0.0                  │");

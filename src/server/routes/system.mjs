@@ -16,6 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { BRAIN_DIR, serverError } from './_shared.mjs';
 import { logger } from '../../core/logger.mjs';
+import { throttledFetch } from '../../core/throttled-fetch.mjs';
 
 // Resolve package root (src/server/routes/ → go up 3 levels)
 import { fileURLToPath } from 'node:url';
@@ -37,7 +38,7 @@ async function getPricingMap() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const response = await fetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
+    const response = await throttledFetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
     clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();

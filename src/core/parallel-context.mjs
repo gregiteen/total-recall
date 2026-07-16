@@ -23,12 +23,13 @@ import { getNodes } from './vault-cache.mjs';
 import { googleApiKey } from './config.mjs';
 import { logger } from './logger.mjs';
 import { inferMemoryLayer } from './memory-layers.mjs';
+import { throttledFetch } from './throttled-fetch.mjs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 const FLASH_MODEL = 'gemini-3.1-flash-lite';
 const FLASH_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MAX_CONCURRENCY = 50;       // concurrent HTTP connections
+const MAX_CONCURRENCY = 4;        // concurrent HTTP connections — keep low, a burst this size can overwhelm router conntrack/Wi-Fi
 const FLASH_TIMEOUT_MS = 6000;    // per-call timeout
 const DEFAULT_BUDGET_TOKENS = 8000;
 const CHARS_PER_TOKEN = 4;
@@ -52,7 +53,7 @@ Reply EXACTLY: SCORE|KEY_BIT (one line, no explanation)`;
   const timeout = setTimeout(() => controller.abort(), FLASH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
+    const response = await throttledFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -269,7 +270,7 @@ export async function checkFlashHealth() {
 
   try {
     const start = Date.now();
-    const response = await fetch(url, {
+    const response = await throttledFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

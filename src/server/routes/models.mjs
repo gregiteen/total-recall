@@ -24,6 +24,7 @@ import {
   CONFIG_DIR,
   serverError,
 } from './_shared.mjs';
+import { throttledFetch } from '../../core/throttled-fetch.mjs';
 
 const router = Router();
 
@@ -91,7 +92,7 @@ async function getPricingMap() {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
-    const response = await fetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
+    const response = await throttledFetch('https://openrouter.ai/api/v1/models', { signal: controller.signal });
     clearTimeout(timeoutId);
     if (response.ok) {
       const data = await response.json();
@@ -199,11 +200,9 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
     let apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       try {
-        const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
-        if (fs.existsSync(secretsPath)) {
-          const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
-          apiKey = secrets.gemini_api_key || secrets.google_api_key;
-        }
+        const { loadSecrets } = await import('../../core/secrets-store.mjs');
+        const secrets = await loadSecrets(AGENT_DIR) || {};
+        apiKey = secrets.gemini_api_key || secrets.google_api_key;
       } catch {}
     }
 
@@ -219,7 +218,7 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+      const response = await throttledFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -257,11 +256,9 @@ router.get('/api/claude-models', requireAuth, async (req, res) => {
     let apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       try {
-        const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
-        if (fs.existsSync(secretsPath)) {
-          const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
-          apiKey = secrets.anthropic_api_key;
-        }
+        const { loadSecrets } = await import('../../core/secrets-store.mjs');
+        const secrets = await loadSecrets(AGENT_DIR) || {};
+        apiKey = secrets.anthropic_api_key;
       } catch {}
     }
 
@@ -270,7 +267,7 @@ router.get('/api/claude-models', requireAuth, async (req, res) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch('https://api.anthropic.com/v1/models', {
+      const response = await throttledFetch('https://api.anthropic.com/v1/models', {
         headers: {
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01'
@@ -309,11 +306,9 @@ router.get('/api/openai-models', requireAuth, async (req, res) => {
     let apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       try {
-        const secretsPath = path.join(AGENT_DIR, 'secrets.enc');
-        if (fs.existsSync(secretsPath)) {
-          const secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
-          apiKey = secrets.openai_api_key;
-        }
+        const { loadSecrets } = await import('../../core/secrets-store.mjs');
+        const secrets = await loadSecrets(AGENT_DIR) || {};
+        apiKey = secrets.openai_api_key || secrets.open_ai_api_key;
       } catch {}
     }
 
@@ -322,7 +317,7 @@ router.get('/api/openai-models', requireAuth, async (req, res) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch('https://api.openai.com/v1/models', {
+      const response = await throttledFetch('https://api.openai.com/v1/models', {
         headers: {
           'Authorization': `Bearer ${apiKey}`
         },
@@ -359,7 +354,7 @@ router.get('/api/openai-models', requireAuth, async (req, res) => {
  */
 router.get('/api/openrouter-models', requireAuth, async (req, res) => {
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/models');
+    const response = await throttledFetch('https://openrouter.ai/api/v1/models');
     if (response.ok) {
       const data = await response.json();
       const models = data.data.map(m => ({

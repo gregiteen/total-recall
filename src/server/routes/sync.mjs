@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { runSync } from '../../core/remote-vault-sync.mjs';
 import config from '../../core/config.mjs';
 import { requireAuth } from '../auth.mjs';
+import { throttledFetch } from '../../core/throttled-fetch.mjs';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.post('/api/sync/remote-vault/proposals/:id/decision', requireAuth, async 
 
     const baseUrl = config.remoteVaultSync.baseUrl.replace(/\/+$/, '');
 
-    const remoteRes = await fetch(`${baseUrl}/api/admin/proposals/${id}/decision`, {
+    const remoteRes = await throttledFetch(`${baseUrl}/api/admin/proposals/${id}/decision`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

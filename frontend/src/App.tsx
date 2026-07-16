@@ -7,9 +7,12 @@ import LoginPage from './pages/LoginPage'
 import ChatPage from './pages/ChatPage'
 import MemoryPage from './pages/MemoryPage'
 import SettingsPage from './pages/SettingsPage'
+import NetworkPage from './pages/NetworkPage'
 import TasksPage from './pages/TasksPage'
 import ApiKeysPage from './pages/ApiKeysPage'
 import IntegrationsPage from './pages/IntegrationsPage'
+import { MeshPage } from './pages/MeshPage'
+import { WebhooksPage } from './pages/WebhooksPage'
 import BrainSelector from './components/BrainSelector'
 import SkillsPage from './pages/SkillsPage'
 import RulesPage from './pages/RulesPage'
@@ -133,6 +136,27 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
           </svg>
           Keys & Usage
+        </NavLink>
+        <NavLink to="/network" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-network">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+            <line x1="6" y1="6" x2="6.01" y2="6" />
+            <line x1="6" y1="18" x2="6.01" y2="18" />
+          </svg>
+          Network
+        </NavLink>
+        <NavLink to="/mesh" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-mesh">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+          </svg>
+          Mesh
+        </NavLink>
+        <NavLink to="/webhooks" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-webhooks">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          </svg>
+          Webhooks
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} id="nav-settings">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -312,10 +336,13 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
-            <Route path="/openwiki" element={<OpenWikiPage />} />
+            <Route path="/openwiki" element={<OpenWikiPage activeBrainId={activeBrainId} />} />
             <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
             <Route path="/keys" element={<ApiKeysPage />} />
             <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
+            <Route path="/network" element={<NetworkPage />} />
+            <Route path="/mesh" element={<MeshPage />} />
+            <Route path="/webhooks" element={<WebhooksPage />} />
             <Route path="/help" element={<HelpPage />} />
             {/* Legacy OS-control-plane routes → core product */}
             <Route path="/vault" element={<Navigate to="/memory" replace />} />

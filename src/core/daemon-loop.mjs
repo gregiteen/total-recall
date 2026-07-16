@@ -6,6 +6,7 @@
  * - Does NOT invent idle work unless TR_IDLE_TASKS=1
  * - Periodically runs dream (system memory consolidation)
  * - Ingests sessions on boot; recompiles surfaces every N ticks
+ * - Auto-syncs all .md files from registered repos into Total Recall
  *
  * Spawned by `total-recall daemon start`.
  */
@@ -14,6 +15,7 @@ import path from 'path';
 import fs from 'fs';
 import { createScheduler, updateTaskStatus, persistTaskToDisk } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
+import { syncAllRepos } from './repo-sync.mjs';
 import { logger } from './logger.mjs';
 import { updateQueueItem } from './research-queue.mjs';
 import { agentDir, brainDir } from './config.mjs';
@@ -94,21 +96,78 @@ export function writeInterrupt(message) {
   logger.info({ subsystem: 'daemon-loop', message: `Interrupt written to SKILL.md: ${message}` });
 }
 
+// ─── PID Lockfile ───────────────────────────────────────────────────────────────
+
+const PID_FILE = path.join(BRAIN_DIR, 'daemon.pid');
+
+/**
+ * Attempt to acquire the PID lockfile. If another daemon is alive, exit.
+ * This is process metadata, not application state — uses raw fs, not SSSS.
+ */
+export function acquirePidLock() {
+  try {
+    if (fs.existsSync(PID_FILE)) {
+      const existingPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+      if (existingPid && !isNaN(existingPid)) {
+        try {
+          process.kill(existingPid, 0); // Check if process is alive (signal 0 = no-op check)
+          logger.error({
+            subsystem: 'daemon-loop',
+            message: `Another daemon is already running (PID: ${existingPid}). Exiting.`,
+          });
+          process.exit(1);
+        } catch {
+          // Process is dead — stale PID file
+          logger.info({
+            subsystem: 'daemon-loop',
+            message: `Stale PID file found (PID: ${existingPid} is dead). Overwriting.`,
+          });
+        }
+      }
+    }
+  } catch {
+    // PID file doesn't exist or can't be read — proceed
+  }
+
+  fs.writeFileSync(PID_FILE, String(process.pid), { mode: 0o644 });
+  logger.info({ subsystem: 'daemon-loop', message: `PID lockfile acquired: ${PID_FILE} (PID: ${process.pid})` });
+}
+
+export function releasePidLock() {
+  try {
+    if (fs.existsSync(PID_FILE)) {
+      const storedPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+      if (storedPid === process.pid) {
+        fs.unlinkSync(PID_FILE);
+        logger.info({ subsystem: 'daemon-loop', message: 'PID lockfile released.' });
+      }
+    }
+  } catch {
+    // Best-effort cleanup
+  }
+}
+
 // ─── Main Daemon Loop ───────────────────────────────────────────────────────────
 
 let taskCount = 0;
 let running = true;
 let vaultWatcher = null;
 
-process.on('SIGTERM', () => {
+import { releaseLease } from './leader-election.mjs';
+
+process.on('SIGTERM', async () => {
   logger.info({ subsystem: 'daemon-loop', message: 'SIGTERM received — shutting down gracefully' });
   if (vaultWatcher) vaultWatcher.stop();
+  await releaseLease();
+  releasePidLock();
   running = false;
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   logger.info({ subsystem: 'daemon-loop', message: 'SIGINT received — shutting down gracefully' });
   if (vaultWatcher) vaultWatcher.stop();
+  await releaseLease();
+  releasePidLock();
   running = false;
 });
 
@@ -121,6 +180,9 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function main() {
+  // ─── PID Lock: prevent duplicate daemons ───
+  acquirePidLock();
+
   logger.info({
     subsystem: 'daemon-loop',
     message: `Daemon starting (open task envelope). Vault: ${VAULT_DIR} idle=${process.env.TR_IDLE_TASKS === '1' ? 'on' : 'off'}`,
@@ -157,11 +219,92 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Boot ingest failed: ${err.message}` });
   }
 
+  // Initial repo sync — auto-ingest all .md files from registered repos
+  try {
+    const syncResult = syncAllRepos();
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: `Boot repo-sync: ${syncResult.totalIngested} new files across ${syncResult.repos.length} repos`,
+    });
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Boot repo-sync failed: ${err.message}` });
+  }
+
+  // Initial mesh patch
+  try {
+    const { patchOwnMeshNode } = await import('./mesh.mjs');
+    await patchOwnMeshNode();
+    logger.info({ subsystem: 'daemon-loop', message: 'Mesh node patched on boot' });
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Mesh node patch failed: ${err.message}` });
+  }
+
+  const { tryAcquireLease, isLeader, getLeaderInfo, renewLease } = await import('./leader-election.mjs');
+
+  const acquired = await tryAcquireLease();
+  if (acquired) {
+    logger.info({ subsystem: 'daemon-loop', message: 'Starting as LEADER' });
+  } else {
+    const info = await getLeaderInfo();
+    const leaderStr = info ? info.hostname : 'unknown';
+    logger.info({ subsystem: 'daemon-loop', message: `Starting as FOLLOWER (leader: ${leaderStr})` });
+    
+    // Phase 4C: Startup Sync (follower only)
+    try {
+      const { syncLoop } = await import('./secrets-sync.mjs');
+      // Wait for leader to stabilize
+      logger.info({ subsystem: 'daemon-loop', message: 'Waiting 3000ms for leader to stabilize before secrets sync...' });
+      await new Promise(r => setTimeout(r, 3000));
+      await syncLoop();
+    } catch (err) {
+      logger.info({ subsystem: 'daemon-loop', message: `Startup secrets sync failed: ${err.message}` });
+    }
+  }
+
   let emptyTicks = 0;
 
   while (running) {
     try {
-      // Periodically recompile surfaces
+      const leader = await isLeader();
+      if (!leader) {
+        // We are a follower. Try to acquire lease in case leader died.
+        const newlyAcquired = await tryAcquireLease();
+        if (newlyAcquired) {
+          logger.info({ subsystem: 'daemon-loop', message: 'Became LEADER' });
+        } else {
+          // As a follower, also check for secrets updates periodically (e.g. every 60s)
+          // 60000 / TASK_SLEEP_MS (10000) = 6
+          if (taskCount > 0 && taskCount % 6 === 0) {
+            try {
+              const { syncLoop } = await import('./secrets-sync.mjs');
+              await syncLoop();
+            } catch (err) {
+              logger.info({ subsystem: 'daemon-loop', message: `Secrets sync heartbeat failed: ${err.message}` });
+            }
+          }
+        }
+      }
+
+      // Periodically patch own mesh node (heartbeat)
+      if (taskCount > 0 && taskCount % (60000 / TASK_SLEEP_MS) === 0) {
+        try {
+          const { patchOwnMeshNode } = await import('./mesh.mjs');
+          await patchOwnMeshNode();
+          if (await isLeader()) {
+            await renewLease();
+          }
+        } catch (err) {
+          logger.info({ subsystem: 'daemon-loop', message: `Mesh heartbeat failed: ${err.message}` });
+        }
+      }
+
+      if (!await isLeader()) {
+        await new Promise(r => setTimeout(r, TASK_SLEEP_MS));
+        taskCount++;
+        continue;
+      }
+
+      // Periodically recompile surfaces (LEADER ONLY)
       if (taskCount > 0 && taskCount % RECOMPILE_EVERY_N_TASKS === 0) {
         logger.info({ subsystem: 'daemon-loop', message: 'Running scheduled surface recompile...' });
         try {
@@ -190,6 +333,19 @@ async function main() {
           await runCrons({ vaultDir: VAULT_DIR, skillsDir: SKILLS_DIR, brainDir: BRAIN_DIR });
         } catch (err) {
           logger.error({ subsystem: 'daemon-loop', message: `Cron execution failed: ${err.message}` });
+        }
+
+        // Periodic repo sync — pick up any new/changed .md files in registered repos
+        try {
+          const syncResult = syncAllRepos();
+          if (syncResult.totalIngested > 0) {
+            logger.info({
+              subsystem: 'daemon-loop',
+              message: `Periodic repo-sync: ${syncResult.totalIngested} files updated across ${syncResult.repos.length} repos`,
+            });
+          }
+        } catch (err) {
+          logger.info({ subsystem: 'daemon-loop', message: `Periodic repo-sync failed: ${err.message}` });
         }
       }
 

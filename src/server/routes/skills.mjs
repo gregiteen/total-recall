@@ -103,6 +103,7 @@ function isTrSkillName(name) {
   const n = name.toLowerCase();
   if (TR_SKILL_EXCLUDE.has(n)) return true;
   if (n.startsWith('total-recall')) return true;
+  if (n.startsWith('tr-')) return true;
   return false;
 }
 
@@ -170,6 +171,7 @@ function scanSkillRoot(skillsRoot, repo, projectPath, rootInfo) {
   const sourceRel = rootInfo.rel;
   for (const ent of entries) {
     if (!ent.isDirectory()) continue;
+    if (ent.name.startsWith('.')) continue;
     if (isTrSkillName(ent.name)) continue;
     const skillDir = path.join(skillsRoot, ent.name);
     const skillMd = path.join(skillDir, 'SKILL.md');

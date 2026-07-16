@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
+import { safeFetch as throttledSafeFetch } from './throttled-fetch.mjs';
+import { loadSecretsSync } from './secrets-store.mjs';
 import {
   brainDir,
   braveApiKey as defaultBraveKey,
@@ -42,10 +44,7 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
 
   let secrets = {};
   try {
-    const secretsPath = path.join(path.dirname(configPath), 'secrets.enc');
-    if (fs.existsSync(secretsPath)) {
-      secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}');
-    }
+    secrets = loadSecretsSync(path.dirname(path.dirname(configPath)));
   } catch {}
 
   return {
@@ -130,14 +129,7 @@ export function getSearchUsageStats(config) {
 // ─── Helper: Safe Fetch ─────────────────────────────────────────────────────────
 
 async function safeFetch(url, options = {}, timeoutMs = 10000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally {
-    clearTimeout(timer);
-  }
+  return throttledSafeFetch(url, options, timeoutMs);
 }
 
 /** Strip HTML tags and normalize whitespace */

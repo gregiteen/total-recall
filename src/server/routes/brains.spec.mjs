@@ -55,7 +55,7 @@ describe('Brains Router', () => {
         { name: 'my-project', brainDir: '/mock/projects/my-project', path: '/mock/projects/my-project', registered_at: '2024-01-01' }
       ];
       vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
-        if (typeof p === 'string' && p.includes('project-registry.json')) return true;
+        if (typeof p === 'string' && (p.includes('project-registry.json') || p.includes('my-project'))) return true;
         return false;
       });
       vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {

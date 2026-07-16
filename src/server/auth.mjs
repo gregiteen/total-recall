@@ -383,20 +383,10 @@ export async function changePasswordHandler(req, res) {
 
   // Dynamically update the backup secrets.enc file to preserve the password hash
   try {
-    const backupSecretsPath = path.join(agentDir, 'secrets.enc');
-    let secretsObj = {};
-    if (fs.existsSync(backupSecretsPath)) {
-      try {
-        secretsObj = JSON.parse(fs.readFileSync(backupSecretsPath, 'utf8') || '{}');
-      } catch {}
-    }
+    const { loadSecrets, saveSecrets } = await import('../core/secrets-store.mjs');
+    let secretsObj = await loadSecrets(agentDir);
     secretsObj.dashboard_password_hash = hash;
-    fs.mkdirSync(path.dirname(backupSecretsPath), { recursive: true });
-    fs.writeFileSync(
-      backupSecretsPath,
-      JSON.stringify(secretsObj, null, 2),
-      { encoding: 'utf8', mode: 0o600 }
-    );
+    await saveSecrets(agentDir, secretsObj);
   } catch (err) {
     logger.error('auth', `Failed to write password hash to secrets.enc backup: ${err.message}`);
   }

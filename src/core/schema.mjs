@@ -875,10 +875,19 @@ export const TicketedEventSchema = z.object({
   db_id: z.string().optional().nullable(),
 });
 
+export const NetworkPolicySchema = z.object({
+  type: z.literal('network_policy'),
+  status: z.enum(['active', 'inactive']).default('active'),
+  blocked_domains: z.array(z.string()).default([]),
+  allowed_domains: z.array(z.string()).default([]),
+  domain_limits: z.record(z.object({ maxConcurrency: z.number() })).default({}),
+}).passthrough();
+
 // ─── Schema Registry (§5 of the SSSS spec) ─────────────────────────────────
 
 /** Map from SSSS `type` value to its Zod schema. Used by the operation validator. */
 export const SSSS_SCHEMAS = {
+  network_policy: NetworkPolicySchema,
   memory: MemoryNodeSchema,
   conflict: ConflictRecordSchema,
   task: TaskSchema,

@@ -345,7 +345,8 @@ export default async function init(args) {
           restoredPasswordHash = secretsObj.dashboard_password_hash;
           // Strip password hash from the copied secrets.enc to keep secrets.enc clean
           delete secretsObj.dashboard_password_hash;
-          fs.writeFileSync(destSecretsPath, JSON.stringify(secretsObj, null, 2), { encoding: 'utf8', mode: 0o600 });
+          const { saveSecrets } = await import('../core/secrets-store.mjs');
+          await saveSecrets(path.join(agentDir, 'skills', 'total-recall'), secretsObj);
         }
         logOk('Restored saved API keys and credentials from persistent backup!');
       } catch (err) {
@@ -846,6 +847,17 @@ export default async function init(args) {
       }
       fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2));
       logOk(`Registered project "${projectName}" in global brain registry`);
+
+      // Auto-sync all .md files from the repo into the vault
+      try {
+        const { syncSingleRepo } = await import('../core/repo-sync.mjs');
+        const syncResult = syncSingleRepo(cwd, brainDir);
+        if (syncResult.ingested > 0) {
+          logOk(`Auto-synced ${syncResult.ingested} files from repo into Total Recall`);
+        }
+      } catch (syncErr) {
+        logWarn(`Repo auto-sync failed (non-fatal): ${syncErr.message}`);
+      }
     } catch (err) {
       logWarn(`Failed to register project: ${err.message}`);
     }

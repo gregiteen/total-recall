@@ -1,0 +1,23 @@
+server_url: http://138.197.199.217:8081
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 127.0.0.1:9090
+grpc_listen_addr: 127.0.0.1:50443
+
+private_key_path: /var/lib/headscale/private.key
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+
+db_type: sqlite3
+db_path: /var/lib/headscale/db.sqlite
+
+dns_config:
+  magic_dns: true
+  base_domain: mesh
+  nameservers:
+    - 1.1.1.1

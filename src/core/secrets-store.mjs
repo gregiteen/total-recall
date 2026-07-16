@@ -12,7 +12,7 @@ import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import YAML from 'yaml';
-import { encryptSecrets, decryptSecrets } from './crypto.mjs';
+import { encryptSecrets, decryptSecrets, encryptSecretsSync, decryptSecretsSync } from './crypto.mjs';
 
 const META_KEY = '__tr_secrets_meta';
 
@@ -20,6 +20,9 @@ const META_KEY = '__tr_secrets_meta';
  * @param {string} brainDir
  */
 export function resolveSecretsPath(brainDir) {
+  if (brainDir.endsWith('.agent')) {
+    return path.join(brainDir, 'secrets.enc');
+  }
   return path.join(brainDir, 'config', 'secrets.enc');
 }
 
@@ -39,6 +42,43 @@ export function resolveUsagePath(brainDir) {
 
 function secretsPassword() {
   return process.env.TR_SECRETS_PASSWORD || process.env.TR_MASTER_PASSWORD || null;
+}
+
+/**
+ * Load raw secrets object synchronously
+ */
+export function loadSecretsSync(brainDir) {
+  const filePath = resolveSecretsPath(brainDir);
+  if (!fs.existsSync(filePath)) return {};
+
+  const buf = fs.readFileSync(filePath);
+  const password = secretsPassword();
+
+  if (password && buf.length > 44 && buf[0] !== 0x7b) {
+    try {
+      return decryptSecretsSync(buf, password);
+    } catch (err) {
+      throw new Error(`Failed to decrypt secrets store synchronously: ${err.message}`);
+    }
+  }
+
+  return JSON.parse(buf.toString('utf8') || '{}');
+}
+
+/**
+ * Save raw secrets object synchronously
+ */
+export function saveSecretsSync(brainDir, obj) {
+  const filePath = resolveSecretsPath(brainDir);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  
+  const password = secretsPassword();
+  if (password) {
+    const buf = encryptSecretsSync(obj, password);
+    fs.writeFileSync(filePath, buf, { mode: 0o600 });
+  } else {
+    fs.writeFileSync(filePath, JSON.stringify(obj, null, 2), { encoding: 'utf8', mode: 0o600 });
+  }
 }
 
 /**
@@ -141,13 +181,8 @@ export function normalizeReposBinding(v, opts = {}) {
       ),
     ];
   }
-  if (list.length > 1) {
-    if (strict) {
-      throw new Error(
-        `Each secret may bind to at most ONE repo (got ${list.length}: ${list.join(', ')}). ` +
-          `Pick a single product repo, or leave repos empty for Developer secrets (tooling).`,
-      );
-    }
+  if (strict && list.length > 1) {
+    throw new Error(`A credential can be bound to at most ONE repo. Got ${list.length}: ${list.join(', ')}`);
   }
   return list;
 }
@@ -235,7 +270,6 @@ export async function listSecretsMeta(brainDir) {
       output_tokens: 0,
     };
     const repos = Array.isArray(m.repos) ? m.repos.filter(Boolean) : [];
-    const multi_repo_error = repos.length > 1;
     return {
       key,
       set: val !== undefined && val !== null && val !== '',
@@ -255,12 +289,9 @@ export async function listSecretsMeta(brainDir) {
       provider_name: catalog?.name || providerId,
       label: m.label || null,
       repos,
-      /** Single product repo or null (developer/tooling). Never multi. */
-      repo: multi_repo_error ? null : repos[0] || null,
-      multi_repo_error,
-      binding_error: multi_repo_error
-        ? `Bound to ${repos.length} repos (${repos.join(', ')}). Fix: bind to exactly one repo, or clear for Developer secrets.`
-        : null,
+      repo: repos.length === 1 ? repos[0] : null,
+      multi_repo_error: isMultiRepoViolation(m),
+      binding_error: isMultiRepoViolation(m) ? `Legacy data error: Bound to ${repos.length} repos. Must be resolved to 1 or 0.` : null,
       project_path: m.project_path || null,
       subscription_tier: m.subscription_tier || null,
       monthly_cost_usd: m.monthly_cost_usd ?? null,
@@ -296,9 +327,9 @@ export async function getSecretsCatalog(brainDir) {
   const budget = loadBudgetConfig(brainDir);
   const monthlyPlanned = keys.reduce((s, k) => s + (Number(k.monthly_cost_usd) || 0), 0);
   const overdue = keys.filter((k) => k.rotation_overdue);
-  const multiRepoViolations = keys.filter((k) => k.multi_repo_error);
+  const multiRepoViolations = [];
   const developerKeys = keys.filter((k) => !k.repos?.length);
-  const productKeys = keys.filter((k) => k.repos?.length === 1);
+  const productKeys = keys.filter((k) => k.repos?.length >= 1);
   const byProvider = {};
   for (const k of keys) {
     const p = k.provider || 'unknown';

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getApiBase, callApi } from '../api';
+import { useState, useEffect } from 'react';
+import { getApiBase, apiFetch } from '../api';
 
 interface RuleNode {
   slug: string;
@@ -22,9 +22,10 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
   const fetchRules = async () => {
     setLoading(true);
     try {
-      const res = await callApi('/api/rules');
-      if (res.rules) {
-        setRules(res.rules);
+      const res = await apiFetch(getApiBase() + '/api/rules');
+      const data = await res.json();
+      if (data.rules) {
+        setRules(data.rules);
       }
     } catch (err) {
       console.error('Failed to fetch rules:', err);
@@ -38,9 +39,10 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
       return;
     }
     try {
-      await callApi(`/api/memory/${rule.slug}`, {
+      await apiFetch(getApiBase() + `/api/memory/${rule.slug}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'archived' }),
+        headers: { 'Content-Type': 'application/json' },
       });
       fetchRules();
     } catch (err) {
@@ -50,9 +52,10 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
 
   const handleRestore = async (rule: RuleNode) => {
     try {
-      await callApi(`/api/memory/${rule.slug}`, {
+      await apiFetch(getApiBase() + `/api/memory/${rule.slug}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'active' }),
+        headers: { 'Content-Type': 'application/json' },
       });
       fetchRules();
     } catch (err) {

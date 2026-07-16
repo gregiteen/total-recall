@@ -115,7 +115,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
  * POST /api/config-json
  * Persist config fields: security (YAML), budget (YAML), brain (JSON), secrets (JSON).
  */
-router.post('/api/config-json', requireAuth, requireScope('config:write'), (req, res) => {
+router.post('/api/config-json', requireAuth, requireScope('config:write'), async (req, res) => {
   try {
     const { security, budget, brain, secrets } = req.body;
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
@@ -160,7 +160,8 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), (req,
           }
         }
       }
-      fs.writeFileSync(secretsPath, JSON.stringify(existingSecrets, null, 2), { encoding: 'utf8', mode: 0o600 });
+      const { saveSecrets } = await import('../../core/secrets-store.mjs');
+      await saveSecrets(AGENT_DIR, existingSecrets);
     }
 
     res.json({ success: true });

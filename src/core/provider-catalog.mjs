@@ -252,6 +252,36 @@ export const PROVIDER_CATALOG = [
     default_monthly_cap_usd: 0,
     tiers: [{ id: 'self-hosted', label: 'Self-hosted', monthly_usd: 0 }],
   },
+  {
+    id: 'smtp2go',
+    name: 'SMTP2GO',
+    docs_url: 'https://www.smtp2go.com/docs/',
+    console_url: 'https://app.smtp2go.com/settings/api_keys/',
+    key_patterns: ['SMTP2GO_API_KEY', 'SMTP2GO_PASSWORD'],
+    schema: {
+      auth: 'header',
+      header: 'X-Smtp2go-Api-Key: <key>',
+      env_keys: ['SMTP2GO_API_KEY'],
+    },
+    default_monthly_cap_usd: 15,
+    tiers: [
+      { id: 'free', label: 'Free', monthly_usd: 0 },
+      { id: 'starter', label: 'Starter', monthly_usd: 15 },
+    ],
+  },
+  {
+    id: 'mailcow',
+    name: 'Mailcow',
+    docs_url: 'https://mailcow.github.io/mailcow-dockerized-docs/api/',
+    key_patterns: ['MAILCOW_API_KEY', 'MAILCOW_ADMIN_PASSWORD', 'MAILCOW_SMTP_PASSWORD', 'MAILCOW_DOVECOT_MASTER_PASSWORD'],
+    schema: {
+      auth: 'header',
+      header: 'X-API-Key: <key>',
+      env_keys: ['MAILCOW_API_KEY'],
+    },
+    default_monthly_cap_usd: 0,
+    tiers: [{ id: 'self-hosted', label: 'Self-hosted', monthly_usd: 0 }],
+  },
 ];
 
 const byId = new Map(PROVIDER_CATALOG.map((p) => [p.id, p]));

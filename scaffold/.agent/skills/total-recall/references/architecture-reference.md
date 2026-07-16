@@ -1,6 +1,6 @@
 # Total Recall — Codebase & Runtime Architecture Reference
 
-This reference manual maps the architecture, VFS directory topologies, and background processes of the **Total Recall Sovereign AI OS**.
+This reference manual maps the architecture, VFS directory topologies, and background processes of the **Total Recall Autonomous AI OS**.
 
 ---
 
@@ -18,7 +18,7 @@ Total Recall relies on a strict, database-free directory layout under `.agent/` 
         ├── config/            # Loaded brain configuration
         │   ├── brain.json     # Brain URL and PAT token
         │   └── clients.json   # Connected IDE clients registry
-        ├── memory-vault/      # TIER 3: Local Sovereign Vault (Git-versioned)
+        ├── memory-vault/      # TIER 3: Local Vault (Git-versioned)
         │   ├── invariants/    # Absolute invariants (modality: must/must_not)
         │   ├── patterns/      # Best practices and structural workflows
         │   ├── anti-patterns/ # Taboos and coding patterns to avoid
@@ -56,7 +56,7 @@ Surfacing rules efficiently without bloating the LLM prompt context is performed
    * **Latency**: ~100ms (loaded dynamically when an agent targets a skill).
    * **Volume**: Capped at 7 active rules per skill.
 3. **Tier 3: The Cold Memory Vault (`.agent/memory-vault/`)**:
-   * **Scope**: Complete sovereign knowledge graph.
+   * **Scope**: Complete local knowledge graph.
    * **Latency**: ~500ms (accessed via high-performance vector search REST API).
    * **Volume**: Unlimited files.
 
