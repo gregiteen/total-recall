@@ -52,11 +52,23 @@ export function VoiceInput({ onTranscript, isRecording = false }: VoiceInputProp
     return (
       <button 
         disabled 
-        className="chat-send-btn" 
-        style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-tertiary)', opacity: 0.5, cursor: 'not-allowed' }}
+        className="btn btn-ghost" 
+        style={{ 
+          width: 44, 
+          height: 44, 
+          padding: 0, 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          background: 'rgba(148, 163, 184, 0.03)', 
+          border: '1px solid var(--border)', 
+          color: 'var(--text-tertiary)', 
+          opacity: 0.5, 
+          cursor: 'not-allowed' 
+        }}
         title="Voice input not supported"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
       </button>
     );
   }
@@ -64,16 +76,22 @@ export function VoiceInput({ onTranscript, isRecording = false }: VoiceInputProp
   return (
     <button 
       onClick={toggleRecording}
-      className="chat-send-btn"
+      className={`btn btn-ghost ${recording ? 'active' : ''}`}
       style={{
-        background: recording ? 'var(--error)' : 'var(--bg-tertiary)',
-        border: '1px solid var(--border)',
-        color: recording ? '#fff' : 'var(--text-secondary)',
+        width: 44,
+        height: 44,
+        padding: 0,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: recording ? 'var(--error-muted)' : 'rgba(148, 163, 184, 0.06)',
+        border: recording ? '1px solid var(--error)' : '1px solid var(--border)',
+        color: recording ? 'var(--error)' : 'var(--text-tertiary)',
         transition: 'all var(--transition-fast)'
       }}
       title={recording ? "Stop recording" : "Start voice input"}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
     </button>
   );
 }
