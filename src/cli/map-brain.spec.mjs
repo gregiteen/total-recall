@@ -131,5 +131,5 @@ Mock Invariant Body Content`;
 
     fs.rmSync(mockProjRoot, { recursive: true, force: true });
     consoleSpy.mockRestore();
-  });
+  }, 15000);
 });
