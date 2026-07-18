@@ -50,6 +50,11 @@ router.get('/api/integrations/active', requireAuth, (req, res) => {
         'claude-code': [path.join(HOME, '.claude', 'projects'), path.join(HOME, '.claude', 'CLAUDE.md')],
         'codex':       [path.join(HOME, '.codex', 'sessions'), path.join(HOME, '.codex', 'AGENTS.md')],
         'cursor':      [path.join(HOME, '.cursor', 'projects'), path.join(HOME, '.cursor')],
+        'cline': [
+          path.join(HOME, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev'),
+          path.join(HOME, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev'),
+          path.join(HOME, '.clinerules'),
+        ],
         'antigravity': [path.join(HOME, '.gemini', 'antigravity')],
         'vscode':      [path.join(HOME, 'Library', 'Application Support', 'Code'), path.join(HOME, '.vscode')],
         'gemini':      [path.join(HOME, '.gemini')],
@@ -83,7 +88,7 @@ router.post('/api/integrations/connect', requireAuth, (req, res) => {
     if (!client) return badRequest(res, 'client is required');
 
     const validClients = [
-      'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'claude-code',
+      'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'cline', 'claude-code',
       'codex', 'gemini', 'aider', 'http-api', 'obsidian',
       'generic', 'antigravity'
     ];

@@ -29,3 +29,21 @@ export async function refreshElection(): Promise<LeaderInfo> {
   if (!data.leader) throw new Error('No online mesh leader is available');
   return data.leader;
 }
+
+export interface LatencyResult {
+  hostname: string;
+  ip: string;
+  latency_ms: number | null;
+  self?: boolean;
+  ok: boolean;
+  error?: string;
+  status?: number;
+}
+
+export async function fetchMeshLatency(): Promise<{
+  latency_ms: Record<string, number | null>;
+  results: LatencyResult[];
+  measured_at: string;
+}> {
+  return get('/api/mesh/latency');
+}

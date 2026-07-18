@@ -1,9 +1,25 @@
-import { useEffect, useState } from 'react';
-import { fetchLeader, fetchNodes as fetchMeshNodes, refreshElection } from '../api/mesh';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  fetchLeader,
+  fetchNodes as fetchMeshNodes,
+  refreshElection,
+  fetchMeshLatency,
+} from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
 import type { MeshNode, LeaderInfo } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
+import { MeshTopology } from '../components/MeshTopology';
 import './MeshPage.css';
+
+const POLL_BASE_MS = 5000;
+const POLL_MAX_MS = 30000;
+
+interface ElectionLogEntry {
+  at: string;
+  hostname: string;
+  ip: string;
+  note: string;
+}
 
 export function MeshPage() {
   const [activeTab, setActiveTab] = useState<'mesh'|'headscale-nodes'|'preauthkeys'|'users'>('mesh');
@@ -11,6 +27,11 @@ export function MeshPage() {
   // Mesh State
   const [meshNodes, setMeshNodes] = useState<MeshNode[]>([]);
   const [leader, setLeader] = useState<LeaderInfo | null>(null);
+  const [selectedNode, setSelectedNode] = useState<MeshNode | null>(null);
+  const [latencyMs, setLatencyMs] = useState<Record<string, number | null>>({});
+  const [electionLog, setElectionLog] = useState<ElectionLogEntry[]>([]);
+  const prevLeaderRef = useRef<string | null>(null);
+  const pollMsRef = useRef(POLL_BASE_MS);
   
   // Headscale State
   const [hsNodes, setHsNodes] = useState<HeadscaleNode[]>([]);
@@ -26,7 +47,20 @@ export function MeshPage() {
   const [newKeyEphemeral, setNewKeyEphemeral] = useState(false);
   const [newKeyExpiration, setNewKeyExpiration] = useState('2099-12-31T23:59:59Z');
 
-  async function loadData() {
+  const recordLeaderChange = useCallback((l: LeaderInfo | null, note: string) => {
+    if (!l) return;
+    const key = `${l.hostname}|${l.ip}`;
+    if (prevLeaderRef.current === key && note === 'observed') return;
+    if (prevLeaderRef.current !== key || note !== 'observed') {
+      setElectionLog((prev) => [
+        { at: new Date().toISOString(), hostname: l.hostname, ip: l.ip, note },
+        ...prev,
+      ].slice(0, 50));
+      prevLeaderRef.current = key;
+    }
+  }, []);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -34,6 +68,12 @@ export function MeshPage() {
         const [n, l] = await Promise.all([fetchMeshNodes(), fetchLeader()]);
         setMeshNodes(n);
         setLeader(l);
+        recordLeaderChange(l, 'observed');
+        // Latency is slower — best-effort, do not fail the page.
+        fetchMeshLatency()
+          .then((lat) => setLatencyMs(lat.latency_ms || {}))
+          .catch(() => { /* peers may be unreachable */ });
+        pollMsRef.current = POLL_BASE_MS;
       } else if (activeTab === 'headscale-nodes') {
         const nodes = await fetchHeadscaleNodes();
         setHsNodes(nodes);
@@ -46,20 +86,35 @@ export function MeshPage() {
       }
     } catch (err: any) {
       setError(err.message || `Failed to load ${activeTab} data`);
+      // Back off polling on errors to reduce long-task pressure.
+      pollMsRef.current = Math.min(POLL_MAX_MS, pollMsRef.current * 1.5);
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeTab, newKeyUser, recordLeaderChange]);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
-  }, [activeTab]);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      await loadData();
+      if (cancelled) return;
+      timer = setTimeout(tick, pollMsRef.current);
+    };
+    tick();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [activeTab, loadData]);
 
   async function handleRefreshElection() {
     try {
-      await refreshElection();
+      const l = await refreshElection();
+      recordLeaderChange(l, 'manual refresh');
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to refresh election state');
@@ -136,52 +191,159 @@ export function MeshPage() {
       {error && <div className="alert alert-error" style={{ marginBottom: '24px' }}>{error}</div>}
 
       {activeTab === 'mesh' && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Hostname</th>
-                <th>Mesh IP</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Operating System</th>
-                <th>Node</th>
-              </tr>
-            </thead>
-            <tbody>
-              {meshNodes.map(node => {
-                const isLeader = node.hostname === leader?.hostname;
-                return (
-                  <tr key={node.hostname} className={isLeader ? 'is-leader' : ''}>
-                    <td style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {isLeader && <span title="Leader" style={{ color: 'var(--accent-hover)' }}>👑</span>}
-                      {node.hostname}
-                    </td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{node.ip}</td>
-                    <td>
-                      <span className={`badge ${isLeader ? 'badge-leader' : 'badge-follower'}`}>
-                        {isLeader ? 'LEADER' : 'FOLLOWER'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${node.online ? 'badge-online' : 'badge-offline'}`}>
-                        {node.online ? 'ONLINE' : 'OFFLINE'}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{node.os || 'Unknown'}</td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{node.self ? 'This node' : 'Peer'}</td>
-                  </tr>
-                );
-              })}
-              {meshNodes.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>
-                    No mesh nodes found
-                  </td>
-                </tr>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Topology</h3>
+              <MeshTopology
+                nodes={meshNodes}
+                leader={leader}
+                latencyMs={latencyMs}
+                selectedHostname={selectedNode?.hostname}
+                onSelectNode={setSelectedNode}
+              />
+            </div>
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Node Detail</h3>
+              {selectedNode ? (
+                <dl className="mesh-node-detail" style={{ margin: 0, display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 12px' }}>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Hostname</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.hostname}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>IP</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.ip}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Online</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.online ? 'yes' : 'no'}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>OS</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.os || 'Unknown'}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Role</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.hostname === leader?.hostname || selectedNode.ip === leader?.ip ? 'LEADER' : 'FOLLOWER'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Latency</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.self
+                      ? 'self'
+                      : latencyMs[selectedNode.hostname] != null
+                        ? `${latencyMs[selectedNode.hostname]} ms`
+                        : 'n/a'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Scope</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.self ? 'This node' : 'Peer'}</dd>
+                </dl>
+              ) : (
+                <p style={{ color: 'var(--text-secondary)' }}>Click a node in the topology to inspect it.</p>
               )}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Hostname</th>
+                  <th>Mesh IP</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Latency</th>
+                  <th>Operating System</th>
+                  <th>Node</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meshNodes.map(node => {
+                  const isNodeLeader = node.hostname === leader?.hostname || node.ip === leader?.ip;
+                  return (
+                    <tr
+                      key={node.hostname}
+                      className={isNodeLeader ? 'is-leader' : ''}
+                      onClick={() => setSelectedNode(node)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {isNodeLeader && <span title="Leader" style={{ color: 'var(--accent-hover)' }}>👑</span>}
+                        {node.hostname}
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{node.ip}</td>
+                      <td>
+                        <span className={`badge ${isNodeLeader ? 'badge-leader' : 'badge-follower'}`}>
+                          {isNodeLeader ? 'LEADER' : 'FOLLOWER'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${node.online ? 'badge-online' : 'badge-offline'}`}>
+                          {node.online ? 'ONLINE' : 'OFFLINE'}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)' }}>
+                        {node.self ? '—' : latencyMs[node.hostname] != null ? `${latencyMs[node.hostname]} ms` : '—'}
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{node.os || 'Unknown'}</td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{node.self ? 'This node' : 'Peer'}</td>
+                    </tr>
+                  );
+                })}
+                {meshNodes.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>
+                      No mesh nodes found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Latency (from this node)</h3>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Peer</th>
+                    <th>RTT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {meshNodes.map((n) => (
+                    <tr key={`lat-${n.hostname}`}>
+                      <td>{n.hostname}</td>
+                      <td>
+                        {n.self
+                          ? '0 ms (self)'
+                          : latencyMs[n.hostname] != null
+                            ? `${latencyMs[n.hostname]} ms`
+                            : n.online
+                              ? 'measuring…'
+                              : 'offline'}
+                      </td>
+                    </tr>
+                  ))}
+                  {meshNodes.length === 0 && (
+                    <tr>
+                      <td colSpan={2} style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No peers</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Election history</h3>
+              {electionLog.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)' }}>No leader changes observed this session.</p>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 220, overflowY: 'auto' }}>
+                  {electionLog.map((e, i) => (
+                    <li key={`${e.at}-${i}`} style={{ marginBottom: 8 }}>
+                      <strong>{e.hostname}</strong> ({e.ip}) — {e.note}
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {new Date(e.at).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

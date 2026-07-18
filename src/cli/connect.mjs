@@ -49,6 +49,13 @@ const CLIENTS = {
       instructions
     ].join('\n')
   },
+  cline: {
+    label: 'Cline',
+    mode: 'file',
+    // Cline uses a .clinerules/ directory (primary); plain markdown, no frontmatter.
+    target: path.join('.clinerules', 'total-recall.md'),
+    render: instructions => instructions,
+  },
   'claude-code': {
     label: 'Claude Code',
     mode: 'symlink',
@@ -150,6 +157,7 @@ function printHelp() {
 
   Clients:
     cursor
+    cline
     claude-code
     codex
     antigravity

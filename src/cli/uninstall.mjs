@@ -381,6 +381,8 @@ export default async function uninstall(args = []) {
     '.clauderules',
     'CLAUDE.md',
     '.cursorrules',
+    '.clinerules',
+    '.clinerules/total-recall.md',
     'AGENTS.md',
     'GEMINI.md',
     '.github/copilot-instructions.md',
@@ -566,7 +568,8 @@ export default async function uninstall(args = []) {
     //    These files belong to the IDE ecosystem, NOT to Total Recall.
     //    TR only injects managed blocks between comment markers.
     const shimFiles = ['INSTRUCTIONS.md', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md',
-      'CODEX.md', '.clauderules', '.cursorrules', '.codexrules',
+      'CODEX.md', '.clauderules', '.cursorrules', '.clinerules',
+      path.join('.clinerules', 'total-recall.md'), '.codexrules',
       'WINDSURF.md', '.windsurfrules'];
     const INJECT_PATTERNS = [
       /<!-- BEGIN INJECTED MEMORY:.*?-->[\s\S]*?<!-- END INJECTED MEMORY -->\n?/g,

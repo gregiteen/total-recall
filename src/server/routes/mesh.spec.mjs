@@ -15,7 +15,14 @@ vi.mock('../../core/leader-election.mjs', () => ({
 
 vi.mock('../../core/mesh.mjs', () => ({
   clearMeshStatusCache: vi.fn(),
-  getMeshPeers: vi.fn().mockReturnValue([{ id: 'peer-1' }])
+  getMeshPeers: vi.fn().mockReturnValue([
+    { hostname: 'self.mesh', ip: '100.64.0.1', online: true, self: true },
+    { hostname: 'peer.mesh', ip: '100.64.0.2', online: true, self: false },
+  ]),
+}));
+
+vi.mock('../../core/throttled-fetch.mjs', () => ({
+  throttledFetch: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
 }));
 
 describe('mesh routes', () => {
@@ -39,9 +46,7 @@ describe('mesh routes', () => {
   it('GET /api/mesh/nodes returns mesh peers', async () => {
     const res = await request(app).get('/api/mesh/nodes');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      nodes: [{ id: 'peer-1' }]
-    });
+    expect(res.body.nodes).toHaveLength(2);
   });
 
   it('POST /api/mesh/election/refresh clears cached status and returns deterministic leader', async () => {
@@ -50,5 +55,14 @@ describe('mesh routes', () => {
     expect(res.status).toBe(200);
     expect(clearMeshStatusCache).toHaveBeenCalledOnce();
     expect(res.body).toEqual({ leader: { id: 'leader-1' }, is_current_node_leader: true });
+  });
+
+  it('GET /api/mesh/latency measures peer RTTs through the fetch gate', async () => {
+    const { throttledFetch } = await import('../../core/throttled-fetch.mjs');
+    const res = await request(app).get('/api/mesh/latency');
+    expect(res.status).toBe(200);
+    expect(res.body.latency_ms['self.mesh']).toBe(0);
+    expect(throttledFetch).toHaveBeenCalled();
+    expect(res.body.results).toHaveLength(2);
   });
 });

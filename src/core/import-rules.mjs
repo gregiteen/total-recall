@@ -37,6 +37,7 @@ const RULE_FILE_CANDIDATES = [
   { filename: 'system.md',        label: 'Project system instructions', ide: 'gemini' },
   { filename: '.cursorrules',     label: 'Cursor rules',             ide: 'cursor'    },
   { filename: '.clauderules',     label: 'Claude rules',             ide: 'claude'    },
+  { filename: '.clinerules',      label: 'Cline rules (legacy file)', ide: 'cline'    },
   { filename: '.windsurfrules',   label: 'Windsurf rules',           ide: 'windsurf'  },
   { filename: '.aiderules',       label: 'Aider rules',              ide: 'aider'     },
   { filename: 'WINDSURF.md',      label: 'Windsurf rules (md)',      ide: 'windsurf'  },
@@ -52,6 +53,7 @@ const RULE_FILE_CANDIDATES = [
 const RULE_DIRECTORY_CANDIDATES = [
   { dirPath: '.claude/rules',     ext: '.md',  label: 'Claude modular rule',      ide: 'claude'   },
   { dirPath: '.cursor/rules',     ext: '.mdc', label: 'Cursor modular rule',       ide: 'cursor'   },
+  { dirPath: '.clinerules',       ext: '.md',  label: 'Cline rule (directory)',    ide: 'cline'    },
   { dirPath: '.agent/skills',     ext: '.md',  label: 'Antigravity/Gemini skill',  ide: 'gemini', recursive: true },
   { dirPath: '.vscode/prompts',   ext: '.md',  label: 'VS Code modular rule',     ide: 'copilot'  },
   { dirPath: '.windsurf/rules',   ext: '.md',  label: 'Windsurf modular rule',    ide: 'windsurf' },

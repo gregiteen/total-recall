@@ -9,6 +9,7 @@ vi.mock('../api/mesh', () => ({
   fetchLeader: vi.fn(),
   fetchNodes: vi.fn(),
   refreshElection: vi.fn(),
+  fetchMeshLatency: vi.fn().mockResolvedValue({ latency_ms: {}, results: [], measured_at: new Date().toISOString() }),
 }));
 
 vi.mock('../api/headscale', () => ({
@@ -35,9 +36,10 @@ describe('MeshPage', () => {
     render(<MeshPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('macmini.mesh')).toBeInTheDocument();
-      expect(screen.getByText('laptop.mesh')).toBeInTheDocument();
+      expect(screen.getAllByText('macmini.mesh').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('laptop.mesh').length).toBeGreaterThan(0);
     });
+    expect(screen.getByTestId('mesh-topology')).toBeInTheDocument();
   });
 
   it('refreshes deterministic election state', async () => {
