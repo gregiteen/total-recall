@@ -23,6 +23,19 @@ vi.mock('../api/mesh', () => ({
     host_count: 1,
     tr_reachable_count: 0,
   }),
+  fetchDeviceIo: vi.fn().mockResolvedValue({
+    io: {
+      headless: false,
+      display: { present: true, touch: false, count: 1, width: 1920, height: 1080 },
+      audio: { input: true, output: true },
+      camera: { present: false },
+      input: { keyboard: true, pointer: true, touch: false },
+      channels: ['screen', 'keyboard', 'pointer', 'microphone', 'speaker'],
+      ui_hints: ['desktop_or_browser_ui', 'voice_input_ok'],
+    },
+    ui_hints: ['desktop_or_browser_ui', 'voice_input_ok'],
+    entity_path: null,
+  }),
 }));
 
 vi.mock('../api/headscale', () => ({

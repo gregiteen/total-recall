@@ -28,6 +28,28 @@ export interface MeshNode {
   transports?: Array<'mesh' | 'lan'>;
   interfaces?: MeshInterfaceSummary[];
   lan_ip?: string | null;
+  /** Device I/O profile for agent UI generation (screen/touch/mic/…). */
+  io?: DeviceIoProfile | null;
+  ui_hints?: string[];
+}
+
+export interface DeviceIoProfile {
+  headless?: boolean;
+  display?: {
+    present?: boolean;
+    touch?: boolean;
+    count?: number | null;
+    width?: number | null;
+    height?: number | null;
+  };
+  audio?: { input?: boolean; output?: boolean };
+  camera?: { present?: boolean };
+  input?: { keyboard?: boolean; pointer?: boolean; touch?: boolean };
+  channels?: string[];
+  ui_hints?: string[];
+  sources?: string[];
+  measured_at?: string;
+  platform?: string;
 }
 
 export interface LanHost {
@@ -102,4 +124,13 @@ export async function fetchLanDiscovery(opts?: { probe?: boolean; limit?: number
   if (opts?.limit) params.set('limit', String(opts.limit));
   const q = params.toString();
   return get(`/api/mesh/lan${q ? `?${q}` : ''}`);
+}
+
+export async function fetchDeviceIo(): Promise<{
+  io: DeviceIoProfile;
+  ui_hints: string[];
+  entity_path: string | null;
+  measured_at?: string;
+}> {
+  return get('/api/mesh/io');
 }

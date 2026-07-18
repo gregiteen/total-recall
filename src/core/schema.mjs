@@ -916,6 +916,35 @@ const NetworkInterfaceEntrySchema = z.object({
   ipv6: z.array(z.string()).optional(),
 }).passthrough();
 
+/** I/O channels agents use to pick UI/output (screen, touch, mic, speaker, …). */
+const DeviceIoProfileSchema = z.object({
+  headless: z.boolean().optional(),
+  display: z.object({
+    present: z.boolean().optional(),
+    touch: z.boolean().optional(),
+    count: z.number().nullable().optional(),
+    width: z.number().nullable().optional(),
+    height: z.number().nullable().optional(),
+  }).passthrough().optional(),
+  audio: z.object({
+    input: z.boolean().optional(),
+    output: z.boolean().optional(),
+  }).passthrough().optional(),
+  camera: z.object({ present: z.boolean().optional() }).passthrough().optional(),
+  input: z.object({
+    keyboard: z.boolean().optional(),
+    pointer: z.boolean().optional(),
+    touch: z.boolean().optional(),
+  }).passthrough().optional(),
+  channels: z.array(z.enum([
+    'screen', 'touch', 'keyboard', 'pointer', 'microphone', 'speaker', 'camera', 'headless',
+  ])).optional(),
+  ui_hints: z.array(z.string()).optional(),
+  sources: z.array(z.string()).optional(),
+  measured_at: z.string().optional(),
+  platform: z.string().optional(),
+}).passthrough();
+
 export const MeshNodeSchema = z.object({
   type: z.literal('mesh_node'),
   title: z.string().min(1),
@@ -936,6 +965,11 @@ export const MeshNodeSchema = z.object({
   /** Snapshot of host NICs (kinds are classified heuristically). */
   interfaces: z.array(NetworkInterfaceEntrySchema).optional(),
   lan_ip: z.string().nullable().optional(),
+  /**
+   * Device I/O profile — entity variables for agent UI generation
+   * (touchscreen, mic, speaker, screen, keyboard, …).
+   */
+  io: DeviceIoProfileSchema.optional(),
 }).passthrough();
 
 export const DaemonLeaderSchema = z.object({

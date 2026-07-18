@@ -4,9 +4,11 @@ import { getLeaderInfo, isLeader } from '../../core/leader-election.mjs';
 import {
   clearMeshStatusCache,
   getMeshPeers,
+  getMeshHostname,
   listEnrichedMeshNodes,
   listMeshNodeEntities,
   attachSelfInterfaces,
+  normalizeHostname,
 } from '../../core/mesh.mjs';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
 import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
@@ -15,6 +17,7 @@ import {
   summarizeInterfacesForEntity,
 } from '../../core/network-interfaces.mjs';
 import { discoverLanSnapshot } from '../../core/lan-discovery.mjs';
+import { detectDeviceIo, mergeIoProfiles, uiHintsFromIo } from '../../core/device-io.mjs';
 
 const router = Router();
 
@@ -49,11 +52,46 @@ router.get('/api/mesh/nodes', requireAuth, requireScope('config:read'), async (r
   } catch {
     // interfaces optional
   }
+  // Attach live I/O profile to self (merge vault entity overrides).
+  try {
+    const liveIo = detectDeviceIo();
+    nodes = nodes.map((n) => {
+      if (!n.self) return n;
+      const io = mergeIoProfiles(liveIo, n.io || null);
+      return { ...n, io, ui_hints: io.ui_hints || uiHintsFromIo(io) };
+    });
+  } catch {
+    // io optional
+  }
   const entities = listMeshNodeEntities(vaultRoot);
   res.json({
     nodes,
     entity_count: entities.length,
   });
+});
+
+/**
+ * This host's I/O capability profile for agent UI generation
+ * (screen, touch, mic, speaker, keyboard, camera, headless, …).
+ */
+router.get('/api/mesh/io', requireAuth, requireScope('config:read'), async (_req, res) => {
+  try {
+    const live = detectDeviceIo();
+    const entities = listMeshNodeEntities(defaultVaultRoot());
+    const selfHost = normalizeHostname(getMeshHostname());
+    const ent = entities.find(
+      (e) => normalizeHostname(e.hostname) === selfHost,
+    );
+    const io = mergeIoProfiles(live, ent?.io || null);
+    res.json({
+      io,
+      ui_hints: io.ui_hints || uiHintsFromIo(io),
+      entity_path: ent?.vfs_path || null,
+      measured_at: io.measured_at,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'I/O detection failed' });
+  }
 });
 
 /**

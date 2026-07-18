@@ -47,6 +47,23 @@ vi.mock('../../core/lan-discovery.mjs', () => ({
   }),
 }));
 
+vi.mock('../../core/device-io.mjs', () => ({
+  detectDeviceIo: vi.fn().mockReturnValue({
+    headless: false,
+    display: { present: true, touch: false, count: 1, width: 1920, height: 1080 },
+    audio: { input: true, output: true },
+    camera: { present: false },
+    input: { keyboard: true, pointer: true, touch: false },
+    channels: ['screen', 'keyboard', 'pointer', 'microphone', 'speaker'],
+    ui_hints: ['desktop_or_browser_ui'],
+    sources: ['test'],
+    measured_at: '2026-07-18T00:00:00Z',
+    platform: 'linux',
+  }),
+  mergeIoProfiles: vi.fn((live) => live),
+  uiHintsFromIo: vi.fn().mockReturnValue(['desktop_or_browser_ui']),
+}));
+
 vi.mock('../../core/mesh.mjs', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -129,6 +146,13 @@ describe('mesh routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.host_count).toBe(1);
     expect(res.body.tr_reachable_count).toBe(1);
+  });
+
+  it('GET /api/mesh/io returns I/O channels and UI hints for agents', async () => {
+    const res = await request(app).get('/api/mesh/io');
+    expect(res.status).toBe(200);
+    expect(res.body.io.channels).toContain('screen');
+    expect(res.body.ui_hints).toContain('desktop_or_browser_ui');
   });
 });
 

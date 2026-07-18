@@ -35,7 +35,8 @@ timestamp: 2026-07-18T00:15:00-06:00
 | 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred) |
 | 7 | Tracker hygiene & archive | ⏳ Partial — waiting final acceptance |
 | 8 | Device entity variables (OSS vs vault) | ✅ Done |
-| 9 | Interface kinds + LAN discovery/connect | ✅ Done (`/api/mesh/interfaces`, `/api/mesh/lan`) |
+| 9 | Interface kinds + LAN discovery/connect | ✅ Done |
+| 10 | Device I/O (screen/touch/mic/speaker…) for agent UI | ✅ Done (`/api/mesh/io`) |
 
 **Open-source rule (invariant):** Device detail is **variables on `mesh_node` (or device) entities** and live discovery — never hostnames / fleet maps / personal paths in product source. Fixtures use neutral `node-a.mesh` etc. Install vaults hold concrete instances (`memory-vault/system/mesh-nodes/*`).
 
@@ -197,3 +198,4 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: Tracker refreshed with scoreboard, Phase 8 (device entity variables), and ordered Next Steps A/B/C
 - 2026-07-18: **Phase 8 complete** (`3ad293f`). MeshNodeSchema entity fields; patchOwnMeshNode SSSS upsert from live self; listEnrichedMeshNodes merge; API/UI bind; mesh-entities.spec.mjs (neutral fixtures only).
 - 2026-07-18: **Phase 9 complete.** Interface kind tracking + LAN ARP discovery + TR health probe on LAN IPs; Mesh page panels; no personal device hardcoding.
+- 2026-07-18: **Phase 10 complete.** Device I/O profile (screen/touch/mic/speaker/camera/keyboard/pointer/headless) + ui_hints for agent UI generation; mesh_node.io entity variable; GET /api/mesh/io; Mesh “I/O for agent UI” panel.

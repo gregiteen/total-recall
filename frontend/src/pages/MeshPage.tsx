@@ -6,9 +6,10 @@ import {
   fetchMeshLatency,
   fetchLanDiscovery,
   fetchMeshInterfaces,
+  fetchDeviceIo,
 } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
-import type { MeshNode, LeaderInfo, LanHost, MeshInterfaceSummary } from '../api/mesh';
+import type { MeshNode, LeaderInfo, LanHost, MeshInterfaceSummary, DeviceIoProfile } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
 import { MeshTopology } from '../components/MeshTopology';
 import './MeshPage.css';
@@ -35,6 +36,8 @@ export function MeshPage() {
   const [lanHosts, setLanHosts] = useState<LanHost[]>([]);
   const [localInterfaces, setLocalInterfaces] = useState<MeshInterfaceSummary[]>([]);
   const [lanTrCount, setLanTrCount] = useState(0);
+  const [deviceIo, setDeviceIo] = useState<DeviceIoProfile | null>(null);
+  const [uiHints, setUiHints] = useState<string[]>([]);
   const prevLeaderRef = useRef<string | null>(null);
   const pollMsRef = useRef(POLL_BASE_MS);
   
@@ -88,6 +91,12 @@ export function MeshPage() {
             setLanTrCount(lan.tr_reachable_count || 0);
           })
           .catch(() => { /* ARP may be unavailable */ });
+        fetchDeviceIo()
+          .then((ioRes) => {
+            setDeviceIo(ioRes.io || null);
+            setUiHints(ioRes.ui_hints || ioRes.io?.ui_hints || []);
+          })
+          .catch(() => { /* optional */ });
         pollMsRef.current = POLL_BASE_MS;
       } else if (activeTab === 'headscale-nodes') {
         const nodes = await fetchHeadscaleNodes();
@@ -284,6 +293,18 @@ export function MeshPage() {
                           .map((i) => `${i.name} (${i.kind})`)
                           .join(', ')}
                   </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>I/O channels</dt>
+                  <dd style={{ margin: 0 }}>
+                    {(selectedNode.self ? deviceIo?.channels : selectedNode.io?.channels)?.length
+                      ? (selectedNode.self ? deviceIo?.channels : selectedNode.io?.channels)!.join(', ')
+                      : '—'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>UI hints</dt>
+                  <dd style={{ margin: 0, fontSize: 12 }}>
+                    {(selectedNode.self ? uiHints : selectedNode.ui_hints || selectedNode.io?.ui_hints)?.length
+                      ? (selectedNode.self ? uiHints : selectedNode.ui_hints || selectedNode.io?.ui_hints)!.join(' · ')
+                      : '—'}
+                  </dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Scope</dt>
                   <dd style={{ margin: 0 }}>{selectedNode.self ? 'This node' : 'Peer'}</dd>
                 </dl>
@@ -291,6 +312,44 @@ export function MeshPage() {
                 <p style={{ color: 'var(--text-secondary)' }}>Click a node in the topology to inspect it.</p>
               )}
             </div>
+          </div>
+
+          <div className="card">
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>This host — I/O for agent UI</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 0 }}>
+              Channels (screen, touch, mic, speaker, …) and UI hints so agents can generate UI for the right surfaces.
+              Stored as mesh_node entity variables; vault overrides live detection.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {(deviceIo?.channels || []).map((ch) => (
+                <span key={ch} className="badge badge-leader">{ch}</span>
+              ))}
+              {!deviceIo?.channels?.length && (
+                <span style={{ color: 'var(--text-secondary)' }}>Detecting…</span>
+              )}
+            </div>
+            <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: '140px 1fr', gap: '6px 12px', fontSize: 13 }}>
+              <dt style={{ color: 'var(--text-secondary)' }}>Display</dt>
+              <dd style={{ margin: 0 }}>
+                {deviceIo?.display?.present
+                  ? `yes${deviceIo.display.touch ? ' · touch' : ''}${deviceIo.display.width && deviceIo.display.height ? ` · ${deviceIo.display.width}×${deviceIo.display.height}` : ''}`
+                  : deviceIo?.headless
+                    ? 'headless'
+                    : '—'}
+              </dd>
+              <dt style={{ color: 'var(--text-secondary)' }}>Audio</dt>
+              <dd style={{ margin: 0 }}>
+                in: {deviceIo?.audio?.input ? 'yes' : 'no'} · out: {deviceIo?.audio?.output ? 'yes' : 'no'}
+              </dd>
+              <dt style={{ color: 'var(--text-secondary)' }}>Camera</dt>
+              <dd style={{ margin: 0 }}>{deviceIo?.camera?.present ? 'yes' : 'no'}</dd>
+              <dt style={{ color: 'var(--text-secondary)' }}>Input</dt>
+              <dd style={{ margin: 0 }}>
+                kb: {deviceIo?.input?.keyboard ? 'yes' : 'no'} · pointer: {deviceIo?.input?.pointer ? 'yes' : 'no'} · touch: {deviceIo?.input?.touch ? 'yes' : 'no'}
+              </dd>
+              <dt style={{ color: 'var(--text-secondary)' }}>UI hints</dt>
+              <dd style={{ margin: 0 }}>{uiHints.length ? uiHints.join(' · ') : '—'}</dd>
+            </dl>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
