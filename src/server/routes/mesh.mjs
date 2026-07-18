@@ -18,8 +18,43 @@ import {
 } from '../../core/network-interfaces.mjs';
 import { discoverLanSnapshot, registerLanMeshNodes } from '../../core/lan-discovery.mjs';
 import { detectDeviceIo, mergeIoProfiles, uiHintsFromIo } from '../../core/device-io.mjs';
+import { appendVfsEvent, listVfsEvents } from '../../core/ssss-operation-service.mjs';
 
 const router = Router();
+
+/** Last observed leader key for de-duped SSSS election events (process-local). */
+let lastRecordedLeaderKey = null;
+
+/**
+ * Dedicated event workspace — never scan default.jsonl (can be 100MB+/100k+ events).
+ * Isolates mesh election history into `.events/mesh-election.jsonl`.
+ */
+const MESH_ELECTION_WORKSPACE = 'mesh-election';
+
+async function recordMeshElectionEvent(leader, note = 'observed') {
+  if (!leader?.hostname && !leader?.ip) return null;
+  const key = `${leader.hostname || ''}|${leader.ip || ''}`;
+  if (note === 'observed' && lastRecordedLeaderKey === key) return null;
+  lastRecordedLeaderKey = key;
+  const at = new Date().toISOString();
+  await appendVfsEvent(
+    `mesh/election/${Date.now()}`,
+    {
+      kind: 'mesh_election',
+      hostname: leader.hostname || null,
+      ip: leader.ip || null,
+      note: String(note || 'observed'),
+      at,
+      strategy: leader.strategy || 'lowest-mesh-ip',
+    },
+    {
+      actorRole: 'system',
+      intent: 'Record mesh leader election observation',
+      workspaceId: MESH_ELECTION_WORKSPACE,
+    },
+  );
+  return { hostname: leader.hostname, ip: leader.ip, note, at };
+}
 
 function meshServerPort() {
   const value = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
@@ -160,10 +195,67 @@ router.post('/api/mesh/lan/register', requireAuth, requireScope('config:write'),
 
 router.post('/api/mesh/election/refresh', requireAuth, requireScope('config:write'), async (_req, res) => {
   clearMeshStatusCache();
+  const leader = await getLeaderInfo();
+  try {
+    await recordMeshElectionEvent(leader, 'manual refresh');
+  } catch {
+    // event append is best-effort; election result still returns
+  }
   res.json({
-    leader: await getLeaderInfo(),
+    leader,
     is_current_node_leader: await isLeader(),
   });
+});
+
+/**
+ * Append-only mesh election observation (SSSS event). Used by dashboard when leader changes.
+ * Body: { hostname?, ip?, note? } — if omitted, records current deterministic leader.
+ */
+router.post('/api/mesh/election/log', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    let leader = null;
+    if (req.body?.hostname || req.body?.ip) {
+      leader = {
+        hostname: req.body.hostname || null,
+        ip: req.body.ip || null,
+        strategy: req.body.strategy || 'lowest-mesh-ip',
+      };
+    } else {
+      leader = await getLeaderInfo();
+    }
+    const entry = await recordMeshElectionEvent(leader, req.body?.note || 'observed');
+    res.json({ success: true, recorded: Boolean(entry), entry });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'election log failed' });
+  }
+});
+
+/**
+ * Recent mesh election events from VFS event store (SSSS append-only).
+ */
+router.get('/api/mesh/election/history', requireAuth, requireScope('config:read'), async (_req, res) => {
+  try {
+    // Read only the mesh-election workspace (not the huge default stream).
+    const events = (await listVfsEvents({ workspaceId: MESH_ELECTION_WORKSPACE }))
+      .filter((event) => event.payload?.kind === 'mesh_election' || event.payload?.kind === undefined)
+      .map((event) => {
+        const p = event.payload || {};
+        // Content may be raw payload if kernel stores content string as payload fields
+        return {
+          id: event.event_id,
+          hostname: p.hostname ?? null,
+          ip: p.ip ?? null,
+          note: p.note || 'observed',
+          at: p.at || event.timestamp || null,
+          strategy: p.strategy,
+        };
+      })
+      .filter((e) => e.hostname || e.ip || e.at);
+    events.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+    res.json({ events: events.slice(0, 50), workspace: MESH_ELECTION_WORKSPACE });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'election history failed' });
+  }
 });
 
 /**

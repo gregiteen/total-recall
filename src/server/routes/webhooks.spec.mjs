@@ -132,6 +132,7 @@ describe('Webhooks API', () => {
       .send(payload);
     expect(first.status).toBe(200);
     expect(JSON.stringify(operations.appendVfsEvent.mock.calls[0])).not.toContain('must-not-persist');
+    expect(operations.appendVfsEvent.mock.calls[0][2]).toMatchObject({ workspaceId: 'webhooks' });
 
     vi.mocked(operations.listVfsEvents).mockResolvedValue([{
       payload: { kind: 'webhook_event', provider: 'github', delivery_id: 'delivery-1' },
@@ -145,6 +146,27 @@ describe('Webhooks API', () => {
       .send(payload);
     expect(duplicate.body).toMatchObject({ success: true, duplicate: true });
     expect(operations.appendVfsEvent).toHaveBeenCalledTimes(1);
+    expect(operations.listVfsEvents).toHaveBeenCalledWith({ workspaceId: 'webhooks' });
+  });
+
+  it('re-delivers a stored webhook event via handleWebhook', async () => {
+    const { handleWebhook } = await import('../../core/webhook-handlers.mjs');
+    vi.mocked(operations.listVfsEvents).mockResolvedValue([{
+      event_id: 'evt-1',
+      payload: {
+        kind: 'webhook_event',
+        provider: 'github',
+        event_type: 'push',
+        payload: { action: 'push' },
+        delivery_id: 'd1',
+      },
+    }]);
+    const res = await request(makeApp()).post('/api/webhooks/events/evt-1/redeliver');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, handled: true, parent_event_id: 'evt-1' });
+    expect(handleWebhook).toHaveBeenCalledWith('github', 'push', { action: 'push' });
+    expect(operations.appendVfsEvent).toHaveBeenCalled();
+    expect(operations.appendVfsEvent.mock.calls.at(-1)?.[2]).toMatchObject({ workspaceId: 'webhooks' });
   });
 
   it('rejects attempts to configure disabled npm ingress', async () => {

@@ -18,6 +18,9 @@ export interface WebhookEvent {
   event_type: string;
   received_at: string;
   payload?: any;
+  delivery_status?: string;
+  parent_event_id?: string;
+  delivery_id?: string | null;
 }
 
 export async function fetchWebhookConfigs(): Promise<WebhookConfig[]> {
@@ -39,4 +42,14 @@ export async function deleteWebhookConfig(provider: string): Promise<void> {
 
 export async function triggerTestWebhook(provider: string): Promise<void> {
   return post(`/api/webhooks/test/${encodeURIComponent(provider)}`, {});
+}
+
+/** Re-run handleWebhook for a stored event (dashboard re-deliver). */
+export async function redeliverWebhookEvent(eventId: string): Promise<{
+  success: boolean;
+  handled: boolean;
+  parent_event_id: string;
+  delivery_status: string;
+}> {
+  return post(`/api/webhooks/events/${encodeURIComponent(eventId)}/redeliver`, {});
 }

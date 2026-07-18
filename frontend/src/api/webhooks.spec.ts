@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchWebhookConfigs, fetchWebhookEvents, addWebhookConfig, deleteWebhookConfig, triggerTestWebhook } from './webhooks';
+import {
+  fetchWebhookConfigs,
+  fetchWebhookEvents,
+  addWebhookConfig,
+  deleteWebhookConfig,
+  triggerTestWebhook,
+  redeliverWebhookEvent,
+} from './webhooks';
 import * as base from './_base';
 
 vi.mock('./_base', () => ({
@@ -44,5 +51,11 @@ describe('webhooks api', () => {
     vi.mocked(base.post).mockResolvedValue(undefined);
     await triggerTestWebhook('github');
     expect(base.post).toHaveBeenCalledWith('/api/webhooks/test/github', {});
+  });
+
+  it('redeliverWebhookEvent calls POST redeliver', async () => {
+    vi.mocked(base.post).mockResolvedValue({ success: true, handled: true, parent_event_id: 'e1', delivery_status: 'redelivered' });
+    await redeliverWebhookEvent('e1');
+    expect(base.post).toHaveBeenCalledWith('/api/webhooks/events/e1/redeliver', {});
   });
 });

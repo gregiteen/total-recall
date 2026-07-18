@@ -19,6 +19,20 @@ const PROVIDERS = new Set(['github', 'stripe', 'npm']);
 const CONFIGURABLE_PROVIDERS = new Set(['github', 'stripe']);
 const STRIPE_TOLERANCE_SECONDS = 300;
 const SENSITIVE_KEY = /(authorization|cookie|credential|password|secret|signature|token)/i;
+/** Dedicated event workspace — avoid scanning 100MB+ default.jsonl for webhook history. */
+const WEBHOOK_EVENT_WORKSPACE = 'webhooks';
+
+function webhookEventOpts(intent) {
+  return {
+    actorRole: 'system',
+    intent,
+    workspaceId: WEBHOOK_EVENT_WORKSPACE,
+  };
+}
+
+async function listWebhookEventsFromStore() {
+  return listVfsEvents({ workspaceId: WEBHOOK_EVENT_WORKSPACE });
+}
 
 function providerName(value) {
   const provider = String(value || '').trim().toLowerCase();
@@ -174,7 +188,7 @@ router.get(
   requireScope('config:read'),
   async (req, res) => {
     try {
-      let events = (await listVfsEvents())
+      let events = (await listWebhookEventsFromStore())
         .filter((event) => event.payload?.kind === 'webhook_event')
         .map((event) => ({ id: event.event_id, ...event.payload }));
       if (req.query.provider) events = events.filter((event) => event.provider === req.query.provider);
@@ -182,6 +196,49 @@ router.get(
       res.json(events.slice(0, 50));
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+/**
+ * Re-run handler for a previously recorded webhook event (dashboard re-deliver).
+ * Uses the redacted stored payload — suitable for replaying handleWebhook side effects,
+ * not for reconstructing raw signed ingress.
+ */
+router.post(
+  '/api/webhooks/events/:id/redeliver',
+  requireAuth,
+  requireScope('config:write'),
+  async (req, res) => {
+    try {
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ error: 'Event id is required' });
+      const all = await listWebhookEventsFromStore();
+      const match = all.find((event) => event.event_id === id && event.payload?.kind === 'webhook_event');
+      if (!match) return res.status(404).json({ error: 'Webhook event not found' });
+      const p = match.payload || {};
+      const provider = providerName(p.provider);
+      const eventType = p.event_type || 'unknown';
+      const handled = await handleWebhook(provider, eventType, p.payload || {});
+      const at = new Date().toISOString();
+      await appendVfsEvent(`webhooks/${provider}/redeliver-${crypto.randomUUID()}`, {
+        kind: 'webhook_event',
+        provider,
+        event_type: eventType,
+        received_at: at,
+        delivery_id: p.delivery_id || null,
+        parent_event_id: id,
+        payload: p.payload ?? null,
+        delivery_status: handled?.handled ? 'redelivered' : 'redelivered_recorded',
+      }, webhookEventOpts(`Re-deliver ${provider} webhook event`));
+      res.json({
+        success: true,
+        handled: !!handled?.handled,
+        parent_event_id: id,
+        delivery_status: handled?.handled ? 'redelivered' : 'redelivered_recorded',
+      });
+    } catch (err) {
+      res.status(/Unsupported/.test(err.message) ? 400 : 500).json({ error: err.message });
     }
   },
 );
@@ -200,7 +257,7 @@ router.post(
         received_at: new Date().toISOString(),
         payload: { message: 'Test webhook payload' },
         delivery_status: 'test',
-      }, { actorRole: 'system', intent: 'Record dashboard webhook test' });
+      }, webhookEventOpts('Record dashboard webhook test'));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -280,7 +337,7 @@ router.post('/api/webhooks/:provider', async (req, res) => {
     ? String(req.headers['x-github-delivery'] || '')
     : String(parsedBody.id || '');
   if (delivery_id) {
-    const priorEvents = await listVfsEvents();
+    const priorEvents = await listWebhookEventsFromStore();
     const duplicate = priorEvents.some((event) => (
       event.payload?.kind === 'webhook_event' &&
       event.payload?.provider === provider &&
@@ -299,7 +356,7 @@ router.post('/api/webhooks/:provider', async (req, res) => {
       delivery_id: delivery_id || null,
       payload: redactPayload(parsedBody),
       delivery_status: handled?.handled ? 'handled' : 'recorded',
-    }, { actorRole: 'system', intent: `Record verified ${provider} webhook` });
+    }, webhookEventOpts(`Record verified ${provider} webhook`));
     res.json({ success: true, event: `${provider}.${eventType}`, handled: !!handled?.handled });
   } catch (err) {
     logger.error('webhooks', 'Verified webhook processing failed', { provider, eventType, error: err.message });

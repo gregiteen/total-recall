@@ -85,6 +85,30 @@ export async function refreshElection(): Promise<LeaderInfo> {
   return data.leader;
 }
 
+export interface ElectionHistoryEntry {
+  id?: string;
+  hostname: string | null;
+  ip: string | null;
+  note: string;
+  at: string;
+  strategy?: string;
+}
+
+/** Load append-only mesh election events from the vault. */
+export async function fetchElectionHistory(): Promise<ElectionHistoryEntry[]> {
+  const data = await get<{ events: ElectionHistoryEntry[] }>('/api/mesh/election/history');
+  return data.events || [];
+}
+
+/** Persist a leader observation to SSSS events (best-effort from UI). */
+export async function logElectionObservation(body: {
+  hostname?: string | null;
+  ip?: string | null;
+  note?: string;
+}): Promise<{ success: boolean; recorded: boolean }> {
+  return post('/api/mesh/election/log', body);
+}
+
 export interface LatencyResult {
   hostname: string;
   ip: string;

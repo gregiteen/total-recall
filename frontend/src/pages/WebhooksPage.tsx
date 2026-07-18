@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { fetchWebhookConfigs, fetchWebhookEvents, triggerTestWebhook, addWebhookConfig, deleteWebhookConfig } from '../api/webhooks';
+import {
+  fetchWebhookConfigs,
+  fetchWebhookEvents,
+  triggerTestWebhook,
+  addWebhookConfig,
+  deleteWebhookConfig,
+  redeliverWebhookEvent,
+} from '../api/webhooks';
 import type { WebhookConfig, WebhookEvent } from '../api/webhooks';
 import './WebhooksPage.css';
 
@@ -61,6 +68,15 @@ export function WebhooksPage() {
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to trigger test webhook');
+    }
+  }
+
+  async function handleRedeliver(eventId: string) {
+    try {
+      await redeliverWebhookEvent(eventId);
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to re-deliver webhook event');
     }
   }
 
@@ -212,12 +228,31 @@ export function WebhooksPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {events.map(ev => (
                 <div key={ev.id} style={{ padding: '16px', background: 'var(--bg-hover)', borderRadius: 'var(--radius-sm)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                       <span style={{ textTransform: 'capitalize', fontWeight: 600, color: 'var(--accent-hover)' }}>{ev.provider}</span>
                       <span className="badge badge-leader">{ev.event_type}</span>
+                      {ev.delivery_status && (
+                        <span className="badge badge-follower" style={{ fontSize: 11 }}>{ev.delivery_status}</span>
+                      )}
+                      {ev.parent_event_id && (
+                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>re-deliver of {ev.parent_event_id.slice(0, 8)}…</span>
+                      )}
                     </div>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{new Date(ev.received_at).toLocaleString()}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{new Date(ev.received_at).toLocaleString()}</span>
+                      {ev.id && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{ fontSize: 12, padding: '4px 8px' }}
+                          onClick={() => handleRedeliver(ev.id)}
+                          title="Re-run handler for this stored event"
+                        >
+                          Re-deliver
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <JsonViewer data={ev.payload} />
                 </div>

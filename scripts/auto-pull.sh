@@ -49,6 +49,22 @@ log "🔄 Update detected! Local: $LOCAL, Remote: $REMOTE"
 log "Pulling latest commits from origin/main..."
 git pull origin main
 
+# Rebuild dashboard SPA (frontend/dist is gitignored — source ships; assets built on host).
+if [ -d "$REPO_DIR/frontend" ] && [ -f "$REPO_DIR/frontend/package.json" ]; then
+  log "Building frontend (vite)..."
+  (
+    cd "$REPO_DIR/frontend"
+    # Prefer vite-only build to avoid full-project tsc in CI-like auto-pull.
+    if "$NODE_BIN" ./node_modules/vite/bin/vite.js build 2>/dev/null; then
+      log "✅ Frontend vite build complete."
+    elif command -v npx >/dev/null 2>&1 && npx --yes vite build; then
+      log "✅ Frontend vite build complete (npx)."
+    else
+      log "⚠️ Frontend build skipped or failed — serving previous dist if present."
+    fi
+  ) || log "⚠️ Frontend build step errored (continuing restart)."
+fi
+
 log "Stopping existing processes..."
 # Cleanly kill standalone server and daemon processes
 pkill -9 -f "total-recall.mjs start" || true
