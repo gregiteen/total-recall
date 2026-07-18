@@ -7,6 +7,7 @@ import {
   fetchLanDiscovery,
   fetchMeshInterfaces,
   fetchDeviceIo,
+  registerLanMeshNodes,
 } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
 import type { MeshNode, LeaderInfo, LanHost, MeshInterfaceSummary, DeviceIoProfile } from '../api/mesh';
@@ -38,6 +39,8 @@ export function MeshPage() {
   const [lanTrCount, setLanTrCount] = useState(0);
   const [deviceIo, setDeviceIo] = useState<DeviceIoProfile | null>(null);
   const [uiHints, setUiHints] = useState<string[]>([]);
+  const [lanRegisterBusy, setLanRegisterBusy] = useState(false);
+  const [lanRegisterMsg, setLanRegisterMsg] = useState<string | null>(null);
   const prevLeaderRef = useRef<string | null>(null);
   const pollMsRef = useRef(POLL_BASE_MS);
   
@@ -142,6 +145,22 @@ export function MeshPage() {
       await loadData();
     } catch (err: any) {
       setError(err.message || 'Failed to refresh election state');
+    }
+  }
+
+  async function handleRegisterLanPeers() {
+    setLanRegisterBusy(true);
+    setLanRegisterMsg(null);
+    try {
+      const res = await registerLanMeshNodes({ probe: true, limit: 24 });
+      setLanRegisterMsg(
+        `Registered ${res.registration?.written_count ?? 0} of ${res.registration?.attempted ?? 0} TR-reachable LAN hosts as mesh_node entities.`,
+      );
+      await loadData();
+    } catch (err: any) {
+      setError(err.message || 'LAN register failed');
+    } finally {
+      setLanRegisterBusy(false);
     }
   }
 
@@ -387,17 +406,32 @@ export function MeshPage() {
               </table>
             </div>
             <div className="card">
-              <h3 style={{ marginTop: 0, marginBottom: 12 }}>
-                LAN discovery
-                {lanTrCount > 0 ? (
-                  <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--accent-hover)' }}>
-                    {lanTrCount} Total Recall reachable
-                  </span>
-                ) : null}
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                <h3 style={{ margin: 0 }}>
+                  LAN discovery
+                  {lanTrCount > 0 ? (
+                    <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--accent-hover)' }}>
+                      {lanTrCount} Total Recall reachable
+                    </span>
+                  ) : null}
+                </h3>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={lanRegisterBusy || lanTrCount === 0}
+                  onClick={handleRegisterLanPeers}
+                  title="Create/update mesh_node vault entities for TR-reachable LAN hosts"
+                >
+                  {lanRegisterBusy ? 'Registering…' : 'Register TR peers'}
+                </button>
+              </div>
               <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 0 }}>
                 Hosts from the OS neighbor/ARP table on private LAN ranges. TR-reachable means /health answered on the brain port.
+                Register upserts entity docs (hostname lan-&lt;ip&gt;) without hardcoding fleet names.
               </p>
+              {lanRegisterMsg && (
+                <p style={{ fontSize: 12, color: 'var(--accent-hover)' }}>{lanRegisterMsg}</p>
+              )}
               <table className="data-table">
                 <thead>
                   <tr>

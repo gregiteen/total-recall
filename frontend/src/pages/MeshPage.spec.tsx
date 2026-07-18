@@ -36,6 +36,11 @@ vi.mock('../api/mesh', () => ({
     ui_hints: ['desktop_or_browser_ui', 'voice_input_ok'],
     entity_path: null,
   }),
+  registerLanMeshNodes: vi.fn().mockResolvedValue({
+    success: true,
+    discovery: { host_count: 1, tr_reachable_count: 0, discovered_at: new Date().toISOString() },
+    registration: { attempted: 0, written_count: 0, results: [] },
+  }),
 }));
 
 vi.mock('../api/headscale', () => ({

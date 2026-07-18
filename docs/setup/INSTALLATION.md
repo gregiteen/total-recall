@@ -112,6 +112,10 @@ curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/interfaces"
 # LAN neighbors + optional Total Recall /health probe
 curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/lan?probe=1"
 
+# Register TR-reachable LAN hosts as mesh_node entities (SSSS upsert; no fixed fleet names)
+curl -X POST -H "Authorization: Bearer $TR_PAT" -H "Content-Type: application/json" \
+  -d '{"probe":true,"limit":24}' "$TR_BRAIN/api/mesh/lan/register"
+
 # This host I/O profile (agent UI hints)
 curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/io"
 ```

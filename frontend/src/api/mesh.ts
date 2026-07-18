@@ -134,3 +134,19 @@ export async function fetchDeviceIo(): Promise<{
 }> {
   return get('/api/mesh/io');
 }
+
+/** Discover LAN TR peers and upsert mesh_node entities (config:write). */
+export async function registerLanMeshNodes(opts?: { probe?: boolean; limit?: number }): Promise<{
+  success: boolean;
+  discovery: { host_count: number; tr_reachable_count: number; discovered_at: string };
+  registration: {
+    attempted: number;
+    written_count: number;
+    results: Array<{ ip: string; hostname: string; path: string; written: boolean; action: string }>;
+  };
+}> {
+  return post('/api/mesh/lan/register', {
+    probe: opts?.probe !== false,
+    limit: opts?.limit ?? 32,
+  });
+}
