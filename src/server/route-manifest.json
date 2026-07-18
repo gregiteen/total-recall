@@ -264,8 +264,36 @@
     "path": "/api/memory/stats"
   },
   {
+    "method": "GET",
+    "path": "/api/mesh/election/history"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/election/log"
+  },
+  {
     "method": "POST",
     "path": "/api/mesh/election/refresh"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/interfaces"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/io"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/lan"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/lan/register"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/latency"
   },
   {
     "method": "GET",
@@ -682,6 +710,10 @@
   {
     "method": "GET",
     "path": "/api/webhooks/events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webhooks/events/:id/redeliver"
   },
   {
     "method": "POST",
