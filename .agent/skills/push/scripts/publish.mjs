@@ -2,48 +2,47 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+// publish.mjs lives at .agent/skills/push/scripts/ → four levels up to repo root
+import { loadSecrets } from '../../../../src/core/secrets-store.mjs';
 
 const ROOT = process.cwd();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 console.error('🚀 Starting Direct NPM Publish Automation...');
 
-// 1. Load NPM automation token from secrets (fallback from local workspace to global)
-const localSecretsPath = path.join(ROOT, '.agent', 'secrets.enc');
-const globalSecretsPath = path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'secrets.enc');
-
-let secretsPath = null;
-if (fs.existsSync(localSecretsPath)) {
-  secretsPath = localSecretsPath;
-} else if (fs.existsSync(globalSecretsPath)) {
-  secretsPath = globalSecretsPath;
-} else {
-  console.error('❌ secrets.enc file not found at local or global paths!');
-  console.error(`   Local path searched:  ${localSecretsPath}`);
-  console.error(`   Global path searched: ${globalSecretsPath}`);
-  process.exit(1);
+/**
+ * Load npm_token from encrypted or plain secrets.enc via secrets-store.
+ * Prefers workspace .agent, then global total-recall brain.
+ */
+async function loadNpmToken() {
+  const candidates = [
+    path.join(ROOT, '.agent'),
+    path.join(os.homedir(), '.agent', 'skills', 'total-recall'),
+  ];
+  const errors = [];
+  for (const brainDir of candidates) {
+    try {
+      const secrets = await loadSecrets(brainDir);
+      const token = secrets.npm_token || secrets.NPM_TOKEN;
+      if (token) {
+        return { token, brainDir };
+      }
+      errors.push(`${brainDir}: no npm_token key`);
+    } catch (err) {
+      errors.push(`${brainDir}: ${err.message}`);
+    }
+  }
+  throw new Error(`No npm_token found.\n${errors.map((e) => `  - ${e}`).join('\n')}`);
 }
 
-let secrets = {};
-try {
-  secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8'));
-} catch (err) {
-  console.error(`❌ Failed to parse secrets file at ${secretsPath}: ${err.message}`);
-  process.exit(1);
-}
-
-const npmToken = secrets.npm_token;
-if (!npmToken) {
-  console.error(`❌ No npm_token found in secrets.enc at ${secretsPath}! Complete setup/onboarding first.`);
-  process.exit(1);
-}
-
-console.error(`🔑 Successfully loaded NPM automation token from: ${secretsPath}`);
-
-// Helper to run command
 function runCommand(command, args = [], opts = {}) {
   const result = spawnSync(command, args, { stdio: 'inherit', cwd: opts.cwd || ROOT });
   return result.status === 0;
 }
+
+const { token: npmToken, brainDir: secretsBrainDir } = await loadNpmToken();
+console.error(`🔑 Successfully loaded NPM automation token from: ${secretsBrainDir}`);
 
 // 2. Back up existing ~/.npmrc if it exists
 const npmrcPath = path.join(os.homedir(), '.npmrc');

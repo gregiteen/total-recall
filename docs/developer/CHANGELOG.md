@@ -1,27 +1,42 @@
 # Changelog
 
 
-## [3.18.0] — 2026-07-17
+## [3.18.0] — 2026-07-18
 
 ### 🚀 Features
-- **Mesh Auto-Bind**: The brain server now automatically binds to its WireGuard mesh IP (plus a loopback listener) when enrolled in the Headscale mesh — `HOST` no longer defaults to `127.0.0.1`, and `resolveServerHost` picks the mesh address when no explicit host is configured (`src/core/network-bind.mjs`).
-- **Mesh Auth & VFS Documents**: New `mesh-auth` node-to-node authentication primitives and the `vfs-documents` SSSS document service, with full spec coverage.
-- **Mesh/Webhooks/Secrets UI**: Updated Mesh, Webhooks, and Secrets dashboard pages and APIs; leader-election, skills-registry, and webhook-handler refinements.
+- **Mesh device entities**: `mesh_node` entity variables (role, labels, capabilities, notes, interfaces, I/O profile); live Tailscale/LAN merge without hardcoding fleet names.
+- **LAN discovery & register**: Interface kind classification, ARP/neighbor LAN scan, TR `/health` probe, `POST /api/mesh/lan/register` for TR-reachable peers.
+- **Mesh latency UX**: From-this-node latency matrix + RTT sparklines; `GET /api/mesh/latency` through the fetch gate.
+- **Durable election history**: SSSS `mesh_election` events on isolated workspace `mesh-election` (avoids scanning huge default.jsonl); dashboard loads history.
+- **Webhook re-deliver**: `POST /api/webhooks/events/:id/redeliver` + Webhooks UI button; webhook events isolated to workspace `webhooks`.
+- **Network gate indicator**: Sidebar green/amber/red from `/health` `fetch_gate` stats; Network page live path.
+- **Mesh Auto-Bind**: Server binds mesh IP plus loopback when enrolled (`src/core/network-bind.mjs`).
+- **Mesh Auth & VFS Documents**: `mesh-auth` and `vfs-documents` SSSS primitives with specs.
+- **minIntervalMs gate**: Per-domain minimum interval on throttled-fetch; policy parity + knobs.
+- **Deterministic leader election**: Lowest mesh IP; `FAILOVER_BOUND_MS` documented; lease redesign cleaned up.
+- **Cline connect surface**: CLI connect/import/protect for Cline rules.
+- **Auto-pull frontend rebuild**: Cloud `auto-pull.sh` runs vite build after pull so gitignored `frontend/dist` stays current.
 
 ### 🐛 Bug Fixes
-- **Site-wide 401 (auth catch-22)**: `routes/headscale.mjs` used a bare `router.use(requireAuth)` on a root-mounted router, gating every path — including the login page and static assets — behind auth. Scoped it to `/api/headscale`.
-- **Mesh HTTPS exemption**: `requireHttps` now exempts requests whose socket address is a mesh (CGNAT `100.64/10` or Tailscale ULA) IP — WireGuard already encrypts mesh traffic end-to-end. Socket address only; forwarded headers are never trusted for this exemption.
-- **Damaged lockfile**: Regenerated `package-lock.json` from scratch — the previous lockfile was flagged "invalid or damaged" by npm and produced broken installs (missing `estraverse` hoisting).
+- **`/health` fetch_gate**: Gate stats exposed on public health (not only `/api/health`).
+- **Secrets migrate**: Boot re-encrypts plain-JSON `secrets.enc` when `TR_SECRETS_PASSWORD` is set; project `.agent` and brainDir both migrated.
+- **Publish secrets**: `publish.mjs` loads `npm_token` via AES secrets-store (no plain JSON requirement).
+- **Site-wide 401 (auth catch-22)**: Scoped headscale auth so login/static are not gated by pathless middleware.
+- **Mesh HTTPS exemption**: Mesh CGNAT/Tailscale sockets exempt from HTTPS redirect (WireGuard already encrypts).
+- **Damaged lockfile**: Regenerated `package-lock.json` for clean installs.
 
+### 📦 Publishing
+- Published to npm as `total-recall-brain@3.18.0`.
 
+## [3.17.0] — 2026-07-16
 
 ### 🚀 Features
-- **Headscale Mesh Integration**: Added a new UI and backend primitive to securely provision Total Recall instances into a Headscale WireGuard mesh network.
-- **Webhooks & Network Policies**: Added a Webhooks UI for API integration, and established default firewall policies to gate all outbound fetch traffic from Total Recall agents.
-- **Network Safety**: Centralized `secrets-store` and `throttled-fetch` utilities to ensure safe and rate-limited cross-node communication.
+- **Headscale Mesh Integration**: UI and backend primitives to provision Total Recall into a Headscale WireGuard mesh.
+- **Webhooks & Network Policies**: Webhooks UI and default firewall policies for outbound agent fetch.
+- **Network Safety**: Centralized `secrets-store` and `throttled-fetch` for rate-limited cross-node communication.
 
 ### 🐛 Bug Fixes
-- **Skill Sync Fix**: Fixed a severe bug where `skill sync` would pollute `.agent` directory with global `.claude` and `.agents` fallback directories.
+- **Skill Sync Fix**: `skill sync` no longer pollutes `.agent` with global `.claude` / `.agents` fallback directories.
 
 ## [3.15.0] — 2026-07-15
 
