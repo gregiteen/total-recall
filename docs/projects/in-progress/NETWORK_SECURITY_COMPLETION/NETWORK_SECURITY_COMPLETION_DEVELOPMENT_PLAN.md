@@ -3,14 +3,15 @@ type: project_document
 title: "NETWORK_SECURITY_COMPLETION — Development Plan"
 description: "Phased implementation plan with Done-When gates (synced 2026-07-18 to tracker scoreboard)"
 tags: ["project-management", "development-plan", "network", "security", "rate-limiting"]
-timestamp: 2026-07-18T00:15:00-06:00
+timestamp: 2026-07-18T02:30:00-06:00
 ---
 
 # NETWORK_SECURITY_COMPLETION — Development Plan
 
 > **Project Prefix**: `NETWORK_SECURITY_COMPLETION`  
-> **Kanban State**: 🏗️ In Progress (implementation nearly complete; acceptance + device-entity bind remain)  
+> **Kanban State**: 🏗️ In Progress (implementation complete on tree; acceptance still open)  
 > **Date**: 2026-07-18 (synced to tracker)  
+> **Shipped tip**: `total-recall-brain@3.18.1` / `e5cd7b2` (prior: `3.18.0`/`3f95be8`, rollout `e45117b`, auto-update `b000b5e`)  
 > **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Tracker](./NETWORK_SECURITY_COMPLETION_PROJECT_TRACKER.md)
 
 ---
@@ -22,12 +23,13 @@ timestamp: 2026-07-18T00:15:00-06:00
 | 0 Containment & firewall | ✅ Done |
 | 1 Gate / minIntervalMs | ✅ Done |
 | 2 Election cleanup | ✅ Done (wall-clock failover → Phase 4) |
-| 3 Full verification gates | ⏳ Remote full suite + manual NETWORK_SAFETY |
-| 4 Three-node mesh | ⏳ User Tailscale enrollment |
+| 3 Full verification gates | ⏳ Targeted + TS green; **remote full suite not logged** |
+| 4 Three-node mesh | ⏳ User Tailscale enrollment (**not verified**) |
 | 5 Cline | ✅ Done |
 | 6 Dashboard mesh/webhooks | ✅ Done (alert rules deferred) |
-| 7 Hygiene & archive | ⏳ After 3+4 |
-| 8 Device entity variables | ✅ Done |
+| 7 Hygiene & archive | ⏳ Archive sync done; final PRD sweep + `completed/` after 3+4 |
+| 8–11 Device / LAN / I/O / register | ✅ Done |
+| Package auto-update hook | ✅ Shipped (`b000b5e`, in 3.18.1) |
 
 ---
 
@@ -89,19 +91,20 @@ Sync archived MESH_DASHBOARD_UI / NETWORK_SAFETY docs; PRD §3 final sweep; move
 
 ## Next steps (execution order)
 
-### A — User / ops
-1. Tailscale laptop enrollment → 3 nodes.  
-2. Full suite on remote host; attach log to tracker.  
-3. Restart local server; verify mesh routes + Network UI + `fetch_gate`.  
-4. Optional: fix ESLint `flat-cache` on laptop.  
-5. Set entity variables on install vault mesh_node docs (role/labels/notes) via SSSS.
+### A — User / ops (acceptance blockers)
+1. Tailscale laptop system-extension approval → enroll → **3** nodes online + pings.  
+2. Full suite on **remote** host (Mac Mini / production); attach pass log to tracker Verification Log.  
+3. Optional: fix ESLint `flat-cache` so lint TOTAL_ERRORS is truly 0.  
+4. Set entity variables on install vault mesh_node docs (role/labels/notes) via SSSS.
 
-### B — Next agent implementation
-1. Remote full suite + attach Verification Log.  
-2. After user Phase 4: final PRD sweep → `completed/`.
+### B — Next agent (after A evidence only)
+1. Record Phase 3 full-suite result; tick boxes only if 100% green.  
+2. Phase 4 kill-leader measurement + follower secrets sync when 3 nodes exist.  
+3. Phase 7 final PRD §3 checkbox pass → move folder to `docs/projects/completed/`.
 
-### C — Close project
-After A + Phase 3/4 green: Phase 7 final PRD sweep → archive to `completed/`.
+### C — Close project (do not skip)
+**Do not** move to `completed/` until Phase 3 full suite **and** Phase 4 three-node are verified in the tracker.  
+PRD §3 sweep table lives in the tracker (2026-07-18): criteria 1–4 and 7 **DONE**; 5 partial/blocked (full suite); 6 blocked (Tailscale).
 
 ---
 

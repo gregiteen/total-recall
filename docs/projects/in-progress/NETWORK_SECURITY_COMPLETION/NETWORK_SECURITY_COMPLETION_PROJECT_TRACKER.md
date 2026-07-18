@@ -3,14 +3,15 @@ type: project_document
 title: "NETWORK_SECURITY_COMPLETION — Project Tracker"
 description: "Living task tracker for finishing headscale mesh, firewall, and rate-limiting work (revised after enhanced audit)"
 tags: ["project-management", "tracker", "network", "security", "rate-limiting"]
-timestamp: 2026-07-18T00:15:00-06:00
+timestamp: 2026-07-18T02:30:00-06:00
 ---
 
 # NETWORK_SECURITY_COMPLETION — Project Tracker
 
 > **Status**: In progress — **implementation largely complete**; remaining work is acceptance (full suite + 3-node mesh)  
 > **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SECURITY_COMPLETION_DEVELOPMENT_PLAN.md)  
-> **Tip of tree (feature work)**: `v3.18.0` / `3f95be8` on npm as `total-recall-brain@3.18.0`
+> **Tip of tree (shipped)**: `v3.18.1` / `e5cd7b2` on npm as **`total-recall-brain@3.18.1`**  
+> **Prior release tips**: `3f95be8` (`v3.18.0`); rollout polish `e45117b`; package-auto-update hook `b000b5e`
 
 > **Merged-From Provenance (2026-07-17):** This project is now the single active tracker for all outstanding network/security/rate-limiting work. The following projects were merged in and their folders archived to `docs/projects/archived/superseded-by-network-security-completion/`:
 > - `RECENT_SYSTEM_INTEGRATION_RECOVERY` → Phases 3-4 below (gates, enrollment, acceptance)
@@ -179,22 +180,40 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 
 ### A. You (manual / ops) — unblocks acceptance
 
-1. **Tailscale system extension** on laptop → enroll so `tailscale status` shows 3 nodes.  
-2. On a **remote machine** (not laptop): full test suite; paste results into Verification Log.  
+1. **Tailscale system extension** on laptop → enroll so `tailscale status` shows **3** nodes (Phase 4).  
+2. On a **remote machine** (Mac Mini / production host — **not** laptop): full vitest suite; paste results into Verification Log (Phase 3).  
 3. Optional: fix ESLint **`flat-cache`** so lint daemon TOTAL_ERRORS is truly 0.  
 4. Enrich install vault `mesh_node` docs with **variables** (role, labels, notes) via SSSS — product never needs those names in code.
 
-### B. Agent session — remaining
+### B. Agent session — remaining (blocked on A)
 
-1. After A (user): Phase 4 kill-leader proof → Phase 7 final PRD sweep → move to `completed/`.  
-2. Remote full suite 100% (Mac Mini / production host — not laptop).  
-3. Optional remaining polish: full multi-node N×N (peers report RTTs). Alert rules stay deferred.
+1. After remote suite log lands: tick Phase 3 full-suite + side-effects boxes if green.  
+2. After user Phase 4 enrollment: kill-leader proof (≤ FAILOVER_BOUND_MS ideal / ≤ 5 min acceptance) + follower secrets sync.  
+3. Then Phase 7 final PRD §3 checkboxes + move folder → `docs/projects/completed/`.  
+4. Optional polish: full multi-node N×N latency (peers report RTTs). Alert rules stay deferred.
 
-### C. Explicitly not next
+### C. Explicitly not next / do not fake
 
+- Do **not** move project to `completed/` until Phase 3 full suite **and** Phase 4 three-node are verified in this tracker.  
 - Hardcoding hostnames, machine nicknames, or personal paths into OSS.  
 - Full vitest on laptop (OOM rule).  
 - Mesh alert-rules UI until notification product design exists.
+
+---
+
+## PRD §3 Success Criteria Sweep (2026-07-18)
+
+| # | Criterion | Status | Evidence / blocker |
+|---|-----------|--------|--------------------|
+| 1 | Fresh frontend bundle; no `election/force` in dist; Mesh no 404/`n.map` | **DONE** | Phase 0 rebuild + serve; source clean of force route |
+| 2 | Recovery changeset committed; clean worktree for that set | **DONE** | Multiple commits on main through `e5cd7b2` |
+| 3 | `minIntervalMs: 2000` spaces gated fetches ≥2s | **DONE** | Phase 1 + throttled-fetch suite |
+| 4 | Tracker-0I cases in `throttled-fetch.spec.mjs` pass | **DONE** | Phase 1 (15 tests, multi-file stress green) |
+| 5 | Full suite + TS 0 + lint 0 | **BLOCKED / partial** | TS 0 via pre-push/sanctioned checker **DONE**. Lint source clean; daemon may still show `flat-cache` tooling noise. **Full suite never logged green on Mac Mini/remote** — still open. |
+| 6 | Three nodes online; kill-leader → new leader within TTL | **BLOCKED** | Needs user Tailscale system-extension approval + enrollment; wall-clock failover not measured |
+| 7 | `connect cline` + Integrations detects Cline | **DONE** | Phase 5 (surface, connect, detect, import/protect/uninstall, specs) |
+
+**Close-out rule:** Project stays under `docs/projects/in-progress/` until criteria **5** (full suite) and **6** (3-node) have Verification Log entries with real results. Do not check those boxes from local targeted tests alone.
 
 ---
 
@@ -223,3 +242,6 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Rollout** `e45117b` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
 - 2026-07-18: **npm publish** `total-recall-brain@3.18.0` (`v3.18.0` tag, commit `3f95be8`); publish.mjs loads AES secrets.enc npm_token.
 - 2026-07-18: **`fetch_gate` on GET /health** + **`migrateSecretsToEncryptedIfNeeded`** (boot re-encrypts plain-JSON secrets when password configured); secrets-store tests 9/9.
+- 2026-07-18: **package-auto-update** `b000b5e` — `src/core/package-auto-update.mjs` + CLI/daemon/cron/API; downloads `total-recall-brain` into registry/`TR_SYNC_REPOS` roots; skips monorepo source trees; opt-out `TR_AUTO_UPDATE_PACKAGE=0`.
+- 2026-07-18: **npm publish** `total-recall-brain@3.18.1` (`v3.18.1` tag, commit `e5cd7b2`); `npm view` + local `package.json` = **3.18.1**; tip of `main` = `e5cd7b2`.
+- 2026-07-18: **Docs hygiene** — tracker tip/Next Steps/PRD §3 sweep aligned to shipped state. Phase 3 full suite + Phase 4 three-node **still unverified** (not moved to `completed/`).
