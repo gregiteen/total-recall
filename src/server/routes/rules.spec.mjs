@@ -5,21 +5,51 @@ import { rulesRouter } from './rules.mjs';
 
 vi.mock('../../cli/agent-dir.mjs', () => ({
   getBothBrains: vi.fn().mockReturnValue({
-    global: { brainRoot: '/global' },
-    project: { brainRoot: '/project' }
-  })
+    global: { brainDir: '/global' },
+    project: { brainDir: '/project' },
+  }),
 }));
 
 vi.mock('../../core/vault-cache.mjs', () => ({
   getNodes: vi.fn().mockImplementation((dir) => {
     if (dir === '/global/memory-vault') {
-      return [{ category: 'invariants', content: 'global rule' }];
+      return [
+        {
+          slug: 'g-inv',
+          category: 'invariants',
+          title: 'Global rule',
+          body: 'global rule body',
+          status: 'active',
+          importance: 4,
+        },
+      ];
     }
     if (dir === '/project/memory-vault') {
-      return [{ category: 'preferences', content: 'project rule' }];
+      return [
+        {
+          slug: 'p-pref',
+          category: 'preferences',
+          title: 'Project rule',
+          content: 'project rule body',
+          status: 'active',
+          importance: 2,
+        },
+        {
+          slug: 'p-corr',
+          category: 'corrections',
+          title: 'Old correction category',
+          body: 'correction body',
+          status: 'active',
+          importance: 3,
+        },
+      ];
     }
     return [];
-  })
+  }),
+}));
+
+vi.mock('../../core/logger.mjs', () => ({
+  logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
 describe('rules routes', () => {
@@ -31,14 +61,58 @@ describe('rules routes', () => {
     app.use('/', rulesRouter);
   });
 
-  it('GET /api/rules returns combined rules', async () => {
+  it('GET /api/rules returns combined rules from brainDir layers', async () => {
     const res = await request(app).get('/api/rules');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      rules: [
-        { category: 'invariants', content: 'global rule', scope: 'global' },
-        { category: 'preferences', content: 'project rule', scope: 'project' }
-      ]
+    expect(res.body.count).toBe(3);
+    expect(res.body.rules).toEqual([
+      {
+        slug: 'g-inv',
+        category: 'invariants',
+        title: 'Global rule',
+        body: 'global rule body',
+        status: 'active',
+        importance: 4,
+        scope: 'global',
+      },
+      {
+        slug: 'p-pref',
+        category: 'preferences',
+        title: 'Project rule',
+        body: 'project rule body',
+        status: 'active',
+        importance: 2,
+        scope: 'project',
+      },
+      {
+        slug: 'p-corr',
+        category: 'anti-patterns',
+        title: 'Old correction category',
+        body: 'correction body',
+        status: 'active',
+        importance: 3,
+        scope: 'project',
+      },
+    ]);
+  });
+
+  it('GET /api/rules dedupes when project brainDir aliases global', async () => {
+    const { getBothBrains } = await import('../../cli/agent-dir.mjs');
+    vi.mocked(getBothBrains).mockReturnValueOnce({
+      global: { brainDir: '/same' },
+      project: { brainDir: '/same' },
     });
+    const { getNodes } = await import('../../core/vault-cache.mjs');
+    vi.mocked(getNodes).mockImplementation((dir) => {
+      if (dir === '/same/memory-vault') {
+        return [{ slug: 'one', category: 'invariants', title: 'Only', body: 'x', status: 'active', importance: 1 }];
+      }
+      return [];
+    });
+
+    const res = await request(app).get('/api/rules');
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+    expect(res.body.rules[0].scope).toBe('global');
   });
 });

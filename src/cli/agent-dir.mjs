@@ -56,7 +56,8 @@ export function detectProjectBrain(startDir = process.cwd()) {
       if (fs.existsSync(path.join(c.candidate, 'SKILL.md')) || fs.existsSync(path.join(c.candidate, 'memory-vault'))) {
         return {
           agentDir: c.dir,
-          brainDir: getGlobalBrainDir(),
+          // Project brain lives at the detected candidate — never alias to global.
+          brainDir: c.candidate,
           projectRoot: dir,
         };
       }

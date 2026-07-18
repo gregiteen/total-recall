@@ -1,23 +1,54 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import RulesPage from './RulesPage';
 
-// Mock simple API and context if needed
+const apiFetch = vi.fn();
+const getApiBase = vi.fn().mockReturnValue('');
+
 vi.mock('../api', () => ({
-  apiFetch: vi.fn().mockResolvedValue({ json: () => Promise.resolve({ rules: [] }) }),
-  getApiBase: vi.fn().mockReturnValue(''),
+  apiFetch: (...args: unknown[]) => apiFetch(...args),
+  getApiBase: () => getApiBase(),
 }));
 
 describe('RulesPage Component', () => {
-  it('renders the RulesPage title', () => {
-    // In a real test, we would wrap with Router/Context providers if needed
-    // Assuming RulesPage is isolated enough or we mock context
-    try {
-      render(<RulesPage activeBrainId="test-brain" />);
-      // We expect the page to render without crashing
-      expect(true).toBe(true);
-    } catch (e) {
-      // Ignored for basic mount check
-    }
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        rules: [
+          {
+            slug: 'test-inv',
+            category: 'invariants',
+            title: 'Always test',
+            status: 'active',
+            importance: 4,
+            body: 'Run tests.',
+            scope: 'global',
+          },
+        ],
+        count: 1,
+      }),
+    });
+  });
+
+  it('renders the Agent Rules title and rule cards', async () => {
+    render(<RulesPage activeBrainId="test-brain" />);
+    expect(await screen.findByText('Agent Rules')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText('Always test')).toBeTruthy();
+    });
+    expect(screen.getByTestId('rule-card')).toBeTruthy();
+  });
+
+  it('shows error state when API fails', async () => {
+    apiFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Failed to load agent rules' }),
+    });
+    render(<RulesPage activeBrainId="test-brain" />);
+    expect(await screen.findByTestId('rules-error')).toBeTruthy();
+    expect(screen.getByText(/Failed to load agent rules/i)).toBeTruthy();
   });
 });
