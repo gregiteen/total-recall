@@ -1,8 +1,14 @@
 import { Router } from 'express';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { getLeaderInfo, isLeader } from '../../core/leader-election.mjs';
-import { clearMeshStatusCache, getMeshPeers } from '../../core/mesh.mjs';
+import {
+  clearMeshStatusCache,
+  getMeshPeers,
+  listEnrichedMeshNodes,
+  listMeshNodeEntities,
+} from '../../core/mesh.mjs';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
+import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
 
 const router = Router();
 
@@ -24,10 +30,17 @@ router.get('/api/mesh/leader', requireAuth, requireScope('config:read'), async (
   });
 });
 
+/**
+ * Live peers merged with vault mesh_node entity variables (role, labels, notes, …).
+ * Device detail is entity data — not product hardcoding.
+ */
 router.get('/api/mesh/nodes', requireAuth, requireScope('config:read'), async (req, res) => {
-  const peers = getMeshPeers({ includeSelf: true });
+  const vaultRoot = defaultVaultRoot();
+  const nodes = listEnrichedMeshNodes(vaultRoot);
+  const entities = listMeshNodeEntities(vaultRoot);
   res.json({
-    nodes: peers
+    nodes,
+    entity_count: entities.length,
   });
 });
 

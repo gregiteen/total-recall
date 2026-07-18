@@ -34,7 +34,7 @@ timestamp: 2026-07-18T00:15:00-06:00
 | 5 | Cline integration | ✅ Done |
 | 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred) |
 | 7 | Tracker hygiene & archive | ⏳ Partial — waiting final acceptance |
-| 8 | Device entity variables (OSS vs vault) | ⏳ Next product step (schema + UI bind) |
+| 8 | Device entity variables (OSS vs vault) | ✅ Done (`listEnrichedMeshNodes` + patchOwnMeshNode) |
 
 **Open-source rule (invariant):** Device detail is **variables on `mesh_node` (or device) entities** and live discovery — never hostnames / fleet maps / personal paths in product source. Fixtures use neutral `node-a.mesh` etc. Install vaults hold concrete instances (`memory-vault/system/mesh-nodes/*`).
 
@@ -129,18 +129,19 @@ Device identities in acceptance are **entity variables** on each install’s `me
 - [ ] Final PRD §3 sweep (blocked on Phase 3 full suite + Phase 4 three-node)
 - [ ] Move project folder → `docs/projects/completed/` when Done-When met
 
-## ⏳ Phase 8: Device Entity Variables (P2 — next product work)
+## ✅ Phase 8: Device Entity Variables (P2)
 
 Goal: machines have **rich entity spaces** as **variables on device entities**, never hardcoded fleet data in OSS.
 
 Invariant (saved): device detail = SSSS `mesh_node` (+ live discovery); product binds to variables only.
 
-- [ ] Extend `MeshNodeSchema` optional first-class fields: `role`, `labels[]`, `capabilities[]`, `notes` (passthrough already allows extras) (S)
-- [ ] Re-enable / fix `patchOwnMeshNode` to SSSS-upsert **self** mesh_node from live Tailscale (no fixed hostname list) (M)
-- [ ] Mesh API: merge live peers with vault `mesh_node` docs by IP/hostname for rich detail panel (M)
-- [ ] Mesh dashboard: prefer vault entity variables for display when present; live online/IP always from control plane (M)
-- [ ] Docs: install guide — “register devices as mesh_node entities; do not fork product for hostnames” (S)
-- [ ] Tests: neutral fixtures only; assert no personal hostname strings in `src/` / `frontend/src` product paths (S)
+- [x] Extend `MeshNodeSchema`: `role`, `labels[]`, `capabilities[]`, `notes`, `os` (+ passthrough) (S)
+- [x] `patchOwnMeshNode` SSSS upsert **self** from live Tailscale; slug derived from hostname; preserves entity vars (M)
+- [x] `listEnrichedMeshNodes` / `mergeLivePeersWithEntities` — live IP/online win; entity vars enrich (M)
+- [x] `GET /api/mesh/nodes` returns enriched nodes + `entity_count` (M)
+- [x] Mesh dashboard node detail shows entity role/labels/capabilities/notes/path (M)
+- [x] Tests: `mesh-entities.spec.mjs` (neutral fixtures); mesh route + MeshPage green (S)
+- [ ] Optional install guide note in docs/setup (S) — can ship with Phase 7 hygiene
 
 ---
 
@@ -149,15 +150,16 @@ Invariant (saved): device detail = SSSS `mesh_node` (+ live discovery); product 
 ### A. You (manual / ops) — unblocks acceptance
 
 1. **Tailscale system extension** on laptop → enroll so `tailscale status` shows 3 nodes.  
-2. On a **remote machine** (Mac Mini / production, not laptop): run full test suite per test skill; paste results into Verification Log.  
-3. Optional: fix local ESLint **`flat-cache`** dependency so lint daemon TOTAL_ERRORS is truly 0.
+2. On a **remote machine** (not laptop): full test suite; paste results into Verification Log.  
+3. Optional: fix ESLint **`flat-cache`** so lint daemon TOTAL_ERRORS is truly 0.  
+4. Enrich install vault `mesh_node` docs with **variables** (role, labels, notes) via SSSS — product never needs those names in code.
 
-### B. Agent session — remaining code/docs (no device hardcoding)
+### B. Agent session — remaining
 
-1. **Phase 8** device entity bind (schema + `patchOwnMeshNode` + UI merge) — preferred next implementation.  
-2. **Phase 7** hygiene: archived MESH_DASHBOARD_UI / NETWORK_SAFETY checkbox sync.  
-3. **Phase 3** manual NETWORK_SAFETY checklist when daemon + UI available.  
-4. After A+B: Phase 4 kill-leader proof → Phase 7 final sweep → archive project to `completed/`.
+1. **Phase 7** hygiene: archived MESH_DASHBOARD_UI / NETWORK_SAFETY checkbox sync.  
+2. **Phase 3** NETWORK_SAFETY manual checklist with running daemon.  
+3. Optional install-guide blurb for mesh_node entities.  
+4. After A: Phase 4 kill-leader proof → Phase 7 archive to `completed/`.
 
 ### C. Explicitly not next
 

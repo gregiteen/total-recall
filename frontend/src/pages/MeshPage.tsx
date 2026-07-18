@@ -207,18 +207,35 @@ export function MeshPage() {
               <h3 style={{ marginTop: 0, marginBottom: 12 }}>Node Detail</h3>
               {selectedNode ? (
                 <dl className="mesh-node-detail" style={{ margin: 0, display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 12px' }}>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Title</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.title || selectedNode.hostname}</dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Hostname</dt>
                   <dd style={{ margin: 0 }}>{selectedNode.hostname}</dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>IP</dt>
-                  <dd style={{ margin: 0 }}>{selectedNode.ip}</dd>
+                  <dd style={{ margin: 0 }}>{selectedNode.ip || '—'}</dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Online</dt>
-                  <dd style={{ margin: 0 }}>{selectedNode.online ? 'yes' : 'no'}</dd>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.online ? 'yes' : 'no'}
+                    {selectedNode.vault_only ? ' (vault-only entity)' : ''}
+                  </dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>OS</dt>
                   <dd style={{ margin: 0 }}>{selectedNode.os || 'Unknown'}</dd>
-                  <dt style={{ color: 'var(--text-secondary)' }}>Role</dt>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Election</dt>
                   <dd style={{ margin: 0 }}>
                     {selectedNode.hostname === leader?.hostname || selectedNode.ip === leader?.ip ? 'LEADER' : 'FOLLOWER'}
                   </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Entity role</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.role || '—'}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Labels</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.labels?.length ? selectedNode.labels.join(', ') : '—'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Capabilities</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.capabilities?.length ? selectedNode.capabilities.join(', ') : '—'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Notes</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.notes || selectedNode.description || '—'}</dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Latency</dt>
                   <dd style={{ margin: 0 }}>
                     {selectedNode.self
@@ -226,6 +243,12 @@ export function MeshPage() {
                       : latencyMs[selectedNode.hostname] != null
                         ? `${latencyMs[selectedNode.hostname]} ms`
                         : 'n/a'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Entity</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.has_entity
+                      ? selectedNode.entity_path || 'vault mesh_node'
+                      : 'live discovery only (no vault entity yet)'}
                   </dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Scope</dt>
                   <dd style={{ margin: 0 }}>{selectedNode.self ? 'This node' : 'Peer'}</dd>

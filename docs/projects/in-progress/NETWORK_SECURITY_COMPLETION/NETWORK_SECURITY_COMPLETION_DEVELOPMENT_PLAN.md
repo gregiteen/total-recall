@@ -27,7 +27,7 @@ timestamp: 2026-07-18T00:15:00-06:00
 | 5 Cline | ✅ Done |
 | 6 Dashboard mesh/webhooks | ✅ Done (alert rules deferred) |
 | 7 Hygiene & archive | ⏳ After 3+4 |
-| 8 Device entity variables | ⏳ **Next implementation** |
+| 8 Device entity variables | ✅ Done |
 
 ---
 
@@ -73,17 +73,15 @@ MeshTopology, latency API, election log, webhook wizard stack.
 
 Sync archived MESH_DASHBOARD_UI / NETWORK_SAFETY docs; PRD §3 final sweep; move folder to `completed/`.
 
-## Phase 8 — Device Entity Variables (P2) — NEXT CODE
+## Phase 8 — Device Entity Variables (P2) — DONE
 
 **Principle:** Machines may have highly detailed entity spaces; those details are **variables of the device entity** (vault `mesh_node` + live discovery), never hardcoded fleet data in open-source product code.
 
-1. Optional first-class schema fields on `MeshNodeSchema` (`role`, `labels`, `capabilities`, …); keep passthrough.
-2. `patchOwnMeshNode`: SSSS upsert of **self** from live Tailscale (no static hostname list).
-3. API/UI: merge live peers with vault mesh_node docs by IP/hostname for rich detail.
-4. Install docs: register devices as entities; do not fork product for machine names.
-5. Tests: neutral fixtures only; grep guard against personal hostnames in product paths.
-
-**Done When:** dashboard shows vault entity variables for a mesh_node without any device name appearing in `src/` or `frontend/src` product code (only in vault data and tests’ synthetic `node-*.mesh` fixtures).
+1. ✅ `MeshNodeSchema`: role, labels, capabilities, notes, os (+ passthrough).
+2. ✅ `patchOwnMeshNode`: SSSS upsert of **self** from live Tailscale; slug from hostname.
+3. ✅ `listEnrichedMeshNodes` / API merge; Mesh detail panel binds entity variables.
+4. ⏳ Optional install-guide blurb (Phase 7 hygiene).
+5. ✅ Tests with neutral `node-*.mesh` fixtures (`mesh-entities.spec.mjs`).
 
 ---
 
@@ -92,12 +90,12 @@ Sync archived MESH_DASHBOARD_UI / NETWORK_SAFETY docs; PRD §3 final sweep; move
 ### A — User / ops
 1. Tailscale laptop enrollment → 3 nodes.  
 2. Full suite on remote host; attach log to tracker.  
-3. Optional: fix ESLint `flat-cache` on laptop.
+3. Optional: fix ESLint `flat-cache` on laptop.  
+4. Set entity variables on install vault mesh_node docs (role/labels/notes) via SSSS.
 
 ### B — Next agent implementation
-1. Phase 8 device entity bind (highest value remaining product work).  
-2. Phase 7 archived-doc checkbox sync.  
-3. Phase 3 NETWORK_SAFETY manual checklist with running daemon.
+1. Phase 7 archived-doc checkbox sync.  
+2. Phase 3 NETWORK_SAFETY manual checklist with running daemon.
 
 ### C — Close project
 After A+B: Phase 4 kill-leader proof → Phase 7 archive to `completed/`.

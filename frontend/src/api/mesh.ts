@@ -2,10 +2,21 @@ import { get, post } from './_base';
 
 export interface MeshNode {
   hostname: string;
-  ip: string;
+  ip: string | null;
   online: boolean;
   self: boolean;
   os: string | null;
+  /** Vault mesh_node entity variables (install-specific). */
+  role?: string | null;
+  labels?: string[];
+  capabilities?: string[];
+  notes?: string | null;
+  title?: string | null;
+  description?: string | null;
+  last_heartbeat?: string | null;
+  entity_path?: string | null;
+  has_entity?: boolean;
+  vault_only?: boolean;
 }
 
 export interface LeaderInfo {
