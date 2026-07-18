@@ -1,9 +1,5 @@
 [
   {
-    "method": "POST",
-    "path": "/:provider"
-  },
-  {
     "method": "GET",
     "path": "/.well-known/total-recall.json"
   },
@@ -173,6 +169,26 @@
   },
   {
     "method": "GET",
+    "path": "/api/headscale/node"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/headscale/node/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/headscale/preauthkey"
+  },
+  {
+    "method": "POST",
+    "path": "/api/headscale/preauthkey"
+  },
+  {
+    "method": "GET",
+    "path": "/api/headscale/user"
+  },
+  {
+    "method": "GET",
     "path": "/api/help"
   },
   {
@@ -246,6 +262,18 @@
   {
     "method": "GET",
     "path": "/api/memory/stats"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/election/refresh"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/leader"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/nodes"
   },
   {
     "method": "GET",
@@ -577,6 +605,10 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/ssss"
+  },
+  {
+    "method": "POST",
     "path": "/api/vault/compact"
   },
   {
@@ -633,6 +665,30 @@
   },
   {
     "method": "POST",
+    "path": "/api/webhooks/:provider"
+  },
+  {
+    "method": "GET",
+    "path": "/api/webhooks/configs"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webhooks/configs"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/webhooks/configs/:provider"
+  },
+  {
+    "method": "GET",
+    "path": "/api/webhooks/events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/webhooks/test/:provider"
+  },
+  {
+    "method": "POST",
     "path": "/auth/change-password"
   },
   {
@@ -654,54 +710,6 @@
   {
     "method": "GET",
     "path": "/auth/status"
-  },
-  {
-    "method": "GET",
-    "path": "/configs"
-  },
-  {
-    "method": "POST",
-    "path": "/configs"
-  },
-  {
-    "method": "DELETE",
-    "path": "/configs/:provider"
-  },
-  {
-    "method": "GET",
-    "path": "/events"
-  },
-  {
-    "method": "GET",
-    "path": "/leader"
-  },
-  {
-    "method": "GET",
-    "path": "/node"
-  },
-  {
-    "method": "DELETE",
-    "path": "/node/:id"
-  },
-  {
-    "method": "GET",
-    "path": "/nodes"
-  },
-  {
-    "method": "GET",
-    "path": "/preauthkey"
-  },
-  {
-    "method": "POST",
-    "path": "/preauthkey"
-  },
-  {
-    "method": "POST",
-    "path": "/test/:provider"
-  },
-  {
-    "method": "GET",
-    "path": "/user"
   },
   {
     "method": "GET",

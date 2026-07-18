@@ -50,6 +50,7 @@ type MetaEdit = {
   monthly_cost_usd: string
   monthly_cap_usd: string
   api_docs_url: string
+  headscale_url: string
   rotate_every_days: string
   auto_rotate: boolean
   notes: string
@@ -65,6 +66,7 @@ function metaForm(k: SecretCatalogKey): MetaEdit {
     monthly_cost_usd: k.monthly_cost_usd != null ? String(k.monthly_cost_usd) : '',
     monthly_cap_usd: k.monthly_cap_usd != null ? String(k.monthly_cap_usd) : '',
     api_docs_url: k.api_docs_url || '',
+    headscale_url: k.headscale_url || '',
     rotate_every_days: k.rotate_every_days != null ? String(k.rotate_every_days) : '',
     auto_rotate: !!k.auto_rotate,
     notes: k.notes || '',
@@ -172,6 +174,7 @@ export default function SecretsPage() {
     monthly_cost_usd: '',
     monthly_cap_usd: '',
     api_docs_url: '',
+    headscale_url: '',
     rotate_every_days: '',
     auto_rotate: false,
     notes: '',
@@ -236,7 +239,7 @@ export default function SecretsPage() {
       const total = res.results.length
       const msg = `Mesh sync complete: ${succeeded}/${total} nodes responded successfully.`
       setSyncLogs(prev => [{ time: new Date().toLocaleTimeString(), event: msg, status: 'success' }, ...prev])
-      setSuccessMsg(`Mesh sync complete. ${succeeded}/${total} nodes synced.`)
+
       await loadSyncData()
     } catch (err: any) {
       const msg = `Sync trigger failed: ${err.message || err}`
@@ -265,6 +268,7 @@ export default function SecretsPage() {
         monthly_cost_usd: edit.monthly_cost_usd ? parseFloat(edit.monthly_cost_usd) : undefined,
         monthly_cap_usd: edit.monthly_cap_usd ? parseFloat(edit.monthly_cap_usd) : undefined,
         api_docs_url: edit.api_docs_url || undefined,
+        headscale_url: edit.provider.trim().toLowerCase() === 'headscale' ? edit.headscale_url || undefined : undefined,
         rotate_every_days: edit.rotate_every_days ? parseInt(edit.rotate_every_days, 10) : undefined,
         auto_rotate: !!edit.auto_rotate,
         notes: edit.notes || undefined,
@@ -517,6 +521,7 @@ export default function SecretsPage() {
         monthly_cost_usd: edit.monthly_cost_usd.trim() === '' ? null : Number(edit.monthly_cost_usd),
         monthly_cap_usd: edit.monthly_cap_usd.trim() === '' ? null : Number(edit.monthly_cap_usd),
         api_docs_url: edit.api_docs_url.trim() || null,
+        headscale_url: edit.provider.trim().toLowerCase() === 'headscale' ? edit.headscale_url.trim() || null : null,
         rotate_every_days:
           edit.rotate_every_days.trim() === '' ? null : Number(edit.rotate_every_days),
         auto_rotate: !!edit.auto_rotate,
@@ -983,6 +988,7 @@ export default function SecretsPage() {
                   monthly_cost_usd: '',
                   monthly_cap_usd: '',
                   api_docs_url: '',
+                  headscale_url: '',
                   rotate_every_days: '',
                   auto_rotate: false,
                   notes: '',
@@ -1351,6 +1357,14 @@ export default function SecretsPage() {
                     </PanelSection>
 
                     <PanelSection title="Docs & rotation">
+                      {edit.provider.trim().toLowerCase() === 'headscale' && (
+                        <Field
+                          label="Headscale HTTPS URL"
+                          value={edit.headscale_url}
+                          onChange={(v) => setEdit({ ...edit, headscale_url: v })}
+                          placeholder="https://headscale.example.com"
+                        />
+                      )}
                       <Field label="API docs URL" value={edit.api_docs_url} onChange={(v) => setEdit({ ...edit, api_docs_url: v })} />
                       <Field label="Rotate every (days)" value={edit.rotate_every_days} onChange={(v) => setEdit({ ...edit, rotate_every_days: v })} />
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 10 }}>
@@ -1581,6 +1595,14 @@ export default function SecretsPage() {
               </PanelSection>
 
               <PanelSection title="Docs & rotation">
+                {edit.provider.trim().toLowerCase() === 'headscale' && (
+                  <Field
+                    label="Headscale HTTPS URL"
+                    value={edit.headscale_url}
+                    onChange={(v) => setEdit({ ...edit, headscale_url: v })}
+                    placeholder="https://headscale.example.com"
+                  />
+                )}
                 <Field label="API docs URL" value={edit.api_docs_url} onChange={(v) => setEdit({ ...edit, api_docs_url: v })} />
                 <Field label="Rotate every (days)" value={edit.rotate_every_days} onChange={(v) => setEdit({ ...edit, rotate_every_days: v })} />
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 10 }}>

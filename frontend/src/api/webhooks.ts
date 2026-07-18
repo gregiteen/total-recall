@@ -4,6 +4,8 @@ export interface WebhookConfig {
   provider: string;
   status: 'active' | 'inactive';
   secret?: string;
+  has_secret?: boolean;
+  secret_ref?: string;
   endpoint_url?: string;
   events?: string[];
   lastReceived?: string;

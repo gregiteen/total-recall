@@ -27,6 +27,8 @@ import {
   deleteSecret,
 } from '../../core/secrets-store.mjs';
 import { logger } from '../../core/logger.mjs';
+import { getMeshSyncAuthorization, requireMeshSyncAuth } from '../../core/mesh-auth.mjs';
+import { throttledFetch } from '../../core/throttled-fetch.mjs';
 import { listProviders, getProvider } from '../../core/provider-catalog.mjs';
 import {
   scanEnvSources,
@@ -62,19 +64,16 @@ function brainDirFromReq(req) {
   return secretsBrainDir(req);
 }
 
-function requireAuthOrMesh(req, res, next) {
-  const ip = req.ip || req.socket.remoteAddress;
-  const cleanIp = ip.includes(':') ? ip.split(':').pop() : ip;
-  const isFromMesh = cleanIp && (cleanIp.startsWith('100.') || cleanIp === '127.0.0.1' || cleanIp === '::1');
-  if (isFromMesh) {
-    return next();
-  }
-  return requireAuth(req, res, () => {
-    return requireScope('keys:read', 'config:read')(req, res, next);
-  });
+function meshServerPort() {
+  const value = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
+  return Number.isInteger(value) && value > 0 && value <= 65535 ? value : 3000;
 }
 
-router.get('/api/secrets/checksum', requireAuthOrMesh, async (req, res) => {
+function meshPeerUrl(ip, route) {
+  return `http://${ip}:${meshServerPort()}${route}`;
+}
+
+router.get('/api/secrets/checksum', requireMeshSyncAuth, async (req, res) => {
   try {
     const { getSecretsChecksum } = await import('../../core/secrets-sync.mjs');
     const checksum = getSecretsChecksum();
@@ -84,12 +83,11 @@ router.get('/api/secrets/checksum', requireAuthOrMesh, async (req, res) => {
   }
 });
 
-router.get('/api/secrets/sync', requireAuthOrMesh, async (req, res) => {
+router.get('/api/secrets/sync', requireMeshSyncAuth, async (req, res) => {
   try {
     const fs = await import('node:fs');
-    const path = await import('node:path');
-    const { agentDir } = await import('../../core/config.mjs');
-    const SECRETS_FILE = path.join(agentDir, 'secrets.enc');
+    const { resolveSecretsPath } = await import('../../core/secrets-store.mjs');
+    const SECRETS_FILE = resolveSecretsPath(BRAIN_DIR);
     if (!fs.existsSync(SECRETS_FILE)) {
       return res.status(404).json({ error: 'Secrets file not found' });
     }
@@ -118,18 +116,17 @@ router.get('/api/secrets/sync/status', requireAuth, requireScope('keys:read', 'c
     
     const localChecksum = getSecretsChecksum();
     const peers = getMeshPeers();
+    const authorization = await getMeshSyncAuthorization();
     
     const nodes = await Promise.all(peers.map(async (peer) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 1500);
         
-        const response = await fetch(`http://${peer.ip}:3100/api/secrets/checksum`, {
+        const response = await throttledFetch(meshPeerUrl(peer.ip, '/api/secrets/checksum'), {
           signal: controller.signal,
-          headers: {
-            ...(req.headers['authorization'] ? { 'Authorization': req.headers['authorization'] } : {})
-          }
-        });
+          headers: { Authorization: authorization }
+        }, 1_500);
         clearTimeout(timeoutId);
         
         if (response.ok) {
@@ -165,20 +162,21 @@ router.post('/api/secrets/sync/trigger', requireAuth, requireScope('keys:write',
   try {
     const { getMeshPeers } = await import('../../core/mesh.mjs');
     const peers = getMeshPeers();
+    const authorization = await getMeshSyncAuthorization();
     
     const results = await Promise.all(peers.map(async (peer) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 1500);
         
-        const response = await fetch(`http://${peer.ip}:3100/api/secrets/sync/trigger-pull`, {
+        const response = await throttledFetch(meshPeerUrl(peer.ip, '/api/secrets/sync/trigger-pull'), {
           method: 'POST',
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
-            ...(req.headers['authorization'] ? { 'Authorization': req.headers['authorization'] } : {})
+            Authorization: authorization
           }
-        });
+        }, 1_500);
         clearTimeout(timeoutId);
         
         return {
@@ -202,19 +200,7 @@ router.post('/api/secrets/sync/trigger', requireAuth, requireScope('keys:write',
   }
 });
 
-router.post('/api/secrets/sync/trigger-pull', async (req, res) => {
-  const ip = req.ip || req.socket.remoteAddress;
-  const cleanIp = ip.includes(':') ? ip.split(':').pop() : ip;
-  const isFromMesh = cleanIp && (cleanIp.startsWith('100.') || cleanIp === '127.0.0.1' || cleanIp === '::1');
-  
-  if (!isFromMesh) {
-    return requireAuth(req, res, () => {
-      return requireScope('keys:write', 'config:write')(req, res, async () => {
-        await runPull(res);
-      });
-    });
-  }
-  
+router.post('/api/secrets/sync/trigger-pull', requireMeshSyncAuth, async (req, res) => {
   await runPull(res);
   
   async function runPull(response) {
@@ -506,6 +492,7 @@ router.post('/api/secrets', requireAuth, requireScope('keys:write', 'config:writ
       monthly_cost_usd: body.monthly_cost_usd,
       monthly_cap_usd: body.monthly_cap_usd ?? catalog?.default_monthly_cap_usd,
       api_docs_url: body.api_docs_url || catalog?.docs_url,
+      headscale_url: body.headscale_url,
       rotate_every_days: body.rotate_every_days,
       auto_rotate: body.auto_rotate,
       notes: body.notes,

@@ -2,13 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MeshPage } from './MeshPage';
-import { fetchLeader, fetchNodes as fetchMeshNodes, forceReElection } from '../api/mesh';
+import { fetchLeader, fetchNodes as fetchMeshNodes, refreshElection } from '../api/mesh';
 import { fetchHeadscaleNodes, deleteHeadscaleNode, fetchPreAuthKeys, createPreAuthKey, fetchHeadscaleUsers } from '../api/headscale';
 
 vi.mock('../api/mesh', () => ({
   fetchLeader: vi.fn(),
   fetchNodes: vi.fn(),
-  forceReElection: vi.fn(),
+  refreshElection: vi.fn(),
 }));
 
 vi.mock('../api/headscale', () => ({
@@ -28,8 +28,8 @@ describe('MeshPage', () => {
   it('renders mesh nodes and leader', async () => {
     vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([
-      { hostname: 'macmini.mesh', ip: '1.2.3.4', status: 'online', role: 'leader', lastHeartbeat: '2024-01-01T00:00:00Z' },
-      { hostname: 'laptop.mesh', ip: '1.2.3.5', status: 'offline', role: 'follower', lastHeartbeat: '2024-01-01T00:00:00Z' },
+      { hostname: 'macmini.mesh', ip: '1.2.3.4', online: true, self: true, os: 'macOS' },
+      { hostname: 'laptop.mesh', ip: '1.2.3.5', online: false, self: false, os: 'macOS' },
     ]);
 
     render(<MeshPage />);
@@ -40,19 +40,19 @@ describe('MeshPage', () => {
     });
   });
 
-  it('handles force re-election', async () => {
+  it('refreshes deterministic election state', async () => {
     vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([]);
-    vi.mocked(forceReElection).mockResolvedValue(undefined);
+    vi.mocked(refreshElection).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
 
     render(<MeshPage />);
     
     await waitFor(() => {
-      expect(screen.getByText('Force Re-Election')).toBeInTheDocument();
+      expect(screen.getByText('Refresh Election')).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByText('Force Re-Election'));
-    expect(forceReElection).toHaveBeenCalled();
+    await userEvent.click(screen.getByText('Refresh Election'));
+    expect(refreshElection).toHaveBeenCalled();
   });
 
   it('renders Headscale Nodes tab and allows deletion', async () => {

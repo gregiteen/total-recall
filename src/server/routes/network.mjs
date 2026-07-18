@@ -1,10 +1,41 @@
 import express from 'express';
 import { getGateStats, getAuditLog } from '../../core/throttled-fetch.mjs';
 import { requireAuth } from '../auth.mjs';
-import { processOperation } from '../../core/operation-validator.mjs';
-import { getNodes } from '../../core/vault-cache.mjs';
+import { findVfsDocumentByPath } from '../../core/vfs-documents.mjs';
+import { patchVfsDocument } from '../../core/ssss-operation-service.mjs';
 
 const router = express.Router();
+const POLICY_PATH = 'system/network-policy.md';
+const MUTABLE_POLICY_FIELDS = new Set([
+  'status',
+  'blocked_domains',
+  'allowed_domains',
+  'domain_limits',
+  'max_global_concurrency',
+  'max_per_domain_concurrency',
+  'default_timeout_ms',
+  'whitelist_mode',
+]);
+
+function currentPolicy() {
+  return findVfsDocumentByPath(POLICY_PATH);
+}
+
+function safePolicyPatch(input) {
+  return Object.fromEntries(
+    Object.entries(input || {}).filter(([key]) => MUTABLE_POLICY_FIELDS.has(key)),
+  );
+}
+
+function normalizeDomain(value) {
+  const domain = String(value || '').trim().toLowerCase().replace(/^\*\./, '');
+  if (!domain || domain.length > 253 || !/^[a-z0-9.-]+$/.test(domain) || domain.includes('..')) {
+    throw new Error('Invalid domain');
+  }
+  const parsed = new URL(`https://${domain}`);
+  if (parsed.hostname !== domain) throw new Error('Invalid domain');
+  return domain;
+}
 
 router.get('/api/network/stats', requireAuth, (req, res) => {
   res.json({
@@ -15,8 +46,7 @@ router.get('/api/network/stats', requireAuth, (req, res) => {
 
 router.get('/api/network/policy', requireAuth, async (req, res) => {
   try {
-    const nodes = await getNodes();
-    const policyNode = nodes.find(n => n.frontmatter.id === 'network-policy');
+    const policyNode = currentPolicy();
     if (!policyNode) {
       return res.status(404).json({ error: 'Network policy not found' });
     }
@@ -26,57 +56,19 @@ router.get('/api/network/policy', requireAuth, async (req, res) => {
   }
 });
 
-// For mutations, we just call the SSSS API directly since the requirement says "All mutations route through POST /api/v1/ssss internally"
-async function applyPatch(patch, req) {
-  const { isLeader, getLeaderInfo } = await import('../../core/leader-election.mjs');
-  const leaderInfo = await getLeaderInfo();
-  
-  if (!await isLeader() && leaderInfo?.ip) {
-    // Proxy to leader
-    const res = await fetch(`http://${leaderInfo.ip}:3100/api/v1/ssss`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(req.headers['authorization'] ? { 'Authorization': req.headers['authorization'] } : {})
-      },
-      body: JSON.stringify({
-        op: 'patch',
-        target_id: 'network-policy',
-        patch
-      })
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Leader proxy failed with status ${res.status}`);
-    }
-    return await res.json();
-  }
-
-  // Rather than making a loopback HTTP call, we'll construct the mock request objects and use the internal SSSS pipeline
-  const { ssssOperationHandler } = await import('./ssss.mjs');
-  return new Promise((resolve, reject) => {
-    const mockReq = {
-      body: {
-        op: 'patch',
-        target_id: 'network-policy',
-        patch
-      },
-      user: req.user
-    };
-    const mockRes = {
-      json: (data) => resolve(data),
-      status: (code) => ({
-        json: (data) => reject(new Error(data.error || 'Unknown error'))
-      })
-    };
-    ssssOperationHandler(mockReq, mockRes).catch(reject);
+async function applyPatch(patch) {
+  const filtered = safePolicyPatch(patch);
+  if (Object.keys(filtered).length === 0) throw new Error('No mutable network policy fields supplied');
+  return patchVfsDocument(POLICY_PATH, filtered, {
+    actorRole: 'admin',
+    intent: 'Update network policy from authenticated dashboard',
   });
 }
 
 router.put('/api/network/policy', requireAuth, async (req, res) => {
   try {
     const patch = req.body; // should contain updated fields
-    const result = await applyPatch(patch, req);
+    const result = await applyPatch(patch);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -85,17 +77,14 @@ router.put('/api/network/policy', requireAuth, async (req, res) => {
 
 router.post('/api/network/block', requireAuth, async (req, res) => {
   try {
-    const { domain } = req.body;
-    if (!domain) return res.status(400).json({ error: 'domain is required' });
+    const domain = normalizeDomain(req.body?.domain);
     
-    // Read current to append
-    const nodes = await getNodes();
-    const policyNode = nodes.find(n => n.frontmatter.id === 'network-policy');
+    const policyNode = currentPolicy();
+    if (!policyNode) return res.status(404).json({ error: 'Network policy not found' });
     const blocked = policyNode?.frontmatter?.blocked_domains || [];
     
     if (!blocked.includes(domain)) {
-      blocked.push(domain);
-      const result = await applyPatch({ blocked_domains: blocked }, req);
+      const result = await applyPatch({ blocked_domains: [...blocked, domain] });
       return res.json(result);
     }
     res.json({ status: 'already_blocked' });
@@ -106,15 +95,15 @@ router.post('/api/network/block', requireAuth, async (req, res) => {
 
 router.delete('/api/network/block/:domain', requireAuth, async (req, res) => {
   try {
-    const { domain } = req.params;
+    const domain = normalizeDomain(req.params.domain);
     
-    const nodes = await getNodes();
-    const policyNode = nodes.find(n => n.frontmatter.id === 'network-policy');
+    const policyNode = currentPolicy();
+    if (!policyNode) return res.status(404).json({ error: 'Network policy not found' });
     let blocked = policyNode?.frontmatter?.blocked_domains || [];
     
     if (blocked.includes(domain)) {
       blocked = blocked.filter(d => d !== domain);
-      const result = await applyPatch({ blocked_domains: blocked }, req);
+      const result = await applyPatch({ blocked_domains: blocked });
       return res.json(result);
     }
     res.json({ status: 'not_blocked' });

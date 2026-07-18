@@ -61,7 +61,9 @@ const configSchema = z.object({
   sessionSecret: z.string().optional(),
   nodeEnv: z.string().default('production'),
   port: z.preprocess((val) => val === undefined || val === '' ? 3000 : parseInt(String(val), 10), z.number().int().default(3000)),
-  host: z.string().default('127.0.0.1'),
+  // No default: when HOST is unset, the server auto-binds to the mesh IP if
+  // available (see resolveServerHost), falling back to loopback otherwise.
+  host: z.string().optional(),
   display: z.string().optional(),
   totalRecallToken: z.string().optional(),
   trBrain: z.string().optional(),

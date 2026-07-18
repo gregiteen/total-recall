@@ -146,7 +146,10 @@ export function registerSkill(brainDir, skillPath, opts = {}) {
     description: meta.description,
     version: meta.version,
     tags: opts.tags || meta.tags || prev.tags || [],
-    repo_scoped: meta.repo_scoped || false,
+    // Fail closed once any registered copy declares repository scope. A later
+    // discovery pass must never make that skill globally syncable merely
+    // because another repository has an older entrypoint without the flag.
+    repo_scoped: meta.repo_scoped || prev.repo_scoped || false,
     source: opts.source || prev.source || abs,
     source_type: opts.source_type || prev.source_type || 'local',
     source_path: abs,
@@ -206,9 +209,26 @@ export function copySkillDir(src, dest) {
     const from = path.join(src, ent.name);
     const to = path.join(dest, ent.name);
     if (ent.isDirectory()) {
+      try {
+        const existing = fs.lstatSync(to);
+        if (!existing.isDirectory() || existing.isSymbolicLink()) {
+          fs.rmSync(to, { recursive: true, force: true });
+        }
+      } catch {}
       copySkillDir(from, to);
     } else if (ent.isFile()) {
+      try {
+        const existing = fs.lstatSync(to);
+        if (existing.isDirectory() || existing.isSymbolicLink()) {
+          fs.rmSync(to, { recursive: true, force: true });
+        }
+      } catch {}
       fs.copyFileSync(from, to);
+    } else if (ent.isSymbolicLink()) {
+      try {
+        fs.rmSync(to, { recursive: true, force: true });
+      } catch {}
+      fs.symlinkSync(fs.readlinkSync(from), to);
     }
   }
 }
@@ -267,19 +287,21 @@ export function resolveSkillSource(brainDir, skillIdOrPath, agentSkillsDir) {
     return { id: path.basename(asPath), sourcePath: asPath, from: 'path' };
   }
 
-  // Local agent skills
+  // Registered catalog entries are authoritative for id-based deploys. Looking
+  // in the target repo's local skill directory first silently self-copied a
+  // stale install and then promoted it over the registered source.
+  const registry = loadRegistry(brainDir);
+  const entry = registry.skills[skillIdOrPath];
+  if (entry?.source_path && fs.existsSync(path.join(entry.source_path, 'SKILL.md'))) {
+    return { id: entry.id, sourcePath: entry.source_path, from: 'registry', entry };
+  }
+
+  // Unregistered local skills remain deployable by id.
   if (agentSkillsDir) {
     const local = path.join(agentSkillsDir, skillIdOrPath);
     if (fs.existsSync(path.join(local, 'SKILL.md'))) {
       return { id: skillIdOrPath, sourcePath: local, from: 'agent-skills' };
     }
-  }
-
-  // Registry entry
-  const registry = loadRegistry(brainDir);
-  const entry = registry.skills[skillIdOrPath];
-  if (entry?.source_path && fs.existsSync(path.join(entry.source_path, 'SKILL.md'))) {
-    return { id: entry.id, sourcePath: entry.source_path, from: 'registry', entry };
   }
 
   throw new Error(
@@ -303,16 +325,36 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
   const destSkills = path.join(repoRoot, '.agent', 'skills');
   const resolved = resolveSkillSource(brainDir, skillIdOrPath, opts.agentSkillsDir);
   const destDir = path.join(destSkills, resolved.id);
+  const sourceMeta = readSkillMeta(resolved.sourcePath);
+  const sourceRepo = repoForSkillPath(brainDir, resolved.sourcePath);
+
+  if (
+    sourceMeta.repo_scoped &&
+    sourceRepo &&
+    canonicalPath(sourceRepo) !== canonicalPath(repoRoot) &&
+    !opts.allowRepoScopedCrossRepo
+  ) {
+    throw new Error(
+      `Refusing to deploy repo-scoped skill "${resolved.id}" from ${sourceRepo} into ${repoRoot}`,
+    );
+  }
+  if (
+    sourceRepo &&
+    canonicalPath(sourceRepo) !== canonicalPath(repoRoot) &&
+    !opts.allowRepoScopedCrossRepo
+  ) {
+    throw new Error(
+      `Refusing to deploy repo-owned catalog skill "${resolved.id}" from ${sourceRepo} into ${repoRoot}. ` +
+      'Register an explicit global source outside a project repository first.',
+    );
+  }
 
   if (fs.existsSync(destDir) && !opts.force) {
-    // allow overwrite with force; default overwrite content but keep note
+    // Existing installs are refreshed transactionally below. `force` remains
+    // an explicit CLI signal for callers that require replacement semantics.
   }
 
-  fs.mkdirSync(destSkills, { recursive: true });
-  if (fs.existsSync(destDir)) {
-    fs.rmSync(destDir, { recursive: true, force: true });
-  }
-  copySkillDir(resolved.sourcePath, destDir);
+  const replacement = replaceSkillDir(resolved.sourcePath, destDir);
 
   let adaptResult = { adapted: false };
   if (opts.adapt) {
@@ -367,6 +409,7 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
     destDir,
     install,
     adapt: adaptResult,
+    replacement,
   };
 }
 
@@ -446,6 +489,99 @@ const SKILL_SCAN_REL = [
   path.join('.codex', 'skills'),
   path.join('.gemini', 'skills'),
 ];
+
+/**
+ * Resolve an existing path through symlinks so aliases of one physical skill
+ * cannot be mistaken for separate copies. Missing paths fall back to their
+ * normalized absolute form.
+ */
+export function canonicalPath(candidate) {
+  const absolute = path.resolve(candidate);
+  try {
+    return fs.realpathSync.native(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
+export function samePhysicalPath(left, right) {
+  return canonicalPath(left) === canonicalPath(right);
+}
+
+/**
+ * Infer the project root that owns a repository-local skill path. The global
+ * ~/.agent/skills catalog intentionally resolves to null because it is not a
+ * project repository.
+ */
+export function inferSkillRepoRoot(skillPath) {
+  const absolute = path.resolve(skillPath);
+  for (const rel of SKILL_SCAN_REL) {
+    const marker = `${path.sep}${rel}${path.sep}`;
+    const index = absolute.lastIndexOf(marker);
+    if (index <= 0) continue;
+    const candidate = absolute.slice(0, index);
+    if (isProjectRepoRoot(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Prefer the install map when determining ownership, then fall back to the
+ * path structure for newly discovered skills.
+ */
+export function repoForSkillPath(brainDir, skillPath) {
+  const physical = canonicalPath(skillPath);
+  try {
+    for (const install of loadRegistry(brainDir).installs || []) {
+      if (!install.path || !install.repo) continue;
+      if (canonicalPath(install.path) === physical) return path.resolve(install.repo);
+    }
+  } catch {}
+  return inferSkillRepoRoot(skillPath);
+}
+
+/**
+ * Repo scoping is fail-closed across the catalog and every live install. This
+ * protects direct single-skill sync calls as well as batch sync.
+ */
+export function isRepoScopedSkill(brainDir, skillId) {
+  const registry = loadRegistry(brainDir);
+  const entry = registry.skills?.[skillId];
+  if (entry?.repo_scoped) return true;
+  const candidates = [
+    entry?.source_path,
+    ...registry.installs.filter((install) => install.skill_id === skillId).map((install) => install.path),
+  ].filter(Boolean);
+  const seen = new Set();
+  const liveRepos = new Set();
+  const liveHashes = new Set();
+  for (const candidate of candidates) {
+    const physical = canonicalPath(candidate);
+    if (seen.has(physical)) continue;
+    seen.add(physical);
+    if (!fs.existsSync(path.join(candidate, 'SKILL.md'))) continue;
+    try {
+      if (readSkillMeta(candidate).repo_scoped) return true;
+    } catch {}
+    const ownerRepo = repoForSkillPath(brainDir, candidate);
+    if (ownerRepo) liveRepos.add(canonicalPath(ownerRepo));
+    const hash = hashSkillContent(candidate);
+    if (hash) liveHashes.add(hash);
+  }
+
+  // An unflagged skill can still be repository-specific. If its catalog source
+  // is itself owned by a project and different repositories carry divergent
+  // content under the same name, never pick a winner and fan it out. Only a
+  // source outside project repositories (for example ~/.agent/skills) is an
+  // explicit global catalog source allowed to synchronize divergence.
+  const catalogSourceRepo = entry?.source_path
+    ? repoForSkillPath(brainDir, entry.source_path)
+    : null;
+  if (catalogSourceRepo && liveRepos.size > 1 && liveHashes.size > 1) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Optional extra repo roots from env (open-source safe — no hardcoded paths).
@@ -634,6 +770,7 @@ export function ensureRegisteredProjectBrains(brainDir, opts = {}) {
  */
 export function discoverSkillsInRepo(repoRoot) {
   const found = [];
+  const seen = new Set();
   const root = path.resolve(repoRoot);
   for (const rel of SKILL_SCAN_REL) {
     const base = path.join(root, rel);
@@ -652,6 +789,9 @@ export function discoverSkillsInRepo(repoRoot) {
         continue;
       }
       if (!fs.existsSync(path.join(dir, 'SKILL.md'))) continue;
+      const physical = canonicalPath(dir);
+      if (seen.has(physical)) continue;
+      seen.add(physical);
       found.push({ id: name, path: dir, repo: root });
     }
   }
@@ -698,10 +838,18 @@ export function discoverAllSkills(
       if (!includeCore && hit.id === 'total-recall') continue;
       discovered++;
       try {
-        registerSkill(brainDir, hit.path, {
-          source: hit.path,
-          source_type: 'discovered',
-        });
+        const before = loadRegistry(brainDir).skills[hit.id];
+        if (!before?.source_path || !fs.existsSync(path.join(before.source_path, 'SKILL.md'))) {
+          registerSkill(brainDir, hit.path, {
+            source: hit.path,
+            source_type: 'discovered',
+          });
+        } else if (readSkillMeta(hit.path).repo_scoped && !before.repo_scoped) {
+          const scopedRegistry = loadRegistry(brainDir);
+          scopedRegistry.skills[hit.id].repo_scoped = true;
+          scopedRegistry.skills[hit.id].updated_at = new Date().toISOString();
+          saveRegistry(brainDir, scopedRegistry);
+        }
         registered.push(hit.id);
       } catch {
         // invalid skill
@@ -755,14 +903,78 @@ export function skillMtime(skillDir) {
 /**
  * Copy skill tree from src → dest (replace).
  */
-export function replaceSkillDir(src, dest, { dryRun = false } = {}) {
+export function replaceSkillDir(
+  src,
+  dest,
+  { dryRun = false, preserveExisting = true, fsImpl = fs, copyFn = copySkillDir } = {},
+) {
   if (dryRun) return { dryRun: true, src, dest };
-  if (!fs.existsSync(src)) throw new Error(`Source missing: ${src}`);
-  if (path.resolve(src) === path.resolve(dest)) return { skipped: true, reason: 'same-path' };
-  fs.mkdirSync(path.dirname(dest), { recursive: true });
-  if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
-  copySkillDir(src, dest);
-  return { src, dest, ok: true };
+  if (!fsImpl.existsSync(src)) throw new Error(`Source missing: ${src}`);
+  const canonical = (candidate) => {
+    const absolute = path.resolve(candidate);
+    try {
+      return fsImpl.realpathSync.native(absolute);
+    } catch {
+      return absolute;
+    }
+  };
+  if (canonical(src) === canonical(dest)) return { skipped: true, reason: 'same-path' };
+  try {
+    if (fsImpl.lstatSync(dest).isSymbolicLink()) {
+      return { skipped: true, reason: 'destination-symlink', src, dest };
+    }
+  } catch {}
+  const parent = path.dirname(dest);
+  const base = path.basename(dest);
+  const nonce = `${process.pid}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+  const stage = path.join(parent, `.${base}.incoming-${nonce}`);
+  const backup = path.join(parent, `.${base}.backup-${nonce}`);
+  let movedDestination = false;
+
+  fsImpl.mkdirSync(parent, { recursive: true });
+  try {
+    // Build the next install off to the side. Preserve destination-only files
+    // by default so sync/deploy can never erase repository-specific hooks,
+    // references, evals, or scripts merely because the source is leaner.
+    if (preserveExisting && fsImpl.existsSync(dest)) {
+      copyFn(dest, stage);
+    }
+    copyFn(src, stage);
+    if (!fsImpl.existsSync(path.join(stage, 'SKILL.md'))) {
+      throw new Error(`Staged skill is missing SKILL.md: ${stage}`);
+    }
+
+    if (fsImpl.existsSync(dest)) {
+      fsImpl.renameSync(dest, backup);
+      movedDestination = true;
+    }
+
+    try {
+      fsImpl.renameSync(stage, dest);
+    } catch (error) {
+      if (movedDestination && fsImpl.existsSync(backup) && !fsImpl.existsSync(dest)) {
+        fsImpl.renameSync(backup, dest);
+      }
+      throw error;
+    }
+
+    if (movedDestination && fsImpl.existsSync(backup)) {
+      fsImpl.rmSync(backup, { recursive: true, force: true });
+    }
+    return { src, dest, ok: true, preservedExisting: preserveExisting };
+  } catch (error) {
+    // A failed copy must leave the last working install in place. This protects
+    // repo skills from interrupted deploy/sync operations.
+    if (movedDestination && fsImpl.existsSync(backup) && !fsImpl.existsSync(dest)) {
+      fsImpl.renameSync(backup, dest);
+    }
+    throw error;
+  } finally {
+    if (fsImpl.existsSync(stage)) fsImpl.rmSync(stage, { recursive: true, force: true });
+    if (fsImpl.existsSync(backup) && fsImpl.existsSync(dest)) {
+      fsImpl.rmSync(backup, { recursive: true, force: true });
+    }
+  }
 }
 
 /**
@@ -786,7 +998,7 @@ export function collectSkillLocations(brainDir, skillId) {
   for (const inst of registry.installs.filter((i) => i.skill_id === skillId)) {
     if (!fs.existsSync(path.join(inst.path, 'SKILL.md'))) continue;
     // skip duplicate of source
-    if (locations.some((l) => path.resolve(l.path) === path.resolve(inst.path))) continue;
+    if (locations.some((l) => samePhysicalPath(l.path, inst.path))) continue;
     locations.push({
       role: 'install',
       path: inst.path,
@@ -800,7 +1012,7 @@ export function collectSkillLocations(brainDir, skillId) {
   for (const repo of loadKnownRepoRoots(brainDir)) {
     for (const hit of discoverSkillsInRepo(repo)) {
       if (hit.id !== skillId) continue;
-      if (locations.some((l) => path.resolve(l.path) === path.resolve(hit.path))) continue;
+      if (locations.some((l) => samePhysicalPath(l.path, hit.path))) continue;
       locations.push({
         role: 'discovered',
         path: hit.path,
@@ -861,6 +1073,9 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
   if (!locations.length) {
     return { skillId, skipped: true, reason: 'no live copies found' };
   }
+  if (isRepoScopedSkill(brainDir, skillId)) {
+    return { skillId, skipped: true, reason: 'repo_scoped', locations: locations.length };
+  }
 
   const hashes = new Set(locations.map((l) => l.hash).filter(Boolean));
   if (hashes.size <= 1 && locations.length >= 1) {
@@ -895,7 +1110,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
 
   const actions = [];
   for (const loc of locations) {
-    if (path.resolve(loc.path) === path.resolve(winner.path)) continue;
+    if (samePhysicalPath(loc.path, winner.path)) continue;
     if (loc.hash === winner.hash) continue;
     actions.push({
       op: 'copy',
@@ -1022,7 +1237,7 @@ export function syncAllSkillsTwoWay(brainDir, opts = {}) {
     try {
       const registry = loadRegistry(brainDir);
       const entry = registry.skills[id];
-      if (entry?.repo_scoped) {
+      if (isRepoScopedSkill(brainDir, id)) {
         results.push({ skillId: id, skipped: true, reason: 'repo_scoped' });
         continue;
       }

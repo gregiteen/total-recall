@@ -6,6 +6,7 @@ import * as secretsStore from '../../core/secrets-store.mjs';
 import * as secretsSync from '../../core/secrets-sync.mjs';
 import * as mesh from '../../core/mesh.mjs';
 import * as leaderElection from '../../core/leader-election.mjs';
+import * as throttled from '../../core/throttled-fetch.mjs';
 
 vi.mock('../auth.mjs', () => ({
   requireAuth: (req, res, next) => next(),
@@ -32,6 +33,15 @@ vi.mock('../../core/leader-election.mjs', () => ({
   isLeader: vi.fn(),
 }));
 
+vi.mock('../../core/mesh-auth.mjs', () => ({
+  getMeshSyncAuthorization: vi.fn(async () => 'Bearer mesh-token'),
+  requireMeshSyncAuth: (_req, _res, next) => next(),
+}));
+
+vi.mock('../../core/throttled-fetch.mjs', () => ({
+  throttledFetch: vi.fn(),
+}));
+
 const app = express();
 app.use(express.json());
 app.use(secretsRouter);
@@ -39,7 +49,7 @@ app.use(secretsRouter);
 describe('Secrets Routing API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn();
+    vi.mocked(throttled.throttledFetch).mockReset();
   });
 
   it('GET /api/secrets/list returns meta list', async () => {
@@ -61,7 +71,7 @@ describe('Secrets Routing API', () => {
     ]);
 
     // Mock fetch for checksum check
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.mocked(throttled.throttledFetch).mockResolvedValue({
       ok: true,
       json: async () => ({ checksum: 'leader-hash' })
     });
@@ -80,7 +90,7 @@ describe('Secrets Routing API', () => {
       { hostname: 'node-1.mesh', ip: '100.64.0.2', online: true }
     ]);
 
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.mocked(throttled.throttledFetch).mockResolvedValue({
       ok: true
     });
 
@@ -91,7 +101,7 @@ describe('Secrets Routing API', () => {
     expect(res.body.results).toEqual([
       { hostname: 'node-1.mesh', ip: '100.64.0.2', success: true }
     ]);
-    expect(global.fetch).toHaveBeenCalledWith('http://100.64.0.2:3100/api/secrets/sync/trigger-pull', expect.any(Object));
+    expect(throttled.throttledFetch).toHaveBeenCalledWith('http://100.64.0.2:3000/api/secrets/sync/trigger-pull', expect.any(Object), 1500);
   });
 
   it('POST /api/secrets/sync/trigger-pull handles pull trigger on followers', async () => {

@@ -877,17 +877,66 @@ export const TicketedEventSchema = z.object({
 
 export const NetworkPolicySchema = z.object({
   type: z.literal('network_policy'),
+  id: z.string().default('network-policy'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
   status: z.enum(['active', 'inactive']).default('active'),
   blocked_domains: z.array(z.string()).default([]),
   allowed_domains: z.array(z.string()).default([]),
   domain_limits: z.record(z.object({ maxConcurrency: z.number() })).default({}),
 }).passthrough();
 
+export const WebhookConfigSchema = z.object({
+  type: z.literal('webhook_config'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  provider: z.enum(['github', 'stripe', 'npm']),
+  status: z.enum(['active', 'inactive']).default('active'),
+  secret_ref: z.string().regex(/^[A-Z][A-Z0-9_]*$/),
+  events: z.array(z.string()).default([]),
+}).passthrough();
+
+export const MeshNodeSchema = z.object({
+  type: z.literal('mesh_node'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  hostname: z.string().min(1),
+  ip: z.string().nullable().optional(),
+  status: z.enum(['online', 'offline', 'unknown']).default('unknown'),
+  last_heartbeat: ssssDatetimeNullable().optional(),
+}).passthrough();
+
+export const DaemonLeaderSchema = z.object({
+  type: z.literal('daemon_leader'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  leader_hostname: z.string().nullable().optional(),
+  leader_mesh_ip: z.string().nullable().optional(),
+  lease_acquired: ssssDatetimeNullable().optional(),
+  lease_id: z.string().nullable().optional(),
+  lease_ttl_seconds: z.number().int().positive().default(60),
+}).passthrough();
+
 // ─── Schema Registry (§5 of the SSSS spec) ─────────────────────────────────
+
+/** Total Recall host-extension primitives; peer hosts are not required to register them. */
+export const SSSS_HOST_EXTENSION_TYPES = [
+  'network_policy',
+  'webhook_config',
+  'mesh_node',
+  'daemon_leader',
+];
 
 /** Map from SSSS `type` value to its Zod schema. Used by the operation validator. */
 export const SSSS_SCHEMAS = {
   network_policy: NetworkPolicySchema,
+  webhook_config: WebhookConfigSchema,
+  mesh_node: MeshNodeSchema,
+  daemon_leader: DaemonLeaderSchema,
   memory: MemoryNodeSchema,
   conflict: ConflictRecordSchema,
   task: TaskSchema,

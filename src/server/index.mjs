@@ -95,7 +95,14 @@ app.use((req, res, next) => {
 });
 
 app.use(cors(corsOptions()));
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, _res, buffer) => {
+    if (req.originalUrl?.startsWith('/api/webhooks/')) {
+      req.rawBody = Buffer.from(buffer);
+    }
+  },
+}));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
@@ -625,23 +632,19 @@ app.get(/^(.*)$/, (req, res) => {
 const serverSecurityConfig = loadSecurityConfig();
 const PORT = configPort || serverSecurityConfig.bind?.port || 3000;
 import { getMeshIp } from '../core/mesh.mjs';
+import { resolveServerHost } from '../core/network-bind.mjs';
 
-let configuredHost = configHost || serverSecurityConfig.bind?.host;
 const meshIp = getMeshIp();
-
-if (!configuredHost) {
-  if (meshIp) {
-    configuredHost = meshIp;
-  } else {
-    configuredHost = '0.0.0.0';
-    logger.warn("server", "No mesh IP found. Binding to 0.0.0.0 as fallback.");
-  }
+const bindResolution = resolveServerHost({
+  configuredHost: configHost || serverSecurityConfig.bind?.host,
+  meshIp,
+  allowPublicBind: serverSecurityConfig.bind?.allow_public_bind === true,
+});
+const configuredHost = bindResolution.requestedHost;
+const HOST = bindResolution.host;
+if (bindResolution.usedLoopbackFallback) {
+  logger.warn('server', 'No configured or mesh IP found. Binding to loopback only.');
 }
-
-const publicBindRequested = configuredHost === '0.0.0.0' || configuredHost === '::';
-const HOST = nodeEnv === 'production' && publicBindRequested && serverSecurityConfig.bind?.allow_public_bind !== true
-  ? '127.0.0.1'
-  : configuredHost;
 
 import { WebSocketServer } from 'ws';
 const collabWss = new WebSocketServer({ noServer: true });
@@ -718,8 +721,8 @@ if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
     });
   });
 
-  const monitorServer = monitorApp.listen(9111, HOST, () => {
-    logger.info("server", `Live Agent Monitor listening on http://${HOST}:9111/stream`);
+  const monitorServer = monitorApp.listen(9111, '127.0.0.1', () => {
+    logger.info("server", 'Live Agent Monitor listening on http://127.0.0.1:9111/stream');
   });
 
   // Track monitorServer for graceful shutdown

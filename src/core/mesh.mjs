@@ -1,91 +1,71 @@
-import { execSync } from 'node:child_process';
-import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 
-/**
- * Checks if tailscale is installed and running
- */
+const CACHE_MS = 2_000;
+let cachedStatus = null;
+let cachedAt = 0;
+
+function readMeshStatus() {
+  if (cachedStatus && Date.now() - cachedAt < CACHE_MS) return cachedStatus;
+  const result = spawnSync('tailscale', ['status', '--json'], {
+    encoding: 'utf8',
+    timeout: 2_000,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  if (result.status !== 0 || !result.stdout) return null;
+  try {
+    cachedStatus = JSON.parse(result.stdout);
+    cachedAt = Date.now();
+    return cachedStatus;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeNode(node, self = false) {
+  return {
+    hostname: node?.DNSName?.replace(/\.$/, '') || node?.HostName || null,
+    ip: node?.TailscaleIPs?.[0] || null,
+    online: self ? true : !!node?.Online,
+    self,
+    os: node?.OS || null,
+  };
+}
+
+export function clearMeshStatusCache() {
+  cachedStatus = null;
+  cachedAt = 0;
+}
+
 export function isMeshAvailable() {
-  try {
-    execSync('tailscale status', { stdio: 'ignore' });
-    return true;
-  } catch (err) {
-    return false;
-  }
+  return !!readMeshStatus()?.Self;
 }
 
-/**
- * Gets the current node's mesh IP
- */
+export function getMeshSelf() {
+  const self = readMeshStatus()?.Self;
+  return self ? normalizeNode(self, true) : null;
+}
+
 export function getMeshIp() {
-  if (!isMeshAvailable()) return null;
-  try {
-    const statusOut = execSync('tailscale status --json', { encoding: 'utf8' });
-    const status = JSON.parse(statusOut);
-    return status.Self?.TailscaleIPs?.[0] || null;
-  } catch (err) {
-    return null;
-  }
+  return getMeshSelf()?.ip || null;
 }
 
-/**
- * Gets the current node's MagicDNS hostname
- */
 export function getMeshHostname() {
-  if (!isMeshAvailable()) return null;
-  try {
-    const statusOut = execSync('tailscale status --json', { encoding: 'utf8' });
-    const status = JSON.parse(statusOut);
-    return status.Self?.DNSName?.replace(/\.$/, '') || null;
-  } catch (err) {
-    return null;
-  }
+  return getMeshSelf()?.hostname || null;
+}
+
+export function getMeshPeers({ includeSelf = false } = {}) {
+  const status = readMeshStatus();
+  if (!status) return [];
+  const peers = Object.values(status.Peer || {}).map((peer) => normalizeNode(peer));
+  if (includeSelf && status.Self) peers.push(normalizeNode(status.Self, true));
+  return peers.filter((peer) => peer.hostname && peer.ip);
 }
 
 /**
- * Gets a list of connected peers
- */
-export function getMeshPeers() {
-  if (!isMeshAvailable()) return [];
-  try {
-    const statusOut = execSync('tailscale status --json', { encoding: 'utf8' });
-    const status = JSON.parse(statusOut);
-    const peers = status.Peer || {};
-    return Object.values(peers).map((p) => ({
-      hostname: p.DNSName?.replace(/\.$/, ''),
-      ip: p.TailscaleIPs?.[0],
-      online: p.Online
-    }));
-  } catch (err) {
-    return [];
-  }
-}
-
-/**
- * Patches the current node's mesh document in the vault
+ * Mesh membership is derived from the control plane. Heartbeat VFS files were
+ * node-local and could never coordinate multiple machines, so this hook now
+ * returns the live self record without pretending to mutate shared state.
  */
 export async function patchOwnMeshNode() {
-  const hostname = getMeshHostname();
-  if (!hostname) return;
-  const ip = getMeshIp();
-  const slug = `mesh-node-${hostname.split('.')[0]}`;
-  
-  try {
-    const { getNodes } = await import('./vault-cache.mjs');
-    const { writeNodeValidatedAsync } = await import('./validated-write.mjs');
-    const { brainDir } = await import('./config.mjs');
-    const path = await import('node:path');
-    
-    const vaultDir = path.join(brainDir, 'memory-vault');
-    const nodes = getNodes(vaultDir);
-    const existing = nodes.find(n => n.slug === slug);
-    
-    if (existing) {
-      existing.ip = ip;
-      existing.status = 'online';
-      existing.last_heartbeat = new Date().toISOString();
-      await writeNodeValidatedAsync(existing, vaultDir);
-    }
-  } catch (err) {
-    // silently fail if vault isn't ready
-  }
+  return getMeshSelf();
 }

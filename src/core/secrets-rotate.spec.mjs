@@ -22,7 +22,7 @@ describe('secrets-rotate', () => {
   beforeEach(() => {
     brain = tmpDir('tr-rotate-brain-');
     project = tmpDir('tr-rotate-proj-');
-    delete process.env.TR_SECRETS_PASSWORD;
+    process.env.TR_SECRETS_PASSWORD = 'test-only-password-for-aes-gcm';
   });
 
   afterEach(() => {

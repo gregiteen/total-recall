@@ -101,7 +101,6 @@ export function WebhooksPage() {
   }
 
   // Compute Stats
-  const totalReceived = configs.reduce((sum, c) => sum + (c.totalCount || 0), 0);
   const activeCount = configs.filter(c => c.status === 'active').length;
 
   return (
@@ -120,16 +119,16 @@ export function WebhooksPage() {
 
       <div className="webhook-stats">
         <div className="stat-box">
-          <div className="label">Total Received</div>
-          <div className="value">{totalReceived}</div>
+          <div className="label">Configured</div>
+          <div className="value">{configs.length}</div>
         </div>
         <div className="stat-box">
           <div className="label">Active Providers</div>
           <div className="value">{activeCount}</div>
         </div>
         <div className="stat-box">
-          <div className="label">Success Rate</div>
-          <div className="value">99.9%</div>
+          <div className="label">Events Loaded</div>
+          <div className="value">{events.length}</div>
         </div>
       </div>
 
@@ -159,9 +158,9 @@ export function WebhooksPage() {
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>
-                        {config.secret ? '••••••••' : 'Not Set'}
+                        {config.has_secret ? '••••••••' : 'Not Set'}
                       </span>
-                      {config.secret && (
+                      {config.has_secret && (
                         <button onClick={() => handleRotateSecret(config.provider)} className="rotate-btn" title="Rotate Secret">
                           ↻
                         </button>
@@ -244,14 +243,16 @@ export function WebhooksPage() {
                 <h3 style={{ marginBottom: '16px' }}>Select Provider</h3>
                 <div className="form-group">
                   <label className="form-label">Provider Name</label>
-                  <input 
+                  <select
                     autoFocus
-                    type="text" 
                     value={newConfig.provider || ''} 
                     onChange={e => setNewConfig({ ...newConfig, provider: e.target.value.toLowerCase() })} 
-                    className="input" 
-                    placeholder="e.g. github, stripe, npm"
-                  />
+                    className="input"
+                  >
+                    <option value="">Choose a provider</option>
+                    <option value="github">GitHub</option>
+                    <option value="stripe">Stripe</option>
+                  </select>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
                     The provider name will dictate the endpoint URL: <code>/api/webhooks/[provider]</code>
                   </p>

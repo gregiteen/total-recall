@@ -126,6 +126,26 @@ export function isLoopbackIp(ip) {
   return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost';
 }
 
+/**
+ * Tailscale/Headscale mesh addresses: IPv4 CGNAT 100.64.0.0/10 and the
+ * Tailscale ULA prefix fd7a:115c:a1e0::/48. Traffic on these addresses is
+ * already WireGuard-encrypted, so HTTPS is redundant. Only ever check the
+ * direct socket address — forwarded headers are spoofable.
+ */
+export function isMeshIp(ip) {
+  if (!ip) return false;
+  const normalized = String(ip)
+    .trim()
+    .replace(/^\[(.*)\]$/, '$1')
+    .replace(/^::ffff:/, '');
+  if (normalized.toLowerCase().startsWith('fd7a:115c:a1e0:')) return true;
+  const m = normalized.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (!m) return false;
+  const first = Number(m[1]);
+  const second = Number(m[2]);
+  return first === 100 && second >= 64 && second <= 127;
+}
+
 function forwardedClientIps(req) {
   const ips = [];
   const headerKey = ['x', 'forwarded', 'for'].join('-');
@@ -210,6 +230,9 @@ export function requireHttps(req, res, next) {
   if (nodeEnv !== 'production') return next();
   if (config.network?.require_https === false) return next();
   if (isLocalRequest(req)) return next();
+  // Mesh traffic is WireGuard-encrypted end-to-end; HTTPS adds nothing.
+  // Socket address only — never trust forwarded headers for this exemption.
+  if (isMeshIp(req.socket?.remoteAddress) && forwardedClientIps(req).length === 0) return next();
 
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
   if (req.secure || forwardedProto === 'https') return next();

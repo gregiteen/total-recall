@@ -14,6 +14,7 @@ vi.mock('../../core/leader-election.mjs', () => ({
 }));
 
 vi.mock('../../core/mesh.mjs', () => ({
+  clearMeshStatusCache: vi.fn(),
   getMeshPeers: vi.fn().mockReturnValue([{ id: 'peer-1' }])
 }));
 
@@ -23,11 +24,11 @@ describe('mesh routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = express();
-    app.use('/', meshRouter);
+    app.use(meshRouter);
   });
 
-  it('GET /leader returns leader info', async () => {
-    const res = await request(app).get('/leader');
+  it('GET /api/mesh/leader returns leader info', async () => {
+    const res = await request(app).get('/api/mesh/leader');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       leader: { id: 'leader-1' },
@@ -35,11 +36,19 @@ describe('mesh routes', () => {
     });
   });
 
-  it('GET /nodes returns mesh peers', async () => {
-    const res = await request(app).get('/nodes');
+  it('GET /api/mesh/nodes returns mesh peers', async () => {
+    const res = await request(app).get('/api/mesh/nodes');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       nodes: [{ id: 'peer-1' }]
     });
+  });
+
+  it('POST /api/mesh/election/refresh clears cached status and returns deterministic leader', async () => {
+    const { clearMeshStatusCache } = await import('../../core/mesh.mjs');
+    const res = await request(app).post('/api/mesh/election/refresh');
+    expect(res.status).toBe(200);
+    expect(clearMeshStatusCache).toHaveBeenCalledOnce();
+    expect(res.body).toEqual({ leader: { id: 'leader-1' }, is_current_node_leader: true });
   });
 });
