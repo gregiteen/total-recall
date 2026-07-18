@@ -13,6 +13,8 @@ import {
   summarizeUsage,
   resolveSecretsPath,
   replaceSecretsBufferAtomic,
+  migrateSecretsToEncryptedIfNeeded,
+  loadSecrets,
 } from './secrets-store.mjs';
 
 function tmpBrain() {
@@ -149,5 +151,27 @@ describe('secrets-store', () => {
     await expect(replaceSecretsBufferAtomic(brain, Buffer.from('not-valid'))).rejects.toThrow();
     expect((await getSecret(brain, 'SYNCED_KEY')).value).toBe('synced-secret-value');
     fs.rmSync(source, { recursive: true, force: true });
+  });
+
+  it('migrates legacy plain-JSON secrets.enc to AES when password is set', async () => {
+    const filePath = resolveSecretsPath(brain);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({ LEGACY_KEY: { value: 'legacy-secret-value-xyz', provider: 'test' } }),
+      'utf8',
+    );
+    expect(fs.readFileSync(filePath, 'utf8').trim().startsWith('{')).toBe(true);
+
+    const result = await migrateSecretsToEncryptedIfNeeded(brain);
+    expect(result.migrated).toBe(true);
+    const raw = fs.readFileSync(filePath);
+    expect(raw[0]).not.toBe('{'.charCodeAt(0));
+    const loaded = await loadSecrets(brain);
+    expect(loaded.LEGACY_KEY?.value || loaded.LEGACY_KEY).toBeTruthy();
+
+    const again = await migrateSecretsToEncryptedIfNeeded(brain);
+    expect(again.migrated).toBe(false);
+    expect(again.reason).toBe('already-encrypted');
   });
 });

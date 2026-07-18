@@ -162,6 +162,14 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     } catch { }
   } catch { }
 
+  let fetch_gate = null;
+  try {
+    const { getGateStats } = await import('../core/throttled-fetch.mjs');
+    fetch_gate = getGateStats();
+  } catch {
+    fetch_gate = null;
+  }
+
   res.json({
     status: hasCriticalIssue ? 'degraded' : 'healthy',
     version: PACKAGE_VERSION,
@@ -173,6 +181,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     caddy: caddyStatus,
     cloudflare: cloudflareStatus,
     emergency_alerts: emergencyAlerts || null,
+    fetch_gate,
     vfs: {
       exists: vaultExists,
       skill_exists: skillExists,
@@ -662,6 +671,17 @@ function setupUpgradeHandler(srv) {
       }
     }
   });
+}
+
+// Best-effort: re-encrypt legacy plain-JSON secrets.enc when a password is set.
+try {
+  const { migrateSecretsToEncryptedIfNeeded } = await import('../core/secrets-store.mjs');
+  const mig = await migrateSecretsToEncryptedIfNeeded(configBrainDir);
+  if (mig.migrated) {
+    logger.info('server', `Migrated legacy plain-JSON secrets store to AES-GCM: ${mig.path}`);
+  }
+} catch (err) {
+  logger.warn('server', `Secrets encryption migrate skipped: ${err.message}`);
 }
 
 const server = app.listen(PORT, HOST, () => {

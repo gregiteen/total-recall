@@ -129,6 +129,47 @@ export async function saveSecrets(brainDir, secrets) {
   fs.writeFileSync(filePath, buf, { mode: 0o600 });
 }
 
+/**
+ * If secrets.enc is still legacy plain JSON and a password is configured,
+ * re-encrypt in place. Safe no-op when already ciphertext or no password.
+ *
+ * @param {string} brainDir
+ * @returns {Promise<{ migrated: boolean, path: string, reason?: string }>}
+ */
+export async function migrateSecretsToEncryptedIfNeeded(brainDir) {
+  const filePath = resolveSecretsPath(brainDir);
+  if (!fs.existsSync(filePath)) {
+    return { migrated: false, path: filePath, reason: 'missing' };
+  }
+  const password = secretsPassword();
+  if (!password) {
+    return { migrated: false, path: filePath, reason: 'no-password' };
+  }
+  const buf = fs.readFileSync(filePath);
+  // Already looks like AES blob (not starting with `{`)
+  if (buf.length > 44 && buf[0] !== 0x7b) {
+    return { migrated: false, path: filePath, reason: 'already-encrypted' };
+  }
+  let obj;
+  try {
+    const text = buf.toString('utf8').trim();
+    if (!text) return { migrated: false, path: filePath, reason: 'empty' };
+    obj = JSON.parse(text);
+  } catch {
+    return { migrated: false, path: filePath, reason: 'not-json' };
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    return { migrated: false, path: filePath, reason: 'invalid-payload' };
+  }
+  await saveSecrets(brainDir, obj);
+  appendAudit(brainDir, {
+    action: 'migrate_encrypt',
+    key: '(store)',
+    actor: 'system',
+  });
+  return { migrated: true, path: filePath };
+}
+
 export async function validateSecretsBuffer(buffer) {
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   const password = secretsPassword();

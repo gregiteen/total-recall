@@ -95,9 +95,9 @@ Goal: release truth green.
   - [x] `/health` → healthy, daemon running (v3.17.1)
   - [x] Network policy API → `status: active`, blocked_domains ≥ 1
   - [x] Global `~/.agent/.../secrets.enc` is **not** valid JSON (encrypted)
-  - [~] Project `.agent/.../secrets.enc` **is** valid JSON (len~29k) — investigate encrypt-at-rest for project brain
-  - [ ] `/api/health` includes explicit `fetch_gate` stats field (not present on live health payload yet)
-  - [ ] Mesh `/api/mesh/interfaces|io` on **running** server after restart (live process still serves SPA for new routes until restart)
+  - [x] Code: `migrateSecretsToEncryptedIfNeeded` on boot re-encrypts legacy plain-JSON when `TR_SECRETS_PASSWORD` set (verify after restart)
+  - [x] Code: `/health` now includes `fetch_gate` (was only on `/api/health`) — restart to pick up
+  - [ ] Mesh `/api/mesh/*` new routes live after server restart
   - [ ] Network page live UI + top-bar indicator (browser)
   - [ ] research/`lsof` connection hygiene
 - [x] Targeted secrets-store + network + leader-election + throttled-fetch + mesh + connect + lan-discovery specs green (S)
@@ -211,3 +211,4 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Phase 7 hygiene (partial).** Archived MESH_DASHBOARD_UI + NETWORK_SAFETY trackers marked SUPERSEDED with completed-item sync; INSTALLATION.md §5 documents mesh_node entity variables, LAN/I/O APIs, and agent UI contract.
 - 2026-07-18: **Phase 11** — `POST /api/mesh/lan/register` auto-upserts TR-reachable LAN peers as `mesh_node` entities (hostname `lan-<ip>`; preserves role/labels). Mesh UI “Register TR peers” button.
 - 2026-07-18: **Phase 3 partial live check** — health healthy/daemon running; network policy active; global secrets.enc not JSON; project secrets.enc still JSON (follow-up); new mesh routes require server restart to leave SPA fallback.
+- 2026-07-18: **`fetch_gate` on GET /health** + **`migrateSecretsToEncryptedIfNeeded`** (boot re-encrypts plain-JSON secrets when password configured); secrets-store tests 9/9.
