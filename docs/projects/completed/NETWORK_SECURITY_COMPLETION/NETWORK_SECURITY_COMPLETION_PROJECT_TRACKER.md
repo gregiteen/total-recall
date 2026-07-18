@@ -113,9 +113,9 @@ Goal: headscale acceptance criteria satisfied.
 - [x] Enroll laptop; `tailscale status` shows **3** nodes: laptop `100.64.0.3`, macmini `100.64.0.2`, cloud `100.64.0.1` (all Online) (S)
 - [x] Mesh discovery: `GET /api/mesh/nodes` returns 3 online peers (laptop self); leader election = lowest IP **cloud** `100.64.0.1` / `lowest-mesh-ip` (S)
 - [x] Cloud TR brain on mesh bind `100.64.0.1:3000` (Ultrachat keeps 127.0.0.1:3000); laptop→cloud `/health` open after mesh auth fix (M)
-- [~] Peer RTT: macmini still no TR listener; cloud RTT via gate may abort under load — raw mesh `/health` OK (M)
+- [x] Peer RTT: cloud **3623 ms** via `GET /api/mesh/latency` (after 10s probe timeout); macmini Tailscale Online but **no TR listener / no SSH** from laptop or cloud (ops, not code) (M)
 - [x] Kill leader (cloud Tailscale down `--accept-risk=lose-ssh`) → new leader **macmini** `100.64.0.2` in **9111 ms** (≤ FAILOVER_BOUND_MS 12s); restored to cloud after `tailscale up` (M)
-- [~] Secrets sync on follower after failover — not separately measured this pass (optional follow-up) (M)
+- [x] Secrets sync measured: laptop↔cloud checksum **synced** (`b2ff8767…`); deploy AES `secrets.enc` + `TR_SECRETS_PASSWORD` on cloud; mesh probe timeout raised 1.5s→10s (M)
 
 Device identities in acceptance are **entity variables** on each install’s `mesh_node` docs + live Tailscale — not product constants.
 
@@ -254,3 +254,4 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Docs hygiene** — tracker tip/Next Steps/PRD §3 sweep aligned to shipped state. Phase 3 full suite + Phase 4 three-node **still unverified** (not moved to `completed/`).
 
 - 2026-07-18: **Phase 4 complete kill-leader** — 9111ms cloud→macmini; project moved to `docs/projects/completed/`.
+- 2026-07-18: **Secrets sync + latency follow-up** — cloud `secrets.enc` + password env; `GET /api/secrets/sync/status` → cloud **synced**; mesh latency cloud **3623ms**; peer probe timeouts 10s (secrets + mesh latency); launchd `com.totalrecall.brain` now has `TR_SECRETS_PASSWORD` (keychain). macmini TR still not running (SSH denied).

@@ -118,15 +118,18 @@ router.get('/api/secrets/sync/status', requireAuth, requireScope('keys:read', 'c
     const peers = getMeshPeers();
     const authorization = await getMeshSyncAuthorization();
     
+    // Mesh peers over Tailscale can take multi-second RTT under load (WAN laptop↔cloud).
+    // 1.5s was too aggressive and reported healthy peers as unreachable.
+    const PEER_PROBE_TIMEOUT_MS = 10_000;
     const nodes = await Promise.all(peers.map(async (peer) => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const timeoutId = setTimeout(() => controller.abort(), PEER_PROBE_TIMEOUT_MS);
         
         const response = await throttledFetch(meshPeerUrl(peer.ip, '/api/secrets/checksum'), {
           signal: controller.signal,
           headers: { Authorization: authorization }
-        }, 1_500);
+        }, PEER_PROBE_TIMEOUT_MS);
         clearTimeout(timeoutId);
         
         if (response.ok) {
@@ -164,10 +167,11 @@ router.post('/api/secrets/sync/trigger', requireAuth, requireScope('keys:write',
     const peers = getMeshPeers();
     const authorization = await getMeshSyncAuthorization();
     
+    const PEER_TRIGGER_TIMEOUT_MS = 10_000;
     const results = await Promise.all(peers.map(async (peer) => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const timeoutId = setTimeout(() => controller.abort(), PEER_TRIGGER_TIMEOUT_MS);
         
         const response = await throttledFetch(meshPeerUrl(peer.ip, '/api/secrets/sync/trigger-pull'), {
           method: 'POST',
@@ -176,7 +180,7 @@ router.post('/api/secrets/sync/trigger', requireAuth, requireScope('keys:write',
             'Content-Type': 'application/json',
             Authorization: authorization
           }
-        }, 1_500);
+        }, PEER_TRIGGER_TIMEOUT_MS);
         clearTimeout(timeoutId);
         
         return {

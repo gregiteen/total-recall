@@ -7,7 +7,7 @@ import { replaceSecretsBufferAtomic, resolveSecretsPath } from './secrets-store.
 import { throttledFetch } from './throttled-fetch.mjs';
 import { getMeshSyncAuthorization } from './mesh-auth.mjs';
 
-const REQUEST_TIMEOUT_MS = 5_000;
+const REQUEST_TIMEOUT_MS = 10_000;
 
 function serverPort() {
   const value = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
