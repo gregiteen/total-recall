@@ -9,7 +9,11 @@ vi.mock('../api/mesh', () => ({
   fetchLeader: vi.fn(),
   fetchNodes: vi.fn(),
   refreshElection: vi.fn(),
-  fetchMeshLatency: vi.fn().mockResolvedValue({ latency_ms: {}, results: [], measured_at: new Date().toISOString() }),
+  fetchMeshLatency: vi.fn().mockResolvedValue({
+    latency_ms: { 'node-a.mesh': 0, 'node-b.mesh': 12 },
+    results: [],
+    measured_at: new Date().toISOString(),
+  }),
   fetchMeshInterfaces: vi.fn().mockResolvedValue({
     interfaces: [],
     summary: [{ name: 'eth0', kind: 'ethernet', ipv4: ['192.168.1.10'] }],
@@ -41,6 +45,8 @@ vi.mock('../api/mesh', () => ({
     discovery: { host_count: 1, tr_reachable_count: 0, discovered_at: new Date().toISOString() },
     registration: { attempted: 0, written_count: 0, results: [] },
   }),
+  fetchElectionHistory: vi.fn().mockResolvedValue([]),
+  logElectionObservation: vi.fn().mockResolvedValue({ success: true, recorded: true }),
 }));
 
 vi.mock('../api/headscale', () => ({
@@ -81,6 +87,7 @@ describe('MeshPage', () => {
       expect(screen.getAllByText('node-b.mesh').length).toBeGreaterThan(0);
     });
     expect(screen.getByTestId('mesh-topology')).toBeInTheDocument();
+    expect(screen.getByTestId('latency-matrix')).toBeInTheDocument();
   });
 
   it('refreshes deterministic election state', async () => {

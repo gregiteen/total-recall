@@ -50,6 +50,32 @@ function StatusDot({ ok, label }: DotProps) {
   )
 }
 
+/** Green / amber / red gate health for Network top-bar indicator. */
+function networkGateTone(gate: HealthData['fetch_gate'] | undefined): {
+  color: string
+  label: string
+  title: string
+} {
+  if (!gate) {
+    return { color: '#94a3b8', label: 'Gate n/a', title: 'Fetch gate stats not available' }
+  }
+  const errors = gate.total_errors || 0
+  const blocked = gate.total_blocked || 0
+  const queue = gate.current_queue_depth || 0
+  const inFlight = gate.current_in_flight || 0
+  const title = `dispatched ${gate.total_dispatched ?? 0} · errors ${errors} · blocked ${blocked} · in-flight ${inFlight} · queue ${queue}`
+  if (errors > 0 && (gate.total_completed || 0) === 0 && (gate.total_dispatched || 0) > 0) {
+    return { color: '#ef4444', label: 'Gate errors', title }
+  }
+  if (errors > 5 || queue > 10 || blocked > 20) {
+    return { color: '#ef4444', label: 'Gate hot', title }
+  }
+  if (errors > 0 || queue > 0 || blocked > 0 || inFlight > (gate.max_global_concurrency || 6) * 0.75) {
+    return { color: '#f59e0b', label: 'Gate busy', title }
+  }
+  return { color: '#22c55e', label: 'Gate ok', title }
+}
+
 interface SidebarProps {
   onLogout: () => void
   health: HealthData | null
@@ -218,6 +244,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
               const daemonOk = health?.daemon === 'running'
               const serverOk = health && health.status !== 'unreachable'
               const allGood = daemonOk && serverOk
+              const gate = networkGateTone(health?.fetch_gate)
 
               if (!health) return <div style={{ color: 'var(--text-tertiary)' }}>Checking…</div>
 
@@ -234,6 +261,29 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
                       <StatusDot ok={daemonOk} label={daemonOk ? 'Daemon' : 'Daemon ' + (health?.daemon ?? 'unknown')} />
                     </>
                   )}
+                  <div
+                    data-testid="network-gate-indicator"
+                    title={gate.title}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-tertiary)' }}
+                  >
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: '50%',
+                        background: gate.color,
+                        boxShadow: `0 0 6px ${gate.color}80`,
+                        display: 'inline-block',
+                      }}
+                    />
+                    <NavLink
+                      to="/network"
+                      style={{ color: 'inherit', textDecoration: 'none', fontSize: 11 }}
+                      title={gate.title}
+                    >
+                      {gate.label}
+                    </NavLink>
+                  </div>
                 </>
               )
             })()}

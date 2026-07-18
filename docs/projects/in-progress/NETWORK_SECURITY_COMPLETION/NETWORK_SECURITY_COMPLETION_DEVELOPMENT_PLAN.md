@@ -67,7 +67,9 @@ connect / surface / integrations / import / protect / uninstall / specs.
 ## Phase 6 — Dashboard (P3) — DONE (except deferred)
 
 MeshTopology, latency API, election log, webhook wizard stack.  
-**Deferred:** mesh alert-rule configuration UI.
+Latency matrix (from this node) + sparklines; durable election history via SSSS `mesh_election` events.  
+Webhook re-deliver + isolated `webhooks` event workspace.  
+**Deferred:** mesh alert-rule configuration UI; full multi-node N×N.
 
 ## Phase 7 — Hygiene & Archive (P2) — AFTER ACCEPTANCE
 
@@ -80,7 +82,7 @@ Sync archived MESH_DASHBOARD_UI / NETWORK_SAFETY docs; PRD §3 final sweep; move
 1. ✅ `MeshNodeSchema`: role, labels, capabilities, notes, os (+ passthrough).
 2. ✅ `patchOwnMeshNode`: SSSS upsert of **self** from live Tailscale; slug from hostname.
 3. ✅ `listEnrichedMeshNodes` / API merge; Mesh detail panel binds entity variables.
-4. ⏳ Optional install-guide blurb (Phase 7 hygiene).
+4. ✅ Install-guide blurb (`docs/setup/INSTALLATION.md` §5).
 5. ✅ Tests with neutral `node-*.mesh` fixtures (`mesh-entities.spec.mjs`).
 
 ---
@@ -90,15 +92,16 @@ Sync archived MESH_DASHBOARD_UI / NETWORK_SAFETY docs; PRD §3 final sweep; move
 ### A — User / ops
 1. Tailscale laptop enrollment → 3 nodes.  
 2. Full suite on remote host; attach log to tracker.  
-3. Optional: fix ESLint `flat-cache` on laptop.  
-4. Set entity variables on install vault mesh_node docs (role/labels/notes) via SSSS.
+3. Restart local server; verify mesh routes + Network UI + `fetch_gate`.  
+4. Optional: fix ESLint `flat-cache` on laptop.  
+5. Set entity variables on install vault mesh_node docs (role/labels/notes) via SSSS.
 
 ### B — Next agent implementation
-1. Phase 7 archived-doc checkbox sync.  
-2. Phase 3 NETWORK_SAFETY manual checklist with running daemon.
+1. Remote full suite + attach Verification Log.  
+2. After user Phase 4: final PRD sweep → `completed/`.
 
 ### C — Close project
-After A+B: Phase 4 kill-leader proof → Phase 7 archive to `completed/`.
+After A + Phase 3/4 green: Phase 7 final PRD sweep → archive to `completed/`.
 
 ---
 

@@ -674,11 +674,19 @@ function setupUpgradeHandler(srv) {
 }
 
 // Best-effort: re-encrypt legacy plain-JSON secrets.enc when a password is set.
+// Migrate both the install brain and the project-local `.agent/` store (if present).
 try {
   const { migrateSecretsToEncryptedIfNeeded } = await import('../core/secrets-store.mjs');
-  const mig = await migrateSecretsToEncryptedIfNeeded(configBrainDir);
-  if (mig.migrated) {
-    logger.info('server', `Migrated legacy plain-JSON secrets store to AES-GCM: ${mig.path}`);
+  const targets = [configBrainDir];
+  const projectAgent = path.join(ROOT, '.agent');
+  if (projectAgent !== configBrainDir && fs.existsSync(projectAgent)) {
+    targets.push(projectAgent);
+  }
+  for (const dir of targets) {
+    const mig = await migrateSecretsToEncryptedIfNeeded(dir);
+    if (mig.migrated) {
+      logger.info('server', `Migrated legacy plain-JSON secrets store to AES-GCM: ${mig.path}`);
+    }
   }
 } catch (err) {
   logger.warn('server', `Secrets encryption migrate skipped: ${err.message}`);

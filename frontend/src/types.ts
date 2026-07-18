@@ -46,6 +46,23 @@ export interface ScriptFile {
   modified: string
 }
 
+export interface FetchGateStats {
+  total_dispatched?: number
+  total_completed?: number
+  total_errors?: number
+  total_timeouts?: number
+  total_queued?: number
+  total_blocked?: number
+  peak_in_flight?: number
+  peak_queue_depth?: number
+  current_in_flight?: number
+  current_queue_depth?: number
+  max_global_concurrency?: number
+  max_per_domain?: number
+  default_timeout_ms?: number
+  whitelist_mode?: boolean
+}
+
 export interface HealthData {
   status: string
   version: string
@@ -59,6 +76,8 @@ export interface HealthData {
   caddy?: string
   cloudflare?: string
   emergency_alerts?: string | null
+  /** Present on /health after network gate wiring (Phase 3). */
+  fetch_gate?: FetchGateStats | null
 }
 
 export interface SandboxResult {

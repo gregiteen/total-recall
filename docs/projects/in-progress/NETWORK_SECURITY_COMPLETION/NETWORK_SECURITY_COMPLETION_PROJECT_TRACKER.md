@@ -8,9 +8,9 @@ timestamp: 2026-07-18T00:15:00-06:00
 
 # NETWORK_SECURITY_COMPLETION — Project Tracker
 
-> **Status**: In progress — **implementation largely complete**; remaining work is acceptance (full suite + 3-node mesh) and optional device-entity enrichment  
+> **Status**: In progress — **implementation largely complete**; remaining work is acceptance (full suite + 3-node mesh)  
 > **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SECURITY_COMPLETION_DEVELOPMENT_PLAN.md)  
-> **Tip of tree (feature work)**: `6f67fba` (OSS device-name hygiene) ← `ca5d069` (Cline + mesh UI) ← `e678838` (election) ← `a48b53a` (gate/minInterval)
+> **Tip of tree (feature work)**: `4e8c8e3` (mesh/webhooks easy kills + auto-pull vite rebuild) ← `ba78ca1` (fetch_gate + secrets migrate)
 
 > **Merged-From Provenance (2026-07-17):** This project is now the single active tracker for all outstanding network/security/rate-limiting work. The following projects were merged in and their folders archived to `docs/projects/archived/superseded-by-network-security-completion/`:
 > - `RECENT_SYSTEM_INTEGRATION_RECOVERY` → Phases 3-4 below (gates, enrollment, acceptance)
@@ -32,7 +32,7 @@ timestamp: 2026-07-18T00:15:00-06:00
 | 3 | Verification gates (full suite / TS / lint) | ⏳ Partial — targeted green; full suite on remote |
 | 4 | Three-node mesh acceptance | ⏳ Blocked on user Tailscale extension approval |
 | 5 | Cline integration | ✅ Done |
-| 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred) |
+| 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred; latency matrix + election log done) |
 | 7 | Tracker hygiene & archive | ⏳ Partial — archive sync done; wait full suite + 3-node to complete/ |
 | 8 | Device entity variables (OSS vs vault) | ✅ Done |
 | 9 | Interface kinds + LAN discovery/connect | ✅ Done |
@@ -96,11 +96,12 @@ Goal: release truth green.
   - [x] Network policy API → `status: active`, blocked_domains ≥ 1
   - [x] Global `~/.agent/.../secrets.enc` is **not** valid JSON (encrypted)
   - [x] Code: `migrateSecretsToEncryptedIfNeeded` on boot re-encrypts legacy plain-JSON when `TR_SECRETS_PASSWORD` set (verify after restart)
-  - [x] Code: `/health` now includes `fetch_gate` (was only on `/api/health`) — restart to pick up
-  - [ ] Mesh `/api/mesh/*` new routes live after server restart
-  - [ ] Network page live UI + top-bar indicator (browser)
-  - [ ] research/`lsof` connection hygiene
-- [x] Targeted secrets-store + network + leader-election + throttled-fetch + mesh + connect + lan-discovery specs green (S)
+  - [x] `/health` includes `fetch_gate` (verified live after restart 2026-07-18)
+  - [x] Mesh `/api/mesh/*` new routes live after server restart (401 JSON unauth; 200 authed: nodes/interfaces/lan/io/latency/leader/election/*)
+  - [x] Network gate indicator in sidebar (`data-testid=network-gate-indicator`) + Network page route; frontend rebuilt
+  - [x] research/`lsof` connection hygiene — TR server clean (LISTEN only 3000 mesh+loopback + 9111; no leaked ESTABLISHED on brain PID)
+  - [x] Project-local `.agent/secrets.enc` migrated to AES-GCM; boot now migrates project `.agent` + brainDir
+- [x] Targeted secrets-store + network + leader-election + throttled-fetch + mesh + connect + lan-discovery + webhooks specs green (S)
 - [ ] No test/runtime side effects remain after full suite (S)
 
 ## ⏳ Phase 4: Three-Node Mesh Acceptance (P1)
@@ -130,6 +131,11 @@ Device identities in acceptance are **entity variables** on each install’s `me
 - [ ] Alert rule configuration for mesh events — **deferred** (needs notifications product design)
 - [x] Specs: MeshPage topology; mesh latency route
 - [x] OSS hygiene: neutral test fixtures (`node-a.mesh`…); no personal hostnames in product UI copy (`6f67fba`)
+- [x] Latency matrix (from this node) + RTT sparklines (`LatencySparkline`)
+- [x] Election history durable via SSSS events (`mesh_election`): `GET/POST /api/mesh/election/history|log`
+- [x] Election events isolated to workspace `mesh-election` (avoid scanning 195MB `default.jsonl`)
+- [x] Sidebar Network gate indicator (green/amber/red from `/health` `fetch_gate`)
+- [x] Webhook re-deliver: `POST /api/webhooks/events/:id/redeliver` + Webhooks UI button; events isolated to workspace `webhooks`
 
 ## ⏳ Phase 7: Tracker Hygiene & Final Verification (P2)
 
@@ -153,7 +159,7 @@ Invariant (saved): device detail = SSSS `mesh_node` (+ live discovery); product 
 - [x] `GET /api/mesh/nodes` returns enriched nodes + `entity_count` (M)
 - [x] Mesh dashboard node detail shows entity role/labels/capabilities/notes/path (M)
 - [x] Tests: `mesh-entities.spec.mjs` (neutral fixtures); mesh route + MeshPage green (S)
-- [ ] Optional install guide note in docs/setup (S) — can ship with Phase 7 hygiene
+- [x] Install guide note in docs/setup (`INSTALLATION.md` §5) — done with Phase 7 hygiene
 
 ## ✅ Phase 9: Interface types + LAN peers (P2)
 
@@ -180,9 +186,9 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 
 ### B. Agent session — remaining
 
-1. **Phase 3** NETWORK_SAFETY manual checklist with running daemon (when available).  
-2. After A: Phase 4 kill-leader proof → Phase 7 final PRD sweep → move to `completed/`.  
-3. Optional polish: latency sparkline, N×N matrix, webhook re-deliver, mesh alert rules.
+1. After A (user): Phase 4 kill-leader proof → Phase 7 final PRD sweep → move to `completed/`.  
+2. Remote full suite 100% (Mac Mini / production host — not laptop).  
+3. Optional remaining polish: full multi-node N×N (peers report RTTs). Alert rules stay deferred.
 
 ### C. Explicitly not next
 
@@ -211,4 +217,8 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Phase 7 hygiene (partial).** Archived MESH_DASHBOARD_UI + NETWORK_SAFETY trackers marked SUPERSEDED with completed-item sync; INSTALLATION.md §5 documents mesh_node entity variables, LAN/I/O APIs, and agent UI contract.
 - 2026-07-18: **Phase 11** — `POST /api/mesh/lan/register` auto-upserts TR-reachable LAN peers as `mesh_node` entities (hostname `lan-<ip>`; preserves role/labels). Mesh UI “Register TR peers” button.
 - 2026-07-18: **Phase 3 partial live check** — health healthy/daemon running; network policy active; global secrets.enc not JSON; project secrets.enc still JSON (follow-up); new mesh routes require server restart to leave SPA fallback.
+- 2026-07-18: **Easy kills** — latency matrix + sparklines; durable `mesh_election` SSSS events (`/api/mesh/election/history|log`); tracker hygiene (install guide [x]); tip `ba78ca1`.
+- 2026-07-18: **Phase 3 restart smoke** — server rebound mesh+loopback; `/health.fetch_gate` live; all mesh routes 200 authed; election log → `mesh-election` workspace (fast); frontend vite build with gate indicator + latency matrix; network policy active/blocked≥1; 3 mesh peers.
+- 2026-07-18: **Easy kills cont.** — lsof hygiene OK; project `.agent/secrets.enc` AES-migrated; boot migrates project+brain secrets; webhook re-deliver API+UI; webhook events workspace `webhooks`; frontend `index-D5xRw5uq.js`. Still open: remote full suite, Tailscale 3-node.
+- 2026-07-18: **Rollout** `4e8c8e3` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
 - 2026-07-18: **`fetch_gate` on GET /health** + **`migrateSecretsToEncryptedIfNeeded`** (boot re-encrypts plain-JSON secrets when password configured); secrets-store tests 9/9.

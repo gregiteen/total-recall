@@ -8,15 +8,19 @@ import {
   fetchMeshInterfaces,
   fetchDeviceIo,
   registerLanMeshNodes,
+  fetchElectionHistory,
+  logElectionObservation,
 } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
 import type { MeshNode, LeaderInfo, LanHost, MeshInterfaceSummary, DeviceIoProfile } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
 import { MeshTopology } from '../components/MeshTopology';
+import { LatencySparkline } from '../components/LatencySparkline';
 import './MeshPage.css';
 
 const POLL_BASE_MS = 5000;
 const POLL_MAX_MS = 30000;
+const LATENCY_HISTORY_MAX = 24;
 
 interface ElectionLogEntry {
   at: string;
@@ -33,6 +37,8 @@ export function MeshPage() {
   const [leader, setLeader] = useState<LeaderInfo | null>(null);
   const [selectedNode, setSelectedNode] = useState<MeshNode | null>(null);
   const [latencyMs, setLatencyMs] = useState<Record<string, number | null>>({});
+  /** Rolling RTT samples per hostname for sparklines (from this node). */
+  const [latencyHistory, setLatencyHistory] = useState<Record<string, number[]>>({});
   const [electionLog, setElectionLog] = useState<ElectionLogEntry[]>([]);
   const [lanHosts, setLanHosts] = useState<LanHost[]>([]);
   const [localInterfaces, setLocalInterfaces] = useState<MeshInterfaceSummary[]>([]);
@@ -43,6 +49,7 @@ export function MeshPage() {
   const [lanRegisterMsg, setLanRegisterMsg] = useState<string | null>(null);
   const prevLeaderRef = useRef<string | null>(null);
   const pollMsRef = useRef(POLL_BASE_MS);
+  const electionHistoryLoadedRef = useRef(false);
   
   // Headscale State
   const [hsNodes, setHsNodes] = useState<HeadscaleNode[]>([]);
@@ -63,12 +70,28 @@ export function MeshPage() {
     const key = `${l.hostname}|${l.ip}`;
     if (prevLeaderRef.current === key && note === 'observed') return;
     if (prevLeaderRef.current !== key || note !== 'observed') {
+      const at = new Date().toISOString();
       setElectionLog((prev) => [
-        { at: new Date().toISOString(), hostname: l.hostname, ip: l.ip, note },
+        { at, hostname: l.hostname, ip: l.ip, note },
         ...prev,
       ].slice(0, 50));
       prevLeaderRef.current = key;
+      // Persist to SSSS event store (best-effort; de-duped server-side).
+      logElectionObservation({ hostname: l.hostname, ip: l.ip, note }).catch(() => {});
     }
+  }, []);
+
+  const pushLatencySamples = useCallback((sample: Record<string, number | null>) => {
+    setLatencyMs(sample);
+    setLatencyHistory((prev) => {
+      const next = { ...prev };
+      for (const [host, ms] of Object.entries(sample)) {
+        if (ms == null || !Number.isFinite(ms)) continue;
+        const series = [...(next[host] || []), ms].slice(-LATENCY_HISTORY_MAX);
+        next[host] = series;
+      }
+      return next;
+    });
   }, []);
 
   const loadData = useCallback(async () => {
@@ -82,8 +105,30 @@ export function MeshPage() {
         recordLeaderChange(l, 'observed');
         // Latency is slower — best-effort, do not fail the page.
         fetchMeshLatency()
-          .then((lat) => setLatencyMs(lat.latency_ms || {}))
+          .then((lat) => pushLatencySamples(lat.latency_ms || {}))
           .catch(() => { /* peers may be unreachable */ });
+        // Load durable election history once per mount.
+        if (!electionHistoryLoadedRef.current) {
+          electionHistoryLoadedRef.current = true;
+          fetchElectionHistory()
+            .then((events) => {
+              if (!events.length) return;
+              setElectionLog((prev) => {
+                const seen = new Set(prev.map((e) => `${e.at}|${e.hostname}|${e.note}`));
+                const fromVault: ElectionLogEntry[] = events
+                  .filter((e) => e.at && (e.hostname || e.ip))
+                  .map((e) => ({
+                    at: e.at,
+                    hostname: e.hostname || e.ip || 'unknown',
+                    ip: e.ip || '',
+                    note: e.note || 'observed',
+                  }))
+                  .filter((e) => !seen.has(`${e.at}|${e.hostname}|${e.note}`));
+                return [...fromVault, ...prev].slice(0, 50);
+              });
+            })
+            .catch(() => { /* optional */ });
+        }
         fetchMeshInterfaces()
           .then((iface) => setLocalInterfaces(iface.summary || []))
           .catch(() => { /* optional */ });
@@ -118,7 +163,7 @@ export function MeshPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, newKeyUser, recordLeaderChange]);
+  }, [activeTab, newKeyUser, recordLeaderChange, pushLatencySamples]);
 
   useEffect(() => {
     let cancelled = false;
@@ -527,56 +572,129 @@ export function MeshPage() {
             </table>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div className="card">
-              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Latency (from this node)</h3>
-              <table className="data-table">
+          <div className="card">
+            <h3 style={{ marginTop: 0, marginBottom: 8 }}>Latency matrix (from this node)</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 0 }}>
+              Measured via <code>GET /api/mesh/latency</code> through the fetch gate. Full N×N requires each peer to report; this row is what <em>this</em> host measures.
+            </p>
+            <div className="latency-matrix-wrap">
+              <table className="latency-matrix" data-testid="latency-matrix">
                 <thead>
                   <tr>
-                    <th>Peer</th>
-                    <th>RTT</th>
+                    <th className="from-label">From → To</th>
+                    {meshNodes.map((n) => (
+                      <th key={`col-${n.hostname}`}>{n.hostname}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {meshNodes.map((n) => (
-                    <tr key={`lat-${n.hostname}`}>
-                      <td>{n.hostname}</td>
-                      <td>
-                        {n.self
-                          ? '0 ms (self)'
-                          : latencyMs[n.hostname] != null
-                            ? `${latencyMs[n.hostname]} ms`
-                            : n.online
-                              ? 'measuring…'
-                              : 'offline'}
-                      </td>
-                    </tr>
-                  ))}
-                  {meshNodes.length === 0 && (
-                    <tr>
-                      <td colSpan={2} style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No peers</td>
-                    </tr>
-                  )}
+                  {(() => {
+                    const selfNode = meshNodes.find((n) => n.self) || meshNodes[0];
+                    if (!selfNode) {
+                      return (
+                        <tr>
+                          <td colSpan={Math.max(meshNodes.length + 1, 2)} style={{ color: 'var(--text-secondary)' }}>
+                            No mesh nodes yet
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr>
+                        <td className="from-label">{selfNode.hostname} (this)</td>
+                        {meshNodes.map((n) => {
+                          const ms = n.self ? 0 : latencyMs[n.hostname];
+                          const label =
+                            n.self
+                              ? '0 ms'
+                              : ms != null
+                                ? `${ms} ms`
+                                : n.online
+                                  ? '…'
+                                  : '—';
+                          return (
+                            <td
+                              key={`cell-${n.hostname}`}
+                              className={`rtt-cell${n.self ? ' is-self' : ''}`}
+                              title={n.self ? 'self' : undefined}
+                            >
+                              <div>{label}</div>
+                              {!n.self && (
+                                <LatencySparkline
+                                  values={latencyHistory[n.hostname] || []}
+                                  title={`RTT trend to ${n.hostname}`}
+                                />
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
-            <div className="card">
-              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Election history</h3>
-              {electionLog.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)' }}>No leader changes observed this session.</p>
-              ) : (
-                <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 220, overflowY: 'auto' }}>
-                  {electionLog.map((e, i) => (
-                    <li key={`${e.at}-${i}`} style={{ marginBottom: 8 }}>
-                      <strong>{e.hostname}</strong> ({e.ip}) — {e.note}
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                        {new Date(e.at).toLocaleString()}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <table className="data-table" style={{ marginTop: 16 }}>
+              <thead>
+                <tr>
+                  <th>Peer</th>
+                  <th>RTT</th>
+                  <th>Trend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meshNodes.map((n) => (
+                  <tr key={`lat-${n.hostname}`}>
+                    <td>{n.hostname}</td>
+                    <td>
+                      {n.self
+                        ? '0 ms (self)'
+                        : latencyMs[n.hostname] != null
+                          ? `${latencyMs[n.hostname]} ms`
+                          : n.online
+                            ? 'measuring…'
+                            : 'offline'}
+                    </td>
+                    <td>
+                      {n.self ? (
+                        '—'
+                      ) : (
+                        <LatencySparkline
+                          values={latencyHistory[n.hostname] || []}
+                          title={`RTT trend to ${n.hostname}`}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {meshNodes.length === 0 && (
+                  <tr>
+                    <td colSpan={3} style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>No peers</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card">
+            <h3 style={{ marginTop: 0, marginBottom: 12 }}>Election history</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 0 }}>
+              Durable SSSS events (<code>mesh_election</code>) plus this session.
+            </p>
+            {electionLog.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)' }}>No leader changes recorded yet.</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18, maxHeight: 220, overflowY: 'auto' }} data-testid="election-history">
+                {electionLog.map((e, i) => (
+                  <li key={`${e.at}-${i}`} style={{ marginBottom: 8 }}>
+                    <strong>{e.hostname}</strong> ({e.ip}) — {e.note}
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {new Date(e.at).toLocaleString()}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
