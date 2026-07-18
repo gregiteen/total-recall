@@ -15,6 +15,14 @@ vi.mock('./github-sync.mjs', () => ({
   runGitHubSync: vi.fn().mockResolvedValue(true),
 }));
 
+vi.mock('./package-auto-update.mjs', () => ({
+  runPackageAutoUpdate: vi.fn().mockResolvedValue({ skipped: true, reason: 'test', results: [] }),
+}));
+
+vi.mock('./secrets-store.mjs', () => ({
+  getSecret: vi.fn().mockResolvedValue({ found: false }),
+}));
+
 // Mock child_process to ensure execFileSync is never called
 vi.mock('child_process', () => ({
   execFileSync: vi.fn(() => {

@@ -51,6 +51,7 @@ const COMMANDS = {
   daemon:   'daemon.mjs',
   restore:  'restore.mjs',
   upgrade:  'upgrade.mjs',
+  update:   'update.mjs',
   friction: 'friction.mjs',
   chat:     'chat.mjs',
   status:   'status.mjs',
@@ -109,6 +110,7 @@ function printHelp() {
     status / doctor     Health and diagnostics
 
   Optional:
+    update [--apply]    Auto-download total-recall-brain for registered repos
     research, share, ingest, import, export, relay, setup, deploy,
     start, backup, restore, config, map, generate-pat, lint, sync, …
 

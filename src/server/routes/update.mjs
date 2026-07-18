@@ -1,39 +1,105 @@
 import { Router } from 'express';
-import { requireAuth } from '../auth.mjs';
+import { requireAuth, requireScope } from '../auth.mjs';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { ROOT, serverError } from './_shared.mjs';
+import { brainDir as configBrainDir } from '../../core/config.mjs';
+import {
+  PACKAGE_NAME,
+  fetchLatestNpmVersion,
+  inspectProjectPackage,
+  listUpdateRoots,
+  runPackageAutoUpdate,
+  needsUpdate,
+  isPackageAutoUpdateEnabled,
+} from '../../core/package-auto-update.mjs';
 
 const router = Router();
 
-router.get('/api/update/check', requireAuth, async (req, res) => {
+router.get('/api/update/check', requireAuth, async (_req, res) => {
   try {
-    const pkg = await import('../../../package.json', { with: { type: 'json' } });
-    const current = pkg.default.version;
-    const proc = spawn('npm', ['view', 'total-recall-brain', 'version'], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let latest = '';
-    proc.stdout.on('data', d => latest += d.toString());
-    proc.on('close', () => {
-      latest = latest.trim();
-      res.json({
-        current,
-        latest,
-        update_available: current !== latest && latest.length > 0
-      });
+    // Host package (this install)
+    let current = null;
+    try {
+      const pkg = await import('../../../package.json', { with: { type: 'json' } });
+      current = pkg.default.version;
+    } catch {
+      current = null;
+    }
+
+    const latest = fetchLatestNpmVersion() || '';
+    const roots = listUpdateRoots({ brainDir: configBrainDir });
+    const projects = roots.map(({ root, name, source }) => {
+      const info = inspectProjectPackage(root);
+      return {
+        name,
+        root,
+        source,
+        declared: info.declared,
+        installed: info.installed,
+        is_source_tree: info.isSourceTree,
+        update_available: !info.isSourceTree && needsUpdate(info.installed, latest),
+      };
+    });
+
+    const consumersBehind = projects.filter((p) => p.update_available).length;
+
+    res.json({
+      package: PACKAGE_NAME,
+      current,
+      latest,
+      update_available: Boolean(latest && current && current !== latest) || consumersBehind > 0,
+      auto_update_enabled: isPackageAutoUpdateEnabled(),
+      projects,
+      consumers_behind: consumersBehind,
     });
   } catch (err) {
     serverError(res, err);
   }
 });
 
-router.post('/api/update/run', requireAuth, async (req, res) => {
+/**
+ * POST /api/update/run
+ * Body optional: { dryRun?: boolean, force?: boolean, roots?: string[] }
+ * Runs multi-repo npm install for total-recall-brain@latest via package-auto-update.
+ */
+router.post('/api/update/run', requireAuth, requireScope('config:write'), async (req, res) => {
   try {
-    const proc = spawn('npm', ['install', 'total-recall-brain@latest', '--no-save'], {
-      cwd: ROOT,
-      detached: true,
-      stdio: 'ignore'
+    const dryRun = Boolean(req.body?.dryRun);
+    const force = req.body?.force !== false;
+    const roots = Array.isArray(req.body?.roots) ? req.body.roots : undefined;
+
+    // Fire multi-project updater (awaits — install can take minutes; client should timeout high)
+    const summary = await runPackageAutoUpdate({
+      brainDir: configBrainDir,
+      roots,
+      dryRun,
+      force,
+      skipThrottle: true,
+      save: true,
     });
-    proc.unref();
-    res.json({ updating: true, message: 'Update started in background. Daemon will restart automatically.' });
+
+    // Also kick a local install in ROOT when this host is a consumer (non-source)
+    const hostInfo = inspectProjectPackage(ROOT);
+    if (!hostInfo.isSourceTree && (hostInfo.declared || hostInfo.installed) && !dryRun) {
+      const latest = summary.latest || fetchLatestNpmVersion();
+      if (latest && needsUpdate(hostInfo.installed, latest)) {
+        const proc = spawn('npm', ['install', `${PACKAGE_NAME}@${latest}`, '--save'], {
+          cwd: ROOT,
+          detached: true,
+          stdio: 'ignore',
+        });
+        proc.unref();
+      }
+    }
+
+    res.json({
+      updating: !dryRun,
+      message: dryRun
+        ? 'Dry-run complete — see projects list'
+        : 'Package auto-update finished for registered projects',
+      summary,
+    });
   } catch (err) {
     serverError(res, err);
   }

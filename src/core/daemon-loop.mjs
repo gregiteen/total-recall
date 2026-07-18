@@ -239,6 +239,20 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Mesh node patch failed: ${err.message}` });
   }
 
+  // npm total-recall-brain auto-update for registered projects (throttled thereafter via crons)
+  try {
+    const { runPackageAutoUpdate } = await import('./package-auto-update.mjs');
+    const pkg = await runPackageAutoUpdate({ brainDir: BRAIN_DIR, skipThrottle: true });
+    if (!pkg.skipped) {
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Boot package-auto-update: latest=${pkg.latest} updated=${pkg.updated || 0} failed=${pkg.failed || 0}`,
+      });
+    }
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Boot package-auto-update failed: ${err.message}` });
+  }
+
   // Deterministic election (lowest mesh IP) — tryAcquire/renew are no-op shims
   // that re-evaluate isLeader(); no node-local lease documents are written.
   const { tryAcquireLease, isLeader, getLeaderInfo, renewLease } = await import('./leader-election.mjs');

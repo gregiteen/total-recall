@@ -2,6 +2,7 @@ import { logger } from './logger.mjs';
 import { runGitHubSync, getGitHubSyncStatus } from './github-sync.mjs';
 import { watchObsidianDirectory } from './obsidian-sync.mjs';
 import { getSecret } from './secrets-store.mjs';
+import { runPackageAutoUpdate } from './package-auto-update.mjs';
 
 /**
  * runCrons — scheduled background jobs.
@@ -26,6 +27,19 @@ export async function runCrons(options) {
       }
     } catch {
       // Obsidian not configured
+    }
+
+    // 3. npm package auto-update for registered projects (total-recall-brain)
+    try {
+      const pkg = await runPackageAutoUpdate({ brainDir });
+      if (!pkg.skipped && (pkg.updated > 0 || pkg.failed > 0)) {
+        logger.info({
+          subsystem: 'cron',
+          message: `package-auto-update: latest=${pkg.latest} updated=${pkg.updated} failed=${pkg.failed}`,
+        });
+      }
+    } catch (err) {
+      logger.warn({ subsystem: 'cron', message: `package-auto-update failed: ${err.message}` });
     }
   } catch (err) {
     logger.error({ subsystem: 'cron', message: `Cron execution failed: ${err.message}` });
