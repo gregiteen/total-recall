@@ -14,6 +14,7 @@ interface RuleNode {
 export default function RulesPage({ activeBrainId }: { activeBrainId: string }) {
   const [rules, setRules] = useState<RuleNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRules();
@@ -21,14 +22,19 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
 
   const fetchRules = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await apiFetch(getApiBase() + '/api/rules');
-      const data = await res.json();
-      if (data.rules) {
-        setRules(data.rules);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || errBody.message || `HTTP ${res.status}`);
       }
+      const data = await res.json();
+      setRules(Array.isArray(data.rules) ? data.rules : []);
     } catch (err) {
       console.error('Failed to fetch rules:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch rules');
+      setRules([]);
     } finally {
       setLoading(false);
     }
@@ -69,9 +75,11 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
 
   const renderRuleCard = (rule: RuleNode, colorCode: string) => {
     const isArchived = rule.status === 'archived';
+    const stars = Math.min(5, Math.max(0, Number(rule.importance) || 0));
     return (
       <div
-        key={rule.slug}
+        key={`${rule.scope}:${rule.slug}`}
+        data-testid="rule-card"
         style={{
           border: `1px solid ${isArchived ? 'var(--border)' : colorCode}`,
           opacity: isArchived ? 0.6 : 1,
@@ -90,13 +98,13 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)', background: 'var(--bg-primary)', padding: '2px 6px', borderRadius: 4 }}>
               {rule.scope} brain
             </span>
-            <span style={{ fontSize: 12, color: 'gold' }}>
-              {'★'.repeat(rule.importance) + '☆'.repeat(5 - rule.importance)}
+            <span style={{ fontSize: 12, color: 'gold' }} aria-label={`Importance ${stars} of 5`}>
+              {'★'.repeat(stars) + '☆'.repeat(5 - stars)}
             </span>
           </div>
         </div>
         <div style={{ fontSize: 14, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-          {rule.body}
+          {rule.body || '(no body)'}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
           {isArchived ? (
@@ -120,17 +128,41 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
   };
 
   if (loading) {
-    return <div style={{ padding: 20 }}>Loading rules...</div>;
+    return <div style={{ padding: 20 }} data-testid="rules-loading">Loading rules...</div>;
   }
 
   return (
-    <div style={{ padding: 40, maxWidth: 1000, margin: '0 auto', height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: 40, maxWidth: 1000, margin: '0 auto', height: '100%', overflowY: 'auto' }} data-testid="rules-page">
       <header style={{ marginBottom: 40 }}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: 28, color: 'var(--text-primary)' }}>Agent Rules</h1>
         <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 16 }}>
           Manage invariants, preferences, and corrections across your active brains.
         </p>
       </header>
+
+      {error && (
+        <div
+          data-testid="rules-error"
+          role="alert"
+          style={{
+            marginBottom: 24,
+            padding: 12,
+            borderRadius: 8,
+            border: '1px solid #ef4444',
+            background: 'rgba(239, 68, 68, 0.08)',
+            color: '#ef4444',
+          }}
+        >
+          Failed to load rules: {error}
+          <button
+            type="button"
+            onClick={() => fetchRules()}
+            style={{ marginLeft: 12, padding: '2px 8px', cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <section style={{ marginBottom: 40 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
