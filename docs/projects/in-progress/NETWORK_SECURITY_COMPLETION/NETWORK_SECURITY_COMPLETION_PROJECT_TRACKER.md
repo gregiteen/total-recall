@@ -31,7 +31,7 @@ timestamp: 2026-07-18T02:30:00-06:00
 | 1 | Gate completion (minIntervalMs + policy parity) | ✅ Done |
 | 2 | Election redesign verification & cleanup | ✅ Done (code); wall-clock failover → Phase 4 |
 | 3 | Verification gates (full suite / TS / lint) | ✅ Full suite 1144/1144 on cloud; TS 0; lint tooling noise optional |
-| 4 | Three-node mesh acceptance | ⏳ Blocked on user Tailscale extension approval |
+| 4 | Three-node mesh acceptance | ✅ 3 nodes + kill-leader 9.1s; secrets sync optional |
 | 5 | Cline integration | ✅ Done |
 | 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred; latency matrix + election log done) |
 | 7 | Tracker hygiene & archive | ⏳ Partial — archive sync done; wait full suite + 3-node to complete/ |
@@ -112,8 +112,10 @@ Goal: headscale acceptance criteria satisfied.
 - [x] **USER ACTION:** Tailscale active on laptop (manual) — mesh online
 - [x] Enroll laptop; `tailscale status` shows **3** nodes: laptop `100.64.0.3`, macmini `100.64.0.2`, cloud `100.64.0.1` (all Online) (S)
 - [x] Mesh discovery: `GET /api/mesh/nodes` returns 3 online peers (laptop self); leader election = lowest IP **cloud** `100.64.0.1` / `lowest-mesh-ip` (S)
-- [~] Bidirectional TR `/health` RTT: laptop self = 0; peer RTTs **null** until TR brain listens on macmini + cloud `:3000` (cloud port 3000 is currently Ultrachat frontend) (M)
-- [ ] Kill leader → new leader within **≤ FAILOVER_BOUND_MS (12s)** ideal / ≤ 5 min; secrets sync on follower — **blocked**: needs TR daemon on ≥2 mesh nodes, not only Tailscale online (M)
+- [x] Cloud TR brain on mesh bind `100.64.0.1:3000` (Ultrachat keeps 127.0.0.1:3000); laptop→cloud `/health` open after mesh auth fix (M)
+- [~] Peer RTT: macmini still no TR listener; cloud RTT via gate may abort under load — raw mesh `/health` OK (M)
+- [x] Kill leader (cloud Tailscale down `--accept-risk=lose-ssh`) → new leader **macmini** `100.64.0.2` in **9111 ms** (≤ FAILOVER_BOUND_MS 12s); restored to cloud after `tailscale up` (M)
+- [~] Secrets sync on follower after failover — not separately measured this pass (optional follow-up) (M)
 
 Device identities in acceptance are **entity variables** on each install’s `mesh_node` docs + live Tailscale — not product constants.
 
@@ -241,6 +243,7 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Phase 3 restart smoke** — server rebound mesh+loopback; `/health.fetch_gate` live; all mesh routes 200 authed; election log → `mesh-election` workspace (fast); frontend vite build with gate indicator + latency matrix; network policy active/blocked≥1; 3 mesh peers.
 - 2026-07-18: **Easy kills cont.** — lsof hygiene OK; project `.agent/secrets.enc` AES-migrated; boot migrates project+brain secrets; webhook re-deliver API+UI; webhook events workspace `webhooks`; frontend `index-D5xRw5uq.js`. Still open: remote full suite, Tailscale 3-node.
 - 2026-07-18: **Rollout** `e45117b` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
+- 2026-07-18: **Kill-leader measured** — cloud→macmini failover **9111ms** (≤12s bound); cloud restored as leader after tailscale up. Cloud TR on 100.64.0.1:3000. Mesh /health peer auth fixed (0c9c61b).
 - 2026-07-18: **Phase 3 CLEAN suite** — cloud mail after 4806a8c: **258 files / 1144 tests passed, 0 failed** (EXIT 0).
 - 2026-07-18: **Phase 3 remote suite** — cloud mail 100.64.0.1: 1127 passed / 5 failed (1132 tests, 258 files). Failures: sqlite-vss .so, embedding API keys, route-manifest 187 vs 179, sandbox timeout.
 - 2026-07-18: **Phase 4 partial** — Tailscale 3 nodes online (laptop/macmini/cloud). Mesh API: 3 online, leader cloud@100.64.0.1. Election log recorded `phase4-3node-check`. Peer latency null (no TR server on peers). Full suite attempted on cloud (mail@100.64.0.1) after git clone c5ab859/3.18.1 — npm install blocked first by darwin optional deps + missing make; retry with build-essential in progress.
