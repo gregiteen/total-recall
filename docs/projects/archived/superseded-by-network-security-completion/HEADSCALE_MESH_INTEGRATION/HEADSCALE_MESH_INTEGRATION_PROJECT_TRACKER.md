@@ -42,17 +42,20 @@ timestamp: 2026-07-15T22:19:00Z
 
 ## Phase 2: Daemon Leader Election — Core Daemon
 
-### 2A. Leader Lease Document (M)
+> **SUPERSEDED (2026-07-18):** Lease-document election was replaced by **deterministic lowest-mesh-IP** selection in `src/core/leader-election.mjs`. `tryAcquireLease` / `renewLease` / `releaseLease` are compatibility shims (no VFS writes). `daemon-leader.md` is vestigial/archived. Failover bound ≈ 12s (mesh cache 2s + daemon tick 10s). Active work: `docs/projects/in-progress/NETWORK_SECURITY_COMPLETION/`.
+
+### 2A. Leader Lease Document (M) — RETIRED
 - [x] Create `memory-vault/system/daemon-leader.md` with `type: daemon_leader` frontmatter
 - [x] Define lease schema: `leader_hostname`, `leader_mesh_ip`, `lease_acquired`, `lease_ttl_seconds`, `lease_id`
+- [x] **RETIRED:** doc annotated `status: archived` / deprecated (NETWORK_SECURITY_COMPLETION Phase 2)
 
-### 2B. Leader Election Logic (L)
+### 2B. Leader Election Logic (L) — DETERMINISTIC (current)
 - [x] Create `src/core/leader-election.mjs`
-- [x] Implement `tryAcquireLease()` — read VFS doc, check expiry, write SSSS `patch` if available
-- [x] Implement `renewLease()` — patch `lease_acquired` timestamp every 60s
-- [x] Implement `releaseLease()` — clear leader fields on graceful shutdown
-- [x] Implement `isLeader()` — check if this daemon holds the active lease
-- [x] Implement `getLeaderInfo()` — return current leader hostname + IP
+- [x] ~~Implement `tryAcquireLease()` — read VFS doc…~~ → shim over `isLeader()`
+- [x] ~~Implement `renewLease()` — patch lease…~~ → shim over `isLeader()`
+- [x] ~~Implement `releaseLease()` — clear leader fields…~~ → no-op shim
+- [x] Implement `isLeader()` — true when self mesh IP equals lowest online peer IP
+- [x] Implement `getLeaderInfo()` — return current leader hostname + IP (`strategy: lowest-mesh-ip`)
 - [x] Write `src/core/leader-election.spec.mjs`
 
 ### 2C. Daemon Mode Integration (L)

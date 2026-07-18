@@ -239,6 +239,8 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Mesh node patch failed: ${err.message}` });
   }
 
+  // Deterministic election (lowest mesh IP) — tryAcquire/renew are no-op shims
+  // that re-evaluate isLeader(); no node-local lease documents are written.
   const { tryAcquireLease, isLeader, getLeaderInfo, renewLease } = await import('./leader-election.mjs');
 
   const acquired = await tryAcquireLease();
@@ -267,7 +269,7 @@ async function main() {
     try {
       const leader = await isLeader();
       if (!leader) {
-        // We are a follower. Try to acquire lease in case leader died.
+        // Follower: re-evaluate election in case the prior leader went offline.
         const newlyAcquired = await tryAcquireLease();
         if (newlyAcquired) {
           logger.info({ subsystem: 'daemon-loop', message: 'Became LEADER' });
@@ -290,6 +292,7 @@ async function main() {
         try {
           const { patchOwnMeshNode } = await import('./mesh.mjs');
           await patchOwnMeshNode();
+          // renewLease is a no-op shim (re-checks isLeader); kept for API stability.
           if (await isLeader()) {
             await renewLease();
           }

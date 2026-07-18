@@ -21,9 +21,18 @@ function readMeshStatus() {
   }
 }
 
+/**
+ * Strip MagicDNS trailing dots so self/peer hostname forms match.
+ * Exported for unit tests and any caller that compares hostnames.
+ */
+export function normalizeHostname(value) {
+  if (value == null || value === '') return null;
+  return String(value).replace(/\.$/, '') || null;
+}
+
 function normalizeNode(node, self = false) {
   return {
-    hostname: node?.DNSName?.replace(/\.$/, '') || node?.HostName || null,
+    hostname: normalizeHostname(node?.DNSName) || node?.HostName || null,
     ip: node?.TailscaleIPs?.[0] || null,
     online: self ? true : !!node?.Online,
     self,

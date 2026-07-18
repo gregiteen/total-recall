@@ -62,17 +62,17 @@ Goal: every field the firewall UI exposes is actually enforced.
 - [x] Test: whitelist mode rejects non-whitelisted domains (S)
 - [x] Test: getGateStats() counts correct (S)
 
-## ⏳ Phase 2: Election Redesign Verification & Cleanup (P2)
+## ✅ Phase 2: Election Redesign Verification & Cleanup (P2)
 
 Goal: prove deterministic lowest-IP election; remove retired lease artifacts. (CAS/TOCTOU plan obsolete — no lease writes exist.)
 
-- [ ] Measure failover latency: kill leader, time follower `isLeader()` flip; record bound (M)
-- [ ] Verify hostname normalization: no MagicDNS trailing-dot mismatch → no zero-leader state (S)
-- [ ] Hysteresis decision: implement min-tenure OR document rejection rationale (S)
-- [ ] Archive/annotate vestigial `memory-vault/system/daemon-leader.md` via SSSS (S)
-- [ ] Sync HEADSCALE tracker Phase 2A/2B text to deterministic design (S)
-- [ ] Remove stale lease-call comments in daemon-loop (S)
-- [ ] Test: lowest-IP winner, offline-leader exclusion, hostname normalization (M)
+- [x] Measure failover latency: analytical bound recorded — mesh cache 2s + daemon tick 10s = **FAILOVER_BOUND_MS 12s** (wall-clock kill-leader still Phase 4 multi-node) (M)
+- [x] Verify hostname normalization: `normalizeHostname` strips MagicDNS trailing dots; `isLeader` is IP-primary (S)
+- [x] Hysteresis decision: **REJECTED** — prefer fast failover; rationale in `leader-election.mjs` header (S)
+- [x] Archive/annotate vestigial `memory-vault/system/daemon-leader.md` via SSSS (`status: archived`, deprecated flags) (S)
+- [x] Sync HEADSCALE tracker Phase 2A/2B text to deterministic design (S)
+- [x] Remove stale lease-call comments in daemon-loop (S)
+- [x] Test: lowest-IP winner, offline-leader exclusion, hostname normalization, IP-primary isLeader (M)
 
 ## ⏳ Phase 3: Verification Gates (P1)
 
@@ -86,7 +86,7 @@ Goal: release truth green (closes recovery tracker Phase 5-6 + NETWORK_SAFETY fi
 - [x] Audit + remove/relocate root strays: `create-network-policy.mjs`, `test-firewall.mjs` (S)
 
 - [ ] NETWORK_SAFETY manual verification: daemon gate stats ≤6 concurrent via `/api/health`; research task keeps `lsof -i | wc -l` under 20; Network page live stats update; block via UI fails with clear error; `secrets.enc` not valid JSON; all API integrations work through the gate; top-bar indicator reflects gate health (M)
-- [ ] `npm test -- --grep "secrets-store"` and `--grep "network"` pass (S)
+- [x] Targeted secrets-store + network + leader-election specs pass (vitest file runs; vitest v4 has no `--grep`) (S)
 - [ ] No test/runtime side effects remain (S)
 
 ## ⏳ Phase 4: Three-Node Mesh Acceptance (P1)
@@ -168,5 +168,6 @@ Goal: docs match source; project archivable (mandatory final testing phase).
 
 - 2026-07-18: **Phase 1 complete.** Implemented `minIntervalMs` rate limiting (`domainMinInterval`/`domainLastStart`/`minIntervalRemaining`/`scheduleDrainRetry`), global knobs from `network-policy.md`, parent-dir watcher for late policy create, `total_blocked` + `rate_wait_ms` audit/event fields, and `NetworkPolicySchema` extension (`minIntervalMs` + optional global knobs). Test hardening: mock `ssss-kernel-bridge` (was writing real vault events), instant fetch mock, generation token on gate reset so orphan in-flight cannot corrupt counters, drain retry timer kept ref'd. `throttled-fetch.spec.mjs` expanded to 15 tests; 5× solo + 3× multi-file stress all green (49 tests with network/ssss-kernel-bridge/config).
 - 2026-07-18: Pushed Phase 1 as `a48b53a` → `origin/main` (pre-push quality gate passed: TS 0; lint report clean of source issues — daemon TOTAL_ERRORS:1 is pre-existing `flat-cache` module resolution noise in the ESLint runner, not a code finding).
+- 2026-07-18: **Phase 2 complete (code/docs).** `isLeader` IP-primary; `normalizeHostname` exported; hysteresis rejected (doc in module header); `FAILOVER_BOUND_MS=12000`; daemon-loop lease comments cleaned; `daemon-leader.md` SSSS-patched `status: archived`; HEADSCALE archived tracker Phase 2A/2B annotated SUPERSEDED. Tests: `leader-election.spec.mjs` 11 cases + mesh/throttled-fetch/network/secrets-store targeted green (26+). Wall-clock kill-leader still deferred to Phase 4 three-node acceptance.
 
 
