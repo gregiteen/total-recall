@@ -30,7 +30,7 @@ timestamp: 2026-07-18T02:30:00-06:00
 | 0 | Containment & firewall activation | ✅ Done |
 | 1 | Gate completion (minIntervalMs + policy parity) | ✅ Done |
 | 2 | Election redesign verification & cleanup | ✅ Done (code); wall-clock failover → Phase 4 |
-| 3 | Verification gates (full suite / TS / lint) | ⏳ Partial — targeted green; full suite on remote |
+| 3 | Verification gates (full suite / TS / lint) | ✅ Full suite 1144/1144 on cloud; TS 0; lint tooling noise optional |
 | 4 | Three-node mesh acceptance | ⏳ Blocked on user Tailscale extension approval |
 | 5 | Cline integration | ✅ Done |
 | 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred; latency matrix + election log done) |
@@ -87,7 +87,7 @@ Goal: prove deterministic lowest-IP election; remove retired lease artifacts.
 
 Goal: release truth green.
 
-- [~] Full suite on **cloud mesh node** (mail@100.64.0.1) 2026-07-18: **1127 passed / 5 failed** of 1132 (env: sqlite-vss, embeddings keys, route-manifest drift, sandbox timeout). Not 100% yet. (L)
+- [x] Full suite on **cloud mesh node** (mail@100.64.0.1) 2026-07-18: **1144 passed / 0 failed** (258 files) after 4806a8c fixes. (L)
 - [x] TypeScript: sanctioned checker **0 errors** (pre-push gate; daemon report) (M)
 - [~] Lint: source clean; daemon `TOTAL_ERRORS:1` is pre-existing **`flat-cache` tooling** noise in ESLint runner — fix env separately (M)
 - [ ] Skill recovery through full-suite gate (S)
@@ -210,7 +210,7 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 | 2 | Recovery changeset committed; clean worktree for that set | **DONE** | Multiple commits on main through `e5cd7b2` |
 | 3 | `minIntervalMs: 2000` spaces gated fetches ≥2s | **DONE** | Phase 1 + throttled-fetch suite |
 | 4 | Tracker-0I cases in `throttled-fetch.spec.mjs` pass | **DONE** | Phase 1 (15 tests, multi-file stress green) |
-| 5 | Full suite + TS 0 + lint 0 | **BLOCKED / partial** | TS 0 via pre-push/sanctioned checker **DONE**. Lint source clean; daemon may still show `flat-cache` tooling noise. **Full suite never logged green on Mac Mini/remote** — still open. |
+| 5 | Full suite + TS 0 + lint 0 | **DONE (suite)** | Cloud remote suite **1144/1144** green (2026-07-18). TS 0. Lint may still show optional flat-cache tooling noise. |
 | 6 | Three nodes online; kill-leader → new leader within TTL | **BLOCKED** | Needs user Tailscale system-extension approval + enrollment; wall-clock failover not measured |
 | 7 | `connect cline` + Integrations detects Cline | **DONE** | Phase 5 (surface, connect, detect, import/protect/uninstall, specs) |
 
@@ -241,6 +241,7 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Phase 3 restart smoke** — server rebound mesh+loopback; `/health.fetch_gate` live; all mesh routes 200 authed; election log → `mesh-election` workspace (fast); frontend vite build with gate indicator + latency matrix; network policy active/blocked≥1; 3 mesh peers.
 - 2026-07-18: **Easy kills cont.** — lsof hygiene OK; project `.agent/secrets.enc` AES-migrated; boot migrates project+brain secrets; webhook re-deliver API+UI; webhook events workspace `webhooks`; frontend `index-D5xRw5uq.js`. Still open: remote full suite, Tailscale 3-node.
 - 2026-07-18: **Rollout** `e45117b` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
+- 2026-07-18: **Phase 3 CLEAN suite** — cloud mail after 4806a8c: **258 files / 1144 tests passed, 0 failed** (EXIT 0).
 - 2026-07-18: **Phase 3 remote suite** — cloud mail 100.64.0.1: 1127 passed / 5 failed (1132 tests, 258 files). Failures: sqlite-vss .so, embedding API keys, route-manifest 187 vs 179, sandbox timeout.
 - 2026-07-18: **Phase 4 partial** — Tailscale 3 nodes online (laptop/macmini/cloud). Mesh API: 3 online, leader cloud@100.64.0.1. Election log recorded `phase4-3node-check`. Peer latency null (no TR server on peers). Full suite attempted on cloud (mail@100.64.0.1) after git clone c5ab859/3.18.1 — npm install blocked first by darwin optional deps + missing make; retry with build-essential in progress.
 - 2026-07-18: **npm publish** `total-recall-brain@3.18.0` (`v3.18.0` tag, commit `3f95be8`); publish.mjs loads AES secrets.enc npm_token.
