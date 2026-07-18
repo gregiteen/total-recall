@@ -884,8 +884,18 @@ export const NetworkPolicySchema = z.object({
   status: z.enum(['active', 'inactive']).default('active'),
   blocked_domains: z.array(z.string()).default([]),
   allowed_domains: z.array(z.string()).default([]),
-  domain_limits: z.record(z.object({ maxConcurrency: z.number() })).default({}),
+  domain_limits: z.record(
+    z.object({
+      maxConcurrency: z.number().optional(),
+      minIntervalMs: z.number().optional(),
+    }),
+  ).default({}),
+  max_global_concurrency: z.number().int().positive().optional(),
+  max_per_domain_concurrency: z.number().int().positive().optional(),
+  default_timeout_ms: z.number().int().positive().optional(),
+  whitelist_mode: z.boolean().optional(),
 }).passthrough();
+
 
 export const WebhookConfigSchema = z.object({
   type: z.literal('webhook_config'),

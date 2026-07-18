@@ -3,7 +3,7 @@ type: project_document
 title: "NETWORK_SECURITY_COMPLETION — Project Tracker"
 description: "Living task tracker for finishing headscale mesh, firewall, and rate-limiting work (revised after enhanced audit)"
 tags: ["project-management", "tracker", "network", "security", "rate-limiting"]
-timestamp: 2026-07-17T21:37:00-06:00
+timestamp: 2026-07-17T23:30:00-06:00
 ---
 
 # NETWORK_SECURITY_COMPLETION — Project Tracker
@@ -36,32 +36,31 @@ Goal: dashboard matches source; changeset protected; firewall actually enforces.
 - [x] E2E proof: block test domain via UI → gated fetch rejects "Domain blocked" (S)
 
 
-## ⏳ Phase 1: Gate Completion — minIntervalMs + Policy Parity (P1)
+## ✅ Phase 1: Gate Completion — minIntervalMs + Policy Parity (P1)
 
 Goal: every field the firewall UI exposes is actually enforced.
 
-- [ ] Parse `minIntervalMs` in `loadPolicy()` → new `domainMinInterval` map (S)
-- [ ] Add `domainLastStart` map (S)
-- [ ] Shared `enforceMinInterval(domain)` helper covering BOTH direct path (L337-340) and `drainQueue()` (L205-225) (M)
-- [ ] Wire doc global knobs: `max_global_concurrency`, `max_per_domain_concurrency`, `default_timeout_ms`, `whitelist_mode` → mutable config + `loadPolicy()` population (M)
-- [ ] Fix watcher: watch parent `system/` dir when policy file absent at boot; attach on create (S)
-- [ ] Add `total_blocked` counter on firewall rejects; expose in `getGateStats()` (S)
-- [ ] Add `rate_wait_ms` to audit log + append-only SSSS event payload (S)
-- [ ] Verify `network_policy` registry schema passes `minIntervalMs` (no key stripping); extend schema if stripped (S)
-- [ ] Test: minInterval honored on direct path (fake timers) (S)
-- [ ] Test: minInterval honored under queue contention (S)
-- [ ] Test: default-off (0/unset) behavior unchanged (S)
-- [ ] Test: hot-reload picks up changed minIntervalMs (S)
-- [ ] Test: global knobs applied from doc (S)
-- [ ] Test: watcher attaches when policy created after boot (S)
-- [ ] Test: blocked counter increments + appears in stats (S)
-- [ ] Test: global concurrency cap at MAX_GLOBAL_CONCURRENCY (S)
-- [ ] Test: per-domain cap at MAX_PER_DOMAIN (S)
-- [ ] Test: queue drains when slots free (S)
-- [ ] Test: timeout fires AbortController (S)
-- [ ] Test: whitelist mode rejects non-whitelisted domains (S)
-- [ ] Test: per-domain maxConcurrency override respected (S)
-- [ ] Test: getGateStats() counts correct (S)
+- [x] Parse `minIntervalMs` in `loadPolicy()` → new `domainMinInterval` map (S)
+- [x] Add `domainLastStart` map (S)
+- [x] Shared `minIntervalRemaining(domain)` + `canDispatch` covering BOTH direct path and `drainQueue()` (+ `scheduleDrainRetry` for interval-only waits) (M)
+- [x] Wire doc global knobs: `max_global_concurrency`, `max_per_domain_concurrency`, `default_timeout_ms`, `whitelist_mode` → mutable config + `loadPolicy()` population (M)
+- [x] Fix watcher: watch parent `system/` dir when policy file absent at boot; attach on create (S)
+- [x] Add `total_blocked` counter on firewall rejects; expose in `getGateStats()` (S)
+- [x] Add `rate_wait_ms` to audit log + append-only SSSS event payload (S)
+- [x] Verify `network_policy` registry schema passes `minIntervalMs` (no key stripping); extend schema if stripped (S)
+- [x] Test: minInterval honored on direct path (real timers) (S)
+- [x] Test: minInterval honored under queue contention (S)
+- [x] Test: default-off (0/unset) behavior unchanged (S)
+- [x] Test: hot-reload picks up changed minIntervalMs (S)
+- [x] Test: global knobs applied from doc (S)
+- [x] Test: watcher attaches when policy created after boot (S)
+- [x] Test: blocked counter increments + appears in stats (S)
+- [x] Test: global concurrency cap at MAX_GLOBAL_CONCURRENCY (S)
+- [x] Test: per-domain maxConcurrency override respected (covers per-domain cap) (S)
+- [x] Test: queue drains when slots free (covered by concurrency + minInterval contention tests) (S)
+- [x] Test: timeout fires AbortController (S)
+- [x] Test: whitelist mode rejects non-whitelisted domains (S)
+- [x] Test: getGateStats() counts correct (S)
 
 ## ⏳ Phase 2: Election Redesign Verification & Cleanup (P2)
 
@@ -167,5 +166,6 @@ Goal: docs match source; project archivable (mandatory final testing phase).
 - 2026-07-18: Pushed `1f04804`→`70c3687` to `origin/main` (pre-push quality gate passed: 0 TS errors, 0 lint issues, SSSS primitives match registered peer validator). Confirmed "push to all other machines" mechanism: `scripts/auto-pull.sh` runs as a cron job on each remote machine (Vast.ai VPS, Mac Mini) and self-pulls from `origin/main` on its own schedule — there is no push-fan-out from the laptop. No further action required; other machines will sync automatically on their next cron tick.
 - 2026-07-18: Post-push live verification — `curl http://127.0.0.1:3000/` → HTTP 200 serving `index-Dki2jzcc.js` (fresh bundle); `curl http://127.0.0.1:3000/health` → HTTP 200; confirmed `OPENROUTER_API_KEY` (repos=total-recall) present via `secret list`. Removed root-stray debug scripts `create-network-policy.mjs` and `test-firewall.mjs` (Phase 3 item) via `git rm`.
 
+- 2026-07-18: **Phase 1 complete.** Implemented `minIntervalMs` rate limiting (`domainMinInterval`/`domainLastStart`/`minIntervalRemaining`/`scheduleDrainRetry`), global knobs from `network-policy.md`, parent-dir watcher for late policy create, `total_blocked` + `rate_wait_ms` audit/event fields, and `NetworkPolicySchema` extension (`minIntervalMs` + optional global knobs). Test hardening: mock `ssss-kernel-bridge` (was writing real vault events), instant fetch mock, generation token on gate reset so orphan in-flight cannot corrupt counters, drain retry timer kept ref'd. `throttled-fetch.spec.mjs` expanded to 15 tests; 5× solo + 3× multi-file stress all green (49 tests with network/ssss-kernel-bridge/config).
 
 
