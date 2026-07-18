@@ -144,9 +144,17 @@ export function mergeLivePeersWithEntities(peers, entities = []) {
 }
 
 function enrichPeerWithEntity(peer, ent, extra = {}) {
+  const transports = Array.isArray(peer.transports)
+    ? peer.transports
+    : Array.isArray(ent?.transports)
+      ? ent.transports
+      : peer.ip
+        ? ['mesh']
+        : [];
   return {
     hostname: peer.hostname,
     ip: peer.ip || ent?.ip || null,
+    lan_ip: peer.lan_ip || ent?.lan_ip || null,
     online: !!peer.online,
     self: !!peer.self,
     os: peer.os || ent?.os || null,
@@ -160,14 +168,51 @@ function enrichPeerWithEntity(peer, ent, extra = {}) {
     entity_path: ent?.vfs_path || null,
     has_entity: !!ent,
     vault_only: !!extra.vault_only,
+    transports: [...new Set(transports)],
+    interfaces: Array.isArray(peer.interfaces)
+      ? peer.interfaces
+      : Array.isArray(ent?.interfaces)
+        ? ent.interfaces
+        : [],
   };
 }
 
 /** Live peers + vault entity variables for API/UI. */
 export function listEnrichedMeshNodes(vaultRoot = defaultVaultRoot()) {
-  const live = getMeshPeers({ includeSelf: true });
+  const live = getMeshPeers({ includeSelf: true }).map((p) => ({
+    ...p,
+    transports: p.ip ? ['mesh'] : [],
+  }));
   const entities = listMeshNodeEntities(vaultRoot);
   return mergeLivePeersWithEntities(live, entities);
+}
+
+/**
+ * Attach local interface snapshot + LAN IPs onto the self enriched node.
+ * Interface list is live host data (entity variables), not a device name table.
+ */
+export function attachSelfInterfaces(nodes, interfacesSummary = null) {
+  let summary = interfacesSummary;
+  if (!summary) {
+    try {
+      // Lazy import path avoided — call from routes with precomputed summary.
+      return nodes;
+    } catch {
+      return nodes;
+    }
+  }
+  return nodes.map((n) => {
+    if (!n.self) return n;
+    const lanIps = summary
+      .flatMap((i) => i.ipv4 || [])
+      .filter(Boolean);
+    return {
+      ...n,
+      interfaces: summary,
+      lan_ip: lanIps[0] || n.lan_ip || null,
+      transports: [...new Set([...(n.transports || []), ...(n.ip ? ['mesh'] : []), ...(lanIps.length ? ['lan'] : [])])],
+    };
+  });
 }
 
 function findEntityForSelf(self, vaultRoot) {
@@ -210,12 +255,25 @@ export async function patchOwnMeshNode(options = {}) {
     timestamp: now,
   };
 
+  let interfacesSummary = [];
+  try {
+    const { summarizeInterfacesForEntity } = await import('./network-interfaces.mjs');
+    interfacesSummary = summarizeInterfacesForEntity();
+  } catch {
+    interfacesSummary = existing?.interfaces || [];
+  }
+  const lanIp =
+    interfacesSummary.flatMap((i) => i.ipv4 || []).find(Boolean) || existing?.lan_ip || null;
+
   const livePatches = {
     hostname: self.hostname,
     ip: self.ip,
     status,
     last_heartbeat: now,
     os: self.os,
+    interfaces: interfacesSummary,
+    lan_ip: lanIp,
+    transports: [...new Set(['mesh', ...(lanIp ? ['lan'] : [])])],
     ...requiredMeta,
   };
 
@@ -249,6 +307,9 @@ export async function patchOwnMeshNode(options = {}) {
       'labels: []',
       'capabilities: []',
       'notes: null',
+      `lan_ip: ${lanIp == null ? 'null' : JSON.stringify(lanIp)}`,
+      `transports: ${JSON.stringify(livePatches.transports)}`,
+      `interfaces: ${JSON.stringify(interfacesSummary)}`,
       '---',
       '',
       '<!-- Entity space: add install-specific notes, labels, and capabilities via SSSS patch. -->',

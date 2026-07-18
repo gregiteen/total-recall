@@ -10,6 +10,19 @@ vi.mock('../api/mesh', () => ({
   fetchNodes: vi.fn(),
   refreshElection: vi.fn(),
   fetchMeshLatency: vi.fn().mockResolvedValue({ latency_ms: {}, results: [], measured_at: new Date().toISOString() }),
+  fetchMeshInterfaces: vi.fn().mockResolvedValue({
+    interfaces: [],
+    summary: [{ name: 'eth0', kind: 'ethernet', ipv4: ['192.168.1.10'] }],
+    measured_at: new Date().toISOString(),
+  }),
+  fetchLanDiscovery: vi.fn().mockResolvedValue({
+    discovered_at: new Date().toISOString(),
+    interfaces: [],
+    local_lan: [],
+    hosts: [{ ip: '192.168.1.20', mac: 'aa:bb:cc:dd:ee:ff', tr_reachable: false }],
+    host_count: 1,
+    tr_reachable_count: 0,
+  }),
 }));
 
 vi.mock('../api/headscale', () => ({

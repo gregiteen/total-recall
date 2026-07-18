@@ -6,9 +6,15 @@ import {
   getMeshPeers,
   listEnrichedMeshNodes,
   listMeshNodeEntities,
+  attachSelfInterfaces,
 } from '../../core/mesh.mjs';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
 import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
+import {
+  listLocalInterfaces,
+  summarizeInterfacesForEntity,
+} from '../../core/network-interfaces.mjs';
+import { discoverLanSnapshot } from '../../core/lan-discovery.mjs';
 
 const router = Router();
 
@@ -33,15 +39,52 @@ router.get('/api/mesh/leader', requireAuth, requireScope('config:read'), async (
 /**
  * Live peers merged with vault mesh_node entity variables (role, labels, notes, …).
  * Device detail is entity data — not product hardcoding.
+ * Self node includes live interface kinds (wifi/ethernet/vpn_overlay/…).
  */
 router.get('/api/mesh/nodes', requireAuth, requireScope('config:read'), async (req, res) => {
   const vaultRoot = defaultVaultRoot();
-  const nodes = listEnrichedMeshNodes(vaultRoot);
+  let nodes = listEnrichedMeshNodes(vaultRoot);
+  try {
+    nodes = attachSelfInterfaces(nodes, summarizeInterfacesForEntity());
+  } catch {
+    // interfaces optional
+  }
   const entities = listMeshNodeEntities(vaultRoot);
   res.json({
     nodes,
     entity_count: entities.length,
   });
+});
+
+/**
+ * Local NIC inventory with classified interface kinds.
+ */
+router.get('/api/mesh/interfaces', requireAuth, requireScope('config:read'), async (_req, res) => {
+  const interfaces = listLocalInterfaces();
+  res.json({
+    interfaces,
+    summary: summarizeInterfacesForEntity(interfaces),
+    measured_at: new Date().toISOString(),
+  });
+});
+
+/**
+ * Discover LAN hosts (ARP/neighbor table) and probe TR /health on LAN IPs.
+ * Query: ?probe=0 to skip health probes.
+ */
+router.get('/api/mesh/lan', requireAuth, requireScope('config:read'), async (req, res) => {
+  const probe = String(req.query?.probe ?? '1') !== '0';
+  try {
+    const snapshot = await discoverLanSnapshot({
+      probe,
+      port: meshServerPort(),
+      throttledFetch,
+      maxProbes: Number(req.query?.limit) || 32,
+    });
+    res.json(snapshot);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'LAN discovery failed' });
+  }
 });
 
 router.post('/api/mesh/election/refresh', requireAuth, requireScope('config:write'), async (_req, res) => {

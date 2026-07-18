@@ -4,9 +4,11 @@ import {
   fetchNodes as fetchMeshNodes,
   refreshElection,
   fetchMeshLatency,
+  fetchLanDiscovery,
+  fetchMeshInterfaces,
 } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
-import type { MeshNode, LeaderInfo } from '../api/mesh';
+import type { MeshNode, LeaderInfo, LanHost, MeshInterfaceSummary } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
 import { MeshTopology } from '../components/MeshTopology';
 import './MeshPage.css';
@@ -30,6 +32,9 @@ export function MeshPage() {
   const [selectedNode, setSelectedNode] = useState<MeshNode | null>(null);
   const [latencyMs, setLatencyMs] = useState<Record<string, number | null>>({});
   const [electionLog, setElectionLog] = useState<ElectionLogEntry[]>([]);
+  const [lanHosts, setLanHosts] = useState<LanHost[]>([]);
+  const [localInterfaces, setLocalInterfaces] = useState<MeshInterfaceSummary[]>([]);
+  const [lanTrCount, setLanTrCount] = useState(0);
   const prevLeaderRef = useRef<string | null>(null);
   const pollMsRef = useRef(POLL_BASE_MS);
   
@@ -73,6 +78,16 @@ export function MeshPage() {
         fetchMeshLatency()
           .then((lat) => setLatencyMs(lat.latency_ms || {}))
           .catch(() => { /* peers may be unreachable */ });
+        fetchMeshInterfaces()
+          .then((iface) => setLocalInterfaces(iface.summary || []))
+          .catch(() => { /* optional */ });
+        // LAN discovery is heavier — probe TR brains on LAN; do not fail the page.
+        fetchLanDiscovery({ probe: true, limit: 24 })
+          .then((lan) => {
+            setLanHosts(lan.hosts || []);
+            setLanTrCount(lan.tr_reachable_count || 0);
+          })
+          .catch(() => { /* ARP may be unavailable */ });
         pollMsRef.current = POLL_BASE_MS;
       } else if (activeTab === 'headscale-nodes') {
         const nodes = await fetchHeadscaleNodes();
@@ -250,12 +265,115 @@ export function MeshPage() {
                       ? selectedNode.entity_path || 'vault mesh_node'
                       : 'live discovery only (no vault entity yet)'}
                   </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Transports</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.transports?.length ? selectedNode.transports.join(', ') : '—'}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>LAN IP</dt>
+                  <dd style={{ margin: 0 }}>{selectedNode.lan_ip || '—'}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Interfaces</dt>
+                  <dd style={{ margin: 0 }}>
+                    {(selectedNode.interfaces?.length
+                      ? selectedNode.interfaces
+                      : selectedNode.self
+                        ? localInterfaces
+                        : []
+                    ).length === 0
+                      ? '—'
+                      : (selectedNode.interfaces?.length ? selectedNode.interfaces : localInterfaces)
+                          .map((i) => `${i.name} (${i.kind})`)
+                          .join(', ')}
+                  </dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Scope</dt>
                   <dd style={{ margin: 0 }}>{selectedNode.self ? 'This node' : 'Peer'}</dd>
                 </dl>
               ) : (
                 <p style={{ color: 'var(--text-secondary)' }}>Click a node in the topology to inspect it.</p>
               )}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>Local interfaces</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 0 }}>
+                Kinds are classified from OS interface names (wifi / ethernet / vpn_overlay / …). Variables of this host, not hardcoded devices.
+              </p>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Kind</th>
+                    <th>IPv4</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {localInterfaces.map((iface) => (
+                    <tr key={iface.name}>
+                      <td>{iface.name}</td>
+                      <td><span className="badge badge-follower">{iface.kind}</span></td>
+                      <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: 12 }}>
+                        {(iface.ipv4 || []).join(', ') || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  {localInterfaces.length === 0 && (
+                    <tr>
+                      <td colSpan={3} style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>
+                        No external interfaces reported
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="card">
+              <h3 style={{ marginTop: 0, marginBottom: 12 }}>
+                LAN discovery
+                {lanTrCount > 0 ? (
+                  <span style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--accent-hover)' }}>
+                    {lanTrCount} Total Recall reachable
+                  </span>
+                ) : null}
+              </h3>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 0 }}>
+                Hosts from the OS neighbor/ARP table on private LAN ranges. TR-reachable means /health answered on the brain port.
+              </p>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th>MAC</th>
+                    <th>IF</th>
+                    <th>TR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lanHosts.map((h) => (
+                    <tr key={h.ip}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{h.ip}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>{h.mac}</td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{h.interface || '—'}</td>
+                      <td>
+                        {h.tr_reachable ? (
+                          <span className="badge badge-online">
+                            yes{h.tr_latency_ms != null ? ` ${h.tr_latency_ms}ms` : ''}
+                          </span>
+                        ) : (
+                          <span className="badge badge-offline">no</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {lanHosts.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>
+                        No LAN neighbors discovered (ARP empty or unavailable)
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
