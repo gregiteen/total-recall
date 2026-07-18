@@ -15,20 +15,56 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { throttledFetch } from './throttled-fetch.mjs';
 import Database from 'better-sqlite3';
-import * as sqliteVss from 'sqlite-vss';
+import {
+  getVectorLoadablePath,
+  getVssLoadablePath,
+} from 'sqlite-vss';
 
 import { googleApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
 const DEFAULT_EMBED_MODEL = embedModel;
-const GOOGLE_API_KEY = googleApiKey || process.env.GOOGLE_API_KEY;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+/** Resolve API keys at call time so tests can set env after import. */
+function resolveGoogleApiKey() {
+  return googleApiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || null;
+}
+
+function resolveOpenAiApiKey() {
+  return process.env.OPENAI_API_KEY || null;
+}
 
 let dbInstance = null;
 let currentDbPath = null;
+/** @type {WeakMap<object, boolean>} */
+const dbVssEnabled = new WeakMap();
 
 /**
- * Get or initialize the SQLite database connection with sqlite-vss loaded.
+ * better-sqlite3 on Linux appends ".so" when the path already ends in ".so",
+ * producing "vss0.so.so". Strip known extensions before loadExtension.
+ */
+function loadExtensionBare(db, absolutePath) {
+  const bare = String(absolutePath).replace(/\.(so|dylib|dll)$/i, '');
+  try {
+    db.loadExtension(bare);
+  } catch {
+    db.loadExtension(absolutePath);
+  }
+}
+
+function tryLoadSqliteVss(db) {
+  try {
+    loadExtensionBare(db, getVectorLoadablePath());
+    loadExtensionBare(db, getVssLoadablePath());
+    return true;
+  } catch (err) {
+    logger.warn('embeddings', `sqlite-vss unavailable; using JSON-only store: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Get or initialize the SQLite database connection with sqlite-vss loaded when available.
  */
 function getDb(derivedDir) {
   const dbPath = path.join(derivedDir, 'embeddings.db');
@@ -43,9 +79,8 @@ function getDb(derivedDir) {
   fs.mkdirSync(derivedDir, { recursive: true });
   
   const db = new Database(dbPath);
-  
-  // Load sqlite-vss extension
-  sqliteVss.load(db);
+  const vssOk = tryLoadSqliteVss(db);
+  dbVssEnabled.set(db, vssOk);
 
   // Initialize schema
   db.exec(`
@@ -67,20 +102,56 @@ function getDb(derivedDir) {
       generated_at TEXT,
       embedding_json TEXT
     );
-    
-    -- Virtual tables for VSS
-    CREATE VIRTUAL TABLE IF NOT EXISTS vss_vault_embeddings USING vss0(
-      embedding(768)
-    );
-    
-    CREATE VIRTUAL TABLE IF NOT EXISTS vss_session_embeddings USING vss0(
-      embedding(768)
-    );
   `);
+
+  if (vssOk) {
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vss_vault_embeddings USING vss0(
+        embedding(768)
+      );
+      CREATE VIRTUAL TABLE IF NOT EXISTS vss_session_embeddings USING vss0(
+        embedding(768)
+      );
+    `);
+  }
 
   dbInstance = db;
   currentDbPath = dbPath;
   return db;
+}
+
+function hasVss(db) {
+  return dbVssEnabled.get(db) === true;
+}
+
+function vssReplaceVault(db, rowId, embeddingJson) {
+  if (!hasVss(db)) return;
+  db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(rowId);
+  db.prepare('INSERT INTO vss_vault_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+}
+
+function vssDeleteVault(db, rowId) {
+  if (!hasVss(db)) return;
+  db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(rowId);
+}
+
+function vssReplaceSession(db, rowId, embeddingJson) {
+  if (!hasVss(db)) return;
+  db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(rowId);
+  db.prepare('INSERT INTO vss_session_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+}
+
+function vssDeleteSession(db, rowId) {
+  if (!hasVss(db)) return;
+  db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(rowId);
+}
+
+function vssClearAll(db) {
+  if (!hasVss(db)) {
+    db.exec('DELETE FROM vault_embeddings; DELETE FROM session_embeddings;');
+    return;
+  }
+  db.exec('DELETE FROM vss_vault_embeddings; DELETE FROM vault_embeddings; DELETE FROM vss_session_embeddings; DELETE FROM session_embeddings;');
 }
 
 function sha256(text) {
@@ -94,12 +165,13 @@ async function resolveEmbeddingModel(selectedModel = embedModel) {
     return selectedModel;
   }
 
-  if (!GOOGLE_API_KEY) {
+  const googleKey = resolveGoogleApiKey();
+  if (!googleKey) {
     return 'gemini-embedding-2';
   }
 
   try {
-    const res = await throttledFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GOOGLE_API_KEY}`, {
+    const res = await throttledFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${googleKey}`, {
       signal: AbortSignal.timeout(5000)
     });
     if (res.ok) {
@@ -124,12 +196,13 @@ async function resolveEmbeddingModel(selectedModel = embedModel) {
 }
 
 async function getGoogleEmbedding(text, model) {
-  if (!GOOGLE_API_KEY) {
+  const googleKey = resolveGoogleApiKey();
+  if (!googleKey) {
     throw new Error('GOOGLE_API_KEY not set. Cannot generate embeddings.');
   }
 
   const resolved = await resolveEmbeddingModel(model);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolved}:embedContent?key=${GOOGLE_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${resolved}:embedContent?key=${googleKey}`;
 
   const res = await throttledFetch(url, {
     method: 'POST',
@@ -155,7 +228,8 @@ async function getGoogleEmbedding(text, model) {
 }
 
 async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
-  if (!OPENAI_API_KEY) {
+  const openaiKey = resolveOpenAiApiKey();
+  if (!openaiKey) {
     throw new Error('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is set. Cannot generate embeddings.');
   }
 
@@ -163,7 +237,7 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'Authorization': `Bearer ${openaiKey}`,
     },
     body: JSON.stringify({ model, input: text }),
     signal: AbortSignal.timeout(30000),
@@ -184,9 +258,11 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
 
 export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   const input = String(text).slice(0, 8000);
+  const googleKey = resolveGoogleApiKey();
+  const openaiKey = resolveOpenAiApiKey();
 
   let embedding;
-  if (GOOGLE_API_KEY) {
+  if (googleKey) {
     try {
       embedding = await getGoogleEmbedding(input, model);
     } catch (err) {
@@ -194,7 +270,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
     }
   }
 
-  if (!embedding && OPENAI_API_KEY) {
+  if (!embedding && openaiKey) {
     try {
       embedding = await getOpenAIEmbedding(input);
     } catch (err) {
@@ -254,10 +330,8 @@ export function saveEmbeddingToIndex(derivedDir, slug, embedding, model = DEFAUL
         embedding_json=excluded.embedding_json
     `).run(slug, model, now, embeddingJson);
     
-    // Add to vss index
     const rowId = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(slug).rowid;
-    db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(rowId);
-    db.prepare('INSERT INTO vss_vault_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+    vssReplaceVault(db, rowId, embeddingJson);
   })();
 }
 
@@ -266,7 +340,7 @@ export function removeEmbeddingFromIndex(derivedDir, slug) {
   db.transaction(() => {
     const row = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(slug);
     if (row) {
-      db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(row.rowid);
+      vssDeleteVault(db, row.rowid);
       db.prepare('DELETE FROM vault_embeddings WHERE slug = ?').run(slug);
     }
   })();
@@ -295,7 +369,8 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
   const db = getDb(derivedDir);
 
   if (force) {
-    db.exec('DELETE FROM vss_vault_embeddings; DELETE FROM vault_embeddings;');
+    if (hasVss(db)) db.exec('DELETE FROM vss_vault_embeddings;');
+    db.exec('DELETE FROM vault_embeddings;');
   }
 
   const existing = force ? {} : loadEmbeddingsIndex(derivedDir);
@@ -312,7 +387,7 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
       for (const slug of toDelete) {
         const row = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(slug);
         if (row) {
-          db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(row.rowid);
+          vssDeleteVault(db, row.rowid);
           db.prepare('DELETE FROM vault_embeddings WHERE slug = ?').run(slug);
         }
       }
@@ -350,8 +425,7 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
         `).run(node.slug, model, now, contentHash, embeddingJson);
         
         const rowId = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(node.slug).rowid;
-        db.prepare('DELETE FROM vss_vault_embeddings WHERE rowid = ?').run(rowId);
-        db.prepare('INSERT INTO vss_vault_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+        vssReplaceVault(db, rowId, embeddingJson);
       })();
 
       built++;
@@ -405,8 +479,7 @@ export function saveSessionEmbeddingToIndex(derivedDir, key, snippet, embedding,
     `).run(key, session_id, chunk, 1, snippet.slice(0, 300), model, now, embeddingJson);
     
     const rowId = db.prepare('SELECT rowid FROM session_embeddings WHERE key = ?').get(key).rowid;
-    db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(rowId);
-    db.prepare('INSERT INTO vss_session_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, embeddingJson);
+    vssReplaceSession(db, rowId, embeddingJson);
   })();
 }
 
@@ -415,7 +488,7 @@ export function removeSessionEmbeddingFromIndex(derivedDir, sessionId) {
   db.transaction(() => {
     const rows = db.prepare('SELECT rowid, key FROM session_embeddings WHERE session_id = ?').all(sessionId);
     for (const row of rows) {
-      db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(row.rowid);
+      vssDeleteSession(db, row.rowid);
       db.prepare('DELETE FROM session_embeddings WHERE key = ?').run(row.key);
     }
   })();
@@ -462,7 +535,8 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
   if (files.length === 0) return { indexed: 0, skipped: 0, failed: 0, chunks: 0 };
 
   if (force) {
-    db.exec('DELETE FROM vss_session_embeddings; DELETE FROM session_embeddings;');
+    if (hasVss(db)) db.exec('DELETE FROM vss_session_embeddings;');
+    db.exec('DELETE FROM session_embeddings;');
   }
 
   const existing = force ? {} : loadSessionEmbeddingsIndex(derivedDir);
@@ -497,8 +571,7 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
           `).run(key, sessionId, i, chunks.length, snippet, model, new Date().toISOString(), JSON.stringify(embedding));
           
           const rowId = db.prepare('SELECT rowid FROM session_embeddings WHERE key = ?').get(key).rowid;
-          db.prepare('DELETE FROM vss_session_embeddings WHERE rowid = ?').run(rowId);
-          db.prepare('INSERT INTO vss_session_embeddings(rowid, embedding) VALUES (?, ?)').run(rowId, JSON.stringify(embedding));
+          vssReplaceSession(db, rowId, JSON.stringify(embedding));
         })();
 
         totalChunks++;
