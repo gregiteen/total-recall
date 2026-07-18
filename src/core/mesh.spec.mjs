@@ -7,10 +7,11 @@ vi.mock('node:child_process', () => {
   return { spawnSync: mockedSpawnSync, default: { spawnSync: mockedSpawnSync } };
 });
 
+/** Neutral fixture status — hostnames/IPs are not real user devices. */
 const status = {
-  Self: { DNSName: 'laptop.mesh.', TailscaleIPs: ['100.64.0.2'], OS: 'macOS' },
+  Self: { DNSName: 'node-self.mesh.', TailscaleIPs: ['100.64.0.2'], OS: 'linux' },
   Peer: {
-    a: { DNSName: 'server.mesh.', TailscaleIPs: ['100.64.0.1'], Online: true, OS: 'linux' },
+    a: { DNSName: 'node-peer.mesh.', TailscaleIPs: ['100.64.0.1'], Online: true, OS: 'linux' },
   },
 };
 
@@ -28,9 +29,9 @@ describe('mesh status', () => {
 
   it('normalizes self and peers from one cached status call', () => {
     vi.mocked(spawnSync).mockReturnValue({ status: 0, stdout: JSON.stringify(status) });
-    expect(getMeshSelf()).toMatchObject({ hostname: 'laptop.mesh', ip: '100.64.0.2', self: true });
+    expect(getMeshSelf()).toMatchObject({ hostname: 'node-self.mesh', ip: '100.64.0.2', self: true });
     expect(getMeshIp()).toBe('100.64.0.2');
-    expect(getMeshHostname()).toBe('laptop.mesh');
+    expect(getMeshHostname()).toBe('node-self.mesh');
     expect(getMeshPeers({ includeSelf: true })).toHaveLength(2);
     expect(spawnSync).toHaveBeenCalledTimes(1);
   });

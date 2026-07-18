@@ -744,8 +744,8 @@
           <label class="radio-item" style="margin-top:8px">
             <input type="radio" name="deploy-target" value="localnet">
             <div>
-              <div class="ri-label">Mac Mini / Home Server via SSH <span style="font-weight:400;color:var(--muted)">(Local Network Server, Mac Mini, PC, or private VPS)</span></div>
-              <div class="ri-desc">Deploy remotely onto a dedicated home server, a local Mac Mini, or a pre-provisioned Linux machine on your private network.</div>
+              <div class="ri-label">Home Server via SSH <span style="font-weight:400;color:var(--muted)">(LAN server, desktop, NAS, or private VPS)</span></div>
+              <div class="ri-desc">Deploy remotely onto a dedicated home server, workstation, or pre-provisioned Linux machine on your private network.</div>
             </div>
           </label>
           <label class="radio-item" style="margin-top:8px">
@@ -760,8 +760,8 @@
         <!-- Localnet SSH details (shown only when Localnet is selected) -->
         <div id="localnet-details" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
           <div class="form-group" style="margin-bottom:12px">
-            <label>Mac Mini or Home Server Host / IP Address <span style="font-weight:400;color:var(--muted)">(e.g. macmini.local or 192.168.1.150)</span></label>
-            <input type="text" id="cfg-localnet-host" placeholder="e.g. macmini.local or 192.168.1.100" autocomplete="off" spellcheck="false">
+            <label>Home Server Host / IP Address <span style="font-weight:400;color:var(--muted)">(e.g. homeserver.local or 192.168.1.50)</span></label>
+            <input type="text" id="cfg-localnet-host" placeholder="e.g. homeserver.local or 192.168.1.50" autocomplete="off" spellcheck="false">
           </div>
           <div class="form-group" style="margin-bottom:0">
             <label>SSH Username <span style="font-weight:400;color:var(--muted)">(e.g. root, admin, ubuntu)</span></label>
@@ -3085,9 +3085,9 @@
     resultEl.style.display = '';
     resultEl.style.color = 'var(--blue)';
     if (agent === 'claude') {
-      resultEl.textContent = '🔑 Claude Code Authorization:\nTo complete authorization on the Mac Mini, open a terminal on the host machine and run:\n   claude login';
+      resultEl.textContent = '🔑 Claude Code Authorization:\nTo complete authorization on the remote host, open a terminal on that machine and run:\n   claude login';
     } else if (agent === 'antigravity') {
-      resultEl.textContent = '🔑 Google Antigravity Authorization:\nTo authorize Antigravity CLI on the Mac Mini, run:\n   antigravity login';
+      resultEl.textContent = '🔑 Google Antigravity Authorization:\nTo authorize Antigravity CLI on the remote host, run:\n   antigravity login';
     } else if (agent === 'codex') {
       resultEl.textContent = '🔑 Codex Authorization:\nConfigure your OpenAI credentials by running:\n   codex login';
     }
