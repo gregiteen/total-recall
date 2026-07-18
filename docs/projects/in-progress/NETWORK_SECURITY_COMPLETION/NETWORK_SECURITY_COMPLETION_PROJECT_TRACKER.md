@@ -84,7 +84,8 @@ Goal: release truth green (closes recovery tracker Phase 5-6 + NETWORK_SAFETY fi
 - [ ] TypeScript report zero via sanctioned code-quality checker (M)
 - [ ] Lint report zero via sanctioned code-quality checker (M)
 - [ ] Skill recovery through full-suite gate (S)
-- [ ] Audit + remove/relocate root strays: `create-network-policy.mjs`, `test-firewall.mjs` (S)
+- [x] Audit + remove/relocate root strays: `create-network-policy.mjs`, `test-firewall.mjs` (S)
+
 - [ ] NETWORK_SAFETY manual verification: daemon gate stats ≤6 concurrent via `/api/health`; research task keeps `lsof -i | wc -l` under 20; Network page live stats update; block via UI fails with clear error; `secrets.enc` not valid JSON; all API integrations work through the gate; top-bar indicator reflects gate health (M)
 - [ ] `npm test -- --grep "secrets-store"` and `--grep "network"` pass (S)
 - [ ] No test/runtime side effects remain (S)
@@ -164,5 +165,7 @@ Goal: docs match source; project archivable (mandatory final testing phase).
 - 2026-07-18: OpenRouter verified end-to-end — `OPENROUTER_API_KEY` in the secrets store validated live against `GET https://openrouter.ai/api/v1/auth/key` (HTTP 200, active paid key); rebound via `secret meta OPENROUTER_API_KEY --repo total-recall`; set as local `preferred_agent` in `brain.json`. Backend (`models.mjs`, `provider-catalog.mjs`, `usage-tracker.mjs`) and frontend (`SecretsPage.tsx`, `UsagePage.tsx`) OpenRouter plumbing already existed and required no code changes.
 - 2026-07-18: Recorded a global SSSS preference node (`memory-vault/preferences/preferences-8e65c833.md`, priority high, modality must_not) instructing future sessions to avoid Gemini/Google API calls until the user's outstanding $200 balance is resolved, without removing shared Gemini support code.
 - 2026-07-18: Pushed `1f04804`→`70c3687` to `origin/main` (pre-push quality gate passed: 0 TS errors, 0 lint issues, SSSS primitives match registered peer validator). Confirmed "push to all other machines" mechanism: `scripts/auto-pull.sh` runs as a cron job on each remote machine (Vast.ai VPS, Mac Mini) and self-pulls from `origin/main` on its own schedule — there is no push-fan-out from the laptop. No further action required; other machines will sync automatically on their next cron tick.
+- 2026-07-18: Post-push live verification — `curl http://127.0.0.1:3000/` → HTTP 200 serving `index-Dki2jzcc.js` (fresh bundle); `curl http://127.0.0.1:3000/health` → HTTP 200; confirmed `OPENROUTER_API_KEY` (repos=total-recall) present via `secret list`. Removed root-stray debug scripts `create-network-policy.mjs` and `test-firewall.mjs` (Phase 3 item) via `git rm`.
+
 
 
