@@ -45,6 +45,12 @@ vi.mock('../../core/lan-discovery.mjs', () => ({
     host_count: 1,
     tr_reachable_count: 1,
   }),
+  registerLanMeshNodes: vi.fn().mockResolvedValue({
+    registered_at: '2026-07-18T00:00:00Z',
+    attempted: 1,
+    written_count: 1,
+    results: [{ ip: '192.168.1.20', hostname: 'lan-192-168-1-20', path: 'system/mesh-nodes/lan-192-168-1-20.md', written: true, action: 'created' }],
+  }),
 }));
 
 vi.mock('../../core/device-io.mjs', () => ({
@@ -98,6 +104,7 @@ describe('mesh routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     app = express();
+    app.use(express.json());
     app.use(meshRouter);
   });
 
@@ -153,6 +160,15 @@ describe('mesh routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.io.channels).toContain('screen');
     expect(res.body.ui_hints).toContain('desktop_or_browser_ui');
+  });
+
+  it('POST /api/mesh/lan/register upserts TR-reachable LAN peers as entities', async () => {
+    const { registerLanMeshNodes } = await import('../../core/lan-discovery.mjs');
+    const res = await request(app).post('/api/mesh/lan/register').send({ probe: true });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.registration.written_count).toBe(1);
+    expect(registerLanMeshNodes).toHaveBeenCalled();
   });
 });
 

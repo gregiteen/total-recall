@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseArpTable, discoverLanHosts, probeLanBrains } from './lan-discovery.mjs';
+import { parseArpTable, discoverLanHosts, probeLanBrains, lanHostnameFromIp } from './lan-discovery.mjs';
 
 describe('parseArpTable', () => {
   it('parses macOS/BSD arp -a lines', () => {
@@ -67,5 +67,11 @@ describe('probeLanBrains', () => {
     expect(results[0].ok).toBe(true);
     expect(results[0].transport).toBe('lan');
     expect(throttledFetch).toHaveBeenCalledWith('http://192.168.1.30:3000/health', {}, 500);
+  });
+});
+
+describe('lanHostnameFromIp', () => {
+  it('builds a portable synthetic hostname from IP only', () => {
+    expect(lanHostnameFromIp('192.168.1.20')).toBe('lan-192-168-1-20');
   });
 });

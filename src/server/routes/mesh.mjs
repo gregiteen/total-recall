@@ -16,7 +16,7 @@ import {
   listLocalInterfaces,
   summarizeInterfacesForEntity,
 } from '../../core/network-interfaces.mjs';
-import { discoverLanSnapshot } from '../../core/lan-discovery.mjs';
+import { discoverLanSnapshot, registerLanMeshNodes } from '../../core/lan-discovery.mjs';
 import { detectDeviceIo, mergeIoProfiles, uiHintsFromIo } from '../../core/device-io.mjs';
 
 const router = Router();
@@ -122,6 +122,39 @@ router.get('/api/mesh/lan', requireAuth, requireScope('config:read'), async (req
     res.json(snapshot);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message || 'LAN discovery failed' });
+  }
+});
+
+/**
+ * Discover LAN TR-reachable hosts and upsert mesh_node entities (SSSS).
+ * Body optional: { probe?: boolean, limit?: number }
+ * Does not hardcode device names — hostname = lan-<ip-dashes> unless entity exists.
+ */
+router.post('/api/mesh/lan/register', requireAuth, requireScope('config:write'), async (req, res) => {
+  const probe = req.body?.probe !== false;
+  const limit = Number(req.body?.limit) || 32;
+  try {
+    const snapshot = await discoverLanSnapshot({
+      probe,
+      port: meshServerPort(),
+      throttledFetch,
+      maxProbes: limit,
+    });
+    const registration = await registerLanMeshNodes(snapshot.hosts, {
+      vaultRoot: defaultVaultRoot(),
+      onlyReachable: true,
+    });
+    res.json({
+      success: true,
+      discovery: {
+        host_count: snapshot.host_count,
+        tr_reachable_count: snapshot.tr_reachable_count,
+        discovered_at: snapshot.discovered_at,
+      },
+      registration,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'LAN register failed' });
   }
 });
 
