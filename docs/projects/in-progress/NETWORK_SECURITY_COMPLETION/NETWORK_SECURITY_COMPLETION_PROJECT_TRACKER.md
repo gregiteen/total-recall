@@ -182,3 +182,4 @@ Invariant (saved): device detail = SSSS `mesh_node` (+ live discovery); product 
 - 2026-07-18: **OSS hygiene** `6f67fba` — neutral fixtures; portable Cline paths; generic wizard copy; production mesh remains live Tailscale only
 - 2026-07-18: **Device entity invariant** remembered — rich machine spaces are variables on `mesh_node` entities in the vault, not product literals
 - 2026-07-18: Tracker refreshed with scoreboard, Phase 8 (device entity variables), and ordered Next Steps A/B/C
+- 2026-07-18: **Phase 8 complete** (`3ad293f`). MeshNodeSchema entity fields; patchOwnMeshNode SSSS upsert from live self; listEnrichedMeshNodes merge; API/UI bind; mesh-entities.spec.mjs (neutral fixtures only).
