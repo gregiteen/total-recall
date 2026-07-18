@@ -1,6 +1,14 @@
 # Changelog
 
 
+## [3.18.2] — 2026-07-18
+
+### 🐛 Bug Fixes
+- **Embeddings CI**: Runtime API key resolution; sqlite-vss bare-path load + JSON-only fallback when VSS unavailable.
+- **Sandbox timeout**: SIGKILL after timeout (no unshare orphan loops on Linux).
+- **Skill specs**: Import skill-deploy helpers from git-tracked scaffold.
+- **Route manifest**: Regenerated to 187 routes.
+
 ## [3.18.1] — 2026-07-18
 
 ### 🚀 Features
