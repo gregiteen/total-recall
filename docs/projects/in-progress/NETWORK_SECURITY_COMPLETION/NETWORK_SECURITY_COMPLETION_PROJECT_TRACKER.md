@@ -87,7 +87,7 @@ Goal: prove deterministic lowest-IP election; remove retired lease artifacts.
 
 Goal: release truth green.
 
-- [ ] Full suite 100% on **Mac Mini / remote** (not laptop — OOM rule) (L)
+- [~] Full suite on **cloud mesh node** (mail@100.64.0.1) 2026-07-18: **1127 passed / 5 failed** of 1132 (env: sqlite-vss, embeddings keys, route-manifest drift, sandbox timeout). Not 100% yet. (L)
 - [x] TypeScript: sanctioned checker **0 errors** (pre-push gate; daemon report) (M)
 - [~] Lint: source clean; daemon `TOTAL_ERRORS:1` is pre-existing **`flat-cache` tooling** noise in ESLint runner — fix env separately (M)
 - [ ] Skill recovery through full-suite gate (S)
@@ -109,10 +109,11 @@ Goal: release truth green.
 
 Goal: headscale acceptance criteria satisfied.
 
-- [ ] **USER ACTION:** approve Tailscale system extension on laptop (manual)
-- [ ] Enroll laptop; `tailscale status` shows **3** nodes (S)
-- [ ] Bidirectional pings across all 3 nodes (S)
-- [ ] Kill leader → new leader within **≤ FAILOVER_BOUND_MS (12s)** ideal / ≤ 5 min acceptance; secrets sync on follower (M)
+- [x] **USER ACTION:** Tailscale active on laptop (manual) — mesh online
+- [x] Enroll laptop; `tailscale status` shows **3** nodes: laptop `100.64.0.3`, macmini `100.64.0.2`, cloud `100.64.0.1` (all Online) (S)
+- [x] Mesh discovery: `GET /api/mesh/nodes` returns 3 online peers (laptop self); leader election = lowest IP **cloud** `100.64.0.1` / `lowest-mesh-ip` (S)
+- [~] Bidirectional TR `/health` RTT: laptop self = 0; peer RTTs **null** until TR brain listens on macmini + cloud `:3000` (cloud port 3000 is currently Ultrachat frontend) (M)
+- [ ] Kill leader → new leader within **≤ FAILOVER_BOUND_MS (12s)** ideal / ≤ 5 min; secrets sync on follower — **blocked**: needs TR daemon on ≥2 mesh nodes, not only Tailscale online (M)
 
 Device identities in acceptance are **entity variables** on each install’s `mesh_node` docs + live Tailscale — not product constants.
 
@@ -240,6 +241,8 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Phase 3 restart smoke** — server rebound mesh+loopback; `/health.fetch_gate` live; all mesh routes 200 authed; election log → `mesh-election` workspace (fast); frontend vite build with gate indicator + latency matrix; network policy active/blocked≥1; 3 mesh peers.
 - 2026-07-18: **Easy kills cont.** — lsof hygiene OK; project `.agent/secrets.enc` AES-migrated; boot migrates project+brain secrets; webhook re-deliver API+UI; webhook events workspace `webhooks`; frontend `index-D5xRw5uq.js`. Still open: remote full suite, Tailscale 3-node.
 - 2026-07-18: **Rollout** `e45117b` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
+- 2026-07-18: **Phase 3 remote suite** — cloud mail 100.64.0.1: 1127 passed / 5 failed (1132 tests, 258 files). Failures: sqlite-vss .so, embedding API keys, route-manifest 187 vs 179, sandbox timeout.
+- 2026-07-18: **Phase 4 partial** — Tailscale 3 nodes online (laptop/macmini/cloud). Mesh API: 3 online, leader cloud@100.64.0.1. Election log recorded `phase4-3node-check`. Peer latency null (no TR server on peers). Full suite attempted on cloud (mail@100.64.0.1) after git clone c5ab859/3.18.1 — npm install blocked first by darwin optional deps + missing make; retry with build-essential in progress.
 - 2026-07-18: **npm publish** `total-recall-brain@3.18.0` (`v3.18.0` tag, commit `3f95be8`); publish.mjs loads AES secrets.enc npm_token.
 - 2026-07-18: **`fetch_gate` on GET /health** + **`migrateSecretsToEncryptedIfNeeded`** (boot re-encrypts plain-JSON secrets when password configured); secrets-store tests 9/9.
 - 2026-07-18: **package-auto-update** `b000b5e` — `src/core/package-auto-update.mjs` + CLI/daemon/cron/API; downloads `total-recall-brain` into registry/`TR_SYNC_REPOS` roots; skips monorepo source trees; opt-out `TR_AUTO_UPDATE_PACKAGE=0`.
