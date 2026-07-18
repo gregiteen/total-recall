@@ -29,8 +29,18 @@ describe('MeshPage', () => {
   it('renders mesh nodes and leader', async () => {
     vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([
-      { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true, self: true, os: 'linux' },
-      { hostname: 'node-b.mesh', ip: '100.64.0.2', online: false, self: false, os: 'linux' },
+      {
+        hostname: 'node-a.mesh',
+        ip: '100.64.0.1',
+        online: true,
+        self: true,
+        os: 'linux',
+        role: 'build-host',
+        labels: ['ci'],
+        has_entity: true,
+        title: 'Builder A',
+      },
+      { hostname: 'node-b.mesh', ip: '100.64.0.2', online: false, self: false, os: 'linux', has_entity: false },
     ]);
 
     render(<MeshPage />);

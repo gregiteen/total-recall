@@ -16,9 +16,25 @@ vi.mock('../../core/leader-election.mjs', () => ({
 vi.mock('../../core/mesh.mjs', () => ({
   clearMeshStatusCache: vi.fn(),
   getMeshPeers: vi.fn().mockReturnValue([
-    { hostname: 'self.mesh', ip: '100.64.0.1', online: true, self: true },
-    { hostname: 'peer.mesh', ip: '100.64.0.2', online: true, self: false },
+    { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true, self: true },
+    { hostname: 'node-b.mesh', ip: '100.64.0.2', online: true, self: false },
   ]),
+  listEnrichedMeshNodes: vi.fn().mockReturnValue([
+    {
+      hostname: 'node-a.mesh',
+      ip: '100.64.0.1',
+      online: true,
+      self: true,
+      role: 'build-host',
+      labels: ['ci'],
+      has_entity: true,
+    },
+  ]),
+  listMeshNodeEntities: vi.fn().mockReturnValue([{ type: 'mesh_node', hostname: 'node-a.mesh' }]),
+}));
+
+vi.mock('../../core/vfs-documents.mjs', () => ({
+  defaultVaultRoot: vi.fn().mockReturnValue('/tmp/tr-mesh-test-vault'),
 }));
 
 vi.mock('../../core/throttled-fetch.mjs', () => ({
@@ -43,10 +59,12 @@ describe('mesh routes', () => {
     });
   });
 
-  it('GET /api/mesh/nodes returns mesh peers', async () => {
+  it('GET /api/mesh/nodes returns enriched peers with entity variables', async () => {
     const res = await request(app).get('/api/mesh/nodes');
     expect(res.status).toBe(200);
-    expect(res.body.nodes).toHaveLength(2);
+    expect(res.body.nodes).toHaveLength(1);
+    expect(res.body.nodes[0].role).toBe('build-host');
+    expect(res.body.entity_count).toBe(1);
   });
 
   it('POST /api/mesh/election/refresh clears cached status and returns deterministic leader', async () => {
@@ -61,8 +79,9 @@ describe('mesh routes', () => {
     const { throttledFetch } = await import('../../core/throttled-fetch.mjs');
     const res = await request(app).get('/api/mesh/latency');
     expect(res.status).toBe(200);
-    expect(res.body.latency_ms['self.mesh']).toBe(0);
+    expect(res.body.latency_ms['node-a.mesh']).toBe(0);
     expect(throttledFetch).toHaveBeenCalled();
     expect(res.body.results).toHaveLength(2);
   });
 });
+

@@ -917,6 +917,12 @@ export const MeshNodeSchema = z.object({
   ip: z.string().nullable().optional(),
   status: z.enum(['online', 'offline', 'unknown']).default('unknown'),
   last_heartbeat: ssssDatetimeNullable().optional(),
+  /** Entity variables — install-specific detail, never product hardcoding. */
+  os: z.string().nullable().optional(),
+  role: z.string().nullable().optional(),
+  labels: z.array(z.string()).optional(),
+  capabilities: z.array(z.string()).optional(),
+  notes: z.string().nullable().optional(),
 }).passthrough();
 
 export const DaemonLeaderSchema = z.object({
