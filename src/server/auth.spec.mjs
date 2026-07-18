@@ -73,6 +73,26 @@ describe('server auth request locality', () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it('allows direct mesh peer sockets through requireAuthOrLocal (latency probes)', () => {
+    const response = res();
+    const next = vi.fn();
+    // CGNAT mesh peer — no forwarded headers
+    auth.requireAuthOrLocal(req({}, '100.64.0.3', '100.64.0.3'), response, next);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not treat forwarded mesh claims as local for requireAuthOrLocal', () => {
+    const response = res();
+    const next = vi.fn();
+    auth.requireAuthOrLocal(
+      req({ 'x-forwarded-for': '100.64.0.9' }, '203.0.113.10', '203.0.113.10'),
+      response,
+      next,
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(response.statusCode).toBe(401);
+  });
+
   it('attaches PAT scopes and allows matching required scopes', () => {
     const issued = keys.issueKey('readonly', { scopes: ['memory:read'] });
     const request = req({ authorization: `Bearer ${issued.token}` });
