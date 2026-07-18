@@ -520,6 +520,7 @@ const CLIENT_SHIMS = {
   cursor:        ['.cursorrules'],
   claude:        ['CLAUDE.md'],
   'claude-code': ['CLAUDE.md'],
+  cline:         ['.clinerules/total-recall.md'],
   antigravity:   ['AGENTS.md', '.agents/rules/AGENTS.md'],
   gemini:        ['GEMINI.md', '.agents/rules/GEMINI.md'],
   codex:         ['AGENTS.md'],

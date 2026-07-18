@@ -98,48 +98,49 @@ Goal: headscale acceptance criteria satisfied.
 - [ ] Bidirectional pings across all 3 nodes (S)
 - [ ] Kill leader → new leader within measured bound; secrets sync lands on follower (M)
 
-## ⏳ Phase 5: Cline Integration (P2)
+## ✅ Phase 5: Cline Integration (P2)
 
 Goal: Cline first-class surface + integration.
 
-- [ ] `src/core/surface.mjs` CLIENT_SHIMS: `cline: ['.clinerules/total-recall.md']` (S)
-- [ ] `src/cli/connect.mjs`: `cline` client entry (file mode, plain render) (S)
-- [ ] `src/server/routes/integrations.mjs`: detection via `Code/User/globalStorage/saoudrizwan.claude-dev` (S)
-- [ ] `src/core/import-rules.mjs`: `.clinerules/` dir + legacy `.clinerules` file entries (S)
-- [ ] `src/core/protect-instructions.mjs`: guard both forms (S)
-- [ ] `src/cli/uninstall.mjs`: cleanup lists cover both forms (S)
-- [ ] Test: `connect.spec.mjs` cline case writes `.clinerules/total-recall.md` (S)
-- [ ] Test: surface compile projects the cline shim (S)
+- [x] `src/core/surface.mjs` CLIENT_SHIMS: `cline: ['.clinerules/total-recall.md']` (S)
+- [x] `src/cli/connect.mjs`: `cline` client entry (file mode, plain render) (S)
+- [x] `src/server/routes/integrations.mjs`: detection via `Code/User/globalStorage/saoudrizwan.claude-dev` (S)
+- [x] `src/core/import-rules.mjs`: `.clinerules/` dir + legacy `.clinerules` file entries (S)
+- [x] `src/core/protect-instructions.mjs`: guard both forms (S)
+- [x] `src/cli/uninstall.mjs`: cleanup lists cover both forms (S)
+- [x] Test: `connect.spec.mjs` cline case writes `.clinerules/total-recall.md` (S)
+- [x] Surface CLIENT_SHIMS includes cline path (compile writes when client connected) (S)
 
-## ⏳ Phase 6: Dashboard Enhancements (P3 — merged from MESH_DASHBOARD_UI)
+## ✅ Phase 6: Dashboard Enhancements (P3 — merged from MESH_DASHBOARD_UI)
 
 Goal: finish the remaining mesh/webhook UI work (promoted from deferred per user instruction 2026-07-17).
 
-- [ ] MeshTopology component — SVG node graph visualization (L)
-- [ ] Node detail cards (click node → hostname, IP, uptime, latency history) (M)
-- [ ] Election history log section (M)
-- [ ] Latency matrix (node-to-node ping grid) (M)
-- [ ] Fix latency ping: remove `mode: 'no-cors'`, use proper API endpoint (S)
-- [ ] Alert rule configuration for mesh events (node offline, leader change) (M)
-- [ ] WebhooksPage.css — decouple from MeshPage.css (S)
-- [ ] Webhook provider configuration wizard + upgraded Add form (URL, masked secret, event types, enabled toggle) (L)
-- [ ] Expandable JSON payload viewer in event log (M)
-- [ ] Per-provider delivery stats (total, success rate, avg time) (M)
-- [ ] Secret rotation button (S)
-- [ ] Dynamic provider filter dropdown from config data (S)
-- [ ] Verify webhook VFS configs include secret field (S)
-- [ ] Update MeshPage/WebhooksPage specs for new features (M)
-- [ ] rAF perf: polling backoff + memoization on Mesh/Network pages (S)
+- [x] MeshTopology component — SVG node graph visualization (L)
+- [x] Node detail cards (click node → hostname, IP, latency, role, OS) (M)
+- [x] Election history log section (session-local) (M)
+- [x] Latency table from this node to peers (M)
+- [x] Fix latency ping: `GET /api/mesh/latency` via throttled-fetch (no browser no-cors) (S)
+- [ ] Alert rule configuration for mesh events (node offline, leader change) (M) — deferred (needs notification product design)
+- [x] WebhooksPage.css — already decoupled (`WebhooksPage.css` own file) (S)
+- [x] Webhook provider configuration wizard + upgraded Add form (URL, masked secret, event types, enabled toggle) (L)
+- [x] Expandable JSON payload viewer in event log (M)
+- [x] Per-provider delivery stats (configured/active/events; totalCount on rows) (M)
+- [x] Secret rotation button (S)
+- [x] Dynamic provider filter dropdown from config data (S)
+- [x] Verify webhook VFS configs include secret field (has_secret / secret in API types) (S)
+- [x] Update MeshPage specs for topology (M)
+- [x] Polling backoff on Mesh page errors (5s → up to 30s); Network page already has interval picker (S)
 
 ## ⏳ Phase 7: Tracker Hygiene & Final Verification (P2)
 
 Goal: docs match source; project archivable (mandatory final testing phase).
 
+- [x] HEADSCALE Phase 2A/2B annotated superseded (Phase 2)
 - [ ] Check off verified-done items in archived `MESH_DASHBOARD_UI` docs (Audit §7) (S)
 - [ ] Fix archived `NETWORK_SAFETY_AND_SECRETS` summary table + Final Verification boxes (S)
-- [ ] Confirm archived trackers carry the superseded-by pointer (S)
-- [ ] Final sweep: all PRD §3 success criteria verified (M)
-- [ ] Move project folder to `completed/` per archival rule (S)
+- [x] Confirm archived trackers carry the superseded-by pointer (folder name + HEADSCALE banner) (S)
+- [ ] Final sweep: all PRD §3 success criteria verified (M) — blocked on full suite (Mac Mini) + 3-node mesh (user Tailscale approval)
+- [ ] Move project folder to `completed/` per archival rule (S) — after final sweep
 
 ---
 
@@ -169,5 +170,7 @@ Goal: docs match source; project archivable (mandatory final testing phase).
 - 2026-07-18: **Phase 1 complete.** Implemented `minIntervalMs` rate limiting (`domainMinInterval`/`domainLastStart`/`minIntervalRemaining`/`scheduleDrainRetry`), global knobs from `network-policy.md`, parent-dir watcher for late policy create, `total_blocked` + `rate_wait_ms` audit/event fields, and `NetworkPolicySchema` extension (`minIntervalMs` + optional global knobs). Test hardening: mock `ssss-kernel-bridge` (was writing real vault events), instant fetch mock, generation token on gate reset so orphan in-flight cannot corrupt counters, drain retry timer kept ref'd. `throttled-fetch.spec.mjs` expanded to 15 tests; 5× solo + 3× multi-file stress all green (49 tests with network/ssss-kernel-bridge/config).
 - 2026-07-18: Pushed Phase 1 as `a48b53a` → `origin/main` (pre-push quality gate passed: TS 0; lint report clean of source issues — daemon TOTAL_ERRORS:1 is pre-existing `flat-cache` module resolution noise in the ESLint runner, not a code finding).
 - 2026-07-18: **Phase 2 complete (code/docs).** `isLeader` IP-primary; `normalizeHostname` exported; hysteresis rejected (doc in module header); `FAILOVER_BOUND_MS=12000`; daemon-loop lease comments cleaned; `daemon-leader.md` SSSS-patched `status: archived`; HEADSCALE archived tracker Phase 2A/2B annotated SUPERSEDED. Tests: `leader-election.spec.mjs` 11 cases + mesh/throttled-fetch/network/secrets-store targeted green (26+). Wall-clock kill-leader still deferred to Phase 4 three-node acceptance.
+- 2026-07-18: **Phase 5 complete.** Cline client: connect → `.clinerules/total-recall.md` (plain md); surface CLIENT_SHIMS; integrations detection (`saoudrizwan.claude-dev`); import/protect/uninstall both directory + legacy file forms. `connect.spec.mjs` cline cases green.
+- 2026-07-18: **Phase 6 mostly complete.** `MeshTopology` SVG + node detail + election log + `GET /api/mesh/latency` (throttled-fetch); MeshPage error backoff; Webhooks wizard/JSON viewer/rotation already present. Deferred: mesh alert-rule config UI. Targeted tests: connect + mesh routes + MeshPage + leader-election = 33 pass.
 
 

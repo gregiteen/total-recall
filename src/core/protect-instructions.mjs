@@ -39,6 +39,8 @@ export function protectIDEInstructions({ vaultDir, derivedDir, instructionsFile 
       path.join(process.cwd(), 'GEMINI.md'),
       path.join(process.cwd(), 'CLAUDE.md'),
       path.join(process.cwd(), '.clauderules'),
+      path.join(process.cwd(), '.clinerules'),
+      path.join(process.cwd(), '.clinerules', 'total-recall.md'),
       path.join(process.cwd(), 'AGENTS.md'),
       path.join(process.cwd(), 'WINDSURF.md'),
       path.join(process.cwd(), '.windsurfrules')

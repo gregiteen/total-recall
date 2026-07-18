@@ -88,6 +88,27 @@ describe('connect — Cursor projection', () => {
   });
 });
 
+describe('connect — Cline projection', () => {
+  it('creates .clinerules/total-recall.md with plain markdown (no frontmatter)', async () => {
+    await runConnect(['cline']);
+    const targetPath = path.join(tmpProject, '.clinerules', 'total-recall.md');
+    expect(fs.existsSync(targetPath)).toBe(true);
+    const content = fs.readFileSync(targetPath, 'utf8');
+    expect(content).toContain('FIXTURE_CONTENT');
+    expect(content.startsWith('---')).toBe(false);
+  });
+
+  it('registers cline in clients.json', async () => {
+    await runConnect(['cline']);
+    const registryPath = path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json');
+    expect(fs.existsSync(registryPath)).toBe(true);
+    const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    expect(registry.clients.cline).toBeDefined();
+    expect(registry.clients.cline.mode).toBe('file');
+    expect(registry.clients.cline.projectionPath).toContain('.clinerules');
+  });
+});
+
 describe('connect — Claude Code projection', () => {
   it('creates CLAUDE.md as a symlink to INSTRUCTIONS.md', async () => {
     await runConnect(['claude-code']);
