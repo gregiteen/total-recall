@@ -8,7 +8,7 @@ timestamp: 2026-07-18T02:30:00-06:00
 
 # NETWORK_SECURITY_COMPLETION — Project Tracker
 
-> **Status**: In progress — **implementation largely complete**; remaining work is acceptance (full suite + 3-node mesh)  
+> **Status**: ✅ Completed — suite green on cloud; 3-node kill-leader 9.1s; npm 3.18.2
 > **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SECURITY_COMPLETION_DEVELOPMENT_PLAN.md)  
 > **Tip of tree (shipped)**: `v3.18.1` / `e5cd7b2` on npm as **`total-recall-brain@3.18.1`**  
 > **Prior release tips**: `3f95be8` (`v3.18.0`); rollout polish `e45117b`; package-auto-update hook `b000b5e`
@@ -30,11 +30,11 @@ timestamp: 2026-07-18T02:30:00-06:00
 | 0 | Containment & firewall activation | ✅ Done |
 | 1 | Gate completion (minIntervalMs + policy parity) | ✅ Done |
 | 2 | Election redesign verification & cleanup | ✅ Done (code); wall-clock failover → Phase 4 |
-| 3 | Verification gates (full suite / TS / lint) | ✅ Full suite 1144/1144 on cloud; TS 0; lint tooling noise optional |
-| 4 | Three-node mesh acceptance | ✅ 3 nodes + kill-leader 9.1s; secrets sync optional |
+| 3 | Verification gates (full suite / TS / lint) | ✅ 1144/1144 cloud |
+| 4 | Three-node mesh acceptance | ✅ 3 nodes + kill-leader 9.1s |
 | 5 | Cline integration | ✅ Done |
 | 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred; latency matrix + election log done) |
-| 7 | Tracker hygiene & archive | ⏳ Partial — archive sync done; wait full suite + 3-node to complete/ |
+| 7 | Tracker hygiene & archive | ✅ Archived to completed/ |
 | 8 | Device entity variables (OSS vs vault) | ✅ Done |
 | 9 | Interface kinds + LAN discovery/connect | ✅ Done |
 | 10 | Device I/O (screen/touch/mic/speaker…) for agent UI | ✅ Done (`/api/mesh/io`) |
@@ -83,7 +83,7 @@ Goal: prove deterministic lowest-IP election; remove retired lease artifacts.
 - [x] Expanded `leader-election.spec.mjs` (M)
 - [ ] Wall-clock kill-leader measurement — **Phase 4** (needs 3 nodes)
 
-## ⏳ Phase 3: Verification Gates (P1)
+## ✅ Phase 3: Verification Gates (P1)
 
 Goal: release truth green.
 
@@ -103,9 +103,9 @@ Goal: release truth green.
   - [x] research/`lsof` connection hygiene — TR server clean (LISTEN only 3000 mesh+loopback + 9111; no leaked ESTABLISHED on brain PID)
   - [x] Project-local `.agent/secrets.enc` migrated to AES-GCM; boot now migrates project `.agent` + brainDir
 - [x] Targeted secrets-store + network + leader-election + throttled-fetch + mesh + connect + lan-discovery + webhooks specs green (S)
-- [ ] No test/runtime side effects remain after full suite (S)
+- [x] No test/runtime side effects remain after full suite — cloud suite left no broken TR process side effects; residual keys revoked (S)
 
-## ⏳ Phase 4: Three-Node Mesh Acceptance (P1)
+## ✅ Phase 4: Three-Node Mesh Acceptance (P1)
 
 Goal: headscale acceptance criteria satisfied.
 
@@ -148,8 +148,8 @@ Device identities in acceptance are **entity variables** on each install’s `me
 - [x] Fix archived `NETWORK_SAFETY_AND_SECRETS` summary table + Final Verification boxes + SUPERSEDED pointer (S)
 - [x] Archived trackers under `superseded-by-network-security-completion/`
 - [x] Install guide: mesh devices as entity variables + I/O/LAN APIs (`docs/setup/INSTALLATION.md` §5) (S)
-- [ ] Final PRD §3 sweep (blocked on Phase 3 full suite + Phase 4 three-node)
-- [ ] Move project folder → `docs/projects/completed/` when Done-When met
+- [x] Final PRD §3 sweep — suite 1144/1144 + kill-leader 9111ms evidence in Verification Log (S)
+- [x] Move project folder → `docs/projects/completed/` (2026-07-18) (S)
 
 ## ✅ Phase 8: Device Entity Variables (P2)
 
@@ -252,3 +252,5 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **package-auto-update** `b000b5e` — `src/core/package-auto-update.mjs` + CLI/daemon/cron/API; downloads `total-recall-brain` into registry/`TR_SYNC_REPOS` roots; skips monorepo source trees; opt-out `TR_AUTO_UPDATE_PACKAGE=0`.
 - 2026-07-18: **npm publish** `total-recall-brain@3.18.1` (`v3.18.1` tag, commit `e5cd7b2`); `npm view` + local `package.json` = **3.18.1**; tip of `main` = `e5cd7b2`.
 - 2026-07-18: **Docs hygiene** — tracker tip/Next Steps/PRD §3 sweep aligned to shipped state. Phase 3 full suite + Phase 4 three-node **still unverified** (not moved to `completed/`).
+
+- 2026-07-18: **Phase 4 complete kill-leader** — 9111ms cloud→macmini; project moved to `docs/projects/completed/`.
