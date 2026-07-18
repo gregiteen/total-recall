@@ -1,5 +1,13 @@
 import { get, post } from './_base';
 
+export interface MeshInterfaceSummary {
+  name: string;
+  kind: 'loopback' | 'wifi' | 'ethernet' | 'bridge' | 'vpn_overlay' | 'other';
+  mac?: string | null;
+  ipv4?: string[];
+  ipv6?: string[];
+}
+
 export interface MeshNode {
   hostname: string;
   ip: string | null;
@@ -17,6 +25,20 @@ export interface MeshNode {
   entity_path?: string | null;
   has_entity?: boolean;
   vault_only?: boolean;
+  transports?: Array<'mesh' | 'lan'>;
+  interfaces?: MeshInterfaceSummary[];
+  lan_ip?: string | null;
+}
+
+export interface LanHost {
+  ip: string;
+  mac: string;
+  interface?: string | null;
+  source?: string;
+  tr_reachable?: boolean;
+  tr_latency_ms?: number | null;
+  tr_port?: number | null;
+  transports?: string[];
 }
 
 export interface LeaderInfo {
@@ -57,4 +79,27 @@ export async function fetchMeshLatency(): Promise<{
   measured_at: string;
 }> {
   return get('/api/mesh/latency');
+}
+
+export async function fetchMeshInterfaces(): Promise<{
+  interfaces: Array<Record<string, unknown>>;
+  summary: MeshInterfaceSummary[];
+  measured_at: string;
+}> {
+  return get('/api/mesh/interfaces');
+}
+
+export async function fetchLanDiscovery(opts?: { probe?: boolean; limit?: number }): Promise<{
+  discovered_at: string;
+  interfaces: Array<Record<string, unknown>>;
+  local_lan: Array<Record<string, unknown>>;
+  hosts: LanHost[];
+  host_count: number;
+  tr_reachable_count: number;
+}> {
+  const params = new URLSearchParams();
+  if (opts?.probe === false) params.set('probe', '0');
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const q = params.toString();
+  return get(`/api/mesh/lan${q ? `?${q}` : ''}`);
 }

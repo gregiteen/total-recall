@@ -908,6 +908,14 @@ export const WebhookConfigSchema = z.object({
   events: z.array(z.string()).default([]),
 }).passthrough();
 
+const NetworkInterfaceEntrySchema = z.object({
+  name: z.string().min(1),
+  kind: z.enum(['loopback', 'wifi', 'ethernet', 'bridge', 'vpn_overlay', 'other']),
+  mac: z.string().nullable().optional(),
+  ipv4: z.array(z.string()).optional(),
+  ipv6: z.array(z.string()).optional(),
+}).passthrough();
+
 export const MeshNodeSchema = z.object({
   type: z.literal('mesh_node'),
   title: z.string().min(1),
@@ -923,6 +931,11 @@ export const MeshNodeSchema = z.object({
   labels: z.array(z.string()).optional(),
   capabilities: z.array(z.string()).optional(),
   notes: z.string().nullable().optional(),
+  /** How this node is reachable: mesh overlay, LAN, or both. */
+  transports: z.array(z.enum(['mesh', 'lan'])).optional(),
+  /** Snapshot of host NICs (kinds are classified heuristically). */
+  interfaces: z.array(NetworkInterfaceEntrySchema).optional(),
+  lan_ip: z.string().nullable().optional(),
 }).passthrough();
 
 export const DaemonLeaderSchema = z.object({

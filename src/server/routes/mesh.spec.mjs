@@ -13,26 +13,6 @@ vi.mock('../../core/leader-election.mjs', () => ({
   isLeader: vi.fn().mockResolvedValue(true)
 }));
 
-vi.mock('../../core/mesh.mjs', () => ({
-  clearMeshStatusCache: vi.fn(),
-  getMeshPeers: vi.fn().mockReturnValue([
-    { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true, self: true },
-    { hostname: 'node-b.mesh', ip: '100.64.0.2', online: true, self: false },
-  ]),
-  listEnrichedMeshNodes: vi.fn().mockReturnValue([
-    {
-      hostname: 'node-a.mesh',
-      ip: '100.64.0.1',
-      online: true,
-      self: true,
-      role: 'build-host',
-      labels: ['ci'],
-      has_entity: true,
-    },
-  ]),
-  listMeshNodeEntities: vi.fn().mockReturnValue([{ type: 'mesh_node', hostname: 'node-a.mesh' }]),
-}));
-
 vi.mock('../../core/vfs-documents.mjs', () => ({
   defaultVaultRoot: vi.fn().mockReturnValue('/tmp/tr-mesh-test-vault'),
 }));
@@ -40,6 +20,60 @@ vi.mock('../../core/vfs-documents.mjs', () => ({
 vi.mock('../../core/throttled-fetch.mjs', () => ({
   throttledFetch: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
 }));
+
+vi.mock('../../core/network-interfaces.mjs', () => ({
+  listLocalInterfaces: vi.fn().mockReturnValue([
+    {
+      name: 'eth0',
+      kind: 'ethernet',
+      internal: false,
+      addresses: [{ address: '192.168.1.10', family: 'IPv4', is_lan: true }],
+      has_lan_ipv4: true,
+    },
+  ]),
+  summarizeInterfacesForEntity: vi.fn().mockReturnValue([
+    { name: 'eth0', kind: 'ethernet', ipv4: ['192.168.1.10'] },
+  ]),
+}));
+
+vi.mock('../../core/lan-discovery.mjs', () => ({
+  discoverLanSnapshot: vi.fn().mockResolvedValue({
+    discovered_at: '2026-07-18T00:00:00Z',
+    interfaces: [],
+    local_lan: [{ address: '192.168.1.10', cidr: '192.168.1.10/24' }],
+    hosts: [{ ip: '192.168.1.20', mac: 'aa:bb:cc:dd:ee:ff', tr_reachable: true }],
+    host_count: 1,
+    tr_reachable_count: 1,
+  }),
+}));
+
+vi.mock('../../core/mesh.mjs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    clearMeshStatusCache: vi.fn(),
+    getMeshPeers: vi.fn().mockReturnValue([
+      { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true, self: true },
+      { hostname: 'node-b.mesh', ip: '100.64.0.2', online: true, self: false },
+    ]),
+    listEnrichedMeshNodes: vi.fn().mockReturnValue([
+      {
+        hostname: 'node-a.mesh',
+        ip: '100.64.0.1',
+        online: true,
+        self: true,
+        role: 'build-host',
+        labels: ['ci'],
+        has_entity: true,
+        transports: ['mesh'],
+      },
+    ]),
+    listMeshNodeEntities: vi.fn().mockReturnValue([{ type: 'mesh_node', hostname: 'node-a.mesh' }]),
+    attachSelfInterfaces: vi.fn((nodes, summary) =>
+      nodes.map((n) => (n.self ? { ...n, interfaces: summary, transports: ['mesh', 'lan'] } : n)),
+    ),
+  };
+});
 
 describe('mesh routes', () => {
   let app;
@@ -82,6 +116,19 @@ describe('mesh routes', () => {
     expect(res.body.latency_ms['node-a.mesh']).toBe(0);
     expect(throttledFetch).toHaveBeenCalled();
     expect(res.body.results).toHaveLength(2);
+  });
+
+  it('GET /api/mesh/interfaces returns classified NICs', async () => {
+    const res = await request(app).get('/api/mesh/interfaces');
+    expect(res.status).toBe(200);
+    expect(res.body.summary[0].kind).toBe('ethernet');
+  });
+
+  it('GET /api/mesh/lan returns LAN discovery snapshot', async () => {
+    const res = await request(app).get('/api/mesh/lan');
+    expect(res.status).toBe(200);
+    expect(res.body.host_count).toBe(1);
+    expect(res.body.tr_reachable_count).toBe(1);
   });
 });
 
