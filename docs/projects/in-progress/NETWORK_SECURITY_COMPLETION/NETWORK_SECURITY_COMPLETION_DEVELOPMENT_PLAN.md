@@ -1,114 +1,112 @@
 ---
 type: project_document
 title: "NETWORK_SECURITY_COMPLETION — Development Plan"
-description: "Phased implementation plan with Done-When gates for the network/security/rate-limiting completion work (revised after enhanced audit)"
+description: "Phased implementation plan with Done-When gates (synced 2026-07-18 to tracker scoreboard)"
 tags: ["project-management", "development-plan", "network", "security", "rate-limiting"]
-timestamp: 2026-07-17T21:35:00-06:00
+timestamp: 2026-07-18T00:15:00-06:00
 ---
 
 # NETWORK_SECURITY_COMPLETION — Development Plan
 
-> **Project Prefix**: `NETWORK_SECURITY_COMPLETION`
-> **Kanban State**: 🏗️ In Progress
-> **Author**: Cline
-> **Date**: 2026-07-17 (revised after enhanced audit — supersedes 20:23 draft)
+> **Project Prefix**: `NETWORK_SECURITY_COMPLETION`  
+> **Kanban State**: 🏗️ In Progress (implementation nearly complete; acceptance + device-entity bind remain)  
+> **Date**: 2026-07-18 (synced to tracker)  
 > **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Tracker](./NETWORK_SECURITY_COMPLETION_PROJECT_TRACKER.md)
 
 ---
 
-## Phase 0 — Containment & Firewall Activation (P0)
+## Status snapshot
 
-Goal: dashboard matches source; changeset protected; **firewall actually enforces**.
+| Phase | Plan status |
+|-------|-------------|
+| 0 Containment & firewall | ✅ Done |
+| 1 Gate / minIntervalMs | ✅ Done |
+| 2 Election cleanup | ✅ Done (wall-clock failover → Phase 4) |
+| 3 Full verification gates | ⏳ Remote full suite + manual NETWORK_SAFETY |
+| 4 Three-node mesh | ⏳ User Tailscale enrollment |
+| 5 Cline | ✅ Done |
+| 6 Dashboard mesh/webhooks | ✅ Done (alert rules deferred) |
+| 7 Hygiene & archive | ⏳ After 3+4 |
+| 8 Device entity variables | ⏳ **Next implementation** |
 
-1. Rebuild frontend: `cd frontend && npm run build` (8 stale sources: mesh/webhooks pages + clients + SecretsPage).
-2. Restart server; hard-refresh; verify Mesh, Webhooks, Secrets pages clean.
-3. Commit the recovery changeset as a local feature commit (not a release).
-4. **Activate the firewall**: SSSS `patch` `status: active` onto `memory-vault/system/network-policy.md`; restart/reload gate; verify `loadPolicy()` logs non-empty policy.
-5. Block a test domain via UI → confirm gated fetch actually rejects (end-to-end proof the gate reads policy).
+---
 
-**Done When:**
-- `grep -rc "election/force" frontend/dist/assets/ | grep -v ':0' | wc -l` → `0`
-- Console clean on Mesh/Webhooks/Secrets pages
-- `git status --short` → clean
-- `blocked_domains: ["example.com"]` → `throttledFetch('https://example.com')` rejects with "Domain blocked"
+## Phase 0 — Containment & Firewall Activation (P0) — DONE
 
-## Phase 1 — Gate Completion: minIntervalMs + Policy Parity (P1)
+Rebuild frontend; commit recovery; SSSS `status: active` on network policy; E2E block proof.
 
-Goal: every field the firewall UI exposes is actually enforced.
+## Phase 1 — Gate Completion (P1) — DONE
 
-1. `throttled-fetch.mjs`: parse `minIntervalMs` in `loadPolicy()` (new `domainMinInterval` map) + `domainLastStart` map.
-2. **Enforce on BOTH dispatch paths** (audit §3d): direct path (L337-340) and `drainQueue()` (L205-225) — shared `enforceMinInterval(domain)` helper that delays start and reserves the slot.
-3. Wire doc global knobs (§3b): `max_global_concurrency`, `max_per_domain_concurrency`, `default_timeout_ms`, `whitelist_mode` → make module config mutable, populated by `loadPolicy()`, falling back to current constants.
-4. Fix watcher (§3c): if policy file absent at boot, watch the parent `system/` dir and attach on create.
-5. Fix stats (§3f): increment `total_blocked` (new counter) on firewall rejects; expose in `getGateStats()`.
-6. Add `rate_wait_ms` to audit log + event payload.
-7. Verify `network_policy` registry schema passes `minIntervalMs` (no key stripping); add key to schema if stripped.
-8. Tests — complete all 10 tracker-0I cases + 3 new: minInterval honored on direct path, minInterval honored under contention, global knobs applied, watcher attaches post-create, blocked counter increments.
+minIntervalMs on both dispatch paths; global knobs; parent watcher; total_blocked; rate_wait_ms; schema; full throttled-fetch tests.
 
-**Done When:**
-- `npx vitest run src/core/throttled-fetch.spec.mjs` → all pass
-- `minIntervalMs: 2000` → two direct-path fetches spaced ≥2 s (`rate_wait_ms` in audit)
-- UI sliders change effective gate behavior (verified via `getGateStats()`)
+## Phase 2 — Election (P2) — DONE (code)
 
-## Phase 2 — Election Redesign Verification & Cleanup (P2; replaces obsolete CAS plan)
+Deterministic lowest-IP; FAILOVER_BOUND_MS=12s; hysteresis rejected; daemon-leader archived; tests expanded.
 
-Goal: prove the deterministic lowest-IP election correct; remove retired lease artifacts. (The July-16 TOCTOU/CAS concern is obsolete — no lease writes exist; audit §4.)
+## Phase 3 — Verification Gates (P1) — IN PROGRESS
 
-1. Measure failover latency: kill leader daemon, time until follower's `isLeader()` flips true (bounded by tailscale online-status freshness — document the bound).
-2. Hostname normalization: confirm `self.hostname` and peer `hostname` use the same form (no MagicDNS trailing-dot mismatch → no zero-leader state).
-3. Decide hysteresis: if online-bit flapping is plausible, add min-tenure (e.g., hold leadership 60 s before yielding); otherwise document rejection with reasoning.
-4. Cleanup vestigials: archive or annotate `memory-vault/system/daemon-leader.md`; sync HEADSCALE tracker Phase 2A/2B text to the deterministic design; remove stale lease-call comments in daemon-loop.
-5. Tests: `leader-election.spec.mjs` — lowest-IP winner, offline-leader exclusion, hostname normalization case.
+1. Full suite on Mac Mini / production (never heavy suite on laptop).
+2. TS 0 via sanctioned checkers (already green at pre-push).
+3. Lint 0 — fix `flat-cache` env if daemon still reports tooling error.
+4. NETWORK_SAFETY manual checklist (health gate stats, Network page, secrets.enc shape).
 
-**Done When:**
-- Failover latency measured and recorded in tracker Verification Log
-- `npx vitest run src/core/leader-election.spec.mjs` passes
-- No doc/tracker references lease acquisition as live behavior
+**Done When:** full suite + TS + lint green in Verification Log; manual checklist ticked.
 
-## Phase 3 — Verification Gates (P1)
+## Phase 4 — Three-Node Mesh Acceptance (P1) — BLOCKED ON USER
 
-Goal: release truth green (closes recovery tracker Phase 5-6).
+1. Approve Tailscale system extension on laptop.
+2. Three nodes online; bidirectional pings.
+3. Kill leader; measure failover vs FAILOVER_BOUND_MS; secrets sync on follower.
 
-1. Full local suite 100% via test skill entrypoint.
-2. Full Mac Mini suite 100%.
-3. TypeScript report zero via sanctioned code-quality checker (never raw tsc).
-4. Lint report zero via sanctioned code-quality checker.
-5. Skill recovery through full-suite gate.
-6. Side-effect sweep: remove/relocate `create-network-policy.mjs`, `test-firewall.mjs` after auditing effects (user preference invariant).
+**Done When:** 3 nodes, single leader, failover within acceptance bound, follower secrets sync.
 
-**Done When:** suite/TS/lint all green, evidence in tracker Verification Log; root strays gone.
+## Phase 5 — Cline (P2) — DONE
 
-## Phase 4 — Three-Node Mesh Acceptance (P1, manual dependency)
+connect / surface / integrations / import / protect / uninstall / specs.
 
-1. USER ACTION: approve Tailscale system extension on laptop.
-2. Enroll laptop; `tailscale status` shows 3 nodes; bidirectional pings.
-3. Kill leader → new leader within measured bound (Phase 2.1); secrets sync lands on follower.
+## Phase 6 — Dashboard (P3) — DONE (except deferred)
 
-**Done When:** 3 nodes online, single leader, failover < 5 min, follower receives secrets.
+MeshTopology, latency API, election log, webhook wizard stack.  
+**Deferred:** mesh alert-rule configuration UI.
 
-## Phase 5 — Cline Integration (P2)
+## Phase 7 — Hygiene & Archive (P2) — AFTER ACCEPTANCE
 
-1. `src/core/surface.mjs` CLIENT_SHIMS: `cline: ['.clinerules/total-recall.md']`.
-2. `src/cli/connect.mjs`: `cline` client (file mode, plain render, no frontmatter).
-3. `src/server/routes/integrations.mjs`: detection via `Code/User/globalStorage/saoudrizwan.claude-dev`.
-4. `src/core/import-rules.mjs`: `.clinerules/` dir + legacy `.clinerules` file.
-5. `src/core/protect-instructions.mjs` + `src/cli/uninstall.mjs`: both forms.
-6. Tests: `connect.spec.mjs` cline case; surface-compile projection test.
+Sync archived MESH_DASHBOARD_UI / NETWORK_SAFETY docs; PRD §3 final sweep; move folder to `completed/`.
 
-**Done When:** `npx total-recall connect cline` writes `.clinerules/total-recall.md`; specs pass; Integrations API lists `cline`.
+## Phase 8 — Device Entity Variables (P2) — NEXT CODE
 
-## Phase 6 — Tracker Hygiene & Final Verification (P2, mandatory final phase)
+**Principle:** Machines may have highly detailed entity spaces; those details are **variables of the device entity** (vault `mesh_node` + live discovery), never hardcoded fleet data in open-source product code.
 
-1. Check off verified-done items in `MESH_DASHBOARD_UI_DEVELOPMENT_PLAN.md` (audit §7).
-2. Fix `NETWORK_SAFETY_AND_SECRETS` summary table + Final Verification boxes.
-3. Update recovery tracker boxes closed by Phases 0-4.
-4. Deferred items (MeshTopology, latency matrix, webhook wizard, rAF perf) → `DEFERRED_BACKLOG.md`.
-5. Final sweep: PRD §3 success criteria all verified → move folder to `completed/`.
+1. Optional first-class schema fields on `MeshNodeSchema` (`role`, `labels`, `capabilities`, …); keep passthrough.
+2. `patchOwnMeshNode`: SSSS upsert of **self** from live Tailscale (no static hostname list).
+3. API/UI: merge live peers with vault mesh_node docs by IP/hostname for rich detail.
+4. Install docs: register devices as entities; do not fork product for machine names.
+5. Tests: neutral fixtures only; grep guard against personal hostnames in product paths.
 
-**Done When:** every checkbox here `[x]`; deferred items preserved.
+**Done When:** dashboard shows vault entity variables for a mesh_node without any device name appearing in `src/` or `frontend/src` product code (only in vault data and tests’ synthetic `node-*.mesh` fixtures).
 
-## SSSS Compliance Checkpoints
+---
 
-- Phase 0.4/1: policy mutations only via Core Contract `patch`; `status: active` set through SSSS, never by hand-editing the file; audit via `event` envelopes.
-- Phase 2.4: VFS doc cleanup via SSSS `patch`/`delete` envelopes.
-- Phase 5: surface projections are instruction files, not application state — allowed.
+## Next steps (execution order)
+
+### A — User / ops
+1. Tailscale laptop enrollment → 3 nodes.  
+2. Full suite on remote host; attach log to tracker.  
+3. Optional: fix ESLint `flat-cache` on laptop.
+
+### B — Next agent implementation
+1. Phase 8 device entity bind (highest value remaining product work).  
+2. Phase 7 archived-doc checkbox sync.  
+3. Phase 3 NETWORK_SAFETY manual checklist with running daemon.
+
+### C — Close project
+After A+B: Phase 4 kill-leader proof → Phase 7 archive to `completed/`.
+
+---
+
+## SSSS compliance
+
+- Policy mutations: Core Contract `patch` only.  
+- Gate audit: append-only `event` envelopes.  
+- mesh_node: vault documents + optional SSSS upsert from live self; never product hardcoding of instance names.  
+- Cline: surface projection files only.

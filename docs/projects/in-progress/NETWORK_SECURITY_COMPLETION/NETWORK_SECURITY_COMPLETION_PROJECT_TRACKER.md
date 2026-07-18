@@ -3,13 +3,14 @@ type: project_document
 title: "NETWORK_SECURITY_COMPLETION — Project Tracker"
 description: "Living task tracker for finishing headscale mesh, firewall, and rate-limiting work (revised after enhanced audit)"
 tags: ["project-management", "tracker", "network", "security", "rate-limiting"]
-timestamp: 2026-07-17T23:30:00-06:00
+timestamp: 2026-07-18T00:15:00-06:00
 ---
 
 # NETWORK_SECURITY_COMPLETION — Project Tracker
 
-> **Status**: In progress
-> **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SECURITY_COMPLETION_DEVELOPMENT_PLAN.md)
+> **Status**: In progress — **implementation largely complete**; remaining work is acceptance (full suite + 3-node mesh) and optional device-entity enrichment  
+> **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SECURITY_COMPLETION_DEVELOPMENT_PLAN.md)  
+> **Tip of tree (feature work)**: `6f67fba` (OSS device-name hygiene) ← `ca5d069` (Cline + mesh UI) ← `e678838` (election) ← `a48b53a` (gate/minInterval)
 
 > **Merged-From Provenance (2026-07-17):** This project is now the single active tracker for all outstanding network/security/rate-limiting work. The following projects were merged in and their folders archived to `docs/projects/archived/superseded-by-network-security-completion/`:
 > - `RECENT_SYSTEM_INTEGRATION_RECOVERY` → Phases 3-4 below (gates, enrollment, acceptance)
@@ -21,156 +22,161 @@ timestamp: 2026-07-17T23:30:00-06:00
 
 ---
 
-## ⏳ Phase 0: Containment & Firewall Activation (P0)
+## Scoreboard
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| 0 | Containment & firewall activation | ✅ Done |
+| 1 | Gate completion (minIntervalMs + policy parity) | ✅ Done |
+| 2 | Election redesign verification & cleanup | ✅ Done (code); wall-clock failover → Phase 4 |
+| 3 | Verification gates (full suite / TS / lint) | ⏳ Partial — targeted green; full suite on remote |
+| 4 | Three-node mesh acceptance | ⏳ Blocked on user Tailscale extension approval |
+| 5 | Cline integration | ✅ Done |
+| 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred) |
+| 7 | Tracker hygiene & archive | ⏳ Partial — waiting final acceptance |
+| 8 | Device entity variables (OSS vs vault) | ⏳ Next product step (schema + UI bind) |
+
+**Open-source rule (invariant):** Device detail is **variables on `mesh_node` (or device) entities** and live discovery — never hostnames / fleet maps / personal paths in product source. Fixtures use neutral `node-a.mesh` etc. Install vaults hold concrete instances (`memory-vault/system/mesh-nodes/*`).
+
+---
+
+## ✅ Phase 0: Containment & Firewall Activation (P0)
 
 Goal: dashboard matches source; changeset protected; firewall actually enforces.
 
 - [x] Audit: prove stale bundle — `election/force` in dist only; source clean
-- [x] Audit: prove firewall inert — `loadPolicy()` requires `status: active` (throttled-fetch.mjs:84); live `network-policy.md` has no `status` field
+- [x] Audit: prove firewall inert — `loadPolicy()` requires `status: active`; live policy had been activated
 - [x] Audit: prove dist drift spans 8 files (mesh/webhooks pages + clients + SecretsPage)
 - [x] Rebuild frontend (`cd frontend && npm run build`) (S)
 - [x] Restart server + hard-refresh; verify Mesh, Webhooks, Secrets pages: no 404, no `n.map` (S)
-- [x] Commit recovery changeset (~40 modified + untracked modules) (M)
-- [x] SSSS `patch` `status: active` onto `memory-vault/system/network-policy.md` (S)
+- [x] Commit recovery changeset (M)
+- [x] SSSS `patch` `status: active` onto `network-policy.md` (S)
 - [x] Reload gate; verify loadPolicy logs non-empty policy (S)
-- [x] E2E proof: block test domain via UI → gated fetch rejects "Domain blocked" (S)
-
+- [x] E2E proof: block test domain → gated fetch rejects "Domain blocked" (S)
 
 ## ✅ Phase 1: Gate Completion — minIntervalMs + Policy Parity (P1)
 
 Goal: every field the firewall UI exposes is actually enforced.
 
-- [x] Parse `minIntervalMs` in `loadPolicy()` → new `domainMinInterval` map (S)
-- [x] Add `domainLastStart` map (S)
-- [x] Shared `minIntervalRemaining(domain)` + `canDispatch` covering BOTH direct path and `drainQueue()` (+ `scheduleDrainRetry` for interval-only waits) (M)
-- [x] Wire doc global knobs: `max_global_concurrency`, `max_per_domain_concurrency`, `default_timeout_ms`, `whitelist_mode` → mutable config + `loadPolicy()` population (M)
-- [x] Fix watcher: watch parent `system/` dir when policy file absent at boot; attach on create (S)
-- [x] Add `total_blocked` counter on firewall rejects; expose in `getGateStats()` (S)
-- [x] Add `rate_wait_ms` to audit log + append-only SSSS event payload (S)
-- [x] Verify `network_policy` registry schema passes `minIntervalMs` (no key stripping); extend schema if stripped (S)
-- [x] Test: minInterval honored on direct path (real timers) (S)
-- [x] Test: minInterval honored under queue contention (S)
-- [x] Test: default-off (0/unset) behavior unchanged (S)
-- [x] Test: hot-reload picks up changed minIntervalMs (S)
-- [x] Test: global knobs applied from doc (S)
-- [x] Test: watcher attaches when policy created after boot (S)
-- [x] Test: blocked counter increments + appears in stats (S)
-- [x] Test: global concurrency cap at MAX_GLOBAL_CONCURRENCY (S)
-- [x] Test: per-domain maxConcurrency override respected (covers per-domain cap) (S)
-- [x] Test: queue drains when slots free (covered by concurrency + minInterval contention tests) (S)
-- [x] Test: timeout fires AbortController (S)
-- [x] Test: whitelist mode rejects non-whitelisted domains (S)
-- [x] Test: getGateStats() counts correct (S)
+- [x] Parse `minIntervalMs` → `domainMinInterval` + `domainLastStart` (S)
+- [x] Shared `minIntervalRemaining` / `canDispatch` on direct path + `drainQueue` + `scheduleDrainRetry` (M)
+- [x] Wire global knobs from policy doc (M)
+- [x] Parent-dir watcher for late policy create (S)
+- [x] `total_blocked` + `rate_wait_ms` (S)
+- [x] `NetworkPolicySchema` extends minIntervalMs + knobs (S)
+- [x] Full throttled-fetch spec suite (15 tests, multi-file stress green) (M)
 
 ## ✅ Phase 2: Election Redesign Verification & Cleanup (P2)
 
-Goal: prove deterministic lowest-IP election; remove retired lease artifacts. (CAS/TOCTOU plan obsolete — no lease writes exist.)
+Goal: prove deterministic lowest-IP election; remove retired lease artifacts.
 
-- [x] Measure failover latency: analytical bound recorded — mesh cache 2s + daemon tick 10s = **FAILOVER_BOUND_MS 12s** (wall-clock kill-leader still Phase 4 multi-node) (M)
-- [x] Verify hostname normalization: `normalizeHostname` strips MagicDNS trailing dots; `isLeader` is IP-primary (S)
-- [x] Hysteresis decision: **REJECTED** — prefer fast failover; rationale in `leader-election.mjs` header (S)
-- [x] Archive/annotate vestigial `memory-vault/system/daemon-leader.md` via SSSS (`status: archived`, deprecated flags) (S)
-- [x] Sync HEADSCALE tracker Phase 2A/2B text to deterministic design (S)
-- [x] Remove stale lease-call comments in daemon-loop (S)
-- [x] Test: lowest-IP winner, offline-leader exclusion, hostname normalization, IP-primary isLeader (M)
+- [x] Analytical failover bound **FAILOVER_BOUND_MS = 12_000** (cache 2s + tick 10s) (M)
+- [x] Hostname normalization + IP-primary `isLeader` (S)
+- [x] Hysteresis **REJECTED** (doc in `leader-election.mjs`) (S)
+- [x] Vestigial `daemon-leader.md` archived via SSSS (S)
+- [x] HEADSCALE tracker Phase 2A/2B annotated SUPERSEDED (S)
+- [x] daemon-loop lease comments cleaned (S)
+- [x] Expanded `leader-election.spec.mjs` (M)
+- [ ] Wall-clock kill-leader measurement — **Phase 4** (needs 3 nodes)
 
 ## ⏳ Phase 3: Verification Gates (P1)
 
-Goal: release truth green (closes recovery tracker Phase 5-6 + NETWORK_SAFETY final verification).
+Goal: release truth green.
 
-- [ ] Full local suite 100% via test skill entrypoint (L)
-- [ ] Full Mac Mini suite 100% (L)
-- [ ] TypeScript report zero via sanctioned code-quality checker (M)
-- [ ] Lint report zero via sanctioned code-quality checker (M)
+- [ ] Full suite 100% on **Mac Mini / remote** (not laptop — OOM rule) (L)
+- [x] TypeScript: sanctioned checker **0 errors** (pre-push gate; daemon report) (M)
+- [~] Lint: source clean; daemon `TOTAL_ERRORS:1` is pre-existing **`flat-cache` tooling** noise in ESLint runner — fix env separately (M)
 - [ ] Skill recovery through full-suite gate (S)
-- [x] Audit + remove/relocate root strays: `create-network-policy.mjs`, `test-firewall.mjs` (S)
-
-- [ ] NETWORK_SAFETY manual verification: daemon gate stats ≤6 concurrent via `/api/health`; research task keeps `lsof -i | wc -l` under 20; Network page live stats update; block via UI fails with clear error; `secrets.enc` not valid JSON; all API integrations work through the gate; top-bar indicator reflects gate health (M)
-- [x] Targeted secrets-store + network + leader-election specs pass (vitest file runs; vitest v4 has no `--grep`) (S)
-- [ ] No test/runtime side effects remain (S)
+- [x] Root strays removed: `create-network-policy.mjs`, `test-firewall.mjs` (S)
+- [ ] NETWORK_SAFETY manual verification checklist (M) — see Next Steps
+- [x] Targeted secrets-store + network + leader-election + throttled-fetch + mesh + connect specs green (S)
+- [ ] No test/runtime side effects remain after full suite (S)
 
 ## ⏳ Phase 4: Three-Node Mesh Acceptance (P1)
 
 Goal: headscale acceptance criteria satisfied.
 
-- [ ] USER ACTION: approve Tailscale system extension on laptop (manual)
-- [ ] Enroll laptop; `tailscale status` shows 3 nodes (S)
+- [ ] **USER ACTION:** approve Tailscale system extension on laptop (manual)
+- [ ] Enroll laptop; `tailscale status` shows **3** nodes (S)
 - [ ] Bidirectional pings across all 3 nodes (S)
-- [ ] Kill leader → new leader within measured bound; secrets sync lands on follower (M)
+- [ ] Kill leader → new leader within **≤ FAILOVER_BOUND_MS (12s)** ideal / ≤ 5 min acceptance; secrets sync on follower (M)
+
+Device identities in acceptance are **entity variables** on each install’s `mesh_node` docs + live Tailscale — not product constants.
 
 ## ✅ Phase 5: Cline Integration (P2)
 
-Goal: Cline first-class surface + integration.
+- [x] surface CLIENT_SHIMS `cline: ['.clinerules/total-recall.md']`
+- [x] `connect cline` file mode, plain render
+- [x] integrations detection (portable OS editor paths + public extension id)
+- [x] import-rules / protect / uninstall both directory + legacy file
+- [x] `connect.spec.mjs` cline cases
 
-- [x] `src/core/surface.mjs` CLIENT_SHIMS: `cline: ['.clinerules/total-recall.md']` (S)
-- [x] `src/cli/connect.mjs`: `cline` client entry (file mode, plain render) (S)
-- [x] `src/server/routes/integrations.mjs`: detection via `Code/User/globalStorage/saoudrizwan.claude-dev` (S)
-- [x] `src/core/import-rules.mjs`: `.clinerules/` dir + legacy `.clinerules` file entries (S)
-- [x] `src/core/protect-instructions.mjs`: guard both forms (S)
-- [x] `src/cli/uninstall.mjs`: cleanup lists cover both forms (S)
-- [x] Test: `connect.spec.mjs` cline case writes `.clinerules/total-recall.md` (S)
-- [x] Surface CLIENT_SHIMS includes cline path (compile writes when client connected) (S)
+## ✅ Phase 6: Dashboard Enhancements (P3)
 
-## ✅ Phase 6: Dashboard Enhancements (P3 — merged from MESH_DASHBOARD_UI)
-
-Goal: finish the remaining mesh/webhook UI work (promoted from deferred per user instruction 2026-07-17).
-
-- [x] MeshTopology component — SVG node graph visualization (L)
-- [x] Node detail cards (click node → hostname, IP, latency, role, OS) (M)
-- [x] Election history log section (session-local) (M)
-- [x] Latency table from this node to peers (M)
-- [x] Fix latency ping: `GET /api/mesh/latency` via throttled-fetch (no browser no-cors) (S)
-- [ ] Alert rule configuration for mesh events (node offline, leader change) (M) — deferred (needs notification product design)
-- [x] WebhooksPage.css — already decoupled (`WebhooksPage.css` own file) (S)
-- [x] Webhook provider configuration wizard + upgraded Add form (URL, masked secret, event types, enabled toggle) (L)
-- [x] Expandable JSON payload viewer in event log (M)
-- [x] Per-provider delivery stats (configured/active/events; totalCount on rows) (M)
-- [x] Secret rotation button (S)
-- [x] Dynamic provider filter dropdown from config data (S)
-- [x] Verify webhook VFS configs include secret field (has_secret / secret in API types) (S)
-- [x] Update MeshPage specs for topology (M)
-- [x] Polling backoff on Mesh page errors (5s → up to 30s); Network page already has interval picker (S)
+- [x] MeshTopology SVG + node detail + election log + latency via `GET /api/mesh/latency`
+- [x] MeshPage polling backoff
+- [x] Webhooks wizard / JSON viewer / rotation / filters (already present)
+- [ ] Alert rule configuration for mesh events — **deferred** (needs notifications product design)
+- [x] Specs: MeshPage topology; mesh latency route
+- [x] OSS hygiene: neutral test fixtures (`node-a.mesh`…); no personal hostnames in product UI copy (`6f67fba`)
 
 ## ⏳ Phase 7: Tracker Hygiene & Final Verification (P2)
 
-Goal: docs match source; project archivable (mandatory final testing phase).
-
-- [x] HEADSCALE Phase 2A/2B annotated superseded (Phase 2)
-- [ ] Check off verified-done items in archived `MESH_DASHBOARD_UI` docs (Audit §7) (S)
+- [x] HEADSCALE Phase 2A/2B superseded banner
+- [ ] Check off verified-done items in archived `MESH_DASHBOARD_UI` docs (S)
 - [ ] Fix archived `NETWORK_SAFETY_AND_SECRETS` summary table + Final Verification boxes (S)
-- [x] Confirm archived trackers carry the superseded-by pointer (folder name + HEADSCALE banner) (S)
-- [ ] Final sweep: all PRD §3 success criteria verified (M) — blocked on full suite (Mac Mini) + 3-node mesh (user Tailscale approval)
-- [ ] Move project folder to `completed/` per archival rule (S) — after final sweep
+- [x] Archived trackers under `superseded-by-network-security-completion/`
+- [ ] Final PRD §3 sweep (blocked on Phase 3 full suite + Phase 4 three-node)
+- [ ] Move project folder → `docs/projects/completed/` when Done-When met
+
+## ⏳ Phase 8: Device Entity Variables (P2 — next product work)
+
+Goal: machines have **rich entity spaces** as **variables on device entities**, never hardcoded fleet data in OSS.
+
+Invariant (saved): device detail = SSSS `mesh_node` (+ live discovery); product binds to variables only.
+
+- [ ] Extend `MeshNodeSchema` optional first-class fields: `role`, `labels[]`, `capabilities[]`, `notes` (passthrough already allows extras) (S)
+- [ ] Re-enable / fix `patchOwnMeshNode` to SSSS-upsert **self** mesh_node from live Tailscale (no fixed hostname list) (M)
+- [ ] Mesh API: merge live peers with vault `mesh_node` docs by IP/hostname for rich detail panel (M)
+- [ ] Mesh dashboard: prefer vault entity variables for display when present; live online/IP always from control plane (M)
+- [ ] Docs: install guide — “register devices as mesh_node entities; do not fork product for hostnames” (S)
+- [ ] Tests: neutral fixtures only; assert no personal hostname strings in `src/` / `frontend/src` product paths (S)
+
+---
+
+## Next Steps (ordered)
+
+### A. You (manual / ops) — unblocks acceptance
+
+1. **Tailscale system extension** on laptop → enroll so `tailscale status` shows 3 nodes.  
+2. On a **remote machine** (Mac Mini / production, not laptop): run full test suite per test skill; paste results into Verification Log.  
+3. Optional: fix local ESLint **`flat-cache`** dependency so lint daemon TOTAL_ERRORS is truly 0.
+
+### B. Agent session — remaining code/docs (no device hardcoding)
+
+1. **Phase 8** device entity bind (schema + `patchOwnMeshNode` + UI merge) — preferred next implementation.  
+2. **Phase 7** hygiene: archived MESH_DASHBOARD_UI / NETWORK_SAFETY checkbox sync.  
+3. **Phase 3** manual NETWORK_SAFETY checklist when daemon + UI available.  
+4. After A+B: Phase 4 kill-leader proof → Phase 7 final sweep → archive project to `completed/`.
+
+### C. Explicitly not next
+
+- Hardcoding hostnames, machine nicknames, or personal paths into OSS.  
+- Full vitest on laptop (OOM rule).  
+- Mesh alert-rules UI until notification product design exists.
 
 ---
 
 ## Verification Log
 
-- 2026-07-17: `grep -l "election/force" frontend/dist/assets/*.js` → `index-D40wCvHM.js` (Jul 16 03:38); source grep → 0 matches
-- 2026-07-17: `find frontend/src -newer dist/index-D40wCvHM.js` → 8 files (mesh.ts+spec, webhooks.ts, MeshPage.tsx+spec, WebhooksPage.tsx+spec, SecretsPage.tsx)
-- 2026-07-17: `throttled-fetch.mjs` full read (402 lines) — L84 requires `status: active`; live `network-policy.md` frontmatter has NO `status` field → firewall inert; L25-27 hardcode 6/3/15000 ignoring doc knobs; L75-76 watcher only attaches if file exists at boot; L337-340 direct path bypasses queue; L323-335 blocked requests increment no stats counter
-- 2026-07-17: `leader-election.mjs` full read (35 lines) — deterministic lowest-mesh-IP design; tryAcquire/renew/release are intentional no-op shims; TOCTOU concern obsolete
-- 2026-07-17: `infra/headscale` verified — 0.29.2, loopback-only ports, read-only container, `server_url: https://headscale.ultrachat.app`, healthcheck present
-- 2026-07-17: `grep -n "it(" src/core/throttled-fetch.spec.mjs` → 3 tests only
-- 2026-07-17: root strays found — `create-network-policy.mjs`, `test-firewall.mjs`
-- 2026-07-17: `PUT /api/network/policy` (network.mjs:68-76) passes body through `applyPatch` — minIntervalMs will round-trip; registry schema check still required
-- 2026-07-17: `ls .../globalStorage/saoudrizwan.claude-dev` → exists; docs.cline.bot fetched live — `.clinerules/` directory format; skills in `.cline/skills/` invocable as `/<name>`
-- 2026-07-17: recovery tracker evidence — focused suite 23 files/110 tests pass; SSSS 0.9.0 conformance green; Headscale 0.29.2 live, 2 nodes enrolled
-- 2026-07-18: Phase 0 completed. `npm install lodash-es d3-selection preact` fixed 3 missing transitive deps that blocked `vite build` (react-force-graph-3d/kapsule/float-tooltip); rebuilt `frontend/dist` (new hash `index-Dki2jzcc.js`); confirmed via `curl` + process check that server serves the fresh bundle and no 404s on Mesh/Webhooks/Secrets routes.
-- 2026-07-18: Discovered the live global-brain `network-policy.md` (`/Users/greg/.agent/skills/total-recall/memory-vault/system/network-policy.md`) already had `status: active` and 1 blocked domain (`example.com`) prior to this session — firewall was NOT actually inert at runtime; re-confirmed via SSSS `patch` envelope (idempotent) and a direct E2E `throttledFetch('https://example.com/')` call, which correctly threw `Fetch blocked: Domain blocked by firewall policy (example.com)`.
-- 2026-07-18: Committed the 91-file recovery changeset (`1f04804` on `main`) — verified `docs/projects/completed/{HEADSCALE_MESH_INTEGRATION,MESH_DASHBOARD_UI,NETWORK_SAFETY_AND_SECRETS,SECRETS_CONSOLIDATION}` were clean `git`-detected renames into `docs/projects/archived/superseded-by-network-security-completion/`, not data loss. `server.log` added to `.gitignore` and untracked.
-
-- 2026-07-18: code-quality daemons (`start-here-ts.mjs` / `start-here-lint.mjs`) report 0 TS errors / 0 lint issues (stable, 3-pass confirmed) prior to push.
-- 2026-07-18: Targeted test confirmation (not full suite, per test-skill laptop guidance) — `throttled-fetch.spec.mjs`, `network.spec.mjs`, `ssss.spec.mjs`, `config.spec.mjs`, `ssss-kernel-bridge.spec.mjs` (39 tests) + `mesh.spec.ts`, `MeshPage.spec.tsx`, `WebhooksPage.spec.tsx` (12 tests) — all 51 pass.
-- 2026-07-18: OpenRouter verified end-to-end — `OPENROUTER_API_KEY` in the secrets store validated live against `GET https://openrouter.ai/api/v1/auth/key` (HTTP 200, active paid key); rebound via `secret meta OPENROUTER_API_KEY --repo total-recall`; set as local `preferred_agent` in `brain.json`. Backend (`models.mjs`, `provider-catalog.mjs`, `usage-tracker.mjs`) and frontend (`SecretsPage.tsx`, `UsagePage.tsx`) OpenRouter plumbing already existed and required no code changes.
-- 2026-07-18: Recorded a global SSSS preference node (`memory-vault/preferences/preferences-8e65c833.md`, priority high, modality must_not) instructing future sessions to avoid Gemini/Google API calls until the user's outstanding $200 balance is resolved, without removing shared Gemini support code.
-- 2026-07-18: Pushed `1f04804`→`70c3687` to `origin/main` (pre-push quality gate passed: 0 TS errors, 0 lint issues, SSSS primitives match registered peer validator). Confirmed "push to all other machines" mechanism: `scripts/auto-pull.sh` runs as a cron job on each remote machine (Vast.ai VPS, Mac Mini) and self-pulls from `origin/main` on its own schedule — there is no push-fan-out from the laptop. No further action required; other machines will sync automatically on their next cron tick.
-- 2026-07-18: Post-push live verification — `curl http://127.0.0.1:3000/` → HTTP 200 serving `index-Dki2jzcc.js` (fresh bundle); `curl http://127.0.0.1:3000/health` → HTTP 200; confirmed `OPENROUTER_API_KEY` (repos=total-recall) present via `secret list`. Removed root-stray debug scripts `create-network-policy.mjs` and `test-firewall.mjs` (Phase 3 item) via `git rm`.
-
-- 2026-07-18: **Phase 1 complete.** Implemented `minIntervalMs` rate limiting (`domainMinInterval`/`domainLastStart`/`minIntervalRemaining`/`scheduleDrainRetry`), global knobs from `network-policy.md`, parent-dir watcher for late policy create, `total_blocked` + `rate_wait_ms` audit/event fields, and `NetworkPolicySchema` extension (`minIntervalMs` + optional global knobs). Test hardening: mock `ssss-kernel-bridge` (was writing real vault events), instant fetch mock, generation token on gate reset so orphan in-flight cannot corrupt counters, drain retry timer kept ref'd. `throttled-fetch.spec.mjs` expanded to 15 tests; 5× solo + 3× multi-file stress all green (49 tests with network/ssss-kernel-bridge/config).
-- 2026-07-18: Pushed Phase 1 as `a48b53a` → `origin/main` (pre-push quality gate passed: TS 0; lint report clean of source issues — daemon TOTAL_ERRORS:1 is pre-existing `flat-cache` module resolution noise in the ESLint runner, not a code finding).
-- 2026-07-18: **Phase 2 complete (code/docs).** `isLeader` IP-primary; `normalizeHostname` exported; hysteresis rejected (doc in module header); `FAILOVER_BOUND_MS=12000`; daemon-loop lease comments cleaned; `daemon-leader.md` SSSS-patched `status: archived`; HEADSCALE archived tracker Phase 2A/2B annotated SUPERSEDED. Tests: `leader-election.spec.mjs` 11 cases + mesh/throttled-fetch/network/secrets-store targeted green (26+). Wall-clock kill-leader still deferred to Phase 4 three-node acceptance.
-- 2026-07-18: **Phase 5 complete.** Cline client: connect → `.clinerules/total-recall.md` (plain md); surface CLIENT_SHIMS; integrations detection (`saoudrizwan.claude-dev`); import/protect/uninstall both directory + legacy file forms. `connect.spec.mjs` cline cases green.
-- 2026-07-18: **Phase 6 mostly complete.** `MeshTopology` SVG + node detail + election log + `GET /api/mesh/latency` (throttled-fetch); MeshPage error backoff; Webhooks wizard/JSON viewer/rotation already present. Deferred: mesh alert-rule config UI. Targeted tests: connect + mesh routes + MeshPage + leader-election = 33 pass.
-
-
+- 2026-07-17: `grep -l "election/force" frontend/dist/assets/*.js` → stale bundle; source clean
+- 2026-07-17: firewall inert analysis; headscale 0.29.2; recovery suite evidence
+- 2026-07-18: Phase 0 completed; frontend rebuild `index-Dki2jzcc.js`; recovery commit `1f04804`
+- 2026-07-18: firewall E2E block `example.com`; OpenRouter live; Gemini preference node
+- 2026-07-18: push mechanism = remote `auto-pull.sh` cron (no fan-out from laptop)
+- 2026-07-18: **Phase 1** complete + push `a48b53a` — minIntervalMs, knobs, watcher, 15 throttled-fetch tests
+- 2026-07-18: **Phase 2** complete + push `e678838` — IP-primary election, FAILOVER_BOUND_MS, daemon-leader archived
+- 2026-07-18: **Phase 5+6** complete + push `ca5d069` — Cline + MeshTopology/latency/election log
+- 2026-07-18: **OSS hygiene** `6f67fba` — neutral fixtures; portable Cline paths; generic wizard copy; production mesh remains live Tailscale only
+- 2026-07-18: **Device entity invariant** remembered — rich machine spaces are variables on `mesh_node` entities in the vault, not product literals
+- 2026-07-18: Tracker refreshed with scoreboard, Phase 8 (device entity variables), and ordered Next Steps A/B/C
