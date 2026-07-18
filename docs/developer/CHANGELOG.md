@@ -1,6 +1,11 @@
 # Changelog
 
 
+## [3.18.1] — 2026-07-18
+
+### 🚀 Features
+- **Package auto-update hook**: Daemon cron + boot + `total-recall update [--apply]` auto-installs `total-recall-brain@latest` into every project-registry / `TR_SYNC_REPOS` root that already depends on the package. Opt-out: `TR_AUTO_UPDATE_PACKAGE=0`. Source monorepos are skipped (git, not npm into self). APIs: `GET/POST /api/update/check|run` report multi-project status.
+
 ## [3.18.0] — 2026-07-18
 
 ### 🚀 Features
