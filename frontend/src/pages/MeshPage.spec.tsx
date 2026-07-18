@@ -27,25 +27,25 @@ describe('MeshPage', () => {
   });
 
   it('renders mesh nodes and leader', async () => {
-    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
+    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([
-      { hostname: 'macmini.mesh', ip: '1.2.3.4', online: true, self: true, os: 'macOS' },
-      { hostname: 'laptop.mesh', ip: '1.2.3.5', online: false, self: false, os: 'macOS' },
+      { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true, self: true, os: 'linux' },
+      { hostname: 'node-b.mesh', ip: '100.64.0.2', online: false, self: false, os: 'linux' },
     ]);
 
     render(<MeshPage />);
 
     await waitFor(() => {
-      expect(screen.getAllByText('macmini.mesh').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('laptop.mesh').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('node-a.mesh').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('node-b.mesh').length).toBeGreaterThan(0);
     });
     expect(screen.getByTestId('mesh-topology')).toBeInTheDocument();
   });
 
   it('refreshes deterministic election state', async () => {
-    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
+    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([]);
-    vi.mocked(refreshElection).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
+    vi.mocked(refreshElection).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
 
     render(<MeshPage />);
     
@@ -58,10 +58,10 @@ describe('MeshPage', () => {
   });
 
   it('renders Headscale Nodes tab and allows deletion', async () => {
-    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
+    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([]);
     vi.mocked(fetchHeadscaleNodes).mockResolvedValue([
-      { id: '1', name: 'node-one', user: 'testuser', ipAddresses: ['100.64.0.1'], online: true, createdAt: '2024-01-01', lastSeen: '2024-01-01T00:00:00Z' }
+      { id: '1', name: 'node-one', user: 'testuser', ipAddresses: ['100.64.0.10'], online: true, createdAt: '2024-01-01', lastSeen: '2024-01-01T00:00:00Z' }
     ]);
     vi.mocked(deleteHeadscaleNode).mockResolvedValue(undefined);
 
@@ -72,7 +72,7 @@ describe('MeshPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('node-one')).toBeInTheDocument();
-      expect(screen.getByText('100.64.0.1')).toBeInTheDocument();
+      expect(screen.getByText('100.64.0.10')).toBeInTheDocument();
     });
 
     const deleteBtn = screen.getByText('Delete');
@@ -82,7 +82,7 @@ describe('MeshPage', () => {
   });
 
   it('renders Pre-Auth Keys tab and supports key generation', async () => {
-    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
+    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([]);
     vi.mocked(fetchPreAuthKeys).mockResolvedValue([
       { id: 'key1', key: 'hspkey_xyz', user: 'default', reusable: true, expiration: '2099-12-31T23:59:59Z', createdAt: '2024-01-01', used: false }
@@ -111,7 +111,7 @@ describe('MeshPage', () => {
   });
 
   it('renders Users tab', async () => {
-    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'macmini.mesh', ip: '1.2.3.4' });
+    vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
     vi.mocked(fetchMeshNodes).mockResolvedValue([]);
     vi.mocked(fetchHeadscaleUsers).mockResolvedValue([
       { id: 'u1', name: 'alice', createdAt: '2024-01-01T00:00:00Z' }

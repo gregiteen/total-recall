@@ -18,39 +18,39 @@ vi.mock('./mesh.mjs', async (importOriginal) => {
   };
 });
 
+/** Neutral fixture names — not tied to any user's real hostnames. */
+const NODE_A = { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true };
+const NODE_B = { hostname: 'node-b.mesh', ip: '100.64.0.2', online: true };
+const NODE_C = { hostname: 'node-c.mesh', ip: '100.64.0.3', online: true };
+const NODE_OFFLINE = { hostname: 'node-offline.mesh', ip: '100.64.0.0', online: false };
+
 describe('deterministic leader election', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('selects the lowest online mesh IP', async () => {
-    vi.mocked(getMeshPeers).mockReturnValue([
-      { hostname: 'laptop.mesh', ip: '100.64.0.3', online: true },
-      { hostname: 'server.mesh', ip: '100.64.0.1', online: true },
-      { hostname: 'offline.mesh', ip: '100.64.0.0', online: false },
-    ]);
+    vi.mocked(getMeshPeers).mockReturnValue([NODE_C, NODE_A, NODE_OFFLINE]);
     expect(await getLeaderInfo()).toEqual({
-      hostname: 'server.mesh',
-      ip: '100.64.0.1',
+      hostname: NODE_A.hostname,
+      ip: NODE_A.ip,
       strategy: 'lowest-mesh-ip',
     });
   });
 
   it('excludes offline nodes even when they have the lowest IP', async () => {
     vi.mocked(getMeshPeers).mockReturnValue([
-      { hostname: 'was-leader.mesh', ip: '100.64.0.1', online: false },
-      { hostname: 'follower.mesh', ip: '100.64.0.2', online: true },
-      { hostname: 'other.mesh', ip: '100.64.0.5', online: true },
+      { ...NODE_A, online: false },
+      NODE_B,
+      { hostname: 'node-d.mesh', ip: '100.64.0.5', online: true },
     ]);
     expect(await getLeaderInfo()).toEqual({
-      hostname: 'follower.mesh',
-      ip: '100.64.0.2',
+      hostname: NODE_B.hostname,
+      ip: NODE_B.ip,
       strategy: 'lowest-mesh-ip',
     });
   });
 
   it('returns null when no online nodes exist', async () => {
-    vi.mocked(getMeshPeers).mockReturnValue([
-      { hostname: 'a.mesh', ip: '100.64.0.1', online: false },
-    ]);
+    vi.mocked(getMeshPeers).mockReturnValue([{ ...NODE_A, online: false }]);
     expect(await getLeaderInfo()).toBeNull();
   });
 
@@ -67,27 +67,24 @@ describe('deterministic leader election', () => {
   });
 
   it('reports leadership by IP (hostname form need not match exactly)', async () => {
-    // Self hostname may differ in form from the peer-list entry; IP is the key.
-    vi.mocked(getMeshSelf).mockReturnValue({ hostname: 'server', ip: '100.64.0.1' });
+    // Short local name vs MagicDNS FQDN — IP is the election key.
+    vi.mocked(getMeshSelf).mockReturnValue({ hostname: 'node-a', ip: NODE_A.ip });
     vi.mocked(getMeshPeers).mockReturnValue([
-      { hostname: 'server.tailnet.ts.net', ip: '100.64.0.1', online: true },
-      { hostname: 'laptop.mesh', ip: '100.64.0.3', online: true },
+      { hostname: 'node-a.example.ts.net', ip: NODE_A.ip, online: true },
+      NODE_C,
     ]);
     expect(await isLeader()).toBe(true);
   });
 
   it('is not leader when a lower online IP exists', async () => {
-    vi.mocked(getMeshSelf).mockReturnValue({ hostname: 'laptop.mesh', ip: '100.64.0.3' });
-    vi.mocked(getMeshPeers).mockReturnValue([
-      { hostname: 'server.mesh', ip: '100.64.0.1', online: true },
-      { hostname: 'laptop.mesh', ip: '100.64.0.3', online: true },
-    ]);
+    vi.mocked(getMeshSelf).mockReturnValue({ hostname: NODE_C.hostname, ip: NODE_C.ip });
+    vi.mocked(getMeshPeers).mockReturnValue([NODE_A, NODE_C]);
     expect(await isLeader()).toBe(false);
   });
 
   it('lease shims re-evaluate isLeader without writing state', async () => {
-    vi.mocked(getMeshSelf).mockReturnValue({ hostname: 'server.mesh', ip: '100.64.0.1' });
-    vi.mocked(getMeshPeers).mockReturnValue([{ hostname: 'server.mesh', ip: '100.64.0.1', online: true }]);
+    vi.mocked(getMeshSelf).mockReturnValue({ hostname: NODE_A.hostname, ip: NODE_A.ip });
+    vi.mocked(getMeshPeers).mockReturnValue([NODE_A]);
     expect(await tryAcquireLease()).toBe(true);
     expect(await renewLease()).toBe(true);
     expect(await releaseLease()).toBe(true);
@@ -100,7 +97,7 @@ describe('deterministic leader election', () => {
 
 describe('normalizeHostname (MagicDNS trailing-dot)', () => {
   it('strips a single trailing dot', () => {
-    expect(normalizeHostname('node.tailnet.ts.net.')).toBe('node.tailnet.ts.net');
+    expect(normalizeHostname('node.example.ts.net.')).toBe('node.example.ts.net');
   });
 
   it('leaves undotted names unchanged', () => {

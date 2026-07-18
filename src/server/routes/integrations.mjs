@@ -44,19 +44,47 @@ router.get('/api/integrations/active', requireAuth, (req, res) => {
       }
     }
 
-    // Fallback detection (filesystem probing) if configuredIdes is empty
+    // Fallback detection (filesystem probing) if configuredIdes is empty.
+    // Paths are OS-standard config locations + public extension IDs only —
+    // never hostnames, mesh names, or user-specific device identifiers.
     if (configuredIdes.length === 0) {
+      const editorDataRoots = [];
+      if (process.platform === 'darwin') {
+        const appSupport = path.join(HOME, 'Library', 'Application Support');
+        editorDataRoots.push(
+          path.join(appSupport, 'Code'),
+          path.join(appSupport, 'Code - Insiders'),
+          path.join(appSupport, 'VSCodium'),
+        );
+      } else if (process.platform === 'win32') {
+        const appData = process.env.APPDATA || path.join(HOME, 'AppData', 'Roaming');
+        editorDataRoots.push(
+          path.join(appData, 'Code'),
+          path.join(appData, 'Code - Insiders'),
+          path.join(appData, 'VSCodium'),
+        );
+      } else {
+        const xdg = process.env.XDG_CONFIG_HOME || path.join(HOME, '.config');
+        editorDataRoots.push(
+          path.join(xdg, 'Code'),
+          path.join(xdg, 'Code - Insiders'),
+          path.join(xdg, 'VSCodium'),
+        );
+      }
+
+      // Public VS Code Marketplace extension id for Cline (not a device/user name).
+      const CLINE_EXTENSION_ID = 'saoudrizwan.claude-dev';
+      const clineStoragePaths = editorDataRoots.map((root) =>
+        path.join(root, 'User', 'globalStorage', CLINE_EXTENSION_ID),
+      );
+
       const checks = {
         'claude-code': [path.join(HOME, '.claude', 'projects'), path.join(HOME, '.claude', 'CLAUDE.md')],
         'codex':       [path.join(HOME, '.codex', 'sessions'), path.join(HOME, '.codex', 'AGENTS.md')],
         'cursor':      [path.join(HOME, '.cursor', 'projects'), path.join(HOME, '.cursor')],
-        'cline': [
-          path.join(HOME, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev'),
-          path.join(HOME, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev'),
-          path.join(HOME, '.clinerules'),
-        ],
+        'cline':       [...clineStoragePaths, path.join(HOME, '.clinerules')],
         'antigravity': [path.join(HOME, '.gemini', 'antigravity')],
-        'vscode':      [path.join(HOME, 'Library', 'Application Support', 'Code'), path.join(HOME, '.vscode')],
+        'vscode':      [...editorDataRoots, path.join(HOME, '.vscode')],
         'gemini':      [path.join(HOME, '.gemini')],
         'pi':          [path.join(HOME, '.pi', 'agent')],
         'hermes':      [path.join(HOME, '.hermes')],
