@@ -36,11 +36,13 @@ describe('Sandbox Execution & Security Sanitization', () => {
     const duration = Date.now() - start;
     
     expect(result.success).toBe(false);
-    // process should be killed
-    expect(duration).toBeGreaterThanOrEqual(400); // roughly 500ms
+    expect(result.timedOut || result.signal === 'SIGKILL' || result.code !== 0).toBe(true);
+    // process should be killed near the timeout (allow platform scheduler slack)
+    expect(duration).toBeGreaterThanOrEqual(400);
+    expect(duration).toBeLessThan(4000);
     
     fs.unlinkSync(tmpPath);
-  });
+  }, 10_000);
 
   describe('validateCommand Shell Sanitizer', () => {
     it('allows safe shell commands', () => {

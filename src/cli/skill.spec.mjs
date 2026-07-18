@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseInstalls, parseFindOutput } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/find-skills.mjs';
-import { scanFile, runScan } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/scan-skill.mjs';
-import { installSkill, validateSkillSource, inferSkillName } from '../../.agent/skills/total-recall/modules/skill-deploy/scripts/install-skill.mjs';
+// Import from packaged scaffold (always in git) — .agent/skills is gitignored and missing on fresh clones.
+import { parseInstalls, parseFindOutput } from '../../scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/find-skills.mjs';
+import { scanFile, runScan } from '../../scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/scan-skill.mjs';
+import { installSkill, validateSkillSource, inferSkillName } from '../../scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/install-skill.mjs';
 import { resolveSkillScriptPath } from './skill.mjs';
 
 describe('Skill Manager', () => {

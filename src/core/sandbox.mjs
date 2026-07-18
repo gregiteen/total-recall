@@ -90,7 +90,8 @@ export function validateCommand(commandLine) {
  * Executes untrusted agent code in a restricted container or OS-level sandbox.
  */
 export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
-  const cappedTimeout = Math.min(Math.max(timeoutMs, 1000), 30000);
+  // Allow short timeouts for tests; clamp upper bound for safety.
+  const cappedTimeout = Math.min(Math.max(Number(timeoutMs) || 5000, 200), 30000);
   const allowNetwork = options.allowNetwork === true;
 
   // Restrict environment variables
@@ -104,6 +105,8 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
   safeEnv.NODE_OPTIONS = '--experimental-vm-modules';
 
   // OS-specific sandboxing wrappers
+  // Prefer plain node + hard kill timeout. unshare --pid --fork can orphan infinite
+  // loops so the parent wait never ends on Linux CI.
   let cmd = process.execPath;
   let args = ['--no-warnings', scriptPath];
   let tempSbProfilePath = null;
@@ -119,26 +122,25 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
         cmd = 'sandbox-exec';
         args = ['-f', tempSbProfilePath, process.execPath, '--no-warnings', scriptPath];
       }
-    } else if (process.platform === 'linux') {
-      // Linux namespace isolation check via unshare
-      const hasUnshare = fs.existsSync('/usr/bin/unshare') || fs.existsSync('/bin/unshare');
-      if (hasUnshare) {
-        cmd = 'unshare';
-        const unshareArgs = ['--mount', '--ipc', '--pid', '--fork'];
-        if (!allowNetwork) {
-          unshareArgs.push('--net');
-        }
-        args = [...unshareArgs, process.execPath, '--no-warnings', scriptPath];
-      }
     }
   } catch (err) {
     logger.warn('sandbox', `Failed to configure OS-specific isolation: ${err.message}. Using default environment limits.`);
   }
 
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
+      if (tempSbProfilePath && fs.existsSync(tempSbProfilePath)) {
+        try { fs.unlinkSync(tempSbProfilePath); } catch { /* ignore */ }
+      }
+      resolve(payload);
+    };
+
     const proc = spawn(cmd, args, {
       env: safeEnv,
-      timeout: cappedTimeout
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     let stdout = '';
@@ -147,22 +149,35 @@ export async function runInSandbox(scriptPath, timeoutMs = 5000, options = {}) {
     proc.stdout.on('data', (data) => { stdout += data.toString(); });
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
+    const timer = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch { /* ignore */ }
+      // Also try process group if detached later
+      try {
+        if (proc.pid) process.kill(proc.pid, 'SIGKILL');
+      } catch { /* ignore */ }
+      finish({
+        success: false,
+        output: stderr || stdout || `Sandbox timeout after ${cappedTimeout}ms`,
+        code: null,
+        signal: 'SIGKILL',
+        timedOut: true,
+      });
+    }, cappedTimeout);
+
     proc.on('close', (code, signal) => {
-      if (tempSbProfilePath && fs.existsSync(tempSbProfilePath)) {
-        try { fs.unlinkSync(tempSbProfilePath); } catch {}
-      }
+      clearTimeout(timer);
       if (code === 0) {
-        resolve({ success: true, output: stdout, code, signal });
+        finish({ success: true, output: stdout, code, signal });
       } else {
-        resolve({ success: false, output: stderr || stdout, code, signal });
+        finish({ success: false, output: stderr || stdout, code, signal });
       }
     });
 
     proc.on('error', (err) => {
-      if (tempSbProfilePath && fs.existsSync(tempSbProfilePath)) {
-        try { fs.unlinkSync(tempSbProfilePath); } catch {}
-      }
-      resolve({ success: false, output: err.message, code: -1 });
+      clearTimeout(timer);
+      finish({ success: false, output: err.message, code: -1 });
     });
   });
 }

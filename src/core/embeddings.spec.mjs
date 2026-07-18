@@ -1,6 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
+
+vi.mock('./throttled-fetch.mjs', () => ({
+  throttledFetch: vi.fn(async () => ({
+    ok: true,
+    json: async () => ({
+      embedding: { values: new Array(768).fill(0.1) },
+      data: [{ embedding: new Array(768).fill(0.1) }],
+      models: [{ name: 'models/gemini-embedding-2' }],
+    }),
+    text: async () => '',
+  })),
+}));
+
 import {
   getEmbedding,
   cosineSimilarity,
@@ -17,28 +30,18 @@ const tempDir = path.join(process.cwd(), '.agent/memory-derived-test');
 describe('embeddings module (sqlite-vss)', () => {
   beforeEach(() => {
     fs.mkdirSync(tempDir, { recursive: true });
-    // mock external api calls
-    vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
-      return {
-        ok: true,
-        json: async () => ({
-          embedding: { values: new Array(768).fill(0.1) },
-          data: [{ embedding: new Array(768).fill(0.1) }]
-        })
-      };
-    });
+    process.env.GOOGLE_API_KEY = 'test';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.GOOGLE_API_KEY;
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
   it('generates mock embeddings', async () => {
-    // Requires GOOGLE_API_KEY environment variable. Let's mock it.
-    process.env.GOOGLE_API_KEY = 'test';
     const vec = await getEmbedding('Hello world');
     expect(vec.length).toBe(768);
   });
@@ -49,7 +52,6 @@ describe('embeddings module (sqlite-vss)', () => {
       { slug: 'node2', title: 'Test 2', body: 'Content 2' },
     ];
     
-    process.env.GOOGLE_API_KEY = 'test';
     const res = await buildEmbeddingsIndex(nodes, tempDir, { force: true });
     expect(res.built).toBe(2);
 
