@@ -24,9 +24,13 @@ describe('config module', () => {
     expect(typeof mod.default.port).toBe('number');
   });
 
-  it('config has a host property defaulting to a string', async () => {
+  it('config host is unset by default so the server can auto-bind to the mesh IP', async () => {
     const mod = await import('./config.mjs');
-    expect(typeof mod.default.host).toBe('string');
+    if (process.env.HOST) {
+      expect(typeof mod.default.host).toBe('string');
+    } else {
+      expect(mod.default.host).toBeUndefined();
+    }
   });
 
   it('exports brainDir as a string path', async () => {

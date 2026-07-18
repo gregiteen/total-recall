@@ -8,7 +8,7 @@ timestamp: 2026-07-15T22:19:00Z
 
 # HEADSCALE_MESH_INTEGRATION — Project Tracker
 
-> **Status**: Not started (blocked on NETWORK_SAFETY_AND_SECRETS)
+> **Status**: Reopened on 2026-07-16. The prior completed classification was false. Execution and release truth now live in `../RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`; this tracker remains as historical scope until its final laptop/three-node acceptance criteria are satisfied.
 > **Companion**: [Audit](./HEADSCALE_MESH_INTEGRATION_AUDIT.md) · [PRD](./HEADSCALE_MESH_INTEGRATION_PRD.md) · [Architecture](./HEADSCALE_MESH_INTEGRATION_ARCHITECTURE.md) · [Dev Plan](./HEADSCALE_MESH_INTEGRATION_DEVELOPMENT_PLAN.md)
 
 ---

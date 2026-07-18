@@ -1,7 +1,19 @@
 # Changelog
 
 
-## [3.16.0] — 2026-07-15
+## [3.18.0] — 2026-07-17
+
+### 🚀 Features
+- **Mesh Auto-Bind**: The brain server now automatically binds to its WireGuard mesh IP (plus a loopback listener) when enrolled in the Headscale mesh — `HOST` no longer defaults to `127.0.0.1`, and `resolveServerHost` picks the mesh address when no explicit host is configured (`src/core/network-bind.mjs`).
+- **Mesh Auth & VFS Documents**: New `mesh-auth` node-to-node authentication primitives and the `vfs-documents` SSSS document service, with full spec coverage.
+- **Mesh/Webhooks/Secrets UI**: Updated Mesh, Webhooks, and Secrets dashboard pages and APIs; leader-election, skills-registry, and webhook-handler refinements.
+
+### 🐛 Bug Fixes
+- **Site-wide 401 (auth catch-22)**: `routes/headscale.mjs` used a bare `router.use(requireAuth)` on a root-mounted router, gating every path — including the login page and static assets — behind auth. Scoped it to `/api/headscale`.
+- **Mesh HTTPS exemption**: `requireHttps` now exempts requests whose socket address is a mesh (CGNAT `100.64/10` or Tailscale ULA) IP — WireGuard already encrypts mesh traffic end-to-end. Socket address only; forwarded headers are never trusted for this exemption.
+- **Damaged lockfile**: Regenerated `package-lock.json` from scratch — the previous lockfile was flagged "invalid or damaged" by npm and produced broken installs (missing `estraverse` hoisting).
+
+
 
 ### 🚀 Features
 - **Headscale Mesh Integration**: Added a new UI and backend primitive to securely provision Total Recall instances into a Headscale WireGuard mesh network.

@@ -1,5 +1,7 @@
 # Secrets Consolidation Project Tracker
 
+> **Status:** Reopened on 2026-07-16 for security remediation. The earlier UI consolidation was implemented, but encrypted-at-rest enforcement, authenticated mesh sync, and release verification are governed by `../RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`.
+
 ## Project Progress Checklist
 
 ### Phase 1: Reorganize and Unify Page as SecretsPage.tsx

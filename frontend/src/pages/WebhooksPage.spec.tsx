@@ -31,7 +31,7 @@ describe('WebhooksPage', () => {
 
   it('renders webhook configs, stats, and events', async () => {
     vi.mocked(fetchWebhookConfigs).mockResolvedValue([
-      { provider: 'github', status: 'active', secret: 'abc', lastReceived: '2024-01-01T00:00:00Z', totalCount: 5 },
+      { provider: 'github', status: 'active', has_secret: true, lastReceived: '2024-01-01T00:00:00Z', totalCount: 5 },
     ]);
     vi.mocked(fetchWebhookEvents).mockResolvedValue([
       { id: '1', provider: 'github', event_type: 'push', received_at: '2024-01-01T00:00:00Z', payload: { commit: '123' } },
@@ -83,8 +83,9 @@ describe('WebhooksPage', () => {
       expect(screen.getByText('Provider Configuration Wizard')).toBeInTheDocument();
     });
     
-    const providerInput = screen.getByPlaceholderText('e.g. github, stripe, npm');
-    await userEvent.type(providerInput, 'stripe');
+    const providerInput = screen.getAllByRole('combobox').find((element) => element.querySelector('option[value="stripe"]'));
+    expect(providerInput).toBeDefined();
+    await userEvent.selectOptions(providerInput!, 'stripe');
     
     const nextBtn1 = screen.getByText('Next');
     await userEvent.click(nextBtn1);

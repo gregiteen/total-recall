@@ -3,9 +3,9 @@ import { get, post } from './_base';
 export interface MeshNode {
   hostname: string;
   ip: string;
-  status: 'online' | 'offline';
-  role: 'leader' | 'follower';
-  lastHeartbeat: string;
+  online: boolean;
+  self: boolean;
+  os: string | null;
 }
 
 export interface LeaderInfo {
@@ -14,13 +14,18 @@ export interface LeaderInfo {
 }
 
 export async function fetchLeader(): Promise<LeaderInfo> {
-  return get('/api/mesh/leader');
+  const data = await get<{ leader: LeaderInfo | null }>('/api/mesh/leader');
+  if (!data.leader) throw new Error('No online mesh leader is available');
+  return data.leader;
 }
 
 export async function fetchNodes(): Promise<MeshNode[]> {
-  return get('/api/mesh/nodes');
+  const data = await get<{ nodes: MeshNode[] }>('/api/mesh/nodes');
+  return data.nodes;
 }
 
-export async function forceReElection(): Promise<void> {
-  return post('/api/mesh/election/force', {});
+export async function refreshElection(): Promise<LeaderInfo> {
+  const data = await post<{ leader: LeaderInfo | null }>('/api/mesh/election/refresh', {});
+  if (!data.leader) throw new Error('No online mesh leader is available');
+  return data.leader;
 }

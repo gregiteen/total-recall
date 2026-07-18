@@ -1,8 +1,7 @@
 /**
  * Secrets store — portable keys separate from the SSSS memory vault.
  *
- * Default format: JSON object at <brain>/config/secrets.enc with mode 0o600
- * (compatible with existing config loader). Optional AES-GCM via TR_SECRETS_PASSWORD.
+ * Format: AES-256-GCM ciphertext at <brain>/config/secrets.enc with mode 0o600.
  *
  * Never write secret values into vault markdown, openwiki, or compiled surfaces.
  */
@@ -73,12 +72,9 @@ export function saveSecretsSync(brainDir, obj) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   
   const password = secretsPassword();
-  if (password) {
-    const buf = encryptSecretsSync(obj, password);
-    fs.writeFileSync(filePath, buf, { mode: 0o600 });
-  } else {
-    fs.writeFileSync(filePath, JSON.stringify(obj, null, 2), { encoding: 'utf8', mode: 0o600 });
-  }
+  if (!password) throw new Error('TR_SECRETS_PASSWORD or TR_MASTER_PASSWORD is required to write secrets');
+  const buf = encryptSecretsSync(obj, password);
+  fs.writeFileSync(filePath, buf, { mode: 0o600 });
 }
 
 /**
@@ -128,15 +124,43 @@ export async function saveSecrets(brainDir, secrets) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const password = secretsPassword();
 
-  if (password) {
-    const buf = await encryptSecrets(secrets, password);
-    fs.writeFileSync(filePath, buf, { mode: 0o600 });
-  } else {
-    fs.writeFileSync(filePath, JSON.stringify(secrets, null, 2) + '\n', {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
+  if (!password) throw new Error('TR_SECRETS_PASSWORD or TR_MASTER_PASSWORD is required to write secrets');
+  const buf = await encryptSecrets(secrets, password);
+  fs.writeFileSync(filePath, buf, { mode: 0o600 });
+}
+
+export async function validateSecretsBuffer(buffer) {
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  const password = secretsPassword();
+  if (password && buf.length > 44 && buf[0] !== 0x7b) {
+    const parsed = await decryptSecrets(buf, password);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Decrypted secrets payload must be an object');
+    }
+    return true;
   }
+  const parsed = JSON.parse(buf.toString('utf8') || '{}');
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Secrets payload must be a JSON object');
+  }
+  return true;
+}
+
+/** Validate then atomically replace the encrypted secrets store. */
+export async function replaceSecretsBufferAtomic(brainDir, buffer) {
+  await validateSecretsBuffer(buffer);
+  const filePath = resolveSecretsPath(brainDir);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, buffer, { mode: 0o600 });
+    fs.renameSync(tempPath, filePath);
+    fs.chmodSync(filePath, 0o600);
+  } finally {
+    if (fs.existsSync(tempPath)) fs.rmSync(tempPath, { force: true });
+  }
+  appendAudit(brainDir, { action: 'mesh_sync_replace', key: '(encrypted-store)', actor: 'mesh-sync' });
+  return { success: true, path: filePath };
 }
 
 function ensureMeta(secrets) {
@@ -421,6 +445,7 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     monthly_cost_usd: opts.monthly_cost_usd !== undefined ? opts.monthly_cost_usd : prev.monthly_cost_usd,
     monthly_cap_usd: opts.monthly_cap_usd !== undefined ? opts.monthly_cap_usd : prev.monthly_cap_usd,
     api_docs_url: opts.api_docs_url !== undefined ? opts.api_docs_url : prev.api_docs_url,
+    headscale_url: opts.headscale_url !== undefined ? opts.headscale_url : prev.headscale_url,
     rotate_every_days: opts.rotate_every_days !== undefined ? opts.rotate_every_days : prev.rotate_every_days,
     auto_rotate: opts.auto_rotate !== undefined ? opts.auto_rotate : prev.auto_rotate,
     notes: opts.notes !== undefined ? opts.notes : prev.notes,

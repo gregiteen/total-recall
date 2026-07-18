@@ -12,6 +12,7 @@ import {
   recordUsage,
   summarizeUsage,
   resolveSecretsPath,
+  replaceSecretsBufferAtomic,
 } from './secrets-store.mjs';
 
 function tmpBrain() {
@@ -35,7 +36,7 @@ describe('secrets-store', () => {
 
   beforeEach(() => {
     brain = tmpBrain();
-    delete process.env.TR_SECRETS_PASSWORD;
+    process.env.TR_SECRETS_PASSWORD = 'test-only-password-for-aes-gcm';
   });
 
   afterEach(() => {
@@ -98,7 +99,7 @@ describe('secrets-store', () => {
 
   it('flags legacy multi-repo data as error', async () => {
     await setSecret(brain, 'LEGACY_KEY', 'value-long-enough-yy');
-    // Bypass write validation by patching store file directly
+    // Bypass metadata validation through the store API to simulate legacy data.
     const { loadSecrets, saveSecrets, resolveSecretsPath } = await import('./secrets-store.mjs');
     const secrets = await loadSecrets(brain);
     secrets.__tr_secrets_meta.keys.LEGACY_KEY.repos = ['alpha', 'beta'];
@@ -124,18 +125,29 @@ describe('secrets-store', () => {
     expect(sum.input_tokens).toBe(100);
   });
 
-  it('writes secrets file with restricted mode intent', async () => {
+  it('always writes AES ciphertext with restricted permissions', async () => {
     await setSecret(brain, 'k', 'value-long-enough');
     const p = resolveSecretsPath(brain);
     expect(fs.existsSync(p)).toBe(true);
-    const raw = fs.readFileSync(p, 'utf8');
-    expect(raw).toContain('k');
-    // value is in file (that's the store) but mode should be 0o600 when supported
+    const raw = fs.readFileSync(p);
+    expect(raw[0]).not.toBe('{'.charCodeAt(0));
+    expect(raw.toString('utf8')).not.toContain('value-long-enough');
     try {
       const mode = fs.statSync(p).mode & 0o777;
       expect(mode).toBe(0o600);
     } catch {
       // some FS ignore mode
     }
+  });
+
+  it('validates before atomically replacing the encrypted store', async () => {
+    const source = tmpBrain();
+    await setSecret(source, 'SYNCED_KEY', 'synced-secret-value');
+    const encrypted = fs.readFileSync(resolveSecretsPath(source));
+    await replaceSecretsBufferAtomic(brain, encrypted);
+    expect((await getSecret(brain, 'SYNCED_KEY')).value).toBe('synced-secret-value');
+    await expect(replaceSecretsBufferAtomic(brain, Buffer.from('not-valid'))).rejects.toThrow();
+    expect((await getSecret(brain, 'SYNCED_KEY')).value).toBe('synced-secret-value');
+    fs.rmSync(source, { recursive: true, force: true });
   });
 });

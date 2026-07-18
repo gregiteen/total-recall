@@ -105,7 +105,7 @@ describe('exportEnvToProject', () => {
   beforeEach(() => {
     brain = tmpDir('tr-export-brain-');
     project = tmpDir('tr-export-proj-');
-    delete process.env.TR_SECRETS_PASSWORD;
+    process.env.TR_SECRETS_PASSWORD = 'test-only-password-for-aes-gcm';
   });
 
   afterEach(() => {

@@ -44,7 +44,7 @@ export default function start(args) {
     return;
   }
 
-  console.log(`  ⚡ Starting Total Recall brain server on ${host}:${port}`);
+  console.log(`  ⚡ Starting Total Recall brain server on ${host || 'auto (mesh IP or 127.0.0.1)'}:${port}`);
   console.log(`  Press Ctrl+C to stop.\n`);
 
   const result = spawnSync(process.execPath, [SERVER], {

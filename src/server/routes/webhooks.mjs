@@ -1,265 +1,309 @@
 import { Router } from 'express';
-import crypto from 'crypto';
-import { ssssOperationHandler } from './ssss.mjs';
-import { getNodes } from '../../core/vault-cache.mjs';
+import crypto from 'node:crypto';
+import { requireAuth, requireScope } from '../auth.mjs';
+import { BRAIN_DIR } from './_shared.mjs';
+import { getSecret, setSecret } from '../../core/secrets-store.mjs';
+import { findVfsDocumentByPath, listVfsDocumentsUnder } from '../../core/vfs-documents.mjs';
+import {
+  appendVfsEvent,
+  deleteVfsDocument,
+  listVfsEvents,
+  patchVfsDocument,
+  writeVfsDocument,
+} from '../../core/ssss-operation-service.mjs';
+import { handleWebhook } from '../../core/webhook-handlers.mjs';
+import { logger } from '../../core/logger.mjs';
 
 const router = Router();
+const PROVIDERS = new Set(['github', 'stripe', 'npm']);
+const CONFIGURABLE_PROVIDERS = new Set(['github', 'stripe']);
+const STRIPE_TOLERANCE_SECONDS = 300;
+const SENSITIVE_KEY = /(authorization|cookie|credential|password|secret|signature|token)/i;
 
-// --- Configuration Management ---
-
-router.get('/configs', async (req, res) => {
-  try {
-    const nodes = await getNodes();
-    const configs = nodes
-      .filter(n => n.frontmatter?.type === 'webhook_config')
-      .map(n => ({
-        provider: n.frontmatter.provider,
-        status: n.frontmatter.status || 'inactive',
-        secret: n.frontmatter.secret, // Provide secret (masked in UI, but needed for rotate validation check)
-        events: n.frontmatter.events || [],
-        endpoint_url: `/api/webhooks/${n.frontmatter.provider}`
-      }));
-    res.json(configs);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/configs', async (req, res) => {
-  try {
-    const config = req.body;
-    if (!config.provider) return res.status(400).json({ error: 'provider is required' });
-
-    const mockReq = {
-      body: {
-        op: 'memory',
-        category: 'system',
-        content: `Webhook Configuration for ${config.provider}`,
-        slug: `webhook-configs-${config.provider}`,
-        metadata: {
-          type: 'webhook_config',
-          provider: config.provider,
-          status: config.status || 'active',
-          secret: config.secret || '',
-          events: config.events || []
-        }
-      },
-      user: req.user || { username: 'daemon-webhook' }
-    };
-
-    const mockRes = {
-      json: (data) => res.json(data),
-      status: (code) => ({
-        json: (data) => res.status(code).json(data)
-      })
-    };
-
-    await ssssOperationHandler(mockReq, mockRes);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.delete('/configs/:provider', async (req, res) => {
-  try {
-    const mockReq = {
-      body: {
-        op: 'forget',
-        slug: `webhook-configs-${req.params.provider}`
-      },
-      user: req.user || { username: 'daemon-webhook' }
-    };
-    
-    const mockRes = {
-      json: (data) => res.json(data),
-      status: (code) => ({
-        json: (data) => res.status(code).json(data)
-      })
-    };
-
-    await ssssOperationHandler(mockReq, mockRes);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --- Event Log Management ---
-
-router.get('/events', async (req, res) => {
-  try {
-    const nodes = await getNodes();
-    let events = nodes
-      .filter(n => n.frontmatter?.type === 'webhook_event')
-      .map(n => ({
-        id: n.slug,
-        provider: n.frontmatter.provider,
-        event_type: n.frontmatter.event_type,
-        received_at: n.frontmatter.received_at,
-        payload: n.frontmatter.payload
-      }));
-      
-    if (req.query.provider) {
-      events = events.filter(e => e.provider === req.query.provider);
-    }
-    
-    events.sort((a, b) => new Date(b.received_at).getTime() - new Date(a.received_at).getTime());
-    res.json(events.slice(0, 50));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/test/:provider', async (req, res) => {
-  try {
-    await emitSsssEvent(req.params.provider, 'test_ping', { message: 'Test webhook payload' });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Mock function to retrieve secrets (in reality we would read from secrets.enc VFS or env)
-async function getWebhookSecret(provider) {
-  // Try to load from webhook VFS config docs
-  try {
-    const { getNodes } = await import('../../core/vault-cache.mjs');
-    const nodes = await getNodes();
-    const config = nodes.find(n => n.frontmatter?.type === 'webhook_config' && n.frontmatter?.provider === provider);
-    if (config?.frontmatter?.secret) {
-      return config.frontmatter.secret;
-    }
-  } catch (err) {
-    // ignore
-  }
-  return process.env[`${provider.toUpperCase()}_WEBHOOK_SECRET`];
+function providerName(value) {
+  const provider = String(value || '').trim().toLowerCase();
+  if (!PROVIDERS.has(provider)) throw new Error('Unsupported webhook provider');
+  return provider;
 }
 
-async function emitSsssEvent(provider, eventType, payload) {
-  return new Promise((resolve, reject) => {
-    const mockReq = {
-      body: {
-        op: 'memory',
-        category: 'webhook',
-        content: `Webhook event ${provider}.${eventType}`,
-        slug: `webhook-event-${provider}-${Date.now()}`,
-        metadata: {
-          type: 'webhook_event',
-          provider: provider,
-          event_type: eventType,
-          received_at: new Date().toISOString(),
-          payload: payload
-        }
-      },
-      user: { username: 'daemon-webhook' }
-    };
-    const mockRes = {
-      json: (data) => resolve(data),
-      status: (code) => ({
-        json: (data) => reject(new Error(data.error || 'Unknown error'))
-      })
-    };
-    ssssOperationHandler(mockReq, mockRes).catch(reject);
-  });
+function configPath(provider) {
+  return `system/webhook-configs/${provider}.md`;
+}
+
+function secretRef(provider) {
+  return `${provider.toUpperCase()}_WEBHOOK_SECRET`;
+}
+
+async function getWebhookSecret(provider) {
+  const ref = secretRef(provider);
+  const stored = await getSecret(BRAIN_DIR, ref, { action: 'use', actor: 'webhook-ingress' });
+  return stored.found && stored.value ? stored.value : process.env[ref] || null;
+}
+
+function publicConfig(doc) {
+  const fm = doc.frontmatter;
+  return {
+    provider: fm.provider,
+    status: fm.status || 'inactive',
+    secret_ref: fm.secret_ref,
+    events: fm.events || [],
+    endpoint_url: `/api/webhooks/${fm.provider}`,
+  };
+}
+
+function redactPayload(value, depth = 0) {
+  if (depth > 12) return '[depth-limit]';
+  if (Array.isArray(value)) return value.slice(0, 500).map((item) => redactPayload(item, depth + 1));
+  if (!value || typeof value !== 'object') return value;
+  const redacted = {};
+  for (const [key, item] of Object.entries(value).slice(0, 500)) {
+    redacted[key] = SENSITIVE_KEY.test(key) ? '[redacted]' : redactPayload(item, depth + 1);
+  }
+  return redacted;
+}
+
+function getConfig(provider) {
+  return findVfsDocumentByPath(configPath(provider));
+}
+
+router.get(
+  '/api/webhooks/configs',
+  requireAuth,
+  requireScope('config:read'),
+  async (_req, res) => {
+    try {
+      const configs = listVfsDocumentsUnder('system/webhook-configs')
+        .filter((doc) => doc.type === 'webhook_config')
+        .map(publicConfig);
+      res.json(await Promise.all(configs.map(async (config) => ({
+        ...config,
+        has_secret: !!(await getWebhookSecret(config.provider)),
+      }))));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+router.post(
+  '/api/webhooks/configs',
+  requireAuth,
+  requireScope('config:write'),
+  async (req, res) => {
+    try {
+      const provider = providerName(req.body?.provider);
+      if (!CONFIGURABLE_PROVIDERS.has(provider)) {
+        return res.status(422).json({ error: 'npm webhook ingress is disabled because no official signing contract is configured' });
+      }
+      const ref = secretRef(provider);
+      if (req.body?.secret) {
+        await setSecret(BRAIN_DIR, ref, req.body.secret, {
+          provider,
+          scope: 'global',
+          actor: 'webhook-config',
+          notes: `Signing secret for ${provider} webhook ingress`,
+        });
+      } else if (!(await getWebhookSecret(provider))) {
+        return res.status(400).json({ error: 'A signing secret is required' });
+      }
+
+      const events = Array.isArray(req.body?.events)
+        ? req.body.events.filter((event) => typeof event === 'string').slice(0, 50)
+        : [];
+      const existing = getConfig(provider);
+      const timestamp = new Date().toISOString();
+      if (existing) {
+        await patchVfsDocument(configPath(provider), {
+          status: req.body?.status === 'inactive' ? 'inactive' : 'active',
+          secret_ref: ref,
+          events,
+          timestamp,
+        }, { actorRole: 'admin', intent: `Update ${provider} webhook configuration` });
+      } else {
+        await writeVfsDocument(configPath(provider), {
+          type: 'webhook_config',
+          title: `${provider} Webhook Configuration`,
+          description: `Signed ${provider} webhook ingress configuration`,
+          timestamp,
+          provider,
+          status: req.body?.status === 'inactive' ? 'inactive' : 'active',
+          secret_ref: ref,
+          events,
+        }, 'The secret value is stored only in the encrypted Total Recall secrets store.', {
+          actorRole: 'admin',
+          intent: `Create ${provider} webhook configuration`,
+        });
+      }
+      res.status(existing ? 200 : 201).json({
+        provider,
+        status: req.body?.status === 'inactive' ? 'inactive' : 'active',
+        has_secret: true,
+        events,
+        endpoint_url: `/api/webhooks/${provider}`,
+      });
+    } catch (err) {
+      const status = /Unsupported|signing secret|required/.test(err.message) ? 400 : 500;
+      res.status(status).json({ error: err.message });
+    }
+  },
+);
+
+router.delete(
+  '/api/webhooks/configs/:provider',
+  requireAuth,
+  requireScope('config:write'),
+  async (req, res) => {
+    try {
+      const provider = providerName(req.params.provider);
+      const existing = getConfig(provider);
+      if (!existing) return res.status(404).json({ error: 'Webhook configuration not found' });
+      await deleteVfsDocument(configPath(provider), {
+        actorRole: 'admin',
+        intent: `Delete ${provider} webhook configuration`,
+      });
+      res.json({ success: true, provider });
+    } catch (err) {
+      res.status(/Unsupported/.test(err.message) ? 400 : 500).json({ error: err.message });
+    }
+  },
+);
+
+router.get(
+  '/api/webhooks/events',
+  requireAuth,
+  requireScope('config:read'),
+  async (req, res) => {
+    try {
+      let events = (await listVfsEvents())
+        .filter((event) => event.payload?.kind === 'webhook_event')
+        .map((event) => ({ id: event.event_id, ...event.payload }));
+      if (req.query.provider) events = events.filter((event) => event.provider === req.query.provider);
+      events.sort((a, b) => new Date(b.received_at) - new Date(a.received_at));
+      res.json(events.slice(0, 50));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+router.post(
+  '/api/webhooks/test/:provider',
+  requireAuth,
+  requireScope('config:write'),
+  async (req, res) => {
+    try {
+      const provider = providerName(req.params.provider);
+      await appendVfsEvent(`webhooks/${provider}/test`, {
+        kind: 'webhook_event',
+        provider,
+        event_type: 'test_ping',
+        received_at: new Date().toISOString(),
+        payload: { message: 'Test webhook payload' },
+        delivery_status: 'test',
+      }, { actorRole: 'system', intent: 'Record dashboard webhook test' });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+function timingSafeTextEqual(actual, expected) {
+  if (typeof actual !== 'string' || typeof expected !== 'string') return false;
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
 }
 
 function verifyGithubSignature(secret, payload, signature) {
-  if (!signature) return false;
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(payload);
-  const expectedSignature = `sha256=${hmac.digest('hex')}`;
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expectedSignature);
-  if (sigBuf.length !== expBuf.length) return false;
-  return crypto.timingSafeEqual(sigBuf, expBuf);
+  const expected = `sha256=${crypto.createHmac('sha256', secret).update(payload).digest('hex')}`;
+  return timingSafeTextEqual(signature, expected);
 }
 
-function verifyStripeSignature(secret, payload, signatureHeader) {
+function verifyStripeSignature(secret, payload, signatureHeader, nowSeconds = Math.floor(Date.now() / 1000)) {
   if (!signatureHeader) return false;
-  const parts = signatureHeader.split(',').reduce((acc, part) => {
-    const [k, v] = part.split('=');
-    acc[k] = v;
-    return acc;
-  }, {});
-  
-  if (!parts.t || !parts.v1) return false;
-  
-  const signedPayload = `${parts.t}.${payload}`;
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(signedPayload);
-  const expectedSignature = hmac.digest('hex');
-  
-  const sigBuf = Buffer.from(parts.v1);
-  const expBuf = Buffer.from(expectedSignature);
-  if (sigBuf.length !== expBuf.length) return false;
-  return crypto.timingSafeEqual(sigBuf, expBuf);
+  const parts = signatureHeader.split(',').map((part) => part.split('=', 2));
+  const timestamp = Number(parts.find(([key]) => key === 't')?.[1]);
+  const signatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
+  if (!Number.isFinite(timestamp) || Math.abs(nowSeconds - timestamp) > STRIPE_TOLERANCE_SECONDS) return false;
+  const expected = crypto.createHmac('sha256', secret).update(`${timestamp}.${payload}`).digest('hex');
+  return signatures.some((signature) => timingSafeTextEqual(signature, expected));
 }
 
-function verifyNpmSignature(secret, payload, signature) {
-  if (!signature) return false;
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(payload);
-  const expectedSignature = `sha256=${hmac.digest('hex')}`;
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expectedSignature);
-  if (sigBuf.length !== expBuf.length) return false;
-  return crypto.timingSafeEqual(sigBuf, expBuf);
-}
-
-// We need raw body for signature verification, so we parse it here if not already parsed
-import bodyParser from 'body-parser';
-
-router.post('/:provider', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
-  const { provider } = req.params;
-  const secret = await getWebhookSecret(provider);
-  
-  let parsedBody = {};
-  if (req.body && req.body.length > 0) {
-    try {
-      parsedBody = JSON.parse(req.body.toString('utf8'));
-    } catch (err) {
-      return res.status(400).json({ error: 'Invalid JSON payload' });
-    }
+router.post('/api/webhooks/:provider', async (req, res) => {
+  let provider;
+  try {
+    provider = providerName(req.params.provider);
+  } catch {
+    return res.status(404).json({ error: 'Unsupported webhook provider' });
   }
 
-  let eventType = 'unknown';
+  if (provider === 'npm') {
+    return res.status(501).json({ error: 'npm webhook ingress is disabled until a documented signing contract is configured' });
+  }
 
+  const payload = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : null);
+  if (!payload) return res.status(400).json({ error: 'Raw webhook body is unavailable' });
+
+  const config = getConfig(provider);
+  if (!config || config.frontmatter?.status !== 'active') {
+    return res.status(503).json({ error: 'Webhook provider is not actively configured' });
+  }
+
+  const secret = await getWebhookSecret(provider);
+  if (!secret) return res.status(503).json({ error: 'Webhook signing secret is not configured' });
+
+  let parsedBody;
+  try {
+    parsedBody = JSON.parse(payload.toString('utf8'));
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+
+  let eventType;
+  let valid;
   if (provider === 'github') {
-    const signature = req.headers['x-hub-signature-256'];
-    if (secret && !verifyGithubSignature(secret, req.body, signature)) {
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
     eventType = req.headers['x-github-event'] || 'unknown';
-  } else if (provider === 'stripe') {
-    const signature = req.headers['stripe-signature'];
-    if (secret && !verifyStripeSignature(secret, req.body, signature)) {
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-    eventType = parsedBody.type || 'unknown';
-  } else if (provider === 'npm') {
-    const signature = req.headers['x-npm-signature'];
-    if (secret && !verifyNpmSignature(secret, req.body, signature)) {
-      return res.status(401).json({ error: 'Invalid signature' });
-    }
-    eventType = parsedBody.event || 'unknown';
+    valid = verifyGithubSignature(secret, payload, req.headers['x-hub-signature-256']);
   } else {
-    // allow generic providers without signature enforcement for testing
-    eventType = parsedBody.event || parsedBody.type || 'generic_event';
+    eventType = parsedBody.type || 'unknown';
+    valid = verifyStripeSignature(secret, payload, req.headers['stripe-signature']);
+  }
+  if (!valid) return res.status(401).json({ error: 'Invalid or expired signature' });
+
+  const subscribedEvents = Array.isArray(config.frontmatter?.events) ? config.frontmatter.events : [];
+  if (subscribedEvents.length > 0 && !subscribedEvents.includes(String(eventType))) {
+    return res.status(202).json({ accepted: true, handled: false, reason: 'event-not-subscribed' });
+  }
+
+  const delivery_id = provider === 'github'
+    ? String(req.headers['x-github-delivery'] || '')
+    : String(parsedBody.id || '');
+  if (delivery_id) {
+    const priorEvents = await listVfsEvents();
+    const duplicate = priorEvents.some((event) => (
+      event.payload?.kind === 'webhook_event' &&
+      event.payload?.provider === provider &&
+      event.payload?.delivery_id === delivery_id
+    ));
+    if (duplicate) return res.json({ success: true, duplicate: true, handled: false });
   }
 
   try {
-    await emitSsssEvent(provider, eventType, parsedBody);
-    
-    // Attempt to route to handler (Phase 3D)
-    try {
-      const { handleWebhook } = await import('../../core/webhook-handlers.mjs');
-      await handleWebhook(provider, eventType, parsedBody);
-    } catch (handlerErr) {
-      // handlers module might not exist yet, or failed
-    }
-
-    res.json({ success: true, event: `${provider}.${eventType}` });
+    const handled = await handleWebhook(provider, eventType, parsedBody);
+    await appendVfsEvent(`webhooks/${provider}/${crypto.randomUUID()}`, {
+      kind: 'webhook_event',
+      provider,
+      event_type: eventType,
+      received_at: new Date().toISOString(),
+      delivery_id: delivery_id || null,
+      payload: redactPayload(parsedBody),
+      delivery_status: handled?.handled ? 'handled' : 'recorded',
+    }, { actorRole: 'system', intent: `Record verified ${provider} webhook` });
+    res.json({ success: true, event: `${provider}.${eventType}`, handled: !!handled?.handled });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logger.error('webhooks', 'Verified webhook processing failed', { provider, eventType, error: err.message });
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 

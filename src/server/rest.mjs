@@ -210,7 +210,7 @@ router.use(configRouter);
 router.use(helpRouter);
 router.use(brainsRouter);
 router.use(integrationsRouter);
-router.use('/headscale', headscaleRouter);
+router.use(headscaleRouter);
 router.use(networkRouter);
 router.use(modelsRouter);
 router.use(graphRouter);

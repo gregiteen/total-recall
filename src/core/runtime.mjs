@@ -300,15 +300,20 @@ export async function callLocalRuntime(prompt, system, config) {
       throw new Error('No CLI agents available. Install antigravity, grok, claude, or codex.');
     }
 
-    const modelFlag = agent.model ? `-m ${agent.model}` : '';
-
-    let cmd;
+    const args = [];
     if (agent.exec === 'subcommand') {
-      cmd = `${agent.binaryPath} exec "${escapeShell(fullPrompt)}" ${agent.flags} ${modelFlag}`.trim();
+      args.push('exec', fullPrompt);
     } else {
-      // flag-style CLIs (antigravity, grok, claude, gemini): -p / --single prompt
-      cmd = `${agent.binaryPath} -p "${escapeShell(fullPrompt)}" ${agent.flags} ${modelFlag}`.trim();
+      args.push('-p', fullPrompt);
     }
+    if (agent.flags) {
+      args.push(...agent.flags.split(/\s+/).filter(Boolean));
+    }
+    if (agent.model) {
+      args.push('-m', agent.model);
+    }
+
+    const cmd = `${agent.binaryPath} ${args.map(a => a.includes(' ') || a.includes('\n') ? `"${a.replace(/"/g, '\\"')}"` : a).join(' ')}`;
 
     logger.info({
       subsystem: 'runtime',
@@ -350,7 +355,7 @@ export async function callLocalRuntime(prompt, system, config) {
     };
 
     logger.info('api', 'SPAWN_ENV GOOGLE_API_KEY length: ' + (spawnEnv.GOOGLE_API_KEY ? spawnEnv.GOOGLE_API_KEY.length : 0));
-    const result = spawnSync('sh', ['-c', cmd], {
+    const result = spawnSync(agent.binaryPath, args, {
       encoding: 'utf8',
       timeout,
       maxBuffer: 10 * 1024 * 1024,
@@ -387,10 +392,6 @@ export async function callLocalRuntimeRaw(messages, config, _tools = undefined) 
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function escapeShell(str) {
-  return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-}
 
 /**
  * Parse JSON or text output from a CLI agent into plain text.

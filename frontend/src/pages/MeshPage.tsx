@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchLeader, fetchNodes as fetchMeshNodes, forceReElection } from '../api/mesh';
+import { fetchLeader, fetchNodes as fetchMeshNodes, refreshElection } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
 import type { MeshNode, LeaderInfo } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
@@ -11,7 +11,6 @@ export function MeshPage() {
   // Mesh State
   const [meshNodes, setMeshNodes] = useState<MeshNode[]>([]);
   const [leader, setLeader] = useState<LeaderInfo | null>(null);
-  const [latencies, setLatencies] = useState<Record<string, number>>({});
   
   // Headscale State
   const [hsNodes, setHsNodes] = useState<HeadscaleNode[]>([]);
@@ -35,18 +34,6 @@ export function MeshPage() {
         const [n, l] = await Promise.all([fetchMeshNodes(), fetchLeader()]);
         setMeshNodes(n);
         setLeader(l);
-        
-        const latData: Record<string, number> = {};
-        await Promise.all(n.map(async (node) => {
-          try {
-            const start = Date.now();
-            await fetch(`http://${node.ip}:3100/api/health`, { mode: 'no-cors' });
-            latData[node.hostname] = Date.now() - start;
-          } catch {
-            latData[node.hostname] = -1;
-          }
-        }));
-        setLatencies(latData);
       } else if (activeTab === 'headscale-nodes') {
         const nodes = await fetchHeadscaleNodes();
         setHsNodes(nodes);
@@ -70,12 +57,12 @@ export function MeshPage() {
     return () => clearInterval(interval);
   }, [activeTab]);
 
-  async function handleForceReElection() {
+  async function handleRefreshElection() {
     try {
-      await forceReElection();
+      await refreshElection();
       await loadData();
     } catch (err: any) {
-      setError(err.message || 'Failed to force re-election');
+      setError(err.message || 'Failed to refresh election state');
     }
   }
 
@@ -110,11 +97,10 @@ export function MeshPage() {
         <h1>Mesh Operations Center</h1>
         {activeTab === 'mesh' && (
           <button
-            onClick={handleForceReElection}
+            onClick={handleRefreshElection}
             className="btn btn-primary"
-            style={{ background: 'var(--error)' }}
           >
-            Force Re-Election
+            Refresh Election
           </button>
         )}
       </div>
@@ -158,8 +144,8 @@ export function MeshPage() {
                 <th>Mesh IP</th>
                 <th>Role</th>
                 <th>Status</th>
-                <th>Latency</th>
-                <th>Last Heartbeat</th>
+                <th>Operating System</th>
+                <th>Node</th>
               </tr>
             </thead>
             <tbody>
@@ -178,20 +164,12 @@ export function MeshPage() {
                       </span>
                     </td>
                     <td>
-                      <span className={`badge ${node.status === 'online' ? 'badge-online' : 'badge-offline'}`}>
-                        {node.status.toUpperCase()}
+                      <span className={`badge ${node.online ? 'badge-online' : 'badge-offline'}`}>
+                        {node.online ? 'ONLINE' : 'OFFLINE'}
                       </span>
                     </td>
-                    <td style={{ color: 'var(--text-secondary)' }}>
-                      {latencies[node.hostname] !== undefined 
-                        ? latencies[node.hostname] === -1 
-                          ? 'Error' 
-                          : `${latencies[node.hostname]}ms` 
-                        : '...'}
-                    </td>
-                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                      {new Date(node.lastHeartbeat).toLocaleString()}
-                    </td>
+                    <td style={{ color: 'var(--text-secondary)' }}>{node.os || 'Unknown'}</td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{node.self ? 'This node' : 'Peer'}</td>
                   </tr>
                 );
               })}

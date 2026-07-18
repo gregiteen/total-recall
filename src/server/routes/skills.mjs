@@ -107,6 +107,19 @@ function isTrSkillName(name) {
   return false;
 }
 
+/**
+ * Install a global catalog skill into one project without ever treating the
+ * project's existing copy as the deployment source.
+ */
+export function enableProjectSkill(brainDir, globalSkillPath, targetRepo) {
+  return deploySkill(brainDir, globalSkillPath, {
+    repo: targetRepo,
+    agentSkillsDir: path.dirname(globalSkillPath),
+    adapt: true,
+    force: true,
+  });
+}
+
 function rootMeta(rel) {
   return SKILL_ROOTS.find((r) => r.rel === rel) || {
     rel,
@@ -586,12 +599,11 @@ skillsRouter.post('/api/skills/toggle', requireAuth, requireScope('ssss:write'),
       
       const brainDir = path.join(AGENT_DIR, 'skills', 'total-recall');
       try {
-        deploySkill(brainDir, skillName, {
-          repo: targetRepo,
-          agentSkillsDir: path.join(targetRepo, '.agent', 'skills'),
-          adapt: true,
-          force: true
-        });
+        // Deploy from the global catalog path explicitly. Passing the target
+        // repo's own skills directory as the source made source === destination
+        // for an already-installed skill, which could delete that skill during
+        // replacement and could never refresh it from the global template.
+        enableProjectSkill(brainDir, globalSkillPath, targetRepo);
       } catch (err) {
         return res.status(500).json({ error: `Deploy failed: ${err.message}` });
       }

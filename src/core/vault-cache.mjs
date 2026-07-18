@@ -1,6 +1,8 @@
 import fs from 'fs';
+import path from 'path';
 import { loadNodes } from './vault.mjs';
 import { logger } from './logger.mjs';
+import { brainDir } from './config.mjs';
 
 /**
  * Per-directory vault cache with fs.watch auto-invalidation.
@@ -14,22 +16,23 @@ const cacheMap = new Map();   // vaultDir → { nodes, watcher }
  * Automatically wires a file watcher on first load to track external changes.
  * Supports multiple vault directories simultaneously (global + project).
  *
- * @param {string} vaultDir - Path to the memory vault directory
+ * @param {string} [vaultDir] - Path to the memory vault directory
  * @returns {Array} List of memory node objects
  */
 export function getNodes(vaultDir) {
-  const entry = cacheMap.get(vaultDir);
+  const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
+  const entry = cacheMap.get(resolvedDir);
   if (entry?.nodes !== null && entry?.nodes !== undefined) {
-    logger.debug('Vault cache hit', { vaultDir });
+    logger.debug('Vault cache hit', { vaultDir: resolvedDir });
     return entry.nodes;
   }
-  logger.info('Vault cache miss, loading nodes from disk', { vaultDir });
-  const nodes = loadNodes(vaultDir);
+  logger.info('Vault cache miss, loading nodes from disk', { vaultDir: resolvedDir });
+  const nodes = loadNodes(resolvedDir);
   if (entry) {
     entry.nodes = nodes;
   } else {
-    cacheMap.set(vaultDir, { nodes, watcher: null });
-    startWatcher(vaultDir);
+    cacheMap.set(resolvedDir, { nodes, watcher: null });
+    startWatcher(resolvedDir);
   }
   return nodes;
 }
@@ -43,9 +46,10 @@ export function getNodes(vaultDir) {
  */
 export function invalidate(vaultDir) {
   if (vaultDir) {
-    const entry = cacheMap.get(vaultDir);
+    const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
+    const entry = cacheMap.get(resolvedDir);
     if (entry) {
-      logger.info('Vault cache invalidated', { vaultDir });
+      logger.info('Vault cache invalidated', { vaultDir: resolvedDir });
       entry.nodes = null;
     }
   } else {
@@ -60,27 +64,28 @@ export function invalidate(vaultDir) {
  * Starts a filesystem watcher on the vault directory to automatically invalidate the cache
  * when external edits occur.
  *
- * @param {string} vaultDir - Path to the vault directory to watch
+ * @param {string} [vaultDir] - Path to the vault directory to watch
  */
 function startWatcher(vaultDir) {
-  const entry = cacheMap.get(vaultDir);
+  const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
+  const entry = cacheMap.get(resolvedDir);
   if (!entry || entry.watcher) return;
 
-  if (!fs.existsSync(vaultDir)) {
+  if (!fs.existsSync(resolvedDir)) {
     try {
-      fs.mkdirSync(vaultDir, { recursive: true });
+      fs.mkdirSync(resolvedDir, { recursive: true });
     } catch (err) {
       logger.error('Failed to create vault directory for watcher', { error: err.message });
       return;
     }
   }
 
-  logger.info('Starting filesystem watcher for vault cache', { vaultDir });
+  logger.info('Starting filesystem watcher for vault cache', { vaultDir: resolvedDir });
   try {
-    const watcher = fs.watch(vaultDir, { recursive: true }, (eventType, filename) => {
+    const watcher = fs.watch(resolvedDir, { recursive: true }, (eventType, filename) => {
       if (filename && filename.endsWith('.md')) {
         logger.info(`Vault filesystem change detected (${eventType}: ${filename}), invalidating cache`);
-        invalidate(vaultDir);
+        invalidate(resolvedDir);
       }
     });
     // Unref the watcher so it does not prevent Node from exiting cleanly
@@ -94,11 +99,12 @@ function startWatcher(vaultDir) {
 /**
  * Explicitly boots the filesystem watcher for the vault directory.
  *
- * @param {string} vaultDir - Path to the vault directory to watch
+ * @param {string} [vaultDir] - Path to the vault directory to watch
  */
 export function start(vaultDir) {
-  if (!cacheMap.has(vaultDir)) {
-    cacheMap.set(vaultDir, { nodes: null, watcher: null });
+  const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
+  if (!cacheMap.has(resolvedDir)) {
+    cacheMap.set(resolvedDir, { nodes: null, watcher: null });
   }
-  startWatcher(vaultDir);
+  startWatcher(resolvedDir);
 }

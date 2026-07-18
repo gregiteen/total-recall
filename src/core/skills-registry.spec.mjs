@@ -6,6 +6,7 @@ import {
   registerSkill,
   listRegistered,
   deploySkill,
+  replaceSkillDir,
   skillStatus,
   listInstalls,
   loadRegistry,
@@ -17,6 +18,7 @@ import {
   syncSkillTwoWay,
   syncAllSkillsTwoWay,
   discoverSkillsInRepo,
+  discoverAllSkills,
   pickSyncWinner,
   loadKnownRepoRoots,
   parseSyncReposEnv,
@@ -89,6 +91,107 @@ describe('skills-registry', () => {
     expect(fs.existsSync(path.join(repo, '.agent', 'skills', 'ship-me', 'SKILL.md'))).toBe(true);
     expect(listInstalls(brain, { skillId: 'ship-me' })).toHaveLength(1);
     expect(listInstalls(brain)[0].repo).toBe(path.resolve(repo));
+  });
+
+  it('prefers the registered source over a stale local install during deploy', () => {
+    const sourceRoot = path.join(workspace, 'catalog');
+    const source = writeSkill(sourceRoot, 'catalog-wins');
+    fs.appendFileSync(path.join(source, 'SKILL.md'), '\n## Canonical source\n');
+    registerSkill(brain, source, { source_type: 'path' });
+
+    const repo = path.join(workspace, 'target-repo');
+    const localSkills = path.join(repo, '.agent', 'skills');
+    const stale = writeSkill(localSkills, 'catalog-wins');
+    fs.appendFileSync(path.join(stale, 'SKILL.md'), '\n## Stale install\n');
+
+    deploySkill(brain, 'catalog-wins', {
+      repo,
+      agentSkillsDir: localSkills,
+      force: true,
+    });
+
+    const deployed = fs.readFileSync(path.join(stale, 'SKILL.md'), 'utf8');
+    expect(deployed).toContain('Canonical source');
+    expect(deployed).not.toContain('Stale install');
+    expect(loadRegistry(brain).skills['catalog-wins'].source_path).toBe(path.resolve(source));
+  });
+
+  it('does not delete a skill when deploy resolves the target as its own source', () => {
+    const repo = path.join(workspace, 'same-source-repo');
+    fs.mkdirSync(repo, { recursive: true });
+    fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"same-source-repo"}\n');
+    const skillsDir = path.join(repo, '.agent', 'skills');
+    const skillDir = writeSkill(skillsDir, 'keep-me');
+    const previous = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8');
+
+    const result = deploySkill(brain, 'keep-me', {
+      repo,
+      agentSkillsDir: skillsDir,
+      force: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.replacement).toMatchObject({ skipped: true, reason: 'same-path' });
+    expect(fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8')).toBe(previous);
+  });
+
+  it('blocks repo-scoped skills from being deployed into another repository', () => {
+    const repoA = path.join(workspace, 'scoped-source-repo');
+    const repoB = path.join(workspace, 'scoped-target-repo');
+    fs.mkdirSync(repoA, { recursive: true });
+    fs.mkdirSync(repoB, { recursive: true });
+    fs.writeFileSync(path.join(repoA, 'package.json'), '{"name":"scoped-source"}\n');
+    const skillDir = writeSkill(path.join(repoA, '.agent', 'skills'), 'private-skill');
+    fs.writeFileSync(
+      path.join(skillDir, 'SKILL.md'),
+      '---\nname: private-skill\ndescription: "Private."\nrepo_scoped: true\n---\n',
+    );
+    registerSkill(brain, skillDir);
+
+    expect(() => deploySkill(brain, 'private-skill', { repo: repoB })).toThrow(
+      'Refusing to deploy repo-scoped skill',
+    );
+    expect(fs.existsSync(path.join(repoB, '.agent', 'skills', 'private-skill'))).toBe(false);
+  });
+
+  it('keeps the installed skill intact when a replacement copy fails', () => {
+    const source = writeSkill(workspace, 'source-skill');
+    const destination = writeSkill(workspace, 'installed-skill');
+    const previous = fs.readFileSync(path.join(destination, 'SKILL.md'), 'utf8');
+
+    expect(() => replaceSkillDir(source, destination, {
+      copyFn: () => { throw new Error('interrupted copy'); },
+    })).toThrow('interrupted copy');
+
+    expect(fs.readFileSync(path.join(destination, 'SKILL.md'), 'utf8')).toBe(previous);
+    expect(fs.existsSync(destination)).toBe(true);
+  });
+
+  it('preserves destination-only files during replacement', () => {
+    const source = writeSkill(path.join(workspace, 'source'), 'shared-skill');
+    const destination = writeSkill(path.join(workspace, 'destination'), 'shared-skill');
+    const localReference = path.join(destination, 'references', 'repo-only.md');
+    fs.mkdirSync(path.dirname(localReference), { recursive: true });
+    fs.writeFileSync(localReference, '# Repository-specific reference\n');
+    fs.appendFileSync(path.join(source, 'SKILL.md'), '\n## Source update\n');
+
+    replaceSkillDir(source, destination);
+
+    expect(fs.readFileSync(path.join(destination, 'SKILL.md'), 'utf8')).toContain('Source update');
+    expect(fs.readFileSync(localReference, 'utf8')).toContain('Repository-specific reference');
+  });
+
+  it('recognizes symlink aliases as the same physical skill', () => {
+    if (process.platform === 'win32') return;
+    const source = writeSkill(workspace, 'canonical-skill');
+    const alias = path.join(workspace, 'skill-alias');
+    fs.symlinkSync(source, alias);
+
+    const result = replaceSkillDir(source, alias);
+
+    expect(result).toMatchObject({ skipped: true, reason: 'same-path' });
+    expect(fs.lstatSync(alias).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(path.join(source, 'SKILL.md'))).toBe(true);
   });
 
   it('status reports drift when SKILL.md changes after deploy', () => {
@@ -208,6 +311,39 @@ describe('skills-registry', () => {
     expect(hits.some((h) => h.id === 'found-me')).toBe(true);
   });
 
+  it('discovery records installs without replacing an existing catalog source', () => {
+    const source = writeSkill(path.join(workspace, 'global-catalog'), 'stable-source');
+    fs.appendFileSync(path.join(source, 'SKILL.md'), '\n## Catalog copy\n');
+    registerSkill(brain, source, { source_type: 'path' });
+
+    const repo = path.join(workspace, 'discovered-repo');
+    fs.mkdirSync(repo, { recursive: true });
+    fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"discovered-repo"}\n');
+    const install = writeSkill(path.join(repo, '.agent', 'skills'), 'stable-source');
+    fs.appendFileSync(path.join(install, 'SKILL.md'), '\n## Repo copy\n');
+
+    const result = discoverAllSkills(brain, {
+      extraRepos: [repo],
+      includeCwd: false,
+    });
+
+    expect(result.discovered).toBe(1);
+    expect(loadRegistry(brain).skills['stable-source'].source_path).toBe(path.resolve(source));
+    expect(listInstalls(brain, { skillId: 'stable-source' })).toHaveLength(1);
+  });
+
+  it('deduplicates symlinked IDE surfaces that resolve to the same skill', () => {
+    if (process.platform === 'win32') return;
+    const repo = path.join(workspace, 'aliased-scan-repo');
+    writeSkill(path.join(repo, '.agent', 'skills'), 'found-once');
+    fs.mkdirSync(path.join(repo, '.agents'), { recursive: true });
+    fs.symlinkSync('../.agent/skills', path.join(repo, '.agents', 'skills'));
+
+    const hits = discoverSkillsInRepo(repo).filter((hit) => hit.id === 'found-once');
+
+    expect(hits).toHaveLength(1);
+  });
+
   it('syncAllSkillsTwoWay dry-run does not throw', () => {
     const skillDir = writeSkill(workspace, 'batch');
     registerSkill(brain, skillDir);
@@ -311,6 +447,60 @@ describe('skills-registry', () => {
     const skillDir = writeSkill(workspace, 'plain-skill');
     const meta = readSkillMeta(skillDir);
     expect(meta.repo_scoped).toBe(false);
+  });
+
+  it('keeps registry scoping fail-closed after an unscoped collision', () => {
+    const scopedDir = writeSkill(path.join(workspace, 'scoped'), 'collision-skill');
+    fs.writeFileSync(
+      path.join(scopedDir, 'SKILL.md'),
+      '---\nname: collision-skill\ndescription: "Scoped."\nrepo_scoped: true\n---\n',
+    );
+    const unscopedDir = writeSkill(path.join(workspace, 'unscoped'), 'collision-skill');
+
+    registerSkill(brain, scopedDir);
+    registerSkill(brain, unscopedDir);
+
+    expect(loadRegistry(brain).skills['collision-skill'].repo_scoped).toBe(true);
+  });
+
+  it('skips repo-scoped skills when syncing a single skill directly', () => {
+    const scopedDir = writeSkill(workspace, 'direct-scoped-skill');
+    fs.writeFileSync(
+      path.join(scopedDir, 'SKILL.md'),
+      '---\nname: direct-scoped-skill\ndescription: "Scoped."\nrepo_scoped: true\n---\n',
+    );
+    registerSkill(brain, scopedDir);
+
+    const report = syncSkillTwoWay(brain, 'direct-scoped-skill');
+
+    expect(report).toMatchObject({ skipped: true, reason: 'repo_scoped' });
+  });
+
+  it('refuses to deploy an unflagged repo-owned catalog source into another repo', () => {
+    const repoA = path.join(workspace, 'divergent-repo-a');
+    const repoB = path.join(workspace, 'divergent-repo-b');
+    for (const repo of [repoA, repoB]) {
+      fs.mkdirSync(repo, { recursive: true });
+      fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: path.basename(repo) }));
+    }
+    const skillA = writeSkill(path.join(repoA, '.agent', 'skills'), 'shared-name');
+    fs.appendFileSync(path.join(skillA, 'SKILL.md'), '\n## Repository A\n');
+    deploySkill(brain, 'shared-name', {
+      repo: repoA,
+      agentSkillsDir: path.join(repoA, '.agent', 'skills'),
+    });
+
+    const skillB = writeSkill(path.join(repoB, '.agent', 'skills'), 'shared-name');
+    fs.appendFileSync(path.join(skillB, 'SKILL.md'), '\n## Repository B\n');
+    expect(() => deploySkill(brain, 'shared-name', {
+      repo: repoB,
+      agentSkillsDir: path.join(repoB, '.agent', 'skills'),
+    })).toThrow('Refusing to deploy repo-owned catalog skill');
+
+    const beforeA = fs.readFileSync(path.join(skillA, 'SKILL.md'), 'utf8');
+    const beforeB = fs.readFileSync(path.join(skillB, 'SKILL.md'), 'utf8');
+    expect(fs.readFileSync(path.join(skillA, 'SKILL.md'), 'utf8')).toBe(beforeA);
+    expect(fs.readFileSync(path.join(skillB, 'SKILL.md'), 'utf8')).toBe(beforeB);
   });
 
   it('syncAllSkillsTwoWay skips repo_scoped skills', () => {

@@ -1,20 +1,33 @@
-# Handoff: Total Recall Project Completion
+# Handoff: Recent System Integration Recovery
 
-## Current State of Repository
-- **Branch**: `main`
-- **Commit**: `88c485c`
-- **Status**: The repository is perfectly clean. It has been hard reset to `88c485c` and all tests are passing green.
-- **Trackers**: The trackers in `docs/projects/in-progress/` accurately reflect reality (Phase 1 is complete, but subsequent phases and Audit Findings are unchecked).
+## Current state
 
-## What Happened in the Last Session
-- A previous agent attempted to automate the completion of the 4 active projects by writing dozens of `fix*.mjs` and `patch*.mjs` scripts into the root directory.
-- These patch scripts were heavily flawed (inserting syntax errors like `await await` and duplicating variables blindly).
-- We ran them, broke the test suite, and subsequently performed a hard reset (`git reset --hard 88c485c`) and a clean (`git clean -fd`) to wipe the corrupted changes and delete all the garbage scripts.
-- We also forcefully deleted the `codex/total-recall-pending-completion` branch as it was redundant and behind `main`.
+- **Branch:** `main`
+- **Worktree:** intentionally dirty with the uncommitted recovery implementation plus pre-existing user changes. Do not reset, clean, or overwrite unrelated files.
+- **Authoritative tracker:** `docs/projects/in-progress/RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`
+- **Project truth:** four falsely completed projects were reopened; the verified API-routing incident was corrected and moved to completed.
 
-## Next Steps for the Incoming Agent
-1. **DO NOT** write patch scripts or attempt to automate the check-offs using string replacements.
-2. Read the project trackers in `docs/projects/in-progress/`.
-3. Start with `ECOSYSTEM_SYNC_AND_SCALE_PROJECT_TRACKER.md`. 
-4. The first task is to manually replace `process.cwd()` and `os.homedir()` fallbacks in `src/server/rest.mjs` (specifically the `/api/import/rules` endpoint) with the absolute `ROOT` and `VAULT_DIR` variables.
-5. Proceed down the tracker list, implementing the features natively and ensuring tests continue to pass after each edit.
+## Repaired
+
+- Restored canonical network, mesh, webhook, Headscale, secrets, and SSSS API routes and regenerated the 179-route manifest.
+- Routed persistent integration mutations through the SSSS operation pipeline and generic host-extension VFS documents.
+- Secured webhook management/ingress, encrypted secret references, mesh secret sync, server binding, and Headscale proxy validation.
+- Upgraded the live empty Headscale control plane to 0.29.2 with backup/checksums, loopback-only container ports, dedicated HTTPS, and encrypted API credentials.
+- Enrolled the cloud server and Mac Mini in the repaired Headscale mesh; bidirectional peer pings pass.
+- Prevented skill deployment/discovery from deleting manifest-unowned skills or replacing live catalog sources with stale repo-owned copies.
+- Removed stale test-brain registry entries and aligned the active SSSS skill with installed SSSS 0.9.0.
+
+## Verified so far
+
+- Focused recovery suite: 23 files, 110 tests passed.
+- Skill registry/routes: 2 files, 31 tests passed.
+- SSSS 0.9.0 conformance: all groups passed.
+- Native backend boot and authenticated API smokes passed; an SSSS dry run committed nothing.
+- Live Headscale HTTPS/API and public direct-port blocking passed.
+
+## Remaining release gates
+
+1. Run the sanctioned TypeScript and lint checker scripts and confirm zero-error reports.
+2. Mirror the dirty worktree to a Mac Mini scratch directory and pass the complete `npm test` suite there.
+3. Enroll this laptop after macOS grants Tailscale system-extension/admin approval, then verify the three-node mesh and leader/follower behavior.
+4. Audit/clean any test or runtime side effects and update the authoritative tracker with final evidence.

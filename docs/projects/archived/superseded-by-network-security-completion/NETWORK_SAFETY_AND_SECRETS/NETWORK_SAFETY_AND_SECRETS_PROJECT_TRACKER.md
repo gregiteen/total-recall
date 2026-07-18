@@ -8,7 +8,7 @@ timestamp: 2026-07-15T22:19:00Z
 
 # NETWORK_SAFETY_AND_SECRETS — Project Tracker
 
-> **Status**: In progress (Phase 0A partially complete)
+> **Status**: Reopened on 2026-07-16. The prior completed classification was false. The security and integration recovery is tracked by `../RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`; unchecked original acceptance work remains open here.
 > **Companion**: [Audit](./NETWORK_SAFETY_AND_SECRETS_AUDIT.md) · [PRD](./NETWORK_SAFETY_AND_SECRETS_PRD.md) · [Architecture](./NETWORK_SAFETY_AND_SECRETS_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SAFETY_AND_SECRETS_DEVELOPMENT_PLAN.md)
 
 ---

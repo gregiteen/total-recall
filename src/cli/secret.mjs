@@ -90,9 +90,10 @@ function printHelp() {
       --docs <url>        API docs URL
       --rotate-days <n>   Auto-rotation interval
       --auto-rotate       Enable auto-rotate flag
-      --notes <text>
-      --label <text>
-      --project <path>
+    --notes <text>
+    --label <text>
+    --project <path>
+    --headscale-url <https-url>
     rotation-due          List keys overdue for rotation
       --enqueue           Create daemon tasks + browser-use prompts for each due key
     rotate-browser <key>  Print supervised browser-use rotation instructions
@@ -107,6 +108,7 @@ function printHelp() {
     --scope global|project
     --repo / --repos      Bind secret to repo(s)
     --tier / --monthly-cost / --rotate-days
+    --headscale-url <https-url>  Headscale control-plane URL metadata
 
   usage-record options:
     --provider <name>
@@ -153,6 +155,7 @@ function parseArgs(args) {
     notes: null,
     label: null,
     project: null,
+    headscale_url: null,
     path: null,
     allProjects: false,
     filename: '.env',
@@ -261,6 +264,9 @@ function parseArgs(args) {
       case '--project':
         out.project = args[++i];
         break;
+      case '--headscale-url':
+        out.headscale_url = args[++i];
+        break;
       case '--path':
         out.path = args[++i];
         break;
@@ -345,6 +351,7 @@ export default async function secretCli(argv) {
         notes: opts.notes,
         label: opts.label,
         project_path: opts.project,
+        headscale_url: opts.headscale_url,
       });
       console.log(`\n  ✅ Secret set: ${opts.key}`);
       console.log(`     store: ${resolveSecretsPath(brainDir)}`);

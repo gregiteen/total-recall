@@ -6,6 +6,7 @@ import * as secretsStore from '../../core/secrets-store.mjs';
 
 vi.mock('../auth.mjs', () => ({
   requireAuth: (req, res, next) => next(),
+  requireScope: () => (req, res, next) => next(),
 }));
 
 vi.mock('../../core/secrets-store.mjs', () => ({
@@ -13,9 +14,13 @@ vi.mock('../../core/secrets-store.mjs', () => ({
   getSecret: vi.fn(),
 }));
 
+vi.mock('../../core/throttled-fetch.mjs', () => ({
+  throttledFetch: vi.fn((...args) => global.fetch(...args.slice(0, 2))),
+}));
+
 const app = express();
 app.use(express.json());
-app.use('/api/headscale', headscaleRouter);
+app.use(headscaleRouter);
 
 describe('Headscale API proxy routes', () => {
   beforeEach(() => {
@@ -34,7 +39,7 @@ describe('Headscale API proxy routes', () => {
   it('GET /node lists nodes from Headscale', async () => {
     vi.mocked(secretsStore.getSecretsCatalog).mockResolvedValue({
       keys: [
-        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'http://test-hs:8081' }
+        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'https://test-hs.example' }
       ]
     });
 
@@ -48,7 +53,7 @@ describe('Headscale API proxy routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, mocked: true });
-    expect(global.fetch).toHaveBeenCalledWith('http://test-hs:8081/api/v1/node', {
+    expect(global.fetch).toHaveBeenCalledWith('https://test-hs.example/api/v1/node', {
       headers: {
         'Authorization': 'Bearer mock-token',
         'Accept': 'application/json',
@@ -60,7 +65,7 @@ describe('Headscale API proxy routes', () => {
   it('DELETE /node/:id deletes node', async () => {
     vi.mocked(secretsStore.getSecretsCatalog).mockResolvedValue({
       keys: [
-        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'http://test-hs:8081' }
+        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'https://test-hs.example' }
       ]
     });
 
@@ -73,7 +78,7 @@ describe('Headscale API proxy routes', () => {
     const res = await request(app).delete('/api/headscale/node/123');
 
     expect(res.status).toBe(200);
-    expect(global.fetch).toHaveBeenCalledWith('http://test-hs:8081/api/v1/node/123', {
+    expect(global.fetch).toHaveBeenCalledWith('https://test-hs.example/api/v1/node/123', {
       method: 'DELETE',
       headers: {
         'Authorization': 'Bearer mock-token',
@@ -86,7 +91,7 @@ describe('Headscale API proxy routes', () => {
   it('GET /preauthkey lists preauth keys', async () => {
     vi.mocked(secretsStore.getSecretsCatalog).mockResolvedValue({
       keys: [
-        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'http://test-hs:8081' }
+        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'https://test-hs.example' }
       ]
     });
 
@@ -99,7 +104,7 @@ describe('Headscale API proxy routes', () => {
     const res = await request(app).get('/api/headscale/preauthkey?user=testuser');
 
     expect(res.status).toBe(200);
-    expect(global.fetch).toHaveBeenCalledWith('http://test-hs:8081/api/v1/preauthkey?user=testuser', {
+    expect(global.fetch).toHaveBeenCalledWith('https://test-hs.example/api/v1/preauthkey?user=testuser', {
       headers: {
         'Authorization': 'Bearer mock-token',
         'Accept': 'application/json',
@@ -111,7 +116,7 @@ describe('Headscale API proxy routes', () => {
   it('POST /preauthkey creates key', async () => {
     vi.mocked(secretsStore.getSecretsCatalog).mockResolvedValue({
       keys: [
-        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'http://test-hs:8081' }
+        { provider: 'headscale', key: 'HEADSCALE_KEY', headscale_url: 'https://test-hs.example' }
       ]
     });
 
@@ -126,7 +131,7 @@ describe('Headscale API proxy routes', () => {
       .send({ user: 'testuser', reusable: true });
 
     expect(res.status).toBe(200);
-    expect(global.fetch).toHaveBeenCalledWith('http://test-hs:8081/api/v1/preauthkey', {
+    expect(global.fetch).toHaveBeenCalledWith('https://test-hs.example/api/v1/preauthkey', {
       method: 'POST',
       body: JSON.stringify({ user: 'testuser', reusable: true }),
       headers: {

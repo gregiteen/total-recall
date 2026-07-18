@@ -94,3 +94,4 @@ build/
 scratch/
 .agent/secrets.enc
 
+server.log
