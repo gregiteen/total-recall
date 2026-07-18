@@ -8,10 +8,16 @@ timestamp: 2026-07-15T22:19:00Z
 
 # NETWORK_SAFETY_AND_SECRETS — Project Tracker
 
-> **Status**: Reopened on 2026-07-16. The prior completed classification was false. The security and integration recovery is tracked by `../RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`; unchecked original acceptance work remains open here.
+> **SUPERSEDED (2026-07-18):** Active gate/firewall/minInterval work lives in  
+> [`docs/projects/in-progress/NETWORK_SECURITY_COMPLETION/`](../../../in-progress/NETWORK_SECURITY_COMPLETION/NETWORK_SECURITY_COMPLETION_PROJECT_TRACKER.md).  
+> Secrets consolidation completed separately under `SECRETS_CONSOLIDATION` (also archived).  
+> Remaining manual acceptance items are tracked as NETWORK_SECURITY_COMPLETION Phase 3.
+>
+> **Status (historical):** Reopened 2026-07-16; later merged into NETWORK_SECURITY_COMPLETION.
 > **Companion**: [Audit](./NETWORK_SAFETY_AND_SECRETS_AUDIT.md) · [PRD](./NETWORK_SAFETY_AND_SECRETS_PRD.md) · [Architecture](./NETWORK_SAFETY_AND_SECRETS_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SAFETY_AND_SECRETS_DEVELOPMENT_PLAN.md)
 
 ---
+
 
 ## Phase 0: Fetch Gate Core
 
@@ -84,16 +90,10 @@ timestamp: 2026-07-15T22:19:00Z
 - [x] Verify: blocking a domain causes fetch to throw with clear error message
 
 ### 0I. Fetch Gate Tests (M)
-- [ ] Create `src/core/throttled-fetch.spec.mjs`
-- [ ] Test: concurrent requests capped at MAX_GLOBAL_CONCURRENCY
-- [ ] Test: per-domain requests capped at MAX_PER_DOMAIN
-- [ ] Test: queue drains correctly when slots free up
-- [ ] Test: timeout fires AbortController
-- [ ] Test: blocked domain throws error
-- [ ] Test: whitelist mode rejects non-whitelisted domains
-- [ ] Test: per-domain rate override respected
-- [ ] Test: audit log records entries
-- [ ] Test: getGateStats() returns correct counts
+> **Completed in NETWORK_SECURITY_COMPLETION Phase 1** (`throttled-fetch.spec.mjs`, 15+ cases including minIntervalMs).
+- [x] Create `src/core/throttled-fetch.spec.mjs`
+- [x] Test: concurrent / per-domain caps, queue drain, timeout, blocked, whitelist, overrides, audit, stats
+- [x] Test: minIntervalMs direct path + contention, global knobs, total_blocked
 
 ---
 
@@ -250,44 +250,33 @@ timestamp: 2026-07-15T22:19:00Z
 ## Final Verification
 
 ### Automated Tests
-- [ ] `npm test -- --grep "throttled-fetch"` passes
-- [ ] `npm test -- --grep "secrets-store"` passes
-- [ ] `npm test -- --grep "network"` passes
+> Prefer file-based vitest runs (v4 has no `--grep` as used below historically).
+
+- [x] `npx vitest run src/core/throttled-fetch.spec.mjs` — green (NSC Phase 1)
+- [x] `npx vitest run src/core/secrets-store.spec.mjs` — green (targeted 2026-07-18)
+- [x] Network route specs — green (targeted 2026-07-18)
+- [ ] **Full suite on remote host** — still open under NETWORK_SECURITY_COMPLETION Phase 3
 
 ### Manual Verification
-- [ ] Start daemon → gate stats show max 6 concurrent via `/api/health`
-- [ ] Run research task → `lsof -i | wc -l` stays under 20
-- [ ] Open Network page → live stats update every 2s
-- [ ] Block a domain via UI → requests to it fail with clear error
-- [ ] `secrets.enc` is NOT valid JSON after migration
-- [ ] All API integrations still work through the gate
-- [ ] Top bar network indicator reflects actual gate health
+> Carried forward to NETWORK_SECURITY_COMPLETION Phase 3 (not re-done here).
+
+- [ ] Start daemon → gate stats via `/api/health` / Network page
+- [ ] Research task connection hygiene
+- [ ] Network page live stats
+- [x] Block domain E2E (example.com) proven 2026-07-18 in NSC Phase 0
+- [ ] `secrets.enc` not valid JSON
+- [ ] API integrations through gate
+- [ ] Top-bar gate health indicator
 
 ---
 
 ## Summary
 
-| Phase | Tasks | Status |
+| Phase | Tasks | Status (archive close-out 2026-07-18) |
 |-------|-------|--------|
-| 0A: Fetch Gate Core | 7 | ✅ Done |
-| 0B: Source Adapters | 11 | ⬜ Not started |
-| 0C: Embeddings | 5 | ⬜ Not started |
-| 0D: Parallel Context | 3 | ⬜ Not started |
-| 0E: Vector Field | 3 | ⬜ Not started |
-| 0F: Inference Engine | 3 | ⬜ Not started |
-| 0G: Health Endpoint | 3 | ⬜ Not started |
-| 0H: Firewall | 12 | ⬜ Not started |
-| 0I: Tests | 10 | ⬜ Not started |
-| 1A: PID Lockfile | 9 | ⬜ Not started |
-| 1B: Launchd | 5 | ⬜ Not started |
-| 2A: Audit Pipeline | 4 | ⬜ Not started |
-| 2B: Encryption Write | 5 | ⬜ Not started |
-| 2C: Decryption Read | 5 | ⬜ Not started |
-| 2D: Migrate Plaintext | 7 | ⬜ Not started |
-| 2E: Encryption Tests | 6 | ⬜ Not started |
-| 3A: Audit Report | 6 | ⬜ Not started |
-| 3B: Gitignore | 5 | ⬜ Not started |
-| 3C: Migration Guide | 5 | ⬜ Not started |
-| 4A: Network API | 10 | ⬜ Not started |
-| 5A-G: Dashboard UI | 20 | ⬜ Not started |
-| **Total** | **~142 tasks** | **7 done, 135 remaining** |
+| 0A–0H: Fetch gate + firewall | — | ✅ Done (checkboxes above + NSC) |
+| 0I: Gate tests | 10 | ✅ Done (NSC Phase 1) |
+| 1–3: Daemon / secrets | — | ✅ Done (SECRETS_CONSOLIDATION + historical [x] items) |
+| 4–5: Network API + dashboard | — | ✅ Done (checkboxes + NSC Phase 6) |
+| Manual final verification | 7 | ⏳ Partial — remaining items on **NETWORK_SECURITY_COMPLETION Phase 3** |
+| **Archive disposition** | — | **Superseded; do not continue work here** |

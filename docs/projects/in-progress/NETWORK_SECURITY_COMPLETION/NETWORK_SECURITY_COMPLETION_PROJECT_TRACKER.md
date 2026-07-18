@@ -33,7 +33,7 @@ timestamp: 2026-07-18T00:15:00-06:00
 | 4 | Three-node mesh acceptance | ⏳ Blocked on user Tailscale extension approval |
 | 5 | Cline integration | ✅ Done |
 | 6 | Dashboard mesh/webhook enhancements | ✅ Done (alert-rules UI deferred) |
-| 7 | Tracker hygiene & archive | ⏳ Partial — waiting final acceptance |
+| 7 | Tracker hygiene & archive | ⏳ Partial — archive sync done; wait full suite + 3-node to complete/ |
 | 8 | Device entity variables (OSS vs vault) | ✅ Done |
 | 9 | Interface kinds + LAN discovery/connect | ✅ Done |
 | 10 | Device I/O (screen/touch/mic/speaker…) for agent UI | ✅ Done (`/api/mesh/io`) |
@@ -125,9 +125,10 @@ Device identities in acceptance are **entity variables** on each install’s `me
 ## ⏳ Phase 7: Tracker Hygiene & Final Verification (P2)
 
 - [x] HEADSCALE Phase 2A/2B superseded banner
-- [ ] Check off verified-done items in archived `MESH_DASHBOARD_UI` docs (S)
-- [ ] Fix archived `NETWORK_SAFETY_AND_SECRETS` summary table + Final Verification boxes (S)
+- [x] Check off verified-done items in archived `MESH_DASHBOARD_UI` docs + SUPERSEDED pointer (S)
+- [x] Fix archived `NETWORK_SAFETY_AND_SECRETS` summary table + Final Verification boxes + SUPERSEDED pointer (S)
 - [x] Archived trackers under `superseded-by-network-security-completion/`
+- [x] Install guide: mesh devices as entity variables + I/O/LAN APIs (`docs/setup/INSTALLATION.md` §5) (S)
 - [ ] Final PRD §3 sweep (blocked on Phase 3 full suite + Phase 4 three-node)
 - [ ] Move project folder → `docs/projects/completed/` when Done-When met
 
@@ -170,10 +171,9 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 
 ### B. Agent session — remaining
 
-1. **Phase 7** hygiene: archived MESH_DASHBOARD_UI / NETWORK_SAFETY checkbox sync.  
-2. **Phase 3** NETWORK_SAFETY manual checklist with running daemon.  
-3. Optional install-guide blurb for mesh_node entities.  
-4. After A: Phase 4 kill-leader proof → Phase 7 archive to `completed/`.
+1. **Phase 3** NETWORK_SAFETY manual checklist with running daemon (when available).  
+2. After A: Phase 4 kill-leader proof → Phase 7 final PRD sweep → move to `completed/`.  
+3. Optional polish: latency sparkline, N×N matrix, webhook re-deliver, mesh alert rules.
 
 ### C. Explicitly not next
 
@@ -199,3 +199,4 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Phase 8 complete** (`3ad293f`). MeshNodeSchema entity fields; patchOwnMeshNode SSSS upsert from live self; listEnrichedMeshNodes merge; API/UI bind; mesh-entities.spec.mjs (neutral fixtures only).
 - 2026-07-18: **Phase 9 complete.** Interface kind tracking + LAN ARP discovery + TR health probe on LAN IPs; Mesh page panels; no personal device hardcoding.
 - 2026-07-18: **Phase 10 complete.** Device I/O profile (screen/touch/mic/speaker/camera/keyboard/pointer/headless) + ui_hints for agent UI generation; mesh_node.io entity variable; GET /api/mesh/io; Mesh “I/O for agent UI” panel.
+- 2026-07-18: **Phase 7 hygiene (partial).** Archived MESH_DASHBOARD_UI + NETWORK_SAFETY trackers marked SUPERSEDED with completed-item sync; INSTALLATION.md §5 documents mesh_node entity variables, LAN/I/O APIs, and agent UI contract.

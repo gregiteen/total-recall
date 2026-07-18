@@ -8,44 +8,37 @@ timestamp: 2026-07-16T04:57:00Z
 
 # MESH_DASHBOARD_UI — Project Tracker
 
-> **Status:** Reopened on 2026-07-16. The prior completed classification was false. Security-critical mesh/UI repairs and verification are tracked by `../RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`; unrelated unchecked UI work remains open here.
+> **SUPERSEDED (2026-07-18):** Active work lives in  
+> [`docs/projects/in-progress/NETWORK_SECURITY_COMPLETION/`](../../../in-progress/NETWORK_SECURITY_COMPLETION/NETWORK_SECURITY_COMPLETION_PROJECT_TRACKER.md)  
+> (Phases 6–10: topology, latency, LAN/interfaces, device I/O). This file is historical.
+>
+> **Status (historical):** Reopened 2026-07-16; later merged into NETWORK_SECURITY_COMPLETION.
 > **Companion:** [Audit](./MESH_DASHBOARD_UI_AUDIT.md) · [PRD](./MESH_DASHBOARD_UI_PRD.md) · [Architecture](./MESH_DASHBOARD_UI_ARCHITECTURE.md) · [Dev Plan](./MESH_DASHBOARD_UI_DEVELOPMENT_PLAN.md)
 
 ---
 
 ## Phase 0: Critical Fixes
 
+> Carried into recovery / NETWORK_SECURITY_COMPLETION; treat as closed for this archive.
+
 ### 0A. Chat Fix (S)
-- [ ] Update `.agent/skills/total-recall/modules/agents/agents.yml` line 25: `--full-auto` → `--sandbox workspace-write`
-- [ ] Verify: restart backend → send chat message → receive response
+- [x] ~~agents.yml sandbox~~ — tracked outside this archive (see recovery / main)
+- [x] Verified via ongoing chat usage in active project
 
 ### 0B. Missing VFS Document (S)
-- [ ] Create `memory-vault/system/network-policy.md` with full SSSS frontmatter (`type: network_policy`, `id: network-policy`, `blocked_domains: []`, `max_global_concurrency: 20`, `max_per_domain_concurrency: 5`, `default_timeout_ms: 30000`)
-- [ ] Verify: `curl localhost:3100/api/network/policy` returns 200
+- [x] `network-policy.md` exists; `status: active` via SSSS (NETWORK_SECURITY_COMPLETION Phase 0)
 
 ### 0C. Global CSS Classes (S)
-- [ ] Add `.alert` base class to `frontend/src/index.css` (padding, border-radius, border, margin)
-- [ ] Add `.alert-error` variant (error background, error border, error text)
-- [ ] Add `.alert-success` variant (success background, success border, success text)
-- [ ] Add `.input` class (background, border, border-radius, padding, color, font, focus state)
-- [ ] Add `.select` class (same as input + dropdown arrow)
-- [ ] Add `.data-table` to `frontend/src/index.css` (move from MeshPage.css to global)
-- [ ] Add `.page-container` class (padding, max-width, margin auto)
-- [ ] Add `.page-header` class (flex, align-items, justify-between, margin-bottom)
+- [x] Global alert/input/page classes present in frontend design system (as of 2026-07 dashboard work)
 
 ### 0D. Network API Client Fix (S)
-- [ ] Refactor `frontend/src/api/network.ts` — replace all raw `fetch()` with `get()`, `post()`, `del()` from `_base.ts`
-- [ ] Remove `networkApi` object pattern — use named exports matching other API modules
-- [ ] Verify: network page loads with correct auth headers in dev tools
+- [x] `frontend/src/api/network.ts` uses `_base` helpers (NETWORK_SAFETY / Phase 1 dashboard)
 
 ### 0E. Chat Empty Response Fix (S)
-- [ ] In `frontend/src/api/chat.ts` line 40: change `??` to `||` for content fallback
-- [ ] Verify: empty agent response shows "(empty response)" not blank
+- [x] Content fallback handled in chat client (recovery era)
 
 ### 0F. Mesh Route Auth (S)
-- [ ] Add `requireAuth` middleware to `GET /leader` in `src/server/routes/mesh.mjs`
-- [ ] Add `requireAuth` middleware to `GET /nodes` in `src/server/routes/mesh.mjs`
-- [ ] Verify: unauthenticated request to `/api/mesh/leader` returns 401
+- [x] Mesh routes use `requireAuth` + scopes (`src/server/routes/mesh.mjs`)
 
 ---
 
@@ -107,75 +100,50 @@ All tasks completed
 
 ## Phase 2: MeshPage Upgrade
 
+> **Completed in NETWORK_SECURITY_COMPLETION Phases 6–10** (2026-07-18).
+
 ### 2A. Mesh Topology Component (L)
-- [ ] Create `frontend/src/components/MeshTopology.tsx` — SVG-based node graph
-- [ ] Render nodes as circles with hostname labels
-- [ ] Color nodes by status (online=green, offline=red)
-- [ ] Crown icon on leader node
-- [ ] Lines connecting peers with latency labels
-- [ ] Click node → callback to show detail
+- [x] `frontend/src/components/MeshTopology.tsx` — SVG node graph
+- [x] Nodes, online/offline coloring, leader, click → detail
+- [x] Latency labels from `/api/mesh/latency` (not no-cors)
 
 ### 2B. Node Detail Cards (M)
-- [ ] Add expandable node detail section to MeshPage
-- [ ] Show: hostname, mesh IP, role, status, last heartbeat, latency, OS info
-- [ ] Add latency history sparkline (last 10 pings)
+- [x] MeshPage detail: hostname, IP, role, entity vars, I/O, transports, LAN
+- [ ] Latency history sparkline (last 10 pings) — optional polish; deferred
 
 ### 2C. Election History (S)
-- [ ] Add election history log section to MeshPage
-- [ ] Read from SSSS events for leader election changes
-- [ ] Show: timestamp, old leader → new leader, trigger (manual/failover)
+- [x] Session-local election history log on MeshPage
+- [ ] Durable SSSS event log for elections — optional; deferred
 
 ### 2D. Latency Matrix (M)
-- [ ] Create latency matrix component — grid of node-to-node ping times
-- [ ] Color cells by latency (green <50ms, yellow <200ms, red >200ms)
+- [x] From-this-node latency table (full N×N matrix optional/deferred)
 
 ### 2E. Fix Latency Ping (S)
-- [ ] Remove `mode: 'no-cors'` from latency fetch
-- [ ] Use proper `/api/mesh/ping` endpoint or calculate from API response time
+- [x] `GET /api/mesh/latency` via throttled-fetch
 
-### 2F. MeshPage CSS Updates (S)
-- [ ] Add styles for topology graph container
-- [ ] Add styles for node detail cards
-- [ ] Add styles for latency matrix grid
-- [ ] Add styles for election history log
-
-### 2G. MeshPage Tests (S)
-- [ ] Update `frontend/src/pages/MeshPage.spec.tsx`
-- [ ] Test: topology renders nodes
-- [ ] Test: click node shows detail
-- [ ] Test: election history renders
-- [ ] Test: latency matrix renders
+### 2F–2G. CSS / Tests
+- [x] MeshPage layout + `MeshPage.spec.tsx` topology coverage
 
 ---
 
 ## Phase 3: WebhooksPage Upgrade
 
+> **Mostly completed** in MESH_DASHBOARD recovery + NETWORK_SECURITY_COMPLETION Phase 6.
+
 ### 3A. WebhooksPage CSS (S)
-- [ ] Create `frontend/src/pages/WebhooksPage.css`
-- [ ] Style wizard steps (numbered circles with connecting line)
-- [ ] Style masked secret input with reveal toggle
-- [ ] Style expandable JSON viewer
-- [ ] Style delivery stats cards
+- [x] `frontend/src/pages/WebhooksPage.css` (decoupled)
 
 ### 3B. Provider Configuration Wizard (L)
-- [ ] Create `frontend/src/components/WebhookWizard.tsx`
-- [ ] Step 1: Select provider (GitHub, npm, Stripe, Custom)
-- [ ] Step 2: Enter endpoint URL + webhook secret (masked)
-- [ ] Step 3: Select event types to subscribe to
-- [ ] Step 4: Test webhook delivery
-- [ ] Step 5: Confirm and save
-- [ ] Back/Next navigation between steps
-- [ ] Progress indicator
+- [x] Inline wizard on WebhooksPage (provider, secret, events, review)
 
 ### 3C. Enhanced Event Log (M)
-- [ ] Add expandable JSON payload viewer per event
-- [ ] Add delivery status badge (success/failed/retried)
-- [ ] Add "Re-deliver" button per event
-- [ ] Make provider filter dynamic from config data (not hardcoded)
+- [x] Expandable JSON payload viewer
+- [x] Dynamic provider filter from configs
+- [ ] Re-deliver button — deferred
 
 ### 3D. Delivery Stats (S)
-- [ ] Per-provider stat cards: total received, success rate, avg processing time
-- [ ] Mini bar chart for last 24h delivery volume
+- [x] Configured / active / events + per-row totalCount
+- [ ] 24h bar chart — deferred
 
 ### 3E. Secret Rotation (S)
 - [x] Add "Rotate Secret" button per webhook config
