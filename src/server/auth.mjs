@@ -246,6 +246,12 @@ export function requireAuthOrLocal(req, res, next) {
   const config = loadSecurityConfig();
   if (config.network?.public_health === true) return next();
   if (isLocalRequest(req)) return next();
+  // Mesh peers probe /health for latency + LAN discovery. Traffic is already on
+  // WireGuard; treat mesh socket addresses like local for this gate only.
+  // Never trust X-Forwarded-For for this exemption (same as requireHttps mesh rule).
+  if (isMeshIp(req.socket?.remoteAddress) && forwardedClientIps(req).length === 0) {
+    return next();
+  }
   return requireAuth(req, res, next);
 }
 
