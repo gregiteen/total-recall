@@ -281,7 +281,8 @@ router.get('/api/mesh/latency', requireAuth, requireScope('config:read'), async 
     }
     const start = Date.now();
     try {
-      const response = await throttledFetch(meshPeerUrl(peer.ip, '/health'), {}, 3000);
+      // WAN mesh RTT can exceed 3s under load; gate + Tailscale need headroom.
+      const response = await throttledFetch(meshPeerUrl(peer.ip, '/health'), {}, 10_000);
       const ms = Date.now() - start;
       const ok = response.ok || response.status === 200;
       latency_ms[peer.hostname] = ok ? ms : null;

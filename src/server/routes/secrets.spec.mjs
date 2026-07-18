@@ -101,7 +101,7 @@ describe('Secrets Routing API', () => {
     expect(res.body.results).toEqual([
       { hostname: 'node-1.mesh', ip: '100.64.0.2', success: true }
     ]);
-    expect(throttled.throttledFetch).toHaveBeenCalledWith('http://100.64.0.2:3000/api/secrets/sync/trigger-pull', expect.any(Object), 1500);
+    expect(throttled.throttledFetch).toHaveBeenCalledWith('http://100.64.0.2:3000/api/secrets/sync/trigger-pull', expect.any(Object), 10_000);
   });
 
   it('POST /api/secrets/sync/trigger-pull handles pull trigger on followers', async () => {
