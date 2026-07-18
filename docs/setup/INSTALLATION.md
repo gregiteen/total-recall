@@ -34,7 +34,7 @@ During initialization, you can select one of the following deployment configurat
 
 > [!TIP]
 > **Cloudflare Tunnels on Headless Servers:**
-> If you are running Total Recall on a headless home server (e.g. a Mac Mini or Linux rig), selecting **Quick Tunnel** allows you to securely access the React Dashboard from any browser worldwide without manual port-forwarding or dynamic DNS.
+> If you are running Total Recall on a headless home server (Linux, appliance, or any always-on host), selecting **Quick Tunnel** allows you to securely access the React Dashboard from any browser worldwide without manual port-forwarding or dynamic DNS.
 
 ---
 
@@ -81,3 +81,57 @@ During the initialization phase, the system configures the brain to operate as a
 ### Interoperability:
 - **Together**: The rebuilder automatically merges both directories, allowing project-specific facts to interact with global invariants.
 - **Separately**: In air-gapped workspaces, the global layer can be fully disabled to restrict the agent's memory to the local repository boundaries.
+
+---
+
+## 🖧 5. Mesh devices as entity variables (not product hardcoding)
+
+Each machine in your fleet is a **`mesh_node` entity** under the brain vault:
+
+```text
+<brain>/memory-vault/system/mesh-nodes/<slug>.md
+```
+
+Product code never embeds your hostnames. It discovers live facts (Tailscale, LAN ARP, NICs, I/O) and merges them with **entity variables** you store on each document.
+
+| Variable group | Examples | Purpose |
+| :--- | :--- | :--- |
+| Identity | `hostname`, `ip`, `title`, `role`, `labels` | Who this device is in *your* install |
+| Network | `interfaces[]` (wifi/ethernet/vpn_overlay…), `lan_ip`, `transports` | How it connects (mesh + LAN) |
+| I/O for agents | `io.channels` (screen, touch, mic, speaker, keyboard, camera, headless), `io.ui_hints` | So agents generate UI for the right surface |
+
+### APIs (authenticated)
+
+```bash
+# Enriched peers + vault entity fields
+curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/nodes"
+
+# Local NIC kinds
+curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/interfaces"
+
+# LAN neighbors + optional Total Recall /health probe
+curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/lan?probe=1"
+
+# This host I/O profile (agent UI hints)
+curl -H "Authorization: Bearer $TR_PAT" "$TR_BRAIN/api/mesh/io"
+```
+
+### Annotate a device (SSSS / vault)
+
+Patch install-specific detail onto the entity (touch kiosk example):
+
+```yaml
+# system/mesh-nodes/<derived-slug>.md
+type: mesh_node
+hostname: <from-live-discovery>
+role: kiosk
+labels: [lobby]
+io:
+  display: { present: true, touch: true }
+  channels: [screen, touch, speaker]
+  ui_hints: [touch_targets_large, avoid_hover_only, voice_output_ok]
+```
+
+Daemon heartbeat (`patchOwnMeshNode`) refreshes **live** fields (`ip`, `status`, `interfaces`, detected `io`) without wiping your role/labels/notes overrides.
+
+Dashboard: **Mesh → Daemon Status** shows topology, LAN discovery, local interfaces, and “I/O for agent UI”.
