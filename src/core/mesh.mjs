@@ -174,6 +174,7 @@ function enrichPeerWithEntity(peer, ent, extra = {}) {
       : Array.isArray(ent?.interfaces)
         ? ent.interfaces
         : [],
+    io: peer.io || ent?.io || null,
   };
 }
 
@@ -265,6 +266,20 @@ export async function patchOwnMeshNode(options = {}) {
   const lanIp =
     interfacesSummary.flatMap((i) => i.ipv4 || []).find(Boolean) || existing?.lan_ip || null;
 
+  let ioProfile = existing?.io || null;
+  try {
+    const { detectDeviceIo, mergeIoProfiles } = await import('./device-io.mjs');
+    const liveIo = detectDeviceIo();
+    ioProfile = mergeIoProfiles(liveIo, existing?.io || null);
+  } catch {
+    // optional
+  }
+
+  // Fold I/O channels into capabilities tags for agents (deduped).
+  const ioChannels = Array.isArray(ioProfile?.channels) ? ioProfile.channels : [];
+  const priorCaps = Array.isArray(existing?.capabilities) ? existing.capabilities : [];
+  const capabilities = [...new Set([...priorCaps, ...ioChannels.map((c) => `io:${c}`)])];
+
   const livePatches = {
     hostname: self.hostname,
     ip: self.ip,
@@ -274,6 +289,8 @@ export async function patchOwnMeshNode(options = {}) {
     interfaces: interfacesSummary,
     lan_ip: lanIp,
     transports: [...new Set(['mesh', ...(lanIp ? ['lan'] : [])])],
+    io: ioProfile,
+    capabilities,
     ...requiredMeta,
   };
 
@@ -310,9 +327,11 @@ export async function patchOwnMeshNode(options = {}) {
       `lan_ip: ${lanIp == null ? 'null' : JSON.stringify(lanIp)}`,
       `transports: ${JSON.stringify(livePatches.transports)}`,
       `interfaces: ${JSON.stringify(interfacesSummary)}`,
+      `io: ${JSON.stringify(ioProfile)}`,
+      `capabilities: ${JSON.stringify(capabilities)}`,
       '---',
       '',
-      '<!-- Entity space: add install-specific notes, labels, and capabilities via SSSS patch. -->',
+      '<!-- Entity space: I/O (screen/touch/mic/speaker) + notes/labels via SSSS patch. Agents use io.channels / ui_hints. -->',
       '',
     ];
     result = await processViaPackageKernel(
