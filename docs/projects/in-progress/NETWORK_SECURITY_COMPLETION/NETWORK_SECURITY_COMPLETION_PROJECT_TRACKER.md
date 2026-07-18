@@ -10,7 +10,7 @@ timestamp: 2026-07-18T00:15:00-06:00
 
 > **Status**: In progress — **implementation largely complete**; remaining work is acceptance (full suite + 3-node mesh)  
 > **Companion**: [Audit](./NETWORK_SECURITY_COMPLETION_AUDIT.md) · [PRD](./NETWORK_SECURITY_COMPLETION_PRD.md) · [Architecture](./NETWORK_SECURITY_COMPLETION_ARCHITECTURE.md) · [Dev Plan](./NETWORK_SECURITY_COMPLETION_DEVELOPMENT_PLAN.md)  
-> **Tip of tree (feature work)**: `4e8c8e3` (mesh/webhooks easy kills + auto-pull vite rebuild) ← `ba78ca1` (fetch_gate + secrets migrate)
+> **Tip of tree (feature work)**: `e45117b` (mesh/webhooks easy kills + auto-pull vite rebuild) ← `ba78ca1` (fetch_gate + secrets migrate)
 
 > **Merged-From Provenance (2026-07-17):** This project is now the single active tracker for all outstanding network/security/rate-limiting work. The following projects were merged in and their folders archived to `docs/projects/archived/superseded-by-network-security-completion/`:
 > - `RECENT_SYSTEM_INTEGRATION_RECOVERY` → Phases 3-4 below (gates, enrollment, acceptance)
@@ -220,5 +220,5 @@ Goal: track **interface kinds** as device variables; discover/connect LAN peers 
 - 2026-07-18: **Easy kills** — latency matrix + sparklines; durable `mesh_election` SSSS events (`/api/mesh/election/history|log`); tracker hygiene (install guide [x]); tip `ba78ca1`.
 - 2026-07-18: **Phase 3 restart smoke** — server rebound mesh+loopback; `/health.fetch_gate` live; all mesh routes 200 authed; election log → `mesh-election` workspace (fast); frontend vite build with gate indicator + latency matrix; network policy active/blocked≥1; 3 mesh peers.
 - 2026-07-18: **Easy kills cont.** — lsof hygiene OK; project `.agent/secrets.enc` AES-migrated; boot migrates project+brain secrets; webhook re-deliver API+UI; webhook events workspace `webhooks`; frontend `index-D5xRw5uq.js`. Still open: remote full suite, Tailscale 3-node.
-- 2026-07-18: **Rollout** `4e8c8e3` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
+- 2026-07-18: **Rollout** `e45117b` — committed + push to main; auto-pull rebuilds frontend via vite after pull.
 - 2026-07-18: **`fetch_gate` on GET /health** + **`migrateSecretsToEncryptedIfNeeded`** (boot re-encrypts plain-JSON secrets when password configured); secrets-store tests 9/9.
