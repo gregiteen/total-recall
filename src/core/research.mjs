@@ -77,9 +77,10 @@ export async function handleProactiveResearch(task, context = {}) {
   }
 
   // Phase 3: Write and integrate findings into a single consolidated main draft node
+  let draftSlug = null;
   for (const [i, results] of allResults.entries()) {
     if (results.length === 0) continue;
-    writeOrUpdateConsolidatedDraft(task.target, queries[i], results, inboxDir);
+    draftSlug = writeOrUpdateConsolidatedDraft(task.target, queries[i], results, inboxDir);
   }
 
   // Phase 4: Synthesize using local runtime (which consists of high-powered CLI agents)
@@ -88,7 +89,7 @@ export async function handleProactiveResearch(task, context = {}) {
 
   // Save the beautiful synthesized executive summary at the top of our main consolidated document
   if (finalReport) {
-    saveSynthesizedReportToDraft(task.target, finalReport, inboxDir);
+    draftSlug = saveSynthesizedReportToDraft(task.target, finalReport, inboxDir) || draftSlug;
   }
 
   // Phase 5: Also add topic to the Research Agenda for ongoing tracking
@@ -100,7 +101,16 @@ export async function handleProactiveResearch(task, context = {}) {
     tags: ['deep-research'],
   });
 
-  return finalReport;
+  // Always return structured result so executors can advance the research queue with a real node slug
+  if (!draftSlug) {
+    draftSlug = `research-report-${slugify(task.target)}`;
+  }
+  return {
+    report: finalReport || null,
+    factSlug: draftSlug,
+    sources: flatResults.length,
+    queries,
+  };
 }
 
 // ─── Planning ───────────────────────────────────────────────────────────────────
@@ -400,7 +410,7 @@ export function writeOrUpdateConsolidatedDraft(parentTopic, query, results, inbo
   };
 
   atomicWrite(filePath, safeStringify(bodyLines.join('\n'), frontmatter));
-  return filePath;
+  return slug;
 }
 
 export function saveSynthesizedReportToDraft(parentTopic, finalReport, inboxDir) {
@@ -494,7 +504,7 @@ export function saveSynthesizedReportToDraft(parentTopic, finalReport, inboxDir)
   };
 
   atomicWrite(filePath, safeStringify(bodyLines.join('\n'), frontmatter));
-  return filePath;
+  return slug;
 }
 
 // ─── Synthesis ───────────────────────────────────────────────────────────────────

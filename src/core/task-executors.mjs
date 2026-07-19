@@ -369,6 +369,45 @@ async function runResearchLegacy(task, ctx) {
     String(task.slug || '').includes('fact-seeker') ||
     String(task.slug || '').includes('knowledge-acquisition')
   ) {
+    // Prefer deep multi-source research when this came from the research queue
+    const deep =
+      String(task.slug || '').startsWith('research-acquisition-') ||
+      task.created_by === 'research-queue' ||
+      task._research_id;
+
+    if (deep) {
+      try {
+        const { handleProactiveResearch } = await import('./research.mjs');
+        const deepResult = await handleProactiveResearch(
+          {
+            target: task.target || task.title || 'Unknown',
+            body: task.body || task.reason || '',
+          },
+          { runtimeConfig },
+        );
+        const draftSlug =
+          deepResult?.factSlug ||
+          findLatestResearchDraftSlug(inboxDir, task.target);
+        if (draftSlug) {
+          return {
+            success: true,
+            output: `Deep researched "${task.target}" → ${draftSlug} (${deepResult?.sources || 0} sources)`,
+            factSlug: draftSlug,
+            executor: 'research',
+          };
+        }
+        logger.info({
+          subsystem: 'task-executors',
+          message: 'Deep research returned no draft slug — falling back to knowledge acquisition',
+        });
+      } catch (err) {
+        logger.info({
+          subsystem: 'task-executors',
+          message: `Deep research failed (${err.message}) — falling back to knowledge acquisition`,
+        });
+      }
+    }
+
     const { runKnowledgeAcquisitionCycle } = await import('./fact-seeker.mjs');
     const result = await runKnowledgeAcquisitionCycle({
       vaultDir: VAULT_DIR,
@@ -380,8 +419,20 @@ async function runResearchLegacy(task, ctx) {
       instructionsFile: INSTRUCTIONS_FILE,
       runtimeConfig,
     });
+    // CRITICAL: skipped/no-results is NOT success — otherwise phases advance empty forever
     if (result.skipped) {
-      return { success: true, output: `Knowledge acquisition: ${result.skipped}`, executor: 'research' };
+      return {
+        success: false,
+        error: `Knowledge acquisition skipped: ${result.skipped}${result.errors?.length ? ` (${result.errors.map((e) => e.error || e.source).join('; ')})` : ''}`,
+        executor: 'research',
+      };
+    }
+    if (!result.factSlug) {
+      return {
+        success: false,
+        error: `Knowledge acquisition produced no memory node for "${result.topic || task.target}"`,
+        executor: 'research',
+      };
     }
     return {
       success: true,
@@ -391,51 +442,104 @@ async function runResearchLegacy(task, ctx) {
     };
   }
 
+  // Later phases require a real node from acquisition — never no-op success
+  const requireNode = (label) => {
+    const slug = task._node_slug;
+    if (!slug || slug === 'pending') {
+      return {
+        success: false,
+        error: `${label} requires node_slug from acquisition (got ${slug || 'null'}). Reset phase to acquisition.`,
+        executor: 'research',
+      };
+    }
+    return null;
+  };
+
   if (String(task.slug || '').startsWith('research-deliberation-')) {
+    const missing = requireNode('Deliberation');
+    if (missing) return missing;
     const { runResearchDeliberationCycle } = await import('./fact-seeker.mjs');
-    await runResearchDeliberationCycle({
+    const result = await runResearchDeliberationCycle({
       vaultDir: VAULT_DIR,
-      nodeSlug: task._node_slug || 'pending',
+      nodeSlug: task._node_slug,
       topic: task.title || task.target || 'Unknown Topic',
       runtimeConfig,
     });
-    return { success: true, output: 'Deliberation complete', executor: 'research' };
+    if (result?.success === false) {
+      return { success: false, error: result.error || 'Deliberation failed', executor: 'research' };
+    }
+    return {
+      success: true,
+      output: result?.output || 'Deliberation complete',
+      factSlug: result?.factSlug || task._node_slug,
+      executor: 'research',
+    };
   }
 
   if (String(task.slug || '').startsWith('research-improvement-')) {
+    const missing = requireNode('Improvement');
+    if (missing) return missing;
     const { runResearchImprovementCycle } = await import('./fact-seeker.mjs');
-    await runResearchImprovementCycle({
+    const result = await runResearchImprovementCycle({
       vaultDir: VAULT_DIR,
-      nodeSlug: task._node_slug || 'pending',
+      nodeSlug: task._node_slug,
       topic: task.title || task.target || 'Unknown Topic',
       runtimeConfig,
     });
-    return { success: true, output: 'Improvement complete', executor: 'research' };
+    if (result?.success === false) {
+      return { success: false, error: result.error || 'Improvement failed', executor: 'research' };
+    }
+    return {
+      success: true,
+      output: result?.output || 'Improvement complete',
+      factSlug: result?.factSlug || task._node_slug,
+      executor: 'research',
+    };
   }
 
   if (String(task.slug || '').startsWith('research-monitoring-')) {
+    const missing = requireNode('Monitoring');
+    if (missing) return missing;
     const { runResearchMonitoringCycle } = await import('./fact-seeker.mjs');
-    await runResearchMonitoringCycle({
+    const result = await runResearchMonitoringCycle({
       vaultDir: VAULT_DIR,
-      nodeSlug: task._node_slug || 'pending',
+      nodeSlug: task._node_slug,
       topic: task.title || task.target || 'Unknown Topic',
       runtimeConfig,
       skillsDir: SKILLS_DIR,
       derivedDir: DERIVED_DIR,
       instructionsFile: INSTRUCTIONS_FILE,
     });
-    return { success: true, output: 'Monitoring complete', executor: 'research' };
+    if (result?.success === false) {
+      return { success: false, error: result.error || 'Monitoring failed', executor: 'research' };
+    }
+    return {
+      success: true,
+      output: result?.output || 'Monitoring complete',
+      factSlug: result?.factSlug || task._node_slug,
+      executor: 'research',
+    };
   }
 
   if (String(task.slug || '').startsWith('research-expansion-')) {
+    const missing = requireNode('Expansion');
+    if (missing) return missing;
     const { runResearchExpansionCycle } = await import('./fact-seeker.mjs');
-    await runResearchExpansionCycle({
+    const result = await runResearchExpansionCycle({
       vaultDir: VAULT_DIR,
-      nodeSlug: task._node_slug || 'pending',
+      nodeSlug: task._node_slug,
       topic: task.title || task.target || 'Unknown Topic',
       runtimeConfig,
     });
-    return { success: true, output: 'Expansion complete', executor: 'research' };
+    if (result?.success === false) {
+      return { success: false, error: result.error || 'Expansion failed', executor: 'research' };
+    }
+    return {
+      success: true,
+      output: result?.output || 'Expansion complete',
+      factSlug: result?.factSlug || task._node_slug,
+      executor: 'research',
+    };
   }
 
   if (String(task.slug || '').includes('validate')) {
@@ -455,7 +559,50 @@ async function runResearchLegacy(task, ctx) {
     };
   }
 
-  return { success: true, output: 'No-op research task', executor: 'research' };
+  return {
+    success: false,
+    error: `No research handler matched slug=${task.slug} category=${task.category}`,
+    executor: 'research',
+  };
+}
+
+/**
+ * Locate the newest consolidated research draft for a topic in memory-inbox/pending.
+ */
+function findLatestResearchDraftSlug(inboxDir, topic) {
+  try {
+    if (!fs.existsSync(inboxDir)) return null;
+    const needle = String(topic || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+    const files = fs
+      .readdirSync(inboxDir)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => {
+        const full = path.join(inboxDir, f);
+        const st = fs.statSync(full);
+        return { slug: f.replace(/\.md$/, ''), mtime: st.mtimeMs, name: f.toLowerCase() };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    if (!files.length) return null;
+    if (needle) {
+      const hit = files.find(
+        (f) =>
+          f.name.includes(needle) ||
+          f.name.includes('research') ||
+          f.name.includes('deep-research') ||
+          f.name.includes('consolidated'),
+      );
+      if (hit) return hit.slug;
+    }
+    // Prefer research-looking drafts, else newest
+    const researchish = files.find((f) => /research|fact-|deep-/.test(f.name));
+    return (researchish || files[0]).slug;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Registry ───────────────────────────────────────────────────────────────────

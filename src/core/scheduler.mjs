@@ -510,16 +510,38 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     for (const item of allItems) {
       if (item.status === 'done' || item.status === 'failed') {
         const completedTime = new Date(item.completed_at || item.updated_at || 0).getTime();
-        if (Date.now() - completedTime >= COOLDOWN_MS) {
-          try {
-            updateQueueItem(item.id, { status: 'pending' });
-            resetCount++;
-          } catch (updateErr) {
-            logger.error({
-              subsystem: 'scheduler',
-              message: `Failed to reset research queue item ${item.id} to pending: ${updateErr.message}`,
+        if (Date.now() - completedTime < COOLDOWN_MS) continue;
+
+        // Empty "done" (no node, no conclusions) is NOT real research — re-acquire
+        const emptyDone =
+          item.status === 'done' &&
+          !item.node_slug &&
+          !(item.summary?.conclusions?.length > 0);
+
+        // Successful done with real content: re-queue only for monitoring refresh, keep node
+        // Failed or empty: force acquisition from scratch
+        try {
+          if (emptyDone || item.status === 'failed' || !item.node_slug) {
+            updateQueueItem(item.id, {
+              status: 'pending',
+              research_phase: 'acquisition',
+              notes: emptyDone
+                ? 'Auto-reset empty done project → re-run acquisition (previous run produced no memory node)'
+                : item.notes || null,
+            });
+          } else {
+            // Has a real node — optional re-monitor after cooldown (don't wipe conclusions)
+            updateQueueItem(item.id, {
+              status: 'pending',
+              research_phase: 'monitoring',
             });
           }
+          resetCount++;
+        } catch (updateErr) {
+          logger.error({
+            subsystem: 'scheduler',
+            message: `Failed to reset research queue item ${item.id} to pending: ${updateErr.message}`,
+          });
         }
       }
     }
@@ -527,7 +549,7 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     if (resetCount > 0) {
       logger.info({
         subsystem: 'scheduler',
-        message: `Auto-reset ${resetCount} completed/failed research items back to pending after cooldown.`,
+        message: `Auto-reset ${resetCount} research items after cooldown (empty→acquisition, failed→acquisition, done+node→monitoring).`,
       });
     }
 
