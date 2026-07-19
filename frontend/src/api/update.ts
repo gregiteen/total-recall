@@ -13,10 +13,15 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
   if (!res.ok) throw new Error(`Check update API error: ${res.status}`)
   const data = await res.json()
   // Normalize snake_case API fields for the Settings UI
+  const currentVersion = data.currentVersion ?? data.current ?? ''
+  const latestVersion = data.latestVersion ?? data.latest ?? ''
+  // Prefer host package comparison; fall back to API flag (includes consumers behind).
+  const hostBehind =
+    Boolean(latestVersion && currentVersion && latestVersion !== currentVersion)
   return {
-    currentVersion: data.currentVersion ?? data.current ?? '',
-    latestVersion: data.latestVersion ?? data.latest ?? '',
-    updateAvailable: Boolean(data.updateAvailable ?? data.update_available),
+    currentVersion,
+    latestVersion,
+    updateAvailable: hostBehind || Boolean(data.updateAvailable ?? data.update_available),
   }
 }
 

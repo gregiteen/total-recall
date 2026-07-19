@@ -19,9 +19,20 @@ describe('SettingsPage', () => {
       brain: {},
       secrets: {},
     } as any);
-    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy', version: '1.0.0' } as any);
-    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
-    vi.mocked(api.fetchBrains).mockResolvedValue([]);
+    vi.mocked(api.fetchHealth).mockResolvedValue({
+      status: 'healthy',
+      version: '1.0.0',
+      cli_agents: ['claude'],
+    } as any);
+    vi.mocked(api.checkUpdate).mockResolvedValue({
+      updateAvailable: false,
+      currentVersion: '1.0.0',
+      latestVersion: '1.0.0',
+    } as any);
+    vi.mocked(api.fetchBrains).mockResolvedValue([
+      { id: 'project:demo', name: 'demo', layer: 'project', node_count: 3 },
+    ] as any);
+    vi.mocked(api.triggerRecompile).mockResolvedValue({ success: true, message: 'ok' } as any);
 
     await act(async () => {
       render(<SettingsPage />);
