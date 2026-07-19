@@ -68,7 +68,7 @@ router.get('/api/config', requireAuth, requireScope('config:read'), async (req, 
  * GET /api/config-json
  * Returns full config bundle: security, budget, brain, and allowed secrets keys.
  */
-router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, res) => {
+router.get('/api/config-json', requireAuth, requireScope('config:read'), async (req, res) => {
   try {
     const securityPath = path.join(CONFIG_DIR, 'security.yml');
     const budgetPath   = path.join(CONFIG_DIR, 'budget.yml');
@@ -89,22 +89,46 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), (req, r
     if (fs.existsSync(brainPath)) {
       try { brain = JSON.parse(fs.readFileSync(brainPath, 'utf8')) || {}; } catch {}
     }
-    if (fs.existsSync(secretsPath)) {
-      try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {}; } catch {}
+    // Prefer brain secrets store (AES). Never return raw secret values to the dashboard.
+    const allowedKeys = [
+      'google_api_key',
+      'anthropic_api_key',
+      'openai_api_key',
+      'openrouter_api_key',
+      'tavily_api_key',
+      'brave_api_key',
+      'exa_api_key',
+      'serper_api_key',
+      'github_token',
+    ];
+    const safeSecrets = {};
+    try {
+      const { listSecretsMeta } = await import('../../core/secrets-store.mjs');
+      const meta = await listSecretsMeta(BRAIN_DIR);
+      for (const row of meta) {
+        if (!allowedKeys.includes(row.key)) continue;
+        // Mask only — Settings/Secrets UIs use presence indicators, not values.
+        safeSecrets[row.key] = row.set ? '••••••••' : '';
+      }
+    } catch {
+      if (fs.existsSync(secretsPath)) {
+        try {
+          secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {};
+        } catch {
+          /* ignore AES/binary */
+        }
+        for (const key of allowedKeys) {
+          if (secrets[key] !== undefined && secrets[key] !== null && secrets[key] !== '') {
+            safeSecrets[key] = '••••••••';
+          }
+        }
+      }
     }
 
     const safeBrain = { ...brain };
     if (safeBrain.token) {
       safeBrain.has_token = true;
       delete safeBrain.token;
-    }
-
-    const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'openrouter_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
-    const safeSecrets = {};
-    for (const key of allowedKeys) {
-      if (secrets[key] !== undefined) {
-        safeSecrets[key] = secrets[key];
-      }
     }
 
     res.json({ security, budget, brain: safeBrain, secrets: safeSecrets });
@@ -146,22 +170,39 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
       fs.writeFileSync(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
     }
     if (secrets) {
-      let existingSecrets = {};
-      if (fs.existsSync(secretsPath)) {
-        try { existingSecrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8')) || {}; } catch {}
-      }
-      const allowedKeys = ['google_api_key', 'anthropic_api_key', 'openai_api_key', 'openrouter_api_key', 'tavily_api_key', 'brave_api_key', 'exa_api_key', 'serper_api_key', 'github_token'];
+      // Only accept real secret values — ignore masked placeholders from GET /api/config-json.
+      const allowedKeys = [
+        'google_api_key',
+        'anthropic_api_key',
+        'openai_api_key',
+        'openrouter_api_key',
+        'tavily_api_key',
+        'brave_api_key',
+        'exa_api_key',
+        'serper_api_key',
+        'github_token',
+      ];
+      const { setSecret, deleteSecret } = await import('../../core/secrets-store.mjs');
       for (const key of allowedKeys) {
-        if (secrets[key] !== undefined) {
-          if (secrets[key] === '') {
-            delete existingSecrets[key];
-          } else {
-            existingSecrets[key] = secrets[key];
+        if (secrets[key] === undefined) continue;
+        const value = secrets[key];
+        if (value === '' || value == null) {
+          try {
+            await deleteSecret(BRAIN_DIR, key, { action: 'delete', actor: 'settings-config' });
+          } catch {
+            /* key may not exist */
           }
+          continue;
         }
+        if (typeof value === 'string' && (value.includes('•') || value === '[redacted]')) {
+          // Masked echo from the UI — do not overwrite the store.
+          continue;
+        }
+        await setSecret(BRAIN_DIR, key, String(value), {
+          action: 'set',
+          actor: 'settings-config',
+        });
       }
-      const { saveSecrets } = await import('../../core/secrets-store.mjs');
-      await saveSecrets(AGENT_DIR, existingSecrets);
     }
 
     res.json({ success: true });

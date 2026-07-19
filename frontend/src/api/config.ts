@@ -21,7 +21,14 @@ export async function saveConfig(name: string, content: string): Promise<void> {
 
 export async function fetchConfigJson(): Promise<ConfigJson> {
   const res = await apiFetch(`${API_BASE}/api/config-json`)
-  if (!res.ok) throw new Error(`Config JSON API error: ${res.status}`)
+  if (!res.ok) {
+    let detail = `Config JSON API error: ${res.status}`
+    try {
+      const body = await res.json()
+      if (body?.error) detail = body.error
+    } catch { /* ignore */ }
+    throw new Error(detail)
+  }
   return res.json()
 }
 
@@ -31,5 +38,12 @@ export async function saveConfigJson(config: ConfigJson): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   })
-  if (!res.ok) throw new Error(`Config JSON API error: ${res.status}`)
+  if (!res.ok) {
+    let detail = `Config JSON API error: ${res.status}`
+    try {
+      const body = await res.json()
+      if (body?.error) detail = body.error
+    } catch { /* ignore */ }
+    throw new Error(detail)
+  }
 }

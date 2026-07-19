@@ -11,7 +11,13 @@ export interface UpdateCheckResult {
 export async function checkUpdate(): Promise<UpdateCheckResult> {
   const res = await apiFetch(`${API_BASE}/api/update/check`)
   if (!res.ok) throw new Error(`Check update API error: ${res.status}`)
-  return res.json()
+  const data = await res.json()
+  // Normalize snake_case API fields for the Settings UI
+  return {
+    currentVersion: data.currentVersion ?? data.current ?? '',
+    latestVersion: data.latestVersion ?? data.latest ?? '',
+    updateAvailable: Boolean(data.updateAvailable ?? data.update_available),
+  }
 }
 
 export async function runUpdate(): Promise<{ success: boolean; message: string }> {

@@ -10,14 +10,14 @@ describe('SettingsPage', () => {
     vi.resetAllMocks();
   });
 
-  it('renders without crashing', async () => {
+  it('renders System Settings when config loads', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    
+
     vi.mocked(api.fetchConfigJson).mockResolvedValue({
       security: { bind: {}, network: {}, rate_limits: {}, sandbox: {}, dashboard: {}, api: {} },
       budget: { budget: {} },
       brain: {},
-      secrets: {}
+      secrets: {},
     } as any);
     vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy', version: '1.0.0' } as any);
     vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
@@ -29,5 +29,21 @@ describe('SettingsPage', () => {
 
     const systemSettings = await screen.findByText(/System Settings/i, {}, { timeout: 4000 });
     expect(systemSettings).toBeInTheDocument();
+    expect(screen.getByTestId('settings-page')).toBeInTheDocument();
+  }, 10000);
+
+  it('shows error + retry when config fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.fetchConfigJson).mockRejectedValue(new Error('Config JSON API error: 500'));
+    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy' } as any);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
+    vi.mocked(api.fetchBrains).mockResolvedValue([]);
+
+    await act(async () => {
+      render(<SettingsPage />);
+    });
+
+    expect(await screen.findByTestId('settings-error')).toBeInTheDocument();
+    expect(screen.getByText(/Config JSON API error: 500/i)).toBeInTheDocument();
   }, 10000);
 });

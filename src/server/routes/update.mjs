@@ -6,7 +6,7 @@ import { ROOT, serverError } from './_shared.mjs';
 import { brainDir as configBrainDir } from '../../core/config.mjs';
 import {
   PACKAGE_NAME,
-  fetchLatestNpmVersion,
+  fetchLatestNpmVersionAsync,
   inspectProjectPackage,
   listUpdateRoots,
   runPackageAutoUpdate,
@@ -27,7 +27,8 @@ router.get('/api/update/check', requireAuth, async (_req, res) => {
       current = null;
     }
 
-    const latest = fetchLatestNpmVersion() || '';
+    // Non-blocking npm view (spawnSync blocked the whole server and froze Settings).
+    const latest = (await fetchLatestNpmVersionAsync({ timeoutMs: 8_000 })) || '';
     const roots = listUpdateRoots({ brainDir: configBrainDir });
     const projects = roots.map(({ root, name, source }) => {
       const info = inspectProjectPackage(root);
@@ -43,12 +44,18 @@ router.get('/api/update/check', requireAuth, async (_req, res) => {
     });
 
     const consumersBehind = projects.filter((p) => p.update_available).length;
+    const updateAvailable =
+      Boolean(latest && current && current !== latest) || consumersBehind > 0;
 
     res.json({
       package: PACKAGE_NAME,
       current,
+      currentVersion: current,
       latest,
-      update_available: Boolean(latest && current && current !== latest) || consumersBehind > 0,
+      latestVersion: latest,
+      // snake + camel for dashboard clients
+      update_available: updateAvailable,
+      updateAvailable,
       auto_update_enabled: isPackageAutoUpdateEnabled(),
       projects,
       consumers_behind: consumersBehind,
@@ -82,7 +89,7 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
     // Also kick a local install in ROOT when this host is a consumer (non-source)
     const hostInfo = inspectProjectPackage(ROOT);
     if (!hostInfo.isSourceTree && (hostInfo.declared || hostInfo.installed) && !dryRun) {
-      const latest = summary.latest || fetchLatestNpmVersion();
+      const latest = summary.latest || (await fetchLatestNpmVersionAsync());
       if (latest && needsUpdate(hostInfo.installed, latest)) {
         const proc = spawn('npm', ['install', `${PACKAGE_NAME}@${latest}`, '--save'], {
           cwd: ROOT,

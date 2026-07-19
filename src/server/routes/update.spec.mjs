@@ -23,6 +23,7 @@ vi.mock('../../core/config.mjs', async (importOriginal) => {
 vi.mock('../../core/package-auto-update.mjs', () => ({
   PACKAGE_NAME: 'total-recall-brain',
   fetchLatestNpmVersion: vi.fn(() => '3.18.0'),
+  fetchLatestNpmVersionAsync: vi.fn(async () => '3.18.0'),
   inspectProjectPackage: vi.fn(() => ({
     declared: '^3.16.1',
     installed: '3.16.1',
@@ -68,9 +69,12 @@ describe('update router', () => {
     const res = await request(app).get('/api/update/check');
     expect(res.status).toBe(200);
     expect(res.body.latest).toBe('3.18.0');
+    expect(res.body.latestVersion).toBe('3.18.0');
+    expect(res.body.updateAvailable).toBe(true);
     expect(res.body.package).toBe('total-recall-brain');
     expect(res.body.projects).toHaveLength(1);
     expect(res.body.auto_update_enabled).toBe(true);
+    expect(pkgUpd.fetchLatestNpmVersionAsync).toHaveBeenCalled();
   });
 
   it('POST /api/update/run runs package auto-update', async () => {
