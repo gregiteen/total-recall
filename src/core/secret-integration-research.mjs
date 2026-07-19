@@ -18,12 +18,12 @@ import { logger } from './logger.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-const INFER_SYSTEM = `You are a senior integrations engineer.
+const INFER_SYSTEM = `You are a senior integrations engineer for Total Recall (a personal memory / mesh OS).
 You are given only:
   (1) an environment/secret KEY NAME (never the secret value)
-  (2) optional code snippets where that key is referenced
+  (2) optional code snippets where that key is referenced in THIS repo
 
-Decide whether Total Recall should queue a *research* job to learn a third-party product API.
+Decide whether Total Recall should queue a *research* job to learn an *external third-party* product API that is NOT already part of this product.
 
 Output ONLY valid JSON (no markdown fences):
 {
@@ -31,22 +31,24 @@ Output ONLY valid JSON (no markdown fences):
   "skip_reason": string|null,
   "product_name": string|null,
   "product_slug": string|null,
-  "kind": "api_key"|"password"|"oauth"|"webhook"|"internal"|"unknown",
+  "kind": "api_key"|"password"|"oauth"|"webhook"|"internal"|"self_hosted"|"already_integrated"|"unknown",
   "topic": string|null,
   "notes": string|null,
   "priority": "low"|"medium"|"high",
   "confidence": number
 }
 
-Rules:
-- Think about the product/service the key belongs to — never treat the env var string as the product name.
-- researchable=true only for third-party APIs worth documenting (auth, base URL, endpoints).
-- researchable=false for: passwords, email logins, SSO/client secrets without a public API, webhook signing secrets, private keys, internal mesh/sync tokens, session secrets, DB passwords, TR/internal credentials.
-- topic must name the *product* (e.g. "Headscale HTTP API auth and endpoints"), never "docs for FOO_API_KEY".
-- notes must instruct the researcher to use official product docs, not search for the raw key name.
-- Use code snippets as primary evidence when present (base URLs, SDK imports, fetch hosts).
-- If unsure, set researchable=false with a clear skip_reason.
-- Do not invent private product paths or repo names.`;
+Rules (strict):
+- researchable=true ONLY for external SaaS/third-party APIs the product might need to learn about from the public internet.
+- researchable=false when code shows the key is for:
+  - infrastructure we already own/run (mesh, Tailscale-compatible control planes, Headscale, local routers, self-hosted mail, etc.)
+  - features already implemented in this repo (routes, clients, adapters present)
+  - passwords, email logins, SSO/client secrets, webhook signing secrets, private keys, session/DB secrets
+  - Total Recall / TR_ / mesh-sync internal credentials
+- If the key is used by existing modules (e.g. headscale routes, mesh auth, mail), set researchable=false with kind "already_integrated" or "self_hosted".
+- Never queue research whose topic is the env var name itself.
+- topic (when researchable) must name the external product and API surface; notes must say use official docs, not the raw key string.
+- Prefer skip when uncertain. Do not invent product paths.`;
 
 /**
  * Collect a small amount of code-usage context for the AI (not classification rules).
