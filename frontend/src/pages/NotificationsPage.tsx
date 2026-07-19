@@ -101,17 +101,20 @@ export function NotificationsPage() {
   }
 
   return (
-    <div className="page-container notifications-page">
+    <div className="page-container notifications-page" data-testid="notifications-page">
       <div className="page-header">
         <h1>Notifications</h1>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
+        <button onClick={() => setShowModal(true)} className="btn btn-primary" data-testid="add-rule-btn">
           Add Rule
         </button>
       </div>
 
       {error && (
-        <div className="alert alert-error" style={{ marginBottom: '24px' }}>
+        <div className="alert alert-error" role="alert" data-testid="notifications-error" style={{ marginBottom: '24px' }}>
           {error}
+          <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 12 }} onClick={() => loadData()}>
+            Retry
+          </button>
         </div>
       )}
       {success && (
