@@ -469,19 +469,28 @@ async function main() {
             status: result.success ? 'pending' : 'failed',
             notes: result.output ? `Phase output: ${result.output}` : (result.error || null),
           };
-          if (result.factSlug) {
+          if (result.factSlug && result.factSlug !== 'pending') {
             patch.node_slug = result.factSlug;
           }
+          const nodeSlug = patch.node_slug || task._node_slug;
           if (result.skippedLLM) {
             patch.status = 'pending';
           } else if (result.success) {
+            // Never advance past acquisition without a real memory/draft node
             if (task._research_phase === 'acquisition' && !result.factSlug) {
               patch.status = 'failed';
-              patch.notes = 'No insights found during acquisition.';
+              patch.notes =
+                result.error ||
+                'No insights found during acquisition (no web results / synthesis failed).';
             } else if (task._research_phase === 'acquisition') {
               patch.status = 'pending';
               patch.research_phase = 'deliberation';
-              patch.completed_at = new Date().toISOString();
+              patch.completed_at = null;
+            } else if (!nodeSlug || nodeSlug === 'pending') {
+              // Later phase without content → force back to acquisition
+              patch.status = 'pending';
+              patch.research_phase = 'acquisition';
+              patch.notes = `Phase ${task._research_phase} had no node_slug — re-running acquisition.`;
             } else if (task._research_phase === 'deliberation') {
               patch.status = 'pending';
               patch.research_phase = 'improvement';
@@ -492,8 +501,25 @@ async function main() {
               patch.status = 'pending';
               patch.research_phase = 'expansion';
             } else if (task._research_phase === 'expansion') {
-              patch.status = 'done';
-              patch.completed_at = new Date().toISOString();
+              // Only mark done when we still have a real node
+              if (nodeSlug && nodeSlug !== 'pending') {
+                patch.status = 'done';
+                patch.node_slug = nodeSlug;
+                patch.completed_at = new Date().toISOString();
+              } else {
+                patch.status = 'failed';
+                patch.notes = 'Expansion finished without a research memory node.';
+              }
+            }
+          } else {
+            // Failure on later phase: if no node, reset to acquisition for retry
+            if (
+              (!task._node_slug || task._node_slug === 'pending') &&
+              task._research_phase !== 'acquisition'
+            ) {
+              patch.status = 'pending';
+              patch.research_phase = 'acquisition';
+              patch.notes = `Reset to acquisition after ${task._research_phase} failure: ${result.error || 'unknown'}`;
             }
           }
           updateQueueItem(task._research_id, patch);

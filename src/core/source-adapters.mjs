@@ -383,18 +383,42 @@ export async function exaSearch(query, config, count = 5) {
  * When the cap is hit, falls back to free DuckDuckGo — research never stops.
  */
 export async function webSearch(query, config, count = 5) {
+  // isDailyCapReached increments the paid counter when still under limit
   const capReached = isDailyCapReached(config);
+  const errors = [];
 
+  // Try paid providers in order — on 429/timeout/error, continue to next
+  // (old code returned only the first key and aborted the whole search on Brave 429)
   if (!capReached) {
-    if (config.braveApiKey)  return braveSearch(query, config, count);
-    if (config.tavilyApiKey) return tavilySearch(query, config, count);
-    if (config.exaApiKey)    return exaSearch(query, config, count);
-    if (config.serperApiKey) return serperSearch(query, config, count);
+    const chain = [];
+    if (config.braveApiKey) chain.push(['brave-search', () => braveSearch(query, config, count)]);
+    if (config.tavilyApiKey) chain.push(['tavily', () => tavilySearch(query, config, count)]);
+    if (config.exaApiKey) chain.push(['exa', () => exaSearch(query, config, count)]);
+    if (config.serperApiKey) chain.push(['serper', () => serperSearch(query, config, count)]);
+
+    for (const [name, fn] of chain) {
+      try {
+        const results = await fn();
+        if (Array.isArray(results) && results.length > 0) {
+          return results;
+        }
+      } catch (err) {
+        errors.push(`${name}: ${err.message}`);
+      }
+    }
   }
 
-  // No paid key or daily cap reached — free fallback, always available
-  const ddg = await duckduckgoInstant(query, config).catch(() => null);
-  return ddg ? [ddg] : [];
+  // Free fallback — always available so research never hard-stops
+  const ddg = await duckduckgoInstant(query, config).catch((err) => {
+    errors.push(`duckduckgo: ${err.message}`);
+    return null;
+  });
+  if (ddg) return Array.isArray(ddg) ? ddg : [ddg];
+
+  if (errors.length) {
+    throw new Error(`All web search providers failed: ${errors.join(' | ')}`);
+  }
+  return [];
 }
 
 // ─── arXiv API ─────────────────────────────────────────────────────────────────
