@@ -146,6 +146,27 @@ export interface SecretCatalogKey {
   headscale_url?: string | null
   usage_30d: { events: number; cost_usd: number; input_tokens: number; output_tokens: number }
   tiers: { id: string; label: string; monthly_usd?: number | null }[]
+  /** Live provider account/usage tracking */
+  tracking_status?: 'ok' | 'partial' | 'error' | 'exempt' | 'never' | string | null
+  tracking_error?: string | null
+  tracking_synced_at?: string | null
+  tracking_probe?: string | null
+  tracking_account?: unknown
+  tracking_usage?: unknown
+  tracking_subscription?: unknown
+  tracking_exempt?: boolean
+  account_api?: boolean | null
+  usage_api?: boolean | null
+  subscription_api?: boolean | null
+  key_valid?: boolean | null
+  /** Same credential value under multiple secret names / apps */
+  shared_value?: boolean
+  shared_with?: { key: string; app: string; repo?: string | null; provider?: string | null }[]
+  shared_apps?: string[]
+  shared_value_error?: string | null
+  shared_value_severity?: 'error' | 'ok' | string | null
+  shared_fingerprint?: string | null
+  shared_value_ok?: boolean
 }
 
 export interface SecretCatalog {
@@ -162,15 +183,105 @@ export interface SecretCatalog {
     usage_30d: { events: number; cost_usd: number }
     rotation_overdue: number
     budget: Record<string, unknown>
+    tracking_healthy?: boolean
+    tracking_ok?: number
+    tracking_exempt?: number
+    tracking_errors?: number
+    tracking_error_keys?: {
+      key: string
+      provider?: string | null
+      tracking_status?: string
+      error?: string
+    }[]
+    shared_value_healthy?: boolean
+    shared_value_keys?: number
+    shared_value_multi_app_keys?: number
+    shared_value_groups?: number
+    shared_value_errors?: {
+      fingerprint?: string
+      apps?: string[]
+      keys?: string[]
+      error?: string | null
+    }[]
   }
   by_provider: { provider: string; keys: number; cost_30d: number; monthly_cost: number }[]
   store: string
+}
+
+export interface SharedValueHealth {
+  healthy: boolean
+  message: string
+  error_groups: number
+  multi_app_groups: number
+  shared_keys: number
+  groups: {
+    fingerprint: string
+    apps: string[]
+    keys: string[]
+    severity: string
+    error?: string | null
+    members?: { key: string; app: string; provider?: string | null; masked?: string | null }[]
+  }[]
+  errors?: { fingerprint: string; apps: string[]; keys: string[]; error?: string | null }[]
+}
+
+export interface TrackingHealth {
+  healthy: boolean
+  message: string
+  ok: number
+  exempt: number
+  errors: number
+  error_keys: {
+    key: string
+    provider?: string | null
+    tracking_status?: string
+    error?: string
+  }[]
 }
 
 export async function fetchSecretsCatalog(): Promise<SecretCatalog> {
   const res = await apiFetch(`${API_BASE}/api/secrets`)
   if (!res.ok) throw new Error(`Secrets catalog error: ${res.status}`)
   return res.json()
+}
+
+/** Same credential value reused across secret names / apps — 409 when unhealthy. */
+export async function fetchSharedValues(): Promise<SharedValueHealth> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/shared-values`)
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok && res.status !== 409) {
+    throw new Error(body.error || `Shared values error: ${res.status}`)
+  }
+  return body as SharedValueHealth
+}
+
+/** Provider account/usage tracking health — 409 when untracked keys remain. */
+export async function fetchTrackingHealth(): Promise<TrackingHealth> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/tracking-health`)
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok && res.status !== 409) {
+    throw new Error(body.error || `Tracking health error: ${res.status}`)
+  }
+  return body as TrackingHealth
+}
+
+/** Live-probe vendor account/usage APIs and persist tracking meta. */
+export async function runAccountSync(opts: {
+  key?: string
+  keys?: string[]
+  strict?: boolean
+  use_ai?: boolean
+} = {}): Promise<Record<string, unknown>> {
+  const res = await apiFetch(`${API_BASE}/api/secrets/account-sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok && res.status !== 409) {
+    throw new Error(body.error || `Account sync failed: ${res.status}`)
+  }
+  return body
 }
 
 export async function updateSecretMeta(key: string, patch: Record<string, unknown>): Promise<SecretCatalogKey> {

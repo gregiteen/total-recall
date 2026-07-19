@@ -237,6 +237,108 @@ router.get('/api/secrets/providers', requireAuth, requireScope('keys:read', 'con
   res.json({ providers: listProviders() });
 });
 
+/**
+ * GET /api/secrets/tracking-health
+ * Hard status: any set secret without tracking_status=ok|exempt is an error.
+ */
+router.get(
+  '/api/secrets/tracking-health',
+  requireAuth,
+  requireScope('keys:read', 'config:read'),
+  async (req, res) => {
+    try {
+      const brainDir = brainDirFromReq(req);
+      const { getTrackingHealth } = await import('../../core/provider-account-sync.mjs');
+      const health = await getTrackingHealth(brainDir);
+      res.status(health.healthy ? 200 : 409).json(health);
+    } catch (err) {
+      serverError(res, err);
+    }
+  },
+);
+
+/**
+ * GET /api/secrets/shared-values
+ * Same credential material under multiple secret names / apps → ERROR (rotate per app).
+ */
+router.get(
+  '/api/secrets/shared-values',
+  requireAuth,
+  requireScope('keys:read', 'config:read'),
+  async (req, res) => {
+    try {
+      const brainDir = brainDirFromReq(req);
+      const { getSharedValueHealth } = await import('../../core/secrets-store.mjs');
+      const health = await getSharedValueHealth(brainDir);
+      res.status(health.healthy ? 200 : 409).json(health);
+    } catch (err) {
+      serverError(res, err);
+    }
+  },
+);
+
+/**
+ * POST /api/secrets/account-sync
+ * Live-probe vendor account/usage/subscription APIs and persist tracking meta.
+ * Body: { key?, keys?, strict?, use_ai? }
+ */
+router.post(
+  '/api/secrets/account-sync',
+  requireAuth,
+  requireScope('keys:write', 'config:write'),
+  async (req, res) => {
+    try {
+      const brainDir = brainDirFromReq(req);
+      const body = req.body || {};
+      const {
+        syncSecretAccount,
+        syncAllSecretAccounts,
+      } = await import('../../core/provider-account-sync.mjs');
+      const opts = {
+        strict: body.strict !== false,
+        use_ai: !!body.use_ai,
+        force_exempt: !!body.force_exempt,
+      };
+      if (body.key) {
+        const result = await syncSecretAccount(brainDir, body.key, opts);
+        const ok = result.tracking_status === 'ok' || result.tracking_status === 'exempt';
+        return res.status(ok ? 200 : 409).json(result);
+      }
+      if (Array.isArray(body.keys) && body.keys.length) {
+        opts.keys = body.keys;
+      }
+      const report = await syncAllSecretAccounts(brainDir, opts);
+      res.status(report.healthy ? 200 : 409).json(report);
+    } catch (err) {
+      serverError(res, err);
+    }
+  },
+);
+
+/**
+ * POST /api/secrets/:key/account-sync — sync one secret by path param
+ */
+router.post(
+  '/api/secrets/:key/account-sync',
+  requireAuth,
+  requireScope('keys:write', 'config:write'),
+  async (req, res) => {
+    try {
+      const brainDir = brainDirFromReq(req);
+      const { syncSecretAccount } = await import('../../core/provider-account-sync.mjs');
+      const result = await syncSecretAccount(brainDir, req.params.key, {
+        strict: req.body?.strict !== false,
+        use_ai: !!req.body?.use_ai,
+        force_exempt: !!req.body?.force_exempt,
+      });
+      const ok = result.tracking_status === 'ok' || result.tracking_status === 'exempt';
+      res.status(ok ? 200 : 409).json(result);
+    } catch (err) {
+      serverError(res, err);
+    }
+  },
+);
+
 router.get('/api/secrets/usage', requireAuth, requireScope('keys:read', 'config:read'), async (req, res) => {
   try {
     const brainDir = brainDirFromReq(req);

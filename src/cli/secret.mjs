@@ -28,6 +28,7 @@ import {
   getSecretsCatalog,
   updateSecretMeta,
   listRotationDue,
+  getSharedValueHealth,
 } from '../core/secrets-store.mjs';
 import {
   scanEnvSources,
@@ -79,9 +80,22 @@ function printHelp() {
       --dry-run           Show keys that would be written
     import-env            One-time migrate: scan local .env → store (not the steady-state path)
       --all / --file / --overwrite / --dry-run
-    catalog               Full catalog: keys, providers, usage, rotation, cost
+    catalog               Full catalog: keys, providers, usage, rotation, cost, tracking
     providers             List provider registry (docs/schema/tiers)
+    account-sync [key]    Live-probe vendor account/usage/subscription APIs
+      --all               Sync every set secret (default if no key)
+      --strict            partial (no $ API) → ERROR (default)
+      --no-strict         Allow partial status
+      --use-ai            AI-classify unknown keys (slow)
+      --exempt            Mark key tracking_exempt (with optional --monthly-cost)
+    tracking-health       Fail (exit 1) if any set secret is untracked
+    shared                List credential values reused across keys/apps (exit 1 if any)
+      --shared-ok         Mark key as intentional share (waive) — use with meta
     meta <key>            Update metadata (no value change)
+      --tracking-exempt   Waive live account API requirement
+      --no-tracking-exempt
+      --shared-ok         Allow this key to share its value with other secret names
+      --no-shared-ok
       --repo <name>       Bind to exactly ONE product repo (not multi)
       --repos <name>      Same as --repo (single name only; multi rejected)
       --tier <id>         Subscription tier
@@ -167,6 +181,11 @@ function parseArgs(args) {
     enqueue: false,
     bytes: 32,
     format: 'base64url',
+    strict: true,
+    use_ai: false,
+    exempt: false,
+    tracking_exempt: null,
+    shared_ok: null,
   };
   if (!args.length || args[0] === '--help' || args[0] === '-h') {
     out.help = true;
@@ -175,7 +194,9 @@ function parseArgs(args) {
   out.command = args[0];
   let i = 1;
   if (
-    ['set', 'get', 'rotate', 'delete', 'meta', 'rotate-browser', 'rm', 'generate'].includes(out.command) &&
+    ['set', 'get', 'rotate', 'delete', 'meta', 'rotate-browser', 'rm', 'generate', 'account-sync'].includes(
+      out.command,
+    ) &&
     args[i] &&
     !args[i].startsWith('--')
   ) {
@@ -300,6 +321,30 @@ function parseArgs(args) {
         break;
       case '--format':
         out.format = args[++i] || 'base64url';
+        break;
+      case '--strict':
+        out.strict = true;
+        break;
+      case '--no-strict':
+        out.strict = false;
+        break;
+      case '--use-ai':
+        out.use_ai = true;
+        break;
+      case '--exempt':
+        out.exempt = true;
+        break;
+      case '--tracking-exempt':
+        out.tracking_exempt = true;
+        break;
+      case '--no-tracking-exempt':
+        out.tracking_exempt = false;
+        break;
+      case '--shared-ok':
+        out.shared_ok = true;
+        break;
+      case '--no-shared-ok':
+        out.shared_ok = false;
         break;
       case '--help':
       case '-h':
@@ -457,6 +502,121 @@ export default async function secretCli(argv) {
       return;
     }
 
+    if (opts.command === 'account-sync' || opts.command === 'sync-accounts') {
+      const {
+        syncSecretAccount,
+        syncAllSecretAccounts,
+        getTrackingHealth,
+      } = await import('../core/provider-account-sync.mjs');
+      const syncOpts = {
+        strict: opts.strict !== false,
+        use_ai: !!opts.use_ai,
+        force_exempt: !!opts.exempt,
+      };
+      if (opts.key) {
+        if (opts.exempt) {
+          await updateSecretMeta(
+            brainDir,
+            opts.key,
+            {
+              tracking_exempt: true,
+              monthly_cost_usd: opts.monthly_cost ?? undefined,
+            },
+            { actor: 'cli' },
+          );
+        }
+        const r = await syncSecretAccount(brainDir, opts.key, syncOpts);
+        const icon =
+          r.tracking_status === 'ok' ? '✅' : r.tracking_status === 'exempt' ? '⏭' : '❌';
+        console.log(`\n  ${icon} ${r.key}  status=${r.tracking_status}  provider=${r.provider || '-'}`);
+        if (r.probe) console.log(`     probe: ${r.probe}`);
+        if (r.error) console.log(`     error: ${r.error}`);
+        if (r.account) console.log(`     account: ${JSON.stringify(r.account)}`);
+        if (r.usage) console.log(`     usage: ${JSON.stringify(r.usage)}`);
+        if (r.subscription) console.log(`     subscription: ${JSON.stringify(r.subscription)}`);
+        console.log('');
+        if (r.tracking_status === 'error') process.exit(1);
+        return;
+      }
+      console.log('\n  🔄 Live provider account/usage sync (all set secrets)…\n');
+      const report = await syncAllSecretAccounts(brainDir, syncOpts);
+      console.log(`  total=${report.total}  ok/exempt=${report.ok}  errors=${report.errors}`);
+      console.log(`  ${report.healthy ? '✅' : '❌'} ${report.message}`);
+      if (report.error_keys?.length) {
+        console.log('\n  Untracked / failed:');
+        for (const e of report.error_keys.slice(0, 50)) {
+          console.log(`    • ${e.key}: ${e.error}`);
+        }
+        if (report.error_keys.length > 50) {
+          console.log(`    … and ${report.error_keys.length - 50} more`);
+        }
+      }
+      const health = await getTrackingHealth(brainDir);
+      console.log(
+        `\n  tracking-health: healthy=${health.healthy} ok=${health.ok} exempt=${health.exempt} errors=${health.errors}\n`,
+      );
+      if (!report.healthy) process.exit(1);
+      return;
+    }
+
+    if (opts.command === 'tracking-health' || opts.command === 'tracking') {
+      const { getTrackingHealth } = await import('../core/provider-account-sync.mjs');
+      const health = await getTrackingHealth(brainDir);
+      console.log(`\n  ${health.healthy ? '✅' : '❌'} ${health.message}`);
+      console.log(`     ok=${health.ok}  exempt=${health.exempt}  errors=${health.errors}`);
+      if (health.error_keys?.length) {
+        console.log('');
+        for (const e of health.error_keys) {
+          console.log(`    • ${e.key.padEnd(28)} ${(e.provider || '-').padEnd(14)} ${e.error}`);
+        }
+      }
+      const shared = await getSharedValueHealth(brainDir);
+      console.log(`\n  ${shared.healthy ? '✅' : '❌'} ${shared.message}`);
+      if (shared.errors?.length) {
+        for (const e of shared.errors) {
+          console.log(`    • fp=${e.fingerprint} apps=[${e.apps.join(', ')}]`);
+          console.log(`      keys: ${e.keys.join(', ')}`);
+        }
+      }
+      console.log('');
+      if (!health.healthy || !shared.healthy) process.exit(1);
+      return;
+    }
+
+    if (opts.command === 'shared' || opts.command === 'shared-values' || opts.command === 'duplicates') {
+      const shared = await getSharedValueHealth(brainDir);
+      console.log(`\n  ${shared.healthy ? '✅' : '❌'} ${shared.message}`);
+      console.log(
+        `     groups=${shared.groups.length}  error_groups=${shared.error_groups}  multi_app=${shared.multi_app_groups}  keys_in_error=${shared.shared_keys}`,
+      );
+      if (shared.groups.length) {
+        console.log('');
+        for (const g of shared.groups) {
+          const icon = g.severity === 'error' ? '❌' : '⏭';
+          console.log(
+            `  ${icon} fingerprint ${g.fingerprint}  ×${g.count}  apps=[${g.apps.join(', ')}]`,
+          );
+          for (const m of g.members) {
+            console.log(
+              `      • ${m.key.padEnd(36)} app=${String(m.app).padEnd(16)} provider=${m.provider || '-'}  ${m.masked || ''}`,
+            );
+          }
+          if (g.error) console.log(`      → ${g.error}`);
+          console.log(
+            `      fix: rotate each key to a unique value, then: secret rotate <key> <new> --export-env`,
+          );
+          console.log(
+            `      waive (rare): secret meta <key> --shared-ok   # only if intentional mirror`,
+          );
+          console.log('');
+        }
+      } else {
+        console.log('\n  No shared credential values detected.\n');
+      }
+      if (!shared.healthy) process.exit(1);
+      return;
+    }
+
     if (opts.command === 'meta') {
       if (!opts.key) {
         console.error('Usage: total-recall secret meta <key> [--repo ...] [--tier ...]');
@@ -475,6 +635,11 @@ export default async function secretCli(argv) {
       if (opts.project) patch.project_path = opts.project;
       if (opts.provider) patch.provider = opts.provider;
       if (opts.scope) patch.scope = opts.scope;
+      if (opts.tracking_exempt != null) {
+        patch.tracking_exempt = opts.tracking_exempt;
+        if (opts.tracking_exempt) patch.tracking_status = 'exempt';
+      }
+      if (opts.shared_ok != null) patch.shared_value_ok = opts.shared_ok;
       // Fill docs from catalog if provider set and no docs
       if (patch.provider && !patch.api_docs_url) {
         const p = getProvider(patch.provider);
@@ -538,10 +703,22 @@ export default async function secretCli(argv) {
       console.log(`\n  Secrets metadata — ${resolveSecretsPath(brainDir)}\n`);
       for (const r of rows) {
         const repos = r.repos?.length ? r.repos.join(',') : '-';
+        const tr = r.tracking_status || 'never';
+        const trIcon = tr === 'ok' ? '✅' : tr === 'exempt' ? '⏭' : '❌';
+        const share = r.shared_value ? ' 🔗SHARED' : '';
         console.log(
-          `  • ${r.key.padEnd(28)} len=${String(r.length).padStart(4)}  ${(r.provider || '-').padEnd(12)} tier=${r.subscription_tier || '-'}  $${r.monthly_cost_usd ?? '-'}  repos=${repos}`,
+          `  • ${r.key.padEnd(28)} len=${String(r.length).padStart(4)}  ${(r.provider || '-').padEnd(12)} ${trIcon}${tr.padEnd(7)} tier=${r.subscription_tier || '-'}  $${r.monthly_cost_usd ?? '-'}  repos=${repos}${share}`,
         );
         if (r.api_docs_url) console.log(`      docs: ${r.api_docs_url}`);
+        if (r.tracking_error && tr === 'error') console.log(`      tracking: ${r.tracking_error}`);
+        if (r.shared_value_error) {
+          console.log(`      shared: ${r.shared_value_error}`);
+          if (r.shared_with?.length) {
+            console.log(
+              `      same value as: ${r.shared_with.map((s) => `${s.key}(${s.app})`).join(', ')}`,
+            );
+          }
+        }
       }
       console.log('');
       return;
