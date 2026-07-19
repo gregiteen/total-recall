@@ -115,7 +115,26 @@ router.post('/api/diagnostics/agents', requireAuth, requireScope('health:read'),
   }
 });
 
-
+/**
+ * GET /api/pairing
+ * Reachable URLs for the Settings mobile pairing QR (LAN / mesh / loopback).
+ */
+router.get('/api/pairing', requireAuth, requireScope('config:read'), async (_req, res) => {
+  try {
+    const { buildPairingInfo } = await import('../../core/pairing.mjs');
+    const { getMeshIp } = await import('../../core/mesh.mjs');
+    const protocol = _req.secure || String(_req.headers['x-forwarded-proto'] || '').includes('https')
+      ? 'https'
+      : 'http';
+    const info = buildPairingInfo({
+      protocol,
+      meshIp: getMeshIp(),
+    });
+    res.json(info);
+  } catch (err) {
+    serverError(res, err);
+  }
+});
 
 /**
  * GET /api/tasks/failed

@@ -1,24 +1,54 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MobilePairing } from './MobilePairing';
+
+vi.mock('../api', () => ({
+  apiFetch: vi.fn(),
+  getApiBase: vi.fn(() => ''),
+}));
+
+import { apiFetch } from '../api';
 
 describe('MobilePairing', () => {
   beforeEach(() => {
-    // Mock window.location
-    vi.stubGlobal('location', {
-      protocol: 'http:',
-      host: '192.168.1.100:3000'
-    });
+    vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  it('renders QR with preferred LAN/mesh URL from API', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        port: 3000,
+        protocol: 'http',
+        preferred_url: 'http://10.0.0.3:3000',
+        listen_hosts: ['127.0.0.1', '100.64.0.3'],
+        warnings: ['Brain is not listening on LAN'],
+        endpoints: [
+          {
+            kind: 'lan',
+            label: 'Local Wi‑Fi / LAN',
+            ip: '10.0.0.3',
+            url: 'http://10.0.0.3:3000',
+            recommended: false,
+            reachable_hint: 'Same Wi‑Fi',
+          },
+          {
+            kind: 'mesh',
+            label: 'Tailscale / mesh',
+            ip: '100.64.0.3',
+            url: 'http://100.64.0.3:3000',
+            recommended: true,
+            reachable_hint: 'Tailscale',
+          },
+        ],
+      }),
+    } as any);
 
-  it('renders instructions and QR code', () => {
     render(<MobilePairing />);
-    expect(screen.getByText('Mobile Device Pairing')).toBeInTheDocument();
-    expect(screen.getByText(/Scan this QR code/)).toBeInTheDocument();
-    expect(screen.getByText('URL: http://192.168.1.100:3000')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('pairing-url').textContent).toContain('10.0.0.3:3000');
+    });
+    expect(screen.getByTestId('pairing-qr')).toBeTruthy();
+    expect(screen.getByTestId('pairing-warnings')).toBeTruthy();
   });
 });

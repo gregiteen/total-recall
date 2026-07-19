@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { fetchConfigJson, saveConfigJson, runSandbox, fetchHealth, runAgentDiagnostics, checkUpdate, runUpdate, fetchBrains } from '../api';
+import {
+  fetchConfigJson,
+  saveConfigJson,
+  fetchHealth,
+  runAgentDiagnostics,
+  checkUpdate,
+  runUpdate,
+  fetchBrains,
+  triggerRecompile,
+  apiFetch,
+  getApiBase,
+} from '../api';
 import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
 import { MobilePairing } from '../components/MobilePairing';
@@ -33,11 +44,24 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   const [runningDiagnostics, setRunningDiagnostics] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<string | null>(null);
 
-  const [updateInfo, setUpdateInfo] = useState<{ updateAvailable: boolean, latestVersion?: string } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<{
+    updateAvailable: boolean;
+    latestVersion?: string;
+    currentVersion?: string;
+  } | null>(null);
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
   
-  const [brains, setBrains] = useState<unknown[]>([]);
+  type BrainOption = {
+    id: string;
+    name: string;
+    layer?: string;
+    node_count?: number;
+    role?: string;
+    nodes?: number;
+  };
+  const [brains, setBrains] = useState<BrainOption[]>([]);
   const activeBrain = activeBrainId || localStorage.getItem('total-recall-active-brain') || '';
 
   const loadConfig = async () => {
@@ -58,8 +82,18 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   useEffect(() => {
     fetchHealth().then(setHealth).catch(console.error);
     // Update check must never block config load (server used to spawnSync npm view).
-    checkUpdate().then(setUpdateInfo).catch(console.error);
-    fetchBrains().then(setBrains).catch(console.error);
+    checkUpdate()
+      .then((u) =>
+        setUpdateInfo({
+          updateAvailable: !!u.updateAvailable,
+          latestVersion: u.latestVersion,
+          currentVersion: u.currentVersion,
+        }),
+      )
+      .catch(console.error);
+    fetchBrains()
+      .then((list) => setBrains(Array.isArray(list) ? (list as BrainOption[]) : []))
+      .catch(console.error);
     loadConfig();
   }, [activeBrainId]);
 
@@ -71,6 +105,12 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     { id: 'codex', name: 'Codex CLI', desc: 'OpenAI agent binary integration' },
     { id: 'grok', name: 'Grok CLI', desc: 'xAI developer binary integration' }
   ];
+
+  const availableAgents: string[] = Array.isArray(health?.cli_agents)
+    ? health.cli_agents
+    : Array.isArray((health as unknown as { agents?: string[] } | null)?.agents)
+      ? ((health as unknown as { agents: string[] }).agents)
+      : [];
 
   const handleRunDiagnostics = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,6 +133,14 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     try {
       const res = await runUpdate();
       setUpdateMessage(res.success ? 'Update complete. Restarting...' : 'Update failed: ' + res.message);
+      const refreshed = await checkUpdate().catch(() => null);
+      if (refreshed) {
+        setUpdateInfo({
+          updateAvailable: !!refreshed.updateAvailable,
+          latestVersion: refreshed.latestVersion,
+          currentVersion: refreshed.currentVersion,
+        });
+      }
     } catch (err: unknown) {
       setUpdateMessage('Update error: ' + (err as Error).message);
     } finally {
@@ -104,7 +152,18 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     if (!configData) return;
     setSaveStatus('saving');
     try {
-      await saveConfigJson(configData);
+      // Do not persist masked secret placeholders back into the store.
+      const payload = { ...configData } as ConfigJson & { secrets?: Record<string, string> };
+      if (payload.secrets) {
+        const cleaned: Record<string, string> = {};
+        for (const [k, v] of Object.entries(payload.secrets)) {
+          if (typeof v === 'string' && v && !v.includes('•') && v !== '[redacted]') {
+            cleaned[k] = v;
+          }
+        }
+        payload.secrets = cleaned;
+      }
+      await saveConfigJson(payload);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (err) {
@@ -114,23 +173,38 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     }
   };
 
-  const executeSandboxCommand = async (command: string, description: string) => {
-    setSandboxLog(`[Running] ${description}...\n$ ${command}`);
+  const handleRebuildIndex = async () => {
+    setRebuilding(true);
+    setSandboxLog('[Running] Rebuilding instruction surfaces…');
     try {
-      // Avoid string-interpolating untrusted shell into the sandbox payload.
-      const safeCmd = JSON.stringify(command);
-      const res = await runSandbox(`
-      const { execSync } = require('child_process');
-      try {
-        const out = execSync(${safeCmd}, { encoding: 'utf8' });
-        console.log(out);
-      } catch (e) {
-        console.error(e.stdout || e.message);
-      }
-    `);
-      setSandboxLog(`[Finished] ${description}\n\n` + (res.output || ''));
+      const res = await triggerRecompile();
+      setSandboxLog(
+        `[Finished] Rebuilding instruction surfaces\n\n${res.message || (res.success ? 'Compile complete.' : 'Compile finished with warnings.')}`,
+      );
     } catch (err) {
-      setSandboxLog(`[Failed] ${description}\n\n${err instanceof Error ? err.message : String(err)}`);
+      setSandboxLog(`[Failed] Rebuild\n\n${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
+  const handleDownloadExtension = async () => {
+    try {
+      const res = await apiFetch(`${getApiBase()}/api/extension/download`);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'total-recall-extension.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSandboxLog(
+        `[Failed] Extension download\n\n${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
@@ -177,8 +251,12 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
 
   // Instead of parsing it back and forth on every keystroke, 
   // we just use simple helpers that don't aggressively trim trailing commas.
-  const getCsv = (arr: unknown) => Array.isArray(arr) ? arr.join(', ') : '';
-  const setCsv = (str: string) => str.split(',').map(s => s.trimStart());
+  const getCsv = (arr: unknown) => Array.isArray(arr) ? arr.filter(Boolean).join(', ') : '';
+  const setCsv = (str: string) =>
+    str
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
 
   if (loading && !configData) {
     return (
@@ -681,7 +759,12 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
                 step="0.01"
                 className="settings-input"
                 value={configData.budget.budget?.daily_cap_usd ?? 5.0}
-                onChange={(e) => updateBudgetProp('monthly_soft_cap', e.target.value === '' ? null : Number(e.target.value))}
+                onChange={(e) =>
+                  updateBudgetProp(
+                    'daily_cap_usd',
+                    e.target.value === '' ? null : Number(e.target.value),
+                  )
+                }
               />
             </div>
             <div className="field-col" style={{ flex: 1 }}>
@@ -692,7 +775,12 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
                 step="0.01"
                 className="settings-input"
                 value={configData.budget.budget?.weekly_cap_usd ?? 20.0}
-                onChange={(e) => updateBudgetProp('weekly_cap_usd', parseFloat(e.target.value))}
+                onChange={(e) =>
+                  updateBudgetProp(
+                    'weekly_cap_usd',
+                    e.target.value === '' ? null : Number(e.target.value),
+                  )
+                }
               />
             </div>
           </div>
@@ -725,9 +813,13 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
               }}
             >
               <option value="">Global Brain (Root)</option>
-              {brains.map((b: any) => (
-                <option key={b.name} value={b.name}>{b.name} ({b.role} - {b.nodes} nodes)</option>
-              ))}
+              {brains
+                .filter((b) => b.id && b.id !== 'global')
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.layer || b.role || 'project'} — {b.node_count ?? b.nodes ?? 0} nodes)
+                  </option>
+                ))}
             </select>
           </div>
 
@@ -819,7 +911,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
               <option value="antigravity">Antigravity (Google Deepmind)</option>
               <option value="gemini">Gemini (Google)</option>
               <option value="claude">Claude (Anthropic)</option>
-              <option value="openai">OpenAI (O-Series)</option>
+              <option value="codex">Codex (OpenAI)</option>
               <option value="grok">Grok (xAI)</option>
             </select>
           </div>
@@ -842,22 +934,30 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
                 Capture context directly from your browser. Install from the Chrome Web Store or load unpacked from <code>/extension</code> directory.
               </p>
-              <a href="/api/extension/download" download className="btn-primary" style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', boxSizing: 'border-box' }}>Download Extension</a>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ display: 'block', width: '100%', boxSizing: 'border-box' }}
+                onClick={handleDownloadExtension}
+              >
+                Download Extension
+              </button>
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.03)', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontSize: 24, marginBottom: 12 }}>🛠️</div>
               <h4 style={{ margin: '0 0 8px', fontSize: 15 }}>Developer Utilities</h4>
               <p style={{ fontSize: 13, color: 'var(--text-tertiary)', margin: '0 0 16px', lineHeight: 1.5 }}>
-                Run background maintenance tasks or re-index the local search tree.
+                Rebuild compiled instruction surfaces (vault compile) without a shell sandbox.
               </p>
               <div style={{ display: 'flex', gap: 12 }}>
                 <button 
                   className="btn-secondary" 
                   style={{ flex: 1 }}
-                  onClick={() => executeSandboxCommand('npx total-recall compile', 'Rebuilding Search Indexes')}
+                  disabled={rebuilding}
+                  onClick={handleRebuildIndex}
                 >
-                  Rebuild Index
+                  {rebuilding ? 'Rebuilding…' : 'Rebuild Index'}
                 </button>
               </div>
             </div>
@@ -880,13 +980,19 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
             </div>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, padding: '16px 20px', background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, padding: '16px 20px', background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)', gap: 16, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {updateInfo?.updateAvailable ? `Update Available (v${updateInfo.latestVersion})` : 'System is up to date'}
+                {updateInfo?.updateAvailable
+                  ? `Update available (latest v${updateInfo.latestVersion || '?'})`
+                  : 'Host package is up to date'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-                {updateInfo?.updateAvailable ? 'A new version of Total Recall is available for download.' : 'You are running the latest version.'}
+                Running v{updateInfo?.currentVersion || health?.version || '—'}
+                {updateInfo?.latestVersion ? ` · npm latest v${updateInfo.latestVersion}` : ''}
+                {updateInfo?.updateAvailable
+                  ? ' · registered projects or host package can be upgraded'
+                  : ''}
               </div>
               {updateMessage && (
                 <div style={{ fontSize: 12, color: updateMessage.includes('error') || updateMessage.includes('failed') ? '#ef4444' : '#10b981', marginTop: 8 }}>
@@ -894,16 +1000,14 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
                 </div>
               )}
             </div>
-            {updateInfo?.updateAvailable && (
-              <button 
-                className="btn-primary"
-                onClick={handleRunUpdate}
-                disabled={updating}
-                style={{ background: '#3fb950', border: 'none' }}
-              >
-                {updating ? 'Updating...' : 'Download & Restart'}
-              </button>
-            )}
+            <button 
+              className="btn-primary"
+              onClick={handleRunUpdate}
+              disabled={updating}
+              style={{ background: updateInfo?.updateAvailable ? '#3fb950' : undefined, border: 'none' }}
+            >
+              {updating ? 'Updating…' : updateInfo?.updateAvailable ? 'Apply Updates' : 'Check & Sync Projects'}
+            </button>
           </div>
         </div>
 
@@ -922,7 +1026,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {AGENTS_LIST.map((a) => {
-                  const activeAgent = health?.cli_agents?.includes(a.id);
+                  const activeAgent = availableAgents.includes(a.id);
                   return (
                     <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--bg-tertiary)', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}>
                       <div style={{ flex: 1 }}>

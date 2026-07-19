@@ -357,6 +357,10 @@
   },
   {
     "method": "GET",
+    "path": "/api/pairing"
+  },
+  {
+    "method": "GET",
     "path": "/api/research"
   },
   {
