@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { getApiBase } from '../api'
+import { apiFetch, getApiBase } from '../api'
 
 interface BrainInfo {
   id: string
   name: string
-  layer: 'global' | 'project'
+  layer: 'global' | 'project' | 'tenant' | string
   path: string
   project_root?: string
   exists: boolean
@@ -21,24 +21,46 @@ interface BrainSelectorProps {
 function layerDot(layer: string, multi = false): string {
   if (multi) return 'linear-gradient(135deg, #60a5fa, #34d399)'
   if (layer === 'global') return 'linear-gradient(135deg, #60a5fa, #2563eb)'
+  if (layer === 'tenant') return 'linear-gradient(135deg, #c084fc, #7c3aed)'
   return 'linear-gradient(135deg, #34d399, #059669)'
+}
+
+function layerBadge(layer: string): string {
+  if (layer === 'global') return 'G'
+  if (layer === 'tenant') return 'T'
+  return 'P'
 }
 
 export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSelectorProps) {
   const [brains, setBrains] = useState<BrainInfo[]>([])
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const selectorRef = useRef<HTMLDivElement>(null)
 
+  const loadBrains = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await apiFetch(`${getApiBase()}/api/brains`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Brains API ${res.status}`)
+      }
+      const data = await res.json()
+      const list: BrainInfo[] = Array.isArray(data.brains) ? data.brains : []
+      setBrains(list)
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Failed to load brains')
+      setBrains([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    const base = getApiBase()
-    fetch(`${base}/api/brains`, { credentials: 'include' })
-      .then((r) => r.json())
-      .then((data) => {
-        setBrains(data.brains || [])
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+    void loadBrains()
   }, [])
 
   useEffect(() => {
@@ -51,42 +73,91 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Normalize empty / missing selection to global when list is ready
+  useEffect(() => {
+    if (loading || brains.length === 0) return
+    const selected = activeBrainId.split(',').filter(Boolean)
+    const known = new Set(brains.map((b) => b.id))
+    const valid = selected.filter((id) => known.has(id))
+    if (valid.length === 0) {
+      const fallback = brains.find((b) => b.id === 'global')?.id || brains[0]?.id
+      if (fallback && fallback !== activeBrainId) onBrainChange(fallback)
+      return
+    }
+    // Drop unknown ids (stale project:foo)
+    if (valid.join(',') !== selected.join(',')) {
+      onBrainChange(valid.join(','))
+    }
+  }, [loading, brains, activeBrainId, onBrainChange])
+
   const selectedIds = activeBrainId.split(',').filter(Boolean)
   const selectedBrains = brains.filter((b) => selectedIds.includes(b.id))
-  const primary = selectedBrains[0] || brains[0]
+  const primary = selectedBrains[0] || brains.find((b) => b.id === 'global') || brains[0]
   const isMulti = selectedIds.length > 1
-  const totalNodes = selectedBrains.reduce((sum, b) => sum + (b.node_count || 0), 0) || primary?.node_count || 0
+  const totalNodes =
+    selectedBrains.reduce((sum, b) => sum + (b.node_count || 0), 0) || primary?.node_count || 0
 
-  const label = isMulti
-    ? `${selectedIds.length} brains`
-    : primary?.name || 'Brain'
+  const label = isMulti ? `${selectedIds.length} brains` : primary?.name || 'Brain'
+
+  const setSelection = (ids: string[]) => {
+    const next = ids.filter(Boolean)
+    if (next.length === 0) {
+      const fallback = brains.find((b) => b.id === 'global')?.id || brains[0]?.id
+      if (fallback) onBrainChange(fallback)
+      return
+    }
+    onBrainChange(next.join(','))
+  }
 
   const handleToggle = (id: string, e: React.SyntheticEvent) => {
     e.stopPropagation()
     if (selectedIds.includes(id)) {
-      onBrainChange(selectedIds.filter((x) => x !== id).join(','))
+      setSelection(selectedIds.filter((x) => x !== id))
     } else {
-      onBrainChange([...selectedIds, id].join(','))
+      setSelection([...selectedIds, id])
     }
+  }
+
+  const handleSelectOnly = (id: string) => {
+    setSelection([id])
+    setExpanded(false)
   }
 
   if (loading) {
     return (
-      <div className="brain-selector-trigger" style={{ opacity: 0.6 }}>
+      <div className="brain-selector-trigger" data-testid="brain-selector-loading" style={{ opacity: 0.6 }}>
         <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>Brains…</span>
       </div>
     )
   }
 
-  if (brains.length === 0) return null
+  if (error) {
+    return (
+      <div data-testid="brain-selector-error" style={{ fontSize: 10, color: '#ef4444', padding: '4px 6px' }}>
+        Brains failed{' '}
+        <button type="button" onClick={() => void loadBrains()} style={{ cursor: 'pointer', marginLeft: 4 }}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  if (brains.length === 0) {
+    return (
+      <div data-testid="brain-selector-empty" style={{ fontSize: 10, color: 'var(--text-tertiary)', padding: '4px 6px' }}>
+        No brains registered
+      </div>
+    )
+  }
 
   return (
-    <div ref={selectorRef} className="brain-selector" style={{ position: 'relative' }}>
+    <div ref={selectorRef} className="brain-selector" data-testid="brain-selector" style={{ position: 'relative' }}>
       <button
         type="button"
         className="brain-selector-trigger"
+        data-testid="brain-selector-trigger"
         onClick={() => setExpanded((v) => !v)}
-        title="Select brain layers"
+        title="Select active brain (sidebar only)"
         style={{
           width: '100%',
           display: 'flex',
@@ -128,9 +199,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
         >
           {label}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', flexShrink: 0 }}>
-          {totalNodes}
-        </span>
+        <span style={{ fontSize: 10, color: 'var(--text-tertiary)', flexShrink: 0 }}>{totalNodes}</span>
         <svg
           width="10"
           height="10"
@@ -152,6 +221,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
       {expanded && (
         <div
           className="brain-selector-menu"
+          data-testid="brain-selector-menu"
           style={{
             position: 'absolute',
             bottom: '100%',
@@ -179,7 +249,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
               borderBottom: '1px solid var(--border)',
             }}
           >
-            Brains · multi-select
+            Active brains · checkbox multi · click row = only
           </div>
           {brains.map((brain) => {
             const isSelected = selectedIds.includes(brain.id)
@@ -188,16 +258,13 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                 key={brain.id}
                 role="button"
                 tabIndex={0}
+                data-testid={`brain-option-${brain.id}`}
                 onClick={() => {
                   if (!brain.exists) return
-                  onBrainChange(brain.id)
-                  setExpanded(false)
+                  handleSelectOnly(brain.id)
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && brain.exists) {
-                    onBrainChange(brain.id)
-                    setExpanded(false)
-                  }
+                  if (e.key === 'Enter' && brain.exists) handleSelectOnly(brain.id)
                 }}
                 style={{
                   display: 'flex',
@@ -214,7 +281,9 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                   if (brain.exists) e.currentTarget.style.background = 'rgba(148, 163, 184, 0.08)'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = isSelected ? 'rgba(59, 130, 246, 0.12)' : 'transparent'
+                  e.currentTarget.style.background = isSelected
+                    ? 'rgba(59, 130, 246, 0.12)'
+                    : 'transparent'
                 }}
               >
                 <input
@@ -223,6 +292,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                   disabled={!brain.exists}
                   onClick={(e) => e.stopPropagation()}
                   onChange={(e) => handleToggle(brain.id, e)}
+                  aria-label={`Include ${brain.name}`}
                   style={{
                     width: 13,
                     height: 13,
@@ -274,11 +344,18 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
                     background:
                       brain.layer === 'global'
                         ? 'rgba(59, 130, 246, 0.15)'
-                        : 'rgba(16, 185, 129, 0.12)',
-                    color: brain.layer === 'global' ? '#93c5fd' : '#6ee7b7',
+                        : brain.layer === 'tenant'
+                          ? 'rgba(168, 85, 247, 0.15)'
+                          : 'rgba(16, 185, 129, 0.12)',
+                    color:
+                      brain.layer === 'global'
+                        ? '#93c5fd'
+                        : brain.layer === 'tenant'
+                          ? '#d8b4fe'
+                          : '#6ee7b7',
                   }}
                 >
-                  {brain.layer === 'global' ? 'G' : 'P'}
+                  {layerBadge(brain.layer)}
                 </span>
               </div>
             )
