@@ -1,47 +1,119 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  classifySecretForIntegration,
+  parseAiJson,
+  gatherCodeUsageContext,
+  inferSecretIntegrationWithAi,
   buildIntegrationResearchBrief,
-  normalizeSecretKeyName,
+  maybeEnqueueIntegrationResearch,
 } from './secret-integration-research.mjs';
 
-describe('secret-integration-research', () => {
-  it('normalizes packaging prefixes', () => {
-    expect(normalizeSecretKeyName('DEVELOPER_BRAVE_SEARCH_API_KEY')).toBe('BRAVE_SEARCH_API_KEY');
-    expect(normalizeSecretKeyName('PORTFOLIO_DOCUMENSO_SSO_SECRET')).toMatch(/DOCUMENSO/);
+vi.mock('./research-queue.mjs', () => ({
+  addToQueue: vi.fn((item) => ({ id: 'q1', ...item, status: 'pending' })),
+  loadQueue: vi.fn(() => []),
+  updateQueueItem: vi.fn(),
+}));
+
+const SRC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
+
+describe('secret-integration-research (AI-only)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('skips internal mesh / TR tokens', () => {
-    const c = classifySecretForIntegration('TR_MESH_SYNC_TOKEN');
-    expect(c.researchable).toBe(false);
-    expect(c.kind).toBe('internal');
-    expect(buildIntegrationResearchBrief('TR_MESH_SYNC_TOKEN')).toBeNull();
+  it('parses JSON from model output with surrounding noise', () => {
+    const parsed = parseAiJson(
+      'Sure.\n{"researchable":true,"topic":"Foo API","notes":"bar","priority":"low","confidence":0.9}\n',
+    );
+    expect(parsed.researchable).toBe(true);
+    expect(parsed.topic).toBe('Foo API');
   });
 
-  it('skips passwords and SSO secrets', () => {
-    expect(classifySecretForIntegration('PORTFOLIO_WEBMAIL_PASSWORD').researchable).toBe(false);
-    expect(classifySecretForIntegration('DOCUMENSO_SSO_SECRET').researchable).toBe(false);
-    expect(classifySecretForIntegration('GITHUB_WEBHOOK_SECRET').researchable).toBe(false);
-  });
+  it('uses AI decision to build a product brief (no catalog/patterns)', async () => {
+    const callRuntime = vi.fn(async () =>
+      JSON.stringify({
+        researchable: true,
+        skip_reason: null,
+        product_name: 'Headscale',
+        product_slug: 'headscale',
+        kind: 'api_key',
+        topic: 'Headscale HTTP API authentication and primary endpoints',
+        notes: 'Use official Headscale docs. Do not search for the env var name.',
+        priority: 'low',
+        confidence: 0.92,
+      }),
+    );
 
-  it('builds a product-level brief for Headscale API key', () => {
-    const brief = buildIntegrationResearchBrief('HEADSCALE_API_KEY');
+    const brief = await buildIntegrationResearchBrief(
+      'HEADSCALE_API_KEY',
+      {},
+      { callRuntime, codeContext: 'src/server/routes/headscale.mjs: Authorization Bearer' },
+    );
+
+    expect(callRuntime).toHaveBeenCalled();
     expect(brief).not.toBeNull();
     expect(brief.topic).toMatch(/Headscale/i);
     expect(brief.topic).not.toMatch(/HEADSCALE_API_KEY/);
-    expect(brief.notes).toMatch(/official/i);
-    expect(brief.notes).not.toMatch(/Scrape the official API documentation for "HEADSCALE_API_KEY"/);
   });
 
-  it('builds a product-level brief for OpenAI', () => {
-    const brief = buildIntegrationResearchBrief('OPENAI_API_KEY');
-    expect(brief.topic).toMatch(/OpenAI/i);
-    expect(brief.notes).toMatch(/platform\.openai\.com|docs/i);
+  it('skips enqueue when AI says not researchable', async () => {
+    const callRuntime = vi.fn(async () =>
+      JSON.stringify({
+        researchable: false,
+        skip_reason: 'Password for webmail, not a public API',
+        product_name: null,
+        kind: 'password',
+        topic: null,
+        notes: null,
+        priority: 'low',
+        confidence: 0.95,
+      }),
+    );
+
+    const result = await maybeEnqueueIntegrationResearch(
+      '/tmp/brain',
+      'PORTFOLIO_WEBMAIL_PASSWORD',
+      {},
+      { callRuntime, codeContext: '(none)' },
+    );
+
+    expect(result.enqueued).toBe(false);
+    expect(result.skipped).toMatch(/Password|webmail/i);
   });
 
-  it('resolves DEVELOPER_BRAVE_SEARCH_API_KEY to Brave', () => {
-    const c = classifySecretForIntegration('DEVELOPER_BRAVE_SEARCH_API_KEY');
-    expect(c.researchable).toBe(true);
-    expect(c.provider?.id).toBe('brave');
+  it('infers from injected callRuntime without hardcoded provider lists', async () => {
+    const callRuntime = vi.fn(async (prompt) => {
+      expect(prompt).toContain('MY_WEIRD_VENDOR_API_KEY');
+      expect(prompt).toContain('api.weirdvendor.example');
+      return JSON.stringify({
+        researchable: true,
+        product_name: 'Weird Vendor',
+        kind: 'api_key',
+        topic: 'Weird Vendor public API auth and endpoints',
+        notes: 'Base URL seen in code: api.weirdvendor.example',
+        priority: 'medium',
+        confidence: 0.8,
+      });
+    });
+
+    const inference = await inferSecretIntegrationWithAi('MY_WEIRD_VENDOR_API_KEY', {
+      callRuntime,
+      codeContext:
+        'src/foo.mjs: fetch("https://api.weirdvendor.example/v1", { headers: { Authorization }})',
+    });
+
+    expect(inference.researchable).toBe(true);
+    expect(inference.product_name).toBe('Weird Vendor');
+    expect(inference.source).toBe('ai');
+  });
+
+  it('gatherCodeUsageContext returns a string', () => {
+    const ctx = gatherCodeUsageContext('THIS_KEY_SHOULD_NOT_EXIST_ZZZ_999', {
+      roots: [SRC_DIR],
+      maxHits: 3,
+    });
+    expect(typeof ctx).toBe('string');
+    expect(ctx.length).toBeGreaterThan(5);
   });
 });
