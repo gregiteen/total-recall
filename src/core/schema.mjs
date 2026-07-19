@@ -908,6 +908,27 @@ export const WebhookConfigSchema = z.object({
   events: z.array(z.string()).default([]),
 }).passthrough();
 
+/** Alert rule for mesh/system events → desktop/webhook/email channels. */
+export const NotificationRuleSchema = z.object({
+  type: z.literal('notification_rule'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  id: z.string().min(1),
+  event: z.enum([
+    'node_offline',
+    'leader_change',
+    'webhook_failed',
+    'secret_sync_failed',
+    'daemon_error',
+    'research_complete',
+  ]),
+  channel: z.enum(['desktop', 'webhook', 'email']),
+  priority: z.enum(['critical', 'high', 'low']).default('high'),
+  enabled: z.boolean().default(true),
+  quietHours: z.boolean().default(false),
+}).passthrough();
+
 const NetworkInterfaceEntrySchema = z.object({
   name: z.string().min(1),
   kind: z.enum(['loopback', 'wifi', 'ethernet', 'bridge', 'vpn_overlay', 'other']),
@@ -990,6 +1011,7 @@ export const DaemonLeaderSchema = z.object({
 export const SSSS_HOST_EXTENSION_TYPES = [
   'network_policy',
   'webhook_config',
+  'notification_rule',
   'mesh_node',
   'daemon_leader',
 ];
@@ -998,6 +1020,7 @@ export const SSSS_HOST_EXTENSION_TYPES = [
 export const SSSS_SCHEMAS = {
   network_policy: NetworkPolicySchema,
   webhook_config: WebhookConfigSchema,
+  notification_rule: NotificationRuleSchema,
   mesh_node: MeshNodeSchema,
   daemon_leader: DaemonLeaderSchema,
   memory: MemoryNodeSchema,

@@ -329,6 +329,26 @@
   },
   {
     "method": "GET",
+    "path": "/api/notifications/history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications/rules"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/rules"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/notifications/rules/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/test"
+  },
+  {
+    "method": "GET",
     "path": "/api/openai-models"
   },
   {

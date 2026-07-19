@@ -1,4 +1,4 @@
-import { get, post, del } from './_base';
+import { apiFetch, getApiBase } from './_base';
 
 export interface NotificationRule {
   id: string;
@@ -18,24 +18,72 @@ export interface NotificationEntry {
   timestamp: string;
 }
 
+async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
+  const text = await res.text();
+  let data: any = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
+  if (!res.ok) {
+    const msg =
+      (data && (data.error || data.message)) ||
+      `${label} failed: ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : `${label} failed: ${res.status}`);
+  }
+  return data;
+}
+
+function asArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (Array.isArray(obj.rules)) return obj.rules as T[];
+    if (Array.isArray(obj.history)) return obj.history as T[];
+    if (Array.isArray(obj.entries)) return obj.entries as T[];
+  }
+  return [];
+}
+
 export async function listNotificationRules(): Promise<NotificationRule[]> {
-  return get('/api/notifications/rules');
+  const res = await apiFetch(`${getApiBase()}/api/notifications/rules`);
+  const data = await parseJsonOrThrow(res, 'GET /api/notifications/rules');
+  return asArray<NotificationRule>(data);
 }
 
 export async function createNotificationRule(
   rule: Omit<NotificationRule, 'id'>,
 ): Promise<NotificationRule> {
-  return post('/api/notifications/rules', rule);
+  const res = await apiFetch(`${getApiBase()}/api/notifications/rules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rule),
+  });
+  return parseJsonOrThrow(res, 'POST /api/notifications/rules');
 }
 
 export async function deleteNotificationRule(id: string): Promise<void> {
-  return del(`/api/notifications/rules/${encodeURIComponent(id)}`);
+  const res = await apiFetch(
+    `${getApiBase()}/api/notifications/rules/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
+  await parseJsonOrThrow(res, 'DELETE /api/notifications/rules');
 }
 
 export async function getNotificationHistory(): Promise<NotificationEntry[]> {
-  return get('/api/notifications/history');
+  const res = await apiFetch(`${getApiBase()}/api/notifications/history`);
+  const data = await parseJsonOrThrow(res, 'GET /api/notifications/history');
+  return asArray<NotificationEntry>(data);
 }
 
 export async function sendTestNotification(): Promise<void> {
-  return post('/api/notifications/test', {});
+  const res = await apiFetch(`${getApiBase()}/api/notifications/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  await parseJsonOrThrow(res, 'POST /api/notifications/test');
 }
