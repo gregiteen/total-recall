@@ -311,15 +311,22 @@ export function getProvider(providerId) {
  * @param {string} keyName
  */
 export function providerForKeyName(keyName) {
-  const k = String(keyName || '').toUpperCase();
+  // Strip packaging prefixes so DEVELOPER_BRAVE_SEARCH_API_KEY → BRAVE_SEARCH_API_KEY
+  let k = String(keyName || '').toUpperCase();
+  k = k.replace(/^(DEVELOPER_|VITE_|NEXT_PUBLIC_|PUBLIC_|NUXT_PUBLIC_|PORTFOLIO_|ULTRACHAT_)+/g, '');
   for (const p of PROVIDER_CATALOG) {
-    if (p.key_patterns.some((pat) => pat.toUpperCase() === k || k.includes(pat.replace(/_API_KEY$/, '')))) {
+    if (p.key_patterns.some((pat) => {
+      const P = pat.toUpperCase();
+      return P === k || k === P || k.endsWith('_' + P) || k.includes(P.replace(/_API_KEY$|_TOKEN$|_KEY$/i, ''));
+    })) {
       return p;
     }
   }
-  // fuzzy
+  // fuzzy product id in the remaining name
+  const compact = k.replace(/-/g, '_');
   for (const p of PROVIDER_CATALOG) {
-    if (k.includes(p.id.toUpperCase().replace('-', '_'))) return p;
+    const id = p.id.toUpperCase().replace(/-/g, '_');
+    if (compact.includes(id) || compact.startsWith(id + '_')) return p;
   }
   return null;
 }
