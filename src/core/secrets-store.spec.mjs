@@ -112,6 +112,58 @@ describe('secrets-store', () => {
     expect(row.binding_error).toMatch(/2 repos/);
   });
 
+  it('detects same credential value shared across repos/apps as ERROR', async () => {
+    const { updateSecretMeta, getSharedValueHealth } = await import('./secrets-store.mjs');
+    const same = 'shared-api-key-material-xyz-999';
+    await setSecret(brain, 'OPENROUTER_API_KEY', same, {
+      provider: 'openrouter',
+      skip_integration_research: true,
+    });
+    await setSecret(brain, 'DEVELOPER_OPENROUTER_API_KEY', same, {
+      provider: 'openrouter',
+      skip_integration_research: true,
+    });
+    await updateSecretMeta(brain, 'OPENROUTER_API_KEY', { repos: ['ultrachat'] });
+    // developer key stays unbound → app "developer"
+    const meta = await listSecretsMeta(brain);
+    const a = meta.find((m) => m.key === 'OPENROUTER_API_KEY');
+    const b = meta.find((m) => m.key === 'DEVELOPER_OPENROUTER_API_KEY');
+    expect(a.shared_value).toBe(true);
+    expect(b.shared_value).toBe(true);
+    expect(a.shared_with.some((s) => s.key === 'DEVELOPER_OPENROUTER_API_KEY')).toBe(true);
+    expect(a.shared_apps).toEqual(expect.arrayContaining(['developer', 'ultrachat']));
+    expect(a.shared_value_error).toMatch(/SHARED CREDENTIAL/i);
+    expect(a.fingerprint).toBe(b.fingerprint);
+
+    const health = await getSharedValueHealth(brain);
+    expect(health.healthy).toBe(false);
+    expect(health.multi_app_groups).toBeGreaterThanOrEqual(1);
+    expect(health.errors[0].keys).toEqual(
+      expect.arrayContaining(['OPENROUTER_API_KEY', 'DEVELOPER_OPENROUTER_API_KEY']),
+    );
+
+    // Unique values clear the error
+    await setSecret(brain, 'DEVELOPER_OPENROUTER_API_KEY', 'unique-other-value-abc-111', {
+      provider: 'openrouter',
+      skip_integration_research: true,
+    });
+    const health2 = await getSharedValueHealth(brain);
+    expect(health2.healthy).toBe(true);
+  });
+
+  it('shared_value_ok waives intentional duplicate storage', async () => {
+    const { updateSecretMeta, getSharedValueHealth } = await import('./secrets-store.mjs');
+    const same = 'mirrored-intentionally-value-42';
+    await setSecret(brain, 'KEY_A', same, { skip_integration_research: true });
+    await setSecret(brain, 'KEY_B', same, { skip_integration_research: true });
+    await updateSecretMeta(brain, 'KEY_A', { shared_value_ok: true });
+    await updateSecretMeta(brain, 'KEY_B', { shared_value_ok: true });
+    const health = await getSharedValueHealth(brain);
+    expect(health.healthy).toBe(true);
+    expect(health.groups.length).toBe(1);
+    expect(health.groups[0].severity).toBe('ok');
+  });
+
   it('records and summarizes usage', () => {
     recordUsage(brain, {
       provider: 'openai',

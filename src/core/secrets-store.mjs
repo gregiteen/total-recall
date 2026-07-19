@@ -294,6 +294,25 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   assign('notes', (v) => (v == null || v === '' ? null : String(v)));
   assign('project_path', (v) => (v == null || v === '' ? null : String(v)));
   assign('headscale_url', (v) => (v == null || v === '' ? null : String(v)));
+  // Live provider account / usage / subscription tracking (provider-account-sync)
+  assign('tracking_exempt', (v) => !!v);
+  assign('tracking_status', (v) => {
+    if (v == null || v === '') return null;
+    const s = String(v).toLowerCase();
+    return ['ok', 'partial', 'error', 'exempt', 'never'].includes(s) ? s : 'error';
+  });
+  assign('tracking_error', (v) => (v == null || v === '' ? null : String(v)));
+  assign('tracking_synced_at', (v) => (v == null || v === '' ? null : String(v)));
+  assign('tracking_probe', (v) => (v == null || v === '' ? null : String(v)));
+  assign('tracking_account', (v) => (v == null ? null : v));
+  assign('tracking_usage', (v) => (v == null ? null : v));
+  assign('tracking_subscription', (v) => (v == null ? null : v));
+  assign('account_api', (v) => (v == null ? null : !!v));
+  assign('usage_api', (v) => (v == null ? null : !!v));
+  assign('subscription_api', (v) => (v == null ? null : !!v));
+  assign('key_valid', (v) => (v == null ? null : !!v));
+  // Operator waiver: intentional shared credential (rare — prefer unique keys per app)
+  assign('shared_value_ok', (v) => !!v);
   if (patch.updated_at) next.updated_at = patch.updated_at;
   if (patch.rotated_at) next.rotated_at = patch.rotated_at;
   if (patch.created_at && !next.created_at) next.created_at = patch.created_at;
@@ -312,8 +331,115 @@ export function nextRotateDue(meta = {}) {
   return new Date(t).toISOString();
 }
 
+/** Canonical app label for repo binding (empty = developer/global). */
+export function appLabelForSecret(row = {}) {
+  if (row.repo) return String(row.repo);
+  if (Array.isArray(row.repos) && row.repos.length === 1) return String(row.repos[0]);
+  if (Array.isArray(row.repos) && row.repos.length > 1) return row.repos.join('+');
+  return 'developer';
+}
+
+/**
+ * Full value fingerprint (never truncated — used for equality).
+ * @param {string} value
+ */
+export function secretValueFingerprint(value) {
+  if (value == null || value === '') return null;
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+/**
+ * Build shared-value groups from rows that already have fingerprint_full + set.
+ * Same credential material under multiple key names / apps must be an ERROR so
+ * each app can get its own rotated key.
+ *
+ * @param {Array<object>} rows - secret meta rows (with fingerprint_full)
+ * @returns {{ groups: object[], byKey: Map<string, object> }}
+ */
+export function buildSharedValueIndex(rows = []) {
+  const byFp = new Map();
+  for (const row of rows) {
+    if (!row?.set || !row.fingerprint_full) continue;
+    // Skip pure internal passwords that are intentionally shared (e.g. same JWT across?)
+    // No — still flag; operator can mark shared_value_ok.
+    if (!byFp.has(row.fingerprint_full)) byFp.set(row.fingerprint_full, []);
+    byFp.get(row.fingerprint_full).push(row);
+  }
+
+  const groups = [];
+  const byKey = new Map();
+
+  for (const [fp, members] of byFp) {
+    if (members.length < 2) continue;
+    const apps = [...new Set(members.map((m) => appLabelForSecret(m)))].sort();
+    const keys = members.map((m) => m.key).sort();
+    const providers = [...new Set(members.map((m) => m.provider).filter(Boolean))];
+    const multiApp = apps.length > 1;
+    const multiKey = keys.length > 1;
+    // Error unless every member is operator-waived
+    const allOk = members.every((m) => m.shared_value_ok === true);
+    let severity = 'error';
+    let error = null;
+    if (allOk) {
+      severity = 'ok';
+      error = null;
+    } else if (multiApp) {
+      severity = 'error';
+      error = `SHARED CREDENTIAL across apps/repos [${apps.join(', ')}] as keys [${keys.join(', ')}]. Issue a unique API key per app and re-bind.`;
+    } else {
+      // Same app/developer but duplicated under multiple secret names — still force unique
+      severity = 'error';
+      error = `SHARED CREDENTIAL value stored under ${keys.length} secret names [${keys.join(', ')}] (app=${apps[0]}). Use one key name or issue distinct values per purpose.`;
+    }
+
+    const group = {
+      fingerprint: fp.slice(0, 12),
+      fingerprint_full: fp,
+      count: members.length,
+      apps,
+      multi_app: multiApp,
+      multi_key: multiKey,
+      keys,
+      providers,
+      severity,
+      error,
+      members: members.map((m) => ({
+        key: m.key,
+        repo: m.repo || null,
+        repos: m.repos || [],
+        app: appLabelForSecret(m),
+        provider: m.provider || null,
+        masked: m.masked || null,
+        shared_value_ok: !!m.shared_value_ok,
+      })),
+    };
+    groups.push(group);
+    for (const m of members) {
+      byKey.set(m.key, {
+        shared_value: true,
+        shared_with: members
+          .filter((o) => o.key !== m.key)
+          .map((o) => ({
+            key: o.key,
+            app: appLabelForSecret(o),
+            repo: o.repo || null,
+            provider: o.provider || null,
+          })),
+        shared_apps: apps,
+        shared_value_error: error,
+        shared_value_severity: severity,
+        shared_fingerprint: fp.slice(0, 12),
+      });
+    }
+  }
+
+  groups.sort((a, b) => b.count - a.count || a.fingerprint.localeCompare(b.fingerprint));
+  return { groups, byKey };
+}
+
 /**
  * List secret keys with rich metadata only (no values).
+ * Annotates shared-value groups (same credential material under multiple keys/apps).
  */
 export async function listSecretsMeta(brainDir) {
   const { getProvider, providerForKeyName } = await import('./provider-catalog.mjs');
@@ -321,7 +447,7 @@ export async function listSecretsMeta(brainDir) {
   const meta = secrets[META_KEY].keys || {};
   const usageByKey = summarizeUsageByKey(brainDir, { days: 30 });
   const keys = Object.keys(secrets).filter((k) => k !== META_KEY);
-  return keys.map((key) => {
+  const rows = keys.map((key) => {
     const m = meta[key] || {};
     const val = secrets[key];
     const providerId = m.provider || providerForKeyName(key)?.id || null;
@@ -336,14 +462,14 @@ export async function listSecretsMeta(brainDir) {
       output_tokens: 0,
     };
     const repos = Array.isArray(m.repos) ? m.repos.filter(Boolean) : [];
+    const fpFull =
+      typeof val === 'string' && val.length ? secretValueFingerprint(val) : null;
     return {
       key,
       set: val !== undefined && val !== null && val !== '',
       length: typeof val === 'string' ? val.length : val != null ? String(val).length : 0,
-      fingerprint:
-        typeof val === 'string' && val.length
-          ? crypto.createHash('sha256').update(val).digest('hex').slice(0, 12)
-          : null,
+      fingerprint: fpFull ? fpFull.slice(0, 12) : null,
+      fingerprint_full: fpFull,
       masked:
         typeof val === 'string' && val.length > 8
           ? `${val.slice(0, 4)}…${val.slice(-4)}`
@@ -379,8 +505,97 @@ export async function listSecretsMeta(brainDir) {
       headscale_url: m.headscale_url || null,
       usage_30d: usage,
       tiers: catalog?.tiers || [],
+      // Provider account/usage tracking (must be ok or exempt — else error)
+      tracking_exempt: !!m.tracking_exempt,
+      tracking_status: m.tracking_status || (m.tracking_exempt ? 'exempt' : null),
+      tracking_error: m.tracking_error || null,
+      tracking_synced_at: m.tracking_synced_at || null,
+      tracking_probe: m.tracking_probe || null,
+      tracking_account: m.tracking_account || null,
+      tracking_usage: m.tracking_usage || null,
+      tracking_subscription: m.tracking_subscription || null,
+      account_api: m.account_api ?? null,
+      usage_api: m.usage_api ?? null,
+      subscription_api: m.subscription_api ?? null,
+      key_valid: m.key_valid ?? null,
+      shared_value_ok: !!m.shared_value_ok,
     };
   });
+
+  const { byKey: sharedByKey } = buildSharedValueIndex(rows);
+  return rows.map((row) => {
+    const shared = sharedByKey.get(row.key);
+    const { fingerprint_full: _full, ...publicRow } = row;
+    if (!shared) {
+      return {
+        ...publicRow,
+        shared_value: false,
+        shared_with: [],
+        shared_apps: [],
+        shared_value_error: null,
+        shared_value_severity: null,
+      };
+    }
+    return {
+      ...publicRow,
+      shared_value: true,
+      shared_with: shared.shared_with,
+      shared_apps: shared.shared_apps,
+      shared_value_error: shared.shared_value_error,
+      shared_value_severity: shared.shared_value_severity,
+      shared_fingerprint: shared.shared_fingerprint,
+    };
+  });
+}
+
+/**
+ * Report of credential values reused across secret names / apps.
+ * healthy=false when any unwaived share exists.
+ */
+export async function getSharedValueHealth(brainDir) {
+  const secrets = ensureMeta(await loadSecrets(brainDir));
+  const meta = secrets[META_KEY].keys || {};
+  const rows = [];
+  for (const key of Object.keys(secrets)) {
+    if (key === META_KEY) continue;
+    const val = secrets[key];
+    if (val === undefined || val === null || val === '') continue;
+    const m = meta[key] || {};
+    const repos = Array.isArray(m.repos) ? m.repos.filter(Boolean) : [];
+    rows.push({
+      key,
+      set: true,
+      provider: m.provider || null,
+      repos,
+      repo: repos.length === 1 ? repos[0] : null,
+      fingerprint_full: secretValueFingerprint(String(val)),
+      masked:
+        typeof val === 'string' && val.length > 8
+          ? `${val.slice(0, 4)}…${val.slice(-4)}`
+          : '••••••••',
+      shared_value_ok: !!m.shared_value_ok,
+    });
+  }
+  const { groups } = buildSharedValueIndex(rows);
+  const errorGroups = groups.filter((g) => g.severity === 'error');
+  const multiAppGroups = errorGroups.filter((g) => g.multi_app);
+  return {
+    healthy: errorGroups.length === 0,
+    groups,
+    error_groups: errorGroups.length,
+    multi_app_groups: multiAppGroups.length,
+    shared_keys: errorGroups.reduce((n, g) => n + g.count, 0),
+    message:
+      errorGroups.length === 0
+        ? 'No shared credential values across secret names/apps'
+        : `SHARED KEY ERROR: ${errorGroups.length} credential value(s) reused across secret names/apps — issue unique keys per app`,
+    errors: errorGroups.map((g) => ({
+      fingerprint: g.fingerprint,
+      apps: g.apps,
+      keys: g.keys,
+      error: g.error,
+    })),
+  };
 }
 
 /**
@@ -405,6 +620,30 @@ export async function getSecretsCatalog(brainDir) {
     byProvider[p].cost_30d += k.usage_30d?.cost_usd || 0;
     byProvider[p].monthly_cost += Number(k.monthly_cost_usd) || 0;
   }
+  const setKeys = keys.filter((k) => k.set);
+  const trackingOk = setKeys.filter((k) => k.tracking_status === 'ok');
+  const trackingExempt = setKeys.filter((k) => k.tracking_status === 'exempt' || k.tracking_exempt);
+  const trackingErrors = setKeys.filter(
+    (k) => k.tracking_status !== 'ok' && k.tracking_status !== 'exempt' && !k.tracking_exempt,
+  );
+  const sharedKeys = setKeys.filter((k) => k.shared_value && k.shared_value_severity === 'error');
+  const sharedApps = setKeys.filter(
+    (k) => k.shared_value && k.shared_value_severity === 'error' && (k.shared_apps?.length || 0) > 1,
+  );
+  // Build unique shared groups from key annotations
+  const seenFp = new Set();
+  const sharedGroups = [];
+  for (const k of sharedKeys) {
+    const fp = k.shared_fingerprint || k.fingerprint;
+    if (!fp || seenFp.has(fp)) continue;
+    seenFp.add(fp);
+    sharedGroups.push({
+      fingerprint: fp,
+      apps: k.shared_apps || [],
+      keys: [k.key, ...(k.shared_with || []).map((s) => s.key)],
+      error: k.shared_value_error,
+    });
+  }
   return {
     keys,
     providers: listProviders(),
@@ -419,6 +658,22 @@ export async function getSecretsCatalog(brainDir) {
       usage_30d: usage30,
       rotation_overdue: overdue.length,
       budget: budget.config,
+      tracking_healthy: trackingErrors.length === 0,
+      tracking_ok: trackingOk.length,
+      tracking_exempt: trackingExempt.length,
+      tracking_errors: trackingErrors.length,
+      tracking_error_keys: trackingErrors.map((k) => ({
+        key: k.key,
+        provider: k.provider,
+        tracking_status: k.tracking_status || 'never',
+        error: k.tracking_error || 'Never synced — run secret account-sync',
+      })),
+      // Same credential material under multiple key names / repos
+      shared_value_healthy: sharedKeys.length === 0,
+      shared_value_keys: sharedKeys.length,
+      shared_value_multi_app_keys: sharedApps.length,
+      shared_value_groups: sharedGroups.length,
+      shared_value_errors: sharedGroups,
     },
     by_provider: Object.values(byProvider).sort((a, b) => b.cost_30d - a.cost_30d),
     store: resolveSecretsPath(brainDir),

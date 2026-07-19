@@ -32,6 +32,7 @@ import {
   addSecret,
   triggerSync,
   getSyncStatus,
+  runAccountSync,
   type SyncNodeStatus
 } from '../api'
 import type { ConfigJson, GeminiModelInfo } from '../types'
@@ -55,6 +56,8 @@ type MetaEdit = {
   auto_rotate: boolean
   notes: string
   project_path: string
+  tracking_exempt: boolean
+  shared_value_ok: boolean
 }
 
 function metaForm(k: SecretCatalogKey): MetaEdit {
@@ -71,6 +74,8 @@ function metaForm(k: SecretCatalogKey): MetaEdit {
     auto_rotate: !!k.auto_rotate,
     notes: k.notes || '',
     project_path: k.project_path || '',
+    tracking_exempt: !!k.tracking_exempt,
+    shared_value_ok: !!k.shared_value_ok,
   }
 }
 
@@ -179,7 +184,10 @@ export default function SecretsPage() {
     auto_rotate: false,
     notes: '',
     project_path: '',
+    tracking_exempt: false,
+    shared_value_ok: false,
   })
+  const [accountSyncBusy, setAccountSyncBusy] = useState(false)
   const [rotateVal, setRotateVal] = useState('')
   const [saving, setSaving] = useState(false)
   const [status, setStatus] = useState('')
@@ -513,7 +521,7 @@ export default function SecretsPage() {
         setSaving(false)
         return
       }
-      const patch = {
+      const patch: Record<string, unknown> = {
         label: edit.label.trim() || null,
         provider: edit.provider.trim() || null,
         repos: reposList,
@@ -527,7 +535,10 @@ export default function SecretsPage() {
         auto_rotate: !!edit.auto_rotate,
         notes: edit.notes.trim() || null,
         project_path: edit.project_path.trim() || null,
+        tracking_exempt: !!edit.tracking_exempt,
+        shared_value_ok: !!edit.shared_value_ok,
       }
+      if (edit.tracking_exempt) patch.tracking_status = 'exempt'
       await updateSecretMeta(selected.key, patch)
       setStatus('Metadata saved')
       await loadCatalog()
@@ -705,6 +716,37 @@ export default function SecretsPage() {
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => void runScan()}>
             Migrate import
           </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={accountSyncBusy}
+            onClick={async () => {
+              setAccountSyncBusy(true)
+              setError(null)
+              try {
+                const r = (await runAccountSync({ strict: true })) as {
+                  healthy?: boolean
+                  ok?: number
+                  errors?: number
+                  message?: string
+                  total?: number
+                }
+                setStatus(
+                  r.healthy
+                    ? `Account sync OK — ${r.ok ?? 0}/${r.total ?? 0} tracked`
+                    : `Account sync: ${r.errors ?? '?'} tracking error(s) — ${r.message || 'see catalog'}`,
+                )
+                if (!r.healthy) setError(r.message || 'Tracking errors remain after account-sync')
+                await loadCatalog()
+              } catch (e: unknown) {
+                setError((e as Error).message)
+              } finally {
+                setAccountSyncBusy(false)
+              }
+            }}
+          >
+            {accountSyncBusy ? 'Syncing accounts…' : 'Sync provider accounts'}
+          </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => void loadCatalog()}>
             Refresh
           </button>
@@ -740,6 +782,14 @@ export default function SecretsPage() {
             </li>
             <li>
               <strong>import-env</strong> = one-time migrate. <strong>PATs</strong> = brain API tokens only.
+            </li>
+            <li>
+              <strong>Account tracking</strong> — every billable key must have live account/usage/subscription data
+              or an explicit tracking exempt + monthly cost.
+            </li>
+            <li>
+              <strong>Shared values</strong> — same credential material under multiple key names/apps is an error;
+              issue a unique API key per app, then rotate each secret name.
             </li>
           </ul>
         </div>
@@ -810,6 +860,16 @@ export default function SecretsPage() {
             accent={summary.multi_repo_violations ? '#f87171' : '#64748b'}
           />
           <SummaryCard
+            label="Shared keys"
+            value={String(summary.shared_value_groups || 0)}
+            accent={summary.shared_value_healthy === false ? '#f87171' : '#64748b'}
+          />
+          <SummaryCard
+            label="Tracking errors"
+            value={String(summary.tracking_errors || 0)}
+            accent={summary.tracking_healthy === false ? '#f87171' : '#34d399'}
+          />
+          <SummaryCard
             label="Developer"
             value={String(summary.developer_keys || 0)}
             accent="#a78bfa"
@@ -836,6 +896,84 @@ export default function SecretsPage() {
             (tooling / personal). Fix in the red “Needs fix” section below — set <em>one</em> repo or
             clear the field.
           </p>
+        </div>
+      )}
+
+      {summary?.shared_value_healthy === false && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 16,
+            padding: 14,
+            borderColor: 'rgba(251,146,60,0.55)',
+            background: 'rgba(251,146,60,0.1)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: '#fb923c' }}>
+            Shared credential values — {summary.shared_value_groups || 0} group(s) ·{' '}
+            {summary.shared_value_keys || 0} key(s)
+          </strong>
+          <p style={{ margin: '6px 0 8px', color: 'var(--text-secondary)' }}>
+            The same API key material is stored under multiple secret names and/or apps. Issue a{' '}
+            <strong>unique key per app</strong> in the vendor console, then rotate each secret name.
+            CLI: <code>npx total-recall secret shared</code>
+          </p>
+          {(summary.shared_value_errors || []).slice(0, 8).map((g) => (
+            <div
+              key={g.fingerprint || (g.keys || []).join(',')}
+              style={{
+                fontSize: 11,
+                fontFamily: 'ui-monospace, monospace',
+                marginBottom: 6,
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span style={{ color: '#fb923c' }}>fp {g.fingerprint || '—'}</span>
+              {' · apps ['}
+              {(g.apps || []).join(', ')}
+              {'] · '}
+              {(g.keys || []).join(', ')}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {summary?.tracking_healthy === false && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 16,
+            padding: 14,
+            borderColor: 'rgba(248,113,113,0.5)',
+            background: 'rgba(248,113,113,0.08)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: '#f87171' }}>
+            Account / usage tracking errors — {summary.tracking_errors || 0}
+          </strong>
+          <p style={{ margin: '6px 0 8px', color: 'var(--text-secondary)' }}>
+            Every set credential must be tracked (live provider account/usage API) or explicitly exempt
+            with a monthly cost. Run <strong>Sync provider accounts</strong> or CLI{' '}
+            <code>npx total-recall secret account-sync</code>.
+          </p>
+          {(summary.tracking_error_keys || []).slice(0, 10).map((e) => (
+            <div
+              key={e.key}
+              style={{
+                fontSize: 11,
+                fontFamily: 'ui-monospace, monospace',
+                marginBottom: 4,
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span style={{ color: '#f87171' }}>{e.key}</span>
+              {e.provider ? ` (${e.provider})` : ''}: {(e.error || '').slice(0, 120)}
+            </div>
+          ))}
         </div>
       )}
 
@@ -992,7 +1130,9 @@ export default function SecretsPage() {
                   rotate_every_days: '',
                   auto_rotate: false,
                   notes: '',
-                  project_path: ''
+                  project_path: '',
+                  tracking_exempt: false,
+                  shared_value_ok: false,
                 })
                 setNewSecretKeyName('')
                 setNewSecretVal('')
@@ -1592,6 +1732,130 @@ export default function SecretsPage() {
                     {edit.monthly_cap_usd ? ` · cap $${edit.monthly_cap_usd}` : ''}
                   </div>
                 )}
+              </PanelSection>
+
+              <PanelSection
+                title="Tracking & shared-key health"
+                hint="Billable keys need live account/usage APIs; shared values across apps must be unique per app"
+              >
+                <div style={{ fontSize: 12, marginBottom: 10, lineHeight: 1.45 }}>
+                  <div>
+                    Tracking:{' '}
+                    <strong
+                      style={{
+                        color:
+                          selected.tracking_status === 'ok' || selected.tracking_exempt
+                            ? '#34d399'
+                            : selected.tracking_status === 'exempt'
+                              ? '#fbbf24'
+                              : '#f87171',
+                      }}
+                    >
+                      {selected.tracking_exempt
+                        ? 'exempt'
+                        : selected.tracking_status || 'never synced'}
+                    </strong>
+                    {selected.key_valid != null && (
+                      <span style={{ color: 'var(--text-tertiary)' }}>
+                        {' '}
+                        · key {selected.key_valid ? 'valid' : 'invalid'}
+                      </span>
+                    )}
+                  </div>
+                  {selected.tracking_error && (
+                    <div style={{ color: '#f87171', fontSize: 11, marginTop: 4 }}>
+                      {selected.tracking_error}
+                    </div>
+                  )}
+                  {selected.tracking_usage != null && (
+                    <pre
+                      style={{
+                        fontSize: 10,
+                        marginTop: 6,
+                        padding: 8,
+                        borderRadius: 6,
+                        background: 'rgba(0,0,0,0.25)',
+                        overflow: 'auto',
+                        maxHeight: 100,
+                      }}
+                    >
+                      {JSON.stringify(selected.tracking_usage, null, 2)}
+                    </pre>
+                  )}
+                  <div style={{ marginTop: 8 }}>
+                    Shared value:{' '}
+                    <strong
+                      style={{
+                        color:
+                          selected.shared_value && selected.shared_value_severity === 'error'
+                            ? '#fb923c'
+                            : selected.shared_value
+                              ? '#fbbf24'
+                              : '#34d399',
+                      }}
+                    >
+                      {selected.shared_value
+                        ? selected.shared_value_severity === 'error'
+                          ? 'ERROR — same material in multiple keys/apps'
+                          : 'shared (waived)'
+                        : 'unique'}
+                    </strong>
+                  </div>
+                  {selected.shared_with && selected.shared_with.length > 0 && (
+                    <div style={{ fontSize: 11, marginTop: 4, color: 'var(--text-secondary)' }}>
+                      Same value as:{' '}
+                      {selected.shared_with
+                        .map((s) => `${s.key} (${s.app})`)
+                        .join(', ')}
+                    </div>
+                  )}
+                  {selected.shared_value_error && (
+                    <div style={{ color: '#fb923c', fontSize: 11, marginTop: 4 }}>
+                      {selected.shared_value_error}
+                    </div>
+                  )}
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!edit.tracking_exempt}
+                    onChange={(e) => setEdit({ ...edit, tracking_exempt: e.target.checked })}
+                  />
+                  Tracking exempt (no vendor account API — set monthly cost)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!edit.shared_value_ok}
+                    onChange={(e) => setEdit({ ...edit, shared_value_ok: e.target.checked })}
+                  />
+                  Shared value OK (intentional mirror — prefer unique keys per app)
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={accountSyncBusy}
+                  style={{ marginTop: 4 }}
+                  onClick={async () => {
+                    setAccountSyncBusy(true)
+                    try {
+                      const r = (await runAccountSync({ key: selected.key, strict: true })) as {
+                        tracking_status?: string
+                        error?: string
+                      }
+                      setStatus(
+                        `Synced ${selected.key}: ${r.tracking_status || '?'}${r.error ? ` — ${r.error.slice(0, 80)}` : ''}`,
+                      )
+                      await loadCatalog()
+                    } catch (e: unknown) {
+                      setError((e as Error).message)
+                    } finally {
+                      setAccountSyncBusy(false)
+                    }
+                  }}
+                >
+                  Re-probe this key
+                </button>
               </PanelSection>
 
               <PanelSection title="Docs & rotation">
@@ -2203,6 +2467,8 @@ export default function SecretsPage() {
 
 const DEVELOPER_ID = '__developer__'
 const MULTI_ERROR_ID = '__multi_repo_error__'
+const SHARED_ERROR_ID = '__shared_value_error__'
+const TRACKING_ERROR_ID = '__tracking_error__'
 
 function groupKeysByRepo(keys: SecretCatalogKey[]): {
   id: string
@@ -2213,8 +2479,21 @@ function groupKeysByRepo(keys: SecretCatalogKey[]): {
   const map = new Map<string, SecretCatalogKey[]>()
   const developer: SecretCatalogKey[] = []
   const multiError: SecretCatalogKey[] = []
+  const sharedError: SecretCatalogKey[] = []
+  const trackingError: SecretCatalogKey[] = []
 
   for (const k of keys) {
+    if (k.shared_value && k.shared_value_severity === 'error') {
+      sharedError.push(k)
+    }
+    if (
+      k.set &&
+      k.tracking_status !== 'ok' &&
+      k.tracking_status !== 'exempt' &&
+      !k.tracking_exempt
+    ) {
+      trackingError.push(k)
+    }
     const repos = (k.repos || []).map((r) => r.trim()).filter(Boolean)
     if (repos.length > 1 || k.multi_repo_error) {
       multiError.push(k)
@@ -2238,6 +2517,22 @@ function groupKeysByRepo(keys: SecretCatalogKey[]): {
   }[] = []
 
   // Errors first so they are impossible to miss
+  if (sharedError.length) {
+    sections.push({
+      id: SHARED_ERROR_ID,
+      label: 'Needs fix — shared key across apps',
+      keys: sharedError.slice().sort((a, b) => a.key.localeCompare(b.key)),
+      kind: 'error',
+    })
+  }
+  if (trackingError.length) {
+    sections.push({
+      id: TRACKING_ERROR_ID,
+      label: 'Needs fix — account/usage not tracked',
+      keys: trackingError.slice().sort((a, b) => a.key.localeCompare(b.key)),
+      kind: 'error',
+    })
+  }
   if (multiError.length) {
     sections.push({
       id: MULTI_ERROR_ID,
@@ -2298,7 +2593,10 @@ function SecretKeyRow({
         border: `1px solid ${selected ? 'var(--border-accent)' : 'transparent'}`,
         background: selected
           ? 'rgba(59,130,246,0.14)'
-          : k.multi_repo_error || k.rotation_overdue
+          : k.multi_repo_error ||
+              k.rotation_overdue ||
+              (k.shared_value && k.shared_value_severity === 'error') ||
+              (k.tracking_status && k.tracking_status !== 'ok' && k.tracking_status !== 'exempt' && !k.tracking_exempt)
             ? 'rgba(248,113,113,0.06)'
             : 'rgba(148,163,184,0.04)',
         color: 'inherit',
@@ -2318,6 +2616,18 @@ function SecretKeyRow({
           }}
         >
           {k.key}
+          {k.shared_value && k.shared_value_severity === 'error' && (
+            <span style={{ marginLeft: 6, fontSize: 9, color: '#fb923c' }}>SHARED</span>
+          )}
+          {k.tracking_status &&
+            k.tracking_status !== 'ok' &&
+            k.tracking_status !== 'exempt' &&
+            !k.tracking_exempt && (
+              <span style={{ marginLeft: 6, fontSize: 9, color: '#f87171' }}>TRACK</span>
+            )}
+          {k.tracking_status === 'ok' && (
+            <span style={{ marginLeft: 6, fontSize: 9, color: '#34d399' }}>OK</span>
+          )}
           {k.multi_repo_error && (
             <span style={{ marginLeft: 6, fontSize: 9, color: '#f87171' }}>MULTI</span>
           )}
@@ -2337,6 +2647,9 @@ function SecretKeyRow({
           {groupBy === 'api' 
             ? (k.repos?.length ? k.repos.join(', ') : 'Developer') 
             : (k.provider_name || k.provider || '—')} · {k.masked || '••••'}
+          {k.shared_value && k.shared_apps?.length
+            ? ` · apps: ${k.shared_apps.join(', ')}`
+            : ''}
           {k.multi_repo_error ? ` · ${k.repos.join(', ')}` : ''}
         </div>
       </div>
