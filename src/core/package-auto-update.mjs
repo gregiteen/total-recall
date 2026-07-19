@@ -14,11 +14,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
 
 export const PACKAGE_NAME = 'total-recall-brain';
 export const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+/** In-process cache so dashboard update checks never block the event loop on every load. */
+let latestVersionCache = { value: null, fetchedAt: 0 };
+const LATEST_VERSION_CACHE_MS = 5 * 60 * 1000;
 
 /**
  * @returns {boolean}
@@ -183,19 +187,111 @@ export function inspectProjectPackage(projectRoot) {
 }
 
 /**
+ * Resolve latest npm version without blocking the Node event loop.
+ * Prefer this from HTTP handlers / daemons.
+ *
+ * @param {{ timeoutMs?: number, force?: boolean }} [opts]
+ * @returns {Promise<string|null>}
+ */
+export function fetchLatestNpmVersionAsync(opts = {}) {
+  const timeout = opts.timeoutMs ?? 8_000;
+  const now = Date.now();
+  if (
+    !opts.force &&
+    latestVersionCache.value &&
+    now - latestVersionCache.fetchedAt < LATEST_VERSION_CACHE_MS
+  ) {
+    return Promise.resolve(latestVersionCache.value);
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (value) {
+        latestVersionCache = { value, fetchedAt: Date.now() };
+      }
+      resolve(value);
+    };
+
+    let child;
+    try {
+      child = spawn('npm', ['view', PACKAGE_NAME, 'version'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (err) {
+      logger.debug('package-auto-update', 'npm view spawn failed', { error: err.message });
+      return finish(null);
+    }
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
+      logger.debug('package-auto-update', 'npm view timed out', { timeoutMs: timeout });
+      // Return stale cache if any
+      finish(latestVersionCache.value || null);
+    }, timeout);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      logger.debug('package-auto-update', 'npm view error', { error: err.message });
+      finish(latestVersionCache.value || null);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        if (stderr) {
+          logger.debug('package-auto-update', 'npm view failed', { code, stderr: stderr.slice(0, 200) });
+        }
+        return finish(latestVersionCache.value || null);
+      }
+      const v = stdout.trim();
+      finish(v || null);
+    });
+  });
+}
+
+/**
+ * Sync npm view (CLI only). Blocks the process — do NOT call from Express handlers.
+ * Prefer fetchLatestNpmVersionAsync in server/daemon paths.
+ *
  * @param {{ timeoutMs?: number }} [opts]
  * @returns {string|null}
  */
 export function fetchLatestNpmVersion(opts = {}) {
-  const timeout = opts.timeoutMs ?? 20_000;
+  const now = Date.now();
+  if (latestVersionCache.value && now - latestVersionCache.fetchedAt < LATEST_VERSION_CACHE_MS) {
+    return latestVersionCache.value;
+  }
+  const timeout = opts.timeoutMs ?? 8_000;
   const result = spawnSync('npm', ['view', PACKAGE_NAME, 'version'], {
     encoding: 'utf8',
     timeout,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  if (!result || result.status !== 0) return null;
+  if (!result || result.status !== 0) return latestVersionCache.value || null;
   const v = (result.stdout || '').trim();
+  if (v) latestVersionCache = { value: v, fetchedAt: Date.now() };
   return v || null;
+}
+
+/** Test helper — clear version cache between specs. */
+export function clearLatestNpmVersionCache() {
+  latestVersionCache = { value: null, fetchedAt: 0 };
 }
 
 /**

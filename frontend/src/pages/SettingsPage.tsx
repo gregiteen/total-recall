@@ -4,8 +4,27 @@ import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
 import { MobilePairing } from '../components/MobilePairing';
 
+function normalizeConfigJson(data: ConfigJson): ConfigJson {
+  const next = { ...data } as ConfigJson & Record<string, any>;
+  if (!next.security) next.security = {};
+  if (!next.security.dashboard) next.security.dashboard = {};
+  if (!next.security.api) next.security.api = {};
+  if (!next.security.network) next.security.network = {};
+  if (!next.security.bind) next.security.bind = {};
+  if (!next.security.rate_limits) next.security.rate_limits = {};
+  if (!next.security.sandbox) next.security.sandbox = {};
+  if (!next.security.privacy) next.security.privacy = {};
+  if (!next.budget) next.budget = { budget: {} };
+  if (!next.budget.budget) next.budget.budget = {};
+  if (!next.brain) next.brain = {};
+  if (!next.secrets) next.secrets = {};
+  return next;
+}
+
 export default function SettingsPage({ activeBrainId }: { activeBrainId?: string }) {
   const [configData, setConfigData] = useState<ConfigJson | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [sandboxLog, setSandboxLog] = useState('');
 
@@ -20,29 +39,28 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   
   const [brains, setBrains] = useState<unknown[]>([]);
   const activeBrain = activeBrainId || localStorage.getItem('total-recall-active-brain') || '';
+
+  const loadConfig = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await fetchConfigJson();
+      setConfigData(normalizeConfigJson(data));
+    } catch (err) {
+      console.error(err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load settings');
+      setConfigData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
   
   useEffect(() => {
     fetchHealth().then(setHealth).catch(console.error);
+    // Update check must never block config load (server used to spawnSync npm view).
     checkUpdate().then(setUpdateInfo).catch(console.error);
     fetchBrains().then(setBrains).catch(console.error);
-    fetchConfigJson()
-      .then(data => {
-        // Ensure all nested structures exist for controlled inputs
-        if (!data.security) data.security = {};
-        if (!data.security.dashboard) data.security.dashboard = {};
-        if (!data.security.api) data.security.api = {};
-        if (!data.security.network) data.security.network = {};
-        if (!data.security.bind) data.security.bind = {};
-        if (!data.security.rate_limits) data.security.rate_limits = {};
-        if (!data.security.sandbox) data.security.sandbox = {};
-        if (!data.security.privacy) data.security.privacy = {};
-        if (!data.budget) data.budget = { budget: {} };
-        if (!data.budget.budget) data.budget.budget = {};
-        if (!data.brain) data.brain = {};
-        if (!data.secrets) data.secrets = {};
-        setConfigData(data);
-      })
-      .catch(console.error);
+    loadConfig();
   }, [activeBrainId]);
 
   
@@ -98,16 +116,22 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
 
   const executeSandboxCommand = async (command: string, description: string) => {
     setSandboxLog(`[Running] ${description}...\n$ ${command}`);
-    const res = await runSandbox(`
+    try {
+      // Avoid string-interpolating untrusted shell into the sandbox payload.
+      const safeCmd = JSON.stringify(command);
+      const res = await runSandbox(`
       const { execSync } = require('child_process');
       try {
-        const out = execSync('${command}', { encoding: 'utf8' });
+        const out = execSync(${safeCmd}, { encoding: 'utf8' });
         console.log(out);
       } catch (e) {
         console.error(e.stdout || e.message);
       }
     `);
-    setSandboxLog(`[Finished] ${description}\n\n` + res.output);
+      setSandboxLog(`[Finished] ${description}\n\n` + (res.output || ''));
+    } catch (err) {
+      setSandboxLog(`[Failed] ${description}\n\n${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   // State Update Helpers
@@ -156,9 +180,9 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   const getCsv = (arr: unknown) => Array.isArray(arr) ? arr.join(', ') : '';
   const setCsv = (str: string) => str.split(',').map(s => s.trimStart());
 
-  if (!configData) {
+  if (loading && !configData) {
     return (
-      <div style={{ padding: 40, color: 'var(--text-secondary)' }}>
+      <div style={{ padding: 40, color: 'var(--text-secondary)' }} data-testid="settings-loading">
         <div className="glass-card" style={{ display: 'inline-block', padding: '12px 24px' }}>
           Loading Settings...
         </div>
@@ -166,8 +190,38 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     );
   }
 
+  if (loadError && !configData) {
+    return (
+      <div style={{ padding: 40 }} data-testid="settings-error" role="alert">
+        <div
+          className="glass-card"
+          style={{
+            display: 'inline-block',
+            padding: '16px 24px',
+            border: '1px solid #ef4444',
+            color: '#ef4444',
+          }}
+        >
+          Failed to load settings: {loadError}
+          <button
+            type="button"
+            className="btn-primary"
+            style={{ marginLeft: 16 }}
+            onClick={() => loadConfig()}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!configData) {
+    return null;
+  }
+
   return (
-    <div className="settings-page-wrapper">
+    <div className="settings-page-wrapper" data-testid="settings-page">
       <style>{`
         .settings-page-wrapper {
           padding: 32px 40px 100px;
