@@ -34,6 +34,31 @@ const USAGE_FILE = path.join(brainDir, 'config', 'search-usage.json');
 // (credit rounds up, so we stay safe). Users on paid plans can raise this.
 const DEFAULT_DAILY_LIMIT = 50;
 
+/**
+ * Pull a secret by any of several env-style names (case-insensitive).
+ * Avoids "only brave_api_key works" when the vault has BRAVE_SEARCH_API_KEY.
+ */
+function secretPick(secrets, ...names) {
+  if (!secrets || typeof secrets !== 'object') return null;
+  const entries = Object.entries(secrets).filter(([k]) => k !== '__tr_secrets_meta');
+  const upperMap = new Map(entries.map(([k, v]) => [String(k).toUpperCase(), v]));
+  for (const name of names) {
+    const v = upperMap.get(String(name).toUpperCase());
+    if (v != null && String(v).trim() !== '') return String(v);
+  }
+  // fuzzy: any key that contains the brand + KEY/TOKEN
+  for (const name of names) {
+    const brand = String(name).toUpperCase().replace(/_API_KEY$|_API_TOKEN$|_TOKEN$|_KEY$/i, '');
+    if (brand.length < 3) continue;
+    for (const [k, v] of upperMap) {
+      if (k.includes(brand) && /(KEY|TOKEN)$/.test(k) && !/PASSWORD|SECRET|PRIVATE|WEBHOOK|CLIENT_SECRET/i.test(k)) {
+        if (v != null && String(v).trim() !== '') return String(v);
+      }
+    }
+  }
+  return null;
+}
+
 export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
   let fileConfig = {};
   if (fs.existsSync(configPath)) {
@@ -49,12 +74,41 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
 
   return {
     // ── Paid search providers (fallback chain: Brave → Tavily → Exa → Serper) ──
-    braveApiKey:  process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || secrets.brave_api_key || fileConfig.brave_api_key  || defaultBraveKey || defaultBraveSearchKey || null,
-    tavilyApiKey: process.env.TAVILY_API_KEY                                    || secrets.tavily_api_key || fileConfig.tavily_api_key || defaultTavilyKey || null,
-    exaApiKey:    process.env.EXA_API_KEY                                       || secrets.exa_api_key    || fileConfig.exa_api_key    || defaultExaKey || null,
-    serperApiKey: process.env.SERPER_API_KEY                                    || secrets.serper_api_key || fileConfig.serper_api_key || defaultSerperKey || null,
+    // Resolve from env, then any vault alias (BRAVE_SEARCH_API_KEY, DEVELOPER_*, …), then defaults.
+    braveApiKey:
+      process.env.BRAVE_SEARCH_API_KEY ||
+      process.env.BRAVE_API_KEY ||
+      secretPick(secrets, 'BRAVE_SEARCH_API_KEY', 'BRAVE_API_KEY', 'brave_api_key', 'DEVELOPER_BRAVE_SEARCH_API_KEY') ||
+      fileConfig.brave_api_key ||
+      defaultBraveKey ||
+      defaultBraveSearchKey ||
+      null,
+    tavilyApiKey:
+      process.env.TAVILY_API_KEY ||
+      secretPick(secrets, 'TAVILY_API_KEY', 'tavily_api_key') ||
+      fileConfig.tavily_api_key ||
+      defaultTavilyKey ||
+      null,
+    exaApiKey:
+      process.env.EXA_API_KEY ||
+      secretPick(secrets, 'EXA_API_KEY', 'exa_api_key') ||
+      fileConfig.exa_api_key ||
+      defaultExaKey ||
+      null,
+    serperApiKey:
+      process.env.SERPER_API_KEY ||
+      secretPick(secrets, 'SERPER_API_KEY', 'serper_api_key', 'DEVELOPER_SERPER_API_KEY') ||
+      fileConfig.serper_api_key ||
+      defaultSerperKey ||
+      null,
     // GitHub: personal access token for higher rate limits (60→5000 req/hr)
-    githubToken: process.env.GITHUB_TOKEN || secrets.github_token || fileConfig.github_token || defaultGithubToken || null,
+    githubToken:
+      process.env.GITHUB_TOKEN ||
+      process.env.GH_TOKEN ||
+      secretPick(secrets, 'GITHUB_TOKEN', 'GH_TOKEN', 'github_token') ||
+      fileConfig.github_token ||
+      defaultGithubToken ||
+      null,
     fetchTimeoutMs: fileConfig.fetch_timeout_ms || 10000,
     maxResultsPerSource: fileConfig.max_results_per_source || 5,
     userAgent:
@@ -746,21 +800,37 @@ export function checkSourceAvailability(config) {
   // Always available (no auth)
   available.push('arxiv', 'npm', 'wikipedia', 'duckduckgo', 'web-fetch');
 
-  // Web search — Brave primary, Serper fallback
+  // Web search chain — Brave → Tavily → Exa → Serper
   if (config.braveApiKey) {
     available.push('brave-search');
   } else {
     unavailable.push('brave-search');
-    warnings.push('BRAVE_SEARCH_API_KEY not set — set in env (already in UltraChat .env.local)');
+  }
+
+  if (config.tavilyApiKey) {
+    available.push('tavily');
+  } else {
+    unavailable.push('tavily');
+  }
+
+  if (config.exaApiKey) {
+    available.push('exa');
+  } else {
+    unavailable.push('exa');
   }
 
   if (config.serperApiKey) {
     available.push('serper');
   } else {
     unavailable.push('serper');
-    if (!config.braveApiKey) {
-      warnings.push('SERPER_API_KEY not set — no web search available (set BRAVE_SEARCH_API_KEY or SERPER_API_KEY)');
-    }
+  }
+
+  const hasPaidSearch =
+    config.braveApiKey || config.tavilyApiKey || config.exaApiKey || config.serperApiKey;
+  if (!hasPaidSearch) {
+    warnings.push(
+      'No paid web-search key resolved (Brave/Tavily/Exa/Serper). Research falls back to DuckDuckGo Instant Answer only — set a search API key in secrets or env.',
+    );
   }
 
   if (config.githubToken) {

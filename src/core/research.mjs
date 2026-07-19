@@ -146,43 +146,98 @@ Generate 3 targeted search queries targeting active, timely information post-${c
 
 // ─── Real Source Gathering ───────────────────────────────────────────────────────
 
+/**
+ * Decide source mix from the *meaning* of the query (not only crude keyword lists).
+ * Combines semantic hints with optional suggested_sources from the planner.
+ */
+function planSourcesForQuery(query, availability, suggested = []) {
+  const q = String(query || '').toLowerCase();
+  const suggestedSet = new Set((suggested || []).map((s) => String(s).toLowerCase()));
+  const avail = new Set(availability?.available || []);
+
+  const want = {
+    web: true, // always try web when possible
+    wikipedia: true,
+    arxiv: false,
+    npm: false,
+    github: false,
+  };
+
+  if (
+    suggestedSet.has('arxiv') ||
+    /\b(paper|arxiv|neural|transformer|llm|benchmark|dataset|training|model card)\b/.test(q)
+  ) {
+    want.arxiv = true;
+  }
+  if (
+    suggestedSet.has('npm') ||
+    /\b(npm|package\.json|node\.js|typescript package|js library)\b/.test(q)
+  ) {
+    want.npm = true;
+  }
+  if (
+    suggestedSet.has('github') ||
+    /\b(github|open.?source|repository|pull request|commit)\b/.test(q)
+  ) {
+    want.github = true;
+  }
+  // API / integration research: bias web + github docs, not arxiv
+  if (/\b(api|endpoint|oauth|sdk|webhook|authentication|base url)\b/.test(q)) {
+    want.github = true;
+    want.web = true;
+    want.arxiv = false;
+  }
+
+  return {
+    web: want.web && (avail.has('brave-search') || avail.has('serper') || avail.has('tavily') || avail.has('exa') || avail.has('duckduckgo')),
+    wikipedia: want.wikipedia && avail.has('wikipedia'),
+    arxiv: want.arxiv && avail.has('arxiv'),
+    npm: want.npm && avail.has('npm'),
+    github: want.github && avail.has('github'),
+  };
+}
+
 async function gatherForQuery(query, researchConfig, availability) {
   const results = [];
   const fetches = [];
+  const sources = planSourcesForQuery(query, availability);
 
-  // Always try: Wikipedia + DuckDuckGo
-  fetches.push(
-    wikipediaFetch(query, researchConfig).then(r => r && results.push(r)).catch(() => {}),
-  );
-
-  // 1. Web search — Brave with Serper fallback
-  if (availability.available.includes('brave-search') || availability.available.includes('serper')) {
+  if (sources.wikipedia) {
     fetches.push(
-      webSearch(query, researchConfig, 4).then(r => results.push(...r)).catch(err => {
-        logger.info({ subsystem: 'deep-research', message: `Web search failed for "${query}": ${err.message}` });
-      }),
+      wikipediaFetch(query, researchConfig).then((r) => r && results.push(r)).catch(() => {}),
     );
   }
 
-  // arXiv for academic topics
-  if (/\b(model|llm|neural|ml|ai|research|paper|algorithm|training)\b/i.test(query)) {
+  // Paid chain (Brave→Tavily→Exa→Serper) or DuckDuckGo — always prefer web for product/API research
+  if (sources.web) {
     fetches.push(
-      arxivSearch(query, researchConfig, 2).then(r => results.push(...r)).catch(() => {}),
+      webSearch(query, researchConfig, 4)
+        .then((r) => results.push(...r))
+        .catch((err) => {
+          logger.info({
+            subsystem: 'deep-research',
+            message: `Web search failed for "${query}": ${err.message}`,
+          });
+        }),
     );
   }
 
-  // npm for JS/package topics
-  if (/\b(npm|node|javascript|typescript|package|library|framework)\b/i.test(query)) {
+  if (sources.arxiv) {
     fetches.push(
-      npmSearch(query, researchConfig, 3).then(r => results.push(...r)).catch(() => {}),
+      arxivSearch(query, researchConfig, 2).then((r) => results.push(...r)).catch(() => {}),
     );
   }
 
-  // GitHub for code/tool topics
-  if (/\b(github|repo|open.source|tool|cli|sdk|api|integration)\b/i.test(query)) {
+  if (sources.npm) {
+    fetches.push(
+      npmSearch(query, researchConfig, 3).then((r) => results.push(...r)).catch(() => {}),
+    );
+  }
+
+  if (sources.github) {
     fetches.push(
       githubSearch(query, researchConfig, 'repositories', 3)
-        .then(r => results.push(...r))
+        .then((r) => results.push(...r))
         .catch(() => {}),
     );
   }
@@ -190,7 +245,9 @@ async function gatherForQuery(query, researchConfig, availability) {
   await Promise.all(fetches);
 
   // Deep-crawl top web result using smartFetch (Playwright if installed, plain fetch otherwise)
-  const topWebResult = results.find(r => ['brave-search', 'serper'].includes(r.source) && r.url);
+  const topWebResult = results.find((r) =>
+    ['brave-search', 'serper', 'tavily', 'exa'].includes(r.source) && r.url,
+  );
   if (topWebResult) {
     try {
       const crawled = await smartFetch(topWebResult.url, researchConfig);
