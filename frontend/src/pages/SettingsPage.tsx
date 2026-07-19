@@ -6,7 +6,6 @@ import {
   runAgentDiagnostics,
   checkUpdate,
   runUpdate,
-  fetchBrains,
   triggerRecompile,
   apiFetch,
   getApiBase,
@@ -53,17 +52,6 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   
-  type BrainOption = {
-    id: string;
-    name: string;
-    layer?: string;
-    node_count?: number;
-    role?: string;
-    nodes?: number;
-  };
-  const [brains, setBrains] = useState<BrainOption[]>([]);
-  const activeBrain = activeBrainId || localStorage.getItem('total-recall-active-brain') || '';
-
   const loadConfig = async () => {
     setLoading(true);
     setLoadError(null);
@@ -90,9 +78,6 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
           currentVersion: u.currentVersion,
         }),
       )
-      .catch(console.error);
-    fetchBrains()
-      .then((list) => setBrains(Array.isArray(list) ? (list as BrainOption[]) : []))
       .catch(console.error);
     loadConfig();
   }, [activeBrainId]);
@@ -796,32 +781,10 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
             </div>
           </div>
 
-          <div className="field-col">
-            <label className="field-label" style={{ color: 'var(--text-accent)', fontWeight: 600 }}>Select Active Brain</label>
-            <select
-              className="settings-select"
-              style={{ border: '1px solid var(--border-accent)', background: 'rgba(59, 130, 246, 0.05)' }}
-              value={activeBrain}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val) {
-                  localStorage.setItem('total-recall-active-brain', val);
-                } else {
-                  localStorage.removeItem('total-recall-active-brain');
-                }
-                window.location.reload();
-              }}
-            >
-              <option value="">Global Brain (Root)</option>
-              {brains
-                .filter((b) => b.id && b.id !== 'global')
-                .map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.layer || b.role || 'project'} — {b.node_count ?? b.nodes ?? 0} nodes)
-                  </option>
-                ))}
-            </select>
-          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '0 0 12px', lineHeight: 1.5 }}>
+            Active vault layer is chosen in the <strong>sidebar brain selector</strong> (bottom left).
+            Fields below edit this install’s <code>brain.json</code> identity — not the active layer.
+          </p>
 
           <div style={{ display: 'flex', gap: 16 }}>
             <div className="field-col" style={{ flex: 1 }}>

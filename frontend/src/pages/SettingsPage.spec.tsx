@@ -29,9 +29,6 @@ describe('SettingsPage', () => {
       currentVersion: '1.0.0',
       latestVersion: '1.0.0',
     } as any);
-    vi.mocked(api.fetchBrains).mockResolvedValue([
-      { id: 'project:demo', name: 'demo', layer: 'project', node_count: 3 },
-    ] as any);
     vi.mocked(api.triggerRecompile).mockResolvedValue({ success: true, message: 'ok' } as any);
 
     await act(async () => {
