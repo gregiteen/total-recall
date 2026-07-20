@@ -5,6 +5,7 @@ import matter from 'gray-matter';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
+import { defaultTitleFromBody } from '../core/memory-title.mjs';
 
 function printHelp() {
   console.log(`
@@ -243,8 +244,12 @@ export default async function remember(args) {
   // Create individual SSSS v2 node in the vault
   const contentHash = crypto.createHash('md5').update(bodyContent).digest('hex').slice(0, 8);
   const finalSlug = slug || `${category}-${contentHash}`;
-  const truncatedContent = bodyContent.slice(0, 50) + (bodyContent.length > 50 ? '...' : '');
-  const finalTitle = title || `Self-captured memory: ${truncatedContent.replace(/\n/g, ' ')}`;
+  // Provenance lives in source.type + tags — not a title prefix
+  const finalTitle = title || defaultTitleFromBody(bodyContent);
+  const finalTags = Array.isArray(tags) ? [...tags] : [];
+  if (!finalTags.includes('self-captured') && !title) {
+    finalTags.push('self-captured');
+  }
 
   const now = new Date().toISOString();
   
@@ -264,12 +269,13 @@ export default async function remember(args) {
     source: {
       type: 'remember-cli',
       session_id: process.env.TR_SESSION_ID || 'remember-session',
-      evidence_count: 1
+      evidence_count: 1,
+      capture: 'self',
     },
     supersedes: [],
     superseded_by: null,
     contradicts: [],
-    tags,
+    tags: finalTags,
     related,
     routes_to_skills: [],
     sentiment_polarity: type.toLowerCase() === 'preference' ? 'preference' : 'descriptive',
