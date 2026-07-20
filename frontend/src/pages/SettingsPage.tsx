@@ -117,7 +117,28 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     setUpdateMessage(null);
     try {
       const res = await runUpdate();
-      setUpdateMessage(res.success ? 'Update complete. Restarting...' : 'Update failed: ' + res.message);
+      if (res.success) {
+        const s = res.summary;
+        const bits = [
+          s?.updated != null ? `${s.updated} updated` : null,
+          s?.up_to_date != null ? `${s.up_to_date} current` : null,
+          s?.latest ? `latest ${s.latest}` : null,
+        ].filter(Boolean);
+        setUpdateMessage(
+          bits.length
+            ? `Update complete — ${bits.join(' · ')}. Restart daemon/server if this host still runs old code.`
+            : res.message || 'Update complete.',
+        );
+      } else {
+        const failDetail = (res.summary?.results || [])
+          .filter((r) => r.status === 'failed')
+          .map((r) => `${r.name}: ${r.error || 'failed'}`)
+          .slice(0, 3)
+          .join('; ');
+        setUpdateMessage(
+          `Update failed: ${res.message}${failDetail ? ` (${failDetail})` : ''}`,
+        );
+      }
       const refreshed = await checkUpdate().catch(() => null);
       if (refreshed) {
         setUpdateInfo({

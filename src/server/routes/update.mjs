@@ -100,11 +100,30 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
       }
     }
 
+    const failed = Number(summary?.failed || 0);
+    const updated = Number(summary?.updated || 0);
+    const upToDate = Number(summary?.up_to_date || 0);
+    const skipped = Number(
+      (summary?.results || []).filter((r) => String(r.status || '').startsWith('skipped')).length,
+    );
+    const ok = !summary?.skipped && failed === 0;
+    const parts = [];
+    if (updated) parts.push(`${updated} updated`);
+    if (upToDate) parts.push(`${upToDate} already current`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    if (failed) parts.push(`${failed} failed`);
+    const detail = parts.length ? parts.join(', ') : 'no projects checked';
+
     res.json({
-      updating: !dryRun,
+      success: ok,
+      updating: !dryRun && ok,
       message: dryRun
-        ? 'Dry-run complete — see projects list'
-        : 'Package auto-update finished for registered projects',
+        ? `Dry-run complete — ${detail}`
+        : ok
+          ? `Package auto-update finished for registered projects (${detail}). Latest: ${summary?.latest || 'n/a'}`
+          : summary?.reason === 'npm-view-failed'
+            ? 'Could not resolve latest version from npm (network or registry). Try again.'
+            : `Package auto-update finished with errors (${detail}). Latest: ${summary?.latest || 'n/a'}`,
       summary,
     });
   } catch (err) {

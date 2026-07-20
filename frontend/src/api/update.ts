@@ -25,8 +25,33 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
   }
 }
 
-export async function runUpdate(): Promise<{ success: boolean; message: string }> {
-  const res = await apiFetch(`${API_BASE}/api/update/run`, { method: 'POST' })
-  if (!res.ok) throw new Error(`Run update API error: ${res.status}`)
-  return res.json()
+export async function runUpdate(): Promise<{
+  success: boolean
+  message: string
+  summary?: {
+    latest?: string
+    updated?: number
+    failed?: number
+    up_to_date?: number
+    results?: { name: string; status: string; error?: string | null }[]
+  }
+}> {
+  const res = await apiFetch(`${API_BASE}/api/update/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: true }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data.error || data.message || `Run update API error: ${res.status}`)
+  }
+  // API historically omitted success — treat finished-with-0-failures as success
+  const failed = Number(data.summary?.failed ?? 0)
+  const success =
+    typeof data.success === 'boolean' ? data.success : failed === 0 && data.summary?.skipped !== true
+  return {
+    success,
+    message: data.message || (success ? 'Package auto-update finished' : 'Package auto-update failed'),
+    summary: data.summary,
+  }
 }

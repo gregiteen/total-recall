@@ -85,23 +85,19 @@ export default function HealthPage() {
     setUpdateError('')
     
     try {
-      await runUpdate()
-      
-      // Keep polling health to check when it goes down and recovers
-      let serverDown = false
-      const pollInterval = setInterval(async () => {
-        try {
-          const res = await fetchHealth()
-          if (serverDown && res.status === 'healthy') {
-            clearInterval(pollInterval)
-            window.location.reload()
-          }
-        } catch {
-          // Connection failed = server is offline / restarting
-          serverDown = true
-        }
-      }, 2000)
+      const result = await runUpdate()
+      if (!result.success) {
+        setUpdateError(result.message || 'Package auto-update reported failures')
+        setIsUpdating(false)
+        return
+      }
 
+      // Multi-repo npm update does not reboot this host — show success, optional reload
+      setIsUpdating(false)
+      setCheckMessage(
+        result.message ||
+          'Registered projects updated. Restart local daemon/server if you need new code in this process.',
+      )
     } catch (e) {
       setUpdateError((e as Error).message)
       setIsUpdating(false)
