@@ -27,10 +27,26 @@ function getRegistryTypes(brainDir) {
   return {};
 }
 
-// Ensure the path is safe
+// Ensure the path is safe (relative, no traversal)
 function isSafePath(p) {
-  const normalized = path.normalize(p).replace(/^(\.\.(\/|\\|$))+/, '');
-  return normalized === p && !p.startsWith('/') && !p.includes('..');
+  if (!p || typeof p !== 'string' || p.includes('\0')) return false;
+  if (path.isAbsolute(p)) return false;
+  const normalized = path.normalize(p);
+  // Reject any path that still escapes after normalize
+  if (normalized.startsWith('..') || normalized.includes(`${path.sep}..${path.sep}`) || normalized.endsWith(`${path.sep}..`)) {
+    return false;
+  }
+  if (normalized.includes('..')) return false;
+  return true;
+}
+
+/** Resolve relPath under vaultDir; returns null if it escapes the vault. */
+function resolveSafeVaultPath(vaultDir, relPath) {
+  if (!isSafePath(relPath)) return null;
+  const root = path.resolve(vaultDir);
+  const abs = path.resolve(vaultDir, relPath);
+  if (abs !== root && !abs.startsWith(root + path.sep)) return null;
+  return abs;
 }
 
 /**
@@ -108,9 +124,8 @@ router.get('/api/docs/read', requireAuth, requireScope('ssss:read'), (req, res) 
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const relPath = req.query.path;
-    if (!relPath || !isSafePath(relPath)) return badRequest(res, 'Invalid path');
-
-    const absPath = path.join(vaultDir, relPath);
+    const absPath = resolveSafeVaultPath(vaultDir, relPath);
+    if (!absPath) return badRequest(res, 'Invalid path');
     if (!fs.existsSync(absPath)) return notFound(res, 'Document not found');
 
     const raw = fs.readFileSync(absPath, 'utf8');
@@ -134,8 +149,8 @@ router.post('/api/docs', requireAuth, requireScope('ssss:write'), async (req, re
     const vaultDir = resolveVaultFromQuery(req);
     const { path: relPath, content } = req.body;
     
-    if (!relPath || !isSafePath(relPath)) return badRequest(res, 'Invalid path');
-    const absPath = path.join(vaultDir, relPath);
+    const absPath = resolveSafeVaultPath(vaultDir, relPath);
+    if (!absPath) return badRequest(res, 'Invalid path');
     if (fs.existsSync(absPath)) return res.status(409).json({ error: 'Document already exists' });
 
     const envelope = {
@@ -164,8 +179,8 @@ router.put('/api/docs', requireAuth, requireScope('ssss:write'), async (req, res
     const vaultDir = resolveVaultFromQuery(req);
     const { path: relPath, content } = req.body;
     
-    if (!relPath || !isSafePath(relPath)) return badRequest(res, 'Invalid path');
-    const absPath = path.join(vaultDir, relPath);
+    const absPath = resolveSafeVaultPath(vaultDir, relPath);
+    if (!absPath) return badRequest(res, 'Invalid path');
     if (!fs.existsSync(absPath)) return notFound(res, 'Document not found');
 
     const envelope = {
@@ -193,9 +208,8 @@ router.delete('/api/docs', requireAuth, requireScope('ssss:write'), async (req, 
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const relPath = req.query.path;
-    
-    if (!relPath || !isSafePath(relPath)) return badRequest(res, 'Invalid path');
-    const absPath = path.join(vaultDir, relPath);
+    const absPath = resolveSafeVaultPath(vaultDir, relPath);
+    if (!absPath) return badRequest(res, 'Invalid path');
     if (!fs.existsSync(absPath)) return notFound(res, 'Document not found');
 
     const envelope = {

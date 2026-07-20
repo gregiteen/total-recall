@@ -985,9 +985,12 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'check-surfaces') {
       const texts = [];
+      const agentRoot = path.dirname(path.dirname(brainDir)); // …/skills/total-recall → …/.agent (or similar)
       const candidates = [
-        path.join(brainDir, 'INSTRUCTIONS.md'),
         path.join(process.cwd(), 'INSTRUCTIONS.md'),
+        path.join(process.cwd(), 'AGENTS.md'),
+        path.join(agentRoot, 'INSTRUCTIONS.md'),
+        path.join(brainDir, 'INSTRUCTIONS.md'), // legacy
         path.join(brainDir, 'openwiki'),
       ];
       for (const c of candidates) {

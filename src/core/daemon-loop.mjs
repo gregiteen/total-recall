@@ -31,7 +31,8 @@ const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
 const CONFLICTS_DIR = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
 const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
 const QUEUE_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
-const INSTRUCTIONS_FILE = path.join(BRAIN_DIR, 'INSTRUCTIONS.md');
+// Surface shims resolve from the agent root (.agent/), not brainDir (…/skills/total-recall/)
+const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
 
 // How often to recompile surfaces (every N task ticks)
 const RECOMPILE_EVERY_N_TASKS = 20;

@@ -223,15 +223,17 @@ router.post('/api/conflicts/resolve', requireAuth, requireScope('memory:write'),
       return badRequest(res, "action must be either 'keep' or 'supersede'");
     }
 
-    const inboxDir = path.join(BRAIN_DIR, 'memory-inbox');
+    const vaultDir = resolveVaultFromQuery(req);
+    const paths = pathsForVault(vaultDir);
+    const inboxDir = path.join(paths.brainDir, 'memory-inbox');
     const { resolveConflict } = await import('../../core/conflict-detector.mjs');
     const result = resolveConflict(conflict_id, inboxDir, action, winner_slug);
     if (!result.resolved) {
       return badRequest(res, result.error || 'Failed to resolve conflict');
     }
 
-    invalidate(); // clear cache
-    res.json({ success: true, conflict_id });
+    invalidate(vaultDir);
+    res.json({ success: true, conflict_id, vault_dir: vaultDir });
   } catch (err) {
     serverError(res, err);
   }

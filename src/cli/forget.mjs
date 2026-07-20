@@ -66,6 +66,9 @@ export default async function forget(args) {
     }
     
     console.log(`  ✅ Soft-deleted ${count} nodes for project "${projectName}" (moved to .trash/)`);
+
+    // Files moved under .trash still invalidate the vault cache (watcher may lag)
+    invalidate(globalVaultDir);
     
     if (!remainingArgs.includes('--no-compile')) {
       console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
