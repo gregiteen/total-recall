@@ -5,7 +5,8 @@ import { execSync } from 'child_process';
 const globalVault = '/Users/greg/.agent/skills/total-recall/memory-vault';
 const projectVault = '/Users/greg/Github/total-recall/.agent/skills/total-recall/memory-vault';
 
-const files = execSync(`grep -rl "Self-captured memory:" ${globalVault} || true`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+// Prefer tag self-captured / source.capture=self; title prefix is legacy
+const files = execSync(`grep -rl "Self-captured memory:\\|self-captured" ${globalVault} || true`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
 
 let moved = 0;
 for (const file of files) {

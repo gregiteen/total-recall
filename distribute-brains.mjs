@@ -20,7 +20,8 @@ function getProjectVault(project) {
 // 1. Move everything I just moved back to global first
 const totalRecallVault = getProjectVault('total-recall');
 console.log('Restoring to global vault...');
-const files = execSync(`grep -rl "Self-captured memory:" ${totalRecallVault} || true`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+// Prefer tag self-captured / source.capture=self; title prefix is legacy
+const files = execSync(`grep -rl "Self-captured memory:\\|self-captured" ${totalRecallVault} || true`, { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
 let restoredCount = 0;
 for (const file of files) {
   const relativePath = path.relative(totalRecallVault, file);

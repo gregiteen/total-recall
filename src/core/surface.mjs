@@ -186,16 +186,16 @@ function modalityMarker(node) {
  */
 export function heuristicCompact(node) {
   const rawTitle = (node.title || '').trim();
+  // Legacy prefix only — provenance is source.type / tags, not title text
   const title = rawTitle.replace(/^Self-captured memory:\s*/i, '').trim();
   const text = (node.body || node.content || '').trim();
   const marker = modalityMarker(node);
   const prefix = marker ? `${marker} ` : '';
 
   // Determine the best display text, avoiding title/body duplication.
-  // When title is auto-generated ("Self-captured memory: ...") it echoes the body —
-  // use the body directly to avoid doubling the same content.
-  const titleIsEcho = rawTitle.startsWith('Self-captured memory:') ||
-    (text && title.length > 20 && text.toLowerCase().startsWith(title.toLowerCase().slice(0, 20)));
+  // Echo titles (legacy "Self-captured…" or title that is just a body prefix) use body only.
+  const titleIsEcho = /^Self-captured memory:/i.test(rawTitle) ||
+    (text && title.length > 20 && text.toLowerCase().startsWith(title.toLowerCase().replace(/\.\.\.$/, '').slice(0, 20)));
 
   if (node.category && ['invariants', 'preferences', 'anti-patterns'].includes(node.category)) {
     if (text) {
