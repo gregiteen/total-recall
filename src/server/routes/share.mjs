@@ -129,7 +129,8 @@ router.post('/api/share', requireAuth, requireScope('memory:write'), async (req,
         validation: vaultResult.validation,
       });
     }
-    invalidate();
+    // Invalidate only the vault we wrote to (avoid thrashing other brain caches)
+    invalidate(vaultDir);
 
     // Mark extension as connected when share comes from the extension
     if (source && source.includes('extension')) {

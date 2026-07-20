@@ -131,6 +131,9 @@ export default async function forget(args) {
     process.exit(1);
   }
 
+  // Drop cached nodes immediately (fs.watch may lag or miss same-process deletes)
+  invalidate(vaultDir);
+
   console.log(`  ✅ Deleted memory node "${slug}" from ${layerLabel} vault.`);
 
   // Recompile unless --no-compile
