@@ -3,6 +3,7 @@ import path from 'node:path';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { deleteNode } from '../core/vault.mjs';
+import { invalidate } from '../core/vault-cache.mjs';
 
 function printHelp() {
   console.log(`
