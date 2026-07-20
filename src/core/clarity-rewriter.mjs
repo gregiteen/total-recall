@@ -567,24 +567,42 @@ export async function runCutoffAudit({ vaultDir, queueDir, runtimeConfig }) {
   return { audited: batch.length, flagged, critical };
 }
 
+/** Resolve vault dir from node file path (…/memory-vault/category/slug.md). */
+function vaultDirFromNodeFile(filePath) {
+  if (!filePath) return null;
+  let cur = path.dirname(filePath);
+  while (cur && cur !== path.dirname(cur)) {
+    if (path.basename(cur) === 'memory-vault') return cur;
+    cur = path.dirname(cur);
+  }
+  // Fallback: parent of category dir
+  return path.dirname(path.dirname(filePath));
+}
+
+function nodeFilePath(node) {
+  return node?._filepath || node?._filePath || null;
+}
+
 async function stampVerified(node) {
-  if (!node._filepath) return;
+  const fp = nodeFilePath(node);
+  if (!fp) return;
   try {
-    const raw = fs.readFileSync(node._filepath, 'utf8');
+    const raw = fs.readFileSync(fp, 'utf8');
     const { data, content } = matter(raw);
     data.x_cutoff_verified_at = new Date().toISOString();
     data.x_cutoff_risk = 'none';
-    atomicWrite(node._filepath, safeStringify(content, data));
-    invalidate(path.dirname(node._filepath));
+    atomicWrite(fp, safeStringify(content, data));
+    invalidate(vaultDirFromNodeFile(fp));
   } catch (err) {
     logger.debug('clarity-rewriter: stampCutoffRiskNone failed', { err: err.message });
   }
 }
 
 async function stampCutoffRisk(node, riskLevel, claimCount) {
-  if (!node._filepath) return;
+  const fp = nodeFilePath(node);
+  if (!fp) return;
   try {
-    const raw = fs.readFileSync(node._filepath, 'utf8');
+    const raw = fs.readFileSync(fp, 'utf8');
     const { data, content } = matter(raw);
     data.x_cutoff_risk = riskLevel;
     data.x_cutoff_claim_count = claimCount;
@@ -592,8 +610,8 @@ async function stampCutoffRisk(node, riskLevel, claimCount) {
     // Lower confidence to reflect that claims are unverified
     const confidencePenalty = riskLevel === 'critical' ? 0.3 : riskLevel === 'high' ? 0.2 : 0.1;
     data.confidence = Math.max(0.1, (data.confidence || 0.5) - confidencePenalty);
-    atomicWrite(node._filepath, safeStringify(content, data));
-    invalidate(path.dirname(node._filepath));
+    atomicWrite(fp, safeStringify(content, data));
+    invalidate(vaultDirFromNodeFile(fp));
   } catch (err) {
     logger.debug('clarity-rewriter: stampCutoffRisk failed', { err: err.message });
   }
@@ -756,9 +774,10 @@ export async function writeCorrection(originalSlug, researchEvidence, { vaultDir
 }
 
 async function stampNodeForCorrection(node, correctionSlug, disposition) {
-  if (!node._filepath) return;
+  const fp = nodeFilePath(node);
+  if (!fp) return;
   try {
-    const raw = fs.readFileSync(node._filepath, 'utf8');
+    const raw = fs.readFileSync(fp, 'utf8');
     const { data, content } = matter(raw);
     data.status = disposition === 'deleted' ? 'archived' : 'superseded';
     data.superseded_by = correctionSlug;
@@ -766,8 +785,8 @@ async function stampNodeForCorrection(node, correctionSlug, disposition) {
     // Lower confidence significantly — this fact has been proven wrong
     data.confidence = Math.max(0.05, (data.confidence || 0.5) * 0.3);
     data.updated = new Date().toISOString();
-    atomicWrite(node._filepath, safeStringify(content, data));
-    invalidate(path.dirname(node._filepath));
+    atomicWrite(fp, safeStringify(content, data));
+    invalidate(vaultDirFromNodeFile(fp));
   } catch (err) {
     logger.debug('clarity-rewriter: stampNodeForCorrection failed', { err: err.message });
   }

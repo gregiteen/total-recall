@@ -150,6 +150,15 @@ export function serverError(res, err) {
 }
 
 /** Strip the internal `body` field from a vault node into `content`. */
-export function sanitizeNode({ body, ...rest }) {
+export function sanitizeNode(node) {
+  if (!node || typeof node !== 'object') return node;
+  // Strip internal fields — never expose absolute paths or vault internals over the API
+  const {
+    body,
+    _filePath,
+    _filepath,
+    _layer,
+    ...rest
+  } = node;
   return { ...rest, content: body };
 }
