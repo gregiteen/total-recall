@@ -70,7 +70,8 @@ export default async function forget(args) {
       console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
       try {
         const { spawn } = await import('node:child_process');
-        const child = spawn(process.argv[0], [process.argv[1], 'compile'], {
+        // Soft-delete from global vault tags — recompile global surfaces
+        const child = spawn(process.argv[0], [process.argv[1], 'compile', '--global'], {
           detached: true,
           stdio: 'ignore'
         });
@@ -137,7 +138,11 @@ export default async function forget(args) {
     console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
     try {
       const { spawn } = await import('node:child_process');
-      const child = spawn(process.argv[0], [process.argv[1], 'compile'], {
+      // Pass layer so project forget recompiles the project brain, not auto/wrong vault
+      const compileArgs = [process.argv[1], 'compile'];
+      if (layer === 'project') compileArgs.push('--project');
+      else if (layer === 'global') compileArgs.push('--global');
+      const child = spawn(process.argv[0], compileArgs, {
         detached: true,
         stdio: 'ignore'
       });

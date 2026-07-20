@@ -363,7 +363,10 @@ export default async function remember(args) {
   console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
   try {
     const { spawn } = await import('node:child_process');
-    const child = spawn(process.argv[0], [process.argv[1], 'compile'], {
+    const compileArgs = [process.argv[1], 'compile'];
+    if (layer === 'project') compileArgs.push('--project');
+    else if (layer === 'global') compileArgs.push('--global');
+    const child = spawn(process.argv[0], compileArgs, {
       detached: true,
       stdio: 'ignore'
     });

@@ -30,6 +30,8 @@ import {
   ROOT,
   badRequest,
   serverError,
+  resolveVaultFromQuery,
+  pathsForVault,
 } from './_shared.mjs';
 
 const router = Router();
@@ -150,7 +152,9 @@ router.get('/api/conflicts', requireAuth, requireScope('ssss:read'), async (req,
     return res.status(404).json({ error: 'dashboard-enhanced feature flag not enabled' });
   }
   try {
-    const conflictsDir = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
+    const vaultDir = resolveVaultFromQuery(req);
+    const paths = pathsForVault(vaultDir);
+    const conflictsDir = path.join(paths.brainDir, 'memory-inbox', 'conflicts');
     const conflicts = [];
 
     if (fs.existsSync(conflictsDir)) {
@@ -166,9 +170,9 @@ router.get('/api/conflicts', requireAuth, requireScope('ssss:read'), async (req,
       }
     }
 
-    // Dynamic scan
+    // Dynamic scan for the requested brain (not always global)
     const { detectSemanticConflicts } = await import('../../core/conflict-detector.mjs');
-    const list = getNodes(VAULT_DIR);
+    const list = getNodes(vaultDir);
     const dynamicConflicts = [];
     for (let i = 0; i < list.length; i++) {
       const found = detectSemanticConflicts(list[i], list.slice(0, i));
