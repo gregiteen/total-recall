@@ -76,7 +76,13 @@ export function loadNodes(vaultDir) {
       const raw = fs.readFileSync(file, 'utf8');
       const { data, content } = matter(raw);
       if (data.type === 'memory') {
-        nodes.push({ ...data, body: content.trim() });
+        // Attach absolute path for stampers/rewriters (both spellings used in codebase)
+        nodes.push({
+          ...data,
+          body: content.trim(),
+          _filePath: file,
+          _filepath: file,
+        });
       }
     } catch (err) {
       logger.warn('vault', `Failed to parse ${file}`, { err: err.message });
