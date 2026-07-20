@@ -17,12 +17,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Default lint target is the global vault (override with --vault / layer flags later).
-const AGENT_DIR = resolveAgentDir('global');
-const BRAIN_DIR = resolveBrainDir('global');
 
 function parseArgs(args) {
   const opts = { vault: null, strict: false, json: false, help: false, okf: false };
@@ -48,7 +45,9 @@ function printHelp() {
   Usage: total-recall lint [options]
 
   Options:
-    --vault <path>     Override vault directory (default: ~/.agent/memory-vault)
+    --vault <path>     Override vault directory (default: global brain vault)
+    --global           Lint the global vault (default)
+    --project          Lint the project vault for the current repo
     --strict           Treat warnings as errors (exit 1 on any issue)
     --okf              Verify OKF v0.1 draft metadata compliance
     --json             Output results as JSONL
@@ -61,10 +60,13 @@ function printHelp() {
 }
 
 export default async function lint(args) {
-  const opts = parseArgs(args);
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  // Default layer is global when no --project/--global (matches help text)
+  const effectiveLayer = layer === 'auto' ? 'global' : layer;
+  const opts = parseArgs(remainingArgs);
   if (opts.help) { printHelp(); return; }
 
-  const vaultDir = opts.vault || path.join(BRAIN_DIR, 'memory-vault');
+  const vaultDir = opts.vault || path.join(resolveBrainDir(effectiveLayer), 'memory-vault');
 
   if (opts.okf) {
     const { lintOkfCompliance } = await import('../core/okf-adapter.mjs');

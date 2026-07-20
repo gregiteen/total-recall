@@ -8,10 +8,11 @@
 
 import path from 'node:path';
 import { detectAndImport } from '../core/import-rules.mjs';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 
 export async function run(argv = []) {
-  const args = argv.slice(3); // strip node, script, 'import'
+  const rawArgs = argv.slice(3); // strip node, script, 'import'
+  const { layer, remainingArgs: args } = parseLayerFlag(rawArgs);
 
   const dirs = [];
   let force  = false;
@@ -33,7 +34,8 @@ export async function run(argv = []) {
   // Default: search cwd
   if (dirs.length === 0) dirs.push(process.cwd());
 
-  const brainDir = resolveBrainDir();
+  // auto → project vault when present (import rules for this repo)
+  const brainDir = resolveBrainDir(layer);
   const vaultDir = path.join(brainDir, 'memory-vault');
 
   console.log(`\n🔍 Scanning for rule files in: ${dirs.join(', ')}\n`);
@@ -90,12 +92,15 @@ all future AI sessions.
 
 Options:
   --dir <path>   Directory to search (default: current directory)
+  --global       Import into the global vault
+  --project      Import into the project vault (default: auto when present)
   --force        Re-import files that were previously imported
   --dry-run      Show what would be imported without writing anything
   --help         Show this help
 
 Examples:
   npx total-recall import
+  npx total-recall import --project
   npx total-recall import --dir ~/my-project
   npx total-recall import --force --dry-run
 `);
