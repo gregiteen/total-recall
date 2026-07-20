@@ -38,8 +38,16 @@ const router = Router();
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function isDashboardEnhanced() {
-  return fs.existsSync(path.join(VAULT_DIR, '..', 'preferences', 'dashboard-enhanced.md'));
+/**
+ * Feature flag file locations:
+ * - Production SSSS layout: <vault>/preferences/dashboard-enhanced.md
+ * - Legacy/test layout: <vault>/../preferences/dashboard-enhanced.md
+ */
+function isDashboardEnhanced(vaultDir = VAULT_DIR) {
+  return (
+    fs.existsSync(path.join(vaultDir, 'preferences', 'dashboard-enhanced.md')) ||
+    fs.existsSync(path.join(vaultDir, '..', 'preferences', 'dashboard-enhanced.md'))
+  );
 }
 
 function sha256(content) {
@@ -126,19 +134,23 @@ function safeReferencePath(name) {
  * Requires dashboard-enhanced feature flag.
  */
 router.get('/api/graph', requireAuth, requireScope('ssss:read'), (req, res) => {
-  if (!isDashboardEnhanced()) {
+  const vaultDir = resolveVaultFromQuery(req);
+  if (!isDashboardEnhanced(vaultDir)) {
     return res.status(404).json({ error: 'dashboard-enhanced feature flag not enabled' });
   }
   try {
-    const graphFile = path.join(DERIVED_DIR, 'graph-index.jsonl');
-    const routesFile = path.join(DERIVED_DIR, 'skill-routes.jsonl');
+    const { derivedDir } = pathsForVault(vaultDir);
+    // Prefer brain-local derived; fall back to shared DERIVED_DIR (tests/mocks)
+    const derived = fs.existsSync(derivedDir) ? derivedDir : DERIVED_DIR;
+    const graphFile = path.join(derived, 'graph-index.jsonl');
+    const routesFile = path.join(derived, 'skill-routes.jsonl');
     const nodes = fs.existsSync(graphFile)
       ? fs.readFileSync(graphFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
       : [];
     const routes = fs.existsSync(routesFile)
       ? fs.readFileSync(routesFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
       : [];
-    res.json({ nodes, routes });
+    res.json({ nodes, routes, vault_dir: vaultDir });
   } catch (err) { serverError(res, err); }
 });
 
@@ -148,11 +160,11 @@ router.get('/api/graph', requireAuth, requireScope('ssss:read'), (req, res) => {
  * Requires dashboard-enhanced feature flag.
  */
 router.get('/api/conflicts', requireAuth, requireScope('ssss:read'), async (req, res) => {
-  if (!isDashboardEnhanced()) {
+  const vaultDir = resolveVaultFromQuery(req);
+  if (!isDashboardEnhanced(vaultDir)) {
     return res.status(404).json({ error: 'dashboard-enhanced feature flag not enabled' });
   }
   try {
-    const vaultDir = resolveVaultFromQuery(req);
     const paths = pathsForVault(vaultDir);
     const conflictsDir = path.join(paths.brainDir, 'memory-inbox', 'conflicts');
     const conflicts = [];

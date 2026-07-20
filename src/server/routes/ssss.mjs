@@ -139,15 +139,23 @@ router.get('/api/ssss', requireAuth, requireScope('ssss:read'), (req, res) => {
 
 router.get('/api/ssss/instructions', requireAuth, requireScope('ssss:read', 'instructions:read'), (req, res) => {
   const surface = req.query.surface;
+  // Prefer live INSTRUCTIONS constant (agent brain), then package ROOT fallback
+  const instructionsPath = fs.existsSync(INSTRUCTIONS)
+    ? INSTRUCTIONS
+    : path.join(ROOT, 'INSTRUCTIONS.md');
   if (surface) {
     if (surface === 'INSTRUCTIONS.md') {
-      return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
+      return sendTextResource(res, instructionsPath, 'instructions');
     }
     const safeSurface = path.basename(surface);
-    const surfacePath = path.join(ROOT, safeSurface);
+    const candidates = [
+      path.join(path.dirname(instructionsPath), safeSurface),
+      path.join(ROOT, safeSurface),
+    ];
+    const surfacePath = candidates.find(p => fs.existsSync(p)) || candidates[0];
     return sendTextResource(res, surfacePath, safeSurface);
   }
-  return sendTextResource(res, path.join(ROOT, 'INSTRUCTIONS.md'), 'instructions');
+  return sendTextResource(res, instructionsPath, 'instructions');
 });
 
 router.get('/api/ssss/skill/ssss', requireAuth, requireScope('ssss:read'), (_req, res) => {
