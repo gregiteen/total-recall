@@ -199,7 +199,14 @@ function planSourcesForQuery(query, availability, suggested = []) {
   }
 
   return {
-    web: want.web && (avail.has('brave-search') || avail.has('serper') || avail.has('tavily') || avail.has('exa') || avail.has('duckduckgo')),
+    web: want.web && (
+      avail.has('searx') ||
+      avail.has('brave-search') ||
+      avail.has('serper') ||
+      avail.has('tavily') ||
+      avail.has('exa') ||
+      avail.has('duckduckgo')
+    ),
     wikipedia: want.wikipedia && avail.has('wikipedia'),
     arxiv: want.arxiv && avail.has('arxiv'),
     npm: want.npm && avail.has('npm'),
@@ -256,7 +263,7 @@ async function gatherForQuery(query, researchConfig, availability) {
 
   // Deep-crawl top web result using smartFetch (Playwright if installed, plain fetch otherwise)
   const topWebResult = results.find((r) =>
-    ['brave-search', 'serper', 'tavily', 'exa'].includes(r.source) && r.url,
+    ['searx', 'brave-search', 'serper', 'tavily', 'exa'].includes(r.source) && r.url,
   );
   if (topWebResult) {
     try {
