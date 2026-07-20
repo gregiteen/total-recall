@@ -20,8 +20,9 @@ import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AGENT_DIR = resolveAgentDir();
-const BRAIN_DIR = resolveBrainDir();
+// Default lint target is the global vault (override with --vault / layer flags later).
+const AGENT_DIR = resolveAgentDir('global');
+const BRAIN_DIR = resolveBrainDir('global');
 
 function parseArgs(args) {
   const opts = { vault: null, strict: false, json: false, help: false, okf: false };

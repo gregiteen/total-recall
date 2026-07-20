@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { compileSurface } from '../core/surface.mjs';
 import { detectIndexDrift } from '../core/drift-detector.mjs';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import { logger } from '../core/logger.mjs';
 
 /**
@@ -14,8 +14,9 @@ import { logger } from '../core/logger.mjs';
  */
 
 export async function runRebuild(options = {}) {
-  const agentDir = resolveAgentDir();
-  const brainDir = resolveBrainDir();
+  const layer = options.layer || 'auto';
+  const agentDir = resolveAgentDir(layer);
+  const brainDir = resolveBrainDir(layer);
   const vaultDir = path.join(brainDir, 'memory-vault');
   const skillsDir = path.join(agentDir, 'skills');
   const derivedDir = path.join(brainDir, 'memory-derived');
@@ -82,7 +83,11 @@ export async function runRebuild(options = {}) {
 }
 
 export default async function cli(args) {
-  const options = { check: args.includes('--check') };
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  const options = {
+    check: remainingArgs.includes('--check'),
+    layer,
+  };
   const code = await runRebuild(options);
   process.exit(code);
 }

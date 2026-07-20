@@ -22,7 +22,8 @@ import { startDaemon, stopDaemon, readPid } from '../core/daemon-control.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
-const BRAIN_DIR = resolveBrainDir();
+// System daemon always targets the global brain — never the cwd project vault.
+const BRAIN_DIR = resolveBrainDir('global');
 const LOG_FILE = path.join(BRAIN_DIR, 'logs', 'daemon.log');
 
 function commandExists(cmd) {
