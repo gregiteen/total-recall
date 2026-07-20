@@ -10,7 +10,7 @@ import { callLocalRuntime, loadRuntimeConfig, checkRuntimeHealth } from '../core
 export default async function runChat(args) {
   console.log('🤖 Total Recall CLI Chat initialized. Type "exit" to quit.\n');
 
-  const configDir = path.join(resolveBrainDir(), 'config');
+  const configDir = path.join(resolveBrainDir('global'), 'config');
   
   let config;
   let caller;

@@ -42,9 +42,31 @@ const router = express.Router();
 /* ── OPT-6: debounce recompilation across rapid consecutive writes ── */
 let recompileTimer = null;
 const RECOMPILE_DEBOUNCE_MS = 2000; // 2-second quiet period
+/** @type {Map<string, ReturnType<typeof setTimeout>>} */
+const recompileTimersByVault = new Map();
 
 function nodes(vaultDir = VAULT_DIR) {
   return getNodes(vaultDir);
+}
+
+/**
+ * Derive brain-local paths from a vault directory so project brains
+ * recompile their own derived indexes / surfaces — not the global ones.
+ * vaultDir is always `…/<brain>/memory-vault`.
+ */
+function pathsForVault(vaultDir) {
+  const brainDir = path.dirname(vaultDir);
+  // brainDir = …/.agent/skills/total-recall → agentDir = …/.agent
+  const skillsParent = path.dirname(brainDir); // …/skills
+  const agentDir = path.dirname(skillsParent); // …/.agent
+  return {
+    brainDir,
+    derivedDir: path.join(brainDir, 'memory-derived'),
+    skillsDir: path.join(agentDir, 'skills'),
+    instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+    sessionsDir: path.join(brainDir, 'sessions'),
+    inboxDir: path.join(brainDir, 'memory-inbox'),
+  };
 }
 
 /**
@@ -52,40 +74,47 @@ function nodes(vaultDir = VAULT_DIR) {
  * Auto-mutates the brain in real time when any fact is written, updated, or deleted!
  */
 async function triggerMutation(node, vaultDir = VAULT_DIR) {
+  const paths = pathsForVault(vaultDir);
+
   // 1. Semantic conflict detection runs IMMEDIATELY (lightweight, per-node)
   try {
     const existing = nodes(vaultDir);
     if (node && node.type === 'memory') {
       detectAndResolve(node, existing, {
         vaultDir,
-        inboxDir: path.join(BRAIN_DIR, 'memory-inbox'),
+        inboxDir: paths.inboxDir,
       });
     }
   } catch (conflictErr) {
     // Non-fatal fallback
   }
 
-  // 2+3. Debounce the EXPENSIVE recompile + embeddings rebuild.
+  // 2+3. Debounce the EXPENSIVE recompile + embeddings rebuild per vault.
   //       Rapid consecutive writes accumulate; only ONE compile fires
   //       after a quiet period. Vault-cache is already invalidated
   //       immediately at each call-site via invalidate().
-  if (recompileTimer) clearTimeout(recompileTimer);
-  recompileTimer = setTimeout(async () => {
-    recompileTimer = null;
+  const prev = recompileTimersByVault.get(vaultDir);
+  if (prev) clearTimeout(prev);
+  // Keep legacy single-timer field in sync for default vault (tests/introspection)
+  if (vaultDir === VAULT_DIR && recompileTimer) clearTimeout(recompileTimer);
+
+  const timer = setTimeout(async () => {
+    recompileTimersByVault.delete(vaultDir);
+    if (vaultDir === VAULT_DIR) recompileTimer = null;
     try {
-      // Recompile instructions surface
+      // Recompile instructions surface for THIS vault's brain
       await compileSurface({
         vaultDir,
-        skillsDir:       SKILLS_DIR,
-        derivedDir:      DERIVED_DIR,
-        instructionsFile: INSTRUCTIONS,
+        skillsDir: paths.skillsDir,
+        derivedDir: paths.derivedDir,
+        instructionsFile: paths.instructionsFile,
       });
 
-      // Rebuild dense embeddings index
+      // Rebuild dense embeddings index for THIS vault
       try {
         const vaultNodes = nodes(vaultDir);
-        await buildEmbeddingsIndex(vaultNodes, DERIVED_DIR);
-        await buildSessionEmbeddingsIndex(SESSIONS_DIR, DERIVED_DIR);
+        await buildEmbeddingsIndex(vaultNodes, paths.derivedDir);
+        await buildSessionEmbeddingsIndex(paths.sessionsDir, paths.derivedDir);
       } catch (embedErr) {
         // local_llm/embeddings offline non-fatal
       }
@@ -93,6 +122,9 @@ async function triggerMutation(node, vaultDir = VAULT_DIR) {
       // Non-fatal background log
     }
   }, RECOMPILE_DEBOUNCE_MS);
+
+  recompileTimersByVault.set(vaultDir, timer);
+  if (vaultDir === VAULT_DIR) recompileTimer = timer;
 }
 
 

@@ -91,7 +91,21 @@ export function resolveAgentDir(layer = 'auto', targetPath = process.cwd()) {
  * @param {'global' | 'project' | 'auto'} [layer='auto']
  */
 export function resolveBrainDir(layer = 'auto', targetPath = process.cwd()) {
-  return getGlobalBrainDir();
+  // Match resolveAgentDir: AGENT_DIR override pins the agent root → brain under it.
+  if (process.env.AGENT_DIR) {
+    return path.join(process.env.AGENT_DIR, 'skills', 'total-recall');
+  }
+  if (layer === 'global') return getGlobalBrainDir();
+  if (layer === 'project') {
+    const project = detectProjectBrain(targetPath);
+    if (!project) {
+      throw new Error('No project brain found. Run `npx total-recall init --project` to create one.');
+    }
+    return project.brainDir;
+  }
+  // Auto: project-local wins if a project brain exists
+  const project = detectProjectBrain(targetPath);
+  return project ? project.brainDir : getGlobalBrainDir();
 }
 
 /**

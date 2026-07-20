@@ -50,6 +50,18 @@ function maybeUnescapeLiteralNewlines(raw) {
   return raw;
 }
 
+/**
+ * Strip legacy prefix from free-text fields (title, description, citation titles).
+ * Does not rewrite openwiki body dumps of old instruction surfaces.
+ */
+function cleanField(value, body = '') {
+  if (value == null) return { value, changed: false };
+  if (typeof value !== 'string') return { value, changed: false };
+  if (!/Self-captured memory/i.test(value)) return { value, changed: false };
+  const next = normalizeMemoryTitle(value, body || value);
+  return { value: next, changed: next !== value };
+}
+
 function fixFile(filePath) {
   let raw = fs.readFileSync(filePath, 'utf8');
   if (!raw.includes('Self-captured memory')) return null;
@@ -63,17 +75,53 @@ function fixFile(filePath) {
     return { file: filePath, error: 'parse failed' };
   }
 
-  const oldTitle = data.title || '';
-  if (!/Self-captured memory/i.test(String(oldTitle))) {
-    // Phrase only in body — leave body alone
-    return null;
+  const body = (content || '').trim();
+  let changed = false;
+  const changes = [];
+
+  // Title
+  const titleFix = cleanField(data.title, body);
+  if (titleFix.changed) {
+    changes.push({ field: 'title', from: String(data.title).slice(0, 80), to: titleFix.value.slice(0, 80) });
+    data.title = titleFix.value;
+    changed = true;
   }
 
-  const body = (content || '').trim();
-  const newTitle = normalizeMemoryTitle(oldTitle, body);
-  if (newTitle === oldTitle) return null;
+  // Description (often a truncated copy of the old title)
+  const descFix = cleanField(data.description, body);
+  if (descFix.changed) {
+    changes.push({ field: 'description', from: String(data.description).slice(0, 80), to: descFix.value.slice(0, 80) });
+    data.description = descFix.value;
+    changed = true;
+  }
 
-  data.title = newTitle;
+  // x_citations[].title
+  if (Array.isArray(data.x_citations)) {
+    for (let i = 0; i < data.x_citations.length; i++) {
+      const c = data.x_citations[i];
+      if (!c || typeof c !== 'object') continue;
+      const citFix = cleanField(c.title, body);
+      if (citFix.changed) {
+        changes.push({ field: `x_citations[${i}].title`, from: String(c.title).slice(0, 80), to: citFix.value.slice(0, 80) });
+        c.title = citFix.value;
+        changed = true;
+      }
+    }
+  }
+
+  // Body: only if the body itself is a single memory line that starts with the prefix
+  // (do not rewrite openwiki snapshots of full instruction files)
+  let newBody = body;
+  if (/^Self-captured memory:\s*/i.test(body) && body.split('\n').length <= 3) {
+    newBody = body.replace(/^Self-captured memory:\s*/i, '').trim();
+    if (newBody !== body) {
+      changes.push({ field: 'body', from: body.slice(0, 80), to: newBody.slice(0, 80) });
+      changed = true;
+    }
+  }
+
+  if (!changed) return null;
+
   data.updated = new Date().toISOString();
 
   // Provenance tags / source
@@ -87,14 +135,15 @@ function fixFile(filePath) {
   if (!data.source.capture) data.source.capture = 'self';
 
   if (!dryRun) {
-    const out = matter.stringify(body ? `${body}\n` : '', data);
+    const out = matter.stringify(newBody ? `${newBody}\n` : '', data);
     fs.writeFileSync(filePath, out, 'utf8');
   }
 
   return {
     file: filePath,
-    oldTitle: String(oldTitle).slice(0, 80),
-    newTitle: String(newTitle).slice(0, 80),
+    oldTitle: changes[0]?.from || String(data.title || '').slice(0, 80),
+    newTitle: changes[0]?.to || String(data.title || '').slice(0, 80),
+    fields: changes.map((c) => c.field),
   };
 }
 

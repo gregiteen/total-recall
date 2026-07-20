@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { getNodes } from '../../core/vault-cache.mjs';
-import { VAULT_DIR, INSTRUCTIONS } from './_shared.mjs';
+import { VAULT_DIR, INSTRUCTIONS, ROOT as SHARED_ROOT } from './_shared.mjs';
 
 const router = Router();
-const ROOT = process.env.TR_ROOT || path.join(path.dirname(new URL(import.meta.url).pathname), '..', '..', '..');
+// Prefer shared ROOT (fileURLToPath-safe). Fall back with fileURLToPath — never URL.pathname
+// (breaks on Windows and on paths with encoded characters).
+const ROOT = process.env.TR_ROOT || SHARED_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 router.get('/api/dashboard/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {
   const surfaces = [];

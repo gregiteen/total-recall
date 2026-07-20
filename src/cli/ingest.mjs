@@ -16,8 +16,9 @@
 import path from 'node:path';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
 
-const AGENT_DIR = resolveAgentDir();
-const BRAIN_DIR = resolveBrainDir();
+// Session ingest lands in the global brain by default.
+const AGENT_DIR = resolveAgentDir('global');
+const BRAIN_DIR = resolveBrainDir('global');
 
 function parseArgs(args) {
   const opts = { sources: null, watch: false, help: false };

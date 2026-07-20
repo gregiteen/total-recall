@@ -9,7 +9,7 @@ export default async function runFriction(args) {
   console.log(`[Friction] 🔍 Analyzing logs for workflow bottlenecks...`);
   
   // Default path for watchdog logs
-  const logPath = args[0] || path.join(resolveBrainDir(), 'logs', 'watchdog.jsonl');
+  const logPath = args[0] || path.join(resolveBrainDir('global'), 'logs', 'watchdog.jsonl');
   
   const result = await detectFriction(logPath);
   if (!result) {

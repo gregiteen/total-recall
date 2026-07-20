@@ -315,8 +315,9 @@ export default async function remember(args) {
             const oldTitle = (data.title || '').trim().toLowerCase();
             const newTitle = finalTitle.trim().toLowerCase();
             
-            const words1 = new Set(bodyContent.toLowerCase().match(/\\b\\w+\\b/g) || []);
-            const words2 = new Set((oldContent || '').toLowerCase().match(/\\b\\w+\\b/g) || []);
+            // Word tokens for Jaccard similarity (must be real \b/\w, not double-escaped literals)
+            const words1 = new Set(bodyContent.toLowerCase().match(/\b\w+\b/g) || []);
+            const words2 = new Set((oldContent || '').toLowerCase().match(/\b\w+\b/g) || []);
             const intersection = new Set([...words1].filter(x => words2.has(x)));
             const union = new Set([...words1, ...words2]);
             const similarity = union.size === 0 ? 0 : intersection.size / union.size;
@@ -331,14 +332,10 @@ export default async function remember(args) {
               data.superseded_by = finalSlug;
               data.updated = now;
               node.supersedes = [...(node.supersedes || []), data.slug];
-              
-              const lines = ['---'];
-              for (const key of Object.keys(data)) {
-                lines.push(`${key}: ${JSON.stringify(data[key])}`);
-              }
-              lines.push('---');
-              lines.push(oldContent);
-              fs.writeFileSync(p, lines.join('\n'));
+
+              // Use gray-matter so nested objects/arrays stay valid YAML
+              const bodyOut = (oldContent || '').trim();
+              fs.writeFileSync(p, matter.stringify(bodyOut ? `${bodyOut}\n` : '', data), 'utf8');
             }
           }
         }

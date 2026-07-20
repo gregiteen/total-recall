@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { parseLayerFlag, resolveBrainDir, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
+import { parseLayerFlag, resolveAgentDir, resolveBrainDir, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { createMemoryNode } from '../core/vault.mjs';
 import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
 import { addToQueue } from '../core/research-queue.mjs';
@@ -128,10 +128,12 @@ export default async function share(args) {
   }
 
   const resolvedBrainDir = resolveBrainDir(layer);
+  const resolvedAgentDir = resolveAgentDir(layer);
   const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
-  const skillsDir = path.join(resolvedBrainDir, '..', '..');
+  // skillsDir must be <agent>/.agent/skills (or ~/.agent/skills), not the agent root
+  const skillsDir = path.join(resolvedAgentDir, 'skills');
   const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
-  const instructionsFile = path.join(skillsDir, '..', 'INSTRUCTIONS.md');
+  const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
 
   const slugBase = category || 'facts';
   const slug = `${slugBase}-${crypto.randomBytes(4).toString('hex')}`;
