@@ -72,8 +72,32 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
     secrets = loadSecretsSync(path.dirname(path.dirname(configPath)));
   } catch {}
 
+  // SearXNG instance base URL (no trailing path). Prefer self-hosted.
+  // Examples: http://127.0.0.1:8080  https://searx.example.com
+  const searxUrlRaw =
+    process.env.SEARX_URL ||
+    process.env.SEARXNG_URL ||
+    process.env.TR_SEARX_URL ||
+    secretPick(secrets, 'SEARX_URL', 'SEARXNG_URL', 'TR_SEARX_URL') ||
+    fileConfig.searx_url ||
+    fileConfig.searxng_url ||
+    null;
+  const searxUrl = searxUrlRaw ? String(searxUrlRaw).replace(/\/+$/, '') : null;
+  // When true (default if URL set), webSearch tries SearX before paid APIs
+  const preferSearx =
+    fileConfig.prefer_searx !== undefined
+      ? !!fileConfig.prefer_searx
+      : process.env.TR_PREFER_SEARX !== '0';
+
   return {
-    // ── Paid search providers (fallback chain: Brave → Tavily → Exa → Serper) ──
+    // ── Free metasearch (preferred when configured) ──
+    searxUrl,
+    preferSearx: !!searxUrl && preferSearx,
+    // Optional: categories CSV for SearX (default: general)
+    searxCategories: fileConfig.searx_categories || process.env.SEARX_CATEGORIES || 'general',
+    // Optional: language code (en, en-US, all)
+    searxLanguage: fileConfig.searx_language || process.env.SEARX_LANGUAGE || 'en',
+    // ── Paid search providers (fallback: Brave → Tavily → Exa → Serper) ──
     // Resolve from env, then any vault alias (BRAVE_SEARCH_API_KEY, DEVELOPER_*, …), then defaults.
     braveApiKey:
       process.env.BRAVE_SEARCH_API_KEY ||
@@ -117,7 +141,7 @@ export function loadResearchConfig(configPath = DEFAULT_CONFIG_PATH) {
       'TotalRecall/1.0 (knowledge-acquisition)',
     // Daily cap: protects free-tier users from unexpected overage charges.
     // Default 50/day ≈ 1,500/month — within Brave/Tavily/Exa free tiers (~1,000/month each).
-    // Set to 0 to disable (paid plans with high volume).
+    // Set to 0 to disable (paid plans with high volume). SearX does NOT count against this cap.
     dailyWebSearchLimit: Number(fileConfig.daily_web_search_limit ?? process.env.TR_DAILY_SEARCH_LIMIT ?? DEFAULT_DAILY_LIMIT),
   };
 }
@@ -377,38 +401,60 @@ export async function exaSearch(query, config, count = 5) {
 
 /**
  * Web search with automatic fallback chain:
- *   Brave → Tavily → Exa → Serper → DuckDuckGo (free, always on)
+ *   SearXNG (preferred free) → Brave → Tavily → Exa → Serper → DuckDuckGo
  *
- * Respects the daily paid-search cap (default 50/day ≈ 1,500/month).
- * When the cap is hit, falls back to free DuckDuckGo — research never stops.
+ * Paid providers respect the daily paid-search cap (default 50/day).
+ * SearXNG is free/self-hosted and does not count against the paid cap.
  */
 export async function webSearch(query, config, count = 5) {
   // isDailyCapReached increments the paid counter when still under limit
   const capReached = isDailyCapReached(config);
   const errors = [];
 
-  // Try paid providers in order — on 429/timeout/error, continue to next
-  // (old code returned only the first key and aborted the whole search on Brave 429)
-  if (!capReached) {
-    const chain = [];
-    if (config.braveApiKey) chain.push(['brave-search', () => braveSearch(query, config, count)]);
-    if (config.tavilyApiKey) chain.push(['tavily', () => tavilySearch(query, config, count)]);
-    if (config.exaApiKey) chain.push(['exa', () => exaSearch(query, config, count)]);
-    if (config.serperApiKey) chain.push(['serper', () => serperSearch(query, config, count)]);
+  const tryProvider = async (name, fn) => {
+    try {
+      const results = await fn();
+      if (Array.isArray(results) && results.length > 0) return results;
+      errors.push(`${name}: empty results`);
+    } catch (err) {
+      errors.push(`${name}: ${err.message}`);
+    }
+    return null;
+  };
 
-    for (const [name, fn] of chain) {
-      try {
-        const results = await fn();
-        if (Array.isArray(results) && results.length > 0) {
-          return results;
-        }
-      } catch (err) {
-        errors.push(`${name}: ${err.message}`);
-      }
+  // 1) SearXNG first when configured (prefer_searx default true when URL set)
+  if (config.searxUrl && config.preferSearx !== false) {
+    const hit = await tryProvider('searx', () => searxSearch(query, config, count));
+    if (hit) return hit;
+  }
+
+  // 2) Paid providers — on 429/timeout/error, continue to next
+  if (!capReached) {
+    if (config.braveApiKey) {
+      const hit = await tryProvider('brave-search', () => braveSearch(query, config, count));
+      if (hit) return hit;
+    }
+    if (config.tavilyApiKey) {
+      const hit = await tryProvider('tavily', () => tavilySearch(query, config, count));
+      if (hit) return hit;
+    }
+    if (config.exaApiKey) {
+      const hit = await tryProvider('exa', () => exaSearch(query, config, count));
+      if (hit) return hit;
+    }
+    if (config.serperApiKey) {
+      const hit = await tryProvider('serper', () => serperSearch(query, config, count));
+      if (hit) return hit;
     }
   }
 
-  // Free fallback — always available so research never hard-stops
+  // 3) SearX again if de-prioritized (prefer_searx: false) but URL is set
+  if (config.searxUrl && config.preferSearx === false) {
+    const hit = await tryProvider('searx', () => searxSearch(query, config, count));
+    if (hit) return hit;
+  }
+
+  // 4) Free DDG Instant Answer — last resort
   const ddg = await duckduckgoInstant(query, config).catch((err) => {
     errors.push(`duckduckgo: ${err.message}`);
     return null;
@@ -419,6 +465,80 @@ export async function webSearch(query, config, count = 5) {
     throw new Error(`All web search providers failed: ${errors.join(' | ')}`);
   }
   return [];
+}
+
+/**
+ * Search via SearXNG (or classic SearX) JSON API.
+ *
+ * Instance must enable JSON format (settings.yml: search.formats includes json).
+ * Self-host recommended — many public instances disable JSON / rate-limit bots.
+ *
+ * @param {string} query
+ * @param {object} config - from loadResearchConfig()
+ * @param {number} [count=5]
+ * @returns {Promise<SourceResult[]>}
+ */
+export async function searxSearch(query, config, count = 5) {
+  if (!config.searxUrl) {
+    throw new Error('SEARX_URL / searx_url not set (SearXNG instance base URL)');
+  }
+
+  const base = String(config.searxUrl).replace(/\/+$/, '');
+  // Accept either bare host or host already ending in /search
+  const searchPath = base.endsWith('/search') ? base : `${base}/search`;
+  const url = new URL(searchPath);
+  url.searchParams.set('q', query);
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('categories', config.searxCategories || 'general');
+  if (config.searxLanguage) {
+    url.searchParams.set('language', config.searxLanguage);
+  }
+
+  const response = await safeFetch(
+    url.toString(),
+    {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': config.userAgent || 'TotalRecall/1.0 (knowledge-acquisition)',
+      },
+    },
+    config.fetchTimeoutMs || 15000,
+  );
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`SearX API error ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(
+      `SearX returned non-JSON (content-type=${contentType}). Enable JSON in instance settings.yml: search.formats: [html, json]`,
+    );
+  }
+
+  const results = Array.isArray(data.results) ? data.results : [];
+  return results
+    .slice(0, count)
+    .map((r, i) => ({
+      source: 'searx',
+      type: 'web',
+      title: r.title || 'Untitled',
+      url: r.url || r.pretty_url || '',
+      snippet: (r.content || r.description || r.snippet || '').slice(0, 500),
+      published: normalizePublishedDate(r.publishedDate || r.pubdate || null),
+      relevance: Math.max(0.3, 1 - i * 0.08),
+      extra: {
+        engine: r.engine || (Array.isArray(r.engines) ? r.engines.join(',') : null),
+        category: r.category || null,
+        score: r.score ?? null,
+      },
+    }))
+    .filter((r) => r.url);
 }
 
 // ─── arXiv API ─────────────────────────────────────────────────────────────────
@@ -824,7 +944,14 @@ export function checkSourceAvailability(config) {
   // Always available (no auth)
   available.push('arxiv', 'npm', 'wikipedia', 'duckduckgo', 'web-fetch');
 
-  // Web search chain — Brave → Tavily → Exa → Serper
+  // SearXNG / SearX (self-hosted metasearch — preferred free web search)
+  if (config.searxUrl) {
+    available.push('searx');
+  } else {
+    unavailable.push('searx');
+  }
+
+  // Paid web search chain — Brave → Tavily → Exa → Serper
   if (config.braveApiKey) {
     available.push('brave-search');
   } else {
@@ -851,9 +978,13 @@ export function checkSourceAvailability(config) {
 
   const hasPaidSearch =
     config.braveApiKey || config.tavilyApiKey || config.exaApiKey || config.serperApiKey;
-  if (!hasPaidSearch) {
+  if (!config.searxUrl && !hasPaidSearch) {
     warnings.push(
-      'No paid web-search key resolved (Brave/Tavily/Exa/Serper). Research falls back to DuckDuckGo Instant Answer only — set a search API key in secrets or env.',
+      'No SearX URL and no paid web-search key. Set SEARX_URL (preferred) or Brave/Tavily/Exa/Serper — otherwise only DuckDuckGo Instant Answer.',
+    );
+  } else if (config.searxUrl) {
+    warnings.push(
+      `SearXNG preferred at ${config.searxUrl} (ensure search.formats includes json).`,
     );
   }
 

@@ -1,0 +1,18 @@
+# Total Recall research source config
+# Loaded from brain config (e.g. ~/.agent/skills/total-recall/config/research.yml)
+# or repo config/research.yml when present.
+
+# ── SearXNG (preferred free web search) ──────────────────────────────────────
+# Self-host recommended. Instance must enable JSON:
+#   settings.yml → search.formats: [html, json]
+#
+# searx_url: http://127.0.0.1:8080
+# prefer_searx: true          # try SearX before paid APIs (default true when URL set)
+# searx_categories: general
+# searx_language: en
+
+# ── Paid fallbacks (optional) ────────────────────────────────────────────────
+# Keys can also live in secrets.enc / env (BRAVE_SEARCH_API_KEY, etc.)
+# daily_web_search_limit: 50  # paid-only cap; SearX does not count
+# fetch_timeout_ms: 10000
+# max_results_per_source: 5
