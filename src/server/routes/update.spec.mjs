@@ -37,6 +37,8 @@ vi.mock('../../core/package-auto-update.mjs', () => ({
     skipped: false,
     latest: '3.18.0',
     updated: 1,
+    failed: 0,
+    up_to_date: 0,
     results: [{ name: 'app', status: 'updated', installed: '3.18.0', latest: '3.18.0' }],
   })),
   needsUpdate: vi.fn((a, b) => a !== b),
@@ -83,6 +85,8 @@ describe('update router', () => {
     app.use(updateRouter);
     const res = await request(app).post('/api/update/run').send({ force: true });
     expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.message).toMatch(/finished|updated|current/i);
     expect(res.body.summary.latest).toBe('3.18.0');
     expect(pkgUpd.runPackageAutoUpdate).toHaveBeenCalled();
   });
