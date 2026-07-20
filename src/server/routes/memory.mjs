@@ -23,18 +23,14 @@ import { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } from '../../core/em
 import { detectAndResolve } from '../../core/conflict-detector.mjs';
 import { listQueue, updateQueueItem } from '../../core/research-queue.mjs';
 import {
-  BRAIN_DIR,
   VAULT_DIR,
-  SKILLS_DIR,
-  DERIVED_DIR,
-  SESSIONS_DIR,
-  INSTRUCTIONS,
   notFound,
   badRequest,
   serverError,
   sanitizeNode,
   resolveVaultFromQuery,
   resolveAllVaultsFromQuery,
+  pathsForVault,
 } from './_shared.mjs';
 
 const router = express.Router();
@@ -47,26 +43,6 @@ const recompileTimersByVault = new Map();
 
 function nodes(vaultDir = VAULT_DIR) {
   return getNodes(vaultDir);
-}
-
-/**
- * Derive brain-local paths from a vault directory so project brains
- * recompile their own derived indexes / surfaces — not the global ones.
- * vaultDir is always `…/<brain>/memory-vault`.
- */
-function pathsForVault(vaultDir) {
-  const brainDir = path.dirname(vaultDir);
-  // brainDir = …/.agent/skills/total-recall → agentDir = …/.agent
-  const skillsParent = path.dirname(brainDir); // …/skills
-  const agentDir = path.dirname(skillsParent); // …/.agent
-  return {
-    brainDir,
-    derivedDir: path.join(brainDir, 'memory-derived'),
-    skillsDir: path.join(agentDir, 'skills'),
-    instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
-    sessionsDir: path.join(brainDir, 'sessions'),
-    inboxDir: path.join(brainDir, 'memory-inbox'),
-  };
 }
 
 /**
@@ -446,16 +422,48 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
 
 /**
  * POST /api/memory/search/semantic
- * Body: { query: string, top_k?: number }
+ * Body: { query: string, top_k?: number, brainId?: string }
+ * Query/header: brain (same as other memory routes) — project:name, global, or multi.
  * Returns top-k vault nodes ranked by vector similarity to the query.
  */
 router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
     const { query, top_k, include_sessions = true } = req.body || {};
     if (!query) return badRequest(res, 'query is required');
-    const results = await semanticSearch(query, { vaultDir: VAULT_DIR, derivedDir: DERIVED_DIR, top_k, includeSessions: include_sessions });
-    if (results.length === 0) return res.status(503).json({ error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.' });
-    res.json({ query, top_k: Math.min(Number(top_k) || 5, 20), results });
+
+    const k = Math.min(Number(top_k) || 5, 20);
+    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const merged = [];
+    let anyIndex = false;
+
+    for (const vaultDir of vaultDirs) {
+      const { derivedDir } = pathsForVault(vaultDir);
+      try {
+        const part = await semanticSearch(query, {
+          vaultDir,
+          derivedDir,
+          top_k: k,
+          // Sessions only on the primary (first) vault to avoid cross-brain noise
+          includeSessions: include_sessions && vaultDir === vaultDirs[0],
+        });
+        if (part.length > 0) anyIndex = true;
+        for (const r of part) {
+          merged.push({ ...r, _brainVault: vaultDir });
+        }
+      } catch {
+        // per-vault search failure is non-fatal when multi-brain
+      }
+    }
+
+    merged.sort((a, b) => (b.score || 0) - (a.score || 0));
+    const results = merged.slice(0, k);
+
+    if (!anyIndex || results.length === 0) {
+      return res.status(503).json({
+        error: 'Embeddings index is empty. Run POST /api/vault/compile to build it.',
+      });
+    }
+    res.json({ query, top_k: k, results });
   } catch (err) {
     serverError(res, err);
   }

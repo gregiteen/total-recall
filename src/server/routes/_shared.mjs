@@ -113,6 +113,29 @@ export function resolveAllVaultsFromQuery(req) {
   return uniqueVaults.length > 0 ? uniqueVaults : [VAULT_DIR];
 }
 
+/**
+ * Derive brain-local paths from a vault directory.
+ * vaultDir is always `…/<brain>/memory-vault`.
+ * Ensures project brains use their own derived indexes / surfaces, not global.
+ *
+ * @param {string} vaultDir
+ * @returns {{ brainDir: string, derivedDir: string, skillsDir: string, instructionsFile: string, sessionsDir: string, inboxDir: string }}
+ */
+export function pathsForVault(vaultDir) {
+  const brainDir = path.dirname(vaultDir);
+  // brainDir = …/.agent/skills/total-recall → agentDir = …/.agent
+  const skillsParent = path.dirname(brainDir); // …/skills
+  const agentDir = path.dirname(skillsParent); // …/.agent
+  return {
+    brainDir,
+    derivedDir: path.join(brainDir, 'memory-derived'),
+    skillsDir: path.join(agentDir, 'skills'),
+    instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+    sessionsDir: path.join(brainDir, 'sessions'),
+    inboxDir: path.join(brainDir, 'memory-inbox'),
+  };
+}
+
 export function notFound(res, msg) {
   return res.status(404).json({ error: msg || 'Not found' });
 }

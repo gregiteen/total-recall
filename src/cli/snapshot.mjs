@@ -1,5 +1,5 @@
 import { createSnapshot, listSnapshots, rollbackVault } from '../core/snapshot.mjs';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import path from 'path';
 
@@ -24,20 +24,22 @@ function printHelp() {
     rollback <id>      Restore the vault to a specific snapshot ID
 
   Options:
-    --help, -h         Show this help
+    --global / --project  Target brain layer (default: auto — project if present)
+    --help, -h            Show this help
 `);
 }
 
 export default async function snapshotCli(args) {
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  if (remainingArgs.length === 0 || remainingArgs.includes('--help') || remainingArgs.includes('-h')) {
     printHelp();
     return;
   }
 
-  const command = args[0];
+  const command = remainingArgs[0];
 
   if (command === 'create') {
-    const reason = args.slice(1).join(' ') || 'manual';
+    const reason = remainingArgs.slice(1).join(' ') || 'manual';
     console.log('📸 Creating snapshot...');
     const result = createSnapshot(reason);
     if (result.success) {
@@ -69,7 +71,7 @@ export default async function snapshotCli(args) {
   }
 
   else if (command === 'rollback') {
-    const id = args[1];
+    const id = remainingArgs[1];
     if (!id) {
       console.error('❌ You must provide a snapshot ID to rollback to.');
       console.error('Usage: total-recall snapshot rollback <id>');
@@ -84,8 +86,8 @@ export default async function snapshotCli(args) {
       console.log(`✅ Rollback successful.`);
       console.log(`🔄 Recompiling derived indexes from restored vault...`);
       
-      const agentDir = resolveAgentDir();
-      const brainDir = resolveBrainDir();
+      const agentDir = resolveAgentDir(layer);
+      const brainDir = resolveBrainDir(layer);
       await compileSurface({
         vaultDir: path.join(brainDir, 'memory-vault'),
         skillsDir: path.join(agentDir, 'skills'),

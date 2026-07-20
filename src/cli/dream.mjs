@@ -13,12 +13,9 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Dream defaults to the global brain (override with --vault).
-const AGENT_DIR = resolveAgentDir('global');
-const BRAIN_DIR = resolveBrainDir('global');
 
 function parseArgs(args) {
   const opts = { vault: null, help: false };
@@ -43,20 +40,26 @@ function printHelp() {
   Usage: total-recall dream [options]
 
   Options:
-    --vault <path>     Override vault directory (default: ~/.agent/memory-vault)
+    --vault <path>     Override vault directory
+    --global           Dream the global brain (default)
+    --project          Dream the project brain for the current repo
     --help, -h         Show this help
 `);
 }
 
 export default async function dream(args) {
-  const opts = parseArgs(args);
+  const { layer, remainingArgs } = parseLayerFlag(args);
+  const effectiveLayer = layer === 'auto' ? 'global' : layer;
+  const opts = parseArgs(remainingArgs);
   if (opts.help) { printHelp(); return; }
 
-  const vaultDir = opts.vault || path.join(BRAIN_DIR, 'memory-vault');
-  const skillsDir = path.join(AGENT_DIR, 'skills');
-  const derivedDir = path.join(BRAIN_DIR, 'memory-derived');
-  const conflictsDir = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
-  const instructionsFile = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+  const agentDir = resolveAgentDir(effectiveLayer);
+  const brainDir = resolveBrainDir(effectiveLayer);
+  const vaultDir = opts.vault || path.join(brainDir, 'memory-vault');
+  const skillsDir = path.join(agentDir, 'skills');
+  const derivedDir = path.join(brainDir, 'memory-derived');
+  const conflictsDir = path.join(brainDir, 'memory-inbox', 'conflicts');
+  const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
 
   console.error('\n  🌙 Starting dream cycle...\n');
   const startTime = Date.now();
