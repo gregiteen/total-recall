@@ -95,3 +95,4 @@ scratch/
 .agent/secrets.enc
 
 server.log
+.npmrc.publish
