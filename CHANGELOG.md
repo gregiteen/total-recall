@@ -1,9 +1,6 @@
-## 3.19.0 — 2026-07-21
+## 3.19.1 — 2026-07-21
 
 ### Fixed / Added
-- Added OpenRouter as an embedding provider (`getOpenRouterEmbedding`), tried first in the fallback chain — Google's embedding API is currently returning `403 Lightning dunning decision is deny` (billing hold), so trying it first was taxing every `recall` call with a ~15-20s guaranteed-failing timeout before falling through
-- Fixed `throttled-fetch.mjs`'s network-policy file watchers (`policyWatcher`/`parentWatcher`) never calling `.unref()`, which kept one-shot CLI commands (e.g. `recall`) alive well past printing their results
-- Fixed `config.mjs`'s secrets loader stopping at the first non-empty `secrets.enc` found across its candidate paths, silently discarding real secrets (like `OPENROUTER_API_KEY`) that only existed in a later, richer store — now merges across all found stores instead, earlier sources still winning on key collisions
 - Fixed network-policy audit events being written inline through the full SSSS kernel commit path (`processViaPackageKernel`/`getTotalRecallEngine` measured 30s+ per call on this vault) — now queued and flushed on a deferred macrotask so it never blocks concurrent request I/O
 - Fixed a second server instance losing the `listen()` port race hanging forever with no bound port — now fails fast via a PID lockfile + `error` handler
 - Fixed Skills page 404s on any skill under the synthesized "Global" catalog repo (`resolveRegisteredProject` never knew about it, only `project-registry.json` entries)
@@ -13,6 +10,13 @@
 - Skill sync now also scans known repos for live-but-undiscovered copies of a skill, and self-heals stale auto-generated skill dirs onto the canonical source without needing `--force`
 - New `/api/secrets/account-sync`, `/api/secrets/shared-values`, `/api/secrets/tracking-health` endpoints
 - Raised vitest's global test timeout (5s → 20s) and fixed several test-isolation bugs (recall's merged search leaking into the real global vault, a broken logger mock, a test treating a returned slug as a filesystem path) surfaced while getting this release to a clean gate
+
+## 3.19.0 — 2026-07-21
+
+### Fixed / Added
+- Added OpenRouter as an embedding provider (`getOpenRouterEmbedding`), tried first in the fallback chain — Google's embedding API is currently returning `403 Lightning dunning decision is deny` (billing hold), so trying it first was taxing every `recall` call with a ~15-20s guaranteed-failing timeout before falling through
+- Fixed `throttled-fetch.mjs`'s network-policy file watchers (`policyWatcher`/`parentWatcher`) never calling `.unref()`, which kept one-shot CLI commands (e.g. `recall`) alive well past printing their results
+- Fixed `config.mjs`'s secrets loader stopping at the first non-empty `secrets.enc` found across its candidate paths, silently discarding real secrets (like `OPENROUTER_API_KEY`) that only existed in a later, richer store — now merges across all found stores instead, earlier sources still winning on key collisions
 
 ## 3.18.3 — 2026-07-20
 
