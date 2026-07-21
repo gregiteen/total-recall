@@ -303,6 +303,9 @@ export function collectSkillsByRepo() {
 
 function resolveRegisteredProject(repoName) {
   if (!repoName) return null;
+  // "Global" is the synthetic repo collectSkillsByRepo() unshifts for os.homedir() —
+  // it isn't a real project-registry.json entry, so resolve it directly here too.
+  if (repoName === 'Global') return { name: 'Global', path: os.homedir() };
   const registry = loadProjectRegistry();
   const entry = registry.find(
     (p) => p.name === repoName || path.basename(p.path || p.project_root || '') === repoName,

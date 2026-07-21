@@ -1,6 +1,58 @@
 # Changelog
 
 
+## [3.19.0] — 2026-07-21
+
+### 🐛 Bug Fixes
+- **Skills page "Global" repo 404s**: viewing/editing/auditing any skill under the synthesized "Global" catalog repo (`repo-expert`, `security`, etc.) 404'd — `resolveRegisteredProject` only checked `project-registry.json`, which never contained the synthetic Global entry.
+- **Rules page ignored the brain selector**: `/api/rules` always resolved via `getBothBrains()` (the server process's own `cwd()`), never the selected brain — every brain showed the same two vaults regardless of selection. Now scoped through the shared `resolveAllVaultsFromQuery`, matching memory/graph/skills.
+- **Skills page brain-selector integration**: multi-brain (comma) selection collapsed the repo list to just "Global"; the enable/disable-skill checkbox compared against `'Global'` (capital) instead of the real `'global'` id so it never gated correctly; and the deploy/toggle calls passed the raw brain id (e.g. `project:foo`) straight through as a filesystem path instead of the actual registered project path.
+- **Misleading search-availability warning**: "no paid web-search key" warning named services generically instead of the actual env vars (`BRAVE_SEARCH_API_KEY` / `TAVILY_API_KEY` / `EXA_API_KEY` / `SERPER_API_KEY`).
+- **Embeddings provider order**: OpenRouter tried first (Gemini's budget is exhausted), falling back to Google/OpenAI — avoids taxing every embedding call with a slow Google timeout first.
+- **Network-policy audit events**: no longer written through the full SSSS kernel commit path inline (`processViaPackageKernel`/`getTotalRecallEngine` measured 30s+ per call on this vault) — queued and flushed on a deferred macrotask so it never blocks concurrent request I/O; in-memory audit log remains the network audit trail until the kernel commit path itself is fixed.
+- **Duplicate server instances**: a second instance losing the `listen()` port race used to hang forever with no bound port; now fails fast via a PID lockfile + `error` handler, mirroring the daemon loop's lock pattern.
+- **Skill sync**: `isRepoScopedSkill` now also scans known repos for live-but-undiscovered copies (previously only the registry-tracked ones), and stale auto-generated skill dirs (e.g. from `repo-expert-generate.mjs`) self-heal onto the canonical source even without `--force`.
+- **Secrets config merge**: multiple `secrets.enc` stores (global root vs. the total-recall skill's own) now merge instead of the first non-empty file silently winning and hiding real values in a later store.
+
+### 🚀 Features
+- **OpenRouter embeddings**: `OPENROUTER_API_KEY` config support end-to-end as a first-class embedding provider.
+- **Provider account tracking**: new `/api/secrets/account-sync`, `/api/secrets/shared-values`, `/api/secrets/tracking-health` endpoints.
+
+### 🧪 Testing
+- Raised vitest's global `testTimeout` (5s → 20s) — several unrelated tests (scrypt-backed secrets round-trips, module-init-heavy imports) were intermittently timing out purely from CPU contention with the rest of the suite, not logic errors.
+- Fixed a test-isolation bug where `recall`'s merged search read the real global vault instead of the test's isolated fixture (missing `_TR_TEST_AGENT_DIR` override — `detectProjectBrain` ignores `AGENT_DIR`).
+- Fixed a broken `webhook-handlers.spec.mjs` mock (unmocked `logger.mjs` tried a real `mkdirSync` under a fake root-level `brainDir`).
+- Fixed `pruning-optimization.spec.mjs` treating `writeOrUpdateConsolidatedDraft`'s return value (a memory-node slug) as a filesystem path.
+
+## [3.18.4] — 2026-07-20
+
+### 🐛 Bug Fixes
+- **Project brain routing**: `resolveBrainDir` honors `--global` / `--project` / auto (no longer always global); `forget --project` works.
+- **Remember dedup**: Word Jaccard used real `\b\w+` tokens; archive writes use gray-matter YAML.
+- **Multi-brain API**: Semantic search, vault compile/status/hash, dream, field, context, export, import, dashboard, conflicts, and share honor `brain` query/header via `pathsForVault`.
+- **Instructions GET**: Defined `sendTextResource`; GET/PUT share path resolution (no crash / path mismatch).
+- **Daemon instructions path**: Surfaces compile from agent root (`~/.agent/INSTRUCTIONS.md`), not `brainDir`.
+- **Vault file paths**: `loadNodes` attaches `_filePath`/`_filepath`; clarity stamps invalidate vault root; API strips internal paths.
+- **Docs path safety**: Resolve under vault only (no traversal).
+- **Forget cache**: Invalidate after delete and `--project-all` trash.
+- **Self-captured titles**: Default titles from body; provenance via `self-captured` tag + `source.capture`; migration script cleans description/citations.
+
+### 🚀 Features
+- **Research web search**: Prefer SearXNG (`SEARX_URL`) with full provider fallback; research queue actually writes memory nodes.
+- **Provider account tracking**: Live usage/subscription probes + shared-key detection on secrets.
+- **Package auto-update API**: Returns `success` correctly for dashboard.
+
+## [3.18.3] — 2026-07-19
+
+### 🚀 Features
+- **SearXNG research**: Prefer mesh/local SearX for research web search.
+- **Secrets tracking**: Provider account sync + shared-value detection.
+
+### 🐛 Bug Fixes
+- **Research queue**: Produce real memory nodes; fail empty phases; require node_slug.
+- **Webhooks**: Coalesce GitHub push deploy tasks (no deploy flood).
+- **Update API**: Package auto-update reports success correctly.
+
 ## [3.18.2] — 2026-07-18
 
 ### 🐛 Bug Fixes

@@ -159,11 +159,17 @@ describe('Pruning Optimization & Safety', () => {
 
     const parentTopic = 'Advanced Quantum Computing';
 
+    // writeOrUpdateConsolidatedDraft / saveSynthesizedReportToDraft return the memory-node
+    // slug (the research queue's "real node slug" contract — see research.mjs's factSlug
+    // usage), not a filesystem path. Derive the actual file path from the slug ourselves.
+    const slugToPath = (slug) => path.join(inboxPendingDir, `${slug}.md`);
+
     // 1. First search query results
     const results1 = [
       { source: 'brave-search', title: 'Quantum Supremacy 2026', url: 'https://quantum.com/2026', snippet: 'Major milestone reached.' }
     ];
-    const reportPath1 = writeOrUpdateConsolidatedDraft(parentTopic, 'quantum supremacy milestones 2026', results1, inboxPendingDir);
+    const slug1 = writeOrUpdateConsolidatedDraft(parentTopic, 'quantum supremacy milestones 2026', results1, inboxPendingDir);
+    const reportPath1 = slugToPath(slug1);
     expect(fs.existsSync(reportPath1)).toBe(true);
     expect(path.basename(reportPath1)).toBe('research-report-advanced-quantum-computing.md');
 
@@ -171,8 +177,9 @@ describe('Pruning Optimization & Safety', () => {
     const results2 = [
       { source: 'wikipedia', title: 'Quantum Computing', url: 'https://en.wikipedia.org/wiki/Quantum_computing', snippet: 'Overview of qubit models.' }
     ];
-    const reportPath2 = writeOrUpdateConsolidatedDraft(parentTopic, 'quantum computing basics', results2, inboxPendingDir);
-    expect(reportPath2).toBe(reportPath1); // Same file!
+    const slug2 = writeOrUpdateConsolidatedDraft(parentTopic, 'quantum computing basics', results2, inboxPendingDir);
+    expect(slug2).toBe(slug1); // Same file!
+    const reportPath2 = slugToPath(slug2);
 
     // Verify it contains both search queries
     const contentBeforeSynth = fs.readFileSync(reportPath2, 'utf8');
@@ -181,8 +188,9 @@ describe('Pruning Optimization & Safety', () => {
 
     // 3. Save synthesized report (should place executive summary at top and preserve appendix)
     const finalReportText = 'This is the comprehensive executive summary of Quantum Computing research.';
-    const finalPath = saveSynthesizedReportToDraft(parentTopic, finalReportText, inboxPendingDir);
-    expect(finalPath).toBe(reportPath2); // Same file!
+    const finalSlug = saveSynthesizedReportToDraft(parentTopic, finalReportText, inboxPendingDir);
+    expect(finalSlug).toBe(slug2); // Same file!
+    const finalPath = slugToPath(finalSlug);
 
     const finalContent = fs.readFileSync(finalPath, 'utf8');
     expect(finalContent).toContain('# Consolidated Research Report: Advanced Quantum Computing');

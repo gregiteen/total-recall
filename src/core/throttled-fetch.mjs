@@ -140,6 +140,9 @@ export async function loadFirewallPolicy(brainDir) {
       policyWatcher = fs.watch(policyPath, (eventType) => {
         if (eventType === 'change') applyPolicy();
       });
+      // Unref so this watcher does not prevent one-shot CLI commands (e.g.
+      // `recall`) from exiting cleanly once their work is done.
+      policyWatcher.unref();
     }
 
     // Also watch the parent directory so we pick up the policy file being
@@ -153,8 +156,10 @@ export async function loadFirewallPolicy(brainDir) {
           policyWatcher = fs.watch(policyPath, (evt) => {
             if (evt === 'change') applyPolicy();
           });
+          policyWatcher.unref();
         }
       });
+      parentWatcher.unref();
     }
   } catch (err) {
     logger.error('throttled-fetch', `Failed to load network policy: ${err.message}`);
@@ -226,22 +231,52 @@ function appendAuditLog(entry) {
   }
 }
 
+/**
+ * Persisting an audit event goes through the full SSSS kernel (schema
+ * registry build + validation), which is CPU-heavy enough to starve the
+ * event loop for seconds at a time. Firing it inline — even un-awaited —
+ * competes with concurrent I/O (like the body-stream read of the very
+ * request being audited) for event-loop turns. Queue + flush on a deferred
+ * macrotask so in-flight I/O always gets priority.
+ */
+const policyEventQueue = [];
+let policyEventFlushScheduled = false;
+
+function schedulePolicyEventFlush() {
+  if (policyEventFlushScheduled) return;
+  policyEventFlushScheduled = true;
+  setImmediate(async () => {
+    policyEventFlushScheduled = false;
+    const batch = policyEventQueue.splice(0, policyEventQueue.length);
+    if (batch.length === 0) return;
+    try {
+      const [{ processViaPackageKernel }, crypto, { brainDir }, path] = await Promise.all([
+        import('./ssss-kernel-bridge.mjs'),
+        import('node:crypto'),
+        import('./config.mjs'),
+        import('node:path'),
+      ]);
+      const vaultRoot = path.join(brainDir, 'memory-vault');
+      for (const eventContent of batch) {
+        const envelope = {
+          type: 'event',
+          idempotency_key: crypto.randomUUID(),
+          path: 'system/network-policy.md',
+          workspace_id: 'default',
+          actor: { role: 'system' },
+          content: JSON.stringify(eventContent),
+        };
+        await processViaPackageKernel(envelope, vaultRoot, { agentRole: 'system' }).catch(() => {});
+      }
+    } catch {
+      // Best-effort audit trail; never let it affect request handling.
+    }
+  });
+}
+
 async function emitPolicyEvent(eventContent) {
-  import('./ssss-kernel-bridge.mjs').then(async ({ processViaPackageKernel }) => {
-    const crypto = await import('node:crypto');
-    const { brainDir } = await import('./config.mjs');
-    const path = await import('node:path');
-    const vaultRoot = path.join(brainDir, 'memory-vault');
-    const envelope = {
-      type: 'event',
-      idempotency_key: crypto.randomUUID(),
-      path: 'system/network-policy.md',
-      workspace_id: 'default',
-      actor: { role: 'system' },
-      content: JSON.stringify(eventContent)
-    };
-    await processViaPackageKernel(envelope, vaultRoot, { agentRole: 'system' }).catch(() => {});
-  }).catch(() => {});
+  policyEventQueue.push(eventContent);
+  schedulePolicyEventFlush();
 }
 
 // ─── Rate Limiting (minIntervalMs) ──────────────────────────────────────────
@@ -392,15 +427,15 @@ async function executeFetch(url, options, timeoutMs, domain, queueWaitMs = 0, ra
         rate_wait_ms: rateWaitMs,
       });
 
-      emitPolicyEvent({
-        domain,
-        url,
-        status: errorMsg ? 'error' : finalStatus,
-        error: errorMsg,
-        duration_ms: durationMs,
-        queue_wait_ms: queueWaitMs,
-        rate_wait_ms: rateWaitMs,
-      });
+      // NOTE: audit events used to also be persisted via emitPolicyEvent()
+      // (a full SSSS kernel write per request). Measured at 30s+ per call —
+      // processViaPackageKernel/getTotalRecallEngine is catastrophically slow
+      // on this vault, and even deferred via setImmediate it still blocks the
+      // single-threaded event loop for its full duration once it runs,
+      // stalling concurrent I/O (e.g. the very response body being read).
+      // In-memory appendAuditLog() above (queryable via getAuditLog()) is the
+      // audit trail for network activity now. Re-enable emitPolicyEvent()
+      // only after the kernel commit path itself is fixed to be fast.
     }
   }
 }

@@ -25,6 +25,7 @@ import {
   isProjectRepoRoot,
   trackRepo,
   normalizeRepoPaths,
+  isRepoScopedSkill,
 } from './skills-registry.mjs';
 
 function tmpDir() {
@@ -330,6 +331,32 @@ describe('skills-registry', () => {
     expect(result.discovered).toBe(1);
     expect(loadRegistry(brain).skills['stable-source'].source_path).toBe(path.resolve(source));
     expect(listInstalls(brain, { skillId: 'stable-source' })).toHaveLength(1);
+  });
+
+  it('isRepoScopedSkill catches divergence on first contact, before either copy is registered', () => {
+    // Repo A's copy is the only one ever registered/discovered so far.
+    const repoA = path.join(workspace, 'repo-a');
+    const skillA = writeSkill(path.join(repoA, '.agent', 'skills'), 'shared-name', 'Repo A description');
+    fs.writeFileSync(path.join(repoA, 'package.json'), '{"name":"repo-a"}\n');
+    registerSkill(brain, skillA, { source_type: 'discovered' });
+
+    // Repo B has an unrelated, same-named skill that has never been
+    // discovered, registered, or installed anywhere — collectSkillLocations
+    // would still find it live via loadKnownRepoRoots + discoverSkillsInRepo,
+    // so the guard must too, or syncSkillTwoWay will pick a "winner" and
+    // clobber repo B's unrelated skill the very first time it's synced.
+    const repoB = path.join(workspace, 'repo-b');
+    writeSkill(path.join(repoB, '.agent', 'skills'), 'shared-name', 'Repo B unrelated description');
+    fs.writeFileSync(path.join(repoB, 'package.json'), '{"name":"repo-b"}\n');
+
+    const regDir = path.join(brain, 'config');
+    fs.mkdirSync(regDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(regDir, 'project-registry.json'),
+      JSON.stringify([{ name: 'repo-b', path: repoB, brainDir: path.join(repoB, '.agent', 'skills', 'total-recall') }]),
+    );
+
+    expect(isRepoScopedSkill(brain, 'shared-name')).toBe(true);
   });
 
   it('deduplicates symlinked IDE surfaces that resolve to the same skill', () => {

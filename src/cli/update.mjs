@@ -16,7 +16,8 @@ import {
 } from '../core/package-auto-update.mjs';
 import { brainDir } from '../core/config.mjs';
 
-function parseArgs(args) {
+/** @param {string[]} args */
+export function parseArgs(args) {
   const opts = {
     apply: false,
     force: false,

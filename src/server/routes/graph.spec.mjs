@@ -60,6 +60,16 @@ vi.mock('./_shared.mjs', async (importOriginal) => {
     SKILLS_DIR,
     INSTRUCTIONS,
     ROOT,
+    // Original resolveVaultFromQuery closes over real VAULT_DIR — pin to test vault
+    resolveVaultFromQuery: () => VAULT_DIR,
+    pathsForVault: () => ({
+      brainDir: BRAIN_DIR,
+      derivedDir: DERIVED_DIR,
+      skillsDir: SKILLS_DIR,
+      instructionsFile: INSTRUCTIONS,
+      sessionsDir: path.join(BRAIN_DIR, 'sessions'),
+      inboxDir: path.join(BRAIN_DIR, 'memory-inbox'),
+    }),
   };
 });
 

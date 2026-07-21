@@ -20,7 +20,7 @@ import {
   getVssLoadablePath,
 } from 'sqlite-vss';
 
-import { googleApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
+import { googleApiKey, openRouterApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 
 const DEFAULT_EMBED_MODEL = embedModel;
@@ -32,6 +32,10 @@ function resolveGoogleApiKey() {
 
 function resolveOpenAiApiKey() {
   return process.env.OPENAI_API_KEY || null;
+}
+
+function resolveOpenRouterApiKey() {
+  return openRouterApiKey || process.env.OPENROUTER_API_KEY || null;
 }
 
 let dbInstance = null;
@@ -211,8 +215,7 @@ async function getGoogleEmbedding(text, model) {
       model: `models/${resolved}`,
       content: { parts: [{ text }] },
     }),
-    signal: AbortSignal.timeout(30000),
-  });
+  }, 30000);
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -225,6 +228,36 @@ async function getGoogleEmbedding(text, model) {
   }
 
   return data.embedding.values;
+}
+
+async function getOpenRouterEmbedding(text, model = 'openai/text-embedding-3-small') {
+  const openRouterKey = resolveOpenRouterApiKey();
+  if (!openRouterKey) {
+    throw new Error('OPENROUTER_API_KEY not set. Cannot generate embeddings.');
+  }
+
+  const res = await throttledFetch('https://openrouter.ai/api/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openRouterKey}`,
+    },
+    // Request 768 dims to match the existing vault vss0(embedding(768)) schema
+    // and stay comparable against previously-stored Google embeddings.
+    body: JSON.stringify({ model, input: text, dimensions: 768 }),
+  }, 20000);
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`OpenRouter embedding API error ${res.status}: ${body || 'no response body'}`);
+  }
+
+  const data = await res.json();
+  if (!data.data?.[0]?.embedding) {
+    throw new Error('OpenRouter returned no embedding vector');
+  }
+
+  return data.data[0].embedding;
 }
 
 async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
@@ -240,8 +273,7 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
       'Authorization': `Bearer ${openaiKey}`,
     },
     body: JSON.stringify({ model, input: text }),
-    signal: AbortSignal.timeout(30000),
-  });
+  }, 30000);
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -258,11 +290,24 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
 
 export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   const input = String(text).slice(0, 8000);
+  const openRouterKey = resolveOpenRouterApiKey();
   const googleKey = resolveGoogleApiKey();
   const openaiKey = resolveOpenAiApiKey();
 
   let embedding;
-  if (googleKey) {
+
+  // OpenRouter first: standing preference (Gemini's budget is exhausted, so
+  // Google is a near-guaranteed slow failure right now — trying it first just
+  // taxes every call with a ~15-20s timeout before falling through).
+  if (openRouterKey) {
+    try {
+      embedding = await getOpenRouterEmbedding(input);
+    } catch (err) {
+      logger.debug('embeddings: OpenRouter failed, trying Google fallback', { err: err.message });
+    }
+  }
+
+  if (!embedding && googleKey) {
     try {
       embedding = await getGoogleEmbedding(input, model);
     } catch (err) {
@@ -280,7 +325,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   }
 
   if (!embedding) {
-    throw new Error('No embedding provider available. Set GOOGLE_API_KEY or OPENAI_API_KEY.');
+    throw new Error('No embedding provider available. Set OPENROUTER_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.');
   }
 
   return embedding;
