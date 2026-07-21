@@ -552,6 +552,18 @@ export function isRepoScopedSkill(brainDir, skillId) {
     entry?.source_path,
     ...registry.installs.filter((install) => install.skill_id === skillId).map((install) => install.path),
   ].filter(Boolean);
+  // Also examine copies not yet tracked in the registry. collectSkillLocations()
+  // (what syncSkillTwoWay actually acts on) additionally scans every known repo
+  // for live-but-undiscovered copies of this skill id. Without doing the same
+  // here, the very first sync that ever touches a newly-known repo only sees
+  // the catalog source as a candidate, never notices that repo's same-named
+  // skill diverges, and lets an unrelated same-named skill silently clobber it
+  // before either copy is ever registered.
+  for (const repo of loadKnownRepoRoots(brainDir)) {
+    for (const hit of discoverSkillsInRepo(repo)) {
+      if (hit.id === skillId) candidates.push(hit.path);
+    }
+  }
   const seen = new Set();
   const liveRepos = new Set();
   const liveHashes = new Set();

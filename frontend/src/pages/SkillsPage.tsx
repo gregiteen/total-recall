@@ -189,6 +189,22 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
   const [installingPkg, setInstallingPkg] = useState<string | null>(null);
   const [quarantineAlert, setQuarantineAlert] = useState<{ pkg: string; reason: string } | null>(null);
 
+  // ─── Active brain → single deployable repo target ──────────────────────────
+  // activeBrainId is 'global', 'project:<name>', or a comma-joined multi-select
+  // (see BrainSelector). Only a single, non-global selection maps to one concrete
+  // project repo we can deploy a global skill into.
+  const activeRepoName = useMemo(() => {
+    if (!activeBrainId) return null;
+    const ids = activeBrainId.split(',').map((s) => s.trim()).filter(Boolean);
+    if (ids.length !== 1 || ids[0] === 'global') return null;
+    const id = ids[0];
+    return id.startsWith('project:') ? id.slice('project:'.length) : id;
+  }, [activeBrainId]);
+  const activeRepoGroup = useMemo(
+    () => (activeRepoName ? repoGroups.find((g) => g.repo === activeRepoName) || null : null),
+    [activeRepoName, repoGroups],
+  );
+
   // ─── Lifecycle tab state ────────────────────────────────────────────────────
   const lifecycleVersion = useMemo(() => selectedSkill && skillContent ? extractVersion(skillContent) : '0.0.0', [selectedSkill, skillContent]);
   const changelogEntries = useMemo(() => selectedSkill && skillContent ? parseChangelog(skillContent) : [], [selectedSkill, skillContent]);
@@ -269,14 +285,23 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
         groups = (data.repos || []) as RepoSkillsGroup[];
       }
 
-      if (activeBrainId && activeBrainId !== 'global') {
-        const targetRepoId = activeBrainId.startsWith('project:') ? activeBrainId.replace('project:', '') : activeBrainId;
+      // activeBrainId may be a comma-joined multi-select (see BrainSelector) — split it
+      // rather than treating the whole string as a single repo id, else selecting more
+      // than one brain collapsed the list down to only the "Global" group.
+      const selectedBrainIds = (activeBrainId || '').split(',').map((s) => s.trim()).filter(Boolean);
+      if (selectedBrainIds.length > 0 && !selectedBrainIds.includes('global')) {
+        const targetRepoIds = selectedBrainIds.map((id) =>
+          id.startsWith('project:') ? id.slice('project:'.length) : id,
+        );
         groups = groups.filter(
-          g => g.repo === 'Global' || 
-               g.repo === targetRepoId || 
-               targetRepoId.endsWith(`/${g.repo}`) || 
-               g.repo.endsWith(`/${targetRepoId}`) ||
-               activeBrainId === `project:${g.repo}`
+          g => g.repo === 'Global' ||
+               targetRepoIds.some(
+                 (targetRepoId) =>
+                   g.repo === targetRepoId ||
+                   targetRepoId.endsWith(`/${g.repo}`) ||
+                   g.repo.endsWith(`/${targetRepoId}`),
+               ) ||
+               selectedBrainIds.includes(`project:${g.repo}`)
         );
         list = groups.flatMap(g => g.skills || []);
       }
@@ -713,24 +738,26 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
                             {skill.name}
                           </span>
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            {activeBrainId && activeBrainId !== 'Global' && group.repo === 'Global' && (
+                            {activeRepoGroup?.path && group.repo === 'Global' && (
                               <input
                                 type="checkbox"
-                                checked={!!repoGroups.find(g => g.repo === activeBrainId)?.skills?.some(s => s.name === skill.name)}
+                                checked={!!activeRepoGroup?.skills?.some(s => s.name === skill.name)}
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={async (e) => {
                                   e.stopPropagation();
                                   const checked = e.target.checked;
+                                  const targetRepoPath = activeRepoGroup?.path;
+                                  if (!targetRepoPath) return;
                                   if (checked) {
                                     // Open preview modal instead of instantly deploying
                                     setPreviewModalOpen(true);
                                     setPreviewLoading(true);
                                     setPreviewData(null);
                                     try {
-                                      const res = await previewSkillRepo(skill.name, activeBrainId);
+                                      const res = await previewSkillRepo(skill.name, targetRepoPath);
                                       setPreviewData({
                                         skillName: skill.name,
-                                        targetRepo: activeBrainId,
+                                        targetRepo: targetRepoPath,
                                         original: res.original,
                                         preview: res.preview,
                                         signals: res.signals
@@ -744,7 +771,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
                                   } else {
                                     // Uncheck (disable) happens immediately
                                     try {
-                                      await toggleSkillRepo(skill.name, activeBrainId, false);
+                                      await toggleSkillRepo(skill.name, targetRepoPath, false);
                                       void fetchSkillsList();
                                     } catch (err) {
                                       setError((err as Error).message);
@@ -831,7 +858,7 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
             <h2 style={{ marginTop: 0, marginBottom: 12 }}>Skill Adaptation Preview</h2>
             {previewLoading ? (
               <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <p>Generating adaptive preview for {activeBrainId}...</p>
+                <p>Generating adaptive preview for {activeRepoName || activeBrainId}...</p>
               </div>
             ) : previewData ? (
               <>

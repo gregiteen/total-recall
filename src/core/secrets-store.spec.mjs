@@ -112,6 +112,10 @@ describe('secrets-store', () => {
     expect(row.binding_error).toMatch(/2 repos/);
   });
 
+  // Longer timeout: this test round-trips setSecret/updateSecretMeta/getSharedValueHealth
+  // several times, each doing a real scrypt(N=2**16) key derivation (~64MB, OWASP-strength —
+  // not weakened for tests). That's fast in isolation but the accumulated cost can exceed
+  // the default 5s under CPU contention from the rest of the suite running concurrently.
   it('detects same credential value shared across repos/apps as ERROR', async () => {
     const { updateSecretMeta, getSharedValueHealth } = await import('./secrets-store.mjs');
     const same = 'shared-api-key-material-xyz-999';
@@ -149,7 +153,7 @@ describe('secrets-store', () => {
     });
     const health2 = await getSharedValueHealth(brain);
     expect(health2.healthy).toBe(true);
-  });
+  }, 20000);
 
   it('shared_value_ok waives intentional duplicate storage', async () => {
     const { updateSecretMeta, getSharedValueHealth } = await import('./secrets-store.mjs');

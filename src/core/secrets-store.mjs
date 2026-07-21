@@ -760,7 +760,13 @@ export async function setSecret(brainDir, key, value, opts = {}) {
   });
 
   // First-time set only: optionally queue product-level API research (not raw key-name scraping).
-  if (!prev.created_at && opts.skip_integration_research !== true) {
+  // Skip under Vitest / NODE_ENV=test — enqueue can hang on network and blow 5s timeouts.
+  // Force research in tests with skip_integration_research: false.
+  const inTest = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+  const skipResearch =
+    opts.skip_integration_research === true ||
+    (inTest && opts.skip_integration_research !== false);
+  if (!prev.created_at && !skipResearch) {
     try {
       const { maybeEnqueueIntegrationResearch } = await import('./secret-integration-research.mjs');
       const result = await maybeEnqueueIntegrationResearch(brainDir, key, {

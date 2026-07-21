@@ -17,6 +17,12 @@ describe('remember and recall CLI commands', () => {
     origAgentDir = process.env.AGENT_DIR;
     origEnv = { ...process.env };
     process.env.AGENT_DIR = tmpAgentDir;
+    // detectProjectBrain() (used by recall's merged search) walks up from cwd looking for
+    // a REAL .agent/skills/total-recall regardless of AGENT_DIR — and this repo's own
+    // checkout has one, so without this override "merged" search picks up the developer's
+    // actual local vault instead of the isolated fixture. _TR_TEST_AGENT_DIR is the
+    // documented escape hatch (see cli/agent-dir.mjs detectProjectBrain).
+    process.env._TR_TEST_AGENT_DIR = tmpAgentDir;
 
     // Create the active meta-skill rule structure
     const rulesDir = path.join(tmpAgentDir, 'skills', 'total-recall', 'rules');

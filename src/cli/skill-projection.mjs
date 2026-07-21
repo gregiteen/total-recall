@@ -70,6 +70,22 @@ function pathExists(filePath) {
   }
 }
 
+// Marker written by tools like repo-expert-generate.mjs into any SKILL.md
+// they produce. A real (non-symlink) directory carrying this marker is
+// leftover tool output, not a user's hand-authored skill — it is always safe
+// to heal back onto the canonical source, even without --force.
+const AUTO_GENERATED_MARKER = '**Auto-generated** by `npx total-recall';
+
+function isStaleGeneratedDir(entryPath) {
+  try {
+    if (!fs.statSync(entryPath).isDirectory()) return false;
+    const content = fs.readFileSync(path.join(entryPath, 'SKILL.md'), 'utf8');
+    return content.includes(AUTO_GENERATED_MARKER);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Skill source roots, in priority order. The canonical Total Recall location
  * (.agent/skills, singular) wins, but we also scan the Antigravity-native
@@ -115,7 +131,10 @@ export function discoverRepoSkills(agentDir) {
  * Idempotent, self-healing, and strictly additive: a symlink that is broken or
  * stale is refreshed even without --force; a *real* (non-symlink) entry is
  * never clobbered unless --force (so a user's own skill always wins a name
- * collision); a skill whose source already *is* the destination is left alone.
+ * collision) — UNLESS that real entry is itself stale tool output (carries
+ * the auto-generated marker), in which case it is healed back onto the
+ * canonical source; a skill whose source already *is* the destination is
+ * left alone.
  */
 export function projectSkillsAsCommands(destDir, skills, opts = {}) {
   fs.mkdirSync(destDir, { recursive: true });
@@ -138,7 +157,7 @@ export function projectSkillsAsCommands(destDir, skills, opts = {}) {
           continue;
         }
         fs.unlinkSync(linkPath); // stale, broken, or --force → refresh
-      } else if (!opts.force) {
+      } else if (!opts.force && !isStaleGeneratedDir(linkPath)) {
         written.push({ name: skill.name, action: 'skipped' }); // user's real file/dir wins
         continue;
       } else {

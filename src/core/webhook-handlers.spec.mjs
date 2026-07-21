@@ -11,6 +11,14 @@ vi.mock('./config.mjs', () => ({
   brainDir: '/mock/brain',
 }));
 
+// logger.mjs ensures its log dir exists at module-load time via a real
+// fs.mkdirSync — with brainDir mocked to a fake root-level path that can
+// never actually be created, importing it for real crashes every test in
+// this file before any test body even runs.
+vi.mock('./logger.mjs', () => ({
+  logger: { log: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal();
   return {

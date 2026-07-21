@@ -38,7 +38,7 @@ describe('secrets-sync', () => {
     expect(throttled.throttledFetch).toHaveBeenCalledWith(
       'http://100.64.0.1:3000/api/secrets/sync',
       { headers: { Authorization: 'Bearer mesh-token' } },
-      5000,
+      10000,
     );
     expect(secretsStore.replaceSecretsBufferAtomic).toHaveBeenCalled();
   });

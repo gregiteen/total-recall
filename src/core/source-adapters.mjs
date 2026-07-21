@@ -980,7 +980,7 @@ export function checkSourceAvailability(config) {
     config.braveApiKey || config.tavilyApiKey || config.exaApiKey || config.serperApiKey;
   if (!config.searxUrl && !hasPaidSearch) {
     warnings.push(
-      'No SearX URL and no paid web-search key. Set SEARX_URL (preferred) or Brave/Tavily/Exa/Serper — otherwise only DuckDuckGo Instant Answer.',
+      'No SearX URL and no paid web-search key. Set SEARX_URL (preferred), or BRAVE_SEARCH_API_KEY / TAVILY_API_KEY / EXA_API_KEY / SERPER_API_KEY — otherwise only DuckDuckGo Instant Answer.',
     );
   } else if (config.searxUrl) {
     warnings.push(

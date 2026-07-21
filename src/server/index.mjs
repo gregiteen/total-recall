@@ -43,6 +43,51 @@ const PACKAGE_VERSION = (() => {
   }
 })();
 
+// ─── PID Lock ───────────────────────────────────────────────────────────────────
+// A second instance that loses the listen() race for PORT has historically kept
+// running indefinitely (no bound port, no work, never exiting) because nothing
+// handled the EADDRINUSE 'error' event. Fail fast instead, mirroring the daemon
+// loop's acquirePidLock/releasePidLock pattern.
+const SERVER_PID_FILE = path.join(configBrainDir, 'server.pid');
+
+function acquireServerPidLock() {
+  try {
+    if (fs.existsSync(SERVER_PID_FILE)) {
+      const existingPid = parseInt(fs.readFileSync(SERVER_PID_FILE, 'utf8').trim(), 10);
+      if (existingPid && !isNaN(existingPid)) {
+        try {
+          process.kill(existingPid, 0); // signal 0 = liveness check only
+          logger.error('server', `Another server instance is already running (PID: ${existingPid}). Exiting.`);
+          process.exit(1);
+        } catch {
+          logger.info('server', `Stale server PID file found (PID: ${existingPid} is dead). Overwriting.`);
+        }
+      }
+    }
+  } catch {
+    // PID file unreadable — proceed
+  }
+  try {
+    fs.mkdirSync(path.dirname(SERVER_PID_FILE), { recursive: true });
+    fs.writeFileSync(SERVER_PID_FILE, String(process.pid), { mode: 0o644 });
+  } catch (err) {
+    logger.warn('server', `Could not write server PID lockfile: ${err.message}`);
+  }
+}
+
+function releaseServerPidLock() {
+  try {
+    if (fs.existsSync(SERVER_PID_FILE)) {
+      const storedPid = parseInt(fs.readFileSync(SERVER_PID_FILE, 'utf8').trim(), 10);
+      if (storedPid === process.pid) fs.unlinkSync(SERVER_PID_FILE);
+    }
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+acquireServerPidLock();
+
 // ─── Watchdog ───────────────────────────────────────────────────────────────────
 // Attach circuit-breaker log monitor before any subsystem can emit events.
 import { attachLogMonitor } from '../core/watchdog.mjs';
@@ -699,12 +744,22 @@ const server = app.listen(PORT, HOST, () => {
   }
   logger.info("server", `Total Recall Brain v3.0.0 is listening on http://${HOST}:${PORT}`);
 });
+server.on('error', (err) => {
+  logger.error('server', `Failed to bind ${HOST}:${PORT}: ${err.message}. Exiting.`);
+  releaseServerPidLock();
+  process.exit(1);
+});
 
 // If bound to a mesh IP, also bind to 127.0.0.1 so local CLI/Dashboard works
 if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
   const localServer = app.listen(PORT, '127.0.0.1', () => {
     setupUpgradeHandler(localServer);
     logger.info("server", `Total Recall Brain v3.0.0 is ALSO listening on http://127.0.0.1:${PORT}`);
+  });
+  localServer.on('error', (err) => {
+    logger.error('server', `Failed to bind 127.0.0.1:${PORT}: ${err.message}. Exiting.`);
+    releaseServerPidLock();
+    process.exit(1);
   });
 }
 
@@ -940,6 +995,7 @@ async function handleShutdown(signal) {
     }
 
     clearTimeout(forceExitTimeout);
+    releaseServerPidLock();
     logger.info('server', 'Graceful shutdown complete. Exiting.');
     process.exit(0);
   });

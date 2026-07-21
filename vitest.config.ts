@@ -6,6 +6,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Default 5000ms is too tight for CPU-bound work (scrypt key derivation, module
+    // imports doing real init) under contention from the rest of the suite running
+    // concurrently — several unrelated tests intermittently timed out at exactly 5000ms
+    // with no logic error, only under load. Individual slow tests can still override this.
+    testTimeout: 20000,
     exclude: ['**/node_modules/**', '**/.agent/**', '**/.agents/**', '**/.claude/**', '**/.cursor/**'],
     setupFiles: ['./frontend/src/setupTests.ts'],
     coverage: {

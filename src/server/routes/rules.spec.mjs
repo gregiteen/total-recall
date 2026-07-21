@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { rulesRouter } from './rules.mjs';
 
-vi.mock('../../cli/agent-dir.mjs', () => ({
-  getBothBrains: vi.fn().mockReturnValue({
-    global: { brainDir: '/global' },
-    project: { brainDir: '/project' },
-  }),
+vi.mock('./_shared.mjs', () => ({
+  VAULT_DIR: '/global/memory-vault',
+  resolveAllVaultsFromQuery: vi.fn(),
 }));
 
 vi.mock('../../core/vault-cache.mjs', () => ({
@@ -52,16 +49,20 @@ vi.mock('../../core/logger.mjs', () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
+const { rulesRouter } = await import('./rules.mjs');
+const { resolveAllVaultsFromQuery } = await import('./_shared.mjs');
+
 describe('rules routes', () => {
   let app;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolveAllVaultsFromQuery).mockReturnValue(['/global/memory-vault', '/project/memory-vault']);
     app = express();
     app.use('/', rulesRouter);
   });
 
-  it('GET /api/rules returns combined rules from brainDir layers', async () => {
+  it('GET /api/rules returns combined rules from the brain(s) resolved for the request', async () => {
     const res = await request(app).get('/api/rules');
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(3);
@@ -96,15 +97,16 @@ describe('rules routes', () => {
     ]);
   });
 
-  it('GET /api/rules dedupes when project brainDir aliases global', async () => {
-    const { getBothBrains } = await import('../../cli/agent-dir.mjs');
-    vi.mocked(getBothBrains).mockReturnValueOnce({
-      global: { brainDir: '/same' },
-      project: { brainDir: '/same' },
-    });
+  it('GET /api/rules dedupes when resolved vaults collapse to the same path', async () => {
+    // Both entries resolve to the actual global vault dir, so this also verifies
+    // scope is 'global' — not just first-in-wins from processing order.
+    vi.mocked(resolveAllVaultsFromQuery).mockReturnValueOnce(['/global/memory-vault', '/global/memory-vault']);
     const { getNodes } = await import('../../core/vault-cache.mjs');
-    vi.mocked(getNodes).mockImplementation((dir) => {
-      if (dir === '/same/memory-vault') {
+    // mockImplementationOnce — a persistent mockImplementation() here would leak
+    // into later tests in this file (vi.clearAllMocks() in beforeEach clears
+    // calls/results but not implementations set this way).
+    vi.mocked(getNodes).mockImplementationOnce((dir) => {
+      if (dir === '/global/memory-vault') {
         return [{ slug: 'one', category: 'invariants', title: 'Only', body: 'x', status: 'active', importance: 1 }];
       }
       return [];
@@ -114,5 +116,14 @@ describe('rules routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(1);
     expect(res.body.rules[0].scope).toBe('global');
+  });
+
+  it('GET /api/rules only queries the selected brain — not every layer — when a single brain is resolved', async () => {
+    vi.mocked(resolveAllVaultsFromQuery).mockReturnValueOnce(['/project/memory-vault']);
+
+    const res = await request(app).get('/api/rules?brain=project:foo');
+    expect(res.status).toBe(200);
+    expect(res.body.rules.every((r) => r.scope === 'project')).toBe(true);
+    expect(res.body.count).toBe(2);
   });
 });

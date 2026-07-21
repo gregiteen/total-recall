@@ -94,6 +94,24 @@ describe('projectSkillsAsCommands', () => {
     expect(fs.lstatSync(userOwned).isSymbolicLink()).toBe(false);
   });
 
+  it('heals a real dir at dest that is stale auto-generated tool output', () => {
+    const src = path.join(tmp, 'src');
+    const dest = path.join(tmp, 'dest');
+    const a = seedSkill(src, 'repo-expert', 'canonical, correct-repo content');
+    const staleDir = path.join(dest, 'repo-expert');
+    fs.mkdirSync(staleDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(staleDir, 'SKILL.md'),
+      '---\nname: repo-expert\n---\n\n> **Auto-generated** by `npx total-recall skill generate-expert`. Regenerate anytime to stay current.\n\nWrong content, left over from a different repoRoot.\n',
+      'utf8'
+    );
+
+    const res = projectSkillsAsCommands(dest, [{ name: 'repo-expert', skillDir: a }], {});
+    expect(res).toEqual([{ name: 'repo-expert', action: 'linked' }]);
+    expect(fs.lstatSync(staleDir).isSymbolicLink()).toBe(true);
+    expect(path.resolve(fs.readlinkSync(staleDir))).toBe(path.resolve(a));
+  });
+
   it('leaves a skill alone when its source already is the destination', () => {
     const root = path.join(tmp, '.agents', 'skills');
     const a = seedSkill(root, 'a');

@@ -48,6 +48,7 @@ const configSchema = z.object({
   cliModel: z.string().optional(),
   cliTimeout: z.preprocess((val) => val === undefined || val === '' ? 300 : parseInt(String(val), 10), z.number().int().default(300)),
   googleApiKey: z.string().optional(),
+  openRouterApiKey: z.string().optional(),
   embedModel: z.string().default('gemini-embedding-2'),
   searxngBaseUrl: z.string().optional(),
   braveApiKey: z.string().optional(),
@@ -151,10 +152,13 @@ try {
         const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
         const brainDir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
         const parsed = loadSecretsSync(brainDir);
-        if (Object.keys(parsed).length > 0) {
-          secrets = parsed;
-          break; // Found valid secrets!
-        }
+        // Merge (don't stop at the first non-empty file): an earlier, sparser
+        // store (e.g. the global ~/.agent/secrets.enc root) was previously
+        // short-circuiting the search and silently hiding real secrets that
+        // only existed in a later, richer store (e.g. the total-recall
+        // skill's own config/secrets.enc). Earlier candidates still win on
+        // key collisions — this only fills in keys the earlier ones lack.
+        secrets = { ...parsed, ...secrets };
       } catch {}
     }
   }
@@ -178,6 +182,7 @@ const rawConfig = {
   cliModel: process.env.TR_CLI_MODEL,
   cliTimeout: process.env.TR_CLI_TIMEOUT,
   googleApiKey: process.env.GOOGLE_API_KEY || secrets.google_api_key,
+  openRouterApiKey: process.env.OPENROUTER_API_KEY || secrets.openrouter_api_key || secrets.OPENROUTER_API_KEY,
   embedModel: process.env.TR_EMBED_MODEL,
   searxngBaseUrl: process.env.SEARXNG_BASE_URL,
   braveApiKey: process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || secrets.brave_api_key,
@@ -225,6 +230,7 @@ export const {
   cliModel,
   cliTimeout,
   googleApiKey,
+  openRouterApiKey,
   embedModel,
   searxngBaseUrl,
   braveApiKey,

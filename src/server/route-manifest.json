@@ -417,11 +417,19 @@
   },
   {
     "method": "POST",
+    "path": "/api/secrets/:key/account-sync"
+  },
+  {
+    "method": "POST",
     "path": "/api/secrets/:key/reveal"
   },
   {
     "method": "POST",
     "path": "/api/secrets/:key/rotate"
+  },
+  {
+    "method": "POST",
+    "path": "/api/secrets/account-sync"
   },
   {
     "method": "GET",
@@ -469,6 +477,10 @@
   },
   {
     "method": "GET",
+    "path": "/api/secrets/shared-values"
+  },
+  {
+    "method": "GET",
     "path": "/api/secrets/sync"
   },
   {
@@ -482,6 +494,10 @@
   {
     "method": "POST",
     "path": "/api/secrets/sync/trigger-pull"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/tracking-health"
   },
   {
     "method": "GET",
