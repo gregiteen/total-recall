@@ -1,21 +1,18 @@
 # Changelog
 
 
-## [3.19.0] — 2026-07-21
+## [3.19.1] — 2026-07-21
 
 ### 🐛 Bug Fixes
 - **Skills page "Global" repo 404s**: viewing/editing/auditing any skill under the synthesized "Global" catalog repo (`repo-expert`, `security`, etc.) 404'd — `resolveRegisteredProject` only checked `project-registry.json`, which never contained the synthetic Global entry.
 - **Rules page ignored the brain selector**: `/api/rules` always resolved via `getBothBrains()` (the server process's own `cwd()`), never the selected brain — every brain showed the same two vaults regardless of selection. Now scoped through the shared `resolveAllVaultsFromQuery`, matching memory/graph/skills.
 - **Skills page brain-selector integration**: multi-brain (comma) selection collapsed the repo list to just "Global"; the enable/disable-skill checkbox compared against `'Global'` (capital) instead of the real `'global'` id so it never gated correctly; and the deploy/toggle calls passed the raw brain id (e.g. `project:foo`) straight through as a filesystem path instead of the actual registered project path.
 - **Misleading search-availability warning**: "no paid web-search key" warning named services generically instead of the actual env vars (`BRAVE_SEARCH_API_KEY` / `TAVILY_API_KEY` / `EXA_API_KEY` / `SERPER_API_KEY`).
-- **Embeddings provider order**: OpenRouter tried first (Gemini's budget is exhausted), falling back to Google/OpenAI — avoids taxing every embedding call with a slow Google timeout first.
 - **Network-policy audit events**: no longer written through the full SSSS kernel commit path inline (`processViaPackageKernel`/`getTotalRecallEngine` measured 30s+ per call on this vault) — queued and flushed on a deferred macrotask so it never blocks concurrent request I/O; in-memory audit log remains the network audit trail until the kernel commit path itself is fixed.
 - **Duplicate server instances**: a second instance losing the `listen()` port race used to hang forever with no bound port; now fails fast via a PID lockfile + `error` handler, mirroring the daemon loop's lock pattern.
 - **Skill sync**: `isRepoScopedSkill` now also scans known repos for live-but-undiscovered copies (previously only the registry-tracked ones), and stale auto-generated skill dirs (e.g. from `repo-expert-generate.mjs`) self-heal onto the canonical source even without `--force`.
-- **Secrets config merge**: multiple `secrets.enc` stores (global root vs. the total-recall skill's own) now merge instead of the first non-empty file silently winning and hiding real values in a later store.
 
 ### 🚀 Features
-- **OpenRouter embeddings**: `OPENROUTER_API_KEY` config support end-to-end as a first-class embedding provider.
 - **Provider account tracking**: new `/api/secrets/account-sync`, `/api/secrets/shared-values`, `/api/secrets/tracking-health` endpoints.
 
 ### 🧪 Testing
@@ -23,6 +20,15 @@
 - Fixed a test-isolation bug where `recall`'s merged search read the real global vault instead of the test's isolated fixture (missing `_TR_TEST_AGENT_DIR` override — `detectProjectBrain` ignores `AGENT_DIR`).
 - Fixed a broken `webhook-handlers.spec.mjs` mock (unmocked `logger.mjs` tried a real `mkdirSync` under a fake root-level `brainDir`).
 - Fixed `pruning-optimization.spec.mjs` treating `writeOrUpdateConsolidatedDraft`'s return value (a memory-node slug) as a filesystem path.
+
+## [3.19.0] — 2026-07-21
+
+### 🐛 Bug Fixes
+- **Embeddings provider order**: OpenRouter tried first (Gemini's budget is exhausted), falling back to Google/OpenAI — avoids taxing every embedding call with a slow Google timeout first.
+- **Secrets config merge**: multiple `secrets.enc` stores (global root vs. the total-recall skill's own) now merge instead of the first non-empty file silently winning and hiding real values in a later store.
+
+### 🚀 Features
+- **OpenRouter embeddings**: `OPENROUTER_API_KEY` config support end-to-end as a first-class embedding provider.
 
 ## [3.18.4] — 2026-07-20
 
