@@ -31,15 +31,19 @@ function jsonResponse(status, body) {
 
 describe('provider-account-sync', () => {
   let brain;
+  const prevPass = process.env.TR_SECRETS_PASSWORD;
 
   beforeEach(() => {
     brain = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pas-'));
     fs.mkdirSync(path.join(brain, 'config'), { recursive: true });
+    process.env.TR_SECRETS_PASSWORD = 'test-only-password-for-aes-gcm';
     vi.mocked(throttledFetch).mockReset();
   });
 
   afterEach(() => {
     fs.rmSync(brain, { recursive: true, force: true });
+    if (prevPass === undefined) delete process.env.TR_SECRETS_PASSWORD;
+    else process.env.TR_SECRETS_PASSWORD = prevPass;
   });
 
   it('resolveProbeName maps known keys and value prefixes', () => {
