@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('./logger.mjs', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {

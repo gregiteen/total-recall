@@ -1,4 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('./logger.mjs', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

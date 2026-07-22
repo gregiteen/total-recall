@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('./logger.mjs', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 import { cleanAndParseJSON, loadRuntimeConfig } from './runtime.mjs';
 import fs from 'fs';
 

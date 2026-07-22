@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// This test needs the real logger/logEvents EventEmitter wiring (it asserts
+// watchdog reacts to actual log events), so logger.mjs itself can't be
+// mocked here. Redirect its brainDir instead so the real fs.appendFileSync
+// call inside logger.log() writes to a throwaway path instead of the user's
+// actual ~/.agent/skills/total-recall/logs/ (matches logger.spec.mjs's own
+// isolation pattern).
+vi.mock('./config.mjs', () => ({ brainDir: '/tmp/test-brain' }));
+
 import { logger, logEvents } from './logger.mjs';
 import { watchdog, attachLogMonitor, detachLogMonitor } from './watchdog.mjs';
 

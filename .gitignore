@@ -29,6 +29,10 @@ node_modules/
 .agent/sessions/
 .agent/interrupts/
 
+# Guard against test-mock gaps leaking real writes to repo root instead of
+# the real brainDir (~/.agent/skills/total-recall/) — see obsidian-sync.spec.mjs
+/brain/
+
 # Daemon / checker runtime state
 .remember/
 .last-successful-ts.txt
