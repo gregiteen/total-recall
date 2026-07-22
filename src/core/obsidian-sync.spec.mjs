@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
+import { addTask } from './task-envelope.mjs';
 import { syncObsidianToVault, watchObsidianDirectory } from './obsidian-sync.mjs';
 
 vi.mock('node:fs', () => {
@@ -14,6 +15,22 @@ vi.mock('node:fs', () => {
     }
   };
 });
+
+// task-envelope.mjs (and vault.mjs beneath it) import the bare 'fs' specifier,
+// not 'node:fs' — the mock above never reaches persistEnvelope's real disk
+// write. Mock the module directly so conflict-path tests can't leak real
+// files into the repo (see github-sync.spec.mjs for the same pattern).
+vi.mock('./task-envelope.mjs', () => ({
+  addTask: vi.fn(),
+  resolveQueueDir: vi.fn((brainDir) => `${brainDir}/scheduler/queue`),
+}));
+
+// logger.mjs also uses the bare 'fs' specifier and resolves the real global
+// brainDir at import time — unmocked, it appends real lines to the user's
+// actual ~/.agent/skills/total-recall/logs/ during every test run.
+vi.mock('./logger.mjs', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
 
 describe('obsidian-sync', () => {
   beforeEach(() => {
@@ -47,8 +64,13 @@ describe('obsidian-sync', () => {
     });
     
     syncObsidianToVault('obsidian/test.md', 'vault/test.md', 'brain');
-    
+
     // Should skip writing due to conflict
     expect(fs.writeFileSync).not.toHaveBeenCalledWith('vault/test.md', expect.anything(), expect.anything());
+    // Should surface the conflict as a queued task instead
+    expect(addTask).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'system', origin: { agent: 'obsidian-sync' } }),
+      'brain/scheduler/queue',
+    );
   });
 });

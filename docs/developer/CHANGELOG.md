@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [3.19.2] — 2026-07-21
+
+### 🧪 Testing
+- **`logger.mjs` test-isolation sweep**: extends 3.19.1's `webhook-handlers.spec.mjs` fix across the rest of `src/core/` — 37 spec files transitively imported `logger.mjs` without mocking it, so running the suite appended real JSON lines into the actual global brain's `logs/` directory on every run. `watchdog.spec.mjs` needed a different fix since it exercises the real `logger`/`logEvents` EventEmitter wiring — mocked `config.mjs`'s `brainDir` to a throwaway path instead of mocking `logger.mjs` itself.
+- **`obsidian-sync.spec.mjs` real-write leak**: its "surfaces conflict" test mocked `node:fs` but not the bare `fs` specifier used by `task-envelope.mjs`/`vault.mjs`, so `addTask()` ran for real and wrote actual task files into `<repo>/brain/scheduler/queue/` on every run, using the test's literal fixture args. Mocked `task-envelope.mjs` directly (matching `github-sync.spec.mjs`'s existing pattern) and strengthened the test to assert the conflict task is actually queued.
+
 ## [3.19.1] — 2026-07-21
 
 ### 🐛 Bug Fixes

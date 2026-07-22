@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('./logger.mjs', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
 import { writeEmergencyAlert, clearEmergencyAlerts, readEmergencyAlerts, runStartupHealthCheck } from './emergency-alerts.mjs';
 
 describe('emergency-alerts.mjs', () => {
