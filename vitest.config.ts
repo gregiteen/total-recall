@@ -11,6 +11,17 @@ export default defineConfig({
     // concurrently — several unrelated tests intermittently timed out at exactly 5000ms
     // with no logic error, only under load. Individual slow tests can still override this.
     testTimeout: 20000,
+    // Run spec FILES one at a time (each still gets a fresh module registry).
+    //
+    // Several specs assert on wall-clock behaviour — queue depth after a
+    // rate-limit interval, fs watchers firing, file permissions — and those
+    // assertions are only valid when the machine isn't saturated by other spec
+    // files running concurrently. Measured over repeated full runs, that
+    // contention made throttled-fetch (3 tests) and secrets-store (1 test)
+    // fail intermittently while passing 15/15 in isolation. This trades a
+    // slower suite for a deterministic one; a flaky suite is worth nothing
+    // because nobody can tell a real regression from noise.
+    fileParallelism: false,
     exclude: ['**/node_modules/**', '**/.agent/**', '**/.agents/**', '**/.claude/**', '**/.cursor/**'],
     setupFiles: ['./frontend/src/setupTests.ts'],
     coverage: {

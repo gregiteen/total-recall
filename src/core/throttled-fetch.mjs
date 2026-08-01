@@ -552,6 +552,23 @@ export function resetGateStats() {
  * Reset internal rate-limit/concurrency state (for testing only).
  */
 export function resetGateStateForTests() {
+  // Tear down policy watchers FIRST. They are module-level singletons that
+  // outlive an individual test, and their callbacks call applyPolicy() +
+  // drainQueue() — so a watcher registered by an earlier test can fire in the
+  // middle of a later one, silently rewriting blockedDomains/domainMinInterval
+  // and draining the queue. That made the firewall-reject and minInterval
+  // tests fail intermittently under full-suite load while passing in
+  // isolation. Closing them here makes each test start from a quiet state.
+  for (const w of [policyWatcher, parentWatcher]) {
+    try {
+      w?.close();
+    } catch {
+      // already closed / never opened
+    }
+  }
+  policyWatcher = null;
+  parentWatcher = null;
+
   gateGeneration += 1;
   globalInFlight = 0;
   domainInFlight.clear();
