@@ -15,6 +15,7 @@ import {
 import { compileSurface } from '../../core/surface.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
 import { loadEmbeddingsIndex, loadSessionEmbeddingsIndex } from '../../core/embeddings.mjs';
+import { logger } from '../../core/logger.mjs';
 
 const router = Router();
 
@@ -32,20 +33,30 @@ router.post('/api/vault/compile', requireAuth, requireScope('memory:recompile'),
       force: true,
     });
     // Incrementally embed any new vault nodes and sessions for THIS brain
-    let vaultEmbed = null, sessionEmbed = null;
+    let vaultEmbed = null, sessionEmbed = null, embedError = null;
     try {
       const { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } = await import('../../core/embeddings.mjs');
       invalidate(vaultDir);
       const vaultNodes = getNodes(vaultDir);
       vaultEmbed = await buildEmbeddingsIndex(vaultNodes, paths.derivedDir);
       sessionEmbed = await buildSessionEmbeddingsIndex(paths.sessionsDir, paths.derivedDir);
-    } catch { /* embedding service may be unavailable — non-fatal */ }
+    } catch (err) {
+      // Still non-fatal — a compile that produced surfaces is worth keeping —
+      // but NEVER silent. This was a bare `catch {}`, and it meant every
+      // compile could fail to embed a single node while reporting
+      // `compiled: true`. A brain with thousands of nodes and zero vectors
+      // looked perfectly healthy, and recall silently answered from keyword
+      // matching for weeks.
+      embedError = String(err?.message || err);
+      logger.error('vault', `Embedding build FAILED during compile (surfaces still compiled): ${embedError}`, { vaultDir });
+    }
     res.json({
       compiled: true,
       elapsed_ms: Date.now() - start,
       vault_dir: vaultDir,
       vault_embeddings: vaultEmbed,
       session_embeddings: sessionEmbed,
+      embedding_error: embedError,
     });
   } catch (err) {
     serverError(res, err);

@@ -132,12 +132,22 @@ export async function semanticSearch(query, {
   const filteredSlugs = new Set(filteredNodes.map(n => n.slug));
   const results = [];
 
-  // Get query embedding
+  // Get query embedding.
+  //
+  // Falling back to lexical-only search is fine. Losing the REASON is not:
+  // "the embedding API failed" and "the index for this brain was never built"
+  // are completely different problems with completely different fixes, and
+  // this used to report both as the former. That mislabelling cost real time —
+  // festech.live's project brain had 2602 vault nodes and 0 embeddings, and
+  // every recall against it printed "Embedding API unreachable or
+  // unconfigured. Configure GOOGLE_API_KEY or OPENAI_API_KEY", which sent the
+  // reader off to check credentials that were working perfectly.
   let queryEmbedding = null;
+  let embeddingError = null;
   try {
     queryEmbedding = await getEmbedding(String(query));
   } catch (err) {
-    // Gracefully ignore embedding generation errors
+    embeddingError = String(err?.message || err);
   }
 
   const vaultIndex = loadEmbeddingsIndex(derivedDir);
@@ -279,6 +289,13 @@ export async function semanticSearch(query, {
   const finalResults = results.slice(0, k);
   if (!queryEmbedding || vaultEntries.length === 0) {
     finalResults.degradedTextSearch = true;
+    // Say WHICH failure this is. The caller renders remediation from it, and
+    // the two causes need opposite fixes: one is credentials, the other is an
+    // unbuilt index for this specific brain.
+    finalResults.degradedReason = !queryEmbedding ? 'embedding_failed' : 'empty_index';
+    finalResults.degradedDetail = !queryEmbedding
+      ? (embeddingError || 'embedding provider returned nothing')
+      : `no embeddings indexed for this brain (${derivedDir})`;
   }
 
   return finalResults;
