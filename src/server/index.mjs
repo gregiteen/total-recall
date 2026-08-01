@@ -187,8 +187,55 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // Check daemon status
   const daemonStatus = getDaemonStatus();
 
+  // Embedding coverage per brain.
+  //
+  // This existed nowhere before, and its absence is exactly why a brain with
+  // 2602 vault nodes and 0 embeddings looked healthy for weeks: compile
+  // reported `compiled: true`, recall returned keyword hits that read like
+  // real results, and nothing anywhere printed "N of M nodes embedded".
+  // Vector search silently off is a CRITICAL failure, not a cosmetic one —
+  // recall answers from the wrong brain and the caller cannot tell.
+  const embeddingCoverage = [];
+  try {
+    const { loadEmbeddingsIndex } = await import('../core/embeddings.mjs');
+    const { getActiveBrains } = await import('../core/config.mjs');
+    const brains = getActiveBrains();
+    for (const b of Object.values(brains)) {
+      if (!b?.brainDir) continue;
+      const vaultPath = path.join(b.brainDir, 'memory-vault');
+      if (!fs.existsSync(vaultPath)) continue;
+      let nodeCount = 0;
+      const walk = (d) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+          if (e.name.startsWith('.')) continue;
+          const p = path.join(d, e.name);
+          if (e.isDirectory()) walk(p);
+          else if (e.name.endsWith('.md')) nodeCount++;
+        }
+      };
+      try { walk(vaultPath); } catch { /* unreadable vault */ }
+      let embedded = 0;
+      try {
+        embedded = Object.keys(loadEmbeddingsIndex(path.join(b.brainDir, 'memory-derived'))).length;
+      } catch { /* index unreadable — reported as 0, which is the honest value */ }
+      embeddingCoverage.push({
+        layer: b.layer || 'unknown',
+        nodes: nodeCount,
+        embedded,
+        vector_search: embedded > 0 ? 'on' : 'OFF — keyword-only',
+      });
+    }
+  } catch (err) {
+    embeddingCoverage.push({ error: String(err?.message || err) });
+  }
+
+  // A brain with nodes but no vectors answers every query from keyword
+  // matching. Surface it at the same severity as a dead daemon.
+  const unembeddedBrains = embeddingCoverage.filter(c => c.nodes > 0 && c.embedded === 0);
+
   // Determine overall status
-  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || cliAgents.length === 0;
+  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || cliAgents.length === 0
+    || unembeddedBrains.length > 0;
 
   // Check Caddy and Cloudflare status
   let caddyStatus = 'inactive';
@@ -223,6 +270,12 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     disk,
     cli_agents: cliAgents,
     daemon: daemonStatus,
+    embedding_coverage: embeddingCoverage,
+    // Explicit, greppable signal. A brain with nodes and no vectors serves
+    // keyword-only results that look exactly like real ones.
+    vector_search_degraded: unembeddedBrains.length > 0
+      ? unembeddedBrains.map(b => `${b.layer}: ${b.embedded}/${b.nodes} embedded`)
+      : null,
     caddy: caddyStatus,
     cloudflare: cloudflareStatus,
     emergency_alerts: emergencyAlerts || null,

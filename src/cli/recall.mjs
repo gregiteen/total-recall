@@ -129,6 +129,7 @@ export default async function recall(args) {
     let allResults = [];
     let isDegraded = false;
     const searchErrors = [];
+    const degradedReasons = new Map();
 
     for (const target of searchTargets) {
       const vaultDir = path.join(target.brainDir, 'memory-vault');
@@ -163,7 +164,13 @@ export default async function recall(args) {
             priority
           });
         }
-        if (results.degradedTextSearch) isDegraded = true;
+        if (results.degradedTextSearch) {
+          isDegraded = true;
+          degradedReasons.set(results.degradedReason || 'unknown', {
+            label: target.label,
+            detail: results.degradedDetail || '',
+          });
+        }
         // Tag each result with its layer
         for (const r of results) {
           r._layer = target.label;
@@ -215,11 +222,35 @@ export default async function recall(args) {
       return;
     }
     if (isDegraded) {
-      console.log('\n  ⚠️  WARNING: Embedding API unreachable or unconfigured. Cos-similarity vector search is disabled.');
-      console.log('              Running basic text keyword search instead. Configure GOOGLE_API_KEY or OPENAI_API_KEY.');
+      // This block used to print ONE message for two unrelated failures:
+      // "Embedding API unreachable or unconfigured … Configure GOOGLE_API_KEY
+      // or OPENAI_API_KEY". When the real cause was an unbuilt index, that
+      // sent the reader to check credentials that were already working, while
+      // a brain with thousands of nodes quietly answered from keyword matching
+      // and returned results from the wrong project. Name the actual cause.
+      const empty = degradedReasons.get('empty_index');
+      const failed = degradedReasons.get('embedding_failed');
+
+      console.log('\n  ⚠️  Vector search is OFF — these results are keyword-only and may miss obvious matches.');
+      if (empty) {
+        console.log(`      Cause: the ${empty.label} brain has NO embeddings indexed. The API is fine; the index was never built.`);
+        console.log('      Fix:   npx total-recall compile        (embeds any unembedded nodes for this brain)');
+      }
+      if (failed) {
+        console.log(`      Cause: embedding generation failed for the ${failed.label} brain — ${failed.detail}`);
+        console.log('      Fix:   set OPENROUTER_API_KEY (preferred), or GOOGLE_API_KEY / OPENAI_API_KEY.');
+      }
+      if (!empty && !failed) {
+        console.log('      Cause: unknown — embeddings unavailable and no reason was reported.');
+      }
     }
     const layerSuffix = searchTargets.length > 1 ? ' (merged)' : ` (${searchTargets[0].label})`;
-    console.log(`\n  🔍 Semantic search results for "${query}"${layerSuffix}:\n`);
+    // Never call it "Semantic search results" when semantic search did not run.
+    // The old header said exactly that regardless, so degraded keyword output
+    // was indistinguishable from real vector results — same header, same
+    // percentage scores. If the label doesn't change, nobody can tell.
+    const modeLabel = isDegraded ? '🔤 KEYWORD-ONLY results' : '🔍 Semantic search results';
+    console.log(`\n  ${modeLabel} for "${query}"${layerSuffix}:\n`);
     for (let i = 0; i < allResults.length; i++) {
       const match = allResults[i];
       const rank = i + 1;

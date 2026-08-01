@@ -285,7 +285,13 @@ export function detectProjectBrain(startDir = process.cwd()) {
     if (fs.existsSync(path.join(candidate, 'SKILL.md'))) {
       return {
         agentDir: path.join(dir, '.agent'),
-        brainDir: globalBrainDir,
+        // The project brain lives at the detected candidate — NEVER alias it to
+        // globalBrainDir. This returned `globalBrainDir` while the sibling
+        // implementation in src/cli/agent-dir.mjs returned `candidate`, so the
+        // two disagreed about where the project brain is: anything routed
+        // through this function silently operated on the GLOBAL vault while
+        // reporting itself as the 'project' layer.
+        brainDir: candidate,
         projectRoot: dir,
       };
     }
