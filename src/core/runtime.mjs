@@ -47,11 +47,21 @@ export function findBinaryInPath(binaryName) {
 
 // ─── Default agent registry (used when agents.yml doesn't exist) ─────────────
 
+// NOTE ON FLAG ORDER AND MODEL PINS (verified by live probe 2026-08-01):
+//   agy    — the REAL Google Antigravity CLI (AI Ultra). The binary named
+//            `antigravity` is a metered Gemini API wrapper, NOT this. Disabled
+//            below; enabling it bills an exhausted API budget (429s).
+//   claude — `-p` is required for non-interactive AND must be LAST, because
+//            `--tools` is variadic and otherwise swallows the prompt.
+//   codex  — `-m` must be pinned; a config.toml model the account cannot use
+//            fails with HTTP 400 at exit code 0.
 const DEFAULT_AGENTS = [
-  { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 1, enabled: true, exec: 'flag' },
-  { name: 'grok',        binary: 'grok',        flags: '--output-format plain --always-approve --permission-mode bypassPermissions', priority: 2, enabled: true, exec: 'flag' },
-  { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions --setting-sources local --tools ""', priority: 3, enabled: true, exec: 'flag' },
-  { name: 'codex',       binary: 'codex',       flags: '--sandbox workspace-write --json --skip-git-repo-check', priority: 4, enabled: true, exec: 'subcommand' },
+  { name: 'agy',         binary: 'agy',         flags: '--output-format json -p', priority: 1, enabled: true, exec: 'flag' },
+  { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions --setting-sources local --tools "" -p', priority: 2, enabled: true, exec: 'flag' },
+  { name: 'codex',       binary: 'codex',       flags: '-m gpt-5.5 --sandbox workspace-write --json --skip-git-repo-check', priority: 3, enabled: true, exec: 'subcommand' },
+  { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 8, enabled: false, exec: 'flag' },
+  { name: 'gemini',      binary: 'gemini',      flags: '--sandbox=false --yolo -o json', priority: 9, enabled: false, exec: 'flag' },
+  { name: 'grok',        binary: 'grok',        flags: '--output-format plain --always-approve --permission-mode bypassPermissions', priority: 10, enabled: false, exec: 'flag' },
 ];
 
 /**
@@ -299,29 +309,65 @@ export async function callLocalRuntime(prompt, system, config) {
     }
   } catch {}
 
-  // Try agents in priority order with retry budget
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const agent = attempt === 0 ? resolveAgent(config) : resolveAgent({
-      ...config,
-      agents: agents.filter(a => a.name !== lastError?.agentName),
-    });
+  // Try agents in priority order, never re-trying one that already failed.
+  //
+  // The old filter excluded only `lastError.agentName` — the MOST RECENT
+  // failure — so a chain of three could hand work back to an agent that had
+  // already failed while a healthy one further down was never reached. Track
+  // every failure instead.
+  //
+  // The iteration cap is `agents.length + maxRetries` so that each enabled
+  // agent gets a turn even when the retry budget is smaller than the chain;
+  // the loop exits as soon as the untried pool is empty.
+  const failedAgents = new Set();
+  const maxAttempts = agents.length + maxRetries;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const remaining = agents.filter(a => !failedAgents.has(a.name));
+    const agent = remaining.length > 0
+      ? resolveAgent({ ...config, agents: remaining })
+      : null;
 
     if (!agent) {
-      throw new Error('No CLI agents available. Install antigravity, grok, claude, or codex.');
+      if (failedAgents.size > 0) {
+        throw new Error(
+          `All CLI agents failed (tried: ${[...failedAgents].join(', ')}). ` +
+          `Last error: ${lastError?.error || 'unknown'}`,
+        );
+      }
+      throw new Error(
+        'No CLI agents available. Install agy (Google Antigravity), claude, or codex.',
+      );
     }
 
+    // The prompt goes LAST, after every flag. Pushing it first (the old
+    // behaviour) broke the registry's own flag sets: it emitted a duplicate
+    // `-p` for agents whose flags already carry one, and it defeats the
+    // ordering that keeps a variadic flag (claude's `--tools <tools...>`) from
+    // swallowing the prompt as one of its values.
     const args = [];
     if (agent.exec === 'subcommand') {
-      args.push('exec', fullPrompt);
-    } else {
-      args.push('-p', fullPrompt);
+      args.push('exec');
     }
     if (agent.flags) {
-      args.push(...agent.flags.split(/\s+/).filter(Boolean));
+      // spawnSync does not go through a shell, so quotes in the registry are
+      // literal characters: `--tools ""` would pass a two-character string
+      // rather than an empty one. Strip matched surrounding quotes per token.
+      args.push(
+        ...agent.flags
+          .split(/\s+/)
+          .filter(Boolean)
+          .map(tok => tok.replace(/^(['"])(.*)\1$/, '$2')),
+      );
     }
     if (agent.model) {
       args.push('-m', agent.model);
     }
+    // `exec: flag` agents need an explicit `-p` only if their flags omit it.
+    if (agent.exec !== 'subcommand' && !args.includes('-p') && !args.includes('--print')) {
+      args.push('-p');
+    }
+    args.push(fullPrompt);
 
     const cmd = `${agent.binaryPath} ${args.map(a => a.includes(' ') || a.includes('\n') ? `"${a.replace(/"/g, '\\"')}"` : a).join(' ')}`;
 
@@ -373,9 +419,25 @@ export async function callLocalRuntime(prompt, system, config) {
       cwd: process.cwd(),
     });
 
-    if (result.status === 0) {
+    const softFailure = detectAgentFailure(result.stdout || '');
+
+    if (result.status === 0 && !softFailure) {
       const output = result.stdout?.trim() || '';
       return parseAgentOutput(output);
+    }
+
+    if (softFailure) {
+      // Exit code 0 but the payload says the run failed. Auth and model-config
+      // failures are not transient, so record and move to the next agent
+      // instead of burning the remaining retries on the same broken agent.
+      logger.error({
+        subsystem: 'runtime',
+        message: `${agent.name} reported failure despite exit 0`,
+        error: softFailure.slice(0, 500),
+      });
+      lastError = { agentName: agent.name, error: softFailure.slice(0, 500) };
+      failedAgents.add(agent.name);
+      continue;
     }
 
     const err = result.stderr || result.stdout || 'Unknown error';
@@ -385,9 +447,13 @@ export async function callLocalRuntime(prompt, system, config) {
       error: err.slice(0, 500),
     });
     lastError = { agentName: agent.name, error: err.slice(0, 500) };
+    failedAgents.add(agent.name);
   }
 
-  throw new Error(`All CLI agents failed. Last error: ${lastError?.error || 'unknown'}`);
+  throw new Error(
+    `All CLI agents failed (tried: ${[...failedAgents].join(', ') || 'none'}). ` +
+    `Last error: ${lastError?.error || 'unknown'}`,
+  );
 }
 
 /**
@@ -406,6 +472,57 @@ export async function callLocalRuntimeRaw(messages, config, _tools = undefined) 
 /**
  * Parse JSON or text output from a CLI agent into plain text.
  */
+/**
+ * Control-frame `type` values in codex's `--json` event stream. None of them
+ * carry the model's answer.
+ */
+const STREAM_CONTROL_TYPES = new Set([
+  'thread.started', 'turn.started', 'turn.completed', 'turn.failed',
+  'item.started', 'item.updated', 'item.completed', 'error',
+]);
+
+/**
+ * Detects a failure the exit code did not report.
+ *
+ * CLI agents exit 0 on failed runs and describe the failure only in the
+ * payload (verified 2026-08-01):
+ *   claude → {"subtype":"success","is_error":true,"result":"Not logged in …"}
+ *   codex  → {"type":"turn.failed","error":{"message":"…"}}
+ *   agy    → {"status":"ERROR"|"CANCELED","error":"…"}
+ *
+ * Without this, `status === 0` accepts the error text as the model's answer —
+ * e.g. "Not logged in · Please run /login" gets stored as a memory node.
+ *
+ * @param {string} output raw stdout
+ * @returns {string|null} failure reason, or null if the run looks clean
+ */
+function detectAgentFailure(output) {
+  if (!output) return null;
+  for (const line of output.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('{')) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(t);
+    } catch {
+      continue;
+    }
+    if (parsed.is_error === true) {
+      return typeof parsed.result === 'string' ? parsed.result : 'is_error: true';
+    }
+    if (parsed.type === 'turn.failed' || parsed.type === 'error') {
+      const msg = parsed.error?.message ?? parsed.message;
+      return typeof msg === 'string' ? msg : String(parsed.type);
+    }
+    if (typeof parsed.status === 'string' && parsed.status.toUpperCase() !== 'SUCCESS') {
+      return typeof parsed.error === 'string'
+        ? `${parsed.status}: ${parsed.error}`
+        : `status=${parsed.status}`;
+    }
+  }
+  return null;
+}
+
 function parseAgentOutput(output) {
   try {
     const parsed = JSON.parse(output);
@@ -418,7 +535,34 @@ function parseAgentOutput(output) {
       return last.content || last.text || last.response || JSON.stringify(last);
     }
   } catch {
-    // Not JSON — return raw text
+    // Not a single JSON document. It may still be a JSONL event stream —
+    // codex `--json` emits one frame per line, so a whole-output JSON.parse
+    // always throws and the raw stream used to be returned as the "answer".
+    const answers = [];
+    for (const line of output.split('\n')) {
+      const t = line.trim();
+      if (!t.startsWith('{')) continue;
+      let frame;
+      try {
+        frame = JSON.parse(t);
+      } catch {
+        continue;
+      }
+      // codex: the reply is item.text of the `agent_message` item.
+      if (frame.item?.type === 'agent_message' && typeof frame.item.text === 'string') {
+        answers.push(frame.item.text);
+        continue;
+      }
+      if (STREAM_CONTROL_TYPES.has(frame.type)) continue;
+      for (const key of ['response', 'result', 'content', 'text']) {
+        if (typeof frame[key] === 'string') {
+          answers.push(frame[key]);
+          break;
+        }
+      }
+    }
+    // Last message wins: earlier frames are partial or superseded.
+    if (answers.length > 0) return answers[answers.length - 1];
   }
   return output;
 }

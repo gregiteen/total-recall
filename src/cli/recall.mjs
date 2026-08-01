@@ -128,6 +128,7 @@ export default async function recall(args) {
     // Search all target brains and merge results
     let allResults = [];
     let isDegraded = false;
+    const searchErrors = [];
 
     for (const target of searchTargets) {
       const vaultDir = path.join(target.brainDir, 'memory-vault');
@@ -168,8 +169,16 @@ export default async function recall(args) {
           r._layer = target.label;
         }
         allResults = allResults.concat(results);
-      } catch {
-        // Skip brains that can't be searched (no embeddings, etc.)
+      } catch (err) {
+        // A brain that cannot be searched is skipped — but NEVER silently.
+        //
+        // This used to be a bare `catch {}`. A missing native binding for
+        // better-sqlite3 ("Could not locate the bindings file") made every
+        // semantic search throw, and the swallow turned a hard dependency
+        // crash into the message "No matching memory nodes found" — so a
+        // fully-populated vault looked empty and the real cause was invisible.
+        // Degrading to lexical-only results is fine; hiding why is not.
+        searchErrors.push({ label: target.label, message: String(err?.message || err) });
       }
     }
 
@@ -182,8 +191,27 @@ export default async function recall(args) {
       return;
     }
 
+    if (searchErrors.length > 0) {
+      // Surface the real cause. "No matches" and "search crashed" are very
+      // different problems and must never look the same.
+      console.log('');
+      for (const e of searchErrors) {
+        console.log(`  ⚠️  ${e.label} brain search failed: ${e.message.split('\n')[0]}`);
+      }
+      if (/bindings file|\.node|NODE_MODULE_VERSION|better-sqlite3/i.test(searchErrors.map(e => e.message).join(' '))) {
+        console.log('      A native module is missing or was built for a different Node version.');
+        console.log('      Fix: pnpm rebuild better-sqlite3   (or npm rebuild better-sqlite3)');
+        console.log('      With pnpm, the package must also be allowed to run build scripts.');
+      }
+      console.log('      Results below (if any) are lexical-only and may be incomplete.');
+    }
+
     if (allResults.length === 0) {
-      console.log('\n  🔍 No matching memory nodes found.');
+      console.log(
+        searchErrors.length > 0
+          ? '\n  🔍 No results — search failed above, so this is NOT proof the vault is empty.'
+          : '\n  🔍 No matching memory nodes found.',
+      );
       return;
     }
     if (isDegraded) {

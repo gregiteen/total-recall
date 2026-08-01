@@ -1,30 +1,66 @@
 agents:
-  - name: antigravity
-    binary: antigravity
-    flags: --sandbox=false --yolo -o json
+  # Google Antigravity CLI. The binary is `agy` (NOT `antigravity`) and it runs
+  # on the AI Ultra plan. Preferred agent for bulk work.
+  #   agy -p "prompt" --output-format json  ->  {status:"SUCCESS", response:"..."}
+  # Docs: https://antigravity.google/docs/cli/headless
+  - name: agy
+    binary: agy
+    flags: --output-format json -p
     priority: 1
     enabled: true
     exec: flag
 
-  - name: grok
-    binary: grok
-    # Grok Build TUI: -p single-turn, plain text for TR parser
-    flags: --output-format plain --always-approve --permission-mode bypassPermissions
+  # `-p` MUST be present (non-interactive requires --print) and MUST be LAST:
+  # `--tools` is variadic (`<tools...>`) in the shipped build, so anything after
+  # it — including the appended prompt — is swallowed as a tool name. Proven
+  # both ways on claude v2.1.201.
+  - name: claude
+    binary: claude
+    flags: --output-format json --permission-mode bypassPermissions --setting-sources local --tools "" -p
     priority: 2
     enabled: true
     exec: flag
 
-  - name: claude
-    binary: claude
-    flags: --output-format json --permission-mode bypassPermissions --setting-sources local --tools ""
-    priority: 3
-    enabled: true
-    exec: flag
+  # `-m` is REQUIRED: ~/.codex/config.toml may pin a model the account cannot
+  # use (seen: gpt-5.6-sol -> HTTP 400 "not supported when using Codex with a
+  # ChatGPT account"). Account-supported slugs: ~/.codex/models_cache.json.
+  # `--full-auto` is hidden from --help but still works as a deprecated alias;
+  # the explicit `--sandbox` form is OpenAI's current recommendation.
   - name: codex
     binary: codex
-    flags: --full-auto --json --skip-git-repo-check
-    priority: 4
+    flags: -m gpt-5.5 --sandbox workspace-write --json --skip-git-repo-check
+    priority: 3
     enabled: true
     exec: subcommand
+
+  # DISABLED — `antigravity` on PATH is total-recall/bin/antigravity.mjs, a thin
+  # wrapper that POSTs to generativelanguage.googleapis.com with GOOGLE_API_KEY,
+  # i.e. the METERED Gemini API, not the Ultra plan. Verified 2026-08-01: every
+  # call returned 429 "You exceeded your current quota". Use `agy` above.
+  - name: antigravity
+    binary: antigravity
+    flags: --sandbox=false --yolo -o json
+    priority: 8
+    enabled: false
+    exec: flag
+
+  # DISABLED — this user has no Gemini CLI. Do not enable because a `gemini`
+  # binary resolves on PATH; their Google surface is `agy`.
+  - name: gemini
+    binary: gemini
+    flags: --sandbox=false --yolo -o json
+    priority: 9
+    enabled: false
+    exec: flag
+
+  # DISABLED — not installed. A stale binary may still resolve at
+  # ~/.grok/bin/grok; PATH presence is not proof an agent works.
+  - name: grok
+    binary: grok
+    flags: --output-format plain --always-approve --permission-mode bypassPermissions
+    priority: 10
+    enabled: false
+    exec: flag
+
 timeout: 300
 max_retries: 2

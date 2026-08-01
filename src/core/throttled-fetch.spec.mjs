@@ -68,6 +68,24 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Wait until `predicate()` is true, or fail after `timeoutMs`.
+ *
+ * A fixed `sleep(5)` before asserting queue depth is a race: under full-suite
+ * load the scheduler may not have enqueued yet at +5ms, so the assertion saw 0
+ * and failed intermittently while passing in isolation. Polling keeps the
+ * assertion exactly as strict (the depth must still become > 0) but stops it
+ * depending on how loaded the machine is.
+ */
+async function waitFor(predicate, timeoutMs = 2000, stepMs = 2) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await sleep(stepMs);
+  }
+  return predicate();
+}
+
 describe('throttledFetch', () => {
   beforeEach(() => {
     if (typeof vi.isFakeTimers === 'function' && vi.isFakeTimers()) {
@@ -143,7 +161,7 @@ describe('throttledFetch', () => {
 
     // Second request must queue — minInterval still active.
     const p2 = throttledFetch('https://ratelimited.com/b');
-    await sleep(5);
+    await waitFor(() => getGateStats().current_queue_depth > 0);
     expect(getGateStats().current_queue_depth).toBeGreaterThan(0);
 
     const res2 = await p2;
