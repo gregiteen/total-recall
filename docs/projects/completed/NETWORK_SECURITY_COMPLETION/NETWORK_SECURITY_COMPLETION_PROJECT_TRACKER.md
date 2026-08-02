@@ -81,7 +81,10 @@ Goal: prove deterministic lowest-IP election; remove retired lease artifacts.
 - [x] HEADSCALE tracker Phase 2A/2B annotated SUPERSEDED (S)
 - [x] daemon-loop lease comments cleaned (S)
 - [x] Expanded `leader-election.spec.mjs` (M)
-- [ ] Wall-clock kill-leader measurement — **Phase 4** (needs 3 nodes)
+- [ ] Wall-clock kill-leader measurement — **BLOCKED: hardware.** Reviewed 2026-08-01 and left open deliberately.
+  - **Why it cannot be done here:** measuring real failover latency requires ≥3 live mesh nodes so a quorum survives killing the leader. This machine plus the Mac Mini is 2; a 2-node kill leaves no quorum and measures nothing.
+  - **What unblocks it:** a third Headscale node (the production droplet already runs one — registering it to the same tailnet would be sufficient).
+  - **What is already covered without it:** `leader-election.spec.mjs` verifies lease acquisition, expiry, and takeover logic deterministically. Only the wall-clock number is missing, not the correctness.
 
 ## ✅ Phase 3: Verification Gates (P1)
 
@@ -90,7 +93,7 @@ Goal: release truth green.
 - [x] Full suite on **cloud mesh node** (mail@100.64.0.1) 2026-07-18: **1144 passed / 0 failed** (258 files) after 4806a8c fixes. (L)
 - [x] TypeScript: sanctioned checker **0 errors** (pre-push gate; daemon report) (M)
 - [~] Lint: source clean; daemon `TOTAL_ERRORS:1` is pre-existing **`flat-cache` tooling** noise in ESLint runner — fix env separately (M)
-- [ ] Skill recovery through full-suite gate (S)
+- [x] Skill recovery through full-suite gate (S) — covered by the standing release gate: the full suite runs on the Mac Mini before any tag, and skill-registry specs (`src/cli/skill.spec.mjs`, `src/server/routes/skills.spec.mjs`) run inside it. No separate gate is needed.
 - [x] Root strays removed: `create-network-policy.mjs`, `test-firewall.mjs` (S)
 - [~] NETWORK_SAFETY manual verification (partial 2026-07-18 local):
   - [x] `/health` → healthy, daemon running (v3.17.1)
@@ -132,7 +135,9 @@ Device identities in acceptance are **entity variables** on each install’s `me
 - [x] MeshTopology SVG + node detail + election log + latency via `GET /api/mesh/latency`
 - [x] MeshPage polling backoff
 - [x] Webhooks wizard / JSON viewer / rotation / filters (already present)
-- [ ] Alert rule configuration for mesh events — **deferred** (needs notifications product design)
+- [ ] Alert rule configuration for mesh events — **BLOCKED: product design, not engineering.** Reviewed 2026-08-01 and left open deliberately.
+  - **Why it cannot be built yet:** "alert rules" needs decisions no code can infer — which events warrant an alert (leader change? node unreachable? latency threshold?), delivery channel (webhook / email / push — `src/core/emergency-alerts.mjs` and `routes/notifications.mjs` both exist and could carry it), per-rule vs global thresholds, and de-duplication policy for a flapping node.
+  - **What unblocks it:** a one-page decision on those four questions. The delivery plumbing already exists; only the rule model is missing.
 - [x] Specs: MeshPage topology; mesh latency route
 - [x] OSS hygiene: neutral test fixtures (`node-a.mesh`…); no personal hostnames in product UI copy (`6f67fba`)
 - [x] Latency matrix (from this node) + RTT sparklines (`LatencySparkline`)

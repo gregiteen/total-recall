@@ -204,16 +204,16 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
       if (!b?.brainDir) continue;
       const vaultPath = path.join(b.brainDir, 'memory-vault');
       if (!fs.existsSync(vaultPath)) continue;
+      // Count only what the embedder actually indexes: type:memory nodes.
+      // Counting every .md under the vault compares against a denominator that
+      // includes proposals/ (optimizer tickets, never embedded by design), so a
+      // perfectly healthy brain reported "847/16701 — 5% coverage" and tripped
+      // a false degraded alarm. Ask the loader, don't count files.
       let nodeCount = 0;
-      const walk = (d) => {
-        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-          if (e.name.startsWith('.')) continue;
-          const p = path.join(d, e.name);
-          if (e.isDirectory()) walk(p);
-          else if (e.name.endsWith('.md')) nodeCount++;
-        }
-      };
-      try { walk(vaultPath); } catch { /* unreadable vault */ }
+      try {
+        const { loadNodes } = await import('../core/vault.mjs');
+        nodeCount = loadNodes(vaultPath).length;
+      } catch { /* unreadable vault */ }
       let embedded = 0;
       try {
         embedded = Object.keys(loadEmbeddingsIndex(path.join(b.brainDir, 'memory-derived'))).length;

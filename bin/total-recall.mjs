@@ -60,6 +60,8 @@ const COMMANDS = {
   recall:   'recall.mjs',
   search:   'recall.mjs',
   research: 'research.mjs',
+  proposals: 'proposals.mjs',
+  proposal:  'proposals.mjs',
   task:     'task.mjs',
   share:    'share.mjs',
   'generate-pat': 'generate-pat.mjs',
@@ -102,6 +104,7 @@ function printHelp() {
     recall              Read-path hybrid search
     compile             Rebuild instruction surfaces
     dream               Memory consolidation cycle
+    proposals <cmd>     Review / apply optimizer proposals (list|apply|revert)
     task <cmd>          Enqueue daemon work (open envelope)
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync

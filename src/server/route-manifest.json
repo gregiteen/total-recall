@@ -361,6 +361,30 @@
   },
   {
     "method": "GET",
+    "path": "/api/proposals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/proposals/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/proposals/:id/apply"
+  },
+  {
+    "method": "POST",
+    "path": "/api/proposals/:id/reject"
+  },
+  {
+    "method": "POST",
+    "path": "/api/proposals/:id/revert"
+  },
+  {
+    "method": "GET",
+    "path": "/api/proposals/stale"
+  },
+  {
+    "method": "GET",
     "path": "/api/research"
   },
   {
@@ -670,6 +694,10 @@
   {
     "method": "GET",
     "path": "/api/usage"
+  },
+  {
+    "method": "GET",
+    "path": "/api/usage/providers"
   },
   {
     "method": "POST",

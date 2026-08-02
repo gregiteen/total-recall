@@ -16,6 +16,37 @@ export async function fetchUsageStats(): Promise<UsageData> {
   return res.json()
 }
 
+/** One provider's reported spend, or the reason we could not read it. */
+export interface ProviderUsageEntry {
+  label: string
+  /** `ok` carries numbers; every other state carries a `reason` instead. */
+  state: 'ok' | 'no_key' | 'needs_admin_key' | 'unsupported' | 'error'
+  reason?: string
+  secret_name?: string
+  total_cost?: number
+  currency?: string
+  balance?: number
+  /** True when the figure is lifetime-to-date rather than the requested window. */
+  lifetime?: boolean
+}
+
+export interface ProviderUsage {
+  fetched_at: string
+  window_days: number
+  from_cache?: boolean
+  providers: Record<string, ProviderUsageEntry>
+}
+
+/**
+ * Spend as the providers report it, rather than estimated from local token counts.
+ * Served from an hourly cache unless `refresh` is set.
+ */
+export async function fetchProviderUsage(refresh = false): Promise<ProviderUsage> {
+  const res = await apiFetch(`${API_BASE}/api/usage/providers${refresh ? '?refresh=1' : ''}`)
+  if (!res.ok) throw new Error(`Provider usage API error: ${res.status}`)
+  return res.json()
+}
+
 export async function fetchLogs(type: 'server' | 'daemon'): Promise<{ content: string }> {
   const res = await apiFetch(`${API_BASE}/api/logs/${type}`)
   if (!res.ok) throw new Error(`Logs API error: ${res.status}`)

@@ -41,7 +41,7 @@ The two repos share the same end state: SSSS is canonical, databases are project
 - [ ] SSSS skill/spec remains canonical in this repo.
 - [ ] SSSS validators are shipped as reusable reference implementation.
 - [ ] All generated indexes are disposable and rebuildable.
-- [ ] The Dream Cycle stages improvements as reviewable SSSS proposals.
+- [x] The Dream Cycle stages improvements as reviewable SSSS proposals. *(Staging shipped here; the review half — CLI, REST, applier, undo — landed 2026-08-01 under `docs/projects/in-progress/PROPOSAL_LIFECYCLE/`.)*
 - [ ] The local brain exposes an OpenAI-compatible endpoint.
 - [ ] The local brain can be registered as a normal UltraChat model through `MODEL.md`.
 - [ ] Conformance tests prove compatibility for SSSS files, operations, projections, and migrations.

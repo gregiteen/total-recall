@@ -13,4 +13,9 @@
 - [x] **Skills Page Repos View**: Not showing the repos on the skills by repo view.
 - [x] **Discussion**: Should any repo heavily using SSSS use Total Recall for *all* files instead of just memory?
 - [x] **Auto Repo-Sync**: Built `src/core/repo-sync.mjs` to automatically ingest all `.md` files from registered repos into each repo's Total Recall vault. Hooked into daemon boot + periodic cycle + init registration. Uses SHA-256 content hashing for incremental sync.
-- [ ] **Auto Usage Stats**: Build `src/core/usage-fetcher.mjs` to automatically fetch real usage/billing data from provider APIs (OpenAI, Anthropic, Google, etc.) using stored keys. Run on daemon cycle.
+- [x] **Auto Usage Stats**: Built `src/core/usage-fetcher.mjs`, wired into the daemon cycle (self-throttling to one live fetch per hour), exposed at `GET /api/usage/providers`, and surfaced in `UsagePage.tsx` as a "Reported by Provider" panel.
+  - **Scope correction after verifying the provider APIs (2026-08-01):** the item assumed stored keys would work. They do not, uniformly.
+    - **OpenAI** — `GET /v1/organization/costs` requires an **admin key** (`sk-admin-…`), not the inference key. Reported as `needs_admin_key` with the console URL, not as an error.
+    - **Anthropic** — `GET /v1/organizations/cost_report` requires an **admin key** (`sk-ant-admin…`). Same handling.
+    - **OpenRouter** — `GET /api/v1/credits` works with the ordinary stored key. Returns lifetime usage + remaining balance (flagged `lifetime`, never mislabelled as a windowed figure).
+    - **Google** — the Gemini / Generative Language API has **no** usage or cost endpoint at all. Spend is only reachable via Cloud Billing (GCP billing account + service-account credentials), which an API key cannot authenticate against. Reported `unsupported` with that explanation rather than silently stubbed.

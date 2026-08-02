@@ -4,6 +4,7 @@ vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 import fs from 'fs';
+import path from 'path';
 import { evaluateCandidates } from './dream.mjs';
 
 describe('Dream Cycle Phase 2 (REM)', () => {
@@ -52,5 +53,31 @@ describe('Dream Cycle Phase 2 (REM)', () => {
     
     // clean up
     fs.rmSync(conflictsDir, { recursive: true, force: true });
+  });
+});
+
+describe('Phase 4 proposal wiring', () => {
+  const src = () => fs.readFileSync(path.join(process.cwd(), 'src/core/dream.mjs'), 'utf8');
+
+  it('keeps the stale-knowledge ticket generator disabled', () => {
+    // Staleness is handled by refreshStaleKnowledge() feeding the research
+    // queue. The old generator wrote one .md per stale node per cycle — 16,401
+    // unread tickets at its peak. Nothing should turn it back on.
+    expect(src()).toMatch(/const ENABLE_STALE_KNOWLEDGE_REFRESH = false;/);
+    expect(src()).toMatch(/ENABLE_STALE_KNOWLEDGE_REFRESH\s*\?\s*await generateStaleKnowledgeRefreshProposals/);
+  });
+
+  it('consumes accepted proposals instead of only writing them', () => {
+    // The defining bug of this feature was that nothing ever read a proposal.
+    // If this call disappears, the phase silently reverts to write-only.
+    expect(src()).toMatch(/await applyAcceptedProposals\(vaultDir/);
+  });
+
+  it('hands staleness to the research queue', () => {
+    expect(src()).toMatch(/await refreshStaleKnowledge\(vaultDir\)/);
+  });
+
+  it('gives the gate live vault state so it can verify, not just read its own prose', () => {
+    expect(src()).toMatch(/evaluateProposalGate\(p, null, vaultDir\)/);
   });
 });

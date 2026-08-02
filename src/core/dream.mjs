@@ -80,6 +80,46 @@ import { detectConflicts, quarantineConflict } from './steering.mjs';
 import { compileSurface } from './surface.mjs';
 
 /**
+ * Delete only proposals that have reached a terminal state.
+ *
+ * The old code ran proposals through the same blind 3-day age prune as log
+ * files, so every un-actioned proposal was destroyed before anyone could act on
+ * it — which is a large part of why the feature looked harmless for so long: the
+ * queue emptied itself. An open proposal is pending work and is never pruned by
+ * age, and neither is a `rejected` tombstone; only `applied` and `superseded`
+ * tickets expire.
+ */
+export function pruneResolvedProposals(proposalsDir, maxAgeMs, now = Date.now()) {
+  if (!fs.existsSync(proposalsDir)) return 0;
+  // `rejected` is deliberately NOT pruned by age: it is a tombstone that stops
+  // the generator re-filing the same rejected proposal every cycle. Deleting it
+  // reopens that leak on a 3-day timer. Only genuinely finished work expires.
+  const resolved = new Set(['applied', 'superseded']);
+  let removed = 0;
+  let files;
+  try {
+    files = fs.readdirSync(proposalsDir).filter(f => f.endsWith('.md'));
+  } catch {
+    return 0;
+  }
+  for (const file of files) {
+    const full = path.join(proposalsDir, file);
+    try {
+      if (now - fs.statSync(full).mtimeMs <= maxAgeMs) continue;
+      const { data } = matter(fs.readFileSync(full, 'utf8'));
+      // Unparseable or status-less files are left alone: deleting a proposal we
+      // cannot read is exactly the silent data loss this function exists to stop.
+      if (!resolved.has(data.status)) continue;
+      fs.unlinkSync(full);
+      removed++;
+    } catch (err) {
+      logger.debug('dream: skipping proposal during prune', { file, err: err.message });
+    }
+  }
+  return removed;
+}
+
+/**
  * Phase 5: Automatic Storage & Memory Pruning.
  * Keeps the VFS local directories clean of old logs, draft files,
  * expired proposals, and temporary IDE session transcripts.
@@ -135,7 +175,7 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
   };
 
   pruneDir(logsDir, logMaxAgeMs);
-  pruneDir(proposalsDir, logMaxAgeMs);
+  pruneResolvedProposals(proposalsDir, logMaxAgeMs, now);
   pruneDir(inboxDir, draftMaxAgeMs); // Keeps the local dev inbox fully clean of automatic research noise
   if (conflictsDir) pruneDir(conflictsDir, draftMaxAgeMs);
 
@@ -212,12 +252,22 @@ export function autoPruneStorage(brainDir, vaultDir, conflictsDir) {
 }
 
 import { 
-  generateMemoryCleanupProposals, 
+  generateMemoryCleanupProposals,
   generateStaleKnowledgeRefreshProposals,
-  evaluateProposalGate
+  evaluateProposalGate,
+  dedupeProposals,
+  refreshStaleKnowledge
 } from './optimizer.mjs';
+import { applyAcceptedProposals } from './proposal-applier.mjs';
 
 const DREAM_PROMOTION_THRESHOLD = 0.7;
+
+// Master switch for the stale-knowledge-refresh *ticket generator* (see PHASE 4).
+// Disabled 2026-08-01 and superseded: staleness is now handled by
+// refreshStaleKnowledge(), which enqueues research the daemon can actually
+// perform instead of filing one .md per stale node every cycle (16,401 unread
+// tickets at its peak). There is no reason to turn this back on.
+const ENABLE_STALE_KNOWLEDGE_REFRESH = false;
 
 /**
  * Phase 1: Light Sleep. Scan for modifications.
@@ -474,14 +524,36 @@ export async function runDreamCycle({
   let proposalCount = 0;
   try {
     const cleanupProposals = await generateMemoryCleanupProposals(vaultDir);
-    const staleProposals = await generateStaleKnowledgeRefreshProposals(vaultDir);
-    const allProposals = [...cleanupProposals, ...staleProposals];
+
+    // Stale-knowledge-refresh generation is DISABLED. It filed one ticket per
+    // high-importance node untouched for 30 days — ~600 of them — and nothing
+    // in this system ever reads or applies a proposal, so every one was write-
+    // only noise. Flip to true to re-enable; the dedupe gate below keeps it
+    // bounded at one open ticket per target if you do.
+    const staleProposals = ENABLE_STALE_KNOWLEDGE_REFRESH
+      ? await generateStaleKnowledgeRefreshProposals(vaultDir)
+      : [];
+
+    // The generators are pure functions of vault state, so every cycle produces
+    // the SAME proposals as the last one — a node stale on Monday is still stale
+    // on Tuesday. Without this gate each cycle re-filed all of them under fresh
+    // random slugs; the global vault accumulated 16,401 proposals for 594 real
+    // targets (~28 copies each, ~5k/day) until proposals were 95% of the vault.
+    const { kept: allProposals, suppressed } = dedupeProposals(
+      [...cleanupProposals, ...staleProposals],
+      vaultDir,
+    );
+    if (suppressed > 0) {
+      logger.info('dream', `Suppressed ${suppressed} duplicate proposals (already open on disk).`);
+    }
 
     if (allProposals.length > 0) {
       logger.info('dream', `Generated ${allProposals.length} optimization proposals.`);
       for (const p of allProposals) {
-        const passed = await evaluateProposalGate(p, null);
-        logger.info('dream', `Proposal [${p.category}]: ${p.summary} -> ${passed ? 'ACCEPTED' : 'REJECTED'}`);
+        // Pass vaultDir so the gate can verify the proposal against live state
+        // rather than grading the optimizer's own rationale string.
+        const passed = await evaluateProposalGate(p, null, vaultDir);
+        logger.info('dream', `Proposal [${p.category}]: ${p.summary} -> ${p.status.toUpperCase()}`);
         // Contract write under vault root → proposals/<slug>.md
         await writeNode(p, vaultDir);
         if (passed) proposalCount++;
@@ -489,8 +561,27 @@ export async function runDreamCycle({
     } else {
       logger.info('dream', 'No new proposals generated.');
     }
+
+    // Consume what the gate accepted. Without this the whole phase is write-only:
+    // proposals accumulated for months and the 3-day pruner deleted every one.
+    const applied = await applyAcceptedProposals(vaultDir, { actor: 'dream' });
+    if (applied.applied || applied.superseded || applied.failed) {
+      logger.info('dream', `Applied ${applied.applied} proposals (${applied.superseded} superseded, ${applied.failed} failed).`);
+    }
   } catch (err) {
     logger.error('dream', `Optimizer failed: ${err.message}`);
+  }
+
+  // Staleness is handled here rather than as proposals: the research daemon can
+  // actually re-verify a stale node and commit the result, whereas a proposal
+  // could only ask someone to. Rate-limited so the backlog drains over cycles.
+  try {
+    const { enqueued, stale } = await refreshStaleKnowledge(vaultDir);
+    if (stale > 0) {
+      logger.info('dream', `Staleness sweep: ${stale} stale nodes, ${enqueued.length} queued for research this cycle.`);
+    }
+  } catch (err) {
+    logger.error('dream', `Staleness sweep failed: ${err.message}`);
   }
 
   // Write daily note summary (native SSSS node; Obsidian Daily Notes reads it directly)

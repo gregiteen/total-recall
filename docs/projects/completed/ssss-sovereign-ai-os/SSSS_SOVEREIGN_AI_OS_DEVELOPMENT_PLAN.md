@@ -76,9 +76,9 @@ Following the deletion of the old visualizers, the frontend was upgraded to supp
 
 ## Phase 5: Verification & Integration Testing (Active)
 
-- [ ] **Core Test Suite Re-alignment**: Re-align the Total Recall Test Suite (`.agent/skills/test/SKILL.md`) to verify that `semantic-index.mjs` and `surface.mjs` work perfectly with the new `text-embedding-004` model.
-- [ ] **Dry-Run Validation**: Implement automated integration tests simulating parallel subagent dispatch and verifying that progressive disclosure shims correctly route memory capsules.
-- [ ] **Performance Benchmarks**: Log semantic search latency, ensuring local cache hits stay under 50ms.
+- [x] **Core Test Suite Re-alignment**: Done as `src/core/embedding-contract.spec.mjs` — but **not** as originally written. Pinning tests to `text-embedding-004` would have re-scheduled the same rot: the default is now `gemini-embedding-2` and `text-embedding-004` survives only as the last fallback preference. The suite instead pins the *invariant* — exactly one place decides the model, callers read it from config, the fallback chain stays ordered and non-empty, and `surface.mjs`/`search.mjs` name no model at all. This surfaced a real drift: `runtime.mjs` hardcoded `text-embedding-004` while `embeddings.mjs` defaulted to `gemini-embedding-2` — two competing defaults with nothing reconciling them. Fixed.
+- [x] **Dry-Run Validation**: `src/core/context-dispatch.integration.spec.mjs` — 8 tests. Dispatches up to 40 concurrent `compileContext` calls over an 85-node vault and asserts the guaranteed invariants slot survives every path, that distinct queries yield distinct capsules, that the same query is deterministic, and that an embedding-provider outage degrades ranking without dropping invariants. The fixture is deliberately larger than the token budget — with a 5-node vault every capsule contains everything and routing is untestable.
+- [x] **Performance Benchmarks**: `src/core/search-performance.spec.mjs` — p95 over 50 iterations against a 2,000-node index, warm-up excluded. Measured 2026-08-01: `fastSearch` p50 4.43ms / p95 8.45ms; with filters p50 3.67ms / p95 7.81ms; `buildMemoryLayerIndex` p50 0.15ms / p95 0.35ms. All well inside the 50ms budget. Only the local cache path is asserted — a wall-clock bound on a network embedding call would fail on a slow connection and pass on a fast one, which is worse than no test.
 
 ---
 

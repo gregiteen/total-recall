@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchUsageStats, fetchConfigJson } from '../api';
+import { fetchUsageStats, fetchConfigJson, fetchProviderUsage } from '../api';
+import type { ProviderUsage } from '../api';
 import type { ConfigJson, UsageData } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -8,6 +9,9 @@ export default function UsagePage() {
   const [config, setConfig] = useState<ConfigJson | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [providerUsage, setProviderUsage] = useState<ProviderUsage | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [providerError, setProviderError] = useState<string | null>(null);
 
   const fetchUsageAndConfig = async () => {
     try {
@@ -24,11 +28,30 @@ export default function UsagePage() {
     }
   };
 
+  const loadProviderUsage = async (refresh = false) => {
+    setProviderLoading(true);
+    try {
+      setProviderUsage(await fetchProviderUsage(refresh));
+      setProviderError(null);
+    } catch (err: unknown) {
+      setProviderError((err as Error).message || 'Failed to read provider billing data.');
+    } finally {
+      setProviderLoading(false);
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate statistics sync on mount
     void fetchUsageAndConfig();
     const interval = setInterval(fetchUsageAndConfig, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    // Deliberately not on the 5s ledger interval — this hits live provider
+    // billing APIs. The server caches hourly; refreshing is a manual action.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial fetch on mount
+    void loadProviderUsage();
   }, []);
 
 
@@ -608,6 +631,69 @@ export default function UsagePage() {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── Provider-Reported Spend ──
+          Everything above is estimated locally: observed tokens × a hardcoded
+          price table. This panel is what the providers themselves bill. */}
+      <div className="card" style={{ padding: 24, marginTop: 24, background: 'rgba(18, 18, 26, 0.6)', backdropFilter: 'blur(8px)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: 10, marginBottom: 16 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5, margin: 0 }}>
+            Reported by Provider
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {providerUsage?.fetched_at && (
+              <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                {new Date(providerUsage.fetched_at).toLocaleString()}
+                {providerUsage.from_cache ? ' (cached)' : ''}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => { void loadProviderUsage(true); }}
+              disabled={providerLoading}
+              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: providerLoading ? 'wait' : 'pointer' }}
+            >
+              {providerLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+
+        {providerError && (
+          <div style={{ fontSize: 12, color: 'var(--error)', marginBottom: 12 }}>{providerError}</div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+          {Object.entries(providerUsage?.providers || {}).map(([id, p]) => (
+            <div key={id} style={{
+              border: '1px solid var(--border)',
+              borderLeft: `3px solid ${p.state === 'ok' ? 'var(--success)' : p.state === 'error' ? 'var(--error)' : 'var(--warning)'}`,
+              borderRadius: 8,
+              padding: 16,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{p.label}</div>
+              {p.state === 'ok' ? (
+                <>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>
+                    ${(p.total_cost ?? 0).toFixed(2)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
+                    {/* Never label a lifetime figure as a windowed one. */}
+                    {p.lifetime ? 'lifetime to date' : `last ${providerUsage?.window_days ?? 30} days`}
+                    {typeof p.balance === 'number' ? ` · $${p.balance.toFixed(2)} remaining` : ''}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  {p.reason}
+                </div>
+              )}
+            </div>
+          ))}
+          {!providerUsage && !providerError && (
+            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Loading provider billing data…</div>
+          )}
         </div>
       </div>
 

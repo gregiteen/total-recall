@@ -4,7 +4,7 @@ import yaml from 'yaml';
 import os from 'os';
 import { spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
-import { agentDir, brainDir, googleApiKey, tavilyApiKey, braveApiKey, exaApiKey, serperApiKey, githubToken } from './config.mjs';
+import { agentDir, brainDir, googleApiKey, tavilyApiKey, braveApiKey, exaApiKey, serperApiKey, githubToken, embedModel } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
 import { validateCommand } from './sandbox.mjs';
 
@@ -116,7 +116,11 @@ export function loadRuntimeConfig(_configPath) {
     agents,
     timeout:    agentConfig.timeout ?? 300,
     maxRetries: agentConfig.max_retries ?? 2,
-    embedding:  agentConfig.embedding ?? { provider: 'google', model: 'text-embedding-004' },
+    // Take the model from config, not a second hardcoded literal. This used to
+    // read 'text-embedding-004' while embeddings.mjs defaulted to
+    // 'gemini-embedding-2' — two different answers to the same question, and
+    // nothing reconciled them.
+    embedding:  agentConfig.embedding ?? { provider: 'google', model: embedModel },
   };
 
   // Dynamic Priority Resolution (No Hardcoding)

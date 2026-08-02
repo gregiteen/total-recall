@@ -3,7 +3,10 @@
 ## ✅ Phase 1: Planning and Discovery
 - [x] Identify requirements and scope.
 - [x] Create PRD (`BYOM_ARCHITECTURE_PRD.md`).
-- [ ] Determine backend data structures required for the new page components.
+- [x] Determine backend data structures required for the new page components. **Resolved 2026-08-01.** Two structures, both already shipped:
+  - **Model catalogue** — `GeminiModelInfo { id: string; displayName: string }`, served per provider by `GET /api/{gemini,claude,openai,openrouter}-models` (`src/server/routes/models.mjs`) and consumed via `frontend/src/api/models.ts`. One shape across all four providers; no per-provider variant is needed.
+  - **Provider credentials** — read from `configData.secrets` (the encrypted secrets store), never from `.env`.
+  - Note: `ModelsPage.tsx` no longer exists. Its panels were folded into `SettingsPage.tsx` in a later refactor, so the "new page components" this item referred to are the Settings panels. Nothing further is required.
 
 ## ✅ Phase 2: Refactoring Frontend UI
 - [x] In `frontend/src/App.tsx`, rename `Deployments` route to `Models & Agents` (path: `/models`).
