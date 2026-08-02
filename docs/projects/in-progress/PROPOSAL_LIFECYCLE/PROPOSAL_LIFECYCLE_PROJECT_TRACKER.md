@@ -121,7 +121,9 @@ project 520/520) and `/health` returns **healthy**.
 - [x] Lint report clean (1 known pre-existing `flat-cache` tooling issue)
 - [x] Native boot check — `node src/server/index.mjs` boots clean on the new code
 - [x] Live verification against the global brain (see log below)
-- [ ] Release 3.21.0 — **awaiting explicit user authorization**
+- [x] Release 3.21.0 — published 2026-08-01 (`total-recall-brain@3.21.0`, tag `v3.21.0`, commit `15bbab9`)
+- [x] Auto-apply ships **disabled** (`AUTO_APPLICABLE_TOPICS` empty) — guards are
+      correct but have seen one real vault; re-enabling is a one-line change
 
 ## Verification log
 
@@ -137,6 +139,9 @@ project 520/520) and `/health` returns **healthy**.
 | 2026-08-01 | Live boundedness (3 cycles) | 459 files → 459 → 459, 8 suppressed each cycle |
 | 2026-08-01 | Live staleness sweep | 58 stale, 3 queued/cycle, 55 deferred (logged) |
 | 2026-08-01 | Vault integrity after incident | 864 nodes, 0 damaged, 0 content lost |
+| 2026-08-01 | Suite stability (5 consecutive full runs) | 1269 passed each run, 0 failures |
+| 2026-08-01 | Final native boot on release code | 0 errors, healthy, daemon running |
+| 2026-08-01 | npm registry | `total-recall-brain@3.21.0`, dist-tag `latest` |
 
 ## Notes
 
