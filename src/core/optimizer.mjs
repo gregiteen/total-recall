@@ -13,6 +13,96 @@ import { brainDir } from './config.mjs';
  * Proposals must pass a local evaluation gate before being accepted.
  */
 
+/**
+ * Stable identity for a proposal: its topic plus what it points at.
+ *
+ * A proposal's slug is random (`prop_<hex>`), so two proposals asking for the
+ * exact same work never collide on disk — they just both get written. That is
+ * how the global vault reached 16,309 proposals covering only 594 distinct
+ * targets: every dream cycle re-filed the same tickets with new names.
+ *
+ * On read a proposal carries `category: 'proposals'` (the vault folder) with the
+ * topic moved to `proposal_topic`; in memory, pre-write, the topic is still in
+ * `category`. Normalize both shapes so a freshly generated proposal compares
+ * equal to its own persisted copy.
+ */
+export function proposalKey(proposal = {}) {
+  const topic = proposal.proposal_topic
+    || (proposal.category && proposal.category !== 'proposals' ? proposal.category : null)
+    || 'unknown';
+  return `${topic}::${proposal.target_path || ''}`;
+}
+
+/**
+ * Statuses that suppress re-filing an identical proposal.
+ *
+ * Everything except `superseded`. The generators are pure functions of vault
+ * state, so a proposal the gate rejected yesterday is regenerated — and rejected
+ * again — every single cycle. Treating `rejected` as "done, may re-file" leaked 5
+ * new files per cycle indefinitely; a decision has to be remembered to be worth
+ * making. `applied` suppresses for the same reason.
+ *
+ * `superseded` is the sole exception, and deliberately so: it means the world
+ * changed underneath the proposal, so the same request may legitimately become
+ * valid again. Note the key includes the target set, so a genuinely different
+ * duplicate group produces a different key and files normally regardless.
+ */
+const SUPPRESSING_PROPOSAL_STATUSES = new Set(['draft', 'accepted', 'applied', 'rejected']);
+
+/**
+ * Keys of proposals already on disk whose existence should stop an identical one
+ * being filed again — see {@link SUPPRESSING_PROPOSAL_STATUSES}.
+ */
+export function loadOpenProposalKeys(vaultDir) {
+  const keys = new Set();
+  // Read proposals/ off disk directly. getNodes() deliberately returns ONLY
+  // type:memory nodes — proposals are invisible to it — so a getNodes()-based
+  // check silently sees zero existing proposals and suppresses nothing.
+  const proposalsDir = path.join(vaultDir, 'proposals');
+  if (!fs.existsSync(proposalsDir)) return keys;
+
+  let files;
+  try {
+    files = fs.readdirSync(proposalsDir).filter(f => f.endsWith('.md'));
+  } catch (err) {
+    // Fail loud-ish: an unreadable dir means we cannot dedupe, and writing
+    // duplicates is exactly the runaway this guard exists to stop.
+    logger.error('optimizer', `Cannot read proposals dir; duplicate suppression disabled: ${err.message}`, { proposalsDir });
+    return keys;
+  }
+
+  for (const file of files) {
+    try {
+      const { data } = matter(fs.readFileSync(path.join(proposalsDir, file), 'utf8'));
+      if (!SUPPRESSING_PROPOSAL_STATUSES.has(data.status)) continue;
+      keys.add(proposalKey(data));
+    } catch (err) {
+      logger.debug('optimizer: skipping unparseable proposal', { file, err: err.message });
+    }
+  }
+  return keys;
+}
+
+/**
+ * Drop proposals that duplicate an open one on disk, or each other.
+ * @returns {{ kept: object[], suppressed: number }}
+ */
+export function dedupeProposals(proposals, vaultDir) {
+  const seen = loadOpenProposalKeys(vaultDir);
+  const kept = [];
+  let suppressed = 0;
+  for (const p of proposals) {
+    const key = proposalKey(p);
+    if (seen.has(key)) {
+      suppressed++;
+      continue;
+    }
+    seen.add(key);
+    kept.push(p);
+  }
+  return { kept, suppressed };
+}
+
 export function createProposal(category, summary, targetPath = null, rationale = '') {
   const proposalId = `prop_${crypto.randomBytes(6).toString('hex')}`;
   return {
@@ -48,7 +138,12 @@ export async function generateMemoryCleanupProposals(vaultDir) {
   
   for (const node of nodes) {
     if (node.type !== 'memory') continue;
-    const key = `${node.predicate}:${node.object}`;
+    // Key on the FULL triple. Keying on predicate:object alone treats every node
+    // sharing a type marker as a duplicate set: 15 distinct research projects all
+    // carry `tracked_research_project:knowledge_vault` and differ only by subject.
+    // The old key flagged them as one duplicate group — merging it would have
+    // destroyed 14 legitimate records.
+    const key = `${node.subject}:${node.predicate}:${node.object}`;
     if (!conceptMap.has(key)) {
       conceptMap.set(key, []);
     }
@@ -194,56 +289,145 @@ export async function generateModelRoutingProposals(vaultDir) {
   return proposals;
 }
 
-export async function generateStaleKnowledgeRefreshProposals(vaultDir) {
-  const nodes = getNodes(vaultDir);
-  const proposals = [];
-  
-  const now = Date.now();
-  const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-  
-  for (const node of nodes) {
-    if (node.type === 'memory' && node.last_accessed) {
-      const lastAccessed = new Date(node.last_accessed).getTime();
-      if (now - lastAccessed > ONE_MONTH_MS && node.importance > 3) {
-        proposals.push(createProposal(
-          'stale-knowledge-refresh',
-          `Refresh stale high-importance memory: ${node.title}`,
-          node.slug,
-          `Node has not been accessed in over 30 days but maintains high importance. Requires verification against current state.`
-        ));
-      }
+/**
+ * Nodes that are important but have gone untouched — computed on demand.
+ *
+ * "Which memories are stale?" is a question, not a filing cabinet. Deriving it
+ * at read time costs one vault scan and is always current; the previous design
+ * answered it by writing one .md ticket per stale node every dream cycle, which
+ * is how 594 real answers became 16,309 files.
+ *
+ * @returns {object[]} stale nodes, most stale first
+ */
+export function findStaleNodes(vaultDir, { days = 30, minImportance = 4 } = {}) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return getNodes(vaultDir)
+    .filter(n => n.type === 'memory'
+      && n.status === 'active'
+      && n.last_accessed
+      && n.importance >= minImportance
+      && new Date(n.last_accessed).getTime() < cutoff)
+    .sort((a, b) => new Date(a.last_accessed) - new Date(b.last_accessed));
+}
+
+/**
+ * Hand stale high-importance memories to the research daemon, which can actually
+ * re-verify them and commit the result — instead of filing a ticket asking
+ * someone else to.
+ *
+ * Rate-limited per cycle: re-researching hundreds of nodes at once would swamp
+ * the daemon and burn provider budget. Most-stale-first means the backlog drains
+ * in a sensible order across cycles. `addToQueue` dedupes by topic, so a node
+ * already queued is never enqueued twice.
+ *
+ * @returns {{ enqueued: string[], stale: number }}
+ */
+export async function refreshStaleKnowledge(vaultDir, { limit = 3, days = 30, minImportance = 4 } = {}) {
+  const { addToQueue } = await import('./research-queue.mjs');
+  const stale = findStaleNodes(vaultDir, { days, minImportance });
+  const enqueued = [];
+
+  for (const node of stale.slice(0, limit)) {
+    const ageDays = Math.floor((Date.now() - new Date(node.last_accessed).getTime()) / 86400000);
+    try {
+      addToQueue({
+        topic: `Verify still-current: ${node.title}`,
+        priority: node.importance >= 5 ? 'high' : 'medium',
+        notes: `Memory node "${node.slug}" (importance ${node.importance}) has not been accessed in ${ageDays} days. Re-verify its claim against current sources and update or archive it.`,
+      });
+      enqueued.push(node.slug);
+    } catch (err) {
+      logger.warn('optimizer', `Could not enqueue staleness research for ${node.slug}: ${err.message}`);
     }
   }
-  
-  return proposals;
+
+  if (stale.length > enqueued.length) {
+    logger.info('optimizer', `${stale.length - enqueued.length} stale nodes deferred to a later cycle (limit ${limit}).`);
+  }
+  return { enqueued, stale: stale.length };
+}
+
+/**
+ * @deprecated Superseded by {@link refreshStaleKnowledge}, which queues real work
+ * instead of writing tickets nothing reads. Retained because the dream cycle's
+ * master switch still references it and because removing it would silently change
+ * behavior for anyone who flips that switch back on.
+ */
+export async function generateStaleKnowledgeRefreshProposals(vaultDir) {
+  return findStaleNodes(vaultDir, { days: 30, minImportance: 4 }).map(node => createProposal(
+    'stale-knowledge-refresh',
+    `Refresh stale high-importance memory: ${node.title}`,
+    node.slug,
+    'Node has not been accessed in over 30 days but maintains high importance. Requires verification against current state.',
+  ));
 }
 
 /**
  * Local Eval Gate for Proposal Promotion
  * Uses the local runtime to evaluate the validity of a proposal.
  */
-export async function evaluateProposalGate(proposal, runtimeConfig) {
-  // In a production scenario, this calls the local LLM runtime to grade the proposal.
-  // For now, we simulate the evaluation gate based on deterministic rules or simple heuristics.
-  if (proposal.category === 'memory-cleanup' && proposal.rationale.includes('identical predicate:object')) {
-    proposal.status = 'accepted';
+export async function evaluateProposalGate(proposal, runtimeConfig, vaultDir = null) {
+  const stamp = (status, extra = {}) => {
+    proposal.status = status;
     proposal.reviewed_at = new Date().toISOString();
     proposal.reviewed_by = 'local_eval_gate';
-    return true;
+    Object.assign(proposal, extra);
+    return status === 'accepted';
+  };
+
+  // memory-cleanup is the one topic a machine can verify end to end, so it is
+  // the only one that may reach `accepted` (and therefore auto-apply) unattended.
+  // Verify against the live vault rather than the rationale string — the old gate
+  // accepted on `rationale.includes('identical predicate:object')`, which is the
+  // optimizer grading its own prose.
+  if (proposal.category === 'memory-cleanup') {
+    const slugs = String(proposal.target_path || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (slugs.length < 2) {
+      return stamp('rejected', { rejection_reason: `Merge proposal names ${slugs.length} target(s); needs at least 2.` });
+    }
+    if (vaultDir) {
+      const bySlug = new Map(getNodes(vaultDir).map(n => [n.slug, n]));
+      const active = slugs.map(s => bySlug.get(s)).filter(n => n && n.status === 'active');
+      if (active.length < 2) {
+        return stamp('rejected', { rejection_reason: `Only ${active.length} of ${slugs.length} targets are still active nodes.` });
+      }
+      const signatures = new Set(active.map(n => `${n.subject}:${n.predicate}:${n.object}`));
+      if (signatures.size !== 1) {
+        return stamp('rejected', { rejection_reason: `Targets span ${signatures.size} distinct subject:predicate:object signatures — not a duplicate set.` });
+      }
+      // Mirror the applier's safety rules here so an unsafe merge never reaches
+      // `accepted` in the first place. The gate is what makes a proposal eligible
+      // for unattended application; it must not be laxer than the applier.
+      const { MAX_AUTO_MERGE_SET, findDissimilarPair } = await import('./proposal-applier.mjs');
+      if (active.length > MAX_AUTO_MERGE_SET) {
+        return stamp('draft', { review_reason: `${active.length} targets exceeds the auto-merge cap of ${MAX_AUTO_MERGE_SET}; needs human review.` });
+      }
+      const dissimilar = findDissimilarPair(active);
+      if (dissimilar) {
+        return stamp('rejected', { rejection_reason: `Targets share a signature but their content differs (${dissimilar}).` });
+      }
+      // Invariants and absolute rules are never auto-merged; a wrong merge here
+      // is noticed only when the agent quietly stops obeying a rule.
+      const guarded = active.filter(n => n.priority === 'absolute' || n.importance >= 5 || n.category === 'invariants');
+      if (guarded.length > 0) {
+        return stamp('draft', { review_reason: `Touches protected nodes (${guarded.map(n => n.slug).join(', ')}); needs human review.` });
+      }
+    }
+    return stamp('accepted');
   }
-  
+
+  // stale-knowledge-refresh no longer produces tickets at all — the work is
+  // handed to the research queue, which can actually perform it. If one is
+  // somehow generated, it is not something to auto-accept.
   if (proposal.category === 'stale-knowledge-refresh') {
-    proposal.status = 'accepted';
-    proposal.reviewed_at = new Date().toISOString();
-    proposal.reviewed_by = 'local_eval_gate';
-    return true;
+    return stamp('draft', { review_reason: 'Staleness is handled by the research queue; this ticket needs a human decision.' });
   }
-  
-  proposal.status = 'rejected';
-  proposal.rejection_reason = 'Failed to meet minimum evaluation threshold for automatic promotion.';
-  proposal.reviewed_at = new Date().toISOString();
-  proposal.reviewed_by = 'local_eval_gate';
-  return false;
+
+  // Everything else is real work that needs judgement (skill rewrites, stalled
+  // workflows, model routing). `draft` parks it for review. The old gate marked
+  // these `rejected`, which quietly discarded legitimate findings and made the
+  // gate's accept rate look meaningful when it was ~100% of what it kept.
+  return stamp('draft', { review_reason: `No automated verifier for topic "${proposal.category}"; queued for human review.` });
 }
 
 // ─── Smart Decay ────────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import fs from 'fs';
 import { createScheduler, updateTaskStatus, persistTaskToDisk } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { syncAllRepos } from './repo-sync.mjs';
+import { refreshProviderUsage } from './usage-fetcher.mjs';
 import { logger } from './logger.mjs';
 import { updateQueueItem } from './research-queue.mjs';
 import { agentDir, brainDir } from './config.mjs';
@@ -364,6 +365,18 @@ async function main() {
           }
         } catch (err) {
           logger.info({ subsystem: 'daemon-loop', message: `Periodic repo-sync failed: ${err.message}` });
+        }
+
+        // Provider usage/billing refresh. Self-throttles to once an hour
+        // internally, so calling it every cycle is safe.
+        try {
+          const usage = await refreshProviderUsage(BRAIN_DIR);
+          if (!usage.from_cache) {
+            const ok = Object.values(usage.providers).filter(p => p.state === 'ok').length;
+            logger.info({ subsystem: 'daemon-loop', message: `Provider usage refreshed (${ok} provider(s) reporting)` });
+          }
+        } catch (err) {
+          logger.info({ subsystem: 'daemon-loop', message: `Provider usage refresh failed: ${err.message}` });
         }
       }
 

@@ -53,9 +53,22 @@ export async function runRebuild(options = {}) {
   }
 
   // Perform full rebuild
+  // Discard the cheap, fully-derivable indexes — but NOT embeddings.db.
+  //
+  // `fs.rmSync(derivedDir)` used to take the whole directory, which threw away
+  // every vector. Embeddings are not free to re-derive: each one is a provider
+  // call. Worse, the rebuild that followed was fire-and-forget, so the process
+  // exited before replacing them and the index stayed empty — that is how this
+  // brain ended up with 520 nodes and 0 embeddings while reporting success.
+  //
+  // The index is content-hash incremental and prunes slugs no longer in the
+  // vault, so keeping it across a rebuild is correct as well as cheap.
   console.log('🗑️  Discarding existing derived indexes...');
   if (fs.existsSync(derivedDir)) {
-    fs.rmSync(derivedDir, { recursive: true, force: true });
+    for (const entry of fs.readdirSync(derivedDir)) {
+      if (entry.startsWith('embeddings.db')) continue; // also skips -wal / -shm
+      fs.rmSync(path.join(derivedDir, entry), { recursive: true, force: true });
+    }
   }
 
   console.log('🏗️  Recompiling surface from canonical vault...');
@@ -64,7 +77,19 @@ export async function runRebuild(options = {}) {
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
     console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);
-    
+
+    // Report vector coverage explicitly. "Post-build verification passed: 0 drift"
+    // checks the jsonl indexes only — it passed happily on a brain with 520 nodes
+    // and 0 embeddings, i.e. keyword-only recall that returns plausible-looking
+    // results from the wrong places.
+    if (stats.semanticUnavailable) {
+      console.log(`⚠️  Vector search is OFF — embeddings unavailable${stats.semanticError ? `: ${stats.semanticError}` : ''}.`);
+      console.log(`   Recall will fall back to keyword matching.`);
+    } else {
+      console.log(`✅ Embeddings: ${stats.semanticIndexed} built, ${stats.semanticSkipped} unchanged${stats.semanticFailed ? `, ${stats.semanticFailed} FAILED` : ''}.`);
+    }
+
+
     // Verify
     const drift = detectIndexDrift(vaultDir, derivedDir);
     if (!drift.drifted) {

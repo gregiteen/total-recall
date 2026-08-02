@@ -354,3 +354,21 @@ describe('throttledFetch', () => {
 
 
 
+
+describe('firewall boot gate', () => {
+  it('does not consult the firewall before the policy has loaded', async () => {
+    // The boot load was fire-and-forget while checkFirewall ran synchronously,
+    // so every fetch issued during the load (three dynamic imports wide, and
+    // wider under load) saw an empty blocklist and bypassed the firewall
+    // entirely. An empty blocklist must never be mistaken for "nothing blocked".
+    // node:fs is mocked in this file, but the mock passes non-policy paths
+    // through to the real implementation.
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(process.cwd(), 'src/core/throttled-fetch.mjs'), 'utf8');
+    expect(src).toMatch(/let firewallReady = loadFirewallPolicy\(brainDir\);/);
+    expect(src).toMatch(/await firewallReady;/);
+    // The await must precede the check, not follow it.
+    expect(src.indexOf('await firewallReady;')).toBeLessThan(src.indexOf('const firewallCheck = checkFirewall(domain);'));
+  });
+});

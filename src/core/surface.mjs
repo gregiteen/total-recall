@@ -637,13 +637,40 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
       buildMemoryLayerIndex(nodes).map(n => JSON.stringify(n)).join('\n')
   );
 
-  // 3. Build semantic embeddings index if available (fire-and-forget)
+  // 3. Build the semantic embeddings index.
+  //
+  // This was fire-and-forget with a bare `.catch(() => {})`, and `semanticResult`
+  // below was a hardcoded `{ indexed: 0, unavailable: true }` that no code path
+  // could ever update. Three consequences, all silent:
+  //   - `total-recall compile` exits before the detached build writes anything,
+  //     so a CLI compile left the vector index EMPTY while printing
+  //     "Rebuilt …", "Post-build verification passed: 0 drift" and exiting 0.
+  //     (`rebuild` rm -rf's derivedDir first, so it actively destroyed the index.)
+  //   - every embedding error was swallowed, so a dead provider looked identical
+  //     to a healthy build.
+  //   - the return value always claimed zero indexed and "unavailable", so no
+  //     caller could detect any of it.
+  // Awaiting is cheap in steady state: buildEmbeddingsIndex skips nodes whose
+  // content hash is unchanged, so only genuinely new or edited nodes cost a call.
   let semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true };
   try {
-    import('./embeddings.mjs').then(({ buildEmbeddingsIndex }) => {
-      buildEmbeddingsIndex(nodes, derivedDir).catch(() => {});
-    }).catch(() => {});
-  } catch { /* semantic index is optional */ }
+    const { buildEmbeddingsIndex } = await import('./embeddings.mjs');
+    const built = await buildEmbeddingsIndex(nodes, derivedDir);
+    semanticResult = {
+      indexed: built.built,
+      skipped: built.skipped,
+      failed: built.failed,
+      unavailable: false,
+    };
+    if (built.failed > 0) {
+      logger.warn('surface', `Embedding build: ${built.failed} node(s) failed; vector search will be incomplete.`, { derivedDir });
+    }
+  } catch (err) {
+    // Still non-fatal — a brain without vectors works, keyword-only — but it is
+    // never again silent.
+    logger.error('surface', `Embedding index build FAILED; vector search is OFF: ${err.message}`, { derivedDir });
+    semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true, error: err.message };
+  }
 
   // 4. Generate Obsidian Canvas
   try {
@@ -667,7 +694,10 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     nodesProcessed: nodes.length,
     skillsInjected,
     semanticIndexed: semanticResult.indexed,
-    semanticUnavailable: semanticResult.unavailable
+    semanticSkipped: semanticResult.skipped,
+    semanticFailed: semanticResult.failed || 0,
+    semanticUnavailable: semanticResult.unavailable,
+    semanticError: semanticResult.error || null,
   };
 }
 

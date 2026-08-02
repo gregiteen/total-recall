@@ -186,5 +186,21 @@ router.get('/api/usage', requireAuth, async (req, res) => {
   } catch (err) { serverError(res, err); }
 });
 
+/**
+ * GET /api/usage/providers
+ * Spend as the providers themselves report it, rather than as estimated from
+ * locally-observed tokens × a hardcoded price table.
+ *
+ * `?refresh=1` forces a live fetch; otherwise the hourly cache is served, so a
+ * dashboard polling this endpoint cannot turn into a request storm against
+ * provider billing APIs.
+ */
+router.get('/api/usage/providers', requireAuth, async (req, res) => {
+  try {
+    const { refreshProviderUsage } = await import('../../core/usage-fetcher.mjs');
+    res.json(await refreshProviderUsage(BRAIN_DIR, { force: req.query.refresh === '1' }));
+  } catch (err) { serverError(res, err); }
+});
+
 export default router;
 export { router as systemRouter };

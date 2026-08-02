@@ -455,6 +455,10 @@ export async function throttledFetch(url, options = {}, timeoutMs) {
   const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url?.url || String(url);
   const domain = extractDomain(urlStr);
 
+  // Never consult the firewall before it has finished loading — an empty
+  // blocklist is indistinguishable from "nothing is blocked".
+  try { await firewallReady; } catch { /* loadFirewallPolicy logs its own failures */ }
+
   const firewallCheck = checkFirewall(domain);
   if (!firewallCheck.ok) {
     stats.total_blocked++;
@@ -598,4 +602,24 @@ export function resetGateStateForTests() {
 
 
 // ─── Initialize Firewall on boot ────────────────────────────────────────────
-loadFirewallPolicy(brainDir);
+//
+// Awaited by throttledFetch before it consults the firewall — see `firewallReady`.
+//
+// This was a bare fire-and-forget call while `throttledFetch` checked the
+// firewall synchronously, which left a real bypass window: `loadFirewallPolicy`
+// performs three dynamic `import()`s before it ever populates `blockedDomains`,
+// and until it does, every fetch sees an empty blocklist and is allowed through.
+// The window widens exactly when the process is busy, which is also why the
+// firewall specs failed only during full-suite runs and passed 15/15 alone.
+//
+// loadFirewallPolicy never rejects (it try/catches internally and logs), so
+// awaiting it cannot wedge the fetch path.
+let firewallReady = loadFirewallPolicy(brainDir);
+
+/**
+ * Re-arm the boot gate. Callers that reload the policy should hand the promise
+ * back so a concurrent fetch waits for the new policy rather than the old one.
+ */
+export function setFirewallReady(promise) {
+  firewallReady = promise;
+}
