@@ -39,6 +39,11 @@ node_modules/
 .last-successful-lint.txt
 *.checker.log
 .typescript-checker.status
+# PID files of the running checkers. Absent from this list until 2026-08-01
+# only because the TS checker crashed on every pass and its exit handler
+# removed the file — a long-lived daemon leaves one behind.
+typescript-checker.pid
+lint-checker.pid
 .agent/skills/code-quality/scripts/*.log
 .agent/skills/mcp-expert/.watch-state.json
 lint-status.txt
