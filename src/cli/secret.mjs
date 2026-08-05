@@ -48,6 +48,13 @@ import {
   enqueueRotationDueTasks,
   getBrowserRotateAssist,
 } from '../core/secrets-rotate.mjs';
+import {
+  loadRemoteTargets,
+  addRemoteTarget,
+  removeRemoteTarget,
+  deployEnvToRemote,
+  deployKeyToRemotes,
+} from '../core/secrets-remote-deploy.mjs';
 import { listProviders, getProvider } from '../core/provider-catalog.mjs';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import fs from 'node:fs';
@@ -77,7 +84,18 @@ function printHelp() {
       --no-example        Skip .env.example
       --no-global         Only keys bound to this repo (skip unbound)
       --replace-all       Overwrite entire .env (default: merge TR block only)
+      --remote <name>     Also push the SSOT projection to a configured remote
+                           target over SSH (see 'secret remote') instead of
+                           (or in addition to) a local file
       --dry-run           Show keys that would be written
+    remote <cmd>          Manage remote (production) deploy targets — generic,
+                           per-repo config, no host/path ever hardcoded in TR
+      add <name>           --host <h> --path </remote/dir> [--user root]
+                            [--port 22] [--filename .env] [--restart-cmd "..."]
+      list                 Show configured targets (no secret values)
+      remove <name>        Delete a target
+      deploy <name>        Push the SSOT projection to that target now
+                            [--dry-run] [--keys k1,k2]
     import-env            One-time migrate: scan local .env → store (not the steady-state path)
       --all / --file / --overwrite / --dry-run
     catalog               Full catalog: keys, providers, usage, rotation, cost, tracking
@@ -116,6 +134,8 @@ function printHelp() {
   rotate options:
     --export-env          After rotate, write .env to bound repos (and cwd if unbound)
     --export-all          After rotate, export-env to all project-registry paths
+    --remote <name>       After rotate, also push to a configured remote target
+                           (production, etc.) over SSH — see 'secret remote'
 
   set / rotate options:
     --provider <name>     Optional provider tag (e.g. openai, anthropic)
@@ -186,6 +206,12 @@ function parseArgs(args) {
     exempt: false,
     tracking_exempt: null,
     shared_ok: null,
+    subcommand: null,
+    remote: null,
+    remoteHost: null,
+    remoteUser: 'root',
+    remotePort: 22,
+    restartCmd: null,
   };
   if (!args.length || args[0] === '--help' || args[0] === '-h') {
     out.help = true;
@@ -193,6 +219,12 @@ function parseArgs(args) {
   }
   out.command = args[0];
   let i = 1;
+  if (out.command === 'remote') {
+    if (args[i] && !args[i].startsWith('--')) out.subcommand = args[i++];
+    if (['add', 'remove', 'rm', 'deploy'].includes(out.subcommand) && args[i] && !args[i].startsWith('--')) {
+      out.key = args[i++]; // reused as the remote target name
+    }
+  }
   if (
     ['set', 'get', 'rotate', 'delete', 'meta', 'rotate-browser', 'rm', 'generate', 'account-sync'].includes(
       out.command,
@@ -208,6 +240,21 @@ function parseArgs(args) {
   while (i < args.length) {
     const a = args[i];
     switch (a) {
+      case '--remote':
+        out.remote = args[++i];
+        break;
+      case '--host':
+        out.remoteHost = args[++i];
+        break;
+      case '--user':
+        out.remoteUser = args[++i] || 'root';
+        break;
+      case '--port':
+        out.remotePort = parseInt(args[++i], 10) || 22;
+        break;
+      case '--restart-cmd':
+        out.restartCmd = args[++i];
+        break;
       case '--provider':
         out.provider = args[++i];
         break;
@@ -724,10 +771,120 @@ export default async function secretCli(argv) {
       return;
     }
 
+    if (opts.command === 'remote') {
+      if (!opts.subcommand) {
+        console.error(
+          'Usage: total-recall secret remote <add|list|remove|deploy> [...]\n' +
+            '  add <name> --host <h> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]\n' +
+            '  list\n' +
+            '  remove <name>\n' +
+            '  deploy <name> [--dry-run] [--keys k1,k2]',
+        );
+        process.exit(1);
+      }
+
+      if (opts.subcommand === 'add') {
+        if (!opts.key || !opts.remoteHost || !opts.path) {
+          console.error(
+            'Usage: total-recall secret remote add <name> --host <host> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]',
+          );
+          process.exit(1);
+        }
+        const { path: targetsPath } = addRemoteTarget(brainDir, {
+          name: opts.key,
+          host: opts.remoteHost,
+          user: opts.remoteUser,
+          port: opts.remotePort,
+          remotePath: opts.path,
+          filename: opts.filename || '.env',
+          restartCommand: opts.restartCmd || null,
+          keys: opts.keys.length ? opts.keys : undefined,
+        });
+        console.log(`\n  ✅ Remote target added: ${opts.key}`);
+        console.log(`     ${opts.remoteUser}@${opts.remoteHost}:${opts.path}/${opts.filename || '.env'}`);
+        if (opts.restartCmd) console.log(`     restart: ${opts.restartCmd}`);
+        console.log(`     config: ${targetsPath}\n`);
+        return;
+      }
+
+      if (opts.subcommand === 'list') {
+        const targets = loadRemoteTargets(brainDir);
+        if (!targets.length) {
+          console.log(`\n  No remote targets configured for this repo.\n`);
+          return;
+        }
+        console.log(`\n  Remote deploy targets\n`);
+        for (const t of targets) {
+          console.log(
+            `  • ${t.name.padEnd(20)} ${t.user}@${t.host}:${t.port}  ${t.remotePath}/${t.filename}`,
+          );
+          if (t.restartCommand) console.log(`      restart: ${t.restartCommand}`);
+          if (t.keys?.length) console.log(`      keys: ${t.keys.join(', ')}`);
+        }
+        console.log('');
+        return;
+      }
+
+      if (opts.subcommand === 'remove' || opts.subcommand === 'rm') {
+        if (!opts.key) {
+          console.error('Usage: total-recall secret remote remove <name>');
+          process.exit(1);
+        }
+        const r = removeRemoteTarget(brainDir, opts.key);
+        console.log(r.removed ? `  ✅ Removed remote target: ${opts.key}` : `  Remote target not found: ${opts.key}`);
+        return;
+      }
+
+      if (opts.subcommand === 'deploy') {
+        if (!opts.key) {
+          console.error('Usage: total-recall secret remote deploy <name> [--dry-run] [--keys k1,k2]');
+          process.exit(1);
+        }
+        const r = await deployEnvToRemote(brainDir, opts.key, {
+          dryRun: opts.dryRun,
+          keys: opts.keys.length ? opts.keys : undefined,
+        });
+        if (r.dryRun) {
+          console.log(`\n  📤 dry-run remote deploy → ${r.target} (${r.host})`);
+          console.log(`     would write ${r.count} keys → ${r.remoteFile}\n`);
+          return;
+        }
+        console.log(`\n  ✅ Deployed ${r.count} secret(s) → ${r.target} (${r.host}:${r.remoteFile})`);
+        if (r.restarted) console.log(`     restart: ok`);
+        else if (r.restartOutput) console.log(`     restart: FAILED — ${r.restartOutput.slice(0, 300)}`);
+        console.log(`     (values written with mode 0600 remotely; not printed)\n`);
+        return;
+      }
+
+      console.error(`Unknown remote subcommand: ${opts.subcommand}`);
+      process.exit(1);
+    }
+
     if (opts.command === 'rotate') {
       if (!opts.key || !opts.value) {
-        console.error('Usage: total-recall secret rotate <key> <new-value> [--export-env|--export-all]');
+        console.error('Usage: total-recall secret rotate <key> <new-value> [--export-env|--export-all|--remote <name>]');
         process.exit(1);
+      }
+      if (opts.remote) {
+        await rotateSecret(brainDir, opts.key, opts.value, { provider: opts.provider, scope: opts.scope });
+        console.log(`  ✅ Rotated: ${opts.key}`);
+        const r = await deployEnvToRemote(brainDir, opts.remote, {});
+        console.log(`  ✅ Deployed to remote target: ${r.target} (${r.host}:${r.remoteFile}, ${r.count} keys)`);
+        if (r.restarted) console.log(`     restart: ok`);
+        else if (r.restartOutput) console.log(`     restart: FAILED — ${r.restartOutput.slice(0, 300)}`);
+        if (opts.exportEnv || opts.exportAll) {
+          const localR = await rotateSecretAndExport(brainDir, opts.key, opts.value, {
+            provider: opts.provider,
+            actor: 'cli',
+            exportEnv: true,
+            exportAllProjects: opts.exportAll,
+            exportCwd: true,
+            includeGlobal: true,
+          });
+          const ok = (localR.exports || []).filter((e) => e.ok !== false);
+          console.log(`     local export-env: ${ok.length} target(s)`);
+        }
+        return;
       }
       if (opts.exportEnv || opts.exportAll) {
         const r = await rotateSecretAndExport(brainDir, opts.key, opts.value, {
@@ -858,6 +1015,23 @@ export default async function secretCli(argv) {
         replaceAll: !!opts.replaceAll,
         keys: opts.keys.length ? opts.keys : undefined,
       };
+
+      if (opts.remote) {
+        const r = await deployEnvToRemote(brainDir, opts.remote, {
+          dryRun: opts.dryRun,
+          keys: opts.keys.length ? opts.keys : undefined,
+        });
+        if (r.dryRun) {
+          console.log(`\n  📤 dry-run remote export → ${r.target} (${r.host})`);
+          console.log(`     would write ${r.count} keys → ${r.remoteFile}\n`);
+        } else {
+          console.log(`\n  ✅ Exported ${r.count} secret(s) → ${r.target} (${r.host}:${r.remoteFile})`);
+          if (r.restarted) console.log(`     restart: ok`);
+          else if (r.restartOutput) console.log(`     restart: FAILED — ${r.restartOutput.slice(0, 300)}`);
+          console.log(`     (values written with mode 0600 remotely; not printed)\n`);
+        }
+        if (!opts.path && !opts.allProjects) return; // --remote alone doesn't also touch local disk
+      }
 
       if (opts.allProjects) {
         const results = await exportEnvToRegistry(brainDir, exportOpts);
