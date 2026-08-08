@@ -60,6 +60,16 @@ import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// Reads a secret value from stdin (fd 0) so it never has to appear as a CLI
+// argument — CLI args land in shell history, `ps aux`, and any transcript
+// that echoes the command. Trims exactly one trailing newline (what a
+// pasted/piped value normally carries), not all whitespace, so a value that
+// legitimately starts or ends with a space round-trips intact.
+function readStdinValue() {
+  const raw = fs.readFileSync(0, 'utf8');
+  return raw.endsWith('\n') ? raw.slice(0, -1) : raw;
+}
+
 function printHelp() {
   console.log(`
   total-recall secret — Secrets store (separate from memory vault)
@@ -67,11 +77,13 @@ function printHelp() {
   Usage: total-recall secret <command> [options]
 
   Commands:
-    set <key> <value>     Store a secret (0600 file; optional AES via TR_SECRETS_PASSWORD)
+    set <key> [value]     Store a secret (0600 file; optional AES via TR_SECRETS_PASSWORD)
+                           --stdin reads the value from fd0 instead of argv,
+                           so it never lands in shell history/ps/a transcript
     generate <key>        Generate a random secret for outside integrations
     get <key>             Print secret value (audited)
     list                  List keys + metadata only (no values)
-    rotate <key> <value>  Replace value and mark rotated
+    rotate <key> [value]  Replace value and mark rotated (also supports --stdin)
     delete <key>          Remove a secret
     audit [--limit N]     Recent set/get/rotate events (no values)
     usage [--days N]      Sum usage.jsonl for last N days (default 1)
@@ -212,6 +224,7 @@ function parseArgs(args) {
     remoteUser: 'root',
     remotePort: 22,
     restartCmd: null,
+    stdin: false,
   };
   if (!args.length || args[0] === '--help' || args[0] === '-h') {
     out.help = true;
@@ -393,6 +406,9 @@ function parseArgs(args) {
       case '--no-shared-ok':
         out.shared_ok = false;
         break;
+      case '--stdin':
+        out.stdin = true;
+        break;
       case '--help':
       case '-h':
         out.help = true;
@@ -422,6 +438,22 @@ export default async function secretCli(argv) {
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);
+  }
+
+  if (opts.stdin) {
+    if (!['set', 'rotate'].includes(opts.command)) {
+      console.error('❌ --stdin is only valid with `set` or `rotate`');
+      process.exit(1);
+    }
+    if (!opts.key) {
+      console.error(`Usage: total-recall secret ${opts.command} <key> --stdin`);
+      process.exit(1);
+    }
+    opts.value = readStdinValue();
+    if (!opts.value) {
+      console.error('❌ --stdin read an empty value');
+      process.exit(1);
+    }
   }
 
   try {
