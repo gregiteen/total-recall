@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import ContextualHelp from './ContextualHelp';
@@ -20,42 +19,43 @@ describe('ContextualHelp', () => {
     expect(btn).toHaveTextContent('?');
   });
 
-  it('opens overlay when help button is clicked', () => {
+  it('opens overlay when help button is clicked', async () => {
     renderWithRouter('/');
     fireEvent.click(screen.getByTitle('Page Help'));
-    expect(screen.getByText(/Chat Interface/)).toBeInTheDocument();
+    expect(await screen.findByText(/Chat Interface/)).toBeInTheDocument();
   });
 
-  it('shows memory vault help for /memory route', () => {
+  it('shows memory vault help for /memory route', async () => {
     renderWithRouter('/memory');
     fireEvent.click(screen.getByTitle('Page Help'));
-    expect(screen.getByText(/Memory Vault/)).toBeInTheDocument();
+    expect(await screen.findByText(/Memory Vault/)).toBeInTheDocument();
   });
 
-  it('shows graph help for /graph route', () => {
+  it('shows graph help for /graph route', async () => {
     renderWithRouter('/graph');
     fireEvent.click(screen.getByTitle('Page Help'));
-    expect(screen.getByText(/Concept Graph/)).toBeInTheDocument();
+    expect(await screen.findByText(/Concept Graph/)).toBeInTheDocument();
   });
 
-  it('shows fallback for unknown routes', () => {
+  it('shows fallback for unknown routes', async () => {
     renderWithRouter('/unknown-route');
     fireEvent.click(screen.getByTitle('Page Help'));
-    expect(screen.getByText(/No specific documentation/)).toBeInTheDocument();
+    expect(await screen.findByText(/No specific documentation/)).toBeInTheDocument();
   });
 
-  it('closes overlay when close button is clicked', () => {
+  it('closes overlay when close button is clicked', async () => {
     renderWithRouter('/');
     fireEvent.click(screen.getByTitle('Page Help'));
-    expect(screen.getByText(/Chat Interface/)).toBeInTheDocument();
+    expect(await screen.findByText(/Chat Interface/)).toBeInTheDocument();
     fireEvent.click(screen.getByText('✕'));
     expect(screen.queryByText(/Chat Interface/)).not.toBeInTheDocument();
   });
 
-  it('closes overlay when backdrop is clicked', () => {
+  it('closes overlay when backdrop is clicked', async () => {
     renderWithRouter('/');
     fireEvent.click(screen.getByTitle('Page Help'));
-    const overlay = screen.getByText(/Chat Interface/).parentElement?.parentElement;
+    const text = await screen.findByText(/Chat Interface/);
+    const overlay = text.parentElement?.parentElement;
     if (overlay) fireEvent.click(overlay);
     expect(screen.queryByText(/Chat Interface/)).not.toBeInTheDocument();
   });

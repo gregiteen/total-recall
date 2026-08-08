@@ -17,9 +17,9 @@ describe('UsagePage', () => {
       breakdown: {
         gemini: { dailyUsd: 1.0, weeklyUsd: 5.0, dailyTokens: 100, weeklyTokens: 500 }
       }
-    } as any);
+    } as never);
 
-    vi.mocked(api.fetchConfigJson).mockResolvedValue({} as any);
+    vi.mocked(api.fetchConfigJson).mockResolvedValue({} as never);
 
     await act(async () => {
       render(<UsagePage />);

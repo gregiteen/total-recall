@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SkillsPage from './SkillsPage';
@@ -10,7 +9,7 @@ describe('SkillsPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(api.listSkills).mockResolvedValue([
-      { name: 'test-skill', description: 'A test skill', repo: 'test' }
+      { name: 'test-skill', description: 'A test skill', repo: 'test' } as any
     ]);
   });
 

@@ -341,9 +341,9 @@ export default function Graph3D({
     const isFocus = !hoverNode || srcId === hoverNode?.id || tgtId === hoverNode?.id;
     
     const hex = link.colorHex || '#475569';
-    let r = parseInt(hex.slice(1, 3), 16) || 71;
-    let g = parseInt(hex.slice(3, 5), 16) || 85;
-    let b = parseInt(hex.slice(5, 7), 16) || 105;
+    const r = parseInt(hex.slice(1, 3), 16) || 71;
+    const g = parseInt(hex.slice(3, 5), 16) || 85;
+    const b = parseInt(hex.slice(5, 7), 16) || 105;
     
     const baseOpacity = link.type === 'implicit' ? 0.2 : 0.6;
     const opacity = isFocus ? baseOpacity : 0.02;

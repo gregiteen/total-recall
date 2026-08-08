@@ -377,6 +377,12 @@ code, pre { font-family: var(--font-mono); }
   color: var(--success);
 }
 
+.alert-warning {
+  background: var(--warning-muted);
+  border-color: rgba(251, 191, 36, 0.25);
+  color: var(--warning);
+}
+
 /* ─── Form Controls ──────────────────────────────────────────────────────────── */
 
 .input, .select {

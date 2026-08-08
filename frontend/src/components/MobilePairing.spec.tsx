@@ -42,7 +42,7 @@ describe('MobilePairing', () => {
           },
         ],
       }),
-    } as any);
+    } as never);
 
     render(<MobilePairing />);
     await waitFor(() => {

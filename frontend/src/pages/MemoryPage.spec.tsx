@@ -18,7 +18,7 @@ describe('MemoryPage', () => {
   it('renders correctly and loads nodes', async () => {
     vi.mocked(api.listMemory).mockResolvedValue([
       { slug: 'test-node', title: 'Test Node', category: 'invariants', content: 'test content' }
-    ] as any);
+    ] as never);
 
     renderWithRouter(<MemoryPage />);
 
@@ -36,7 +36,7 @@ describe('MemoryPage', () => {
         { id: 'sess-1', brain_id: 'default', total_chunks: 5, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: 'active' }
       ],
       total: 1
-    } as any);
+    } as never);
 
     renderWithRouter(<MemoryPage />);
 

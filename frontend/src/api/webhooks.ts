@@ -17,7 +17,7 @@ export interface WebhookEvent {
   provider: string;
   event_type: string;
   received_at: string;
-  payload?: any;
+  payload?: unknown;
   delivery_status?: string;
   parent_event_id?: string;
   delivery_id?: string | null;

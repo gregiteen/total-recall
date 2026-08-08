@@ -15,7 +15,7 @@ import type { ConfigJson } from '../types';
 import { MobilePairing } from '../components/MobilePairing';
 
 function normalizeConfigJson(data: ConfigJson): ConfigJson {
-  const next = { ...data } as ConfigJson & Record<string, any>;
+  const next = { ...data } as ConfigJson & Record<string, unknown>;
   if (!next.security) next.security = {};
   if (!next.security.dashboard) next.security.dashboard = {};
   if (!next.security.api) next.security.api = {};
@@ -79,7 +79,7 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
         }),
       )
       .catch(console.error);
-    loadConfig();
+    setTimeout(() => { void loadConfig(); }, 0);
   }, [activeBrainId]);
 
   

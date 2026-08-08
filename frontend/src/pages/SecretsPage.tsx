@@ -231,8 +231,8 @@ export default function SecretsPage() {
       const syncData = await getSyncStatus()
       setSyncNodes(syncData.nodes || [])
       setLocalChecksum(syncData.localChecksum)
-    } catch (err: any) {
-      setError(err.message || 'Failed to load sync status')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load sync status')
     }
   }, [])
 
@@ -249,10 +249,10 @@ export default function SecretsPage() {
       setSyncLogs(prev => [{ time: new Date().toLocaleTimeString(), event: msg, status: 'success' }, ...prev])
 
       await loadSyncData()
-    } catch (err: any) {
-      const msg = `Sync trigger failed: ${err.message || err}`
+    } catch (err) {
+      const msg = `Sync trigger failed: ${err instanceof Error ? err.message : String(err)}`
       setSyncLogs(prev => [{ time: new Date().toLocaleTimeString(), event: msg, status: 'error' }, ...prev])
-      setError(err.message || 'Failed to trigger synchronization')
+      setError(err instanceof Error ? err.message : 'Failed to trigger synchronization')
     } finally {
       setSyncing(false)
     }
@@ -287,8 +287,8 @@ export default function SecretsPage() {
       setNewSecretKeyName('')
       setNewSecretVal('')
       await loadCatalog()
-    } catch (err: any) {
-      setError(err.message || 'Failed to create secret')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create secret')
     } finally {
       setSaving(false)
     }
@@ -296,7 +296,7 @@ export default function SecretsPage() {
 
   useEffect(() => {
     if (tab === 'sync') {
-      void loadSyncData()
+      setTimeout(() => void loadSyncData(), 0)
     }
   }, [tab, loadSyncData])
 
@@ -360,12 +360,11 @@ export default function SecretsPage() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line
-    void loadCatalog()
-     
-    void loadPats()
-     
-    void loadWebAuthn()
+    setTimeout(() => {
+      void loadCatalog()
+      void loadPats()
+      void loadWebAuthn()
+    }, 0)
   }, [loadCatalog, loadPats, loadWebAuthn])
 
   

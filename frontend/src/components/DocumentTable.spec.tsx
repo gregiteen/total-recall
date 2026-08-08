@@ -28,7 +28,7 @@ describe('DocumentTable', () => {
   it('renders custom column render correctly', () => {
     const customCols = [
       ...columns,
-      { key: 'action', header: 'Action', render: (row: any) => <button>Edit {row.name}</button> }
+      { key: 'action', header: 'Action', render: (row: { name: string }) => <button>Edit {row.name}</button> }
     ];
     const data = [{ id: 1, name: 'Doc 1', status: 'Active' }];
 

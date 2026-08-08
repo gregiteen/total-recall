@@ -10,10 +10,10 @@ agents:
     enabled: true
     exec: flag
 
-  # `-p` MUST be present (non-interactive requires --print) and MUST be LAST:
-  # `--tools` is variadic (`<tools...>`) in the shipped build, so anything after
-  # it — including the appended prompt — is swallowed as a tool name. Proven
-  # both ways on claude v2.1.201.
+  # `-p` MUST be present (non-interactive requires --print) and MUST be the LAST
+  # flag: `--tools` is variadic (`<tools...>`) in the shipped build, so anything
+  # after it — including the appended prompt — is swallowed as a tool name.
+  # Proven both ways on claude v2.1.201.
   - name: claude
     binary: claude
     flags: --output-format json --permission-mode bypassPermissions --setting-sources local --tools "" -p
@@ -23,9 +23,10 @@ agents:
 
   # `-m` is REQUIRED: ~/.codex/config.toml may pin a model the account cannot
   # use (seen: gpt-5.6-sol -> HTTP 400 "not supported when using Codex with a
-  # ChatGPT account"). Account-supported slugs: ~/.codex/models_cache.json.
+  # ChatGPT account"). Overriding per-dispatch avoids editing global config.
+  # Account-supported slugs are listed in ~/.codex/models_cache.json.
   # `--full-auto` is hidden from --help but still works as a deprecated alias;
-  # the explicit `--sandbox` form is OpenAI's current recommendation.
+  # the explicit `--sandbox` form is what OpenAI now recommends for scripts.
   - name: codex
     binary: codex
     flags: -m gpt-5.5 --sandbox workspace-write --json --skip-git-repo-check
@@ -33,10 +34,11 @@ agents:
     enabled: true
     exec: subcommand
 
-  # DISABLED — `antigravity` on PATH is total-recall/bin/antigravity.mjs, a thin
-  # wrapper that POSTs to generativelanguage.googleapis.com with GOOGLE_API_KEY,
-  # i.e. the METERED Gemini API, not the Ultra plan. Verified 2026-08-01: every
-  # call returned 429 "You exceeded your current quota". Use `agy` above.
+  # DISABLED — `antigravity` on PATH is bin/antigravity.mjs, a thin wrapper that
+  # POSTs to generativelanguage.googleapis.com with GOOGLE_API_KEY, i.e. the
+  # METERED Gemini API, not the Ultra plan. Verified 2026-08-01: every call
+  # returned 429 "You exceeded your current quota". Use `agy` above instead.
+  # Do not confuse the two names.
   - name: antigravity
     binary: antigravity
     flags: --sandbox=false --yolo -o json
@@ -44,8 +46,8 @@ agents:
     enabled: false
     exec: flag
 
-  # DISABLED — this user has no Gemini CLI. Do not enable because a `gemini`
-  # binary resolves on PATH; their Google surface is `agy`.
+  # DISABLED — this user has no Gemini CLI. Do not enable on the basis that a
+  # `gemini` binary resolves on PATH; their Google surface is `agy`.
   - name: gemini
     binary: gemini
     flags: --sandbox=false --yolo -o json
@@ -53,7 +55,7 @@ agents:
     enabled: false
     exec: flag
 
-  # DISABLED — not installed. A stale binary may still resolve at
+  # DISABLED — not installed for this user. A stale binary may still resolve at
   # ~/.grok/bin/grok; PATH presence is not proof an agent works.
   - name: grok
     binary: grok

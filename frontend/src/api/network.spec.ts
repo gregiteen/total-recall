@@ -3,14 +3,14 @@ import { networkApi } from './network';
 
 describe('networkApi', () => {
   beforeEach(() => {
-    globalThis.fetch = vi.fn() as any;
+    globalThis.fetch = vi.fn() as unknown as typeof fetch;
   });
 
   it('getStats fetches from /api/network/stats', async () => {
-    (globalThis.fetch as any).mockResolvedValue({
+    vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ stats: { total: 10 }, audit_count: 5 })
-    });
+    } as unknown as Response);
 
     const result = await networkApi.getStats();
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/stats', expect.any(Object));
@@ -18,10 +18,10 @@ describe('networkApi', () => {
   });
 
   it('getPolicy fetches from /api/network/policy', async () => {
-    (globalThis.fetch as any).mockResolvedValue({
+    vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ id: 'network-policy', blocked_domains: [] })
-    });
+    } as unknown as Response);
 
     const result = await networkApi.getPolicy();
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/policy', expect.any(Object));
@@ -29,10 +29,10 @@ describe('networkApi', () => {
   });
 
   it('blockDomain POSTs to /api/network/block', async () => {
-    (globalThis.fetch as any).mockResolvedValue({
+    vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true })
-    });
+    } as unknown as Response);
 
     await networkApi.blockDomain('evil.com');
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/block', expect.objectContaining({
@@ -42,10 +42,10 @@ describe('networkApi', () => {
   });
 
   it('unblockDomain DELETEs to /api/network/block/:domain', async () => {
-    (globalThis.fetch as any).mockResolvedValue({
+    vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true })
-    });
+    } as unknown as Response);
 
     await networkApi.unblockDomain('evil.com');
     expect(globalThis.fetch).toHaveBeenCalledWith('/api/network/block/evil.com', expect.objectContaining({

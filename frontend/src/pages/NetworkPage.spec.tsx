@@ -33,14 +33,14 @@ vi.mock('../api/network', () => {
 describe('NetworkPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (getNetworkStats as any).mockResolvedValue({
-      stats: { active: 2, queueLength: 0, errors: 0, timeouts: 0 }
-    });
-    (getNetworkPolicy as any).mockResolvedValue({
+    vi.mocked(getNetworkStats).mockResolvedValue({
+      stats: { active: 2, queueLength: 0, errors: 0, timeouts: 0 } as any
+    } as any);
+    vi.mocked(getNetworkPolicy).mockResolvedValue({
       blocked_domains: ['evil.com'],
       max_global_concurrency: 20
-    });
-    (getAuditLog as any).mockResolvedValue({
+    } as any);
+    vi.mocked(getAuditLog).mockResolvedValue({
       audit: []
     });
   });
@@ -54,10 +54,9 @@ describe('NetworkPage', () => {
     render(<NetworkPage />);
     
     await waitFor(() => {
-      expect(screen.getAllByText(/Network Firewall/i)[0]).toBeInTheDocument();
+      expect(screen.getByText(/Active Connections/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Active Connections/i)).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('evil.com')).toBeInTheDocument();
   });

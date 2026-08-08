@@ -13,7 +13,7 @@ describe('FilesPage', () => {
   it('renders correctly and loads files', async () => {
     vi.mocked(api.listFiles).mockResolvedValue([
       { name: 'test.txt', size: 1024, modified: new Date().toISOString(), isDirectory: false }
-    ] as any);
+    ] as never);
     vi.mocked(api.listSkills).mockResolvedValue([]);
 
     render(<FilesPage />);
@@ -31,7 +31,7 @@ describe('FilesPage', () => {
     vi.mocked(api.listSkills).mockResolvedValue([]);
     vi.mocked(api.listScripts).mockResolvedValue([
       { name: 'test-script.mjs', size: 500, modified: new Date().toISOString(), isDirectory: false }
-    ] as any);
+    ] as never);
 
     render(<FilesPage />);
 

@@ -315,6 +315,59 @@ curl -H "Authorization: Bearer <YOUR_PAT_TOKEN>" \
 
 ---
 
+## 🔐 SECRETS STORE (separate from the memory vault — `secret` subcommand)
+
+API keys and credentials are **not** memory nodes. They live encrypted at
+`<brain>/config/secrets.enc`, managed exclusively via `npx total-recall secret
+<cmd>` — never write them into vault markdown, openwiki, or a compiled
+INSTRUCTIONS.md/skill surface (`secret check-surfaces` fails the build if one
+ever leaks in). Full reference: `npx total-recall secret --help`.
+
+```bash
+npx total-recall secret set <key> <value>            # store (0600, optional AES)
+npx total-recall secret rotate <key> <new-value>      # replace + mark rotated
+npx total-recall secret get <key>                     # print value (audited)
+npx total-recall secret list                          # metadata only, no values
+npx total-recall secret export-env --path <repo>       # SSOT → local .env.local
+```
+
+### Remote (production) deploy — `secret remote` (added 3.21.1)
+
+`export-env` only ever wrote a **local** file — there was no path from the
+SSOT to an actual production host. `secret remote` closes that gap over SSH,
+entirely generically: every host/path/restart-command is declared per-repo in
+that repo's own `<brain>/config/remote-targets.json`, never hardcoded in
+Total Recall core.
+
+```bash
+# One-time: register a target (per repo, per environment)
+npx total-recall secret remote add production \
+  --host <ip-or-hostname> --path </remote/dir> \
+  --filename .env.local --restart-cmd "pm2 restart <app> --update-env"
+
+npx total-recall secret remote list                    # show configured targets
+npx total-recall secret remote deploy production        # push current SSOT now
+npx total-recall secret remote deploy production --dry-run
+
+# Steady state: rotate AND ship to prod AND restart, in one call
+npx total-recall secret rotate SMTP2GO_API_KEY "<new-value>" --remote production
+```
+
+Secret values travel over SSH **stdin only** — never as an argv string or in
+a shell-interpolated command — written via a remote temp-file + atomic
+rename so a dropped connection can't leave a truncated secrets file live,
+then `chmod 600`. This is also why a value should never be pasted into chat
+to get it into production: paste it straight into `secret set`/`secret
+rotate` in your own terminal, or — if a provider's API supports minting a
+new key from an existing one (e.g. SMTP2GO `POST /api_keys/add`) — mint the
+replacement programmatically and it never has to be typed anywhere at all.
+When self-minting a replacement key, scope it to include the provider's own
+key-management endpoints (not just its functional one) so it can service
+its *own* next rotation too — otherwise you've built a one-shot capability
+that dead-ends back at a manual dashboard step.
+
+---
+
 <!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
 <!-- @route: tfidf, generated_at: 2026-05-21T03:34:14.837Z -->
 

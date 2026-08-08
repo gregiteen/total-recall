@@ -1,16 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { VoiceInput } from './VoiceInput';
 
 describe('VoiceInput', () => {
-  it('renders disabled button if SpeechRecognition is not supported', () => {
+  it('renders disabled button if SpeechRecognition is not supported', async () => {
     // Delete any mock to simulate unsupported browser
-    delete (window as any).SpeechRecognition;
-    delete (window as any).webkitSpeechRecognition;
+    delete (window as typeof window & { SpeechRecognition?: unknown }).SpeechRecognition;
+    delete (window as typeof window & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
 
     render(<VoiceInput onTranscript={() => {}} />);
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    await waitFor(() => expect(button).toBeDisabled());
     expect(button.title).toBe('Voice input not supported');
   });
 
@@ -25,7 +25,7 @@ describe('VoiceInput', () => {
       stop = mockStop;
     }
 
-    (window as any).SpeechRecognition = MockSpeechRecognition;
+    (window as typeof window & { SpeechRecognition?: unknown }).SpeechRecognition = MockSpeechRecognition;
 
     render(<VoiceInput onTranscript={() => {}} />);
     const button = screen.getByRole('button');

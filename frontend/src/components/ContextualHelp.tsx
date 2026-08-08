@@ -23,7 +23,9 @@ export default function ContextualHelp() {
   useEffect(() => {
     // Determine content based on current path
     const path = location.pathname;
-    setContent(helpContent[path] || `### ${path}\nNo specific documentation is available for this route yet.`);
+    setTimeout(() => {
+      setContent(helpContent[path] || `### ${path}\nNo specific documentation is available for this route yet.`);
+    }, 0);
   }, [location.pathname]);
 
   return (

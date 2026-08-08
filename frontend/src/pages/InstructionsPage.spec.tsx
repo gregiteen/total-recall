@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import InstructionsPage from './InstructionsPage';
@@ -18,9 +18,9 @@ describe('InstructionsPage', () => {
       ],
       lastCompileTimestamp: new Date().toISOString(),
       totalNodes: 10
-    } as any);
+    } as never);
 
-    vi.mocked(api.fetchInstructionContent).mockResolvedValue({ content: '# AGENTS\n\nRule 1' } as any);
+    vi.mocked(api.fetchInstructionContent).mockResolvedValue({ content: '# AGENTS\n\nRule 1' } as never);
 
     render(<InstructionsPage />);
 
@@ -36,9 +36,9 @@ describe('InstructionsPage', () => {
       surfaces: [],
       lastCompileTimestamp: new Date().toISOString(),
       totalNodes: 0
-    } as any);
+    } as never);
 
-    vi.mocked(api.triggerRecompile).mockResolvedValue({ message: 'Success' });
+    vi.mocked(api.triggerRecompile).mockResolvedValue({ message: 'Success' } as never);
 
     render(<InstructionsPage />);
 

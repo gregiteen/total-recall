@@ -16,9 +16,9 @@ describe('IntegrationsPage', () => {
       keys: [
         { id: '1', name: 'Antigravity', token_preview: 'abc', created_at: '', last_used_at: '', hit_count: 1, revoked: false, scopes: [] }
       ]
-    } as any);
-    vi.mocked(api.fetchActiveIntegrations).mockResolvedValue({ success: true, active: ['antigravity'] } as any);
-    vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: true, connected: true } as any);
+    } as never);
+    vi.mocked(api.fetchActiveIntegrations).mockResolvedValue({ success: true, active: ['antigravity'] } as never);
+    vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: true, connected: true } as never);
 
     await act(async () => {
       render(<IntegrationsPage />);
@@ -32,10 +32,10 @@ describe('IntegrationsPage', () => {
 
   it('handles connect', async () => {
     vi.mocked(api.getApiBase).mockReturnValue('http://localhost:3000');
-    vi.mocked(api.listApiKeys).mockResolvedValue({ keys: [] } as any);
-    vi.mocked(api.fetchActiveIntegrations).mockResolvedValue({ success: true, active: [] } as any);
-    vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: false, connected: false } as any);
-    vi.mocked(api.connectClient).mockResolvedValue({ success: true, message: 'Connected' } as any);
+    vi.mocked(api.listApiKeys).mockResolvedValue({ keys: [] } as never);
+    vi.mocked(api.fetchActiveIntegrations).mockResolvedValue({ success: true, active: [] } as never);
+    vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: false, connected: false } as never);
+    vi.mocked(api.connectClient).mockResolvedValue({ success: true, message: 'Connected' } as never);
 
     await act(async () => {
       render(<IntegrationsPage />);

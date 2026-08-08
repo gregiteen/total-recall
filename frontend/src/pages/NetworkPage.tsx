@@ -53,7 +53,7 @@ export default function NetworkPage() {
             : undefined
         ),
       ]);
-      setStats(statsRes.stats || statsRes as any);
+      setStats(statsRes.stats || statsRes as unknown as NetworkStats);
       if (policyRes) {
         setPolicy(policyRes);
         if (!limitsChanged) {
@@ -66,15 +66,15 @@ export default function NetworkPage() {
       }
       setAudit(auditRes.audit || []);
       setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load network data');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load network data');
     } finally {
       setLoading(false);
     }
   }, [filterDomain, filterStatus, limitsChanged]);
 
   useEffect(() => {
-    loadData();
+    setTimeout(() => void loadData(), 0);
   }, [loadData]);
 
   useEffect(() => {
@@ -94,8 +94,8 @@ export default function NetworkPage() {
       setSuccess(`Blocked ${domain}`);
       setTimeout(() => setSuccess(''), 3000);
       await loadData();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -105,8 +105,8 @@ export default function NetworkPage() {
       setSuccess(`Unblocked ${domain}`);
       setTimeout(() => setSuccess(''), 3000);
       await loadData();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -117,8 +117,8 @@ export default function NetworkPage() {
       setSuccess('Limits updated');
       setTimeout(() => setSuccess(''), 3000);
       await loadData();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -129,8 +129,8 @@ export default function NetworkPage() {
       setSuccess(`Switched to ${!policy.whitelist_mode ? 'whitelist' : 'blocklist'} mode`);
       setTimeout(() => setSuccess(''), 3000);
       await loadData();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

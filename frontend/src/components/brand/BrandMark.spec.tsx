@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import BrandMark, { BrandChip } from './BrandMark';
 
@@ -58,7 +57,7 @@ describe('BrandMark', () => {
 describe('BrandChip', () => {
   it('renders with default size', () => {
     render(<BrandChip />);
-    const chip = document.querySelector('.brand-chip');
+    const chip = document.querySelector('.brand-chip') as HTMLElement | null;
     expect(chip).toBeInTheDocument();
     expect(chip?.style.width).toBe('36px');
     expect(chip?.style.height).toBe('36px');
@@ -66,7 +65,7 @@ describe('BrandChip', () => {
 
   it('renders with custom size', () => {
     render(<BrandChip size={64} />);
-    const chip = document.querySelector('.brand-chip');
+    const chip = document.querySelector('.brand-chip') as HTMLElement | null;
     expect(chip?.style.width).toBe('64px');
     expect(chip?.style.height).toBe('64px');
   });

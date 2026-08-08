@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
@@ -18,7 +18,7 @@ describe('OnboardingPage', () => {
   };
 
   it('renders welcome step first', async () => {
-    vi.mocked(api.listMemory).mockResolvedValue([] as any);
+    vi.mocked(api.listMemory).mockResolvedValue([] as never);
 
     renderWithRouter(<OnboardingPage />);
 
@@ -28,8 +28,8 @@ describe('OnboardingPage', () => {
   });
 
   it('navigates to next step', async () => {
-    vi.mocked(api.listMemory).mockResolvedValue([] as any);
-    vi.mocked(api.scanEnvSecrets).mockResolvedValue({ candidates: [] } as any);
+    vi.mocked(api.listMemory).mockResolvedValue([] as never);
+    vi.mocked(api.scanEnvSecrets).mockResolvedValue({ candidates: [] } as never);
 
     renderWithRouter(<OnboardingPage />);
 
@@ -42,10 +42,10 @@ describe('OnboardingPage', () => {
   });
 
   it('handles scan import mode', async () => {
-    vi.mocked(api.listMemory).mockResolvedValue([] as any);
+    vi.mocked(api.listMemory).mockResolvedValue([] as never);
     vi.mocked(api.scanEnvSecrets).mockResolvedValue({
-      candidates: [{ key: 'TEST_KEY', provider: 'test', masked: 'sk-***', source_label: '.env' }]
-    });
+      candidates: [{ key: 'TEST_KEY', provider: 'test', masked: 'sk-***', source_label: '.env' } as any]
+    } as any);
 
     renderWithRouter(<OnboardingPage />);
 

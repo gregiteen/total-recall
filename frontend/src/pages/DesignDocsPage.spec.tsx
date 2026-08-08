@@ -13,7 +13,7 @@ describe('DesignDocsPage', () => {
   it('renders correctly', async () => {
     vi.mocked(api.fetchDesignDocs).mockResolvedValue([
       { name: 'Architecture Overview', path: 'docs/architecture.md', category: 'Core' }
-    ] as any);
+    ] as never);
     vi.mocked(api.fetchDesignDocContent).mockResolvedValue({ content: '# Architecture Overview' });
 
     render(<DesignDocsPage />);

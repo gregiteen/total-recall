@@ -30,7 +30,7 @@ describe('BrainSelector', () => {
           },
         ],
       }),
-    } as any);
+    } as never);
 
     const onBrainChange = vi.fn();
     render(<BrainSelector activeBrainId="global" onBrainChange={onBrainChange} />);
@@ -51,7 +51,7 @@ describe('BrainSelector', () => {
           { id: 'project:demo', name: 'demo', layer: 'project', exists: true, node_count: 5 },
         ],
       }),
-    } as any);
+    } as never);
 
     const onBrainChange = vi.fn();
     render(<BrainSelector activeBrainId="global" onBrainChange={onBrainChange} />);
@@ -71,7 +71,7 @@ describe('BrainSelector', () => {
           { id: 'project:demo', name: 'demo', layer: 'project', exists: true, node_count: 5 },
         ],
       }),
-    } as any);
+    } as never);
 
     const onBrainChange = vi.fn();
     render(<BrainSelector activeBrainId="global" onBrainChange={onBrainChange} />);
@@ -87,7 +87,7 @@ describe('BrainSelector', () => {
       ok: false,
       status: 401,
       json: async () => ({ error: 'Authentication required' }),
-    } as any);
+    } as never);
 
     render(<BrainSelector activeBrainId="global" onBrainChange={vi.fn()} />);
     await waitFor(() => {

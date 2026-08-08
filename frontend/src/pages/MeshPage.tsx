@@ -10,9 +10,18 @@ import {
   registerLanMeshNodes,
   fetchElectionHistory,
   logElectionObservation,
+  fetchEnrollmentStatus,
+  enrollThisNode,
 } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
-import type { MeshNode, LeaderInfo, LanHost, MeshInterfaceSummary, DeviceIoProfile } from '../api/mesh';
+import type {
+  MeshNode,
+  LeaderInfo,
+  LanHost,
+  MeshInterfaceSummary,
+  DeviceIoProfile,
+  EnrollmentStatus,
+} from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
 import { MeshTopology } from '../components/MeshTopology';
 import { LatencySparkline } from '../components/LatencySparkline';
@@ -45,6 +54,9 @@ export function MeshPage() {
   const [lanTrCount, setLanTrCount] = useState(0);
   const [deviceIo, setDeviceIo] = useState<DeviceIoProfile | null>(null);
   const [uiHints, setUiHints] = useState<string[]>([]);
+  const [enrollment, setEnrollment] = useState<EnrollmentStatus | null>(null);
+  const [enrollBusy, setEnrollBusy] = useState(false);
+  const [enrollMsg, setEnrollMsg] = useState<string | null>(null);
   const [lanRegisterBusy, setLanRegisterBusy] = useState(false);
   const [lanRegisterMsg, setLanRegisterMsg] = useState<string | null>(null);
   const prevLeaderRef = useRef<string | null>(null);
@@ -145,6 +157,10 @@ export function MeshPage() {
             setUiHints(ioRes.ui_hints || ioRes.io?.ui_hints || []);
           })
           .catch(() => { /* optional */ });
+        // Enrollment state drives the join banner; never fail the page on it.
+        fetchEnrollmentStatus()
+          .then(setEnrollment)
+          .catch(() => { /* optional */ });
         pollMsRef.current = POLL_BASE_MS;
       } else if (activeTab === 'headscale-nodes') {
         const nodes = await fetchHeadscaleNodes();
@@ -156,8 +172,8 @@ export function MeshPage() {
         const users = await fetchHeadscaleUsers();
         setHsUsers(users);
       }
-    } catch (err: any) {
-      setError(err.message || `Failed to load ${activeTab} data`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to load ${activeTab} data`);
       // Back off polling on errors to reduce long-task pressure.
       pollMsRef.current = Math.min(POLL_MAX_MS, pollMsRef.current * 1.5);
     } finally {
@@ -188,8 +204,8 @@ export function MeshPage() {
       const l = await refreshElection();
       recordLeaderChange(l, 'manual refresh');
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to refresh election state');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh election state');
     }
   }
 
@@ -202,10 +218,33 @@ export function MeshPage() {
         `Registered ${res.registration?.written_count ?? 0} of ${res.registration?.attempted ?? 0} TR-reachable LAN hosts as mesh_node entities.`,
       );
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'LAN register failed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'LAN register failed');
     } finally {
       setLanRegisterBusy(false);
+    }
+  }
+
+  async function handleEnroll() {
+    setEnrollBusy(true);
+    setEnrollMsg(null);
+    try {
+      const result = await enrollThisNode();
+      setEnrollment(result.status);
+      if (result.ok && result.changed) {
+        setEnrollMsg(`Enrolled on the mesh via ${result.method || 'control server'}.`);
+      } else if (result.ok) {
+        setEnrollMsg('This node is already enrolled.');
+      } else if (result.auth_url) {
+        setEnrollMsg('Approve the registration link below to finish joining.');
+      } else {
+        setEnrollMsg(result.hint || result.reason || 'Enrollment did not complete.');
+      }
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Enrollment failed');
+    } finally {
+      setEnrollBusy(false);
     }
   }
 
@@ -219,8 +258,8 @@ export function MeshPage() {
         expiration: newKeyExpiration
       });
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create pre-auth key');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create pre-auth key');
     }
   }
 
@@ -229,8 +268,8 @@ export function MeshPage() {
     try {
       await deleteHeadscaleNode(id);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete node');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete node');
     }
   }
 
@@ -277,6 +316,46 @@ export function MeshPage() {
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: '24px' }}>{error}</div>}
+
+      {enrollment && !enrollment.enrolled && (
+        <div className="alert alert-warning mesh-enrollment-banner" style={{ marginBottom: '24px' }} data-testid="enrollment-banner">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <strong>This node is not on the mesh</strong>
+              <div style={{ fontSize: 13, marginTop: 4 }}>
+                {enrollment.state === 'client_unavailable'
+                  ? 'No Tailscale client detected. Install Tailscale (or set TR_TAILSCALE_BIN) to join the mesh.'
+                  : enrollment.can_auto_enroll
+                    ? `Ready to enroll automatically against ${enrollment.login_server}.`
+                    : enrollment.login_server
+                      ? `Control server ${enrollment.login_server} — add a Headscale API key to enroll without approving in a browser.`
+                      : 'No control server configured. Add a Headscale API key with its URL, or set TR_HEADSCALE_URL.'}
+              </div>
+              {enrollment.auth_url && (
+                <div style={{ fontSize: 13, marginTop: 8 }}>
+                  Pending registration:{' '}
+                  <a href={enrollment.auth_url} target="_blank" rel="noreferrer noopener">
+                    approve this node
+                  </a>
+                </div>
+              )}
+              {enrollMsg && (
+                <div style={{ fontSize: 13, marginTop: 8, color: 'var(--accent-hover)' }}>{enrollMsg}</div>
+              )}
+            </div>
+            {enrollment.client_available && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleEnroll}
+                disabled={enrollBusy}
+              >
+                {enrollBusy ? 'Enrolling…' : 'Enroll this node'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'mesh' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

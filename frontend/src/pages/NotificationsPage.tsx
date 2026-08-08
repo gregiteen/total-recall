@@ -41,15 +41,15 @@ export function NotificationsPage() {
       const [r, h] = await Promise.all([listNotificationRules(), getNotificationHistory()]);
       setRules(r);
       setHistory(h);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load notifications data');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load notifications data');
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadData();
+    setTimeout(() => { void loadData() }, 0);
     const interval = setInterval(loadData, 15000);
     return () => clearInterval(interval);
   }, []);
@@ -70,8 +70,8 @@ export function NotificationsPage() {
       setNewPriority('high');
       setNewQuietHours(false);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create notification rule');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create notification rule');
     }
   }
 
@@ -80,8 +80,8 @@ export function NotificationsPage() {
     try {
       await deleteNotificationRule(id);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete notification rule');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete notification rule');
     }
   }
 
@@ -90,8 +90,8 @@ export function NotificationsPage() {
       await sendTestNotification();
       setSuccess('Test notification sent');
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send test notification');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send test notification');
     }
   }
 

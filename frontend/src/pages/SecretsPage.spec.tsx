@@ -12,15 +12,15 @@ describe('SecretsPage', () => {
   });
 
   it('renders without crashing', async () => {
-    vi.mocked(api.fetchConfigJson).mockResolvedValue({} as any);
-    vi.mocked(api.fetchSecretsCatalog).mockResolvedValue({ keys: [], by_provider: [], store: 'mock-store' } as any);
-    vi.mocked(api.listApiKeys).mockResolvedValue({ keys: [] } as any);
-    vi.mocked(api.fetchWebAuthnStatus).mockResolvedValue({} as any);
+    vi.mocked(api.fetchConfigJson).mockResolvedValue({} as never);
+    vi.mocked(api.fetchSecretsCatalog).mockResolvedValue({ keys: [], by_provider: [], store: 'mock-store' } as never);
+    vi.mocked(api.listApiKeys).mockResolvedValue({ keys: [] } as never);
+    vi.mocked(api.fetchWebAuthnStatus).mockResolvedValue({} as never);
     vi.mocked(api.fetchGeminiModels).mockResolvedValue([]);
     vi.mocked(api.fetchClaudeModels).mockResolvedValue([]);
     vi.mocked(api.fetchOpenaiModels).mockResolvedValue([]);
     vi.mocked(api.fetchOpenRouterModels).mockResolvedValue([]);
-    vi.mocked(api.getSyncStatus).mockResolvedValue({ nodes: [], localChecksum: 'abc' } as any);
+    vi.mocked(api.getSyncStatus).mockResolvedValue({ nodes: [], localChecksum: 'abc' } as never);
 
     render(
       <BrowserRouter>
