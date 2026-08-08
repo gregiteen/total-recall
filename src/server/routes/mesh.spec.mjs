@@ -70,6 +70,31 @@ vi.mock('../../core/device-io.mjs', () => ({
   uiHintsFromIo: vi.fn().mockReturnValue(['desktop_or_browser_ui']),
 }));
 
+vi.mock('../../core/mesh-enroll.mjs', () => ({
+  getEnrollmentStatus: vi.fn().mockResolvedValue({
+    state: 'needs_login',
+    enrolled: false,
+    backend_state: 'NeedsLogin',
+    auth_url: 'https://control.example.org/register/abc123',
+    ips: [],
+    hostname: 'node-a',
+    login_server: 'https://control.example.org',
+    can_auto_enroll: true,
+    auto_enroll_blocked_reason: null,
+    auto_enroll_enabled: true,
+    client_available: true,
+    checked_at: '2026-07-18T00:00:00Z',
+  }),
+  enrollThisNode: vi.fn().mockResolvedValue({
+    ok: true,
+    changed: true,
+    state: 'enrolled',
+    method: 'preauth-key',
+    status: { state: 'enrolled', enrolled: true, ips: ['100.64.0.1'] },
+  }),
+  resetAutoEnrollThrottle: vi.fn(),
+}));
+
 vi.mock('../../core/ssss-operation-service.mjs', () => ({
   appendVfsEvent: vi.fn().mockResolvedValue({ success: true }),
   listVfsEvents: vi.fn().mockResolvedValue([
@@ -213,6 +238,46 @@ describe('mesh routes', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.registration.written_count).toBe(1);
     expect(registerLanMeshNodes).toHaveBeenCalled();
+  });
+
+  it('GET /api/mesh/enrollment reports this node enrollment state', async () => {
+    const res = await request(app).get('/api/mesh/enrollment');
+    expect(res.status).toBe(200);
+    expect(res.body.enrolled).toBe(false);
+    expect(res.body.state).toBe('needs_login');
+    expect(res.body.auth_url).toBe('https://control.example.org/register/abc123');
+    expect(res.body.can_auto_enroll).toBe(true);
+  });
+
+  it('POST /api/mesh/enroll enrolls the node and clears the status cache', async () => {
+    const { enrollThisNode, resetAutoEnrollThrottle } = await import('../../core/mesh-enroll.mjs');
+    const { clearMeshStatusCache } = await import('../../core/mesh.mjs');
+    const res = await request(app).post('/api/mesh/enroll').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.method).toBe('preauth-key');
+    // A user-triggered enroll must bypass the daemon backoff.
+    expect(resetAutoEnrollThrottle).toHaveBeenCalled();
+    expect(enrollThisNode).toHaveBeenCalled();
+    // Fresh mesh IP must be visible immediately, not after the 2s status cache.
+    expect(clearMeshStatusCache).toHaveBeenCalled();
+  });
+
+  it('POST /api/mesh/enroll surfaces failures as JSON, not a 500 crash', async () => {
+    const { enrollThisNode } = await import('../../core/mesh-enroll.mjs');
+    vi.mocked(enrollThisNode).mockResolvedValueOnce({
+      ok: false,
+      changed: false,
+      state: 'needs_login',
+      method: 'interactive',
+      auth_url: 'https://control.example.org/register/xyz',
+      reason: 'awaiting-user-approval',
+      status: { state: 'needs_login', enrolled: false },
+    });
+    const res = await request(app).post('/api/mesh/enroll').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.auth_url).toBe('https://control.example.org/register/xyz');
   });
 });
 

@@ -14,10 +14,10 @@ describe('ChatPage', () => {
 
   it('renders correctly', async () => {
     vi.mocked(api.fetchChatThreads).mockResolvedValue([]);
-    vi.mocked(api.listResearch).mockResolvedValue({ items: [] } as any);
-    vi.mocked(api.fetchHealth).mockResolvedValue({ cli_agents: ['antigravity', 'claude'] } as any);
+    vi.mocked(api.listResearch).mockResolvedValue({ items: [] } as never);
+    vi.mocked(api.fetchHealth).mockResolvedValue({ cli_agents: ['antigravity', 'claude'] } as never);
     vi.mocked(api.fetchGeminiModels).mockResolvedValue([]);
-    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as never);
     vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: false, connected: false });
     vi.mocked(api.listMemory).mockResolvedValue([]);
     vi.mocked(api.fetchChatHistory).mockResolvedValue([]);

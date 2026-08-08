@@ -34,13 +34,13 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   return res
 }
 
-export async function get<T = any>(path: string): Promise<T> {
+export async function get<T = unknown>(path: string): Promise<T> {
   const res = await apiFetch(API_BASE + path);
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
   return res.json();
 }
 
-export async function post<T = any>(path: string, body: any): Promise<T> {
+export async function post<T = unknown>(path: string, body: unknown): Promise<T> {
   const res = await apiFetch(API_BASE + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -50,7 +50,7 @@ export async function post<T = any>(path: string, body: any): Promise<T> {
   return res.json();
 }
 
-export async function del<T = any>(path: string): Promise<T> {
+export async function del<T = unknown>(path: string): Promise<T> {
   const res = await apiFetch(API_BASE + path, {
     method: 'DELETE'
   });

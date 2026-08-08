@@ -7,8 +7,8 @@ vi.mock('recharts', () => {
   const OriginalRecharts = vi.importActual('recharts');
   return {
     ...OriginalRecharts,
-    ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
-    BarChart: ({ children, data }: any) => (
+    ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    BarChart: ({ children, data }: { children: React.ReactNode, data: unknown }) => (
       <div data-testid="bar-chart" data-data={JSON.stringify(data)}>
         {children}
       </div>
@@ -39,7 +39,7 @@ describe('UsageChart', () => {
     const { container } = render(<UsageChart {...defaultProps} usageData={{
       breakdown: { gemini: { cost: 0 }, claude: { cost: 0 }, codex: { cost: 0 } },
       timeseries: {}
-    } as any} />);
+    } as never} />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -57,7 +57,7 @@ describe('UsageChart', () => {
       }
     };
 
-    render(<UsageChart {...defaultProps} usageData={usageData as any} />);
+    render(<UsageChart {...defaultProps} usageData={usageData as never} />);
     
     expect(screen.getByText('API Costs Over Time')).toBeInTheDocument();
     

@@ -11,9 +11,9 @@ describe('TasksPage', () => {
   });
 
   it('renders without crashing', async () => {
-    vi.mocked(api.listTasks).mockResolvedValue({ items: [] } as any);
-    vi.mocked(api.listResearch).mockResolvedValue({ items: [] } as any);
-    vi.mocked(api.fetchLogs).mockResolvedValue({ content: '' } as any);
+    vi.mocked(api.listTasks).mockResolvedValue({ items: [] } as never);
+    vi.mocked(api.listResearch).mockResolvedValue({ items: [] } as never);
+    vi.mocked(api.fetchLogs).mockResolvedValue({ content: '' } as never);
     render(<TasksPage />);
     expect(screen.getByText(/Cognitive Dashboard/i)).toBeInTheDocument();
   });

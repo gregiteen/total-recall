@@ -51,7 +51,7 @@ export async function getNetworkPolicy(): Promise<NetworkPolicy> {
   return get('/api/network/policy');
 }
 
-export async function updateNetworkPolicy(patch: Partial<NetworkPolicy>): Promise<any> {
+export async function updateNetworkPolicy(patch: Partial<NetworkPolicy>): Promise<unknown> {
   const res = await apiFetch(API_BASE + '/api/network/policy', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -61,16 +61,16 @@ export async function updateNetworkPolicy(patch: Partial<NetworkPolicy>): Promis
   return res.json();
 }
 
-export async function blockDomain(domain: string): Promise<any> {
+export async function blockDomain(domain: string): Promise<unknown> {
   return post('/api/network/block', { domain });
 }
 
-export async function unblockDomain(domain: string): Promise<any> {
+export async function unblockDomain(domain: string): Promise<unknown> {
   return del(`/api/network/block/${encodeURIComponent(domain)}`);
 }
 
 export async function getAuditLog(params?: { domain?: string; status?: string; since?: string }): Promise<{ audit: AuditLogEntry[] }> {
-  const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
+  const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
   return get(`/api/network/audit${query}`);
 }
 

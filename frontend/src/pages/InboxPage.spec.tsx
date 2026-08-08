@@ -15,7 +15,7 @@ describe('InboxPage', () => {
       docs: [
         { path: 'proposals/p1.md', name: 'Proposal 1', type: 'proposal', status: 'pending_approval' }
       ]
-    } as any);
+    } as never);
 
     render(<InboxPage />);
 
@@ -32,10 +32,10 @@ describe('InboxPage', () => {
       docs: [
         { path: 'proposals/p2.md', name: 'Proposal 2', type: 'proposal', status: 'pending_approval' }
       ]
-    } as any);
+    } as never);
 
-    vi.mocked(api.readDoc).mockResolvedValue({ raw: 'status: pending_approval' } as any);
-    vi.mocked(api.postDecision).mockResolvedValue({} as any);
+    vi.mocked(api.readDoc).mockResolvedValue({ raw: 'status: pending_approval' } as never);
+    vi.mocked(api.postDecision).mockResolvedValue({} as never);
 
     render(<InboxPage />);
 

@@ -110,7 +110,7 @@ try {
           // Re-fetch nodes after background ingest completes
           void fetchNodes(activeBrainId || 'global');
         });
-      } catch (e) {
+      } catch {
         // ignore
       }
       
@@ -118,8 +118,8 @@ try {
     };
 
     void initFetch();
-    void fetchHealthData();
-    const interval = setInterval(fetchHealthData, 15000);
+    setTimeout(() => { void fetchHealthData(); }, 0);
+    const interval = setInterval(() => { void fetchHealthData(); }, 15000);
     return () => clearInterval(interval);
   }, [activeBrainId]);
 

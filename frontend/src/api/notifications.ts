@@ -18,9 +18,9 @@ export interface NotificationEntry {
   timestamp: string;
 }
 
-async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
+async function parseJsonOrThrow(res: Response, label: string): Promise<unknown> {
   const text = await res.text();
-  let data: any = null;
+  let data: unknown = null;
   if (text) {
     try {
       data = JSON.parse(text);
@@ -29,8 +29,9 @@ async function parseJsonOrThrow(res: Response, label: string): Promise<any> {
     }
   }
   if (!res.ok) {
+    const obj = data as Record<string, unknown> | null;
     const msg =
-      (data && (data.error || data.message)) ||
+      (obj && (obj.error || obj.message)) ||
       `${label} failed: ${res.status}`;
     throw new Error(typeof msg === 'string' ? msg : `${label} failed: ${res.status}`);
   }
@@ -62,7 +63,7 @@ export async function createNotificationRule(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rule),
   });
-  return parseJsonOrThrow(res, 'POST /api/notifications/rules');
+  return parseJsonOrThrow(res, 'POST /api/notifications/rules') as Promise<NotificationRule>;
 }
 
 export async function deleteNotificationRule(id: string): Promise<void> {

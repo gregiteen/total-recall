@@ -1,4 +1,4 @@
-// @ts-nocheck
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import AutomationsPage from './AutomationsPage';
@@ -13,7 +13,7 @@ describe('AutomationsPage', () => {
   });
 
   it('renders correctly and triggers dream cycle', async () => {
-    vi.mocked(api.triggerDream).mockResolvedValue({ status: 'completed' });
+    vi.mocked(api.triggerDream).mockResolvedValue({ status: 'completed' } as never);
 
     render(<AutomationsPage />);
 
@@ -29,7 +29,7 @@ describe('AutomationsPage', () => {
   });
 
   it('triggers recompilation', async () => {
-    vi.mocked(api.triggerRecompile).mockResolvedValue({ message: 'Brain surfaces recompiled successfully!' });
+    vi.mocked(api.triggerRecompile).mockResolvedValue({ message: 'Brain surfaces recompiled successfully!' } as never);
 
     render(<AutomationsPage />);
 
@@ -43,7 +43,7 @@ describe('AutomationsPage', () => {
   });
 
   it('enqueues a task', async () => {
-    vi.mocked(api.createTask).mockResolvedValue({} as any);
+    vi.mocked(api.createTask).mockResolvedValue({} as never);
 
     render(<AutomationsPage />);
 

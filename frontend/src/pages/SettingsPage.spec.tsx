@@ -18,18 +18,18 @@ describe('SettingsPage', () => {
       budget: { budget: {} },
       brain: {},
       secrets: {},
-    } as any);
+    } as never);
     vi.mocked(api.fetchHealth).mockResolvedValue({
       status: 'healthy',
       version: '1.0.0',
       cli_agents: ['claude'],
-    } as any);
+    } as never);
     vi.mocked(api.checkUpdate).mockResolvedValue({
       updateAvailable: false,
       currentVersion: '1.0.0',
       latestVersion: '1.0.0',
-    } as any);
-    vi.mocked(api.triggerRecompile).mockResolvedValue({ success: true, message: 'ok' } as any);
+    } as never);
+    vi.mocked(api.triggerRecompile).mockResolvedValue({ success: true, message: 'ok' } as never);
 
     await act(async () => {
       render(<SettingsPage />);
@@ -43,8 +43,8 @@ describe('SettingsPage', () => {
   it('shows error + retry when config fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(api.fetchConfigJson).mockRejectedValue(new Error('Config JSON API error: 500'));
-    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy' } as any);
-    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
+    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy' } as never);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as never);
     vi.mocked(api.fetchBrains).mockResolvedValue([]);
 
     await act(async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   fetchWebhookConfigs,
   fetchWebhookEvents,
@@ -11,7 +11,7 @@ import type { WebhookConfig, WebhookEvent } from '../api/webhooks';
 import './WebhooksPage.css';
 
 // Expandable JSON Viewer Component
-function JsonViewer({ data }: { data: any }) {
+function JsonViewer({ data }: { data: unknown }) {
   const [expanded, setExpanded] = useState(false);
   
   if (!data) return null;
@@ -42,32 +42,32 @@ export function WebhooksPage() {
   const [wizardStep, setWizardStep] = useState(1);
   const [newConfig, setNewConfig] = useState<Partial<WebhookConfig>>({ status: 'active', events: [] });
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const [c, e] = await Promise.all([fetchWebhookConfigs(), fetchWebhookEvents(filterProvider || undefined)]);
       setConfigs(c);
       setEvents(e);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load webhooks data');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load webhooks data');
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterProvider]);
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(loadData, 10000);
+    setTimeout(() => { void loadData() }, 0);
+    const interval = setInterval(() => { void loadData() }, 10000);
     return () => clearInterval(interval);
-  }, [filterProvider]);
+  }, [loadData]);
 
   async function handleTest(provider: string) {
     try {
       await triggerTestWebhook(provider);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to trigger test webhook');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to trigger test webhook');
     }
   }
 
@@ -75,8 +75,8 @@ export function WebhooksPage() {
     try {
       await redeliverWebhookEvent(eventId);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to re-deliver webhook event');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to re-deliver webhook event');
     }
   }
 
@@ -88,8 +88,8 @@ export function WebhooksPage() {
       setWizardStep(1);
       setNewConfig({ status: 'active', events: [] });
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to add webhook');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add webhook');
     }
   }
 
@@ -98,8 +98,8 @@ export function WebhooksPage() {
     try {
       await deleteWebhookConfig(provider);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete webhook');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete webhook');
     }
   }
 
@@ -111,8 +111,8 @@ export function WebhooksPage() {
         .join('');
       await addWebhookConfig({ provider, status: 'active', secret: newSecret });
       await loadData();
-    } catch (err: any) {
-      setError(err.message || 'Failed to rotate secret');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rotate secret');
     }
   }
 

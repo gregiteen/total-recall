@@ -19,7 +19,7 @@ vi.mock('./utils/onboarding', () => ({
 
 // Mock the components since App contains a lot of them and we just want to test routing/auth logic
 vi.mock('./pages/LoginPage', () => ({
-  default: ({ onAuthenticated }: any) => <div data-testid="login-page"><button onClick={onAuthenticated}>Login</button></div>
+  default: ({ onAuthenticated }: { onAuthenticated: () => void }) => <div data-testid="login-page"><button onClick={onAuthenticated}>Login</button></div>
 }));
 vi.mock('./pages/ChatPage', () => ({ default: () => <div data-testid="chat-page" /> }));
 vi.mock('./pages/MemoryPage', () => ({ default: () => <div data-testid="memory-page" /> }));

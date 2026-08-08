@@ -5,20 +5,35 @@ interface VoiceInputProps {
   isRecording?: boolean;
 }
 
+interface SpeechRecognitionObj {
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: { transcript: string }[][] }) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionObj;
+}
+
 export function VoiceInput({ onTranscript, isRecording = false }: VoiceInputProps) {
   const [recording, setRecording] = useState(isRecording);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionObj | null>(null);
   const [supported, setSupported] = useState(true);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const win = window as unknown as { SpeechRecognition?: SpeechRecognitionConstructor, webkitSpeechRecognition?: SpeechRecognitionConstructor };
+      const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = false;
         recognitionRef.current.interimResults = false;
 
-        recognitionRef.current.onresult = (event: any) => {
+        recognitionRef.current.onresult = (event) => {
           const transcript = event.results[0][0].transcript;
           onTranscript(transcript);
           setRecording(false);
@@ -32,7 +47,7 @@ export function VoiceInput({ onTranscript, isRecording = false }: VoiceInputProp
           setRecording(false);
         };
       } else {
-        setSupported(false);
+        setTimeout(() => setSupported(false), 0);
       }
     }
   }, [onTranscript]);

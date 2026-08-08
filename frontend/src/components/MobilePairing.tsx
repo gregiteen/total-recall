@@ -74,7 +74,7 @@ export function MobilePairing() {
   };
 
   useEffect(() => {
-    load();
+    setTimeout(() => { void load(); }, 0);
   }, []);
 
   const selected = info?.endpoints?.find((e) => e.url === selectedUrl) || null;

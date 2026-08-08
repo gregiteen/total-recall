@@ -232,9 +232,25 @@ async function main() {
     logger.info({ subsystem: 'daemon-loop', message: `Boot repo-sync failed: ${err.message}` });
   }
 
+  // Automatic mesh enrollment — a node that never authenticated to the control
+  // server has no mesh IP, so this must run before the first mesh patch.
+  try {
+    const { ensureEnrolled } = await import('./mesh-enroll.mjs');
+    const enrollment = await ensureEnrolled({ brainDir: BRAIN_DIR });
+    if (!enrollment.skipped) {
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Boot mesh enrollment: ok=${enrollment.ok} state=${enrollment.state} method=${enrollment.method || 'n/a'}`,
+      });
+    }
+  } catch (err) {
+    logger.info({ subsystem: 'daemon-loop', message: `Boot mesh enrollment failed: ${err.message}` });
+  }
+
   // Initial mesh patch
   try {
-    const { patchOwnMeshNode } = await import('./mesh.mjs');
+    const { clearMeshStatusCache, patchOwnMeshNode } = await import('./mesh.mjs');
+    clearMeshStatusCache();
     await patchOwnMeshNode();
     logger.info({ subsystem: 'daemon-loop', message: 'Mesh node patched on boot' });
   } catch (err) {
@@ -306,6 +322,17 @@ async function main() {
       // Periodically patch own mesh node (heartbeat)
       if (taskCount > 0 && taskCount % (60000 / TASK_SLEEP_MS) === 0) {
         try {
+          // Self-heal enrollment: a node that dropped off the control server
+          // (logged out, expired node key) rejoins without user intervention.
+          // Internally throttled, so this is cheap on every heartbeat.
+          const { ensureEnrolled } = await import('./mesh-enroll.mjs');
+          const enrollment = await ensureEnrolled({ brainDir: BRAIN_DIR });
+          if (enrollment.changed) {
+            logger.info({
+              subsystem: 'daemon-loop',
+              message: `Mesh re-enrolled via ${enrollment.method || 'unknown'}`,
+            });
+          }
           const { patchOwnMeshNode } = await import('./mesh.mjs');
           await patchOwnMeshNode();
           // renewLease is a no-op shim (re-checks isLeader); kept for API stability.

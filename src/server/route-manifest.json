@@ -276,6 +276,14 @@
     "path": "/api/mesh/election/refresh"
   },
   {
+    "method": "POST",
+    "path": "/api/mesh/enroll"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/enrollment"
+  },
+  {
     "method": "GET",
     "path": "/api/mesh/interfaces"
   },

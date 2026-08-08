@@ -327,7 +327,7 @@ export default function SkillsPage({ activeBrainId }: { activeBrainId?: string }
             try {
               const skillDetails = await fetchSkill(target.name, target.repo);
               setSkillContent(skillDetails.content || '');
-            } catch (err) {
+            } catch {
               console.warn(`Could not load SKILL.md for ${target.name}`);
               setSkillContent('');
             }
@@ -633,8 +633,8 @@ Configure triggers, options, and prompts inside this rules sheet to hot-recompil
         setError(res.message || 'Failed to generate repo-expert');
       }
       setTimeout(() => setSuccess(null), 5000);
-    } catch (err: any) {
-      setError(err.message || 'Error generating repo-expert');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error generating repo-expert');
     } finally {
       void fetchSkillsList(selectedSkill?.name, selectedSkill?.repo);
     }

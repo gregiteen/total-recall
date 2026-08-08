@@ -7,10 +7,10 @@ afterEach(() => {
 });
 
 class MockEventSource {
-  constructor(_url: string) {}
+  constructor(_url: string) { void _url; }
   close() {}
-  onmessage: ((event: any) => void) | null = null;
-  onerror: ((event: any) => void) | null = null;
+  onmessage: ((event: unknown) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
 }
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'EventSource', {
@@ -28,7 +28,7 @@ class MockResizeObserver {
   unobserve() {}
   disconnect() {}
 }
-(globalThis as any).ResizeObserver = MockResizeObserver;
+(globalThis as typeof globalThis & { ResizeObserver: unknown }).ResizeObserver = MockResizeObserver;
 
 // Mock localStorage
 const localStorageMock = (function () {

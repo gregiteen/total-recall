@@ -2,7 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MeshPage } from './MeshPage';
-import { fetchLeader, fetchNodes as fetchMeshNodes, refreshElection } from '../api/mesh';
+import {
+  fetchLeader,
+  fetchNodes as fetchMeshNodes,
+  refreshElection,
+  fetchEnrollmentStatus,
+  enrollThisNode,
+} from '../api/mesh';
 import { fetchHeadscaleNodes, deleteHeadscaleNode, fetchPreAuthKeys, createPreAuthKey, fetchHeadscaleUsers } from '../api/headscale';
 
 vi.mock('../api/mesh', () => ({
@@ -47,6 +53,21 @@ vi.mock('../api/mesh', () => ({
   }),
   fetchElectionHistory: vi.fn().mockResolvedValue([]),
   logElectionObservation: vi.fn().mockResolvedValue({ success: true, recorded: true }),
+  fetchEnrollmentStatus: vi.fn().mockResolvedValue({
+    state: 'enrolled',
+    enrolled: true,
+    backend_state: 'Running',
+    auth_url: null,
+    ips: ['100.64.0.1'],
+    hostname: 'node-a',
+    login_server: 'https://control.example.org',
+    can_auto_enroll: true,
+    auto_enroll_blocked_reason: null,
+    auto_enroll_enabled: true,
+    client_available: true,
+    checked_at: new Date().toISOString(),
+  }),
+  enrollThisNode: vi.fn(),
 }));
 
 vi.mock('../api/headscale', () => ({
@@ -135,7 +156,7 @@ describe('MeshPage', () => {
     vi.mocked(fetchPreAuthKeys).mockResolvedValue([
       { id: 'key1', key: 'hspkey_xyz', user: 'default', reusable: true, expiration: '2099-12-31T23:59:59Z', createdAt: '2024-01-01', used: false }
     ]);
-    vi.mocked(createPreAuthKey).mockResolvedValue({} as any);
+    vi.mocked(createPreAuthKey).mockResolvedValue({} as never);
 
     render(<MeshPage />);
 
@@ -172,6 +193,94 @@ describe('MeshPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('alice')).toBeInTheDocument();
+    });
+  });
+
+  describe('enrollment banner', () => {
+    const notEnrolled = {
+      state: 'needs_login' as const,
+      enrolled: false,
+      backend_state: 'NeedsLogin',
+      auth_url: 'https://control.example.org/register/abc123',
+      ips: [],
+      hostname: 'node-a',
+      login_server: 'https://control.example.org',
+      can_auto_enroll: true,
+      auto_enroll_blocked_reason: null,
+      auto_enroll_enabled: true,
+      client_available: true,
+      checked_at: new Date().toISOString(),
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchLeader).mockResolvedValue({ hostname: 'node-a.mesh', ip: '100.64.0.1' });
+      vi.mocked(fetchMeshNodes).mockResolvedValue([]);
+    });
+
+    it('stays hidden when this node is already on the mesh', async () => {
+      vi.mocked(fetchEnrollmentStatus).mockResolvedValue({ ...notEnrolled, state: 'enrolled', enrolled: true });
+      render(<MeshPage />);
+      await waitFor(() => expect(screen.getByText('Mesh Operations Center')).toBeInTheDocument());
+      expect(screen.queryByTestId('enrollment-banner')).not.toBeInTheDocument();
+    });
+
+    it('prompts to enroll and shows the pending registration link', async () => {
+      vi.mocked(fetchEnrollmentStatus).mockResolvedValue(notEnrolled);
+      render(<MeshPage />);
+
+      const banner = await screen.findByTestId('enrollment-banner');
+      expect(banner).toHaveTextContent('This node is not on the mesh');
+      expect(screen.getByRole('link', { name: /approve this node/i })).toHaveAttribute(
+        'href',
+        'https://control.example.org/register/abc123',
+      );
+      expect(screen.getByRole('button', { name: /enroll this node/i })).toBeInTheDocument();
+    });
+
+    it('enrolls on click and re-syncs enrollment state from the server', async () => {
+      const enrolled = { ...notEnrolled, state: 'enrolled' as const, enrolled: true, ips: ['100.64.0.7'], auth_url: null };
+      // The page must trust the server, not its own optimistic state: the
+      // status call flips to `enrolled` only once the node is really up.
+      vi.mocked(fetchEnrollmentStatus).mockResolvedValueOnce(notEnrolled).mockResolvedValue(enrolled);
+      vi.mocked(enrollThisNode).mockResolvedValue({
+        ok: true,
+        changed: true,
+        state: 'enrolled',
+        method: 'preauth-key',
+        status: enrolled,
+      });
+
+      render(<MeshPage />);
+      await userEvent.click(await screen.findByRole('button', { name: /enroll this node/i }));
+
+      await waitFor(() => expect(enrollThisNode).toHaveBeenCalled());
+      await waitFor(() => expect(screen.queryByTestId('enrollment-banner')).not.toBeInTheDocument());
+    });
+
+    it('explains what to configure when no automatic path exists', async () => {
+      vi.mocked(fetchEnrollmentStatus).mockResolvedValue({
+        ...notEnrolled,
+        can_auto_enroll: false,
+        auto_enroll_blocked_reason: 'no-headscale-api-key',
+        login_server: null,
+      });
+      render(<MeshPage />);
+      const banner = await screen.findByTestId('enrollment-banner');
+      expect(banner).toHaveTextContent(/No control server configured/i);
+    });
+
+    it('hides the enroll button when no tailscale client is installed', async () => {
+      vi.mocked(fetchEnrollmentStatus).mockResolvedValue({
+        ...notEnrolled,
+        state: 'client_unavailable',
+        client_available: false,
+        auth_url: null,
+        can_auto_enroll: false,
+      });
+      render(<MeshPage />);
+      const banner = await screen.findByTestId('enrollment-banner');
+      expect(banner).toHaveTextContent(/No Tailscale client detected/i);
+      expect(screen.queryByRole('button', { name: /enroll this node/i })).not.toBeInTheDocument();
     });
   });
 });

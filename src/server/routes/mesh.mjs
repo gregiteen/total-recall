@@ -19,6 +19,12 @@ import {
 import { discoverLanSnapshot, registerLanMeshNodes } from '../../core/lan-discovery.mjs';
 import { detectDeviceIo, mergeIoProfiles, uiHintsFromIo } from '../../core/device-io.mjs';
 import { appendVfsEvent, listVfsEvents } from '../../core/ssss-operation-service.mjs';
+import {
+  enrollThisNode,
+  getEnrollmentStatus,
+  resetAutoEnrollThrottle,
+} from '../../core/mesh-enroll.mjs';
+import { BRAIN_DIR } from './_shared.mjs';
 
 const router = Router();
 
@@ -103,6 +109,41 @@ router.get('/api/mesh/nodes', requireAuth, requireScope('config:read'), async (r
     nodes,
     entity_count: entities.length,
   });
+});
+
+/**
+ * Enrollment state of THIS node on the mesh control server.
+ * Reports whether an unattended enrollment is possible and, when it is not,
+ * the interactive registration URL the user must approve.
+ */
+router.get('/api/mesh/enrollment', requireAuth, requireScope('config:read'), async (_req, res) => {
+  try {
+    res.json(await getEnrollmentStatus({ brainDir: BRAIN_DIR }));
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'enrollment status failed' });
+  }
+});
+
+/**
+ * Enroll this node now. Mints a short-lived pre-auth key when a Headscale
+ * credential is configured; otherwise returns the interactive URL.
+ * Body: { login_server?, user?, force? }
+ */
+router.post('/api/mesh/enroll', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    // A user-triggered enroll always runs, regardless of the daemon backoff.
+    resetAutoEnrollThrottle();
+    const result = await enrollThisNode({
+      brainDir: BRAIN_DIR,
+      loginServer: req.body?.login_server,
+      user: req.body?.user,
+      force: req.body?.force === true,
+    });
+    if (result.changed) clearMeshStatusCache();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'enrollment failed' });
+  }
 });
 
 /**

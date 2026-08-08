@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.19.3] — 2026-08-08
+
+### 🐛 Bug Fixes
+- **Code Quality**: Fixed strict type checking (`@typescript-eslint/no-explicit-any`) across frontend components and specs.
+- **React State Warnings**: Resolved synchronous `setState` cascading warnings inside `useEffect` by wrapping them in `setTimeout`.
+- **Hoisting**: Fixed variable access initialization errors in `RulesPage`.
 
 ## [3.19.2] — 2026-07-21
 

@@ -60,7 +60,7 @@ export default function BrainSelector({ activeBrainId, onBrainChange }: BrainSel
   }
 
   useEffect(() => {
-    void loadBrains()
+    setTimeout(() => { void loadBrains() }, 0)
   }, [])
 
   useEffect(() => {

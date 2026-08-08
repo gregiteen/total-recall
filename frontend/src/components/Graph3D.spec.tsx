@@ -29,7 +29,7 @@ describe('Graph3D', () => {
     });
     
     // Mock requestAnimationFrame
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((_cb) => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => {
       // Don't actually loop, just call once for coverage
       return 1;
     });
@@ -66,9 +66,9 @@ describe('Graph3D', () => {
     render(
       <Graph3D
         {...defaultProps}
-        threads={[{ id: 't1', title: 'Thread 1', turns: 2, lastUpdated: new Date().toISOString() } as any]}
-        memoryNodes={[{ slug: 'm1', title: 'Memory 1', category: 'facts', content: 'test', confidence: 0.9 } as any]}
-        researchItems={[{ id: 'r1', topic: 'Research 1', status: 'active', created_at: new Date().toISOString() } as any]}
+        threads={[{ id: 't1', title: 'Thread 1', turns: 2, lastUpdated: new Date().toISOString() } as never]}
+        memoryNodes={[{ slug: 'm1', title: 'Memory 1', category: 'facts', content: 'test', confidence: 0.9 } as never]}
+        researchItems={[{ id: 'r1', topic: 'Research 1', status: 'active', created_at: new Date().toISOString() } as never]}
       />
     );
 

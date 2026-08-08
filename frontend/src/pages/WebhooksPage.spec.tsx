@@ -71,7 +71,7 @@ describe('WebhooksPage', () => {
   it('runs through the Add Webhook wizard', async () => {
     vi.mocked(fetchWebhookConfigs).mockResolvedValue([]);
     vi.mocked(fetchWebhookEvents).mockResolvedValue([]);
-    vi.mocked(addWebhookConfig).mockResolvedValue({} as any);
+    vi.mocked(addWebhookConfig).mockResolvedValue({} as never);
 
     render(<WebhooksPage />);
     

@@ -20,7 +20,7 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
     fetchRules();
   }, [activeBrainId]);
 
-  const fetchRules = async () => {
+  async function fetchRules() {
     setLoading(true);
     setError(null);
     try {
@@ -51,7 +51,7 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
         headers: { 'Content-Type': 'application/json' },
       });
       fetchRules();
-    } catch (err) {
+    } catch {
       alert('Failed to archive rule');
     }
   };
@@ -64,7 +64,7 @@ export default function RulesPage({ activeBrainId }: { activeBrainId: string }) 
         headers: { 'Content-Type': 'application/json' },
       });
       fetchRules();
-    } catch (err) {
+    } catch {
       alert('Failed to restore rule');
     }
   };

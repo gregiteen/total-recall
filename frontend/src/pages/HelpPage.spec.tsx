@@ -16,11 +16,11 @@ describe('HelpPage', () => {
         { id: 'cli', title: 'CLI Reference', description: 'Commands for CLI' },
         { id: 'vault', title: 'Vault Structure', description: 'How files are stored' }
       ]
-    } as any);
+    } as never);
 
     vi.mocked(api.fetchHelpContent).mockResolvedValue({
       content: '# CLI Reference\n\nSome helpful text.'
-    } as any);
+    } as never);
 
     await act(async () => {
       render(<HelpPage />);
@@ -39,13 +39,13 @@ describe('HelpPage', () => {
         { id: 'cli', title: 'CLI Reference', description: 'Commands for CLI' },
         { id: 'vault', title: 'Vault Structure', description: 'How files are stored' }
       ]
-    } as any);
+    } as never);
 
     vi.mocked(api.fetchHelpContent).mockResolvedValueOnce({
       content: 'CLI content'
-    } as any).mockResolvedValueOnce({
+    } as never).mockResolvedValueOnce({
       content: 'Vault content'
-    } as any);
+    } as never);
 
     await act(async () => {
       render(<HelpPage />);

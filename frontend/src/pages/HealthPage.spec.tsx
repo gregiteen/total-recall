@@ -16,8 +16,8 @@ describe('HealthPage', () => {
       version: '1.0.0',
       uptime_seconds: 3600,
       timestamp: new Date().toISOString()
-    } as any);
-    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as any);
+    } as never);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as never);
 
     render(<HealthPage />);
 

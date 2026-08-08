@@ -159,6 +159,53 @@ export async function fetchDeviceIo(): Promise<{
   return get('/api/mesh/io');
 }
 
+export type EnrollmentState =
+  | 'enrolled'
+  | 'needs_login'
+  | 'stopped'
+  | 'client_unavailable'
+  | 'unknown';
+
+export interface EnrollmentStatus {
+  state: EnrollmentState;
+  enrolled: boolean;
+  backend_state: string | null;
+  auth_url: string | null;
+  ips: string[];
+  hostname: string;
+  login_server: string | null;
+  can_auto_enroll: boolean;
+  auto_enroll_blocked_reason: string | null;
+  auto_enroll_enabled: boolean;
+  client_available: boolean;
+  checked_at: string;
+}
+
+export interface EnrollResult {
+  ok: boolean;
+  changed: boolean;
+  state: EnrollmentState;
+  status: EnrollmentStatus;
+  method?: 'preauth-key' | 'interactive' | 'resume';
+  auth_url?: string | null;
+  reason?: string | null;
+  hint?: string;
+}
+
+/** Enrollment state of this node on the mesh control server. */
+export async function fetchEnrollmentStatus(): Promise<EnrollmentStatus> {
+  return get('/api/mesh/enrollment');
+}
+
+/** Enroll this node now (mints a pre-auth key when one can be minted). */
+export async function enrollThisNode(opts?: {
+  login_server?: string;
+  user?: string;
+  force?: boolean;
+}): Promise<EnrollResult> {
+  return post('/api/mesh/enroll', opts || {});
+}
+
 /** Discover LAN TR peers and upsert mesh_node entities (config:write). */
 export async function registerLanMeshNodes(opts?: { probe?: boolean; limit?: number }): Promise<{
   success: boolean;
