@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { buildEnvProjection, mergeEnvManagedBlock } from './secrets-env-export.mjs';
+import { buildEnvProjection, mergeEnvManagedBlock, projectSlugFromPath } from './secrets-env-export.mjs';
 import { resolveSecretsPath } from './secrets-store.mjs';
 
 /**
@@ -176,9 +176,18 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
     );
   }
 
+  // Match the same projection local `export-env --path .` builds: repo-bound
+  // secrets (set with --repo <name>) only resolve when the caller's project
+  // slug is passed through. Without this, deployEnvToRemote silently dropped
+  // every repo-scoped key and pushed only unbound/global ones — the opposite
+  // of what --repo scoping is for. cwd is the right default since this CLI
+  // is always invoked from the repo root (same assumption --path . makes).
+  const projectPath = opts.projectPath || process.cwd();
   const projection = await buildEnvProjection(brainDir, {
     includeGlobal: target.includeGlobal !== false,
     keys: opts.keys?.length ? opts.keys : target.keys,
+    projectPath,
+    projectSlug: opts.projectSlug || projectSlugFromPath(projectPath),
   });
 
   const remoteFile = path.posix.join(target.remotePath, target.filename || '.env');
