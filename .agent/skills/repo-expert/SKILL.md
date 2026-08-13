@@ -5,8 +5,8 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-13T18:09:34.594Z
-generated_from: .
+generated_at: 2026-08-13T20:22:02.988Z
+generated_from: total-recall
 ---
 
 # total-recall-brain — Codebase Architecture
@@ -17,7 +17,7 @@ generated_from: .
 
 ## Stack
 
-- **Languages**: JavaScript (538 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (535 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -42,7 +42,7 @@ generated_from: .
     skill/  (8 items)
     ssss/  (7 items)
     test/  (7 items)
-    total-recall/  (16 items)
+    total-recall/  (17 items)
     total-recall-project-management/  (6 items)
 .agents/
   rules/  (3 items)
@@ -179,7 +179,7 @@ templates/
 | remember | remember.mjs | Parse a human-friendly duration string and return a Date in  |
 | repo-expert-generate | repo-expert-generate.mjs | repo-expert-generate.mjs — Auto-generate repo-expert SKILL.m |
 | research | research.mjs | src/cli/research.mjs |
-| reset-password | reset-password.mjs |  |
+| reset-password | reset-password.mjs | Read a password without echoing it, and without it ever beco |
 | restore | restore.mjs | total-recall restore |
 | secret | secret.mjs | total-recall secret — manage API keys and credentials (not i |
 | setup | setup.mjs | total-recall setup |
@@ -568,7 +568,7 @@ templates/
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
-- **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, waitForLogin, closeContext
+- **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
 - **clarity-rewriter** — exports: runClarityReview, runStalenessCheck, runFactSeeker, runCutoffAudit, writeCorrection
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
 - **config** — exports: getEnvVar, detectProjectBrain, getActiveBrains, resolveBrainLayer

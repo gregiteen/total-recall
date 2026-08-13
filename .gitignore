@@ -29,6 +29,10 @@ node_modules/
 .agent/files/
 .agent/logs/
 .agent/.backups/
+# `skill generate-expert` snapshots the previous SKILL.md beside it on every
+# run. Those snapshots are local scratch and carry the generating machine's
+# paths, so they must never be committed.
+.agent/skills/*/SKILL.md.backup-*
 .agent/memory/episodes/
 .agent/memory/daily-logs/
 .agent/memory-pipeline-errors.log

@@ -331,7 +331,11 @@ export function generateSkillMd(scan, repoRoot) {
   lines.push('  file before executing.');
   lines.push('repo_scoped: true');
   lines.push(`generated_at: ${new Date().toISOString()}`);
-  lines.push(`generated_from: ${repoRoot}`);
+  // Record the repo by name, never by absolute path. SKILL.md is committed, so
+  // an absolute root bakes the generating machine's home directory into the
+  // repository — a private detail that also churns the diff on every machine
+  // that regenerates it.
+  lines.push(`generated_from: ${path.basename(path.resolve(repoRoot))}`);
   lines.push('---');
   lines.push('');
   lines.push(`# ${scan.name || path.basename(repoRoot)} — Codebase Architecture`);
