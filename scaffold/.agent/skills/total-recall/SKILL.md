@@ -331,6 +331,45 @@ npx total-recall secret list                          # metadata only, no values
 npx total-recall secret export-env --path <repo>       # SSOT → local .env.local
 ```
 
+### Executed rotation — `rotate-auto` / `rotate-browser` (added 3.22.0)
+
+Rotation used to only ever **print instructions**. It now executes. Every key
+resolves to one of four rotation classes, so nothing is silently unrotatable:
+
+| Class | How it rotates | Human needed? |
+|---|---|---|
+| `self_generated` | TR mints the value itself (`JWT_SECRET`, `DB_PASSWORD`, `*_WEBHOOK_SECRET`) | **No** |
+| `provider_browser` | TR drives the provider console in its own browser profile | Login/2FA once |
+| `provider_api` | Provider key-management API | No |
+| `manual` | Human-only artifact (SSH keys, recovery codes, OAuth app secrets) | Yes, with reason |
+
+```bash
+npx total-recall secret rotation-status               # coverage for every key
+npx total-recall secret rotation-status --json
+npx total-recall secret rotate-auto <key>             # pick the right method automatically
+npx total-recall secret rotate-browser <key>          # force the console path
+npx total-recall secret rotate-browser <key> --print-only   # legacy: just print steps
+npx total-recall secret browser-logout                # wipe TR's browser profile
+```
+
+**Browser profile.** Console rotation uses a persistent Chromium profile at
+`<brain>/browser-profile` (created `0700`). You log in once per provider; the
+daemon can then rotate unattended. That directory holds live Stripe/GitHub
+sessions — treat it as **equally sensitive to `secrets.enc`**: never sync it,
+never back it up off-machine, and `browser-logout` when you're done.
+
+**Safety invariants** (enforced by `rotation-capability.spec.mjs`):
+
+- The new value is read from the browser's own clipboard **inside TR's process** —
+  it never transits an argv string, an env var, or a chat transcript.
+- Only recipes marked `verified: true` auto-click. Unverified providers run
+  **supervised** — TR opens the console, tells you what to click, and detects the
+  result. It never blind-clicks guessed selectors on a billing dashboard.
+- A captured value is shape-checked against the provider pattern and, where an
+  API probe exists, **verified to authenticate before it replaces the old one**.
+  A failed check stores nothing.
+- The old credential is never revoked until the new one is stored and exported.
+
 ### Remote (production) deploy — `secret remote` (added 3.21.1)
 
 `export-env` only ever wrote a **local** file — there was no path from the

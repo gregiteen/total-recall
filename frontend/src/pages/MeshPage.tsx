@@ -24,6 +24,7 @@ import type {
 } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
 import { MeshTopology } from '../components/MeshTopology';
+import { EmbeddingProviderPanel } from '../components/EmbeddingProviderPanel';
 import { LatencySparkline } from '../components/LatencySparkline';
 import './MeshPage.css';
 
@@ -359,6 +360,10 @@ export function MeshPage() {
 
       {activeTab === 'mesh' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Which mesh node actually serves embeddings, and which model it uses. */}
+          <div className="card">
+            <EmbeddingProviderPanel />
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div className="card">
               <h3 style={{ marginTop: 0, marginBottom: 12 }}>Topology</h3>

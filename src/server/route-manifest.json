@@ -136,6 +136,18 @@
     "path": "/api/dream"
   },
   {
+    "method": "POST",
+    "path": "/api/embeddings/model"
+  },
+  {
+    "method": "GET",
+    "path": "/api/embeddings/provider"
+  },
+  {
+    "method": "POST",
+    "path": "/api/embeddings/rediscover"
+  },
+  {
     "method": "GET",
     "path": "/api/extension/download"
   },

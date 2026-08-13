@@ -21,6 +21,14 @@ import {
 import { exportEnvToProject, exportEnvToRegistry, loadProjectRegistry, projectSlugFromPath } from './secrets-env-export.mjs';
 import { getProvider, providerForKeyName } from './provider-catalog.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import { getRotationPlan, generateSecretValue } from './rotation-capability.mjs';
+import { getRecipe, valueLooksValid } from './provider-rotation-recipes.mjs';
+import {
+  launchRotationContext,
+  openConsole,
+  waitForLogin,
+  closeContext,
+} from './browser-session.mjs';
 
 /**
  * Build a supervised browser-use prompt for rotating one key.
@@ -241,5 +249,189 @@ export async function getBrowserRotateAssist(brainDir, key) {
     docs_url: row.api_docs_url,
     overdue: row.rotation_overdue,
     next_rotate_due: row.next_rotate_due,
+  };
+}
+
+// ─── Executed rotation ──────────────────────────────────────────────────────────
+
+/**
+ * Read the freshly-copied credential out of the browser's own clipboard.
+ *
+ * Provider consoles show a new key exactly once behind a "copy" button. Reading
+ * it here keeps the value inside TR's process — it never transits a shell
+ * argument, an env var, or a chat transcript.
+ *
+ * @param {any} page
+ * @returns {Promise<string|null>}
+ */
+async function captureFromClipboard(page) {
+  try {
+    const text = await page.evaluate(() => navigator.clipboard.readText());
+    return typeof text === 'string' ? text.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Drive a provider console to mint a new credential, then store + export it.
+ *
+ * Verified recipes are driven autonomously. Unverified ones run supervised: TR
+ * opens the console and waits while the human creates and copies the key. TR
+ * never blind-clicks guessed selectors on a billing dashboard.
+ *
+ * The old credential is NOT revoked here — revocation only happens after the
+ * new value is stored, exported, and (where possible) proven to authenticate.
+ *
+ * @param {string} brainDir
+ * @param {string} key
+ * @param {{
+ *   headless?: boolean,
+ *   label?: string,
+ *   timeoutMs?: number,
+ *   onStatus?: (msg: string) => void,
+ * }} [opts]
+ */
+export async function rotateViaBrowser(brainDir, key, opts = {}) {
+  const say = opts.onStatus || (() => {});
+  const rows = await listSecretsMeta(brainDir);
+  const row = rows.find((r) => r.key === key);
+  if (!row) throw new Error(`Secret not found: ${key}`);
+
+  const plan = getRotationPlan(key, row);
+  const recipe = getRecipe(plan.provider);
+  if (!recipe) {
+    return {
+      ok: false,
+      key,
+      class: plan.class,
+      error: `no rotation recipe for provider "${plan.provider || 'unknown'}"`,
+      hint: 'Add an entry to provider-rotation-recipes.mjs to enable this.',
+    };
+  }
+
+  const launched = await launchRotationContext(brainDir, {
+    headless: opts.headless === true && recipe.verified,
+    timeoutMs: opts.timeoutMs,
+  });
+  if (!launched.ok) return { ok: false, key, error: launched.error };
+
+  const { context } = launched;
+  try {
+    say(`opening ${recipe.console_url}`);
+    const { page, authenticated } = await openConsole(context, recipe);
+
+    if (!authenticated) {
+      say('not signed in — complete login/2FA in the browser window');
+      const ok = await waitForLogin(page, recipe, {
+        timeoutMs: opts.timeoutMs ?? 180_000,
+        onWait: (s) => say(`waiting for login… ${s}s`),
+      });
+      if (!ok) return { ok: false, key, error: 'login timed out' };
+      say('signed in');
+    }
+
+    // Allow clipboard reads for this origin so the console's copy button works.
+    try {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+        origin: new URL(recipe.console_url).origin,
+      });
+    } catch {
+      /* some engines auto-grant; failure here is not fatal */
+    }
+
+    let value = null;
+    if (recipe.verified && typeof recipe.create === 'function') {
+      say('creating new credential');
+      value = await recipe.create(page, { label: opts.label || `total-recall ${new Date().toISOString().slice(0, 10)}` });
+      if (!value) value = await captureFromClipboard(page);
+    } else {
+      say(`SUPERVISED — ${recipe.create_hint}`);
+      say('TR is watching the clipboard; copy the new value when it appears.');
+      const deadline = Date.now() + (opts.timeoutMs ?? 300_000);
+      while (Date.now() < deadline) {
+        const candidate = await captureFromClipboard(page);
+        if (candidate && valueLooksValid(recipe, candidate)) {
+          value = candidate;
+          break;
+        }
+        await page.waitForTimeout(2000);
+      }
+    }
+
+    if (!value) return { ok: false, key, error: 'no new credential captured' };
+    if (!valueLooksValid(recipe, value)) {
+      // Shape mismatch means we probably read the wrong node — refuse to
+      // overwrite a working credential with garbage.
+      return { ok: false, key, error: 'captured value failed provider shape check; nothing was stored' };
+    }
+
+    // Prove the new credential works BEFORE it replaces the old one.
+    let verified = null;
+    if (typeof recipe.verify === 'function') {
+      say('verifying new credential against provider API');
+      verified = await recipe.verify(value);
+      if (!verified) {
+        return { ok: false, key, error: 'new credential failed verification; nothing was stored' };
+      }
+    }
+
+    say('storing + exporting');
+    const result = await rotateSecretAndExport(brainDir, key, value, {
+      actor: 'browser-rotation',
+      provider: plan.provider,
+      exportEnv: opts.exportEnv !== false,
+    });
+    value = null; // drop the reference promptly
+
+    return {
+      ok: true,
+      key,
+      provider: plan.provider,
+      supervised: !recipe.verified,
+      verified,
+      exports: result.exports,
+      revoke_hint: recipe.revoke_hint || 'Revoke the old credential in the console now that the new one is live.',
+    };
+  } finally {
+    await closeContext(context);
+  }
+}
+
+/**
+ * Rotate any key by whichever method its class supports.
+ *
+ * self_generated keys are fully automatic — no browser, no human, no provider.
+ *
+ * @param {string} brainDir
+ * @param {string} key
+ * @param {object} [opts]
+ */
+export async function rotateAuto(brainDir, key, opts = {}) {
+  const rows = await listSecretsMeta(brainDir);
+  const row = rows.find((r) => r.key === key);
+  if (!row) throw new Error(`Secret not found: ${key}`);
+  const plan = getRotationPlan(key, row);
+
+  if (plan.class === 'self_generated') {
+    const value = generateSecretValue(key);
+    const result = await rotateSecretAndExport(brainDir, key, value, {
+      actor: 'self-generated-rotation',
+      exportEnv: opts.exportEnv !== false,
+    });
+    return { ok: true, key, class: plan.class, method: 'self_generated', exports: result.exports };
+  }
+
+  if (plan.class === 'provider_browser' || plan.class === 'provider_api') {
+    return { ...(await rotateViaBrowser(brainDir, key, opts)), class: plan.class, method: 'browser' };
+  }
+
+  return {
+    ok: false,
+    key,
+    class: plan.class,
+    method: 'manual',
+    error: plan.reason,
+    console_url: plan.console_url,
   };
 }

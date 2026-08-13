@@ -6,8 +6,13 @@
  *
  * Index file: .agent/memory-derived/embeddings.db
  *
- * Embedding model: gemini-embedding-2 (Google, 768 dims, free tier)
- *   Auth: GOOGLE_API_KEY env var
+ * Providers, in order: Ollama (local/mesh) → OpenRouter → Google → OpenAI.
+ * Ollama leads because it needs no key, costs nothing, and keeps working when
+ * a hosted provider is out of credit — the cloud providers are the fallback,
+ * not the default.
+ *
+ * Every provider must return EMBEDDING_DIMS-wide vectors; the vss0 index is
+ * declared at that width and a mismatch corrupts search silently.
  */
 
 import fs from 'node:fs';
@@ -22,8 +27,20 @@ import {
 
 import { googleApiKey, openRouterApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
 import { logger } from './logger.mjs';
+import {
+  resolveOllamaEndpoint,
+  selectEmbeddingModel,
+  getOllamaEmbedding,
+} from './ollama-embeddings.mjs';
 
 const DEFAULT_EMBED_MODEL = embedModel;
+
+/**
+ * Vector width of the vault index. The vss0 virtual tables are declared at this
+ * width, so it is a storage constraint rather than a tuning knob — changing it
+ * requires rebuilding every stored embedding.
+ */
+export const EMBEDDING_DIMS = 768;
 
 /** Resolve API keys at call time so tests can set env after import. */
 function resolveGoogleApiKey() {
@@ -111,10 +128,10 @@ function getDb(derivedDir) {
   if (vssOk) {
     db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vss_vault_embeddings USING vss0(
-        embedding(768)
+        embedding(${EMBEDDING_DIMS})
       );
       CREATE VIRTUAL TABLE IF NOT EXISTS vss_session_embeddings USING vss0(
-        embedding(768)
+        embedding(${EMBEDDING_DIMS})
       );
     `);
   }
@@ -242,9 +259,9 @@ async function getOpenRouterEmbedding(text, model = 'openai/text-embedding-3-sma
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${openRouterKey}`,
     },
-    // Request 768 dims to match the existing vault vss0(embedding(768)) schema
-    // and stay comparable against previously-stored Google embeddings.
-    body: JSON.stringify({ model, input: text, dimensions: 768 }),
+    // Match the vault's declared vector width so results stay comparable
+    // against previously-stored embeddings.
+    body: JSON.stringify({ model, input: text, dimensions: EMBEDDING_DIMS }),
   }, 20000);
 
   if (!res.ok) {
@@ -296,10 +313,32 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
 
   let embedding;
 
-  // OpenRouter first: standing preference (Gemini's budget is exhausted, so
+  // Local/mesh Ollama first: no key, no spend, no rate limit, and unaffected by
+  // a hosted provider running out of credit. The model is discovered from the
+  // server at call time rather than named here.
+  try {
+    const baseUrl = await resolveOllamaEndpoint();
+    if (baseUrl) {
+      const ollamaModel = await selectEmbeddingModel(baseUrl, {
+        dims: EMBEDDING_DIMS,
+        preferred: process.env.TR_OLLAMA_EMBED_MODEL || null,
+      });
+      if (ollamaModel) {
+        embedding = await getOllamaEmbedding(input, {
+          baseUrl,
+          model: ollamaModel,
+          dims: EMBEDDING_DIMS,
+        });
+      }
+    }
+  } catch (err) {
+    logger.debug('embeddings: Ollama unavailable, trying hosted providers', { err: err.message });
+  }
+
+  // OpenRouter next: standing preference (Gemini's budget is exhausted, so
   // Google is a near-guaranteed slow failure right now — trying it first just
   // taxes every call with a ~15-20s timeout before falling through).
-  if (openRouterKey) {
+  if (!embedding && openRouterKey) {
     try {
       embedding = await getOpenRouterEmbedding(input);
     } catch (err) {
@@ -325,7 +364,10 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   }
 
   if (!embedding) {
-    throw new Error('No embedding provider available. Set OPENROUTER_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.');
+    throw new Error(
+      'No embedding provider available. Run Ollama with an embedding model (optionally set TR_OLLAMA_URL / TR_OLLAMA_EMBED_MODEL), ' +
+        'or set OPENROUTER_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY.',
+    );
   }
 
   return embedding;
