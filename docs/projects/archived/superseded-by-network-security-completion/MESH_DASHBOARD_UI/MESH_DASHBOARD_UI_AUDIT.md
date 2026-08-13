@@ -270,8 +270,8 @@ Frontend uses `data.choices?.[0]?.message?.content ?? '(empty response)'`. The `
 **Findings**:
 - **Docker Compose**: Runs `headscale/headscale:0.22.3`.
 - **Ports**: Maps host port 8081 to container port 8080.
-- **Config**: The `server_url` is hardcoded to `http://138.197.199.217:8081`. 
+- **Config**: The `server_url` is hardcoded to `http://$HEADSCALE_HOST:8081`. 
 - **Volumes**: Data is stored in `./data`.
-- **API**: The Headscale server is exposing its REST API on `http://138.197.199.217:8081/api/v1/`.
+- **API**: The Headscale server is exposing its REST API on `http://$HEADSCALE_HOST:8081/api/v1/`.
 
 This deployed infrastructure must be integrated into the dashboard, requiring the UI to supply the correct API token for the API.
