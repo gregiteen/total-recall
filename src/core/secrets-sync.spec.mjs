@@ -44,7 +44,8 @@ describe('secrets-sync', () => {
   });
 
   it('rejects addresses outside the mesh range', async () => {
-    expect(await pullSecretsFromLeader('138.197.199.217')).toBe(false);
+    // RFC 5737 documentation address — any public IP outside 100.64.0.0/10.
+    expect(await pullSecretsFromLeader('203.0.113.10')).toBe(false);
     expect(throttled.throttledFetch).not.toHaveBeenCalled();
   });
 
