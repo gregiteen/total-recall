@@ -29,6 +29,7 @@ import {
   updateSecretMeta,
   listRotationDue,
   getSharedValueHealth,
+  loadSecrets,
 } from '../core/secrets-store.mjs';
 import {
   scanEnvSources,
@@ -140,7 +141,13 @@ function printHelp() {
     --headscale-url <https-url>
     rotation-due          List keys overdue for rotation
       --enqueue           Create daemon tasks + browser-use prompts for each due key
-    rotate-browser <key>  Print supervised browser-use rotation instructions
+    rotate-browser <key>  Drive the provider console in TR's browser and rotate
+      --print-only        Only print instructions (legacy behaviour)
+      --headless          Allow headless for verified recipes
+    rotate-auto <key>     Rotate by whatever method the key's class supports
+    rotation-status       Rotation coverage for every key in the vault
+      --json              Machine-readable output
+    browser-logout        Delete TR's persistent browser profile (all sessions)
     usage                 Cost/events (add --key-ref for per-key)
 
   rotate options:
@@ -239,9 +246,18 @@ function parseArgs(args) {
     }
   }
   if (
-    ['set', 'get', 'rotate', 'delete', 'meta', 'rotate-browser', 'rm', 'generate', 'account-sync'].includes(
-      out.command,
-    ) &&
+    [
+      'set',
+      'get',
+      'rotate',
+      'delete',
+      'meta',
+      'rotate-browser',
+      'rotate-auto',
+      'rm',
+      'generate',
+      'account-sync',
+    ].includes(out.command) &&
     args[i] &&
     !args[i].startsWith('--')
   ) {
@@ -375,6 +391,15 @@ function parseArgs(args) {
         break;
       case '--enqueue':
         out.enqueue = true;
+        break;
+      case '--print-only':
+        out.printOnly = true;
+        break;
+      case '--headless':
+        out.headless = true;
+        break;
+      case '--json':
+        out.json = true;
         break;
       case '--bytes':
         out.bytes = parseInt(args[++i], 10) || 32;
@@ -945,17 +970,73 @@ export default async function secretCli(argv) {
       return;
     }
 
-    if (opts.command === 'rotate-browser') {
+    if (opts.command === 'rotate-browser' || opts.command === 'rotate-auto') {
       if (!opts.key) {
-        console.error('Usage: total-recall secret rotate-browser <key>');
+        console.error(`Usage: total-recall secret ${opts.command} <key>`);
         process.exit(1);
       }
-      const assist = await getBrowserRotateAssist(brainDir, opts.key);
-      console.log(`\n  🌐 Supervised browser rotation — ${assist.key}\n`);
-      if (assist.console_url) console.log(`  Console: ${assist.console_url}`);
-      if (assist.docs_url) console.log(`  Docs:    ${assist.docs_url}`);
-      console.log(`  Overdue: ${assist.overdue ? 'YES' : 'no'}`);
-      console.log('\n' + assist.prompt + '\n');
+
+      if (opts.printOnly) {
+        const assist = await getBrowserRotateAssist(brainDir, opts.key);
+        console.log(`\n  🌐 Supervised browser rotation — ${assist.key}\n`);
+        if (assist.console_url) console.log(`  Console: ${assist.console_url}`);
+        if (assist.docs_url) console.log(`  Docs:    ${assist.docs_url}`);
+        console.log(`  Overdue: ${assist.overdue ? 'YES' : 'no'}`);
+        console.log('\n' + assist.prompt + '\n');
+        return;
+      }
+
+      const { rotateViaBrowser, rotateAuto } = await import('../core/secrets-rotate.mjs');
+      const run = opts.command === 'rotate-auto' ? rotateAuto : rotateViaBrowser;
+      console.log(`\n  🔐 Rotating ${opts.key}…\n`);
+      const r = await run(brainDir, opts.key, {
+        headless: !!opts.headless,
+        exportEnv: opts.exportEnv !== false,
+        onStatus: (m) => console.log(`     · ${m}`),
+      });
+
+      if (!r.ok) {
+        console.error(`\n  ❌ ${r.error}`);
+        if (r.console_url) console.error(`     Console: ${r.console_url}`);
+        process.exit(1);
+      }
+      console.log(`\n  ✅ Rotated ${r.key}` + (r.method ? ` via ${r.method}` : ''));
+      if (r.verified === true) console.log('     verified against provider API');
+      if (r.supervised) console.log('     (supervised — recipe not yet auto-verified)');
+      if (r.exports?.length) console.log(`     exported to ${r.exports.length} project(s)`);
+      if (r.revoke_hint) console.log(`\n  ⚠️  ${r.revoke_hint}`);
+      return;
+    }
+
+    if (opts.command === 'rotation-status') {
+      const { planAll, summarizePlans } = await import('../core/rotation-capability.mjs');
+      const all = await loadSecrets(brainDir);
+      const keys = Object.keys(all || {}).filter((k) => k !== 'meta');
+      const plans = planAll(keys, all.meta || {});
+      const sum = summarizePlans(plans);
+
+      if (opts.json) {
+        console.log(JSON.stringify({ summary: sum, plans }, null, 2));
+        return;
+      }
+
+      console.log(`\n  🔄 Rotation coverage — ${sum.automatable}/${sum.total} automatable\n`);
+      for (const [cls, n] of Object.entries(sum.byClass)) {
+        console.log(`     ${cls.padEnd(18)} ${n}`);
+      }
+      const manual = plans.filter((p) => !p.automatable && p.class !== 'non_secret');
+      if (manual.length) {
+        console.log(`\n  Needs a human (${manual.length}):`);
+        for (const p of manual) console.log(`     ${p.key.padEnd(34)} ${p.reason}`);
+      }
+      console.log('');
+      return;
+    }
+
+    if (opts.command === 'browser-logout') {
+      const { clearProfile } = await import('../core/browser-session.mjs');
+      const r = clearProfile(brainDir);
+      console.log(r.removed ? `  ✅ Cleared browser profile: ${r.path}` : `  (no profile at ${r.path})`);
       return;
     }
 

@@ -14,7 +14,13 @@ node_modules/
 # Total Recall runtime — never commit
 # The meta-skill (.agent/skills/total-recall/) IS the user's brain.
 # All user data directories live inside it.
-.agent/skills/
+#
+# Ignore the brain specifically, NOT all of .agent/skills/. The sibling
+# directories there are repo-scoped dev skills (security, code-quality, push,
+# repo-expert…) — authored repo knowledge that belongs in version control and
+# must survive a fresh clone. A blanket .agent/skills/ rule swept those up with
+# the user data, so every dev skill lived only on the machine that wrote it.
+.agent/skills/total-recall/
 .agent/memory-vault/
 .agent/memory-derived/
 .agent/memory-inbox/
@@ -105,3 +111,11 @@ scratch/
 
 server.log
 .npmrc.publish
+
+# UltraChat-specific dev skills. This repo is PUBLIC and open-source, and TR's
+# own invariant forbids naming third-party product repos in it.
+#   push/              production droplet IP + root SSH deploy commands
+#   instruction-keeper/ stub pointing at an absolute /Users/... UltraChat path
+# They stay on disk for local use; they must not ship.
+.agent/skills/push/
+.agent/skills/instruction-keeper/

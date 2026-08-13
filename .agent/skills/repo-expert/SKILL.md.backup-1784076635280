@@ -1,0 +1,62 @@
+---
+name: repo-expert
+description: >-
+  Use this skill when you need to understand codebase architecture, file
+  structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
+  file before executing.
+repo_scoped: true
+---
+
+## Total Recall — Codebase Architecture
+
+Total Recall is a **filesystem-native AI memory system** distributed as an npm package (`total-recall`). It provides portable, persistent memory for AI coding assistants by storing knowledge as Markdown files with SSSS (Structured Semantic Syntax System) YAML frontmatter. There is no database — the filesystem is the brain.
+
+### Core Architecture
+
+```
+total-recall/
+├── src/
+│   ├── cli/              # CLI commands (remember, recall, forget, compile, etc.)
+│   ├── core/             # Core engine (surface compiler, embeddings, optimizer, etc.)
+│   └── server/           # REST API server + route modules
+├── frontend/             # React dashboard UI (Vite + TypeScript)
+│   └── src/
+│       ├── pages/        # Route pages (Chat, Vault, Graph, Settings, etc.)
+│       ├── components/   # Shared UI components
+│       └── api/          # API client modules
+├── .agent/
+│   ├── skills/           # Agent skills (this directory)
+│   └── secrets.enc       # Encrypted secrets (AES-256-GCM)
+├── docs/                 # Documentation, project trackers, guides
+├── scaffold/             # Template files for new installs
+└── modules/              # Nested packages (NOT agent skills)
+    └── skill-deploy/     # Skill deployment module
+```
+
+### Key Subsystems
+
+1. **CLI (`src/cli/`)**: Entry point is `src/cli/index.mjs`. Commands: `remember`, `recall`, `forget`, `compile`, `repo-expert`, `config`, `ingest`.
+2. **Surface Compiler (`src/core/surface.mjs`)**: Reads all memory nodes from the vault, compiles them into instruction files (AGENTS.md, INSTRUCTIONS.md, GEMINI.md, CLAUDE.md) that get injected into IDE agents.
+3. **Dream Cycle (`src/core/optimizer.mjs`, `clarity-rewriter.mjs`, `fact-seeker.mjs`)**: Background optimization pipeline that evaluates memory staleness, discovers knowledge gaps, and rewrites unclear nodes. Calls external LLM APIs — no local models.
+4. **REST Server (`src/server/`)**: Express server with route modules under `src/server/routes/`. Serves the dashboard UI and provides API endpoints for memory operations.
+5. **Frontend Dashboard (`frontend/`)**: React + Vite app. Pages: Chat, Vault, Graph, Tasks, Integrations, Skills, Keys, Settings, Help, Onboarding.
+6. **Embeddings (`src/core/embeddings.mjs`)**: Generates vector embeddings for semantic search. Uses external embedding API.
+
+### Memory Architecture
+
+Memory nodes live in `.agent/skills/total-recall/memory-vault/` as individual `.md` files with SSSS frontmatter. Categories: `invariant`, `correction`, `preference`, `concept`, `pattern`, `decision`, `fact`, `log`.
+
+Derived indexes live in `.agent/skills/total-recall/memory-derived/`:
+- `graph-index.jsonl` — node relationships
+- `memory-layers.jsonl` — layered memory tiers
+- `skill-routes.jsonl` — skill routing index
+- `embeddings.db` — vector store
+
+### No Local Models
+
+Total Recall does NOT run local AI models. All LLM calls go to external APIs (configured via API keys). The system prompts in `src/core/` files are sent to these external APIs for the Dream Cycle optimization pipeline.
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-24T01:09:37.302Z -->
+
+<!-- END INJECTED MEMORY -->

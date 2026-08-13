@@ -279,10 +279,28 @@ Manage API keys and credentials (stored in `secrets.enc`, not in the memory vaul
   npx total-recall secret list
   npx total-recall secret rotate <key> <value>
   npx total-recall secret delete <key>
+
+  # Executed rotation (3.22.0+)
+  npx total-recall secret rotation-status [--json]
+  npx total-recall secret rotate-auto <key> [--export-env]
+  npx total-recall secret rotate-browser <key> [--headless] [--print-only]
+  npx total-recall secret browser-logout
   ```
 - **Options for set**:
   - `--provider <name>`: E.g., openai, anthropic.
   - `--scope <global|project>`: Scope the secret.
+- **Rotation classes**: every key resolves to `self_generated` (TR mints it, no
+  human), `provider_browser` (TR drives the console), `provider_api`, or
+  `manual` (human-only, with a stated reason). `rotation-status` reports
+  coverage across the whole vault.
+- **`rotate-auto`** picks the method from the key's class. `self_generated`
+  keys — `JWT_SECRET`, `DB_PASSWORD`, `*_WEBHOOK_SECRET` and friends — rotate
+  fully unattended with no browser at all.
+- **Console rotation** uses a persistent Chromium profile at
+  `<brain>/browser-profile` (mode `0700`). It holds live provider sessions and is
+  as sensitive as `secrets.enc` — never sync it; clear it with `browser-logout`.
+  Values are captured from the browser clipboard inside TR's process, shape-checked,
+  and verified against the provider API before replacing the old credential.
 
 ---
 
