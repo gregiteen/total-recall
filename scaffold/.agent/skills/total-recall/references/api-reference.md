@@ -43,7 +43,7 @@ Returns the status of the vault, embeddings index, and LLM reachability.
       "vfs": {
         "exists": true,
         "skill_exists": true,
-        "path": "/Users/greg/.agent"
+        "path": "~/.agent"
       }
     }
     ```

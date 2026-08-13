@@ -5,7 +5,7 @@
  *   npx total-recall secret set <key> <value> [--provider name] [--scope global|project]
  *   npx total-recall secret get <key>          # prints value (use carefully)
  *   npx total-recall secret list
- *   npx total-recall secret rotate <key> <new-value>
+ *   npx total-recall secret rotate <key>       # prompts for the value
  *   npx total-recall secret delete <key>
  *   npx total-recall secret audit [--limit N]
  *   npx total-recall secret usage [--days N]
@@ -60,6 +60,7 @@ import { listProviders, getProvider } from '../core/provider-catalog.mjs';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 // Reads a secret value from stdin (fd 0) so it never has to appear as a CLI
 // argument — CLI args land in shell history, `ps aux`, and any transcript
@@ -69,6 +70,75 @@ import path from 'node:path';
 function readStdinValue() {
   const raw = fs.readFileSync(0, 'utf8');
   return raw.endsWith('\n') ? raw.slice(0, -1) : raw;
+}
+
+/**
+ * Read the OS clipboard. Keeps a pasted credential inside this process rather
+ * than routing it through argv, shell history, or an agent transcript.
+ *
+ * @returns {string}
+ */
+function readSystemClipboard() {
+  const cmds =
+    process.platform === 'darwin'
+      ? [['pbpaste', []]]
+      : process.platform === 'win32'
+        ? [['powershell', ['-NoProfile', '-Command', 'Get-Clipboard']]]
+        : [
+            ['wl-paste', ['--no-newline']],
+            ['xclip', ['-selection', 'clipboard', '-o']],
+            ['xsel', ['--clipboard', '--output']],
+          ];
+  for (const [cmd, args] of cmds) {
+    try {
+      return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch {
+      // try the next clipboard tool
+    }
+  }
+  return '';
+}
+
+/**
+ * Read a credential without echoing it and without it ever becoming an argv
+ * element. `argv` is world-readable via `ps`, lands in shell history, and is
+ * captured verbatim by any agent driving this CLI. Falls back to reading one
+ * line from stdin when the input is piped rather than a terminal.
+ *
+ * @param {string} label
+ * @returns {Promise<string>}
+ */
+function readSecretValue(label) {
+  return new Promise((resolve, reject) => {
+    const input = process.stdin;
+    if (!input.isTTY) {
+      resolve(readStdinValue());
+      return;
+    }
+    process.stdout.write(label);
+    input.setRawMode(true);
+    input.resume();
+    input.setEncoding('utf8');
+    let buf = '';
+    const onData = (ch) => {
+      if (ch === '\n' || ch === '\r' || ch === '\u0004') {
+        input.setRawMode(false);
+        input.pause();
+        input.removeListener('data', onData);
+        process.stdout.write('\n');
+        resolve(buf.trim());
+      } else if (ch === '\u0003') {
+        input.setRawMode(false);
+        process.stdout.write('\n');
+        process.exit(130);
+      } else if (ch === '\u007f' || ch === '\b') {
+        buf = buf.slice(0, -1);
+      } else {
+        buf += ch;
+      }
+    };
+    input.on('data', onData);
+  });
 }
 
 function printHelp() {
@@ -84,7 +154,10 @@ function printHelp() {
     generate <key>        Generate a random secret for outside integrations
     get <key>             Print secret value (audited)
     list                  List keys + metadata only (no values)
-    rotate <key> [value]  Replace value and mark rotated (also supports --stdin)
+    rotate <key>          Replace value and mark rotated. Prompts for the value;
+                           --stdin reads fd0, --from-clipboard reads the OS
+                           clipboard (use the browser you are already signed
+                           into). The value never appears in argv or output.
     delete <key>          Remove a secret
     audit [--limit N]     Recent set/get/rotate events (no values)
     usage [--days N]      Sum usage.jsonl for last N days (default 1)
@@ -381,6 +454,9 @@ function parseArgs(args) {
         break;
       case '--replace-all':
         out.replaceAll = true;
+        break;
+      case '--from-clipboard':
+        out.fromClipboard = true;
         break;
       case '--export-env':
         out.exportEnv = true;
@@ -918,8 +994,39 @@ export default async function secretCli(argv) {
     }
 
     if (opts.command === 'rotate') {
-      if (!opts.key || !opts.value) {
-        console.error('Usage: total-recall secret rotate <key> <new-value> [--export-env|--export-all|--remote <name>]');
+      if (!opts.key) {
+        console.error('Usage: total-recall secret rotate <key> [--export-env|--export-all|--remote <name>]');
+        console.error('       The new value is read from a prompt or stdin — never from argv.');
+        process.exit(1);
+      }
+      // A credential passed as an argument is disclosed the moment it is typed:
+      // argv is readable by any user via `ps`, is saved to shell history, and is
+      // captured verbatim by any agent driving this CLI. Read it from a hidden
+      // prompt (or stdin when piped) so it stays in this process's memory.
+      if (!opts.value && opts.fromClipboard) {
+        // Read the OS clipboard inside this process. This lets the operator use
+        // the browser they are already signed into — copy the new credential
+        // there, and the value travels clipboard -> Node -> secrets.enc without
+        // ever passing through argv, a terminal echo, or an agent transcript.
+        opts.value = readSystemClipboard();
+        if (!opts.value) {
+          console.error('Error: clipboard is empty — copy the new credential first.');
+          process.exit(1);
+        }
+        console.log(`  📋 Read ${opts.value.length} chars from the clipboard (value not shown).`);
+      }
+      if (!opts.value) {
+        opts.value = await readSecretValue(`New value for ${opts.key}: `);
+      } else if (!opts.fromClipboard) {
+        console.error(
+          `\n  ⚠️  WARNING: the value was passed as a command-line argument.\n` +
+            `     It is now in your shell history and was visible to any user\n` +
+            `     running \`ps\` on this machine. Treat it as already disclosed\n` +
+            `     and rotate again using the prompt: total-recall secret rotate ${opts.key}\n`,
+        );
+      }
+      if (!opts.value) {
+        console.error('Error: empty value — aborting rotation.');
         process.exit(1);
       }
       if (opts.remote) {

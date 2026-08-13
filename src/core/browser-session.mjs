@@ -90,17 +90,42 @@ export async function launchRotationContext(brainDir, opts = {}) {
   // headless first-run would simply hang on an invisible challenge.
   const headless = opts.headless === true;
 
-  try {
-    const context = await chromium.launchPersistentContext(profileDir, {
-      headless,
-      viewport: { width: 1440, height: 900 },
-      args: ['--disable-blink-features=AutomationControlled', '--no-first-run'],
-    });
-    context.setDefaultTimeout(opts.timeoutMs ?? 30_000);
-    return { ok: true, context, profileDir };
-  } catch (err) {
-    return { ok: false, error: `failed to launch browser profile: ${err.message}`, profileDir };
+  const base = {
+    headless,
+    viewport: { width: 1440, height: 900 },
+    args: ['--disable-blink-features=AutomationControlled', '--no-first-run'],
+  };
+
+  // Playwright's bundled Chromium is not available on every host — it has
+  // dropped support for older macOS versions, and the pinned build is often
+  // simply not downloaded. A rotation that dies here strands the operator with
+  // live, burned credentials, so fall back to any locally installed Chrome or
+  // Edge before giving up.
+  const attempts = [
+    { label: 'bundled chromium', options: base },
+    { label: 'system chrome', options: { ...base, channel: 'chrome' } },
+    { label: 'system edge', options: { ...base, channel: 'msedge' } },
+  ];
+
+  const failures = [];
+  for (const attempt of attempts) {
+    try {
+      const context = await chromium.launchPersistentContext(profileDir, attempt.options);
+      context.setDefaultTimeout(opts.timeoutMs ?? 30_000);
+      return { ok: true, context, profileDir, browser: attempt.label };
+    } catch (err) {
+      failures.push(`${attempt.label}: ${err.message.split('\n')[0]}`);
+    }
   }
+
+  return {
+    ok: false,
+    error:
+      `failed to launch a browser profile. Tried ${attempts.length} browsers —\n  ` +
+      failures.join('\n  ') +
+      '\nInstall one with: npx playwright install chromium (or install Google Chrome).',
+    profileDir,
+  };
 }
 
 /**
@@ -128,16 +153,46 @@ export async function openConsole(context, recipe) {
  * @param {{ signed_in?: string, signed_out?: string }} recipe
  * @returns {Promise<boolean>}
  */
-export async function isAuthenticated(page, recipe) {
+export async function isAuthenticated(page, recipe, opts = {}) {
   // A visible signed-out marker (login form, "Sign in" CTA) is decisive.
   if (recipe.signed_out) {
     const out = await page.locator(recipe.signed_out).first().isVisible().catch(() => false);
     if (out) return false;
   }
+
   if (recipe.signed_in) {
-    return page.locator(recipe.signed_in).first().isVisible().catch(() => false);
+    // Consoles are SPA-heavy: the positive marker frequently renders a second
+    // or two after DOMContentLoaded. Give it a real wait instead of a single
+    // instantaneous probe.
+    const appeared = await page
+      .locator(recipe.signed_in)
+      .first()
+      .waitFor({ state: 'visible', timeout: opts.markerTimeoutMs ?? 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (appeared) return true;
+
+    // The positive marker never showed and no login form matched. Selectors go
+    // stale constantly, so fall back to the one signal every console agrees on:
+    // an unauthenticated request gets redirected to a login URL.
+    return !looksLikeLoginUrl(page.url());
   }
-  return true;
+
+  return !looksLikeLoginUrl(page.url());
+}
+
+/**
+ * Provider-agnostic sign-in detection. Consoles redirect anonymous visitors to
+ * a login route rather than returning an error status, so the landed URL is a
+ * far more durable signal than any per-provider CSS selector.
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function looksLikeLoginUrl(url) {
+  return /\/(login|log-in|sign[_-]?in|signin|auth\/login|sessions\/new|u\/login)(\/|\?|#|$)/i.test(
+    String(url || ''),
+  );
 }
 
 /**
