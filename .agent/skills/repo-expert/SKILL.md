@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-13T20:22:02.988Z
+generated_at: 2026-08-13T23:16:01.288Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (535 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (537 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -36,7 +36,7 @@ generated_from: total-recall
     okf/  (5 items)
     project-management/  (6 items)
     push/  (7 items)
-    repo-expert/  (8 items)
+    repo-expert/  (7 items)
     research/  (1 items)
     security/  (7 items)
     skill/  (8 items)
@@ -123,7 +123,7 @@ scripts/  (9 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (203 items)
+  core/  (205 items)
   server/
     routes/  (89 items)
 templates/
@@ -564,7 +564,7 @@ templates/
 
 ## Core Modules
 
-97 modules in `src/core/`:
+98 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
@@ -632,6 +632,7 @@ templates/
 - **search** — exports: semanticSearch
 - **secret-integration-research** — exports: gatherCodeUsageContext, parseAiJson, inferSecretIntegrationWithAi, buildIntegrationResearchBrief, maybeEnqueueIntegrationResearch, cancelBogusApiIntegrationQueueItems
 - **secrets-env-export** — exports: mergeEnvManagedBlock, projectSlugFromPath, loadProjectRegistry, secretMatchesTarget, buildEnvProjection, exportEnvToProject, exportEnvToRegistry, buildDeploySecretsPayload
+- **secrets-rekey** — exports: readMasterPasswordFromCarrierText, updateMasterPasswordCarrierText, readMasterPasswordFromCarrier, generateSecretsMasterPassword, rekeySecretsTransaction
 - **secrets-remote-deploy** — exports: resolveRemoteTargetsPath, loadRemoteTargets, saveRemoteTargets, addRemoteTarget, removeRemoteTarget, deployEnvToRemote, deployKeyToRemotes
 - **secrets-rotate** — exports: buildBrowserRotatePrompt, enqueueRotationDueTasks, rotateSecretAndExport, runSecretsRotationCheck, runSecretsExportAll, getBrowserRotateAssist, rotateViaBrowser, rotateAuto
 - **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets, migrateSecretsToEncryptedIfNeeded
