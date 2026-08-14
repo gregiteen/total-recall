@@ -76,6 +76,11 @@ vi.mock('../api/headscale', () => ({
   fetchPreAuthKeys: vi.fn(),
   createPreAuthKey: vi.fn(),
   fetchHeadscaleUsers: vi.fn(),
+  // Mesh SSH policy: default to "already configured" so the banner stays out of
+  // the way of tests that are asserting on other things.
+  fetchHeadscalePolicy: vi.fn().mockResolvedValue({ policy: '{}', configured: true }),
+  saveHeadscalePolicy: vi.fn().mockResolvedValue({ policy: '{}', configured: true }),
+  buildMeshSshPolicy: vi.fn(() => '{}'),
 }));
 
 describe('MeshPage', () => {

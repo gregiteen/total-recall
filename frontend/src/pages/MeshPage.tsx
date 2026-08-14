@@ -13,7 +13,7 @@ import {
   fetchEnrollmentStatus,
   enrollThisNode,
 } from '../api/mesh';
-import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode } from '../api/headscale';
+import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode, fetchHeadscalePolicy, saveHeadscalePolicy, buildMeshSshPolicy } from '../api/headscale';
 import type {
   MeshNode,
   LeaderInfo,
@@ -58,6 +58,11 @@ export function MeshPage() {
   const [enrollment, setEnrollment] = useState<EnrollmentStatus | null>(null);
   const [enrollBusy, setEnrollBusy] = useState(false);
   const [enrollMsg, setEnrollMsg] = useState<string | null>(null);
+  // Mesh SSH is a property of the control server, not of this node, so it is
+  // tracked separately from enrollment.
+  const [sshPolicy, setSshPolicy] = useState<{ configured: boolean; fileMode?: boolean } | null>(null);
+  const [sshBusy, setSshBusy] = useState(false);
+  const [sshMsg, setSshMsg] = useState<string | null>(null);
   const [lanRegisterBusy, setLanRegisterBusy] = useState(false);
   const [lanRegisterMsg, setLanRegisterMsg] = useState<string | null>(null);
   const prevLeaderRef = useRef<string | null>(null);
@@ -158,6 +163,16 @@ export function MeshPage() {
             setUiHints(ioRes.ui_hints || ioRes.io?.ui_hints || []);
           })
           .catch(() => { /* optional */ });
+        // Neither of these should ever take the page down — both are optional
+        // capabilities that may simply not be configured yet.
+        void (async () => {
+          try {
+            const p = await fetchHeadscalePolicy();
+            setSshPolicy({ configured: p.configured, fileMode: p.fileMode });
+          } catch {
+            setSshPolicy(null);
+          }
+        })();
         // Enrollment state drives the join banner; never fail the page on it.
         fetchEnrollmentStatus()
           .then(setEnrollment)
@@ -223,6 +238,21 @@ export function MeshPage() {
       setError(err instanceof Error ? err.message : 'LAN register failed');
     } finally {
       setLanRegisterBusy(false);
+    }
+  }
+
+  async function handleEnableMeshSsh() {
+    setSshBusy(true);
+    setSshMsg(null);
+    try {
+      await saveHeadscalePolicy(buildMeshSshPolicy());
+      const next = await fetchHeadscalePolicy();
+      setSshPolicy({ configured: next.configured, fileMode: next.fileMode });
+      setSshMsg('Mesh SSH enabled. Nodes pick this up automatically.');
+    } catch (err) {
+      setSshMsg(err instanceof Error ? err.message : 'Could not enable mesh SSH');
+    } finally {
+      setSshBusy(false);
     }
   }
 
@@ -360,6 +390,33 @@ export function MeshPage() {
 
       {activeTab === 'mesh' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Without a policy the control server routes packets but authorises
+              nothing, so every machine falls back to its own SSH keys. */}
+          {sshPolicy && !sshPolicy.configured && (
+            <div className="alert alert-warning" data-testid="mesh-ssh-banner">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <strong>Mesh SSH is off</strong>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>
+                    {sshPolicy.fileMode
+                      ? 'The control server stores its policy in a file, so it cannot be managed here. Set policy.mode: database in the control server config to enable this.'
+                      : 'Nodes can reach each other, but each still needs its own SSH keys. Enabling mesh SSH lets the control server authorise connections instead.'}
+                  </div>
+                  {sshMsg && (
+                    <div style={{ fontSize: 13, marginTop: 8, color: 'var(--accent-hover)' }}>{sshMsg}</div>
+                  )}
+                </div>
+                {!sshPolicy.fileMode && (
+                  <button type="button" className="btn btn-primary" onClick={handleEnableMeshSsh} disabled={sshBusy}>
+                    {sshBusy ? 'Enabling…' : 'Enable mesh SSH'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {sshPolicy?.configured && sshMsg && (
+            <div className="alert alert-success" data-testid="mesh-ssh-ok">{sshMsg}</div>
+          )}
           {/* Which mesh node actually serves embeddings, and which model it uses. */}
           <div className="card">
             <EmbeddingProviderPanel />

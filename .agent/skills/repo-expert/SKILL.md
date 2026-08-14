@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-14T21:48:59.031Z
+generated_at: 2026-08-14T22:12:29.619Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (539 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (540 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -123,7 +123,7 @@ scripts/  (9 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (206 items)
+  core/  (207 items)
   server/
     routes/  (89 items)
 templates/
@@ -600,7 +600,7 @@ templates/
 - **memory-layers** — exports: normalizeMemoryLayer, inferMemoryLayer, memoryLayerRoutingWeight, buildMemoryLayerIndex
 - **memory-title** — exports: stripSelfCapturedTitlePrefix, isSelfCapturedEchoTitle, defaultTitleFromBody, normalizeMemoryTitle
 - **mesh-auth** — exports: normalizeRemoteAddress, isMeshOrLoopbackAddress, getMeshSyncToken, getMeshSyncAuthorization, requireMeshSyncAuth
-- **mesh-enroll** — exports: resetAutoEnrollThrottle, resolveTailscaleBinary, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled, buildUpArgs
+- **mesh-enroll** — exports: resetAutoEnrollThrottle, resolveTailscaleBinary, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled
 - **mesh** — exports: normalizeHostname, meshNodeDocSlug, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname, getMeshPeers
 - **migrate** — exports: runMigration, testMigration
 - **network-bind** — exports: resolveServerHost
