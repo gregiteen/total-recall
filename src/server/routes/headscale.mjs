@@ -5,6 +5,8 @@ import { logger } from '../../core/logger.mjs';
 import {
   headscaleFetch,
   headscaleFetchWithLegacyFallback,
+  getHeadscalePolicy,
+  setHeadscalePolicy,
 } from '../../core/headscale-client.mjs';
 
 const router = express.Router();
@@ -76,6 +78,36 @@ router.get('/api/headscale/user', requireScope('config:read'), async (req, res) 
   } catch (err) {
     logger.error('headscale', `GET /user failed: ${err.message}`);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// The ACL policy is what lets the control server authorise SSH itself instead
+// of every host falling back to its own authorized_keys. Requires the control
+// server to run with `policy.mode: database`.
+router.get('/api/headscale/policy', requireScope('config:read'), async (req, res) => {
+  try {
+    res.json(await getHeadscalePolicy(BRAIN_DIR));
+  } catch (err) {
+    logger.error('headscale', `GET /policy failed: ${err.message}`);
+    // A file-mode server is a configuration problem the caller can fix, so it
+    // is a 409 rather than an opaque 500.
+    const status = err.code === 'POLICY_MODE_FILE' ? 409 : 500;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+router.put('/api/headscale/policy', requireScope('config:write'), async (req, res) => {
+  try {
+    const policy = req.body?.policy;
+    if (!policy) {
+      res.status(400).json({ error: 'A `policy` field is required' });
+      return;
+    }
+    res.json(await setHeadscalePolicy(policy, BRAIN_DIR));
+  } catch (err) {
+    logger.error('headscale', `PUT /policy failed: ${err.message}`);
+    const status = err.code === 'POLICY_MODE_FILE' ? 409 : 500;
+    res.status(status).json({ error: err.message, code: err.code });
   }
 });
 

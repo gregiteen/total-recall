@@ -225,3 +225,90 @@ export async function createHeadscalePreAuthKey(options = {}, brainDir) {
   }
   throw lastError || new Error('Headscale did not return a pre-auth key');
 }
+
+/**
+ * Read the control server's ACL policy.
+ *
+ * Requires the server to run with `policy.mode: database` — in `file` mode the
+ * policy lives on the control server's disk and the API cannot manage it.
+ *
+ * Headscale returns a 500 (not a 404) when database mode is on but the policy
+ * table is still empty, so an unset policy is normalised to `policy: null`
+ * rather than thrown. That distinction matters: "no policy yet" is the expected
+ * first-run state, whereas a real transport or auth failure must still surface.
+ */
+export async function getHeadscalePolicy(brainDir) {
+  try {
+    const data = await headscaleFetch('/api/v1/policy', {}, brainDir);
+    return {
+      policy: data?.policy ?? null,
+      updatedAt: data?.updatedAt ?? null,
+      configured: Boolean(data?.policy),
+      raw: data,
+    };
+  } catch (err) {
+    const detail = String(err.detail || '');
+    const emptyPolicyTable =
+      err.status === 404 ||
+      (err.status === 500 && /policy|not found|no such/i.test(detail));
+    if (emptyPolicyTable) {
+      return { policy: null, updatedAt: null, configured: false, unset: true, raw: null };
+    }
+    if (err.status === 400 && /database/i.test(detail)) {
+      const modeError = new Error(
+        'Headscale is running in file policy mode; set `policy.mode: database` to manage the policy over the API',
+      );
+      modeError.status = err.status;
+      modeError.detail = err.detail;
+      modeError.code = 'POLICY_MODE_FILE';
+      throw modeError;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Replace the control server's ACL policy.
+ *
+ * `policy` may be an object (serialised here) or an already-formatted
+ * HuJSON/JSON string. Headscale validates server-side and rejects the write if
+ * the policy's own `tests` block fails, so a bad policy never lands.
+ */
+export async function setHeadscalePolicy(policy, brainDir) {
+  if (!policy) throw new Error('A policy is required');
+  const serialised = typeof policy === 'string' ? policy : JSON.stringify(policy, null, 2);
+
+  const data = await headscaleFetch(
+    '/api/v1/policy',
+    { method: 'PUT', body: JSON.stringify({ policy: serialised }) },
+    brainDir,
+  );
+  return { policy: data?.policy ?? serialised, updatedAt: data?.updatedAt ?? null, raw: data };
+}
+
+/**
+ * Build a policy that lets every mesh member reach every other member, and use
+ * Tailscale SSH between them as any non-root user.
+ *
+ * This is deliberately the simple single-operator shape: one person's own
+ * machines, all equally trusted. It is NOT appropriate for a multi-tenant
+ * tailnet — headscale membership is the trust boundary, so anything admitted to
+ * the mesh inherits this access. Narrow `src`/`dst` before adding a node you do
+ * not control.
+ *
+ * root is excluded via `autogroup:nonroot`: SSH-ing straight to root over the
+ * mesh removes the audit trail that makes per-user access worth having.
+ */
+export function buildMeshSshPolicy({ allowRoot = false } = {}) {
+  return {
+    acls: [{ action: 'accept', src: ['*'], dst: ['*:*'] }],
+    ssh: [
+      {
+        action: 'accept',
+        src: ['autogroup:member'],
+        dst: ['autogroup:self'],
+        users: allowRoot ? ['autogroup:nonroot', 'root'] : ['autogroup:nonroot'],
+      },
+    ],
+  };
+}

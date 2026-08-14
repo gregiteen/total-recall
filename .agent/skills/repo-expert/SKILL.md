@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-13T23:16:01.288Z
+generated_at: 2026-08-14T21:48:59.031Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (537 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (539 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -123,7 +123,7 @@ scripts/  (9 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (205 items)
+  core/  (206 items)
   server/
     routes/  (89 items)
 templates/
@@ -139,7 +139,7 @@ templates/
 
 ## CLI Commands
 
-51 commands in `src/cli/`:
+52 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
@@ -171,6 +171,7 @@ templates/
 | key | key.mjs |  |
 | lint | lint.mjs | total-recall lint |
 | map | map.mjs |  |
+| mesh | mesh.mjs | total-recall mesh — control-server (headscale) mesh administ |
 | migrate | migrate.mjs |  |
 | proposals | proposals.mjs |  |
 | rebuild | rebuild.mjs | SSSS Projection Rebuild Command |
@@ -182,8 +183,7 @@ templates/
 | reset-password | reset-password.mjs | Read a password without echoing it, and without it ever beco |
 | restore | restore.mjs | total-recall restore |
 | secret | secret.mjs | total-recall secret — manage API keys and credentials (not i |
-| setup | setup.mjs | total-recall setup |
-| ... | +11 more | |
+| ... | +12 more | |
 
 ## API Routes
 
@@ -291,13 +291,15 @@ templates/
 - `GET /api/ssss/references`
 - `GET /api/ssss/references/:name`
 
-### headscale (5 endpoints)
+### headscale (7 endpoints)
 
 - `GET /api/headscale/node`
 - `DELETE /api/headscale/node/:id`
 - `GET /api/headscale/preauthkey`
 - `POST /api/headscale/preauthkey`
 - `GET /api/headscale/user`
+- `GET /api/headscale/policy`
+- `PUT /api/headscale/policy`
 
 ### help (3 endpoints)
 

@@ -81,6 +81,7 @@ const COMMANDS = {
   relay:    'relay.mjs',
   uninstall: 'uninstall.mjs',
   map:      'map.mjs',
+  mesh:     'mesh.mjs',
   brain:    'brain.mjs',
   config:   'config.mjs',
   skill:    'skill.mjs',
@@ -109,6 +110,7 @@ function printHelp() {
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync
     secret <cmd>        Secrets store + usage (not the vault)
+    mesh <cmd>          Control-server mesh: nodes, ACL policy, Tailscale SSH
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics
 
