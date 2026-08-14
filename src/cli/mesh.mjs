@@ -18,6 +18,7 @@ import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import {
   describeHeadscaleAvailability,
   headscaleFetchWithLegacyFallback,
+  createHeadscalePreAuthKey,
   getHeadscalePolicy,
   setHeadscalePolicy,
   buildMeshSshPolicy,
@@ -31,6 +32,9 @@ function printHelp() {
 
     status                 Control-server reachability and credential state
     nodes                  List registered mesh nodes
+    preauthkey             Mint an enrollment key for 'tailscale up --authkey'
+                             --reusable   usable by more than one node
+                             --ephemeral  node is removed when it goes offline
     policy get             Show the current ACL policy
     policy set --file <p>  Replace the policy from a file ("-" reads stdin)
     policy init-ssh        Write a policy enabling Tailscale SSH across the mesh
@@ -105,6 +109,22 @@ export default async function meshCli(argv = []) {
           `  ${String(node.id).padEnd(4)} ${String(node.name || node.givenName || '-').padEnd(24)} ${addrs}`,
         );
       }
+      return;
+    }
+
+    // Enrolling a node otherwise means an interactive browser login against the
+    // control server. A pre-auth key makes `tailscale up` a single
+    // copy-pasteable command, which matters most on a machine you are standing
+    // in front of precisely because you cannot reach it yet.
+    if (command === 'preauthkey') {
+      const reusable = args.includes('--reusable');
+      const ephemeral = args.includes('--ephemeral');
+      const { key, expiration } = await createHeadscalePreAuthKey(
+        { reusable, ephemeral },
+        brainDir,
+      );
+      console.log(key);
+      console.error(`(expires ${expiration}${reusable ? ', reusable' : ', single-use'})`);
       return;
     }
 

@@ -43,6 +43,15 @@ const FALLBACK_BINARIES = [
   '/usr/bin/tailscale',
 ];
 
+// Presence of a tailscaled binary is what separates the open-source macOS build
+// (which can serve Tailscale SSH) from the sandboxed GUI builds (which cannot).
+const DARWIN_DAEMON_BINARIES = [
+  '/usr/local/bin/tailscaled',
+  '/opt/homebrew/bin/tailscaled',
+  '/usr/local/sbin/tailscaled',
+  '/opt/homebrew/sbin/tailscaled',
+];
+
 const STATUS_TIMEOUT_MS = 5_000;
 const UP_TIMEOUT_MS = 90_000;
 const LOGIN_PROBE_TIMEOUT_MS = 15_000;
@@ -71,6 +80,42 @@ export function resolveTailscaleBinary() {
     }
   }
   return 'tailscale';
+}
+
+/**
+ * Can this machine run the Tailscale SSH *server*?
+ *
+ * Enrolling a node is not enough to make mesh SSH work — the node has to
+ * advertise SSH, and only some builds can. Passing `--ssh` to a build that
+ * cannot serve it fails the whole `up`, taking enrollment down with it, so this
+ * gate decides whether the flag is safe to add.
+ *
+ * - Linux: supported.
+ * - macOS: only the open-source `tailscaled` build. The App Store and
+ *   standalone GUI builds are sandboxed and silently never start the SSH
+ *   server, so we require an actual `tailscaled` binary as proof of the CLI
+ *   build rather than trusting the platform alone.
+ * - Everything else (Windows, BSDs): client only.
+ *
+ * `TR_TAILSCALE_SSH=0|1` overrides, for operators who know their own build.
+ */
+export function supportsTailscaleSsh({ platform = process.platform, env = process.env } = {}) {
+  const override = String(env.TR_TAILSCALE_SSH ?? '').trim();
+  if (override === '0' || /^(false|no|off)$/i.test(override)) return false;
+  if (override === '1' || /^(true|yes|on)$/i.test(override)) return true;
+
+  if (platform === 'linux') return true;
+  if (platform === 'darwin') {
+    // The GUI variants ship no tailscaled binary; the Homebrew formula does.
+    return DARWIN_DAEMON_BINARIES.some((candidate) => {
+      try {
+        return fs.existsSync(candidate);
+      } catch {
+        return false;
+      }
+    });
+  }
+  return false;
 }
 
 function runTailscale(args, { timeout = STATUS_TIMEOUT_MS } = {}) {
@@ -209,15 +254,19 @@ function withAuthKeyFile(key, fn) {
  * `reset: true` is the escape hatch for a setting we do not model — it clears
  * unmentioned settings to defaults, so the flags below are still re-stated.
  */
-export function buildUpArgs({ loginServer, prefs, authKeyFile, reset = false }) {
+export function buildUpArgs({ loginServer, prefs, authKeyFile, reset = false, enableSsh = false }) {
   const args = ['up'];
   const current = normalizeControlUrl(prefs?.ControlURL || '');
   const target = normalizeControlUrl(loginServer || '');
   const repointing = Boolean(target) && target !== current;
 
+  // Turning SSH on is a real state change, so it counts as having something to
+  // say even when nothing else does.
+  const turningOnSsh = enableSsh && prefs?.RunSSH !== true;
+
   // No flags at all — resuming an already-configured node — keeps every
   // setting untouched and sidesteps the complete-set rule entirely.
-  if (!repointing && !authKeyFile && !reset) return args;
+  if (!repointing && !authKeyFile && !reset && !turningOnSsh) return args;
 
   // `--reset` clears every unmentioned setting to its default, and ControlURL
   // is one of them: without restating it here, a reset silently repoints the
@@ -229,7 +278,7 @@ export function buildUpArgs({ loginServer, prefs, authKeyFile, reset = false }) 
     args.push(`--accept-routes=${prefs.RouteAll === true}`);
     args.push(`--accept-dns=${prefs.CorpDNS !== false}`);
     if (prefs.ShieldsUp === true) args.push('--shields-up');
-    if (prefs.RunSSH === true) args.push('--ssh');
+    if (prefs.RunSSH === true || enableSsh) args.push('--ssh');
     if (prefs.Hostname) args.push(`--hostname=${prefs.Hostname}`);
     if (Array.isArray(prefs.AdvertiseRoutes) && prefs.AdvertiseRoutes.length) {
       args.push(`--advertise-routes=${prefs.AdvertiseRoutes.join(',')}`);
@@ -240,6 +289,10 @@ export function buildUpArgs({ loginServer, prefs, authKeyFile, reset = false }) 
     if (prefs.ExitNodeIP) args.push(`--exit-node=${prefs.ExitNodeIP}`);
     if (prefs.ExitNodeAllowLANAccess === true) args.push('--exit-node-allow-lan-access');
   }
+
+  // A never-enrolled node has no prefs to copy forward, so the flag would
+  // otherwise be dropped on exactly the machines that need it most.
+  if (enableSsh && !args.includes('--ssh')) args.push('--ssh');
 
   if (authKeyFile) args.push(`--auth-key=file:${authKeyFile}`);
   return args;
@@ -254,8 +307,8 @@ export function isIncompleteSettingsError(stderr = '') {
  * Run `tailscale up`, retrying once with `--reset` if the client rejects the
  * command for an unmodeled non-default setting.
  */
-function runUpWithResetFallback({ loginServer, prefs, authKeyFile }) {
-  const first = runTailscale(buildUpArgs({ loginServer, prefs, authKeyFile }), {
+function runUpWithResetFallback({ loginServer, prefs, authKeyFile, enableSsh = false }) {
+  const first = runTailscale(buildUpArgs({ loginServer, prefs, authKeyFile, enableSsh }), {
     timeout: UP_TIMEOUT_MS,
   });
   if (first.ok || !isIncompleteSettingsError(first.stderr)) {
@@ -266,9 +319,10 @@ function runUpWithResetFallback({ loginServer, prefs, authKeyFile }) {
   if (!normalizeControlUrl(loginServer || '')) {
     return { ...first, usedReset: false };
   }
-  const retry = runTailscale(buildUpArgs({ loginServer, prefs, authKeyFile, reset: true }), {
-    timeout: UP_TIMEOUT_MS,
-  });
+  const retry = runTailscale(
+    buildUpArgs({ loginServer, prefs, authKeyFile, reset: true, enableSsh }),
+    { timeout: UP_TIMEOUT_MS },
+  );
   return { ...retry, usedReset: true };
 }
 
@@ -296,7 +350,14 @@ export function requestInteractiveAuthUrl({ loginServer } = {}) {
  * interactive URL for the user to approve. Never throws — enrollment runs on a
  * daemon heartbeat and must not take the loop down.
  */
-export async function enrollThisNode({ brainDir, loginServer: explicitServer, user, force } = {}) {
+export async function enrollThisNode({
+  brainDir,
+  loginServer: explicitServer,
+  user,
+  force,
+  // Tri-state: undefined = decide from platform capability, true/false = force.
+  ssh,
+} = {}) {
   const before = await getEnrollmentStatus({ brainDir });
 
   if (before.enrolled && !force) {
@@ -315,9 +376,17 @@ export async function enrollThisNode({ brainDir, loginServer: explicitServer, us
 
   const prefs = readTailscalePrefs();
 
+  // Mesh SSH is the point of enrolling for most operators, and a node that
+  // comes up without it silently ignores whatever the control server's SSH
+  // policy says. Turn it on wherever the local build can actually serve it —
+  // builds that cannot are skipped rather than failing the whole enrollment.
+  const enableSsh = ssh ?? supportsTailscaleSsh();
+
   // Already authenticated, just not running — no key needed.
   if (before.state === ENROLLMENT_STATES.STOPPED) {
-    const res = runTailscale(buildUpArgs({ prefs, loginServer: null }), { timeout: UP_TIMEOUT_MS });
+    const res = runTailscale(buildUpArgs({ prefs, loginServer: null, enableSsh }), {
+      timeout: UP_TIMEOUT_MS,
+    });
     const after = await getEnrollmentStatus({ brainDir });
     return {
       ok: res.ok && after.enrolled,
@@ -339,7 +408,7 @@ export async function enrollThisNode({ brainDir, loginServer: explicitServer, us
       const keyUser = userRef?.name || user || 'default';
       const { key } = await createHeadscalePreAuthKey({ userRef, ttlMinutes: 10 }, brainDir);
       const res = withAuthKeyFile(key, (authKeyFile) =>
-        runUpWithResetFallback({ loginServer: target, prefs, authKeyFile }),
+        runUpWithResetFallback({ loginServer: target, prefs, authKeyFile, enableSsh }),
       );
       const after = await getEnrollmentStatus({ brainDir });
       if (res.ok && after.enrolled) {
