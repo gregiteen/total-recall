@@ -21,6 +21,7 @@ Classification for the portable-memory product focus. Commands remain available 
 | `daemon` | Background worker (ingest, tasks, system dream) |
 | `skill` | Registry, deploy, track, multi-repo sync |
 | `secret` / `secrets` | Secrets store + usage (not vault) |
+| `mesh` | Control server: nodes, ACL policy, Tailscale SSH |
 | `brain` | List / register / ensure / unregister project brains |
 | `status` | Health / brain connection summary |
 | `doctor` | Environment diagnostics |
