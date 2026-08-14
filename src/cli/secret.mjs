@@ -61,6 +61,13 @@ import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import os from 'node:os';
+import {
+  generateSecretsMasterPassword,
+  readMasterPasswordFromCarrier,
+  rekeySecretsTransaction,
+} from '../core/secrets-rekey.mjs';
+import { agentDir as configuredAgentDir, getActiveBrains } from '../core/config.mjs';
 
 // Reads a secret value from stdin (fd 0) so it never has to appear as a CLI
 // argument — CLI args land in shell history, `ps aux`, and any transcript
@@ -158,6 +165,10 @@ function printHelp() {
                            --stdin reads fd0, --from-clipboard reads the OS
                            clipboard (use the browser you are already signed
                            into). The value never appears in argv or output.
+    rekey                 Rotate the secrets-store master password transactionally.
+                           The replacement is generated in memory by default;
+                           --stdin accepts a coordinated replacement without argv.
+                           --launch-agent/--env-file select persistent carriers.
     delete <key>          Remove a secret
     audit [--limit N]     Recent set/get/rotate events (no values)
     usage [--days N]      Sum usage.jsonl for last N days (default 1)
@@ -305,6 +316,9 @@ function parseArgs(args) {
     remotePort: 22,
     restartCmd: null,
     stdin: false,
+    launchAgents: [],
+    envFiles: [],
+    storePaths: [],
   };
   if (!args.length || args[0] === '--help' || args[0] === '-h') {
     out.help = true;
@@ -510,6 +524,15 @@ function parseArgs(args) {
       case '--stdin':
         out.stdin = true;
         break;
+      case '--launch-agent':
+        out.launchAgents.push(args[++i]);
+        break;
+      case '--env-file':
+        out.envFiles.push(args[++i]);
+        break;
+      case '--store':
+        out.storePaths.push(args[++i]);
+        break;
       case '--help':
       case '-h':
         out.help = true;
@@ -542,11 +565,11 @@ export default async function secretCli(argv) {
   }
 
   if (opts.stdin) {
-    if (!['set', 'rotate'].includes(opts.command)) {
-      console.error('❌ --stdin is only valid with `set` or `rotate`');
+    if (!['set', 'rotate', 'rekey'].includes(opts.command)) {
+      console.error('❌ --stdin is only valid with `set`, `rotate`, or `rekey`');
       process.exit(1);
     }
-    if (!opts.key) {
+    if (opts.command !== 'rekey' && !opts.key) {
       console.error(`Usage: total-recall secret ${opts.command} <key> --stdin`);
       process.exit(1);
     }
@@ -558,6 +581,87 @@ export default async function secretCli(argv) {
   }
 
   try {
+    if (opts.command === 'rekey') {
+      const carriers = [
+        ...opts.launchAgents.filter(Boolean).map((carrierPath) => ({
+          path: path.resolve(carrierPath),
+          type: 'launchd-plist',
+          allowInsert: true,
+        })),
+        ...opts.envFiles.filter(Boolean).map((carrierPath) => ({
+          path: path.resolve(carrierPath),
+          type: 'env',
+          allowInsert: true,
+        })),
+      ];
+
+      if (!carriers.length && process.platform === 'darwin') {
+        const launchAgentsDir = path.join(os.homedir(), 'Library', 'LaunchAgents');
+        if (fs.existsSync(launchAgentsDir)) {
+          for (const entry of fs.readdirSync(launchAgentsDir)) {
+            if (!entry.endsWith('.plist')) continue;
+            const carrierPath = path.join(launchAgentsDir, entry);
+            const source = fs.readFileSync(carrierPath, 'utf8');
+            if (source.includes('<key>TR_SECRETS_PASSWORD</key>')) {
+              carriers.push({ path: carrierPath, type: 'launchd-plist' });
+            }
+          }
+        }
+      }
+
+      if (!carriers.length) {
+        console.error(
+          '❌ No persistent master-password carrier found. Use --launch-agent <path> or --env-file <path>.',
+        );
+        process.exit(1);
+      }
+
+      const currentPasswords = carriers
+        .map((carrier) => readMasterPasswordFromCarrier(carrier))
+        .filter(Boolean);
+      const oldPassword = currentPasswords[0] || process.env.TR_SECRETS_PASSWORD;
+      if (!oldPassword) {
+        console.error('❌ The current master password is unavailable from the selected carriers.');
+        process.exit(1);
+      }
+      if (currentPasswords.some((value) => value !== oldPassword)) {
+        console.error('❌ Selected credential carriers do not contain the same current master password.');
+        process.exit(1);
+      }
+
+      const defaultBrainDirs = [
+        configuredAgentDir,
+        brainDir,
+        ...Object.values(getActiveBrains()).map((brain) => brain?.brainDir),
+      ].filter(Boolean);
+      const legacyAgentDirs = defaultBrainDirs
+        .filter(
+          (dir) =>
+            path.basename(dir) === 'total-recall' && path.basename(path.dirname(dir)) === 'skills',
+        )
+        .map((dir) => path.dirname(path.dirname(dir)));
+      const storePaths = opts.storePaths.length
+        ? opts.storePaths.map((storePath) => path.resolve(storePath))
+        : [...new Set([...defaultBrainDirs, ...legacyAgentDirs].map((dir) => resolveSecretsPath(dir)))].filter(
+            (storePath) => fs.existsSync(storePath),
+          );
+      const newPassword = opts.value || generateSecretsMasterPassword();
+      const result = await rekeySecretsTransaction({
+        storePaths,
+        carriers,
+        oldPassword,
+        newPassword,
+      });
+
+      console.log(`\n  ✅ Secrets master password rotated transactionally`);
+      console.log(`     stores re-encrypted and verified: ${result.stores.length}`);
+      console.log(`     persistent carriers updated: ${result.carriers.length}`);
+      console.log(`     retired password rejected: yes`);
+      console.log(`     replacement value was not printed`);
+      console.log(`     restart affected services so they load the new credential\n`);
+      return;
+    }
+
     if (opts.command === 'set') {
       if (!opts.key || opts.value == null) {
         console.error('Usage: total-recall secret set <key> <value>');
