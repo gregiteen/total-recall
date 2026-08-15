@@ -40,7 +40,9 @@
     "start": "node src/server/index.mjs",
     "test": "vitest run",
     "routes:manifest": "node scripts/generate-route-manifest.mjs",
-    "clean": "rm -rf scratch/* .remember/* *.log"
+    "clean": "rm -rf scratch/* .remember/* *.log",
+    "check:dist": "node scripts/check-dist-freshness.mjs",
+    "prepublishOnly": "npm run check:dist"
   },
   "repository": {
     "type": "git",
