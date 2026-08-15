@@ -174,6 +174,20 @@ async function main() {
       return;
     }
 
+    // The same trap one rung down. Exit 1 means tsc found errors; if the parser
+    // could not turn the report body into diagnostics, every display mode below
+    // prints its all-clear over a failing gate. The counts come from tsc
+    // itself — when they disagree with the parser, tsc is right.
+    if ((exitCode !== 0 || Number(total) > 0) && errors.length === 0) {
+      console.log(`❌ --- TYPESCRIPT GATE FAILING (exit ${exitCode}, ${total} error(s)) — not parseable per-file --- ❌`);
+      console.log(lines.slice(4).join('\n').trim().slice(0, 2000));
+      process.exitCode = 1;
+      return;
+    }
+
+    // A gate that prints errors must not also exit 0.
+    if (errors.length) process.exitCode = 1;
+
     switch (mode) {
       case 'type':  showByType(errors); break;
       case 'file':  showByFile(errors, filePattern); break;

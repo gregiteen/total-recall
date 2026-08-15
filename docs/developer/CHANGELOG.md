@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.23.2] — 2026-08-15
+
+### 🐛 Bug Fixes
+- **The quality gates could report clean while failing**: both reporters derive their per-file view from a regex over the report body, then print "✅ No problems found" whenever that view comes back empty — without consulting the exit code the tool actually returned. Any diagnostic the regex cannot match therefore reads as an all-clear. One does not match: "Unused eslint-disable directive (no problems were reported from '<rule>')" ends in a quote and a paren rather than a trailing rule id, so a red gate printed green. That is how 3.23.1 shipped with lint exiting 1. `TOTAL_ERRORS` and `EXIT_CODE` come from ESLint and tsc themselves; when they disagree with the parser, the tool is right — so both reporters now print the raw report body and exit non-zero instead of inventing a success, and a run that prints problems can no longer also exit 0.
+- **Unused lint directive**: removed the stale `react-hooks/set-state-in-effect` disable in `OpenWikiPage` — the problem it suppressed no longer occurs, which is what the gate was reporting.
+
 ## [3.23.1] — 2026-08-15
 
 ### 🐛 Bug Fixes

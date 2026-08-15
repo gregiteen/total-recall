@@ -94,7 +94,6 @@ export default function OpenWikiPage({ activeBrainId = 'global' }: { activeBrain
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     const initFetch = async () => {
       // Optimistically trigger background ingest to keep nodes fresh
       try {

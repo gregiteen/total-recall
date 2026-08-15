@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-14T23:48:20.239Z
+generated_at: 2026-08-15T20:27:23.174Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (545 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (550 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -123,7 +123,7 @@ scripts/  (10 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (211 items)
+  core/  (216 items)
   server/
     routes/  (89 items)
 templates/
@@ -566,7 +566,7 @@ templates/
 
 ## Core Modules
 
-100 modules in `src/core/`:
+102 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
@@ -615,6 +615,7 @@ templates/
 - **package-auto-update** — exports: isPackageAutoUpdateEnabled, packageUpdateStatePath, loadUpdateState, saveUpdateState, resolveRegistryFiles, readRegistryEntries, rootsFromEnv, listUpdateRoots
 - **pairing** — exports: buildPairingInfo
 - **parallel-context** — exports: streamParallelContext, checkFlashHealth
+- **pid-lock** — exports: entryPathHint, readProcessCommand, shouldHonorPidLock
 - **post-mortem** — exports: readSessionTranscript, runPostMortem, runComplianceAudit
 - **project-brain** — exports: resolveProjectBrainPaths, ensureOpenWiki, ensureCoreSkillPackage, writeBrainIdentity, ensureFullProjectBrain, registerProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
 - **proposal-applier** — exports: findDissimilarPair, appendProposalAudit, listProposals, getProposal, setProposalStatus, revertProposal, hasHandler, applyProposal
@@ -635,10 +636,11 @@ templates/
 - **search** — exports: semanticSearch
 - **secret-integration-research** — exports: gatherCodeUsageContext, parseAiJson, inferSecretIntegrationWithAi, buildIntegrationResearchBrief, maybeEnqueueIntegrationResearch, cancelBogusApiIntegrationQueueItems
 - **secrets-env-export** — exports: mergeEnvManagedBlock, projectSlugFromPath, loadProjectRegistry, secretMatchesTarget, buildEnvProjection, exportEnvToProject, exportEnvToRegistry, buildDeploySecretsPayload
+- **secrets-keychain** — exports: keychainAvailable, readKeychainPassword, writeKeychainPassword, describeKeychainCarrier
 - **secrets-rekey** — exports: readMasterPasswordFromCarrierText, updateMasterPasswordCarrierText, readMasterPasswordFromCarrier, generateSecretsMasterPassword, rekeySecretsTransaction
 - **secrets-remote-deploy** — exports: resolveRemoteTargetsPath, loadRemoteTargets, saveRemoteTargets, addRemoteTarget, removeRemoteTarget, deployEnvToRemote, deployKeyToRemotes
 - **secrets-rotate** — exports: buildBrowserRotatePrompt, enqueueRotationDueTasks, rotateSecretAndExport, runSecretsRotationCheck, runSecretsExportAll, getBrowserRotateAssist, rotateViaBrowser, rotateAuto
-- **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets, migrateSecretsToEncryptedIfNeeded
+- **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets
 - **secrets-sync** — exports: getSecretsChecksum, pullSecretsFromLeader, fetchLeaderChecksum, syncLoop
 - **session-watcher** — exports: createSessionEntry, parseClaudeCode, parseCodex, parseGeminiCli, parseAntigravity, parseCursor, parseVSCode, contentFingerprint
 - **skills-registry** — exports: resolveRegistryDir, resolveRegistryPath, emptyRegistry, loadRegistry, saveRegistry, hashSkillContent, readSkillMeta, registerSkill

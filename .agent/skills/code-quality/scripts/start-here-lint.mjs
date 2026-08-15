@@ -131,9 +131,25 @@ async function report() {
     console.log(`🛡️ --- LINT ERROR BITES (Showing Files ${skipCount + 1}-${skipCount + Math.max(1, sortedFiles.length)} of ${fileCount} Files) --- 🛡️`);
 
     if (sortedFiles.length === 0) {
+      // TOTAL_ERRORS/EXIT_CODE come from ESLint; the per-file view comes from a
+      // regex over the report body. When they disagree, ESLint is right.
+      // Messages carrying no trailing rule id — "Unused eslint-disable
+      // directive (no problems were reported from '<rule>')" is one, since it
+      // ends in a quote and a paren — match nothing here. Printing the
+      // all-clear on a failing report is how a red gate gets shipped, so the
+      // raw body is shown instead of an invented success.
+      if (exitCode !== 0 || Number(total) > 0) {
+        console.log(`❌ --- LINT GATE FAILING (exit ${exitCode}, ${total} problem(s)) — not parseable per-file --- ❌`);
+        console.log(lines.slice(4).join('\n').trim().slice(0, 2000));
+        process.exitCode = 1;
+        return;
+      }
       console.log('✅ No Lint problems found in report.');
       return;
     }
+
+    // A gate that prints problems must not also exit 0.
+    process.exitCode = 1;
 
     let totalShown = 0;
     const MAX_SHOWN = 150;
