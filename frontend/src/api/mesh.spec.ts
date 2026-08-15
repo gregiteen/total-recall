@@ -5,6 +5,9 @@ import {
   refreshElection,
   fetchElectionHistory,
   logElectionObservation,
+  fetchAccessProposals,
+  importAccessFromSshConfig,
+  setNodeAccess,
 } from './mesh';
 import * as base from './_base';
 
@@ -52,6 +55,30 @@ describe('mesh api', () => {
       hostname: 'a',
       ip: '1',
       note: 'observed',
+    });
+  });
+
+  it('fetchAccessProposals calls GET /api/mesh/access/proposals', async () => {
+    vi.mocked(base.get).mockResolvedValue({ proposals: [], missing_access: [], checked_at: 't' });
+    await fetchAccessProposals();
+    expect(base.get).toHaveBeenCalledWith('/api/mesh/access/proposals');
+  });
+
+  // Proposing and applying are separate calls on purpose: a wrong login written
+  // to the vault is worse than none, because it then looks authored.
+  it('importAccessFromSshConfig calls POST /api/mesh/access/import', async () => {
+    vi.mocked(base.post).mockResolvedValue({ success: true, attempted: 0, saved: 0, failed: 0, results: [] });
+    await importAccessFromSshConfig();
+    expect(base.post).toHaveBeenCalledWith('/api/mesh/access/import', {});
+  });
+
+  it('setNodeAccess posts the fields it was given, so an empty one can clear', async () => {
+    vi.mocked(base.post).mockResolvedValue({ success: true, path: 'p', access: {} });
+    await setNodeAccess({ node: 'node-b.mesh', ssh_user: 'operator', identity_file: '' });
+    expect(base.post).toHaveBeenCalledWith('/api/mesh/access', {
+      node: 'node-b.mesh',
+      ssh_user: 'operator',
+      identity_file: '',
     });
   });
 });

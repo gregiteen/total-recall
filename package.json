@@ -39,6 +39,7 @@
     "dev": "node src/server/index.mjs",
     "start": "node src/server/index.mjs",
     "test": "vitest run",
+    "routes:manifest": "node scripts/generate-route-manifest.mjs",
     "clean": "rm -rf scratch/* .remember/* *.log"
   },
   "repository": {

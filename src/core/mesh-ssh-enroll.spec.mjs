@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { buildUpArgs, supportsTailscaleSsh } from './mesh-enroll.mjs';
 
+// `hasDaemon` is passed explicitly throughout: left to probe the host, the
+// answer would depend on whether the machine running the suite happens to have
+// tailscaled installed, and the macOS cases would invert on a developer box
+// with the Homebrew formula.
 describe('supportsTailscaleSsh', () => {
   it('supports Linux', () => {
-    expect(supportsTailscaleSsh({ platform: 'linux', env: {} })).toBe(true);
+    expect(supportsTailscaleSsh({ platform: 'linux', env: {}, hasDaemon: false })).toBe(true);
   });
 
   // The sandboxed macOS GUI builds ship no tailscaled and silently never start
   // the SSH server, so the daemon binary is the only honest signal.
   it('rejects macOS GUI builds that have no tailscaled', () => {
-    expect(supportsTailscaleSsh({ platform: 'darwin', env: {} })).toBe(false);
+    expect(supportsTailscaleSsh({ platform: 'darwin', env: {}, hasDaemon: false })).toBe(false);
+  });
+
+  // The open-source formula does ship one, and that build serves SSH fine —
+  // treating all of macOS as incapable would leave those nodes on their own keys.
+  it('supports macOS running the open-source tailscaled', () => {
+    expect(supportsTailscaleSsh({ platform: 'darwin', env: {}, hasDaemon: true })).toBe(true);
   });
 
   it('rejects platforms that are client-only', () => {
-    expect(supportsTailscaleSsh({ platform: 'win32', env: {} })).toBe(false);
+    expect(supportsTailscaleSsh({ platform: 'win32', env: {}, hasDaemon: false })).toBe(false);
   });
 
   it('honours an explicit operator override in both directions', () => {

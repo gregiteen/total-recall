@@ -12,6 +12,9 @@ import {
   logElectionObservation,
   fetchEnrollmentStatus,
   enrollThisNode,
+  fetchAccessProposals,
+  importAccessFromSshConfig,
+  setNodeAccess,
 } from '../api/mesh';
 import { fetchHeadscaleNodes, fetchPreAuthKeys, fetchHeadscaleUsers, createPreAuthKey, deleteHeadscaleNode, fetchHeadscalePolicy, saveHeadscalePolicy, buildMeshSshPolicy } from '../api/headscale';
 import type {
@@ -21,6 +24,7 @@ import type {
   MeshInterfaceSummary,
   DeviceIoProfile,
   EnrollmentStatus,
+  AccessProposal,
 } from '../api/mesh';
 import type { HeadscaleNode, PreAuthKey as HeadscalePreAuthKey, HeadscaleUser } from '../api/headscale';
 import { MeshTopology } from '../components/MeshTopology';
@@ -39,13 +43,43 @@ interface ElectionLogEntry {
   note: string;
 }
 
+/** Editable access fields, as strings so an empty box can clear a value. */
+interface AccessDraft {
+  ssh_user: string;
+  ssh_port: string;
+  identity_file: string;
+  ssh_host: string;
+}
+
+const EMPTY_ACCESS_DRAFT: AccessDraft = {
+  ssh_user: '',
+  ssh_port: '',
+  identity_file: '',
+  ssh_host: '',
+};
+
+function accessDraftFromNode(node: MeshNode | null): AccessDraft {
+  const access = node?.access;
+  return {
+    ssh_user: access?.ssh_user || '',
+    ssh_port: access?.ssh_port ? String(access.ssh_port) : '',
+    identity_file: access?.identity_file || '',
+    ssh_host: access?.ssh_host || '',
+  };
+}
+
 export function MeshPage() {
   const [activeTab, setActiveTab] = useState<'mesh'|'headscale-nodes'|'preauthkeys'|'users'>('mesh');
 
   // Mesh State
   const [meshNodes, setMeshNodes] = useState<MeshNode[]>([]);
   const [leader, setLeader] = useState<LeaderInfo | null>(null);
-  const [selectedNode, setSelectedNode] = useState<MeshNode | null>(null);
+  // Selection is held as a hostname, not a node object: polling replaces the
+  // node list every few seconds, and a captured object goes stale the moment it
+  // does — the detail pane would keep showing the state at the time of click,
+  // including right after an edit was saved.
+  const [selectedHostname, setSelectedHostname] = useState<string | null>(null);
+  const selectedNode = meshNodes.find((node) => node.hostname === selectedHostname) || null;
   const [latencyMs, setLatencyMs] = useState<Record<string, number | null>>({});
   /** Rolling RTT samples per hostname for sparklines (from this node). */
   const [latencyHistory, setLatencyHistory] = useState<Record<string, number[]>>({});
@@ -65,6 +99,14 @@ export function MeshPage() {
   const [sshMsg, setSshMsg] = useState<string | null>(null);
   const [lanRegisterBusy, setLanRegisterBusy] = useState(false);
   const [lanRegisterMsg, setLanRegisterMsg] = useState<string | null>(null);
+  // A node whose login account is unknown refuses every connection in exactly
+  // the way an unreachable node does, so the gap is surfaced, not just stored.
+  const [accessProposals, setAccessProposals] = useState<AccessProposal[]>([]);
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [accessMsg, setAccessMsg] = useState<string | null>(null);
+  const [accessDraft, setAccessDraft] = useState<AccessDraft>(EMPTY_ACCESS_DRAFT);
+  const [accessSaveBusy, setAccessSaveBusy] = useState(false);
+  const [accessSaveMsg, setAccessSaveMsg] = useState<string | null>(null);
   const prevLeaderRef = useRef<string | null>(null);
   const pollMsRef = useRef(POLL_BASE_MS);
   const electionHistoryLoadedRef = useRef(false);
@@ -83,6 +125,8 @@ export function MeshPage() {
   const [newKeyEphemeral, setNewKeyEphemeral] = useState(false);
   const [newKeyExpiration, setNewKeyExpiration] = useState('2099-12-31T23:59:59Z');
 
+  const nodesMissingAccess = meshNodes.filter((node) => node.access_resolved?.complete === false);
+
   const recordLeaderChange = useCallback((l: LeaderInfo | null, note: string) => {
     if (!l) return;
     const key = `${l.hostname}|${l.ip}`;
@@ -97,6 +141,15 @@ export function MeshPage() {
       // Persist to SSSS event store (best-effort; de-duped server-side).
       logElectionObservation({ hostname: l.hostname, ip: l.ip, note }).catch(() => {});
     }
+  }, []);
+
+  // Selecting is the only thing that may overwrite the edit form. Doing it in a
+  // poll-driven effect instead would wipe whatever the user was typing every
+  // few seconds.
+  const selectNode = useCallback((node: MeshNode) => {
+    setSelectedHostname(node.hostname);
+    setAccessDraft(accessDraftFromNode(node));
+    setAccessSaveMsg(null);
   }, []);
 
   const pushLatencySamples = useCallback((sample: Record<string, number | null>) => {
@@ -177,6 +230,9 @@ export function MeshPage() {
         fetchEnrollmentStatus()
           .then(setEnrollment)
           .catch(() => { /* optional */ });
+        fetchAccessProposals()
+          .then((res) => setAccessProposals(res.proposals || []))
+          .catch(() => { /* no ssh config on this host is normal */ });
         pollMsRef.current = POLL_BASE_MS;
       } else if (activeTab === 'headscale-nodes') {
         const nodes = await fetchHeadscaleNodes();
@@ -238,6 +294,40 @@ export function MeshPage() {
       setError(err instanceof Error ? err.message : 'LAN register failed');
     } finally {
       setLanRegisterBusy(false);
+    }
+  }
+
+  async function handleImportAccess() {
+    setAccessBusy(true);
+    setAccessMsg(null);
+    try {
+      const res = await importAccessFromSshConfig();
+      setAccessMsg(
+        res.failed
+          ? `Recorded ${res.saved} of ${res.attempted}; ${res.failed} could not be saved.`
+          : `Recorded a login account for ${res.saved} node(s).`,
+      );
+      await loadData();
+    } catch (err) {
+      setAccessMsg(err instanceof Error ? err.message : 'Could not import from ssh config');
+    } finally {
+      setAccessBusy(false);
+    }
+  }
+
+  async function handleSaveAccess(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedNode) return;
+    setAccessSaveBusy(true);
+    setAccessSaveMsg(null);
+    try {
+      await setNodeAccess({ node: selectedNode.hostname, ...accessDraft });
+      setAccessSaveMsg('Saved to the node entity.');
+      await loadData();
+    } catch (err) {
+      setAccessSaveMsg(err instanceof Error ? err.message : 'Could not save access');
+    } finally {
+      setAccessSaveBusy(false);
     }
   }
 
@@ -417,6 +507,54 @@ export function MeshPage() {
           {sshPolicy?.configured && sshMsg && (
             <div className="alert alert-success" data-testid="mesh-ssh-ok">{sshMsg}</div>
           )}
+          {/* The control server can say a node is up but not which account you
+              log in as, and connecting as the wrong one is refused exactly like
+              an unreachable host — so the gap is stated rather than discovered. */}
+          {nodesMissingAccess.length > 0 && (
+            <div className="alert alert-warning" data-testid="mesh-access-banner">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <strong>
+                    {nodesMissingAccess.length === 1
+                      ? '1 node has no recorded login account'
+                      : `${nodesMissingAccess.length} nodes have no recorded login account`}
+                  </strong>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>
+                    Any node that tries to reach one of these is refused, in exactly the way an unreachable
+                    machine refuses. {accessProposals.length > 0
+                      ? `This host's ssh config can supply ${accessProposals.length} of them.`
+                      : 'Select a node below to record one.'}
+                  </div>
+                  <div style={{ fontSize: 12, marginTop: 6, color: 'var(--text-secondary)' }}>
+                    {nodesMissingAccess.map((node) => node.hostname).join(', ')}
+                  </div>
+                  {accessProposals.length > 0 && (
+                    <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12 }} data-testid="access-proposals">
+                      {accessProposals.map((proposal) => (
+                        <li key={proposal.hostname}>
+                          <strong>{proposal.hostname}</strong> → {proposal.access.ssh_user}{' '}
+                          <span style={{ color: 'var(--text-secondary)' }}>(from Host {proposal.matched_host})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {accessMsg && (
+                    <div style={{ fontSize: 13, marginTop: 8, color: 'var(--accent-hover)' }}>{accessMsg}</div>
+                  )}
+                </div>
+                {accessProposals.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleImportAccess}
+                    disabled={accessBusy}
+                  >
+                    {accessBusy ? 'Importing…' : 'Import from ssh config'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {/* Which mesh node actually serves embeddings, and which model it uses. */}
           <div className="card">
             <EmbeddingProviderPanel />
@@ -428,8 +566,8 @@ export function MeshPage() {
                 nodes={meshNodes}
                 leader={leader}
                 latencyMs={latencyMs}
-                selectedHostname={selectedNode?.hostname}
-                onSelectNode={setSelectedNode}
+                selectedHostname={selectedHostname}
+                onSelectNode={selectNode}
               />
             </div>
             <div className="card">
@@ -512,9 +650,91 @@ export function MeshPage() {
                   </dd>
                   <dt style={{ color: 'var(--text-secondary)' }}>Scope</dt>
                   <dd style={{ margin: 0 }}>{selectedNode.self ? 'This node' : 'Peer'}</dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Login</dt>
+                  <dd style={{ margin: 0, fontFamily: 'monospace', fontSize: 12 }} data-testid="node-access-target">
+                    {selectedNode.access_resolved?.complete
+                      ? selectedNode.access_resolved.target
+                      : <span className="badge badge-offline">no login recorded</span>}
+                  </dd>
+                  <dt style={{ color: 'var(--text-secondary)' }}>Access source</dt>
+                  <dd style={{ margin: 0 }}>
+                    {selectedNode.access?.source && selectedNode.access.source !== 'unknown'
+                      ? selectedNode.access.source.replace('_', ' ')
+                      : '—'}
+                  </dd>
+                  {/* Only the open-source build can serve control-server-authorised
+                      SSH; the sandboxed GUI builds never start the server, so a
+                      node running one still needs its own keys. */}
+                  <dt style={{ color: 'var(--text-secondary)' }}>Mesh SSH</dt>
+                  <dd style={{ margin: 0 }} data-testid="node-mesh-ssh">
+                    {selectedNode.access_resolved?.mesh_ssh === 'available'
+                      ? 'authorised by the control server'
+                      : selectedNode.access_resolved?.mesh_ssh === 'unsupported'
+                        ? `not served by this build (${selectedNode.access_resolved.tailscale_variant}) — needs its own keys`
+                        : 'unknown'}
+                  </dd>
                 </dl>
               ) : (
                 <p style={{ color: 'var(--text-secondary)' }}>Click a node in the topology to inspect it.</p>
+              )}
+
+              {selectedNode && (
+                <form onSubmit={handleSaveAccess} style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                  <h4 style={{ margin: '0 0 4px' }}>Access</h4>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+                    Stored on the node entity, so every machine and agent resolves it the same way.
+                    Leave a box empty to clear it. The address comes from the mesh unless you override it.
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <label style={{ fontSize: 12 }}>
+                      Login account
+                      <input
+                        className="input"
+                        value={accessDraft.ssh_user}
+                        placeholder="e.g. the account you ssh as"
+                        onChange={(e) => setAccessDraft({ ...accessDraft, ssh_user: e.target.value })}
+                      />
+                    </label>
+                    <label style={{ fontSize: 12 }}>
+                      Port
+                      <input
+                        className="input"
+                        value={accessDraft.ssh_port}
+                        placeholder="22"
+                        inputMode="numeric"
+                        onChange={(e) => setAccessDraft({ ...accessDraft, ssh_port: e.target.value })}
+                      />
+                    </label>
+                    <label style={{ fontSize: 12 }}>
+                      Key file
+                      <input
+                        className="input"
+                        value={accessDraft.identity_file}
+                        placeholder="~/.ssh/id_ed25519"
+                        onChange={(e) => setAccessDraft({ ...accessDraft, identity_file: e.target.value })}
+                      />
+                    </label>
+                    <label style={{ fontSize: 12 }}>
+                      Address override
+                      <input
+                        className="input"
+                        value={accessDraft.ssh_host}
+                        placeholder={selectedNode.ip || 'mesh address'}
+                        onChange={(e) => setAccessDraft({ ...accessDraft, ssh_host: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={accessSaveBusy}>
+                      {accessSaveBusy ? 'Saving…' : 'Save access'}
+                    </button>
+                    {accessSaveMsg && (
+                      <span style={{ fontSize: 12, color: 'var(--accent-hover)' }} data-testid="access-save-msg">
+                        {accessSaveMsg}
+                      </span>
+                    )}
+                  </div>
+                </form>
               )}
             </div>
           </div>
@@ -665,6 +885,7 @@ export function MeshPage() {
                   <th>Role</th>
                   <th>Status</th>
                   <th>Latency</th>
+                  <th>Login</th>
                   <th>Operating System</th>
                   <th>Node</th>
                 </tr>
@@ -675,8 +896,9 @@ export function MeshPage() {
                   return (
                     <tr
                       key={node.hostname}
+                      data-testid={`node-row-${node.hostname}`}
                       className={isNodeLeader ? 'is-leader' : ''}
-                      onClick={() => setSelectedNode(node)}
+                      onClick={() => selectNode(node)}
                       style={{ cursor: 'pointer' }}
                     >
                       <td style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -697,6 +919,15 @@ export function MeshPage() {
                       <td style={{ color: 'var(--text-secondary)' }}>
                         {node.self ? '—' : latencyMs[node.hostname] != null ? `${latencyMs[node.hostname]} ms` : '—'}
                       </td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {node.access_resolved?.complete ? (
+                          node.access_resolved.target
+                        ) : (
+                          <span className="badge badge-offline" title="Connecting will fail as though the node were unreachable">
+                            no login
+                          </span>
+                        )}
+                      </td>
                       <td style={{ color: 'var(--text-secondary)' }}>{node.os || 'Unknown'}</td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{node.self ? 'This node' : 'Peer'}</td>
                     </tr>
@@ -704,7 +935,7 @@ export function MeshPage() {
                 })}
                 {meshNodes.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '32px' }}>
                       No mesh nodes found
                     </td>
                   </tr>

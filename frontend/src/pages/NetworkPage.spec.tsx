@@ -34,12 +34,27 @@ describe('NetworkPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getNetworkStats).mockResolvedValue({
-      stats: { active: 2, queueLength: 0, errors: 0, timeouts: 0 } as any
-    } as any);
+      stats: {
+        total: 2,
+        blocked: 0,
+        queueLength: 0,
+        active: 2,
+        completed: 0,
+        errors: 0,
+        timeouts: 0,
+        peakActive: 2,
+        peakQueue: 0,
+        domains: {},
+      },
+      audit_count: 0,
+    });
     vi.mocked(getNetworkPolicy).mockResolvedValue({
+      id: 'test-policy',
       blocked_domains: ['evil.com'],
-      max_global_concurrency: 20
-    } as any);
+      max_global_concurrency: 20,
+      max_per_domain_concurrency: 4,
+      default_timeout_ms: 10000,
+    });
     vi.mocked(getAuditLog).mockResolvedValue({
       audit: []
     });

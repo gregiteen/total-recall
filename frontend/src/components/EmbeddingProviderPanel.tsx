@@ -29,17 +29,35 @@ export function EmbeddingProviderPanel() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const load = useCallback(async () => {
+  /**
+   * `shouldApply` lets the mount effect drop a response that arrived after the
+   * panel went away, or after a newer request superseded it — a fetch started
+   * on mount has no other way to know it is no longer the current one.
+   */
+  const load = useCallback(async (shouldApply: () => boolean = () => true) => {
     try {
-      setStatus(await fetchEmbeddingProvider())
+      const next = await fetchEmbeddingProvider()
+      if (!shouldApply()) return
+      setStatus(next)
       setError(null)
     } catch (err) {
+      if (!shouldApply()) return
       setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
   useEffect(() => {
-    void load()
+    let active = true
+    // Deferred a tick rather than called from the effect body: loading straight
+    // from an effect trips react-hooks/set-state-in-effect, and this is how the
+    // rest of the app loads on mount (see BrainSelector).
+    const timer = setTimeout(() => {
+      void load(() => active)
+    }, 0)
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
   }, [load])
 
   const onPin = useCallback(

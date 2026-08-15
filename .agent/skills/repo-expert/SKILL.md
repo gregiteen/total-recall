@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-14T22:12:29.619Z
+generated_at: 2026-08-14T23:48:20.239Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (540 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (545 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -119,11 +119,11 @@ scaffold/
 scratch/
   dummy-repo/
     .agent/  (1 items)
-scripts/  (9 items)
+scripts/  (10 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (207 items)
+  core/  (211 items)
   server/
     routes/  (89 items)
 templates/
@@ -339,18 +339,18 @@ templates/
 - `DELETE /api/memory/:slug`
 - `POST /api/memory/search/semantic`
 
-### mesh (12 endpoints)
+### mesh (15 endpoints)
 
 - `GET /api/mesh/leader`
 - `GET /api/mesh/nodes`
+- `POST /api/mesh/access`
+- `GET /api/mesh/access/proposals`
+- `POST /api/mesh/access/import`
 - `GET /api/mesh/enrollment`
 - `POST /api/mesh/enroll`
 - `GET /api/mesh/io`
 - `GET /api/mesh/interfaces`
 - `GET /api/mesh/lan`
-- `POST /api/mesh/lan/register`
-- `POST /api/mesh/election/refresh`
-- `POST /api/mesh/election/log`
 
 ### models (5 endpoints)
 
@@ -566,7 +566,7 @@ templates/
 
 ## Core Modules
 
-98 modules in `src/core/`:
+100 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
@@ -599,9 +599,10 @@ templates/
 - **logger**
 - **memory-layers** — exports: normalizeMemoryLayer, inferMemoryLayer, memoryLayerRoutingWeight, buildMemoryLayerIndex
 - **memory-title** — exports: stripSelfCapturedTitlePrefix, isSelfCapturedEchoTitle, defaultTitleFromBody, normalizeMemoryTitle
+- **mesh-access** — exports: parseSshConfig, readSshConfig, sshConfigMatchScore, findSshConfigEntryForNode, accessFromSshConfigEntry, classifyTailscaleVariant, meshSshFromVariant, resolveNodeAccess
 - **mesh-auth** — exports: normalizeRemoteAddress, isMeshOrLoopbackAddress, getMeshSyncToken, getMeshSyncAuthorization, requireMeshSyncAuth
-- **mesh-enroll** — exports: resetAutoEnrollThrottle, resolveTailscaleBinary, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled
-- **mesh** — exports: normalizeHostname, meshNodeDocSlug, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname, getMeshPeers
+- **mesh-enroll** — exports: resetAutoEnrollThrottle, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled, buildUpArgs
+- **mesh** — exports: normalizeHostname, meshNodeDocSlug, meshNodeKey, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname
 - **migrate** — exports: runMigration, testMigration
 - **network-bind** — exports: resolveServerHost
 - **network-interfaces** — exports: classifyInterfaceKind, isLanIpv4, isOverlayIpv4, listLocalInterfaces, summarizeInterfacesForEntity, listLocalLanCidrs
@@ -649,6 +650,7 @@ templates/
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
 - **surface** — exports: extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, compileSurface, routeNodesToSkills, injectSkills, compileTier1
+- **tailscale-cli** — exports: resolveTailscaleBinary, hasTailscaleDaemon
 - **task-envelope** — exports: normalizePriority, buildTaskEnvelope, normalizeTask, persistEnvelope, addTask, listTasks, getTask, cancelTask
 - **task-executors** — exports: resolveExecutor, dispatchTask, listExecutorIds
 - **throttled-fetch** — exports: loadFirewallPolicy, blockDomain, unblockDomain, getAuditLog, throttledFetch, safeFetch, getGateStats, resetGateStats
@@ -686,7 +688,7 @@ templates/
 
 ## Config Files
 
-- **package.json scripts**: dev, start, test, clean
+- **package.json scripts**: dev, start, test, routes:manifest, clean
 - vitest.config.ts
 - .env.example
 - AGENTS.md

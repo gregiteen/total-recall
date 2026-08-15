@@ -9,7 +9,7 @@ describe('SkillsPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(api.listSkills).mockResolvedValue([
-      { name: 'test-skill', description: 'A test skill', repo: 'test' } as any
+      { id: 'test-skill', name: 'test-skill', repo: 'test', source: 'A test skill' },
     ]);
   });
 

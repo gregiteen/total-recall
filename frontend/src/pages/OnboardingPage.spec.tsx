@@ -44,8 +44,20 @@ describe('OnboardingPage', () => {
   it('handles scan import mode', async () => {
     vi.mocked(api.listMemory).mockResolvedValue([] as never);
     vi.mocked(api.scanEnvSecrets).mockResolvedValue({
-      candidates: [{ key: 'TEST_KEY', provider: 'test', masked: 'sk-***', source_label: '.env' } as any]
-    } as any);
+      candidates: [
+        {
+          key: 'TEST_KEY',
+          provider: 'test',
+          masked: 'sk-***',
+          source_label: '.env',
+          source: '.env',
+          length: 12,
+          known: true,
+        },
+      ],
+      count: 1,
+      sources_scanned: ['.env'],
+    });
 
     renderWithRouter(<OnboardingPage />);
 

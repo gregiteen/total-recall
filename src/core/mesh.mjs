@@ -6,19 +6,33 @@ import {
   findVfsDocumentByPath,
   listVfsDocumentsUnder,
 } from './vfs-documents.mjs';
+import { logger } from './logger.mjs';
+import { STATUS_TIMEOUT_MS, resolveTailscaleBinary } from './tailscale-cli.mjs';
 
 const CACHE_MS = 2_000;
+
 let cachedStatus = null;
 let cachedAt = 0;
 
 function readMeshStatus() {
   if (cachedStatus && Date.now() - cachedAt < CACHE_MS) return cachedStatus;
-  const result = spawnSync('tailscale', ['status', '--json'], {
+  // The CLI is not on PATH for macOS GUI installs, where it lives inside the
+  // app bundle — so resolve it the same way enrollment does.
+  const result = spawnSync(resolveTailscaleBinary(), ['status', '--json'], {
     encoding: 'utf8',
-    timeout: 2_000,
-    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: STATUS_TIMEOUT_MS,
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
-  if (result.status !== 0 || !result.stdout) return null;
+  if (result.status !== 0 || !result.stdout) {
+    // Silence here is what made the failure indistinguishable from "no peers".
+    logger.info(
+      'mesh',
+      `Could not read mesh status: ${
+        result.error?.message || (result.stderr || '').trim().slice(0, 200) || 'no output'
+      }`,
+    );
+    return null;
+  }
   try {
     cachedStatus = JSON.parse(result.stdout);
     cachedAt = Date.now();
@@ -48,6 +62,21 @@ export function meshNodeDocSlug(hostname) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug || 'unknown-node';
+}
+
+/**
+ * Canonical identity for a node, independent of DNS suffix.
+ *
+ * A tailnet appends its own domain, so the same machine appears as `box`,
+ * `box.mesh`, and `box.mesh.example.org` depending on who is asking and when
+ * the tailnet was last renamed. Keying entities on the full name therefore
+ * mints a fresh duplicate document every time that suffix changes, which is
+ * how one host ended up with several entities describing it.
+ */
+export function meshNodeKey(hostname) {
+  const base = normalizeHostname(hostname);
+  if (!base) return '';
+  return meshNodeDocSlug(String(base).split('.')[0] || base);
 }
 
 function normalizeNode(node, self = false) {
@@ -105,24 +134,24 @@ export function mergeLivePeersWithEntities(peers, entities = []) {
   const byHost = new Map();
   const byIp = new Map();
   for (const ent of entities) {
-    const host = normalizeHostname(ent.hostname);
+    const host = meshNodeKey(ent.hostname);
     if (host) byHost.set(host, ent);
     if (ent.ip) byIp.set(String(ent.ip), ent);
   }
 
   const merged = peers.map((peer) => {
-    const host = normalizeHostname(peer.hostname);
+    const host = meshNodeKey(peer.hostname);
     const ent = (host && byHost.get(host)) || (peer.ip && byIp.get(String(peer.ip))) || null;
     return enrichPeerWithEntity(peer, ent);
   });
 
   const seen = new Set(
-    merged.map((m) => normalizeHostname(m.hostname) || m.ip).filter(Boolean),
+    merged.map((m) => meshNodeKey(m.hostname) || m.ip).filter(Boolean),
   );
 
   // Vault-only entities (registered but not currently on the mesh).
   for (const ent of entities) {
-    const key = normalizeHostname(ent.hostname) || ent.ip;
+    const key = meshNodeKey(ent.hostname) || ent.ip;
     if (!key || seen.has(key)) continue;
     seen.add(key);
     merged.push(
@@ -175,6 +204,9 @@ function enrichPeerWithEntity(peer, ent, extra = {}) {
         ? ent.interfaces
         : [],
     io: peer.io || ent?.io || null,
+    // Access is entity-only: the control server has no idea which account you
+    // log in as, so live discovery can never supply or override it.
+    access: ent?.access || null,
   };
 }
 
@@ -218,12 +250,109 @@ export function attachSelfInterfaces(nodes, interfacesSummary = null) {
 
 function findEntityForSelf(self, vaultRoot) {
   const entities = listMeshNodeEntities(vaultRoot);
-  const host = normalizeHostname(self.hostname);
+  const host = meshNodeKey(self.hostname);
   return (
-    entities.find((e) => normalizeHostname(e.hostname) === host) ||
+    entities.find((e) => meshNodeKey(e.hostname) === host) ||
     entities.find((e) => e.ip && self.ip && String(e.ip) === String(self.ip)) ||
     null
   );
+}
+
+/** Find an enriched node (live + vault) by hostname or address. */
+export function findMeshNode(nameOrAddress, vaultRoot = defaultVaultRoot()) {
+  const wanted = String(nameOrAddress || '').trim();
+  if (!wanted) return null;
+  const key = meshNodeKey(wanted);
+  const nodes = listEnrichedMeshNodes(vaultRoot);
+
+  return (
+    nodes.find((n) => String(n.ip) === wanted || String(n.lan_ip) === wanted) ||
+    nodes.find((n) => meshNodeKey(n.hostname) === key) ||
+    null
+  );
+}
+
+/**
+ * Record how to reach a node.
+ *
+ * Creates the entity when a peer has never had one — remote nodes only get a
+ * document when something writes to them, and access is usually the first
+ * thing anyone knows about a machine they did not install Total Recall on.
+ */
+export async function setMeshNodeAccess(nameOrAddress, accessPatch, options = {}) {
+  const vaultRoot = options.vaultRoot || defaultVaultRoot();
+  const node = findMeshNode(nameOrAddress, vaultRoot);
+  if (!node) return { written: false, reason: 'node-not-found' };
+
+  const entities = listMeshNodeEntities(vaultRoot);
+  const existing =
+    entities.find((e) => meshNodeKey(e.hostname) === meshNodeKey(node.hostname)) ||
+    entities.find((e) => e.ip && node.ip && String(e.ip) === String(node.ip)) ||
+    null;
+
+  // Merge rather than replace: setting only a port must not erase the user.
+  const merged = { ...(existing?.access || {}), ...accessPatch };
+  for (const [key, value] of Object.entries(merged)) {
+    if (value === null || value === undefined) delete merged[key];
+  }
+
+  const now = new Date().toISOString();
+  const { processViaPackageKernel } = await import('./ssss-kernel-bridge.mjs');
+  const vfsPath = existing?.vfs_path || `system/mesh-nodes/${meshNodeKey(node.hostname)}.md`;
+
+  const envelope = existing
+    ? {
+        type: 'patch',
+        path: vfsPath,
+        patches: {
+          access: merged,
+          timestamp: now,
+          // A patch is validated against the whole resulting document, and the
+          // earliest node entities were written before title/description became
+          // required. Without backfilling them here, every write to one of
+          // those documents fails validation forever — the node can never be
+          // given an access record, which is exactly what it needs most.
+          ...(existing.title ? {} : { title: node.hostname }),
+          ...(existing.description
+            ? {}
+            : { description: `Mesh node entity for ${node.hostname}.` }),
+        },
+      }
+    : {
+        type: 'operation',
+        path: vfsPath,
+        content: [
+          '---',
+          'type: mesh_node',
+          `title: ${JSON.stringify(node.hostname)}`,
+          `description: ${JSON.stringify(`Mesh node entity for ${node.hostname}.`)}`,
+          `timestamp: ${now}`,
+          `hostname: ${JSON.stringify(node.hostname)}`,
+          `ip: ${node.ip == null ? 'null' : JSON.stringify(node.ip)}`,
+          `status: ${node.online ? 'online' : 'offline'}`,
+          `os: ${node.os == null ? 'null' : JSON.stringify(node.os)}`,
+          `lan_ip: ${node.lan_ip == null ? 'null' : JSON.stringify(node.lan_ip)}`,
+          `access: ${JSON.stringify(merged)}`,
+          '---',
+          '',
+          '<!-- Access variables (login account, port, key path) live here so every',
+          '     machine and agent on the mesh resolves them the same way. -->',
+          '',
+        ].join('\n'),
+      };
+
+  const result = await processViaPackageKernel(
+    {
+      ...envelope,
+      idempotency_key: crypto.randomUUID(),
+      workspace_id: options.workspace_id || 'default',
+      actor: { role: 'system' },
+    },
+    vaultRoot,
+    { agentRole: 'system' },
+  );
+
+  return { written: !!result?.success, path: vfsPath, access: merged, result };
 }
 
 /**
@@ -241,7 +370,7 @@ export async function patchOwnMeshNode(options = {}) {
   const existing = findEntityForSelf(self, vaultRoot);
   const slug = existing
     ? path.basename(existing.vfs_path, '.md')
-    : meshNodeDocSlug(self.hostname);
+    : meshNodeKey(self.hostname);
   const vfsPath = existing?.vfs_path || `system/mesh-nodes/${slug}.md`;
   const now = new Date().toISOString();
   const status = self.online ? 'online' : 'offline';
@@ -280,6 +409,25 @@ export async function patchOwnMeshNode(options = {}) {
   const priorCaps = Array.isArray(existing?.capabilities) ? existing.capabilities : [];
   const capabilities = [...new Set([...priorCaps, ...ioChannels.map((c) => `io:${c}`)])];
 
+  // Which Tailscale build this machine runs decides whether the control server
+  // can authorise SSH to it, or whether callers still need their own keys.
+  // Recording it here makes it a mesh fact: every other node learns what this
+  // one can do without having to log in and look — which is the only way to
+  // find out otherwise, and needs the very access this may be missing.
+  // `getMeshSelf()` answered, so the client did run; only the build is in doubt.
+  const { classifyTailscaleVariant, meshSshFromVariant } = await import('./mesh-access.mjs');
+  const { hasTailscaleDaemon } = await import('./tailscale-cli.mjs');
+  const variant = classifyTailscaleVariant({
+    platform: process.platform,
+    hasClient: true,
+    hasDaemon: hasTailscaleDaemon(),
+  });
+  const access = {
+    ...(existing?.access || {}),
+    tailscale_variant: variant,
+    mesh_ssh: meshSshFromVariant(variant),
+  };
+
   const livePatches = {
     hostname: self.hostname,
     ip: self.ip,
@@ -291,6 +439,8 @@ export async function patchOwnMeshNode(options = {}) {
     transports: [...new Set(['mesh', ...(lanIp ? ['lan'] : [])])],
     io: ioProfile,
     capabilities,
+    // Merged, never replaced: probing must not erase a recorded login account.
+    access,
     ...requiredMeta,
   };
 
@@ -322,13 +472,15 @@ export async function patchOwnMeshNode(options = {}) {
       `os: ${self.os == null ? 'null' : JSON.stringify(self.os)}`,
       'role: null',
       'labels: []',
-      'capabilities: []',
       'notes: null',
       `lan_ip: ${lanIp == null ? 'null' : JSON.stringify(lanIp)}`,
       `transports: ${JSON.stringify(livePatches.transports)}`,
       `interfaces: ${JSON.stringify(interfacesSummary)}`,
       `io: ${JSON.stringify(ioProfile)}`,
+      // Emitted once. A duplicate YAML key is resolved by last-one-wins, so a
+      // stale earlier line survives review while contributing nothing.
       `capabilities: ${JSON.stringify(capabilities)}`,
+      `access: ${JSON.stringify(access)}`,
       '---',
       '',
       '<!-- Entity space: I/O (screen/touch/mic/speaker) + notes/labels via SSSS patch. Agents use io.channels / ui_hints. -->',

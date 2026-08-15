@@ -9,7 +9,13 @@ import {
   listMeshNodeEntities,
   attachSelfInterfaces,
   normalizeHostname,
+  setMeshNodeAccess,
 } from '../../core/mesh.mjs';
+import {
+  proposeAccessFromSshConfig,
+  readSshConfig,
+  resolveNodeAccess,
+} from '../../core/mesh-access.mjs';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
 import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
 import {
@@ -104,11 +110,123 @@ router.get('/api/mesh/nodes', requireAuth, requireScope('config:read'), async (r
   } catch {
     // io optional
   }
+  // Resolve "how do I actually reach this" server-side. The precedence rules
+  // (explicit host over mesh address over LAN address) are domain logic; having
+  // the UI reimplement them is how two answers to the same question appear.
+  nodes = nodes.map((node) => ({ ...node, access_resolved: resolveNodeAccess(node) }));
   const entities = listMeshNodeEntities(vaultRoot);
   res.json({
     nodes,
     entity_count: entities.length,
+    missing_access_count: nodes.filter((node) => !node.access_resolved.complete).length,
   });
+});
+
+/**
+ * Turn a request body into an access patch.
+ *
+ * A key that is present but empty clears the stored value; a key that is absent
+ * leaves it untouched. Without that distinction a value could be set from the
+ * UI but never taken back.
+ */
+function accessPatchFromBody(body = {}) {
+  const patch = { source: 'manual' };
+  const text = (value) => String(value ?? '').trim() || null;
+  if ('ssh_user' in body) patch.ssh_user = text(body.ssh_user);
+  if ('ssh_host' in body) patch.ssh_host = text(body.ssh_host);
+  if ('identity_file' in body) patch.identity_file = text(body.identity_file);
+  if ('ssh_port' in body) {
+    const raw = text(body.ssh_port);
+    patch.ssh_port = raw === null ? null : Number.parseInt(raw, 10);
+  }
+  return patch;
+}
+
+/**
+ * Record how to reach a node — the one fact the control server cannot supply.
+ * Body: { node, ssh_user?, ssh_port?, ssh_host?, identity_file? }
+ */
+router.post('/api/mesh/access', requireAuth, requireScope('config:write'), async (req, res) => {
+  const target = String(req.body?.node || '').trim();
+  if (!target) {
+    res.status(400).json({ success: false, message: 'node is required' });
+    return;
+  }
+
+  const patch = accessPatchFromBody(req.body || {});
+  if (patch.ssh_port != null && !(Number.isInteger(patch.ssh_port) && patch.ssh_port > 0 && patch.ssh_port <= 65535)) {
+    res.status(400).json({ success: false, message: 'ssh_port must be between 1 and 65535' });
+    return;
+  }
+
+  try {
+    const result = await setMeshNodeAccess(target, patch, { vaultRoot: defaultVaultRoot() });
+    if (!result.written) {
+      const notFound = result.reason === 'node-not-found';
+      res.status(notFound ? 404 : 500).json({
+        success: false,
+        message: notFound ? `No mesh node matches "${target}".` : 'The vault write was rejected.',
+        reason: result.reason || null,
+      });
+      return;
+    }
+    res.json({ success: true, path: result.path, access: result.access });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'access write failed' });
+  }
+});
+
+/**
+ * Which nodes could be given a login account from this host's ssh config.
+ *
+ * Read-only, and deliberately separate from applying: importing a config is a
+ * judgement call, and a wrong login written to the vault is worse than none at
+ * all — it fails exactly like an unreachable host, only now it looks authored.
+ */
+router.get('/api/mesh/access/proposals', requireAuth, requireScope('config:read'), async (_req, res) => {
+  try {
+    const nodes = listEnrichedMeshNodes(defaultVaultRoot());
+    res.json({
+      proposals: proposeAccessFromSshConfig(nodes, readSshConfig()),
+      missing_access: nodes
+        .filter((node) => !resolveNodeAccess(node).complete)
+        .map((node) => node.hostname),
+      checked_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'access proposal failed' });
+  }
+});
+
+/** Apply every proposal from this host's ssh config to the node entities. */
+router.post('/api/mesh/access/import', requireAuth, requireScope('config:write'), async (_req, res) => {
+  try {
+    const vaultRoot = defaultVaultRoot();
+    const proposals = proposeAccessFromSshConfig(listEnrichedMeshNodes(vaultRoot), readSshConfig());
+    const results = [];
+    for (const proposal of proposals) {
+      const result = await setMeshNodeAccess(proposal.hostname, proposal.access, { vaultRoot });
+      results.push({
+        hostname: proposal.hostname,
+        ssh_user: proposal.access.ssh_user,
+        matched_host: proposal.matched_host,
+        written: Boolean(result.written),
+        reason: result.reason || null,
+      });
+    }
+    const saved = results.filter((r) => r.written).length;
+    // Counting attempts as successes is how a failed write once got announced
+    // as a success; the caller gets both numbers.
+    res.json({
+      success: saved === proposals.length,
+      attempted: proposals.length,
+      saved,
+      failed: proposals.length - saved,
+      results,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'access import failed' });
+  }
 });
 
 /**
