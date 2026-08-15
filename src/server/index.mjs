@@ -28,7 +28,7 @@ import {
   requireScope
 } from './auth.mjs';
 import { logger, logEvents } from "../core/logger.mjs";
-import { readProcessCommand, serverEntryHint, shouldHonorPidLock } from './pid-lock.mjs';
+import { readProcessCommand, entryPathHint, shouldHonorPidLock } from '../core/pid-lock.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
 import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
@@ -69,7 +69,7 @@ function acquireServerPidLock() {
             }
           },
           readCommand: readProcessCommand,
-          entryHint: serverEntryHint(fileURLToPath(import.meta.url)),
+          entryHint: entryPathHint(fileURLToPath(import.meta.url)),
         });
         if (verdict.honor) {
           logger.error('server', `Another server instance is already running (PID: ${existingPid}). Exiting.`);

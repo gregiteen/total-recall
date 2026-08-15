@@ -8,7 +8,7 @@
  * at a process that had nothing to do with it.
  */
 import { describe, expect, it } from 'vitest';
-import { serverEntryHint, shouldHonorPidLock } from './pid-lock.mjs';
+import { entryPathHint, shouldHonorPidLock } from './pid-lock.mjs';
 
 const ENTRY_HINT = 'server/index.mjs';
 const OURS = '/usr/local/bin/node /opt/app/src/server/index.mjs';
@@ -21,11 +21,37 @@ function decide(pid, { alive = true, command = OURS } = {}) {
   });
 }
 
-describe('serverEntryHint', () => {
+describe('entryPathHint', () => {
   // Derived from the running file rather than written down, so it holds
   // wherever the package is installed and pins no checkout location.
   it('is the directory and file name of the entry point', () => {
-    expect(serverEntryHint('/anywhere/at/all/src/server/index.mjs')).toBe('server/index.mjs');
+    expect(entryPathHint('/anywhere/at/all/src/server/index.mjs')).toBe('server/index.mjs');
+    expect(entryPathHint('/elsewhere/src/core/daemon-loop.mjs')).toBe('core/daemon-loop.mjs');
+  });
+});
+
+// The daemon carried the same naive liveness check as the server, so it had the
+// same failure: its lock file here pointed at a PID the OS had reassigned to an
+// unrelated desktop app, which would have refused every start from then on.
+describe('daemon locks', () => {
+  const DAEMON_HINT = 'core/daemon-loop.mjs';
+
+  it('releases a daemon lock whose PID now belongs to something else', () => {
+    const verdict = shouldHonorPidLock(553, {
+      isAlive: () => true,
+      readCommand: () => '/Applications/Some.app/Contents/Frameworks/crashpad_handler',
+      entryHint: DAEMON_HINT,
+    });
+    expect(verdict).toMatchObject({ honor: false, reason: 'pid-reused' });
+  });
+
+  it('honors a lock held by a real daemon', () => {
+    const verdict = shouldHonorPidLock(777, {
+      isAlive: () => true,
+      readCommand: () => '/usr/local/bin/node /opt/app/src/core/daemon-loop.mjs',
+      entryHint: DAEMON_HINT,
+    });
+    expect(verdict).toMatchObject({ honor: true, reason: 'alive-and-ours' });
   });
 });
 
