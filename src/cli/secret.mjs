@@ -67,6 +67,11 @@ import {
   readMasterPasswordFromCarrier,
   rekeySecretsTransaction,
 } from '../core/secrets-rekey.mjs';
+import {
+  DEFAULT_KEYCHAIN_SERVICE,
+  keychainAvailable,
+  readKeychainPassword,
+} from '../core/secrets-keychain.mjs';
 import { agentDir as configuredAgentDir, getActiveBrains } from '../core/config.mjs';
 
 // Reads a secret value from stdin (fd 0) so it never has to appear as a CLI
@@ -168,7 +173,11 @@ function printHelp() {
     rekey                 Rotate the secrets-store master password transactionally.
                            The replacement is generated in memory by default;
                            --stdin accepts a coordinated replacement without argv.
-                           --launch-agent/--env-file select persistent carriers.
+                           --launch-agent/--env-file/--keychain select persistent
+                           carriers. The macOS Keychain entry is included
+                           automatically when present, because a shell profile
+                           that reads it would otherwise be left on the retired
+                           password; --no-keychain opts out.
     delete <key>          Remove a secret
     audit [--limit N]     Recent set/get/rotate events (no values)
     usage [--days N]      Sum usage.jsonl for last N days (default 1)
@@ -318,6 +327,8 @@ function parseArgs(args) {
     stdin: false,
     launchAgents: [],
     envFiles: [],
+    keychainServices: [],
+    keychain: true,
     storePaths: [],
   };
   if (!args.length || args[0] === '--help' || args[0] === '-h') {
@@ -530,6 +541,12 @@ function parseArgs(args) {
       case '--env-file':
         out.envFiles.push(args[++i]);
         break;
+      case '--keychain':
+        out.keychainServices.push(args[++i]);
+        break;
+      case '--no-keychain':
+        out.keychain = false;
+        break;
       case '--store':
         out.storePaths.push(args[++i]);
         break;
@@ -609,16 +626,28 @@ export default async function secretCli(argv) {
         }
       }
 
-      if (!carriers.length) {
+      // A shell profile that reads the password from the Keychain is the most
+      // common macOS arrangement, and it is invisible to a file-carrier scan.
+      // Left out, a rotation succeeds and every interactive shell breaks at
+      // once — so the entry is picked up by default when it exists.
+      const keychainCarriers = opts.keychainServices.filter(Boolean).map((service) => ({ service }));
+      if (!keychainCarriers.length && opts.keychain !== false && keychainAvailable()) {
+        if (readKeychainPassword({ service: DEFAULT_KEYCHAIN_SERVICE })) {
+          keychainCarriers.push({ service: DEFAULT_KEYCHAIN_SERVICE });
+        }
+      }
+
+      if (!carriers.length && !keychainCarriers.length) {
         console.error(
-          '❌ No persistent master-password carrier found. Use --launch-agent <path> or --env-file <path>.',
+          '❌ No persistent master-password carrier found. Use --launch-agent <path>, --env-file <path> or --keychain <service>.',
         );
         process.exit(1);
       }
 
-      const currentPasswords = carriers
-        .map((carrier) => readMasterPasswordFromCarrier(carrier))
-        .filter(Boolean);
+      const currentPasswords = [
+        ...carriers.map((carrier) => readMasterPasswordFromCarrier(carrier)),
+        ...keychainCarriers.map((carrier) => readKeychainPassword(carrier)),
+      ].filter(Boolean);
       const oldPassword = currentPasswords[0] || process.env.TR_SECRETS_PASSWORD;
       if (!oldPassword) {
         console.error('❌ The current master password is unavailable from the selected carriers.');
@@ -626,6 +655,7 @@ export default async function secretCli(argv) {
       }
       if (currentPasswords.some((value) => value !== oldPassword)) {
         console.error('❌ Selected credential carriers do not contain the same current master password.');
+        console.error('   Every carrier must hold the same password before one can replace it.');
         process.exit(1);
       }
 
@@ -649,6 +679,7 @@ export default async function secretCli(argv) {
       const result = await rekeySecretsTransaction({
         storePaths,
         carriers,
+        keychainCarriers,
         oldPassword,
         newPassword,
       });
@@ -656,6 +687,7 @@ export default async function secretCli(argv) {
       console.log(`\n  ✅ Secrets master password rotated transactionally`);
       console.log(`     stores re-encrypted and verified: ${result.stores.length}`);
       console.log(`     persistent carriers updated: ${result.carriers.length}`);
+      console.log(`     keychain entries updated: ${result.keychain.length}`);
       console.log(`     retired password rejected: yes`);
       console.log(`     replacement value was not printed`);
       console.log(`     restart affected services so they load the new credential\n`);

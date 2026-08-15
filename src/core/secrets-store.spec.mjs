@@ -221,13 +221,42 @@ describe('secrets-store', () => {
 
     const result = await migrateSecretsToEncryptedIfNeeded(brain);
     expect(result.migrated).toBe(true);
+    // Not `raw[0] !== '{'`: the blob opens with a random 16-byte salt, so that
+    // byte is `{` roughly once in every 256 runs, and the assertion would fail
+    // for a reason that has nothing to do with the migration. What matters is
+    // that the plaintext is gone.
     const raw = fs.readFileSync(filePath);
-    expect(raw[0]).not.toBe('{'.charCodeAt(0));
+    expect(raw.toString('utf8')).not.toContain('legacy-secret-value-xyz');
     const loaded = await loadSecrets(brain);
     expect(loaded.LEGACY_KEY?.value || loaded.LEGACY_KEY).toBeTruthy();
 
     const again = await migrateSecretsToEncryptedIfNeeded(brain);
     expect(again.migrated).toBe(false);
     expect(again.reason).toBe('already-encrypted');
+  });
+
+  // The unlucky 1-in-256 store. An encrypted blob opens with a random 16-byte
+  // salt, so its first byte is `{` about that often — measured at 17 in 5000.
+  // While the format was decided by peeking at that byte, such a store was
+  // reported as `not-json` and its caller told it still needed migrating, every
+  // time it asked, forever. Built here from a fixed non-JSON body rather than by
+  // encrypting until a collision turns up, which costs ~250 scrypt derivations.
+  it('recognises ciphertext that happens to begin with "{"', async () => {
+    const filePath = resolveSecretsPath(brain);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, Buffer.concat([Buffer.from('{'), Buffer.alloc(60)]));
+
+    const result = await migrateSecretsToEncryptedIfNeeded(brain);
+    expect(result).toMatchObject({ migrated: false, reason: 'already-encrypted' });
+  });
+
+  // The other direction: a real plaintext store must still be seen as one, or
+  // the migration it needs would never run.
+  it('still recognises a genuine plaintext store', async () => {
+    const filePath = resolveSecretsPath(brain);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify({ K: { value: 'v'.repeat(64), provider: 't' } }));
+
+    expect(await migrateSecretsToEncryptedIfNeeded(brain)).toMatchObject({ migrated: true });
   });
 });

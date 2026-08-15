@@ -966,6 +966,40 @@ const DeviceIoProfileSchema = z.object({
   platform: z.string().optional(),
 }).passthrough();
 
+/**
+ * How an operator (or agent) actually reaches this node.
+ *
+ * Identity and reachability come from the control server, but *operating* a
+ * node needs facts the control server never sees — which account to log in as
+ * above all. Without this, that knowledge lives in a local `~/.ssh/config` that
+ * no other machine and no agent can read, so every consumer rediscovers it by
+ * guessing. Recording it here makes access a mesh fact like any other.
+ *
+ * Secrets never belong on this document: `identity_file` is a path to a key,
+ * never key material.
+ */
+const MeshNodeAccessSchema = z.object({
+  /** Login account. The single most common reason a reachable node looks dead. */
+  ssh_user: z.string().min(1).nullable().optional(),
+  ssh_port: z.number().int().positive().max(65535).nullable().optional(),
+  /** Preferred address when it is neither the mesh IP nor the LAN IP. */
+  ssh_host: z.string().min(1).nullable().optional(),
+  /** Path to a private key — never the key itself. */
+  identity_file: z.string().min(1).nullable().optional(),
+  /**
+   * Which Tailscale build runs here. Only the open-source `tailscaled` build
+   * can serve Tailscale SSH; the sandboxed GUI builds cannot, so this is what
+   * decides whether keyless mesh SSH is even possible for the node.
+   */
+  tailscale_variant: z.enum(['daemon', 'sandboxed', 'missing', 'unknown']).optional(),
+  /** Whether control-plane-authorised SSH works, derived from the variant. */
+  mesh_ssh: z.enum(['available', 'unsupported', 'unknown']).optional(),
+  /** Where these values came from, so a probe can outrank a guess. */
+  source: z.enum(['probe', 'ssh_config', 'manual', 'unknown']).optional(),
+  /** Last time access was proven by an actual successful connection. */
+  verified_at: ssssDatetimeNullable().optional(),
+}).passthrough();
+
 export const MeshNodeSchema = z.object({
   type: z.literal('mesh_node'),
   title: z.string().min(1),
@@ -991,6 +1025,8 @@ export const MeshNodeSchema = z.object({
    * (touchscreen, mic, speaker, screen, keyboard, …).
    */
   io: DeviceIoProfileSchema.optional(),
+  /** Operational access — how to actually log in to this node. */
+  access: MeshNodeAccessSchema.optional(),
 }).passthrough();
 
 export const DaemonLeaderSchema = z.object({

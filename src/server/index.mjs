@@ -28,6 +28,7 @@ import {
   requireScope
 } from './auth.mjs';
 import { logger, logEvents } from "../core/logger.mjs";
+import { readProcessCommand, serverEntryHint, shouldHonorPidLock } from './pid-lock.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
 import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
@@ -55,13 +56,31 @@ function acquireServerPidLock() {
     if (fs.existsSync(SERVER_PID_FILE)) {
       const existingPid = parseInt(fs.readFileSync(SERVER_PID_FILE, 'utf8').trim(), 10);
       if (existingPid && !isNaN(existingPid)) {
-        try {
-          process.kill(existingPid, 0); // signal 0 = liveness check only
+        // Liveness alone is not enough: PIDs are recycled, and a stale lock
+        // pointing at a number the OS has since reassigned would block startup
+        // on every boot, blaming an instance that does not exist.
+        const verdict = shouldHonorPidLock(existingPid, {
+          isAlive: (pid) => {
+            try {
+              process.kill(pid, 0); // signal 0 = liveness check only
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          readCommand: readProcessCommand,
+          entryHint: serverEntryHint(fileURLToPath(import.meta.url)),
+        });
+        if (verdict.honor) {
           logger.error('server', `Another server instance is already running (PID: ${existingPid}). Exiting.`);
           process.exit(1);
-        } catch {
-          logger.info('server', `Stale server PID file found (PID: ${existingPid} is dead). Overwriting.`);
         }
+        logger.info(
+          'server',
+          verdict.reason === 'pid-reused'
+            ? `Stale server PID file found (PID ${existingPid} now belongs to another program). Overwriting.`
+            : `Stale server PID file found (PID: ${existingPid} is dead). Overwriting.`,
+        );
       }
     }
   } catch {

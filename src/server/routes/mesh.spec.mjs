@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import meshRouter from './mesh.mjs';
@@ -137,8 +137,21 @@ vi.mock('../../core/mesh.mjs', async (importOriginal) => {
     attachSelfInterfaces: vi.fn((nodes, summary) =>
       nodes.map((n) => (n.self ? { ...n, interfaces: summary, transports: ['mesh', 'lan'] } : n)),
     ),
+    setMeshNodeAccess: vi.fn().mockResolvedValue({
+      written: true,
+      path: 'system/mesh-nodes/node-b.md',
+      access: { ssh_user: 'operator', source: 'manual' },
+    }),
   };
 });
+
+// Only the file read is stubbed: the matching and precedence rules are the part
+// worth exercising, and reading the real ~/.ssh/config would make these tests
+// depend on whoever happens to run them.
+vi.mock('../../core/mesh-access.mjs', async (importOriginal) => ({
+  ...(await importOriginal()),
+  readSshConfig: vi.fn(() => 'Host node-b\n  HostName 10.0.0.9\n  User operator\n'),
+}));
 
 describe('mesh routes', () => {
   let app;
@@ -278,6 +291,124 @@ describe('mesh routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(false);
     expect(res.body.auth_url).toBe('https://control.example.org/register/xyz');
+  });
+
+  // The control server can say a node exists but not which account reaches it.
+  // Connecting as the wrong user is refused exactly like an unreachable host,
+  // so the API has to report the gap rather than leave it to be discovered.
+  describe('node access', () => {
+    const NODES = [
+      { hostname: 'node-a.mesh', ip: '100.64.0.1', online: true, self: true, access: { ssh_user: 'operator' } },
+      { hostname: 'node-b.mesh', ip: '100.64.0.2', lan_ip: '10.0.0.9', online: true, self: false },
+    ];
+    let restoreNodes;
+
+    beforeEach(async () => {
+      const { listEnrichedMeshNodes } = await import('../../core/mesh.mjs');
+      restoreNodes = vi.mocked(listEnrichedMeshNodes).getMockImplementation();
+      vi.mocked(listEnrichedMeshNodes).mockReturnValue(NODES);
+    });
+
+    afterEach(async () => {
+      const { listEnrichedMeshNodes } = await import('../../core/mesh.mjs');
+      vi.mocked(listEnrichedMeshNodes).mockImplementation(restoreNodes);
+    });
+
+    it('GET /api/mesh/nodes resolves how to reach each node and counts the gaps', async () => {
+      const res = await request(app).get('/api/mesh/nodes');
+      expect(res.status).toBe(200);
+      expect(res.body.nodes[0].access_resolved).toMatchObject({
+        target: 'operator@100.64.0.1',
+        complete: true,
+      });
+      expect(res.body.nodes[1].access_resolved).toMatchObject({ complete: false, target: null });
+      expect(res.body.missing_access_count).toBe(1);
+    });
+
+    it('POST /api/mesh/access records a login on the node entity', async () => {
+      const { setMeshNodeAccess } = await import('../../core/mesh.mjs');
+      const res = await request(app)
+        .post('/api/mesh/access')
+        .send({ node: 'node-b.mesh', ssh_user: 'operator', ssh_port: '2222' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(setMeshNodeAccess).toHaveBeenCalledWith(
+        'node-b.mesh',
+        { source: 'manual', ssh_user: 'operator', ssh_port: 2222 },
+        expect.anything(),
+      );
+    });
+
+    // A field sent empty clears it; a field left out is untouched. Without that
+    // distinction a value could be set from the UI but never taken back.
+    it('POST /api/mesh/access clears a field sent empty and leaves absent ones alone', async () => {
+      const { setMeshNodeAccess } = await import('../../core/mesh.mjs');
+      await request(app).post('/api/mesh/access').send({ node: 'node-b.mesh', identity_file: '' });
+      expect(setMeshNodeAccess).toHaveBeenCalledWith(
+        'node-b.mesh',
+        { source: 'manual', identity_file: null },
+        expect.anything(),
+      );
+    });
+
+    it('POST /api/mesh/access rejects a port that is not a port', async () => {
+      const res = await request(app)
+        .post('/api/mesh/access')
+        .send({ node: 'node-b.mesh', ssh_port: '99999' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/1 and 65535/);
+    });
+
+    it('POST /api/mesh/access 404s a node that is not on the mesh', async () => {
+      const { setMeshNodeAccess } = await import('../../core/mesh.mjs');
+      vi.mocked(setMeshNodeAccess).mockResolvedValueOnce({ written: false, reason: 'node-not-found' });
+      const res = await request(app).post('/api/mesh/access').send({ node: 'ghost', ssh_user: 'x' });
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('GET /api/mesh/access/proposals matches ssh config blocks without writing', async () => {
+      const { setMeshNodeAccess } = await import('../../core/mesh.mjs');
+      const res = await request(app).get('/api/mesh/access/proposals');
+      expect(res.status).toBe(200);
+      expect(res.body.proposals).toEqual([
+        expect.objectContaining({
+          hostname: 'node-b.mesh',
+          matched_host: 'node-b',
+          access: expect.objectContaining({ ssh_user: 'operator', source: 'ssh_config' }),
+        }),
+      ]);
+      expect(res.body.missing_access).toEqual(['node-b.mesh']);
+      expect(setMeshNodeAccess).not.toHaveBeenCalled();
+    });
+
+    // A config HostName is a LAN address — correct only from the machine that
+    // wrote it. Importing it would replace a portable answer with a fragile one.
+    it('GET /api/mesh/access/proposals never proposes the config address', async () => {
+      const res = await request(app).get('/api/mesh/access/proposals');
+      expect(res.body.proposals[0].access.ssh_host).toBeUndefined();
+    });
+
+    it('POST /api/mesh/access/import reports a failed write instead of counting it', async () => {
+      const { setMeshNodeAccess } = await import('../../core/mesh.mjs');
+      vi.mocked(setMeshNodeAccess).mockResolvedValueOnce({ written: false, reason: 'rejected' });
+      const res = await request(app).post('/api/mesh/access/import').send({});
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ success: false, attempted: 1, saved: 0, failed: 1 });
+      expect(res.body.results[0]).toMatchObject({ hostname: 'node-b.mesh', written: false, reason: 'rejected' });
+    });
+
+    it('POST /api/mesh/access/import writes every proposal it reported', async () => {
+      const { setMeshNodeAccess } = await import('../../core/mesh.mjs');
+      const res = await request(app).post('/api/mesh/access/import').send({});
+      expect(res.body).toMatchObject({ success: true, attempted: 1, saved: 1, failed: 0 });
+      expect(setMeshNodeAccess).toHaveBeenCalledWith(
+        'node-b.mesh',
+        expect.objectContaining({ ssh_user: 'operator', source: 'ssh_config' }),
+        expect.anything(),
+      );
+    });
   });
 });
 

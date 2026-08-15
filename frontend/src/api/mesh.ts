@@ -8,6 +8,40 @@ export interface MeshInterfaceSummary {
   ipv6?: string[];
 }
 
+export type TailscaleVariant = 'daemon' | 'sandboxed' | 'missing' | 'unknown';
+export type MeshSshCapability = 'available' | 'unsupported' | 'unknown';
+export type AccessSource = 'probe' | 'ssh_config' | 'manual' | 'unknown';
+
+/**
+ * How to log in to a node — stored on the node entity, because the control
+ * server knows a machine exists but not which account you reach it as.
+ */
+export interface MeshNodeAccess {
+  ssh_user?: string | null;
+  ssh_port?: number | null;
+  ssh_host?: string | null;
+  identity_file?: string | null;
+  tailscale_variant?: TailscaleVariant;
+  mesh_ssh?: MeshSshCapability;
+  source?: AccessSource;
+  verified_at?: string | null;
+}
+
+/** Server-resolved connection details; address precedence is decided there. */
+export interface ResolvedNodeAccess {
+  user: string | null;
+  host: string | null;
+  port: number;
+  identity_file: string | null;
+  mesh_ssh: MeshSshCapability;
+  tailscale_variant: TailscaleVariant;
+  source: AccessSource;
+  verified_at: string | null;
+  /** False when the login account is unknown — the node will refuse you. */
+  complete: boolean;
+  target: string | null;
+}
+
 export interface MeshNode {
   hostname: string;
   ip: string | null;
@@ -31,6 +65,9 @@ export interface MeshNode {
   /** Device I/O profile for agent UI generation (screen/touch/mic/…). */
   io?: DeviceIoProfile | null;
   ui_hints?: string[];
+  /** Raw access record from the vault entity (absent until one is recorded). */
+  access?: MeshNodeAccess | null;
+  access_resolved?: ResolvedNodeAccess;
 }
 
 export interface DeviceIoProfile {
@@ -77,6 +114,54 @@ export async function fetchLeader(): Promise<LeaderInfo> {
 export async function fetchNodes(): Promise<MeshNode[]> {
   const data = await get<{ nodes: MeshNode[] }>('/api/mesh/nodes');
   return data.nodes;
+}
+
+export interface AccessProposal {
+  hostname: string;
+  ip: string | null;
+  /** The `Host` block the login was taken from, so the guess is auditable. */
+  matched_host: string;
+  access: MeshNodeAccess;
+}
+
+/** Logins this host's ssh config could supply for nodes that have none. */
+export async function fetchAccessProposals(): Promise<{
+  proposals: AccessProposal[];
+  missing_access: string[];
+  checked_at: string;
+}> {
+  return get('/api/mesh/access/proposals');
+}
+
+/** Apply every ssh-config proposal to its node entity. */
+export async function importAccessFromSshConfig(): Promise<{
+  success: boolean;
+  attempted: number;
+  saved: number;
+  failed: number;
+  results: Array<{
+    hostname: string;
+    ssh_user: string | null;
+    matched_host: string;
+    written: boolean;
+    reason: string | null;
+  }>;
+}> {
+  return post('/api/mesh/access/import', {});
+}
+
+/**
+ * Record how to reach a node. Omit a field to leave it alone; send it empty to
+ * clear it.
+ */
+export async function setNodeAccess(body: {
+  node: string;
+  ssh_user?: string;
+  ssh_port?: string | number;
+  ssh_host?: string;
+  identity_file?: string;
+}): Promise<{ success: boolean; path: string; access: MeshNodeAccess }> {
+  return post('/api/mesh/access', body);
 }
 
 export async function refreshElection(): Promise<LeaderInfo> {

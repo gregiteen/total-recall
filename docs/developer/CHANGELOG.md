@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.23.0] — 2026-08-15
+
+### 🚀 Features
+- **Node access is mesh state**: a `mesh_node` entity now carries an `access` record — login account, port, key path, Tailscale build variant, and mesh-SSH capability. The control server can say a machine is up but not which account you reach it as, and connecting as the wrong user is refused in exactly the way an unreachable host refuses. That fact previously lived only in each operator's `~/.ssh/config`, where no other machine and no agent could read it.
+- **`mesh ssh <node>`**: opens a session using the recorded access — no username, address, or key path to remember. A configured identity is pinned with `IdentitiesOnly` so a crowded agent cannot offer the wrong key first and get refused before the right one is tried.
+- **`mesh access` / `mesh access import`**: show or record access, or propose it from this host's ssh config. Proposals are shown before they are applied — a wrong login written to the vault is worse than none, because it then looks authored. The config's `HostName` is deliberately never imported: it is usually a LAN address, correct only from the machine that wrote it, while the mesh address works from anywhere.
+- **Mesh dashboard**: nodes list their resolved login, the detail pane shows and edits access, and a banner names any node whose login is unknown, offering the ssh-config import. Address precedence is resolved server-side so the UI cannot drift from the CLI.
+- **Keychain as a master-password carrier**: `secret rekey` previously updated only file carriers (LaunchAgent plist, env file). On macOS a shell profile typically reads the password from the Keychain, which was invisible to it — so a rotation re-encrypted the store, reported success, and left every interactive shell holding the retired password. The Keychain entry is now included automatically when present (`--keychain <service>` / `--no-keychain`), with a pre-flight match check, verification, and rollback. The password is passed to `security` on **stdin, never argv**.
+
+### 🐛 Bug Fixes
+- **Route manifest drift**: two routes shipped in `08409ce` were never added to `route-manifest.json`, leaving that spec red on `main`. Extraction now lives in a shared `route-inventory.mjs` used by both the spec and a new `npm run routes:manifest` generator, so the tripwire can no longer be defeated by having no way to update it.
+- **`tailscale status` timeout**: 2s in discovery and 5s in enrollment against a measured 1.2–1.7s baseline. A timeout returned nothing, the mesh read as completely empty, and every node reported missing rather than unknown — indistinguishable from never having enrolled. One shared 10s constant.
+- **Tailscale CLI lookup**: resolution fell back to a bare `tailscale`, which is not on `PATH` for macOS GUI installs — the machines most likely to need it.
+- **Duplicate node entities**: entities were keyed on the fully-qualified hostname, so a tailnet rename minted a second document per machine. Now keyed on the short label.
+- **Legacy node documents**: a patch validates the whole resulting document, and the earliest `mesh_node` entities predate `title`/`description` becoming required — so every write to one failed validation permanently, including the access record it most needed. Missing required fields are backfilled on write.
+- **Store format detection**: an encrypted store opens with a random 16-byte salt, so its first byte is `{` about once in every 256 stores (measured 17 in 5000). Five copies of a "first byte is `{` therefore plain JSON" check decided the format from that byte; `migrateSecretsToEncryptedIfNeeded` consequently reported valid ciphertext as `not-json` and told its caller the store still needed migrating. One shared check that parses instead of guessing.
+- **PID lock blocked startup after PID reuse**: the server's lock only tested whether *something* was alive at the recorded PID. PIDs are recycled aggressively after a reboot — one machine's lock pointed at a system daemon, and the server exited with "another server instance is already running" on every boot thereafter. A lock is now honored only when the process also looks like this server.
+- **Panel refetch on unmount**: `EmbeddingProviderPanel` could apply a response after unmount or let a slow response overwrite a newer one.
+- **Stale detail pane**: the mesh page captured the selected node object, so polling could not update it — including immediately after saving an edit.
+
+### 🧪 Testing
+- New specs for mesh access resolution, the self-node entity write, the Keychain carrier and its rollback, and PID-lock adjudication.
+- `supportsTailscaleSsh` took its daemon signal from the real filesystem, so its macOS cases would invert on any machine with the Homebrew formula installed; the signal is now injected, and the previously untested macOS-with-daemon case is covered.
+- Removed a genuinely flaky assertion that the migrated store's first byte is not `{` — a property the format does not guarantee.
+
 ## [3.21.3] — 2026-08-08
 
 ### 🐛 Bug Fixes

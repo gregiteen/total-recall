@@ -19,12 +19,21 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { logger } from './logger.mjs';
 import {
+  STATUS_TIMEOUT_MS,
+  hasTailscaleDaemon,
+  resolveTailscaleBinary,
+} from './tailscale-cli.mjs';
+import { classifyTailscaleVariant, meshSshFromVariant } from './mesh-access.mjs';
+import {
   createHeadscalePreAuthKey,
   describeHeadscaleAvailability,
   headscaleUrlFromEnv,
   normalizeControlUrl,
   resolveHeadscaleUser,
 } from './headscale-client.mjs';
+
+// Re-exported so existing callers keep importing it from here.
+export { resolveTailscaleBinary };
 
 /** Enrollment states surfaced to the API/UI. */
 export const ENROLLMENT_STATES = Object.freeze({
@@ -35,24 +44,6 @@ export const ENROLLMENT_STATES = Object.freeze({
   UNKNOWN: 'unknown',
 });
 
-/** macOS ships the CLI inside the app bundle; PATH-only lookup misses it. */
-const FALLBACK_BINARIES = [
-  '/usr/local/bin/tailscale',
-  '/opt/homebrew/bin/tailscale',
-  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
-  '/usr/bin/tailscale',
-];
-
-// Presence of a tailscaled binary is what separates the open-source macOS build
-// (which can serve Tailscale SSH) from the sandboxed GUI builds (which cannot).
-const DARWIN_DAEMON_BINARIES = [
-  '/usr/local/bin/tailscaled',
-  '/opt/homebrew/bin/tailscaled',
-  '/usr/local/sbin/tailscaled',
-  '/opt/homebrew/sbin/tailscaled',
-];
-
-const STATUS_TIMEOUT_MS = 5_000;
 const UP_TIMEOUT_MS = 90_000;
 const LOGIN_PROBE_TIMEOUT_MS = 15_000;
 
@@ -68,20 +59,6 @@ export function resetAutoEnrollThrottle() {
   lastAutoResult = null;
 }
 
-/** Resolve the Tailscale CLI, honoring an explicit override first. */
-export function resolveTailscaleBinary() {
-  const override = (process.env.TR_TAILSCALE_BIN || '').trim();
-  if (override) return override;
-  for (const candidate of FALLBACK_BINARIES) {
-    try {
-      if (fs.existsSync(candidate)) return candidate;
-    } catch {
-      // permission errors fall through to PATH lookup
-    }
-  }
-  return 'tailscale';
-}
-
 /**
  * Can this machine run the Tailscale SSH *server*?
  *
@@ -90,32 +67,28 @@ export function resolveTailscaleBinary() {
  * cannot serve it fails the whole `up`, taking enrollment down with it, so this
  * gate decides whether the flag is safe to add.
  *
- * - Linux: supported.
- * - macOS: only the open-source `tailscaled` build. The App Store and
- *   standalone GUI builds are sandboxed and silently never start the SSH
- *   server, so we require an actual `tailscaled` binary as proof of the CLI
- *   build rather than trusting the platform alone.
- * - Everything else (Windows, BSDs): client only.
+ * Which builds qualify is decided in one place, `classifyTailscaleVariant`, so
+ * that the answer given here and the capability recorded on a node entity can
+ * never drift apart. Client presence is a separate question the enrollment path
+ * already answers, hence `hasClient: true`: this asks only whether the build,
+ * if present, can serve SSH.
  *
  * `TR_TAILSCALE_SSH=0|1` overrides, for operators who know their own build.
  */
-export function supportsTailscaleSsh({ platform = process.platform, env = process.env } = {}) {
+export function supportsTailscaleSsh({
+  platform = process.platform,
+  env = process.env,
+  // Injectable so the rule can be tested without the answer depending on
+  // whether the machine running the suite happens to have tailscaled installed.
+  hasDaemon = hasTailscaleDaemon(),
+} = {}) {
   const override = String(env.TR_TAILSCALE_SSH ?? '').trim();
   if (override === '0' || /^(false|no|off)$/i.test(override)) return false;
   if (override === '1' || /^(true|yes|on)$/i.test(override)) return true;
 
-  if (platform === 'linux') return true;
-  if (platform === 'darwin') {
-    // The GUI variants ship no tailscaled binary; the Homebrew formula does.
-    return DARWIN_DAEMON_BINARIES.some((candidate) => {
-      try {
-        return fs.existsSync(candidate);
-      } catch {
-        return false;
-      }
-    });
-  }
-  return false;
+  // The GUI variants ship no tailscaled binary; the Homebrew formula does.
+  const variant = classifyTailscaleVariant({ platform, hasClient: true, hasDaemon });
+  return meshSshFromVariant(variant) === 'available';
 }
 
 function runTailscale(args, { timeout = STATUS_TIMEOUT_MS } = {}) {

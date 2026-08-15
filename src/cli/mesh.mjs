@@ -14,6 +14,8 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import {
   describeHeadscaleAvailability,
@@ -23,6 +25,14 @@ import {
   setHeadscalePolicy,
   buildMeshSshPolicy,
 } from '../core/headscale-client.mjs';
+import { findMeshNode, listEnrichedMeshNodes, setMeshNodeAccess } from '../core/mesh.mjs';
+import {
+  buildSshArgs,
+  formatAccessTarget,
+  proposeAccessFromSshConfig,
+  readSshConfig,
+  resolveNodeAccess,
+} from '../core/mesh-access.mjs';
 
 function printHelp() {
   console.log(`
@@ -31,7 +41,12 @@ function printHelp() {
   Usage: total-recall mesh <command> [options]
 
     status                 Control-server reachability and credential state
-    nodes                  List registered mesh nodes
+    nodes                  List mesh nodes and how to reach each one
+    ssh <node> [cmd…]      Open a session using the node's recorded access
+    access <node>          Show resolved access for a node
+    access <node> --user <u> [--port <n>] [--host <h>] [--identity <path>]
+                           Record how to reach a node
+    access import          Propose access from ~/.ssh/config (--apply to save)
     preauthkey             Mint an enrollment key for 'tailscale up --authkey'
                              --reusable   usable by more than one node
                              --ephemeral  node is removed when it goes offline
@@ -46,11 +61,16 @@ function printHelp() {
     Mesh membership is the trust boundary — every node admitted to the tailnet
     inherits whatever the policy grants. Audit 'mesh nodes' before widening it.
 
+    A node is only as reachable as its login account is known. The control
+    server cannot supply that, so 'access' records it on the node entity where
+    every machine and agent resolves it the same way.
+
   Examples:
-    npx total-recall mesh status
-    npx total-recall mesh policy init-ssh --dry-run
+    npx total-recall mesh nodes
+    npx total-recall mesh access import
+    npx total-recall mesh ssh macmini
+    npx total-recall mesh ssh macmini 'uptime'
     npx total-recall mesh policy init-ssh
-    npx total-recall mesh policy get
 `);
 }
 
@@ -82,6 +102,10 @@ export default async function meshCli(argv = []) {
 
   const layer = parseLayerFlag(args);
   const brainDir = resolveBrainDir(layer);
+  // Node entities must be read and written in the brain the caller selected;
+  // falling back to the default root silently splits one machine's facts
+  // across two brains depending on which command touched it last.
+  const vaultRoot = path.join(brainDir, 'memory-vault');
   const command = args.shift();
 
   try {
@@ -92,23 +116,191 @@ export default async function meshCli(argv = []) {
     }
 
     if (command === 'nodes') {
-      const data = await headscaleFetchWithLegacyFallback(
-        '/api/v1/node',
-        '/api/v1/machine',
-        {},
-        brainDir,
-      );
-      const nodes = data?.nodes || data?.machines || [];
-      if (!nodes.length) {
-        console.log('No nodes registered.');
+      // The control server is the authoritative registry, but local discovery
+      // plus the vault can already answer "what is on my mesh and how do I
+      // reach it". Requiring a credential for that turns a routine listing
+      // into a dead end whenever the secrets store is locked.
+      let registry = null;
+      try {
+        const data = await headscaleFetchWithLegacyFallback(
+          '/api/v1/node',
+          '/api/v1/machine',
+          {},
+          brainDir,
+        );
+        registry = data?.nodes || data?.machines || [];
+      } catch (err) {
+        console.error(`⚠️  Control server unavailable: ${err.message}`);
+        console.error('   Falling back to local discovery.\n');
+      }
+
+      // Access lives in the vault, not the control server, so the listing is
+      // joined against local entities by address.
+      const enriched = listEnrichedMeshNodes(vaultRoot);
+      const byIp = new Map();
+      for (const node of enriched) {
+        if (node.ip) byIp.set(String(node.ip), node);
+      }
+
+      const rows = registry
+        ? registry.map((node) => {
+            const addresses = node.ipAddresses || [];
+            return {
+              id: node.id,
+              name: node.name || node.givenName || '-',
+              address: addresses[0] || null,
+              entity: addresses.map((ip) => byIp.get(String(ip))).find(Boolean) || null,
+            };
+          })
+        : enriched.map((node) => ({
+            id: '-',
+            name: node.hostname || '-',
+            address: node.ip || null,
+            entity: node,
+          }));
+
+      if (!rows.length) {
+        console.log('No nodes found.');
         return;
       }
-      for (const node of nodes) {
-        const addrs = (node.ipAddresses || []).join(', ');
+
+      let missing = 0;
+      for (const row of rows) {
+        const resolved = resolveNodeAccess(row.entity || { ip: row.address });
+        if (!resolved.complete) missing += 1;
         console.log(
-          `  ${String(node.id).padEnd(4)} ${String(node.name || node.givenName || '-').padEnd(24)} ${addrs}`,
+          `  ${String(row.id).padEnd(4)} ` +
+            `${String(row.name).padEnd(38)} ` +
+            `${String(row.address || '-').padEnd(16)} ` +
+            `${formatAccessTarget(resolved)}`,
         );
       }
+
+      if (missing) {
+        console.log('');
+        console.log(
+          `${missing} node(s) have no recorded login account — connecting to one will fail`,
+        );
+        console.log("as though it were unreachable. Run 'total-recall mesh access import'.");
+      }
+      return;
+    }
+
+    // Connecting should not require the operator to remember, or rediscover,
+    // which account a given machine uses.
+    if (command === 'ssh') {
+      const target = args.shift();
+      if (!target) {
+        fail('`ssh` requires a node name or address.', 'Run `total-recall mesh nodes`.');
+        return;
+      }
+      const node = findMeshNode(target, vaultRoot);
+      if (!node) {
+        fail(`No mesh node matches "${target}".`, 'Run `total-recall mesh nodes` to list them.');
+        return;
+      }
+
+      const resolved = resolveNodeAccess(node);
+      if (!resolved.complete) {
+        fail(
+          `No login account recorded for ${node.hostname}.`,
+          `Set one with: total-recall mesh access ${target} --user <login>`,
+        );
+        return;
+      }
+
+      const sshArgs = buildSshArgs(resolved, {
+        command: args.length ? args.join(' ') : null,
+      });
+      const res = spawnSync('ssh', sshArgs, { stdio: 'inherit' });
+      process.exitCode = res.status ?? 1;
+      return;
+    }
+
+    if (command === 'access') {
+      const target = args.shift();
+      if (!target) {
+        fail('`access` requires a node name, or `import`.');
+        return;
+      }
+
+      if (target === 'import') {
+        const nodes = listEnrichedMeshNodes(vaultRoot);
+        const proposals = proposeAccessFromSshConfig(nodes, readSshConfig());
+        if (!proposals.length) {
+          console.log('No new access could be inferred from ~/.ssh/config.');
+          return;
+        }
+
+        const apply = args.includes('--apply');
+        let saved = 0;
+        let failed = 0;
+        for (const proposal of proposals) {
+          console.log(
+            `  ${String(proposal.hostname).padEnd(24)} ${proposal.access.ssh_user}` +
+              `   (from Host ${proposal.matched_host})`,
+          );
+          if (apply) {
+            const result = await setMeshNodeAccess(proposal.hostname, proposal.access, { vaultRoot });
+            if (result.written) {
+              saved += 1;
+            } else {
+              failed += 1;
+              console.error(`   ⚠️  could not save: ${result.reason || 'write failed'}`);
+            }
+          }
+        }
+
+        console.log('');
+        if (!apply) {
+          console.log('Re-run with --apply to record these on the node entities.');
+          return;
+        }
+        // Reporting a flat total here regardless of outcome is how a failed
+        // write got announced as a success.
+        console.log(`Recorded access for ${saved} of ${proposals.length} node(s).`);
+        if (failed) {
+          fail(`${failed} node(s) could not be saved.`);
+        }
+        return;
+      }
+
+      const readOption = (flag) => {
+        const index = args.indexOf(flag);
+        return index === -1 ? null : args[index + 1] || null;
+      };
+      const user = readOption('--user');
+      const port = readOption('--port');
+      const host = readOption('--host');
+      const identity = readOption('--identity');
+
+      if (!user && !port && !host && !identity) {
+        const node = findMeshNode(target, vaultRoot);
+        if (!node) {
+          fail(`No mesh node matches "${target}".`);
+          return;
+        }
+        console.log(JSON.stringify(resolveNodeAccess(node), null, 2));
+        return;
+      }
+
+      const patch = { source: 'manual' };
+      if (user) patch.ssh_user = user;
+      if (port) patch.ssh_port = Number.parseInt(port, 10);
+      if (host) patch.ssh_host = host;
+      if (identity) patch.identity_file = identity;
+
+      const result = await setMeshNodeAccess(target, patch, { vaultRoot });
+      if (!result.written) {
+        fail(
+          `Could not record access for "${target}".`,
+          result.reason === 'node-not-found'
+            ? 'Run `total-recall mesh nodes` to see known nodes.'
+            : 'The vault write was rejected.',
+        );
+        return;
+      }
+      console.log(`✅ Access recorded for ${target} (${result.path}).`);
       return;
     }
 

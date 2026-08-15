@@ -44,6 +44,28 @@ function secretsPassword() {
 }
 
 /**
+ * Is this buffer the plaintext JSON form of the store, rather than ciphertext?
+ *
+ * The encrypted form opens with a random 16-byte salt, so its first byte is
+ * `{` about once in every 256 stores — measured at 17 in 5000. Deciding the
+ * format from that byte alone therefore misreads roughly one store in every
+ * 256 as plain JSON. Reads survive it by falling back to decryption, but
+ * `migrateSecretsToEncryptedIfNeeded` does not: it reports perfectly good
+ * ciphertext as `not-json`, and its caller believes the store still needs
+ * migrating. The first byte is a cheap way to reject the common case; only
+ * parsing can settle the rest.
+ */
+export function isPlainJsonStore(buf) {
+  if (!buf?.length || buf[0] !== 0x7b /* { */) return false;
+  try {
+    const parsed = JSON.parse(buf.toString('utf8'));
+    return Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Load raw secrets object synchronously
  */
 export function loadSecretsSync(brainDir) {
@@ -53,7 +75,7 @@ export function loadSecretsSync(brainDir) {
   const buf = fs.readFileSync(filePath);
   const password = secretsPassword();
 
-  if (password && buf.length > 44 && buf[0] !== 0x7b) {
+  if (password && buf.length > 44 && !isPlainJsonStore(buf)) {
     try {
       return decryptSecretsSync(buf, password);
     } catch (err) {
@@ -88,8 +110,7 @@ export async function loadSecrets(brainDir) {
   const buf = fs.readFileSync(filePath);
   const password = secretsPassword();
 
-  // AES blob: starts with non-JSON (binary). Detect: first byte not `{`
-  if (password && buf.length > 44 && buf[0] !== 0x7b /* { */) {
+  if (password && buf.length > 44 && !isPlainJsonStore(buf)) {
     try {
       return await decryptSecrets(buf, password);
     } catch (err) {
@@ -146,8 +167,7 @@ export async function migrateSecretsToEncryptedIfNeeded(brainDir) {
     return { migrated: false, path: filePath, reason: 'no-password' };
   }
   const buf = fs.readFileSync(filePath);
-  // Already looks like AES blob (not starting with `{`)
-  if (buf.length > 44 && buf[0] !== 0x7b) {
+  if (buf.length > 44 && !isPlainJsonStore(buf)) {
     return { migrated: false, path: filePath, reason: 'already-encrypted' };
   }
   let obj;
@@ -173,7 +193,7 @@ export async function migrateSecretsToEncryptedIfNeeded(brainDir) {
 export async function validateSecretsBuffer(buffer) {
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   const password = secretsPassword();
-  if (password && buf.length > 44 && buf[0] !== 0x7b) {
+  if (password && buf.length > 44 && !isPlainJsonStore(buf)) {
     const parsed = await decryptSecrets(buf, password);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('Decrypted secrets payload must be an object');

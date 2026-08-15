@@ -189,6 +189,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/headscale/policy"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/headscale/policy"
+  },
+  {
+    "method": "GET",
     "path": "/api/headscale/preauthkey"
   },
   {
@@ -274,6 +282,18 @@
   {
     "method": "GET",
     "path": "/api/memory/stats"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/access"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/access/import"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/access/proposals"
   },
   {
     "method": "GET",
