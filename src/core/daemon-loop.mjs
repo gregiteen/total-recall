@@ -13,6 +13,8 @@
 
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'node:url';
+import { readProcessCommand, entryPathHint, shouldHonorPidLock } from './pid-lock.mjs';
 import { createScheduler, updateTaskStatus, persistTaskToDisk } from './scheduler.mjs';
 import { scanAndIngest } from './session-watcher.mjs';
 import { syncAllRepos } from './repo-sync.mjs';
@@ -111,20 +113,36 @@ export function acquirePidLock() {
     if (fs.existsSync(PID_FILE)) {
       const existingPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
       if (existingPid && !isNaN(existingPid)) {
-        try {
-          process.kill(existingPid, 0); // Check if process is alive (signal 0 = no-op check)
+        // Liveness alone cannot tell our daemon from whatever else inherited
+        // the number after a reboot — observed here holding a PID that had
+        // since been handed to an unrelated desktop app, which would refuse
+        // every start from then on.
+        const verdict = shouldHonorPidLock(existingPid, {
+          isAlive: (pid) => {
+            try {
+              process.kill(pid, 0); // signal 0 = no-op liveness check
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          readCommand: readProcessCommand,
+          entryHint: entryPathHint(fileURLToPath(import.meta.url)),
+        });
+        if (verdict.honor) {
           logger.error({
             subsystem: 'daemon-loop',
             message: `Another daemon is already running (PID: ${existingPid}). Exiting.`,
           });
           process.exit(1);
-        } catch {
-          // Process is dead — stale PID file
-          logger.info({
-            subsystem: 'daemon-loop',
-            message: `Stale PID file found (PID: ${existingPid} is dead). Overwriting.`,
-          });
         }
+        logger.info({
+          subsystem: 'daemon-loop',
+          message:
+            verdict.reason === 'pid-reused'
+              ? `Stale PID file found (PID ${existingPid} now belongs to another program). Overwriting.`
+              : `Stale PID file found (PID: ${existingPid} is dead). Overwriting.`,
+        });
       }
     }
   } catch {

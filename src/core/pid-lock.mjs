@@ -11,19 +11,20 @@
  * already running", and it did so on every boot from then on — an outage with
  * an error message that sent you looking for a process that was never there.
  *
- * So liveness is necessary but not sufficient: the process has to look like
- * this server before its lock is honored.
+ * So liveness is necessary but not sufficient: the process has to look like the
+ * program that wrote the lock before the lock is honored. Shared by the server
+ * and the daemon, which had the same check and therefore the same bug.
  */
 
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 /**
- * The tail of our own entry path (`server/index.mjs`), derived rather than
- * written down so it stays correct wherever the package is installed and never
- * hardcodes a checkout location.
+ * The tail of an entry path (`server/index.mjs`, `core/daemon-loop.mjs`),
+ * derived from the caller's own module URL rather than written down, so it stays
+ * correct wherever the package is installed and hardcodes no checkout location.
  */
-export function serverEntryHint(entryPath) {
+export function entryPathHint(entryPath) {
   return path.join(path.basename(path.dirname(entryPath)), path.basename(entryPath));
 }
 

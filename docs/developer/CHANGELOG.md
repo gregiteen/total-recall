@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.23.1] — 2026-08-15
+
+### 🐛 Bug Fixes
+- **Daemon refused to start after PID reuse**: 3.23.0 fixed this for the server's lock but left the daemon's, which carried the same check — and the same bug. Found live on a developer machine, where `daemon.pid` held a PID the OS had since handed to an unrelated desktop app: the liveness test passed, and the daemon would have exited with "another daemon is already running" on every start from then on. Both locks now share one adjudicator (`core/pid-lock.mjs`) that requires the process to look like the program that wrote the lock.
+
 ## [3.23.0] — 2026-08-15
 
 ### 🚀 Features
