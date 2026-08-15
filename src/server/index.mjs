@@ -29,6 +29,7 @@ import {
 } from './auth.mjs';
 import { logger, logEvents } from "../core/logger.mjs";
 import { readProcessCommand, entryPathHint, shouldHonorPidLock } from '../core/pid-lock.mjs';
+import { createCoverageCache } from './health-coverage.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
 import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
 import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
@@ -172,6 +173,56 @@ app.use(cookieParser());
 
 // ─── Health Check ───────────────────────────────────────────────────────────────
 
+/**
+ * Embedding coverage is the expensive half of this endpoint — see
+ * health-coverage.mjs for why it is computed off the request path. The check
+ * itself is unchanged: a brain with nodes and no vectors still reports at
+ * critical severity, because recall silently answering from keyword matching
+ * is the failure this was written to catch.
+ */
+async function computeEmbeddingCoverage() {
+  const coverage = [];
+  try {
+    const { loadEmbeddingsIndex } = await import('../core/embeddings.mjs');
+    const { getActiveBrains } = await import('../core/config.mjs');
+    const brains = getActiveBrains();
+    for (const b of Object.values(brains)) {
+      if (!b?.brainDir) continue;
+      const vaultPath = path.join(b.brainDir, 'memory-vault');
+      if (!fs.existsSync(vaultPath)) continue;
+      // Count only what the embedder actually indexes: type:memory nodes.
+      // Counting every .md under the vault compares against a denominator that
+      // includes proposals/ (optimizer tickets, never embedded by design), so a
+      // perfectly healthy brain reported "847/16701 — 5% coverage" and tripped
+      // a false degraded alarm. Ask the loader, don't count files.
+      let nodeCount = 0;
+      try {
+        const { loadNodes } = await import('../core/vault.mjs');
+        nodeCount = loadNodes(vaultPath).length;
+      } catch { /* unreadable vault */ }
+      let embedded = 0;
+      try {
+        embedded = Object.keys(loadEmbeddingsIndex(path.join(b.brainDir, 'memory-derived'))).length;
+      } catch { /* index unreadable — reported as 0, which is the honest value */ }
+      coverage.push({
+        layer: b.layer || 'unknown',
+        nodes: nodeCount,
+        embedded,
+        vector_search: embedded > 0 ? 'on' : 'OFF — keyword-only',
+      });
+    }
+  } catch (err) {
+    coverage.push({ error: String(err?.message || err) });
+  }
+  return coverage;
+}
+
+const coverageCache = createCoverageCache({ compute: computeEmbeddingCoverage });
+const embeddingCoverageSnapshot = () => coverageCache.snapshot();
+
+// Warm it at boot so the first probe already has a real answer.
+embeddingCoverageSnapshot();
+
 app.get('/health', requireAuthOrLocal, async (req, res) => {
   let disk = { free: 0, total: 0 };
   try {
@@ -206,7 +257,7 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // Check daemon status
   const daemonStatus = getDaemonStatus();
 
-  // Embedding coverage per brain.
+  // Embedding coverage per brain, served from the background cache above.
   //
   // This existed nowhere before, and its absence is exactly why a brain with
   // 2602 vault nodes and 0 embeddings looked healthy for weeks: compile
@@ -214,43 +265,13 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // real results, and nothing anywhere printed "N of M nodes embedded".
   // Vector search silently off is a CRITICAL failure, not a cosmetic one —
   // recall answers from the wrong brain and the caller cannot tell.
-  const embeddingCoverage = [];
-  try {
-    const { loadEmbeddingsIndex } = await import('../core/embeddings.mjs');
-    const { getActiveBrains } = await import('../core/config.mjs');
-    const brains = getActiveBrains();
-    for (const b of Object.values(brains)) {
-      if (!b?.brainDir) continue;
-      const vaultPath = path.join(b.brainDir, 'memory-vault');
-      if (!fs.existsSync(vaultPath)) continue;
-      // Count only what the embedder actually indexes: type:memory nodes.
-      // Counting every .md under the vault compares against a denominator that
-      // includes proposals/ (optimizer tickets, never embedded by design), so a
-      // perfectly healthy brain reported "847/16701 — 5% coverage" and tripped
-      // a false degraded alarm. Ask the loader, don't count files.
-      let nodeCount = 0;
-      try {
-        const { loadNodes } = await import('../core/vault.mjs');
-        nodeCount = loadNodes(vaultPath).length;
-      } catch { /* unreadable vault */ }
-      let embedded = 0;
-      try {
-        embedded = Object.keys(loadEmbeddingsIndex(path.join(b.brainDir, 'memory-derived'))).length;
-      } catch { /* index unreadable — reported as 0, which is the honest value */ }
-      embeddingCoverage.push({
-        layer: b.layer || 'unknown',
-        nodes: nodeCount,
-        embedded,
-        vector_search: embedded > 0 ? 'on' : 'OFF — keyword-only',
-      });
-    }
-  } catch (err) {
-    embeddingCoverage.push({ error: String(err?.message || err) });
-  }
+  const { coverage: embeddingCoverage, as_of: coverageAsOf } = embeddingCoverageSnapshot();
 
   // A brain with nodes but no vectors answers every query from keyword
-  // matching. Surface it at the same severity as a dead daemon.
-  const unembeddedBrains = embeddingCoverage.filter(c => c.nodes > 0 && c.embedded === 0);
+  // matching. Surface it at the same severity as a dead daemon. Before the
+  // first reading lands there is nothing to judge, and an unknown is reported
+  // as unknown rather than quietly counted as healthy.
+  const unembeddedBrains = (embeddingCoverage || []).filter(c => c.nodes > 0 && c.embedded === 0);
 
   // Determine overall status
   const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || cliAgents.length === 0
@@ -290,6 +311,9 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
     cli_agents: cliAgents,
     daemon: daemonStatus,
     embedding_coverage: embeddingCoverage,
+    // When this reading was taken. Null means the first computation has not
+    // landed yet, so the coverage field is unknown rather than clean.
+    embedding_coverage_as_of: coverageAsOf,
     // Explicit, greppable signal. A brain with nodes and no vectors serves
     // keyword-only results that look exactly like real ones.
     vector_search_degraded: unembeddedBrains.length > 0

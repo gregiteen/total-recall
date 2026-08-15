@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.23.3] — 2026-08-15
+
+### 🐛 Bug Fixes
+- **`/health` took 25-57 seconds**: for every active brain the handler parsed every node in that brain's vault and loaded that brain's embeddings index — 12MB on the machine this was found on — all inside the request. Measured on a loaded laptop: `/health` 39s, 28s, 31s, 55s, 55s while the dashboard on the same server answered in 116ms. This is the worst endpoint to make slow, because `/health` is what the watchdog and every monitor poll: a liveness probe that times out is indistinguishable from a server that is down, and it was in fact misread that way — the server was declared dead and restarted repeatedly while it was serving the UI normally the whole time. Coverage is now computed off the request path behind a single-flight 30s cache, bringing `/health` to 0.27-2.8s. A cache would trade one wrong answer for another if it could pass a stale reading as current, so the response carries `embedding_coverage_as_of`, reports "no reading yet" as null rather than as clean, and keeps the previous reading and its original timestamp when a refresh fails — the degraded-vector-search signal this reading exists to raise cannot be hidden by a failed refresh.
+
 ## [3.23.2] — 2026-08-15
 
 ### 🐛 Bug Fixes
