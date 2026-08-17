@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-15T23:39:58.716Z
+generated_at: 2026-08-17T02:34:44.822Z
 generated_from: total-recall
 ---
 
@@ -31,7 +31,7 @@ generated_from: total-recall
   scratch/  (1 items)
   skills/
     code-mode/  (6 items)
-    code-quality/  (7 items)
+    code-quality/  (9 items)
     instruction-keeper/  (8 items)
     okf/  (5 items)
     project-management/  (6 items)
@@ -674,7 +674,7 @@ templates/
 ## Agent Skills
 
 - **code-mode**: "Use this skill when working on the Code Mode Infrastructure, sandbox VFS, or instruction-led architecture. MANDATORY: You MUST read the full SKILL.md file before executing."
-- **code-quality**: "Use this skill when fixing TypeScript or linting errors via the start-here scripts. NEVER run raw eslint/tsc. MANDATORY: You MUST read the full SKILL.md file before executing."
+- **code-quality**: "Use this skill before committing, publishing, or deploying Total Recall, and whenever fixing errors from a quality gate. This repo is plain Node ESM — it has NO TypeScript and NO ESLint installed, so do NOT run tsc, eslint, npm run typecheck, or npm run lint (they do not exist here). Its gates are dist freshness, the open-source path invariant, SSSS registry verification, and vitest. Run checks as BACKGROUND jobs via scripts/check.mjs. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **instruction-keeper**: Use this skill when managing the lifecycle and version control of system
 - **okf**: Use this skill to access information about Google's Open Knowledge Format
 - **project-management**: "Use this skill when managing project documentation, GitHub issues, pull requests, and project tracker checklists in ANY repository. Defines the universal 4-file (PRD/ARCHITECTURE/DEVELOPMENT_PLAN/PROJECT_TRACKER) Kanban documentation system shared across all repos. Do NOT use for code implementation. MANDATORY: You MUST read the full SKILL.md file before executing."

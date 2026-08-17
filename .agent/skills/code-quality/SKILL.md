@@ -1,178 +1,74 @@
 ---
-repo_scoped: true
 name: code-quality
-description: "Use this skill when fixing TypeScript or linting errors via the start-here scripts. NEVER run raw eslint/tsc. MANDATORY: You MUST read the full SKILL.md file before executing."
-command: /code-quality
+description: "Use this skill before committing, publishing, or deploying Total Recall, and whenever fixing errors from a quality gate. This repo is plain Node ESM — it has NO TypeScript and NO ESLint installed, so do NOT run tsc, eslint, npm run typecheck, or npm run lint (they do not exist here). Its gates are dist freshness, the open-source path invariant, SSSS registry verification, and vitest. Run checks as BACKGROUND jobs via scripts/check.mjs. MANDATORY: You MUST read the full SKILL.md file before executing."
 ---
 
-# Code Quality
+# Code Quality — Total Recall
 
-> [!CAUTION]
-> **MANDATORY WORKFLOW**: Use the provided `start-here` or `errors-by-type` scripts to check errors.
-> **NEVER** run raw `tsc`, `eslint`, `npm run lint`, `npm run typecheck`, or `npm run build`!
-> **NEVER** invoke `continuous-checker-ts.mjs` / `continuous-checker-lint.mjs` directly — and ESPECIALLY never with `--once`.
-> **DO NOT PANIC ON STALE RESULTS**: The checker daemons run incrementally. If you just fixed a file and the script still shows the error, the result is simply STALE. Do not freak out. Do NOT run manual commands to force a check. Do NOT edit the checker code. Move to parallel tasks and trust your fix.
+**Stack:** Node ESM (`"type": "module"`), no TypeScript, no ESLint, vitest,
+`@ssss/cli` v0.9, published to npm as `total-recall-brain`.
 
-> [!WARNING]
-> **`--once` crashes this machine.** `continuous-checker-ts.mjs --once` forces a full,
-> from-scratch type-check of the entire repo. On this machine that spikes CPU/RAM hard
-> enough to crash it. There is **no** legitimate reason to force a full recompile —
-> ever. The only sanctioned way to (re)start checking is `start-here-ts.mjs` /
-> `start-here-lint.mjs`, which read the cached report and auto-start the **incremental**
-> daemon. That is always safe to run, including to wake a slept daemon.
->
-> **Allowed (safe):** `start-here-ts.mjs`, `start-here-lint.mjs`, `errors-by-type-*.mjs`, `lint-auto-fix.mjs`.
-> **Forbidden:** raw `tsc`/`eslint`/`npm run typecheck|lint|build`, and `continuous-checker-*.mjs` (especially `--once`).
+> **No tsc, no eslint here.** Neither is declared in `package.json`. Quality in
+> this repo means: the published `dist` matches `src`, the open-source path
+> invariant holds, the SSSS registry verifies, and the suite passes.
 
-Use the repo's checker scripts, not raw `tsc`, `eslint`, `npm run lint`, or `npm run build`.
-
-## Core rule
-
-- **CRITICAL WORKFLOW RULE**: You must NEVER stop, kill, or restart the continuous error checker daemon unless it is unresponsive. You trigger it once (by running `start-here-ts.mjs` or `start-here-lint.mjs`), then leave it running continuously in the background.
-- **DO NOT WAIT EVER**: There are absolutely zero delays (timeouts or intervals) between runs in the continuous checker. It re-executes immediately. Consequently, you must NEVER sit idle waiting for a pass to complete. Keep fixing files.
-- **AUTO-STOP RULE**: The checker will automatically exit after **3 identical passes** with the same error report to reclaim system RAM. If the checker is stopped, simply trigger it again with `start-here-*.mjs`.
-- Never use `sleep` or passive waiting as the next action while any source-level lint/TS cleanup, stale report reconciliation, or safe mechanical fix remains available.
-- Use the report views to pick the next files and keep patching.
-- Trust source edits over stale file views when a report is one pass behind.
-
-## TypeScript workflow
-
-Start here:
+## The loop
 
 ```bash
-node .agent/skills/code-quality/scripts/start-here-ts.mjs
+node .agent/skills/code-quality/scripts/check.mjs
 ```
 
-That entrypoint does two things:
-
-- reads `typescript-fullrepo-errors.txt`
-- auto-starts `continuous-checker-ts.mjs` if the checker is asleep
-
-Primary TS views:
-
-- Worst files:
-  `node .agent/skills/code-quality/scripts/start-here-ts.mjs`
-- By error type:
-  `node .agent/skills/code-quality/scripts/start-here-ts.mjs type`
-- By file pattern:
-  `node .agent/skills/code-quality/scripts/start-here-ts.mjs file <pattern>`
-- Count summary:
-  `node .agent/skills/code-quality/scripts/start-here-ts.mjs count`
-- Detailed by-type reader:
-  `node .agent/skills/code-quality/scripts/errors-by-type-ts.mjs`
-
-## Lint workflow
-
-Use the lint equivalents:
+Launch as a **background job**, then read:
 
 ```bash
-node .agent/skills/code-quality/scripts/start-here-lint.mjs
-node .agent/skills/code-quality/scripts/start-here-lint.mjs type
-node .agent/skills/code-quality/scripts/start-here-lint.mjs file <pattern>
-node .agent/skills/code-quality/scripts/start-here-lint.mjs count
-node .agent/skills/code-quality/scripts/errors-by-type-lint.mjs
+node .agent/skills/code-quality/scripts/report.mjs
 ```
 
-Safe lint autofix entrypoint for this repo:
+## This repo's gates
 
-```bash
-node .agent/skills/code-quality/scripts/lint-auto-fix.mjs
-```
+| id | tier | what it is |
+|:---|:---|:---|
+| `dist-freshness` | fast | `npm run check:dist` — `prepublishOnly` depends on it |
+| `open-source-paths` | fast | grep: hardcoded `/Users/…`, `~/Github/`, or named product repos |
+| `ssss-registry` | full | `npx ssss registry verify` |
+| `test` | full | `npm test` (vitest) |
 
-Use it deliberately because it runs a repo-wide ESLint `--fix` pass.
+## Repo invariants
 
-## Operator loop
+**Total Recall is open-source. It must never hardcode or special-case a
+personal path or a third-party product repository.** No `/Users/<name>/`, no
+`~/Github/`, and no naming of host applications in core code. Multi-repo support
+is path-only: `register` / `track` / `--repo` / `TR_SYNC_REPOS` / cwd detection.
+Optional remote vault sync is `TR_REMOTE_VAULT_*` only.
 
-Use this loop exactly:
+The `open-source-paths` gate enforces this. It ignores `*.spec.mjs`, `*.test.mjs`,
+`fixtures/`, `templates/`, `scaffold/`, `docs/`, and `scratch/`, where sample
+paths are legitimate test data.
 
-1. Open worst files once.
-2. Open `type` to identify the biggest active bucket.
-3. Open `file <pattern>` for one concrete file.
-4. Fix all errors you can in that file.
-5. Move immediately to the next file from the current view.
-6. Re-open `type`, `count`, or `errors-by-type-*` after a few files.
+**Before publishing:** never publish blind. Boot the server natively first —
+`node src/server/index.mjs` — and confirm it starts without a SyntaxError, then
+run `check:dist`. Exit code 0 from a piped command is not proof; check the
+process directly.
 
-## When views disagree
+**PID locks must verify identity, not just liveness.** `shouldHonorPidLock()` in
+`src/core/pid-lock.mjs` requires the PID to be alive *and* its command line to
+contain the entry path tail. `check.mjs` in this skill follows the same rule —
+that pattern exists because stale PIDs once pointed at `metrickitd` and a
+crashpad handler and blocked every start.
 
-- `file <pattern>` can lag behind source edits because it reads the last written report.
-- If the source is already patched and the file view is stale, do not block on it.
-- Move to another file from the same `type` bucket or another active bucket.
-- Use `count` and `type` to track real progress; use `file` to target the next patch.
+## Pitfalls
 
-### Verifying a single fix without forcing a recompile
-
-When you need to confirm **one** specific fix landed but the report is stale (or the
-daemon has slept), do NOT force a full check. Instead:
-
-1. **Read the source** at the reported line — `grep`/`Read` the exact symbol the error
-   named (e.g. confirm `manifest.content` is now `manifestContent`).
-2. **Reason about the type locally** — confirm the narrowing/guard makes it valid (e.g.
-   a `if (!x) return` above the use narrows `x` to non-null).
-3. If both hold, the fix is correct. Re-run `start-here-*.mjs` to wake the incremental
-   daemon and let it reconcile the count on its own next pass.
-
-This is faster than any recompile and never risks the machine. The report flipping to 0
-is confirmation, not a prerequisite — your verified source edit is the source of truth.
-
-## Prioritization
-
-Default order:
-
-1. Highest-count TS or lint bucket from `type`
-2. Small files with 1-4 errors
-3. Worst files
-4. Tests and edge-case fixtures
-
-This usually drops the total faster than camping on one stale file view.
-
-## Patch style
-
-- Apply the mechanical recipe from `references/patterns.md` when it matches.
-- Prefer narrow type guards, typed locals, and optional-property omission over broad casts.
-- Do not revert unrelated user changes.
-- Do not run generic repo-wide verification commands.
-
-## Boot-critical full-tree sweeps (outage triage / post-merge safety net)
-
-The incremental daemons are the everyday gate, but history-altering git operations
-(`reset --hard`, force-push, partial re-commits) can put code on disk that **never
-passed any gate** — this shipped 5 syntax-broken files and 9 dead import paths to
-production on 2026-06-10. Two cheap sweeps verify that what is actually on disk can
-boot, in one pass (the runtime aborts at the FIRST broken file, so boot logs always
-under-report):
-
-1. **esbuild syntax sweep** — walk `server/**/*.ts(x)` and `transformSync` each file.
-   This is per-file syntax transform only (NO type resolution), so unlike `tsc` it is
-   safe anywhere — ~10s for 1287 files, trivial memory. Catches duplicate declarations,
-   `await` outside `async`, `import` inside function bodies.
-2. **Import-resolution sweep** — extract every relative `from "…"` / `import("…")`
-   specifier and stat the candidate targets (`.ts`/`.tsx`/`.js`/`index.*`). Catches
-   `ERR_MODULE_NOT_FOUND` boot-killers the syntax sweep cannot see. Static bad imports
-   kill boot; dynamic ones inside try/catch fail only at request time.
-
-When to run: a production boot crash-loop, after any merge/reset touching many server
-files, or before pushing a server-wide refactor. On the droplet, run them inside a
-throwaway container so the esbuild version matches production exactly (see
-deploy/SKILL.md § BOOT CRASH-LOOP TRIAGE for the `docker run` launcher). These sweeps
-complement — never replace — the daemons: they prove "it boots", not "it type-checks".
-
-## Files
-
-- TS report: `typescript-fullrepo-errors.txt`
-- TS checker pid: `typescript-checker.pid`
-- TS checker log: `.agent/skills/code-quality/scripts/ts-checker.log`
-- Lint report: `lint-status.txt`
-- Lint checker pid: `lint-checker.pid`
-- Lint checker log: `.agent/skills/code-quality/scripts/lint-checker.log`
+- **`daemon-loop.mjs` is a separate process from the REST server.** Restarting
+  the brain (`launchctl kickstart -k gui/501/com.totalrecall.brain`) does **not**
+  reload daemon-loop code, and the old daemon survives as an orphan. Use
+  `npx total-recall daemon stop && npx total-recall daemon start`.
+- **`recall` and `compile` hold a vault filesystem watcher open ~60s** after
+  results print. Piped output can look empty. Redirect to a file and read it.
+- **`test` is tier `full`** — vitest across this repo is not free on a laptop.
+- One check at a time, machine-wide (`check.mjs` holds a global lock).
 
 ## Reference
 
-For recurring fixes and subagent behavior, read:
-
-- [references/patterns.md](./references/patterns.md)
-
-
-<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-24T01:09:37.302Z -->
-
-<!-- END INJECTED MEMORY -->
+- [references/architecture.md](./references/architecture.md) — why one-shot, the v2 incident
+- [references/patterns.md](./references/patterns.md) — fix recipes, incl. SSSS contract rules
+- `scripts/sync-ssss-schemas.mjs` — repo-specific, unrelated to the checker

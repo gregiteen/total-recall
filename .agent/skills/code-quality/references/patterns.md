@@ -1,206 +1,73 @@
----
-name: fix-code-patterns
-description: Mechanical fix recipes for the most common lint and TS errors in this codebase
-type: reference
----
+# Recurring fixes
 
-# Fix Patterns Reference
+Mechanical recipes for findings that show up repeatedly. Apply the narrow fix,
+never the broad cast — and never a suppression comment.
 
-These are the recurring patterns in this codebase. Match the error  apply the recipe. No analysis needed.
+## TypeScript
 
----
+| Code | Meaning | Fix |
+|:---|:---|:---|
+| `TS6133` | Declared but never read | Delete it. If it is a required signature param, prefix `_`. **Never** `@ts-ignore`. |
+| `TS2532` / `TS18048` | Possibly undefined | Narrow with a guard (`if (!x) return`) or `?.`. Not `!`. |
+| `TS2345` | Argument type mismatch | Fix the source type. A cast at the call site hides the real defect. |
+| `TS2739` / `TS2741` | Missing properties | Add the properties, or make them optional in the type if genuinely optional. |
+| `TS7006` | Implicit `any` param | Annotate it. Infer from the call site rather than reaching for `any`. |
+| `TS2322` | Not assignable | Usually a union that needs narrowing, or a wrong generic argument. |
+| `TS4111` | Index-signature access | Use `obj['key']`, or give the type a real property. |
 
-## LINT: `@typescript-eslint/no-explicit-any`
+**Optional properties under `exactOptionalPropertyTypes`:** omit the key rather
+than passing `undefined`.
 
-### Pattern 1  catch clause `error: any`
 ```ts
-//  Before
-} catch (error: any) {
-  res.status(500).json({ error: error.message || "Failed" });
-}
-
-//  After
-} catch (error) {
-  res.status(500).json({ error: error instanceof Error ? error.message : "Failed" });
-}
+// ✗ const opts = { retries, timeout: timeout ?? undefined }
+const opts = { retries, ...(timeout !== undefined && { timeout }) };
 ```
 
-### Pattern 2  AI response content block (OpenAI/OpenRouter)
-```ts
-//  Before
-(contentResponse as any[]).filter((b: any) => b.type === "text").map((b: any) => b.text)
+## ESLint / Biome
 
-//  After
-(contentResponse as { type: string; text?: string }[]).filter((b) => b.type === "text").map((b) => b.text ?? "")
-```
+- `no-unused-vars` — delete; `_`-prefix only for required signature positions.
+- `no-explicit-any` — replace with `unknown` plus a narrowing guard.
+- `react-hooks/exhaustive-deps` — add the dep, or hoist the value out of the
+  component. Do not disable the rule.
+- `i18next/no-literal-string` — extract to `en.json`. Suppressing this is
+  banned outright in festech.live.
 
-### Pattern 3  array filter/findIndex with typed object
-```ts
-//  Before
-scripts.findIndex((s: any) => s.name === name)
-arr.filter((x: any) => x.id === id)
+If a disable is genuinely correct, scope it to **one rule on one line** with a
+reason comment. Blanket file-level disables are gated.
 
-//  After  
-scripts.findIndex((s: { name: string }) => s.name === name)
-arr.filter((x: { id: string }) => x.id === id)
-```
+## Python
 
-### Pattern 4  interface field typed as `any`
-```ts
-//  Before
-spec: any;
-data: any;
-result: any;
+- `F401` unused import — delete.
+- `E501` line too long — the repo allows 160; reflow rather than `# noqa`.
+- `E203` / `W503` — already ignored in `.flake8`; do not re-add.
+- mypy `no-untyped-def` — annotate the signature; avoid `Any` returns.
+- Formatting findings from `black --check` are applied with
+  `scripts/format.py`, never hand-reflowed.
 
-//  After (prefer most specific, fall back in order)
-spec: Record<string, unknown>;
-data: unknown;
-result: unknown;
-```
+## SSSS
 
-### Pattern 5  function parameter typed as `any`
-```ts
-//  Before
-function process(data: any) { ... }
-const handler = (event: any) => { ... }
+SSSS findings are **contract violations, not style**. Never resolve one by
+loosening a schema or skipping a fixture.
 
-//  After
-function process(data: unknown) { ... }   // if you don't know the shape
-function process(data: Record<string, unknown>) { ... }  // if it's an object
-```
+- **Registry validation failure** — an extension collides with a core type, or
+  a `required_field` is missing. Fix the primitive definition.
+- **Conformance failure** — do not claim conformance from an HTTP 200, a file
+  appearing on disk, or a passing typecheck. Only the conformance gate proves it.
+- **Envelope errors** — a `type: 'patch'` envelope needs a `patches` object; a
+  YAML `content:` block alone is a dead patch that silently no-ops.
+- **Idempotency** — keys must be unique per attempt for repeatable writes. A
+  constant key per entity makes the second write a silent no-op.
+- **VFS-first** — state mutations flow through the SSSS Core Contract. Never
+  `db.insert/update/delete`, never a raw `fs.writeFileSync` for application state.
 
-### Pattern 6  variable assigned `as any` or cast via `any`
-```ts
-//  Before
-const parsed = JSON.parse(text) as any;
-let config: any = {};
+## Working through a large backlog
 
-//  After
-const parsed = JSON.parse(text) as Record<string, unknown>;
-let config: Record<string, unknown> = {};
-```
+1. `report.mjs count` — find the biggest bucket.
+2. `report.mjs type` — see if one recipe clears many at once.
+3. Fix whole files, not scattered lines; re-running has a fixed cost, so
+   batching amortizes it.
+4. Relaunch the background check, keep fixing from the current report.
+5. `report.mjs worst 4`, `worst 8` … to page deeper without re-running.
 
----
-
-## LINT: `@typescript-eslint/no-unused-vars`
-
-### Pattern 1  unused import
-```ts
-//  Before
-import { Foo, Bar, Baz } from "./module";  // Bar is unused
-
-//  After  just remove Bar from the import
-import { Foo, Baz } from "./module";
-```
-
-### Pattern 2  unused function parameter (must keep for signature compat)
-```ts
-//  Before
-function handler(req: Request, res: Response, next: NextFunction) { ... }
-//                                             ^^^^ unused
-
-//  After  prefix with underscore
-function handler(req: Request, res: Response, _next: NextFunction) { ... }
-```
-
-### Pattern 3  unused catch binding
-```ts
-//  Before
-} catch (err) {
-  toast.error("Failed");
-}
-
-//  After
-} catch (_err) {
-  toast.error("Failed");
-}
-// OR (ES2019+)
-} catch {
-  toast.error("Failed");
-}
-```
-
-### Pattern 4  unused variable (assigned but never read)
-```ts
-//  Before
-const { data: uploadData, error } = await supabase.storage.upload(...)
-// uploadData never used
-
-//  After  destructure without it, or prefix
-const { error } = await supabase.storage.upload(...)
-// OR
-const { data: _uploadData, error } = await supabase.storage.upload(...)
-```
-
-### Pattern 5  unused type import
-```ts
-//  Before
-import type { Foo, Bar } from "./types";  // Bar unused
-
-//  After
-import type { Foo } from "./types";
-```
-
----
-
-## TYPESCRIPT: Common TS Errors
-
-### Pattern 1  Property does not exist on type
-```ts
-//  Before
-const msg = error.message;  // error is 'unknown'
-
-//  After
-const msg = error instanceof Error ? error.message : String(error);
-```
-
-### Pattern 2  Argument of type X is not assignable to Y
-```ts
-//  Before
-someFunction(value);  // value: string | undefined, param expects string
-
-//  After
-if (value) someFunction(value);
-// OR
-someFunction(value ?? "");
-// OR
-someFunction(value!);  // only if you're certain it's defined
-```
-
-### Pattern 3  Object is possibly null/undefined
-```ts
-//  Before
-const name = user.profile.name;
-
-//  After
-const name = user.profile?.name ?? "";
-```
-
-### Pattern 4  Missing return type causes implicit any
-```ts
-//  Before
-async function getData() {
-  const { data } = await supabase.from("table").select("*");
-  return data;
-}
-
-//  After  let inference work, just narrow the return
-async function getData(): Promise<TableRow[] | null> { ... }
-```
-
----
-
-## Subagent Instructions
-
-When dispatched as a lint/TS subagent, follow this loop:
-1. Run the canonical checker entrypoint:
-   `node .agent/skills/code-quality/scripts/start-here-lint.mjs`
-   or
-   `node .agent/skills/code-quality/scripts/start-here-ts.mjs`
-2. Match each error to a pattern above  **do not analyze, just apply the recipe**
-3. Fix ALL errors in that file before moving to the next
-4. Use the report views, not waiting:
-   `type`, `file <pattern>`, `count`, and `errors-by-type-*`
-5. Move immediately to the next file in the list  do NOT idle-wait for a fresh daemon pass
-6. After fixing a few files, re-open `type` or `count` for the next bucket
-7. Stop when total issues stop decreasing across consecutive reads
+Files marked `🔄` in the report changed after the run started — their findings
+may already be fixed. Don't chase them; they'll be re-evaluated next run.

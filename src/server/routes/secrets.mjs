@@ -49,7 +49,7 @@ const router = express.Router();
 
 /**
  * Provider secrets are a single host SSOT — NOT per project-vault brain.
- * Selecting project:ultrachat for memory/graph must not empty the Secrets page.
+ * Selecting any project:<name> scope for memory/graph must not empty the Secrets page.
  * Repo binding lives in secret metadata (repos[]), not separate secrets.enc files.
  *
  * Override only via TR_SECRETS_BRAIN / TR_BRAIN env (deploy/ops).
