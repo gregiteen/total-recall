@@ -1,0 +1,69 @@
+{
+  "version": 3,
+  "toolchain": "javascript",
+  "repoDescription": "Total Recall brain — Node ESM, no TypeScript, no ESLint. Quality here means: dist stays in sync with src, the open-source path invariant holds, and the SSSS reference kernel still passes its own suites.",
+  "globalLock": true,
+  "memory": { "maxOldSpaceMb": 4096 },
+  "lock": { "staleAfterMinutes": 45 },
+  "sourceExtensions": [".mjs", ".js", ".cjs"],
+  "checks": [
+    {
+      "id": "dist-freshness",
+      "tier": "fast",
+      "description": "Published dist must not lag src — prepublishOnly depends on this.",
+      "cmd": ["npm", "run", "check:dist"],
+      "parser": "generic"
+    },
+    {
+      "id": "open-source-paths",
+      "tier": "fast",
+      "kind": "grep-forbid",
+      "description": "INVARIANT: TR core must never hardcode a personal home path or name a third-party product repo. Multi-repo support is path-only (register/track/--repo/TR_SYNC_REPOS/cwd).",
+      "extensions": [".mjs", ".js", ".cjs"],
+      "ignorePaths": [
+        "^node_modules/",
+        "^scratch/",
+        "^docs/",
+        "^fixtures/",
+        "^templates/",
+        "^scaffold/",
+        "test",
+        "\\.test\\.mjs$",
+        "\\.spec\\.mjs$",
+        "^\\.agent/"
+      ],
+      "patterns": [
+        {
+          "pattern": "/Users/[a-zA-Z0-9._-]+/",
+          "code": "TR-PATH-001",
+          "message": "Hardcoded absolute home path. Derive from os.homedir(), cwd, or config."
+        },
+        {
+          "pattern": "~/(Github|github)/",
+          "code": "TR-PATH-002",
+          "message": "Hardcoded ~/Github path. Use project-registry / TR_SYNC_REPOS / --repo / cwd."
+        },
+        {
+          "pattern": "(festech\\.live|ultrachat|portfolio-site|moogie_crm|documenso)",
+          "code": "TR-OSS-001",
+          "message": "Names a third-party product repo. TR is open-source: host apps are equal implementations, never special-cased."
+        }
+      ]
+    },
+    {
+      "id": "ssss-registry",
+      "tier": "full",
+      "description": "SSSS effective-registry verification via the shipped @ssss/cli (v0.9).",
+      "cmd": ["npx", "ssss", "registry", "verify"],
+      "parser": "generic"
+    },
+    {
+      "id": "test",
+      "tier": "full",
+      "description": "Full vitest suite. Heavy — prefer the Mac Mini or droplet over the laptop.",
+      "cmd": ["npm", "test"],
+      "parser": "generic",
+      "timeoutSeconds": 1800
+    }
+  ]
+}

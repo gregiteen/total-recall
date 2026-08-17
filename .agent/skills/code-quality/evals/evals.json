@@ -1,26 +1,47 @@
 [
   {
-    "id": "code-quality-eval-1",
-    "description": "Ensure code-quality SKILL.md exists and has frontmatter",
-    "command": "test -f .agent/skills/code-quality/SKILL.md && grep -q 'name: code-quality' .agent/skills/code-quality/SKILL.md",
-    "expected_exit_code": 0
+    "name": "config-exists-and-validates",
+    "assertion": "config.json exists in the skill dir, parses as JSON, declares version 3, and every entry in checks[] has a unique id plus either a non-empty cmd array or kind:'grep-forbid' with a non-empty patterns array.",
+    "severity": "error"
   },
   {
-    "id": "code-quality-eval-2",
-    "description": "Ensure start-here-ts.mjs is executable and passes",
-    "command": "node .agent/skills/code-quality/scripts/start-here-ts.mjs --help",
-    "expected_exit_code": 0
+    "name": "config-is-tailored-to-this-repo",
+    "assertion": "Every command in config.json checks[] actually resolves in THIS repo — each npm/pnpm script named in a cmd exists in package.json, each binary is installed, and no check references a toolchain the repo does not have (e.g. no tsc gate in a repo without typescript).",
+    "severity": "error"
   },
   {
-    "id": "code-quality-eval-3",
-    "description": "Ensure code-quality-auditor subagent contains tool whitelist",
-    "command": "grep -q '## Tools Available' .agent/skills/code-quality/subagents/code-quality-auditor.md",
-    "expected_exit_code": 0
+    "name": "no-daemon-scripts-remain",
+    "assertion": "scripts/ contains no continuous-checker*.mjs, start-here-*.mjs, errors-by-type-*.mjs, or lint-auto-fix.mjs, and no *.log files are committed. v3 is one-shot only.",
+    "severity": "error"
   },
   {
-    "id": "code-quality-eval-4",
-    "description": "Ensure on-lint-error hook executes successfully",
-    "command": "bash .agent/skills/code-quality/hooks/on-lint-error.sh",
-    "expected_exit_code": 0
+    "name": "check-is-run-in-background",
+    "assertion": "check.mjs is invoked as a background job, never as a blocking foreground command, and the agent never sleeps or polls waiting for it to finish.",
+    "severity": "error"
+  },
+  {
+    "name": "locking-is-fail-closed",
+    "assertion": "When the lock holder's command line cannot be read, check.mjs refuses to start rather than proceeding. A run must never begin on the assumption that an unverifiable lock is stale.",
+    "severity": "error"
+  },
+  {
+    "name": "partial-coverage-is-declared",
+    "assertion": "When any gate is skipped by tier or --only, both check.mjs stderr and the report.mjs header state which gates did not run. A bounded run is never presented as full coverage.",
+    "severity": "error"
+  },
+  {
+    "name": "no-orphans-left-behind",
+    "assertion": "After check.mjs exits by any path (success, findings, timeout, SIGINT, SIGTERM, crash), no child process survives and both the repo lock and the global lock are released.",
+    "severity": "error"
+  },
+  {
+    "name": "gates-are-not-bypassed",
+    "assertion": "Findings are resolved by fixing the code, never by adding @ts-nocheck / @ts-ignore / @ts-expect-error / blanket eslint-disable / blanket biome-ignore, and never by editing check.mjs or deleting a gate from config.json to silence it.",
+    "severity": "error"
+  },
+  {
+    "name": "report-declares-staleness",
+    "assertion": "report.mjs compares tracked source mtimes against the run's startedAt and explicitly reports FRESH, STALE (naming changed files), or that git could not be read. It never implies freshness it has not verified.",
+    "severity": "warning"
   }
 ]

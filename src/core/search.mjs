@@ -138,7 +138,7 @@ export async function semanticSearch(query, {
   // "the embedding API failed" and "the index for this brain was never built"
   // are completely different problems with completely different fixes, and
   // this used to report both as the former. That mislabelling cost real time —
-  // festech.live's project brain had 2602 vault nodes and 0 embeddings, and
+  // one project brain had 2602 vault nodes and 0 embeddings, and
   // every recall against it printed "Embedding API unreachable or
   // unconfigured. Configure GOOGLE_API_KEY or OPENAI_API_KEY", which sent the
   // reader off to check credentials that were working perfectly.
