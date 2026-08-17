@@ -1,25 +1,46 @@
 #!/usr/bin/env node
 /**
  * Pre-push quality gate.
- * All quality checks are handled by the release verification script
- * (node .agent/skills/push/scripts/release.mjs) which runs tests,
- * lint, and TypeScript checks before version bumping.
  *
- * This gate delegates to the code-quality skill scripts.
+ * Delegates to the code-quality skill's one-shot runner. Which gates exist is
+ * the skill's business, not this file's — read
+ * .agent/skills/code-quality/config.json to see them. Naming individual
+ * checker scripts here is what broke this hook when the checker was rebuilt:
+ * it went on invoking start-here-lint.mjs / start-here-ts.mjs long after those
+ * were deleted, so every push failed with MODULE_NOT_FOUND.
+ *
+ * Exit contract of check.mjs:
+ *   0 = clean   1 = findings   2 = a gate could not run (never treat as clean)
  */
-import { execSync } from 'child_process';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import { spawnSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const root = resolve(__dirname, '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-try {
-  console.log('🔍 Pre-push: running quality checks...');
-  execSync('node .agent/skills/code-quality/scripts/start-here-lint.mjs', { cwd: root, stdio: 'inherit' });
-  execSync('node .agent/skills/code-quality/scripts/start-here-ts.mjs', { cwd: root, stdio: 'inherit' });
-  console.log('✅ Pre-push quality gate passed.');
-} catch (err) {
-  console.error('❌ Pre-push quality gate failed.');
+console.log('🔍 Pre-push: running quality checks...');
+
+const run = spawnSync(
+  process.execPath,
+  ['.agent/skills/code-quality/scripts/check.mjs'],
+  { cwd: root, stdio: 'inherit' }
+);
+
+if (run.error) {
+  console.error(`❌ Pre-push gate could not run: ${run.error.message}`);
   process.exit(1);
 }
+
+if (run.status === 0) {
+  console.log('✅ Pre-push quality gate passed.');
+  process.exit(0);
+}
+
+console.error(
+  run.status === 2
+    ? '❌ A quality gate failed to run. This is not a clean result — see:\n' +
+      '   node .agent/skills/code-quality/scripts/report.mjs'
+    : '❌ Quality gate found blocking errors. Inspect them with:\n' +
+      '   node .agent/skills/code-quality/scripts/report.mjs'
+);
+process.exit(1);
