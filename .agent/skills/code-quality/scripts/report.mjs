@@ -66,7 +66,20 @@ const ageMin = Math.round((Date.now() - Date.parse(report.finishedAt)) / 60000);
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-console.log(`\n📊 code-quality — ${report.toolchain} — ${report.totalFindings} finding(s)`);
+// Errors block a push; warnings and infos are reported but do not. Showing the
+// split keeps "17 findings" from reading as "17 things I must fix now".
+const sevCount = (report.findings || []).reduce((m, f) => {
+  const k = f.severity === 'warning' || f.severity === 'info' ? f.severity : 'error';
+  m[k] = (m[k] || 0) + 1;
+  return m;
+}, {});
+const sevLabel = ['error', 'warning', 'info']
+  .filter((k) => sevCount[k])
+  .map((k) => `${sevCount[k]} ${k}`)
+  .join(', ');
+console.log(
+  `\n📊 code-quality — ${report.toolchain} — ${report.totalFindings} finding(s)${sevLabel ? ` (${sevLabel})` : ''}`
+);
 console.log(`   ran ${report.ranChecks.join(', ')} at tier=${report.tier} in ${(report.durationMs / 1000).toFixed(1)}s, ${ageMin}min ago`);
 
 if (report.skippedChecks?.length) {
@@ -117,6 +130,18 @@ const byFile = () => {
 const fmt = (f) => `  ${f.file}:${f.line}:${f.col}  ${f.code}  ${f.message}${f.snippet ? `\n      ↳ ${f.snippet}` : ''}`;
 const staleMark = (file) => (changed?.includes(file) ? ' 🔄' : '');
 
+// `raw` reads the stored tool output, not the parsed findings, so it must be
+// reachable when there are zero findings — that is precisely the "failed
+// without parseable findings" case the header just told you to inspect.
+if (mode === 'raw') {
+  if (!existsSync(REPORT_TXT)) { console.error('No raw output stored.'); process.exit(1); }
+  const raw = readFileSync(REPORT_TXT, 'utf8');
+  if (!arg) { console.log(raw.slice(0, 20000)); process.exit(0); }
+  const section = raw.split(/^# /m).find((s) => s.startsWith(arg));
+  console.log(section ? `# ${section}`.slice(0, 40000) : `No raw section for check "${arg}".`);
+  process.exit(section ? 0 : 1);
+}
+
 if (findings.length === 0) {
   console.log('✅ No findings.');
   process.exit(0);
@@ -151,14 +176,6 @@ switch (mode) {
     const hits = findings.filter((f) => f.file.includes(arg));
     console.log(`🔍 ${hits.length} finding(s) matching "${arg}"${staleMark(hits[0]?.file || '')}`);
     hits.slice(0, MAX_SHOWN).forEach((f) => console.log(fmt(f)));
-    break;
-  }
-  case 'raw': {
-    if (!existsSync(REPORT_TXT)) { console.error('No raw output stored.'); process.exit(1); }
-    const raw = readFileSync(REPORT_TXT, 'utf8');
-    if (!arg) { console.log(raw.slice(0, 20000)); break; }
-    const section = raw.split(/^# /m).find((s) => s.startsWith(arg));
-    console.log(section ? `# ${section}`.slice(0, 40000) : `No raw section for check "${arg}".`);
     break;
   }
   default: {

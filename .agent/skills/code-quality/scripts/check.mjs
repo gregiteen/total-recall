@@ -276,6 +276,33 @@ const PARSERS = {
       code: m[5] || 'mypy', message: m[4].trim()
     };
   },
+  /**
+   * Biome, via `--reporter=github`. Biome's default pretty output is a
+   * multi-line box drawing that also truncates at --max-diagnostics, so a gate
+   * parsing it would silently under-report. The github reporter is one
+   * fully-structured line per diagnostic:
+   *
+   *   ::warning title=lint/style/useConst,file=a.ts,line=3,endLine=3,col=7,endColumn=9::Use const.
+   *
+   * Always pair it with --max-diagnostics=none.
+   */
+  biome(line) {
+    const m = line.match(/^::(error|warning|notice)\s+(.+?)::(.*)$/);
+    if (!m) return null;
+    const attrs = {};
+    for (const kv of m[2].split(',')) {
+      const i = kv.indexOf('=');
+      if (i > 0) attrs[kv.slice(0, i)] = kv.slice(i + 1);
+    }
+    return {
+      file: attrs.file || '?',
+      line: +(attrs.line || 0),
+      col: +(attrs.col || 0),
+      code: attrs.title || 'biome',
+      message: m[3].trim(),
+      severity: m[1] === 'notice' ? 'info' : m[1]
+    };
+  },
   generic(line) {
     const m = line.match(/^(.+?):(\d+):(?:(\d+):)?\s*(?:error|ERROR)[:\s]+(.*)$/);
     return m && { file: m[1].trim(), line: +m[2], col: m[3] ? +m[3] : 0, code: 'error', message: m[4].trim() };
@@ -333,6 +360,38 @@ function gitHead() {
  * This is how the repo's own written invariants become enforceable gates —
  * e.g. "never add @ts-nocheck to silence the typechecker".
  */
+/**
+ * Files this gate should look at.
+ *
+ *   scope: "all"      (default) every tracked source file
+ *   scope: "changed"  only files modified vs `baseline` (default origin/HEAD)
+ *
+ * "changed" exists for going-forward naming/style invariants on codebases with
+ * large pre-existing violation sets, where a blanket rename would break a live
+ * API or schema. The rule still fails the moment new code violates it; the
+ * historical backlog is a tracked migration, not a permanently red gate.
+ * Never use it for correctness gates (types, lint, bypass) — those must stay
+ * repo-wide.
+ */
+function grepScopeFiles(check) {
+  const all = trackedSources();
+  if ((check.scope || 'all') !== 'changed') return all;
+  const baseline = check.baseline || 'origin/HEAD';
+  let changed;
+  try {
+    const out = execFileSync('git', ['diff', '--name-only', '--diff-filter=d', baseline], {
+      cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 20_000
+    });
+    changed = new Set(out.split('\n').map((s) => s.trim()).filter(Boolean));
+  } catch {
+    // Cannot resolve the baseline — fail safe by checking everything rather
+    // than silently checking nothing.
+    console.error(`⚠️  [code-quality] ${check.id}: baseline "${baseline}" unresolvable; falling back to full scope.`);
+    return all;
+  }
+  return all.filter((f) => changed.has(f));
+}
+
 function runGrepForbid(check) {
   const findings = [];
   const patterns = (check.patterns || []).map((p) => ({
@@ -341,7 +400,7 @@ function runGrepForbid(check) {
   const exts = new Set(check.extensions || config.sourceExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py']);
   const ignore = (check.ignorePaths || []).map((p) => new RegExp(p));
 
-  for (const rel of trackedSources()) {
+  for (const rel of grepScopeFiles(check)) {
     if (!exts.has(path.extname(rel))) continue;
     if (ignore.some((re) => re.test(rel))) continue;
     let text;
@@ -468,10 +527,15 @@ async function main() {
       : (check.cmd || []).join(' ');
     console.error(`   → ${check.id}: ${label}`);
     const r = await runCheck(check);
+    // Mirror the exit contract: ✅ means nothing here blocks a push. Warnings
+    // are counted separately so a green gate with warnings does not read as
+    // failing, and a failing gate never reads as green.
+    const soft = r.findings.filter((f) => f.severity === 'warning' || f.severity === 'info').length;
+    const hard = r.findings.length - soft;
     const note = r.spawnError ? `spawn failed: ${r.spawnError}`
       : r.timedOut ? 'TIMED OUT'
-      : `${r.findings.length} finding(s), exit ${r.exitCode}`;
-    console.error(`     ${r.ok && !r.findings.length ? '✅' : '⚠️ '} ${note} (${(r.durationMs / 1000).toFixed(1)}s)`);
+      : `${hard} error(s)${soft ? `, ${soft} warning(s)` : ''}, exit ${r.exitCode}`;
+    console.error(`     ${r.ok && !hard ? '✅' : '⚠️ '} ${note} (${(r.durationMs / 1000).toFixed(1)}s)`);
     results.push(r);
   }
 
@@ -512,11 +576,21 @@ async function main() {
   //   2 = infrastructure failure, or a gate failed in a way we could not parse
   //       (spawn error, timeout, or non-zero exit with zero findings — that
   //        last one is the dangerous case: it must never read as clean)
+  //
+  // A gate's verdict is the TOOL's verdict. Linters routinely exit 0 while
+  // emitting warnings; turning those into a red gate would mean the gate
+  // disagrees with the tool it wraps, and a gate nobody can get green stops
+  // being a gate. So warnings/infos are reported but do not fail the run on
+  // their own — a non-zero exit from the tool still does.
   const opaqueFailure = results.some(
     (r) => !r.ok && !r.spawnError && !r.timedOut && r.findings.length === 0
   );
+  const toolFailed = results.some((r) => !r.ok);
+  const blocking = findings.filter((f) => f.severity !== 'warning' && f.severity !== 'info');
   releaseLocks();
-  process.exit(report.infrastructureFailure || opaqueFailure ? 2 : findings.length ? 1 : 0);
+  process.exit(
+    report.infrastructureFailure || opaqueFailure ? 2 : toolFailed || blocking.length ? 1 : 0
+  );
 }
 
 main().catch((err) => {
