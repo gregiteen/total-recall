@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.24.2] — 2026-08-19
+
+### 🐛 Bug Fixes & Improvements
+- **Brain backups no longer break silently**: `backup` now gitignores and untracks the file classes that had each already broken a real backup — `memory-vault/.events/` (one reached 306MB, and GitHub hard-rejects blobs over 100MB, so every nightly push was refused for five weeks while the job kept reporting nothing), `browser-profile/` (the rotation Chromium profile, holding live provider session cookies), `.snapshots/` and `daemon.pid`. Enforced on every push rather than only at `--install`, so brains created before this release self-correct. Files stay on disk; only git stops tracking them.
+- **"Brain unchanged — nothing to push" now verifies the remote**: it was decided from the working tree alone, so two scheduled jobs sharing the `backup` remote name but pointing at different URLs was enough to freeze one destination for months while every run logged success. It now skips only when the remote demonstrably has the local HEAD, and pushes when the remote is behind.
+- **`sync-repo` implemented**: it previously printed `Synced and verified skill: <name>`, `Merging core invariants non-destructively` and `Sync Completed Successfully!` without fetching, merging or writing anything, while the skill's Core Directive #4 told agents to run it to keep skills current. It also probed `<agent>/memory-vault` rather than `<agent>/skills/total-recall/memory-vault`, so on a correct install it aborted with a misleading "run init first". It now resolves a real template source, preserves each destination's compiled `<!-- BEGIN INJECTED MEMORY -->` block, never descends into `memory-vault/`, and reports the files it actually changed.
+- **Scaffold conformance**: the two seeded preference nodes were missing the SSSS §4.2 `description` and `timestamp` fields, so every brain created by `init` was seeded non-conformant. New brains also now inherit the protective `.gitignore`.
+- **Route manifest**: recorded `POST /api/daemon/restart`, added in 3.24.1 without updating the committed manifest tripwire.
+
 ## [3.24.1] — 2026-08-19
 
 ### 🐛 Bug Fixes & Improvements
