@@ -202,43 +202,50 @@ export function MobilePairing() {
             </div>
 
             {selected && (
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-                {selected.reachable_hint}
-              </p>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.5, background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: 6 }}>
+                <strong>Connection Route:</strong> {selected.reachable_hint}
+              </div>
             )}
 
             {isLoopback && (
-              <p
+              <div
                 data-testid="pairing-loopback-warning"
-                style={{ fontSize: 12, color: '#f59e0b', margin: 0 }}
+                style={{ fontSize: 12, color: '#f59e0b', margin: '0 0 8px', background: 'rgba(245, 158, 11, 0.1)', padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(245, 158, 11, 0.2)' }}
               >
-                This address only works on this computer. Choose LAN or Tailscale for your phone.
-              </p>
+                ⚠️ <strong>Loopback Only:</strong> <code>127.0.0.1</code> only works on this computer. To open on your phone, select your Mesh IP (<code>100.64.x.x</code>) or enable <strong>Allow Public Bind</strong> below to use local Wi-Fi.
+              </div>
             )}
           </div>
         </div>
       )}
 
       {info?.warnings && info.warnings.length > 0 && (
-        <ul
+        <div
           data-testid="pairing-warnings"
           style={{
             margin: '16px 0 0',
-            paddingLeft: 18,
+            padding: '10px 14px',
             fontSize: 12,
-            color: '#f59e0b',
+            color: '#fbbf24',
+            background: 'rgba(251, 191, 36, 0.08)',
+            borderRadius: 8,
+            border: '1px solid rgba(251, 191, 36, 0.2)',
           }}
         >
-          {info.warnings.map((w) => (
-            <li key={w}>{w}</li>
-          ))}
-        </ul>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Network Notice:</div>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {info.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      <p style={{ marginTop: 16, fontSize: 11, color: 'var(--text-tertiary)' }}>
-        After scanning, log in on the phone (same password/PAT as this dashboard). Listening:{' '}
-        {(info?.listen_hosts || []).join(', ') || 'unknown'}
-      </p>
+      <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(59, 130, 246, 0.06)', borderRadius: 8, border: '1px solid rgba(59, 130, 246, 0.15)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>📱 How to connect your phone:</div>
+        <div><strong>Option A (WireGuard / Mesh — Recommended):</strong> Install the standard <em>Tailscale</em> app on your phone (iOS App Store / Google Play). Log into your tailnet/headscale server. Scan the <code>100.64.x.x</code> QR code above.</div>
+        <div style={{ marginTop: 4 }}><strong>Option B (Local Home Wi-Fi):</strong> Check <strong>Allow Public Bind</strong> in <em>Network & Binding</em> below, restart the server, and scan your local Wi-Fi LAN QR code (e.g. <code>192.168.x.x</code>).</div>
+      </div>
     </div>
   );
 }
