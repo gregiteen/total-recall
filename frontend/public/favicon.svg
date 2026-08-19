@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="14" fill="#0b1220"/>
-  <path d="M18 42V28a14 14 0 0 1 28 0v14" stroke="#60a5fa" stroke-width="5" stroke-linecap="round"/>
-  <path d="M24 42V28a8 8 0 0 1 16 0v14" stroke="#1e3a8a" stroke-width="4" stroke-linecap="round"/>
-  <rect x="20" y="40" width="24" height="6" rx="2" fill="#93c5fd"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" rx="64" fill="#0b1220" />
+  <!-- Minimalist Archway representing a permanent memory vault -->
+  <path d="M 120 300 L 120 180 A 80 80 0 0 1 280 180 L 280 300 Z" fill="#93c5fd" />
+  <!-- Elegant shadow -->
+  <path d="M 280 300 L 280 180 A 80 80 0 0 0 200 100 L 350 250 L 350 300 Z" fill="#1e40af" opacity="0.6" />
+  <!-- Inner void -->
+  <path d="M 150 300 L 150 180 A 50 50 0 0 1 250 180 L 250 300 Z" fill="#0b1220" />
 </svg>
