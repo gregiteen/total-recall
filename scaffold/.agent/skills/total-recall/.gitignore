@@ -1,7 +1,18 @@
-
-# Auto-added by total-recall backup --install
+# Derived/regenerable — rebuilt from the vault
 memory-derived/
 sessions/
 *.backup
 logs/
 node_modules/
+
+# Runtime, sensitive, or oversized — never versioned.
+# Each of these broke a real backup before it was listed here:
+#   memory-vault/.events/  append-only logs; one reached 306MB and GitHub
+#                          hard-rejects blobs >100MB, killing every push.
+#   browser-profile/       the rotation Chromium profile — live provider
+#                          session cookies. As sensitive as secrets.enc.
+#   .snapshots/            ~46MB vault tarballs stored inside the vault.
+memory-vault/.events/
+browser-profile/
+.snapshots/
+daemon.pid
