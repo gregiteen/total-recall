@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { fetchNodes, mintPreAuthKey } from '../api/mesh';
+import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey } from '../api/mesh';
 import type { MeshNode, PreAuthKey } from '../api/mesh';
 
 /**
@@ -19,12 +19,20 @@ export function TailnetEnroll() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [serverCopied, setServerCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  // The control-server URL is the FIRST thing you need on the phone, and it is
+  // config, not a property of a key. Reading it only off a minted key meant the
+  // URL stayed invisible until a 15-minute countdown was already running.
+  const [controlServer, setControlServer] = useState<string | null>(null);
 
   useEffect(() => {
     fetchNodes()
       .then(setNodes)
       .catch((e) => setError(e?.message ?? 'could not load nodes'));
+    fetchEnrollmentStatus()
+      .then((st) => setControlServer(st.login_server))
+      .catch(() => setControlServer(null));
   }, []);
 
   // An enrollment key is a bearer credential with a short TTL. Show the time
@@ -54,7 +62,7 @@ export function TailnetEnroll() {
   };
 
   const expired = secondsLeft !== null && secondsLeft <= 0;
-  const loginServer = minted?.login_server ?? null;
+  const loginServer = controlServer ?? minted?.login_server ?? null;
   // `complete` is the resolver's own verdict: false when the login account is
   // unknown and the node would refuse you. No resolved access at all counts as
   // unknown too. (There is no `ssh_user` field — the account is `user`.)
@@ -64,8 +72,77 @@ export function TailnetEnroll() {
     <section data-testid="tailnet-enroll" style={{ marginTop: 24 }}>
       <h3 style={{ marginBottom: 4 }}>Add a device to the tailnet</h3>
       <p style={{ fontSize: 12, opacity: 0.75, marginTop: 0 }}>
-        Mints a short-lived enrollment key for a phone, tablet, or another machine.
+        Point the device at this control server, then authenticate it with a short-lived key.
       </p>
+
+      {/*
+        Instructions come BEFORE the key and are open by default. They used to
+        live inside the `minted` branch behind a collapsed <details>, so the
+        control-server URL -- step one, and the thing you cannot proceed
+        without -- was invisible until a 15-minute countdown was already
+        running. Nothing here is hardcoded: the URL is whatever the brain's
+        config resolves to.
+      */}
+      <div
+        data-testid="enroll-instructions"
+        style={{ margin: '12px 0', padding: 14, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)' }}
+      >
+        <div style={{ fontSize: 12, marginBottom: 10 }}>
+          <strong>Control server</strong>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+            <code data-testid="enroll-login-server" style={{ wordBreak: 'break-all', flex: 1 }}>
+              {loginServer ?? 'not configured — set the Headscale URL in Secrets first'}
+            </code>
+            {loginServer && (
+              <button
+                type="button"
+                data-testid="enroll-copy-server"
+                onClick={() => { navigator.clipboard?.writeText(loginServer); setServerCopied(true); }}
+              >
+                {serverCopied ? 'Copied' : 'Copy'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <details open style={{ fontSize: 12 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>On a phone (iOS)</summary>
+          <ol style={{ paddingLeft: 18, lineHeight: 1.7, marginBottom: 6 }}>
+            <li>Install <strong>Tailscale</strong> from the App Store — <strong>1.38.1 or newer</strong>, the first release that supports an alternate control server.</li>
+            <li>
+              <strong>Sign out of Tailscale first.</strong> The alternate-server setting is only read while
+              the app is logged out.
+            </li>
+            <li>
+              Open <strong>iOS Settings</strong>, scroll past Game Center and TV Provider to{' '}
+              <strong>Tailscale</strong>, and put the control server above into{' '}
+              <strong>Alternate Coordination Server URL</strong>.
+            </li>
+            <li>
+              <strong>If this device was ever signed into Tailscale's own service, turn on “Reset Keychain”.</strong>{' '}
+              Skipping this is the usual reason the app keeps going back to the public login.
+            </li>
+            <li>Force-quit Tailscale from the app switcher, then reopen it — the setting is read at launch.</li>
+            <li>Tap the plain <strong>Sign in</strong> option (not SSO). It should open this control server's page.</li>
+            <li>Authenticate with the key below.</li>
+          </ol>
+          <p style={{ opacity: 0.75, margin: 0 }}>
+            The in-app route — account icon → <strong>Log in…</strong> → options menu →{' '}
+            <strong>Use custom coordination server</strong> — reaches the same place when it works, but that
+            menu has been reported unresponsive on some builds. The Settings route above is the reliable one.
+          </p>
+        </details>
+
+        <details style={{ fontSize: 12, marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>On Android</summary>
+          <ol style={{ paddingLeft: 18, lineHeight: 1.7, margin: '4px 0 0' }}>
+            <li>Install Tailscale from Google Play and make sure it is signed out.</li>
+            <li>Open the app, tap the account icon, then <strong>Log in…</strong>.</li>
+            <li>Open the top-right options menu → <strong>Use custom coordination server</strong>.</li>
+            <li>Enter the control server above, then authenticate with the key below.</li>
+          </ol>
+        </details>
+      </div>
 
       {error && (
         <div
@@ -105,11 +182,6 @@ export function TailnetEnroll() {
 
           <div style={{ flex: 1, minWidth: 260 }}>
             <div style={{ fontSize: 12, marginBottom: 6 }}>
-              <strong>Control server</strong>
-              <div><code data-testid="enroll-login-server">{loginServer ?? 'not configured'}</code></div>
-            </div>
-
-            <div style={{ fontSize: 12, marginBottom: 6 }}>
               <strong>Enrollment key</strong>{' '}
               <span data-testid="enroll-ttl" style={{ opacity: 0.7 }}>
                 {expired ? '(expired)' : `(expires in ${secondsLeft}s, ${minted.reusable ? 'reusable' : 'single-use'})`}
@@ -126,20 +198,6 @@ export function TailnetEnroll() {
                 </button>
               </div>
             </div>
-
-            <details style={{ fontSize: 12, marginTop: 10 }}>
-              <summary style={{ cursor: 'pointer' }}>On a phone (iOS / Android)</summary>
-              <ol style={{ paddingLeft: 18, lineHeight: 1.6 }}>
-                <li>Install Tailscale (iOS needs 1.38.1 or newer).</li>
-                <li>Account icon → <strong>Log in</strong> → options menu → <strong>Use custom coordination server</strong>.</li>
-                <li>Enter <code>{loginServer ?? 'your control server URL'}</code>.</li>
-                <li>Scan the QR or paste the key above when asked to authenticate.</li>
-              </ol>
-              <p style={{ opacity: 0.75 }}>
-                If that menu does not respond (reported on some 2026 iOS builds), set the same URL under
-                iOS Settings → Tailscale → <em>Alternate coordination server URL</em>.
-              </p>
-            </details>
 
             <details style={{ fontSize: 12, marginTop: 6 }}>
               <summary style={{ cursor: 'pointer' }}>On a computer</summary>
