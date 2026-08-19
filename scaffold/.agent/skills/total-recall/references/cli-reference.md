@@ -23,7 +23,7 @@ Rebuild the derived indexes and compile memory surfaces.
 ### 1.3 `connect`
 Configure an IDE or external client to bind to the Total Recall local server.
 *   **Syntax**: `npx total-recall connect <client> [options]`
-*   **Supported Clients**: `cursor`, `claude-code`, `antigravity`, `gemini`, `vscode`, `windsurf`, `aider`, `ultrachat`, `obsidian`.
+*   **Supported Clients**: `vscode`, `cursor`, `cline`, `codex`, `antigravity`, `gemini`, `aider`, `obsidian`, `pi`, `hermes`, `openclaw`, `generic`.
 *   **Options**:
     *   `--brain <url>`: Override default brain server URL.
     *   `--token <PAT>`: Inject bearer PAT credentials for authenticating requests.
