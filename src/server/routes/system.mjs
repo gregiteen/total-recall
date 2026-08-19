@@ -202,5 +202,20 @@ router.get('/api/usage/providers', requireAuth, async (req, res) => {
   } catch (err) { serverError(res, err); }
 });
 
+/**
+ * POST /api/daemon/restart
+ * Restarts the Active Intelligence background daemon process.
+ */
+router.post('/api/daemon/restart', requireAuth, requireScope('config:write'), async (_req, res) => {
+  try {
+    const { stopDaemon, startDaemon } = await import('../../core/daemon-control.mjs');
+    stopDaemon();
+    const pid = startDaemon();
+    res.json({ success: true, message: `Daemon restarted successfully (PID ${pid})`, pid });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
 export default router;
 export { router as systemRouter };

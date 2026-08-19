@@ -45,7 +45,7 @@ router.get('/api/update/check', requireAuth, async (_req, res) => {
 
     const consumersBehind = projects.filter((p) => p.update_available).length;
     const updateAvailable =
-      Boolean(latest && current && current !== latest) || consumersBehind > 0;
+      Boolean(latest && current && needsUpdate(current, latest)) || consumersBehind > 0;
 
     res.json({
       package: PACKAGE_NAME,

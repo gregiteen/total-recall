@@ -6,6 +6,7 @@ import {
   runAgentDiagnostics,
   checkUpdate,
   runUpdate,
+  restartDaemon,
   triggerRecompile,
   apiFetch,
   getApiBase,
@@ -50,6 +51,22 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   } | null>(null);
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [restartingDaemon, setRestartingDaemon] = useState(false);
+
+  const handleRestartDaemon = async () => {
+    setRestartingDaemon(true);
+    setUpdateMessage(null);
+    try {
+      const res = await restartDaemon();
+      setUpdateMessage(res.message || 'Daemon restarted successfully.');
+      const h = await fetchHealth().catch(() => null);
+      if (h) setHealth(h);
+    } catch (err: unknown) {
+      setUpdateMessage('Restart error: ' + (err as Error).message);
+    } finally {
+      setRestartingDaemon(false);
+    }
+  };
   const [rebuilding, setRebuilding] = useState(false);
   
   const loadConfig = async () => {
@@ -984,14 +1001,24 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
                 </div>
               )}
             </div>
-            <button 
-              className="btn-primary"
-              onClick={handleRunUpdate}
-              disabled={updating}
-              style={{ background: updateInfo?.updateAvailable ? '#3fb950' : undefined, border: 'none' }}
-            >
-              {updating ? 'Updating…' : updateInfo?.updateAvailable ? 'Apply Updates' : 'Check & Sync Projects'}
-            </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                className="btn-secondary"
+                onClick={handleRestartDaemon}
+                disabled={restartingDaemon}
+                style={{ fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}
+              >
+                {restartingDaemon ? 'Restarting…' : 'Restart Daemon'}
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={handleRunUpdate}
+                disabled={updating}
+                style={{ background: updateInfo?.updateAvailable ? '#3fb950' : undefined, border: 'none' }}
+              >
+                {updating ? 'Updating…' : updateInfo?.updateAvailable ? 'Apply Updates' : 'Check & Sync Projects'}
+              </button>
+            </div>
           </div>
         </div>
 

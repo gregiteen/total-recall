@@ -99,6 +99,7 @@ import {
   triggerRecompile,
   triggerDream,
   runAgentDiagnostics,
+  restartDaemon,
   fetchBrains,
   listTasks,
   createTask,
@@ -189,7 +190,7 @@ describe('API barrel exports — all functions exist', () => {
     // research
     listResearch, createResearch, patchResearch, deleteResearch,
     // system
-    fetchHealth, fetchUsageStats, fetchLogs, triggerRecompile, triggerDream, runAgentDiagnostics,
+    fetchHealth, fetchUsageStats, fetchLogs, triggerRecompile, triggerDream, runAgentDiagnostics, restartDaemon,
     fetchBrains, listTasks, createTask, listFiles, listScripts, readScript, saveScript, runScript,
     shareToApi, runOkfLint, triggerOkfExport, postDecision,
     // update

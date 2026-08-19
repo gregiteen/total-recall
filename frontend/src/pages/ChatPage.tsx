@@ -46,6 +46,9 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
   const [extensionBannerDismissed, setExtensionBannerDismissed] = useState(
     () => localStorage.getItem('tr-ext-banner-dismissed') === 'true'
   )
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | null>(
+    () => localStorage.getItem('tr-update-banner-dismissed-version')
+  )
 
   // Threads listing & session control state
   const [threads, setThreads] = useState<ChatThread[]>([])
@@ -671,7 +674,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
         </header>
 
         {/* Update Available Banner */}
-        {updateInfo?.updateAvailable && (
+        {updateInfo?.updateAvailable && dismissedUpdateVersion !== updateInfo.latestVersion && (
           <div className="animate-fade-in" style={{
             margin: '0 16px 12px',
             padding: '12px 16px',
@@ -709,6 +712,27 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
               }}
             >
               Go to Update
+            </button>
+            <button
+              onClick={() => {
+                if (updateInfo?.latestVersion) {
+                  localStorage.setItem('tr-update-banner-dismissed-version', updateInfo.latestVersion)
+                  setDismissedUpdateVersion(updateInfo.latestVersion)
+                }
+              }}
+              title="Dismiss banner"
+              aria-label="Dismiss update banner"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: 16,
+                cursor: 'pointer',
+                padding: '4px 6px',
+                lineHeight: 1,
+              }}
+            >
+              ✕
             </button>
           </div>
         )}

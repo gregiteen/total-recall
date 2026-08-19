@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { fetchHealth, checkUpdate, runUpdate } from '../api'
+import { fetchHealth, checkUpdate, runUpdate, restartDaemon } from '../api'
 import type { HealthData, UpdateCheckResult } from '../types'
 
 function formatUptime(seconds: number): string {
@@ -23,6 +23,24 @@ export default function HealthPage() {
   const [updateError, setUpdateError] = useState('')
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [checkMessage, setCheckMessage] = useState('')
+  const [isRestartingDaemon, setIsRestartingDaemon] = useState(false)
+  const [daemonMessage, setDaemonMessage] = useState('')
+
+  const handleRestartDaemon = async () => {
+    setIsRestartingDaemon(true)
+    setDaemonMessage('')
+    try {
+      const res = await restartDaemon()
+      setDaemonMessage(res.message || 'Daemon restarted successfully')
+      setTimeout(() => setDaemonMessage(''), 4000)
+      const data = await fetchHealth()
+      setHealth(data)
+    } catch (e) {
+      setDaemonMessage(`Failed to restart daemon: ${(e as Error).message}`)
+    } finally {
+      setIsRestartingDaemon(false)
+    }
+  }
 
   const handleManualCheckUpdate = async () => {
     setIsCheckingUpdate(true)
@@ -96,8 +114,14 @@ export default function HealthPage() {
       setIsUpdating(false)
       setCheckMessage(
         result.message ||
-          'Registered projects updated. Restart local daemon/server if you need new code in this process.',
+          'Registered projects updated. Restart daemon if you need new code running.',
       )
+
+      // Refresh version check immediately so banner / badge clears
+      const refreshed = await checkUpdate().catch(() => null)
+      if (refreshed) {
+        setUpdateInfo(refreshed)
+      }
     } catch (e) {
       setUpdateError((e as Error).message)
       setIsUpdating(false)
@@ -278,7 +302,32 @@ export default function HealthPage() {
                 <tr><th>Version</th><td>{health.version}</td></tr>
                 <tr><th>Uptime</th><td>{formatUptime(health.uptime_seconds)}</td></tr>
                 <tr><th>Timestamp</th><td>{health.timestamp}</td></tr>
-                <tr><th>Daemon Status</th><td>{health.daemon || 'unknown'}</td></tr>
+                <tr>
+                  <th>Daemon Status</th>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <span style={{ fontWeight: 600 }}>{health.daemon || 'unknown'}</span>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleRestartDaemon}
+                        disabled={isRestartingDaemon}
+                        style={{
+                          fontSize: 12,
+                          padding: '4px 12px',
+                          borderRadius: 6,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {isRestartingDaemon ? 'Restarting…' : 'Restart Daemon'}
+                      </button>
+                    </div>
+                    {daemonMessage && (
+                      <div style={{ fontSize: 12, color: daemonMessage.includes('Failed') ? '#ef4444' : '#3fb950', marginTop: 4 }}>
+                        {daemonMessage}
+                      </div>
+                    )}
+                  </td>
+                </tr>
                 {health.cli_agents && (
                   <tr><th>CLI Agents</th><td>{health.cli_agents.join(', ')}</td></tr>
                 )}

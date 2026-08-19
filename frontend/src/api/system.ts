@@ -71,6 +71,12 @@ export async function runAgentDiagnostics(): Promise<{ success: boolean; output:
   return res.json()
 }
 
+export async function restartDaemon(): Promise<{ success: boolean; message: string; pid?: number }> {
+  const res = await apiFetch(`${API_BASE}/api/daemon/restart`, { method: 'POST' })
+  if (!res.ok) throw new Error(`Restart daemon API error: ${res.status}`)
+  return res.json()
+}
+
 export async function fetchBrains(): Promise<Record<string, unknown>[]> {
   const res = await apiFetch(`${API_BASE}/api/brains`)
   const data = await res.json()
