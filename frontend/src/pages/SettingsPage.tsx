@@ -14,6 +14,7 @@ import {
 import type { HealthData } from '../types';
 import type { ConfigJson } from '../types';
 import { MobilePairing } from '../components/MobilePairing';
+import { TailnetEnroll } from '../components/TailnetEnroll';
 
 function normalizeConfigJson(data: ConfigJson): ConfigJson {
   const next = { ...data } as ConfigJson & Record<string, unknown>;
@@ -557,6 +558,10 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
       <div className="settings-grid">
         <div className="settings-card glow-on-hover">
           <MobilePairing />
+        </div>
+
+        <div className="settings-card glow-on-hover">
+          <TailnetEnroll />
         </div>
 
         {/* --- Global System Layer --- */}

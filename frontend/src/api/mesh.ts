@@ -306,3 +306,27 @@ export async function registerLanMeshNodes(opts?: { probe?: boolean; limit?: num
     limit: opts?.limit ?? 32,
   });
 }
+
+/** A short-lived bearer credential that lets a NEW device join the tailnet. */
+export interface PreAuthKey {
+  success: boolean;
+  key: string;
+  expiration: string;
+  reusable: boolean;
+  ephemeral: boolean;
+  ttl_minutes: number;
+  /** Control-server URL to enter on the device. Never carries the token. */
+  login_server: string | null;
+}
+
+export async function mintPreAuthKey(opts?: {
+  reusable?: boolean;
+  ephemeral?: boolean;
+  ttlMinutes?: number;
+}): Promise<PreAuthKey> {
+  return post('/api/mesh/preauthkey', {
+    reusable: opts?.reusable === true,
+    ephemeral: opts?.ephemeral === true,
+    ttlMinutes: opts?.ttlMinutes,
+  });
+}
