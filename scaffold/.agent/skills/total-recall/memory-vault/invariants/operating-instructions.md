@@ -3,6 +3,8 @@ type: memory
 slug: operating-instructions
 category: invariants
 title: Total Recall Core Operating Protocol
+description: "The absolute operating protocol for agents using Total Recall: SSSS-governed memory, CLI-first mutations, no external database."
+timestamp: 2026-05-15T00:00:00.000Z
 schema_version: 2
 status: active
 confidence: 1

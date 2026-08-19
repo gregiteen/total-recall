@@ -22,14 +22,19 @@ export function getSnapshotsDir() {
 }
 
 /**
- * Create a point-in-time snapshot of the memory vault.
+ * Create a point-in-time snapshot of a memory vault.
+ *
+ * `vaultDir` is explicit because this used to always snapshot the global brain
+ * vault no matter which vault the caller was about to modify — so a migration
+ * against a project vault took its safety snapshot of an unrelated vault and
+ * the thing being changed had no backup at all.
  *
  * @param {string} reason - The reason for the snapshot (e.g. 'pre-dream', 'manual')
+ * @param {string} [vaultDir] - Vault to snapshot; defaults to the global brain vault
  * @returns {{ success: boolean, snapshot_id: string, path: string, error?: string }}
  */
-export function createSnapshot(reason = 'manual') {
+export function createSnapshot(reason = 'manual', vaultDir = path.join(brainDir, 'memory-vault')) {
   try {
-    const vaultDir = path.join(brainDir, 'memory-vault');
     const snapshotsDir = getSnapshotsDir();
 
     if (!fs.existsSync(vaultDir)) {
@@ -48,6 +53,7 @@ export function createSnapshot(reason = 'manual') {
       snapshot_id: snapshotId,
       created_at: new Date().toISOString(),
       reason,
+      vault_dir: vaultDir,
     };
     fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
 
@@ -91,14 +97,20 @@ export function listSnapshots() {
 }
 
 /**
- * Rollback the memory vault to a specific snapshot.
+ * Rollback a memory vault to a specific snapshot.
+ *
+ * Restores into the vault the snapshot was actually taken from, recorded in its
+ * metadata. This used to always restore into the global brain vault, so rolling
+ * back a project snapshot would have deleted the global vault and unpacked
+ * another project's nodes over it — destroying good data while leaving the
+ * vault in trouble untouched. Snapshots predating the recorded field came from
+ * the global vault, which is the fallback.
  *
  * @param {string} snapshotId - The ID of the snapshot to restore.
  * @returns {{ success: boolean, error?: string }}
  */
 export function rollbackVault(snapshotId) {
   try {
-    const vaultDir = path.join(brainDir, 'memory-vault');
     const snapshotsDir = getSnapshotsDir();
 
     const tarball = path.join(snapshotsDir, `vault-${snapshotId}.tar.gz`);
@@ -106,8 +118,19 @@ export function rollbackVault(snapshotId) {
       return { success: false, error: `Snapshot ${snapshotId} not found.` };
     }
 
-    // Safety measure: take a backup of the CURRENT state before destroying it
-    const preRollback = createSnapshot(`pre-rollback-to-${snapshotId}`);
+    let vaultDir = path.join(brainDir, 'memory-vault');
+    const metaPath = path.join(snapshotsDir, `vault-${snapshotId}.json`);
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (meta.vault_dir) vaultDir = meta.vault_dir;
+      } catch (err) {
+        return { success: false, error: `Snapshot ${snapshotId} metadata is unreadable: ${err.message}` };
+      }
+    }
+
+    // Safety measure: back up the CURRENT state of that same vault first
+    const preRollback = createSnapshot(`pre-rollback-to-${snapshotId}`, vaultDir);
     if (!preRollback.success) {
       return { success: false, error: `Failed to create pre-rollback safety snapshot: ${preRollback.error}` };
     }
@@ -124,8 +147,8 @@ export function rollbackVault(snapshotId) {
       throw new Error(`tar extraction failed: ${result.stderr.toString()}`);
     }
 
-    logger.info('snapshot', `Rolled back to snapshot ${snapshotId}`);
-    return { success: true };
+    logger.info('snapshot', `Rolled back ${vaultDir} to snapshot ${snapshotId}`);
+    return { success: true, vault_dir: vaultDir };
   } catch (err) {
     logger.error('snapshot', `Rollback failed: ${err.message}`);
     return { success: false, error: err.message };

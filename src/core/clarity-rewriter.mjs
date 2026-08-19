@@ -4,7 +4,8 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
-import { getNodes, invalidate } from './vault-cache.mjs';
+import { updateNodeInPlace } from './validated-write.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -567,18 +568,6 @@ export async function runCutoffAudit({ vaultDir, queueDir, runtimeConfig }) {
   return { audited: batch.length, flagged, critical };
 }
 
-/** Resolve vault dir from node file path (…/memory-vault/category/slug.md). */
-function vaultDirFromNodeFile(filePath) {
-  if (!filePath) return null;
-  let cur = path.dirname(filePath);
-  while (cur && cur !== path.dirname(cur)) {
-    if (path.basename(cur) === 'memory-vault') return cur;
-    cur = path.dirname(cur);
-  }
-  // Fallback: parent of category dir
-  return path.dirname(path.dirname(filePath));
-}
-
 function nodeFilePath(node) {
   return node?._filepath || node?._filePath || null;
 }
@@ -587,12 +576,11 @@ async function stampVerified(node) {
   const fp = nodeFilePath(node);
   if (!fp) return;
   try {
-    const raw = fs.readFileSync(fp, 'utf8');
-    const { data, content } = matter(raw);
-    data.x_cutoff_verified_at = new Date().toISOString();
-    data.x_cutoff_risk = 'none';
-    atomicWrite(fp, safeStringify(content, data));
-    invalidate(vaultDirFromNodeFile(fp));
+    const result = await updateNodeInPlace(fp, (data) => {
+      data.x_cutoff_verified_at = new Date().toISOString();
+      data.x_cutoff_risk = 'none';
+    });
+    if (!result.success) throw new Error((result.validation?.errors || [result.error]).join('; '));
   } catch (err) {
     logger.debug('clarity-rewriter: stampCutoffRiskNone failed', { err: err.message });
   }
@@ -602,16 +590,15 @@ async function stampCutoffRisk(node, riskLevel, claimCount) {
   const fp = nodeFilePath(node);
   if (!fp) return;
   try {
-    const raw = fs.readFileSync(fp, 'utf8');
-    const { data, content } = matter(raw);
-    data.x_cutoff_risk = riskLevel;
-    data.x_cutoff_claim_count = claimCount;
-    data.x_cutoff_flagged_at = new Date().toISOString();
-    // Lower confidence to reflect that claims are unverified
-    const confidencePenalty = riskLevel === 'critical' ? 0.3 : riskLevel === 'high' ? 0.2 : 0.1;
-    data.confidence = Math.max(0.1, (data.confidence || 0.5) - confidencePenalty);
-    atomicWrite(fp, safeStringify(content, data));
-    invalidate(vaultDirFromNodeFile(fp));
+    const result = await updateNodeInPlace(fp, (data) => {
+      data.x_cutoff_risk = riskLevel;
+      data.x_cutoff_claim_count = claimCount;
+      data.x_cutoff_flagged_at = new Date().toISOString();
+      // Lower confidence to reflect that claims are unverified
+      const confidencePenalty = riskLevel === 'critical' ? 0.3 : riskLevel === 'high' ? 0.2 : 0.1;
+      data.confidence = Math.max(0.1, (data.confidence || 0.5) - confidencePenalty);
+    });
+    if (!result.success) throw new Error((result.validation?.errors || [result.error]).join('; '));
   } catch (err) {
     logger.debug('clarity-rewriter: stampCutoffRisk failed', { err: err.message });
   }
@@ -777,16 +764,15 @@ async function stampNodeForCorrection(node, correctionSlug, disposition) {
   const fp = nodeFilePath(node);
   if (!fp) return;
   try {
-    const raw = fs.readFileSync(fp, 'utf8');
-    const { data, content } = matter(raw);
-    data.status = disposition === 'deleted' ? 'archived' : 'superseded';
-    data.superseded_by = correctionSlug;
-    data.x_correction_applied_at = new Date().toISOString();
-    // Lower confidence significantly — this fact has been proven wrong
-    data.confidence = Math.max(0.05, (data.confidence || 0.5) * 0.3);
-    data.updated = new Date().toISOString();
-    atomicWrite(fp, safeStringify(content, data));
-    invalidate(vaultDirFromNodeFile(fp));
+    const result = await updateNodeInPlace(fp, (data) => {
+      data.status = disposition === 'deleted' ? 'archived' : 'superseded';
+      data.superseded_by = correctionSlug;
+      data.x_correction_applied_at = new Date().toISOString();
+      // Lower confidence significantly — this fact has been proven wrong
+      data.confidence = Math.max(0.05, (data.confidence || 0.5) * 0.3);
+      data.updated = new Date().toISOString();
+    });
+    if (!result.success) throw new Error((result.validation?.errors || [result.error]).join('; '));
   } catch (err) {
     logger.debug('clarity-rewriter: stampNodeForCorrection failed', { err: err.message });
   }

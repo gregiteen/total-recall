@@ -143,7 +143,7 @@ export default async function proposals(args) {
     case 'reject': {
       if (!id) { console.error('  ❌ Usage: proposals reject <id> [reason]'); process.exitCode = 1; return; }
       const reason = remainingArgs.slice(2).filter(a => !a.startsWith('--')).join(' ') || 'Rejected by user.';
-      setProposalStatus(vaultDir, id, 'rejected', { rejection_reason: reason, reviewed_by: 'user' });
+      await setProposalStatus(vaultDir, id, 'rejected', { rejection_reason: reason, reviewed_by: 'user' });
       console.log(`\n  ✗ Rejected ${id}: ${reason}\n`);
       return;
     }
@@ -172,7 +172,7 @@ export default async function proposals(args) {
         return;
       }
       for (const p of open) {
-        setProposalStatus(vaultDir, p.proposal_id, 'superseded', { superseded_reason: reason });
+        await setProposalStatus(vaultDir, p.proposal_id, 'superseded', { superseded_reason: reason });
       }
       console.log(`\n  ~ Superseded ${open.length} "${topic}" proposal(s).\n`);
       return;
@@ -181,7 +181,7 @@ export default async function proposals(args) {
     case 'revert': {
       if (!id) { console.error('  ❌ Usage: proposals revert <id>'); process.exitCode = 1; return; }
       try {
-        const { reverted, deleted } = revertProposal(vaultDir, id);
+        const { reverted, deleted } = await revertProposal(vaultDir, id);
         console.log(`\n  ✓ Reverted ${id} — ${reverted} file(s) restored, ${deleted} removed.\n`);
       } catch (err) {
         console.error(`  ❌ ${err.message}`);

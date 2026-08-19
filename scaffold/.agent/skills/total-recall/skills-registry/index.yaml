@@ -1,7 +1,2462 @@
-# Skills registry — populated at runtime by `total-recall skill` commands.
-#
-# This file ships as part of the install template, so it must start EMPTY.
-# It previously shipped a snapshot of the maintainer's machine, which leaked
-# local repository paths and private project names to every installer.
 version: 1
-skills: {}
+updated_at: 2026-08-17T02:02:30.779Z
+skills:
+  code-mode:
+    id: code-mode
+    title: code-mode
+    description: "Use this skill when working on Code Mode infrastructure — the AI
+      assistant tool execution mode using search_api and execute_api. MANDATORY:
+      Read this file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/code-mode
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/code-mode
+    content_hash: 40834007fe1eaa52
+    registered_at: 2026-07-14T00:13:39.743Z
+    updated_at: 2026-07-14T00:17:43.096Z
+  instruction-keeper:
+    id: instruction-keeper
+    title: instruction-keeper
+    description: "Use this skill when managing the lifecycle and version control of
+      system instructions. MANDATORY: You MUST read the full SKILL.md file
+      before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/instruction-keeper
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/instruction-keeper
+    content_hash: 63fc983279b2e599
+    registered_at: 2026-07-14T00:13:39.943Z
+    updated_at: 2026-07-14T00:17:57.886Z
+  okf:
+    id: okf
+    title: OKF Compatibility
+    description: >
+      Use this skill to access information about Google's Open Knowledge Format
+      (OKF). Contains core principles, repository links, and conventions.
+      ACTIVATE this skill  when designing or upgrading SSSS schemas to ensure
+      they maintain strict compatibility  with the OKF standard.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ssss/.claude/skills/okf
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ssss/.claude/skills/okf
+    content_hash: 997b37707ccdc2f8
+    registered_at: 2026-07-14T00:13:39.974Z
+    updated_at: 2026-07-14T00:18:10.469Z
+  push:
+    id: push
+    title: push
+    description: "Use this skill when verifying, committing, or pushing code to
+      cloud and triggering auto-deploys. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/push
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/push
+    content_hash: 11eb36a844c35006
+    registered_at: 2026-07-14T00:13:39.998Z
+    updated_at: 2026-07-14T00:18:13.421Z
+  repo-expert:
+    id: repo-expert
+    title: repo-expert
+    description: "Use this skill when you need to understand codebase architecture,
+      file structure, and runtime topology. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/repo-expert
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/repo-expert
+    content_hash: 035e6dbac000d776
+    registered_at: 2026-07-14T00:13:40.026Z
+    updated_at: 2026-07-14T00:18:18.774Z
+  research:
+    id: research
+    title: research
+    description: Use this skill when queueing, searching, and managing long-horizon
+      background research projects via the Total Recall REST API.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ssss/.claude/skills/research
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ssss/.claude/skills/research
+    content_hash: 401f578609f9f678
+    registered_at: 2026-07-14T00:13:40.118Z
+    updated_at: 2026-07-14T00:18:19.831Z
+  security:
+    id: security
+    title: security
+    description: "Use this skill when making changes to Supabase, DO, OpenRouter,
+      Stripe, PAT, OAuth 2.1, WebAuthn, MCP, telephony, or email security.
+      MANDATORY: You MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/security
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/security
+    content_hash: 305cdd5eb59d8cf0
+    registered_at: 2026-07-14T00:13:40.160Z
+    updated_at: 2026-07-14T00:18:24.800Z
+  skill:
+    id: skill
+    title: skill
+    description: "Use this skill when managing the UltraChat Skill Ecosystem,
+      Development Skills, or Product Skills. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/skill
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/skill
+    content_hash: 0a15e7bf874a1807
+    registered_at: 2026-07-14T00:13:40.293Z
+    updated_at: 2026-07-14T00:18:27.422Z
+  ssss:
+    id: ssss
+    title: ssss
+    description: "Use this skill when reading, writing, parsing, validating, or
+      extending SSSS -- the Structured Semantic Syntax System -- in the
+      UltraChat repo: the SSSS Core Contract API, VFS-native primitives
+      (assistants, workflows, models, conversations, runs, skills, memory),
+      operation/patch/event envelopes, leases, and projections. MANDATORY: You
+      MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ssss
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ssss
+    content_hash: f648dd067ae4c673
+    registered_at: 2026-07-14T00:13:40.393Z
+    updated_at: 2026-07-14T00:18:28.908Z
+  test:
+    id: test
+    title: test
+    description: "Use this skill when running the Browser Test Suite, WebGPU,
+      storage, offline, PWA, or Web APIs tests. MANDATORY: You MUST read the
+      full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/test
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/test
+    content_hash: 21c5ac8d208928e8
+    registered_at: 2026-07-14T00:13:40.551Z
+    updated_at: 2026-07-14T00:18:33.890Z
+  total-recall-project-management:
+    id: total-recall-project-management
+    title: total-recall-project-management
+    description: "Total Recall-specific project management overlay. Use alongside
+      the global project-management skill when managing Total Recall GitHub
+      issues, pull requests, or project tracker checklists. Defines what
+      stability/readiness means for Total Recall, architecture reminders, and
+      prioritization. Do NOT use for code implementation. MANDATORY: You MUST
+      read the full SKILL.md file before executing."
+    version: 3.14.1
+    tags: []
+    source: /Users/greg/Github/total-recall/.agents/skills/total-recall-project-management
+    source_type: discovered
+    source_path: /Users/greg/Github/total-recall/.agents/skills/total-recall-project-management
+    content_hash: 0ffd2e3d7e92ac5a
+    registered_at: 2026-07-14T00:13:40.635Z
+    updated_at: 2026-07-14T00:18:34.815Z
+  cli-agents:
+    id: cli-agents
+    title: cli-agents
+    description: "Use this skill when coordinating multiple terminal subagents
+      (Gemini, Claude, Codex) for parallel code generation or project
+      orchestration. MANDATORY: You MUST read the full SKILL.md file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/cli-agents
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/cli-agents
+    content_hash: df1bd2eb039b1181
+    registered_at: 2026-07-14T00:16:11.117Z
+    updated_at: 2026-07-14T00:17:41.747Z
+  accounting:
+    id: accounting
+    title: accounting
+    description: "MANDATORY: Trigger this skill whenever reconciling accounts,
+      generating 1099/W2 forms, updating ledgers, or running payroll."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/accounting
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/accounting
+    content_hash: 9ec5c473363fa425
+    registered_at: 2026-07-14T00:16:11.634Z
+    updated_at: 2026-07-14T00:17:37.173Z
+  asterisk:
+    id: asterisk
+    title: asterisk
+    description: "Use this skill when managing Telephony, Asterisk PBX, SIP trunks,
+      SMS routing, and carrier operations. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/asterisk
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/asterisk
+    content_hash: de8ba048ccf99dd0
+    registered_at: 2026-07-14T00:16:11.690Z
+    updated_at: 2026-07-14T00:17:38.620Z
+  database:
+    id: database
+    title: database
+    description: "Use this skill when working on Supabase PostgreSQL schema,
+      migrations, database health, or queries. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/database
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/database
+    content_hash: 4863cdeee4cdd5a8
+    registered_at: 2026-07-14T00:16:11.823Z
+    updated_at: 2026-07-14T00:17:46.573Z
+  domains:
+    id: domains
+    title: domains
+    description: Use this skill when managing, configuring, or pointing custom
+      domains (like festech.live) registered on Vercel to the Digital Ocean
+      Droplet.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/domains
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/domains
+    content_hash: 53833abef1eb9d41
+    registered_at: 2026-07-14T00:16:12.024Z
+    updated_at: 2026-07-14T00:17:52.375Z
+  festech-project-management:
+    id: festech-project-management
+    title: festech-project-management
+    description: >
+      Project management skill for festech.live (Multi-Use Studio Engine) — the
+      bespoke artist collective management platform. Built on SSSS (Structured
+      Semantic Syntax System) as the core operational substrate. Guides agents
+      through the standard SWE sequence (PRD → Architecture → Dev Plan →
+      Tracker) and enforces per-project document isolation. ACTIVATE this skill
+      for any task related to festech.live project planning, tracking, or
+      feature scoping.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/festech-project-management
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/festech-project-management
+    content_hash: ccead0ca367e4a4f
+    registered_at: 2026-07-14T00:16:12.106Z
+    updated_at: 2026-07-14T00:17:55.221Z
+  legal-quants:
+    id: legal-quants
+    title: legal-quants
+    description: A collection of highly-rated LegalQuants agent skills for
+      generating, reviewing, and analyzing legal documents. Use this whenever
+      working on legal documents via the BYOK AI.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/legal-quants
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/legal-quants
+    content_hash: 70f05f4207957636
+    registered_at: 2026-07-14T00:16:12.343Z
+    updated_at: 2026-07-14T00:18:00.858Z
+  monetization:
+    id: monetization
+    title: monetization
+    description: Comprehensive reference for festech.live revenue streams, Stripe
+      configuration, limits, feature flags, and top-up schemas. Use this skill
+      whenever building or debugging billing features, enforcing pricing tiers,
+      or restricting access to platform capabilities.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/monetization
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/monetization
+    content_hash: df9bbcc9ca24667c
+    registered_at: 2026-07-14T00:16:12.506Z
+    updated_at: 2026-07-14T00:18:06.018Z
+  translation:
+    id: translation
+    title: translation
+    description: Use this skill when you need to run the automated AI translation
+      pipeline, extract hardcoded strings to en.json, or configure the
+      translation models.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/translation
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/translation
+    content_hash: 8175e88f657b219b
+    registered_at: 2026-07-14T00:16:13.634Z
+    updated_at: 2026-07-14T00:18:40.551Z
+  ui:
+    id: ui
+    title: ui
+    description: "Use this skill when working on Frontend UI development, shadcn/ui
+      components, or mobile-first responsive design. MANDATORY: You MUST read
+      the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ui
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ui
+    content_hash: b98c37e88cff2c3a
+    registered_at: 2026-07-14T00:16:13.931Z
+    updated_at: 2026-07-14T00:18:42.065Z
+  web-design:
+    id: web-design
+    title: web-design
+    description: "Use this skill when generating, critiquing, or refining AI-powered
+      web page designs for festech.live collectives. Enforces anti-slop
+      constraints, brand fidelity, and distinctive visual identity. MANDATORY:
+      You MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/web-design
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/web-design
+    content_hash: d4120293dda2bbb0
+    registered_at: 2026-07-14T00:16:14.265Z
+    updated_at: 2026-07-14T00:18:44.754Z
+  autonomous-improvement:
+    id: autonomous-improvement
+    title: autonomous-improvement
+    description: "Use this skill to spawn 10x concurrent subagents that analyze and
+      improve 10 turborepo systems simultaneously on a cron schedule. MANDATORY:
+      Read full SKILL.md before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/autonomous-improvement
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/autonomous-improvement
+    content_hash: de251aa6c0c12fcc
+    registered_at: 2026-07-14T00:16:14.816Z
+    updated_at: 2026-07-14T00:17:39.489Z
+  bug-killer:
+    id: bug-killer
+    title: bug-killer
+    description: "Use this skill when diagnosing, reproducing, isolating, or fixing
+      software bugs. MANDATORY: You MUST read the full SKILL.md file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/bug-killer
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/bug-killer
+    content_hash: a7308a138e1230a8
+    registered_at: 2026-07-14T00:16:15.043Z
+    updated_at: 2026-07-14T00:17:40.383Z
+  mail-expert:
+    id: mail-expert
+    title: mail-expert
+    description: Trigger this skill when working with email infrastructure, SMTP,
+      Mailcow, DKIM/SPF/DMARC, or DNS mail records for festech.live or
+      ultrachat.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/festech.live/.claude/skills/mail-expert
+    source_type: discovered
+    source_path: /Users/greg/Github/festech.live/.claude/skills/mail-expert
+    content_hash: 07b8f4c5c28f00e8
+    registered_at: 2026-07-14T00:16:16.238Z
+    updated_at: 2026-07-14T00:18:01.858Z
+  deploy:
+    id: deploy
+    title: deploy
+    description: "Use this skill when deploying to production, managing
+      auto-deploys, or hot-reloading APIs. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/deploy
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/deploy
+    content_hash: 72a21ac41905d645
+    registered_at: 2026-07-14T00:16:21.389Z
+    updated_at: 2026-07-14T00:17:47.985Z
+  design:
+    id: design
+    title: design
+    description: "Use this skill when checking or implementing the Google Labs
+      DESIGN.md standard. MANDATORY: You MUST read the full SKILL.md file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/design
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/design
+    content_hash: 24e9ec58c96f7b62
+    registered_at: 2026-07-14T00:16:21.508Z
+    updated_at: 2026-07-14T00:17:49.765Z
+  moogie-crm:
+    id: moogie-crm
+    title: moogie-crm
+    description: Complete architecture, deployment, design system, and operational
+      details for the Moogie Marketing custom CRM.
+    version: 0.0.0
+    tags:
+      - crm
+      - flask
+      - alpinejs
+      - tailwind
+      - google-api
+      - cron
+      - deployment
+      - moogie
+    source: /Users/greg/Github/moogie_crm/.agent/skills/moogie-crm
+    source_type: discovered
+    source_path: /Users/greg/Github/moogie_crm/.agent/skills/moogie-crm
+    content_hash: 9ef21d3295cb05cb
+    registered_at: 2026-07-14T00:16:21.716Z
+    updated_at: 2026-07-14T00:18:07.173Z
+  moogie-project-management:
+    id: moogie-project-management
+    title: moogie-project-management
+    description: "Moogie CRM-specific project management overlay. Use alongside the
+      global project-management skill when planning or tracking Moogie CRM
+      features and architecture changes. Do NOT use for code implementation.
+      MANDATORY: You MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/moogie_crm/.agent/skills/moogie-project-management
+    source_type: discovered
+    source_path: /Users/greg/Github/moogie_crm/.agent/skills/moogie-project-management
+    content_hash: 20f327f0eacd9562
+    registered_at: 2026-07-14T00:16:21.840Z
+    updated_at: 2026-07-14T00:18:08.149Z
+  start:
+    id: start
+    title: start
+    description: Cold boot and context restoration for Moogie CRM
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/moogie_crm/.agent/skills/start
+    source_type: discovered
+    source_path: /Users/greg/Github/moogie_crm/.agent/skills/start
+    content_hash: 56fa2d09cbd312c7
+    registered_at: 2026-07-14T00:16:22.658Z
+    updated_at: 2026-07-14T00:18:31.108Z
+  switch:
+    id: switch
+    title: switch
+    description: Context preservation and thread switching for Moogie CRM
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/moogie_crm/.agent/skills/switch
+    source_type: discovered
+    source_path: /Users/greg/Github/moogie_crm/.agent/skills/switch
+    content_hash: 83d47bfcff5ed128
+    registered_at: 2026-07-14T00:16:22.740Z
+    updated_at: 2026-07-14T00:18:32.039Z
+  web-expert:
+    id: web-expert
+    title: web-expert
+    description: Elite web conversion expert persona and prompt for AI visual audits
+      using browser-harness.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/moogie_crm/.agent/skills/web-expert
+    source_type: discovered
+    source_path: /Users/greg/Github/moogie_crm/.agent/skills/web-expert
+    content_hash: 0abd1a98e341c385
+    registered_at: 2026-07-14T00:16:23.041Z
+    updated_at: 2026-07-14T00:18:46.102Z
+  email:
+    id: email
+    title: email
+    description: Use this skill to manage email infrastructure, check the mail
+      server status, and configure SMTP2GO or Mailcow environments.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.agent/skills/email
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.agent/skills/email
+    content_hash: d812396eaf278627
+    registered_at: 2026-07-14T00:16:24.289Z
+    updated_at: 2026-07-14T00:17:53.931Z
+  frontend-design:
+    id: frontend-design
+    title: frontend-design
+    description: Guidance for distinctive, intentional visual design when building
+      new UI or reshaping an existing one. Helps with aesthetic direction,
+      typography, and making choices that don't read as templated defaults.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.agent/skills/frontend-design
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.agent/skills/frontend-design
+    content_hash: f7fa37b1a29f5cd9
+    registered_at: 2026-07-14T00:16:24.557Z
+    updated_at: 2026-07-14T00:17:55.990Z
+  marketing:
+    id: marketing
+    title: marketing
+    description: Use this skill for marketing workflows, drip campaigns, emails,
+      lead generation, and messaging.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.agent/skills/marketing
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.agent/skills/marketing
+    content_hash: 962263454f3db74c
+    registered_at: 2026-07-14T00:16:24.740Z
+    updated_at: 2026-07-14T00:18:03.402Z
+  portfolio-project-management:
+    id: portfolio-project-management
+    title: portfolio-project-management
+    description: "portfolio-site-specific project management overlay. Use alongside
+      the global project-management skill when managing portfolio-site GitHub
+      issues, pull requests, or project tracker checklists. Defines the SSSS
+      vault architecture reminders and repo context. Do NOT use for code
+      implementation. MANDATORY: You MUST read the full SKILL.md file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.agent/skills/portfolio-project-management
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.agent/skills/portfolio-project-management
+    content_hash: 48799bd6c4a85d99
+    registered_at: 2026-07-14T00:16:24.931Z
+    updated_at: 2026-07-14T00:18:12.099Z
+  tr-cli-agents:
+    id: tr-cli-agents
+    title: tr-cli-agents
+    description: Orchestrate headlessly spawned CLI agents from the central registry.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.claude/skills/tr-cli-agents
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.claude/skills/tr-cli-agents
+    content_hash: 8235298c395e4ccc
+    registered_at: 2026-07-14T00:16:25.922Z
+    updated_at: 2026-07-14T00:18:36.129Z
+  tr-research:
+    id: tr-research
+    title: tr-research
+    description: Use this skill when queueing, searching, and managing long-horizon
+      background research projects via the Total Recall REST API.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.claude/skills/tr-research
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.claude/skills/tr-research
+    content_hash: e0d0fedf085abf7d
+    registered_at: 2026-07-14T00:16:26.189Z
+    updated_at: 2026-07-14T00:18:37.271Z
+  tr-skill:
+    id: tr-skill
+    title: tr-skill
+    description: "Use this skill when creating, auditing, or modifying any skill in
+      the .agent/skills/ ecosystem. MANDATORY: You MUST read the full SKILL.md
+      file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.claude/skills/tr-skill
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.claude/skills/tr-skill
+    content_hash: 82b7c01070cd14b4
+    registered_at: 2026-07-14T00:16:26.441Z
+    updated_at: 2026-07-14T00:18:38.374Z
+  tr-ssss:
+    id: tr-ssss
+    title: tr-ssss
+    description: "Use this skill to inspect, validate, write, and manage SSSS
+      primitives, memory nodes, operation envelopes, scope overlays,
+      projections, and VFS specifications in the Total Recall reference kernel.
+      MANDATORY: Read this file before editing SSSS files or code."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/portfolio-site/.claude/skills/tr-ssss
+    source_type: discovered
+    source_path: /Users/greg/Github/portfolio-site/.claude/skills/tr-ssss
+    content_hash: 6c6479088c51f011
+    registered_at: 2026-07-14T00:16:26.788Z
+    updated_at: 2026-07-14T00:18:39.515Z
+  rbac-fail-open-auditor:
+    id: rbac-fail-open-auditor
+    title: RBAC Fail-Open Auditor
+    description: >
+      Use this skill when auditing or hardening Stage 5.5 RBAC on an SSSS vault
+      or engine fork — e.g. before production launch, after adding a
+      security_role or ROLE.md, when actor.role might be missing or spoofable,
+      when someone asks whether a bad actor can write without a role, or after
+      ANY change to src/engine.mjs's Stage 5.5 block. Builds and runs
+      adversarial envelopes (missing actor, unknown role, zero-permission role,
+      system-role bypass, event-vs-document-type permission gating) against the
+      reference engine and reports fail-open vs fail-closed per case, generating
+      conformance-schema-compatible negative fixtures for any confirmed gap. Do
+      NOT use for registry/spec drift unrelated to authorization — use
+      ssss-registry-parity-auditor for that.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ssss/.claude/skills/rbac-fail-open-auditor
+    source_type: discovered
+    source_path: /Users/greg/Github/ssss/.claude/skills/rbac-fail-open-auditor
+    content_hash: 82654f7dee21e728
+    registered_at: 2026-07-14T00:16:30.139Z
+    updated_at: 2026-07-14T00:18:14.840Z
+  ssss-project-management:
+    id: ssss-project-management
+    title: SSSS Project Management
+    description: >
+      Project management skill for the SSSS (Structured Semantic Syntax System)
+      standard repo. Guides agents through the standard SWE sequence (PRD →
+      Architecture → Dev Plan → Tracker)  and enforces per-project document
+      isolation. ACTIVATE this skill for any task related to SSSS project
+      planning, tracking, or feature scoping.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ssss/.claude/skills/ssss-project-management
+    source_type: discovered
+    source_path: /Users/greg/Github/ssss/.claude/skills/ssss-project-management
+    content_hash: 0a05ace41fb586ca
+    registered_at: 2026-07-14T00:16:31.941Z
+    updated_at: 2026-07-14T00:18:29.603Z
+  ssss-registry-parity-auditor:
+    id: ssss-registry-parity-auditor
+    title: SSSS Registry Parity Auditor
+    description: >
+      Use this skill to audit whether SSSS's registry (registry/core.json +
+      registry/extensions/*.json) is actually consumed by the reference engine
+      (src/engine.mjs, src/registry.mjs) and matches docs/ssss-spec.md. Trigger
+      on "audit registry drift", "does the spec still match the code", "is
+      required_when actually enforced", "why is the conformance README's
+      reconciliation table still open", when adding a NEW field to a registry
+      primitive, or before cutting a release. Also trigger when a registry field
+      is declared on a primitive but might be silently ignored by
+      validateContent() — a drift class that is invisible to normal testing and
+      was previously real in this repo (required_when/enums were declared on the
+      memory primitive for a full release cycle with zero engine enforcement).
+      Do NOT use for RBAC/authorization-specific auditing — use
+      rbac-fail-open-auditor for that.
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ssss/.claude/skills/ssss-registry-parity-auditor
+    source_type: discovered
+    source_path: /Users/greg/Github/ssss/.claude/skills/ssss-registry-parity-auditor
+    content_hash: a62f7771c446d990
+    registered_at: 2026-07-14T00:16:32.405Z
+    updated_at: 2026-07-14T00:18:30.466Z
+  docs:
+    id: docs
+    title: docs
+    description: "Use this skill when managing, searching, or purging project
+      documentation under the Diátaxis architecture. MANDATORY: You MUST read
+      the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/docs
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/docs
+    content_hash: 47b912ea256d5d5d
+    registered_at: 2026-07-14T00:16:36.187Z
+    updated_at: 2026-07-14T00:17:51.223Z
+  elevenlabs:
+    id: elevenlabs
+    title: elevenlabs
+    description: "Use this skill when implementing, fixing, or modifying ElevenLabs
+      TTS, STT, and voice generation features. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/elevenlabs
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/elevenlabs
+    content_hash: 5ec9f7063ed4b65d
+    registered_at: 2026-07-14T00:16:36.652Z
+    updated_at: 2026-07-14T00:17:53.451Z
+  extensionexpert:
+    id: extensionexpert
+    title: extensionexpert
+    description: "Use this skill when developing or modifying Chrome Extensions,
+      Manifest V3, and side panels. MANDATORY: You MUST read the full SKILL.md
+      file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/extensionexpert
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/extensionexpert
+    content_hash: b0215657a7072609
+    registered_at: 2026-07-14T00:16:37.139Z
+    updated_at: 2026-07-14T00:17:54.541Z
+  identity:
+    id: identity
+    title: identity
+    description: "Use this skill when configuring how the AI presents itself, its
+      persona, and how it processes memory. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/identity
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/identity
+    content_hash: 11e628b971e1a6b5
+    registered_at: 2026-07-14T00:16:37.541Z
+    updated_at: 2026-07-14T00:17:56.758Z
+  instructions:
+    id: instructions
+    title: instructions
+    description: "Use this skill when modifying INSTRUCTIONS.md, syncing IDE
+      configs, or updating agent-facing rules. Do NOT use for skill content.
+      MANDATORY: You MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/instructions
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/instructions
+    content_hash: 3df4652ca34ba887
+    registered_at: 2026-07-14T00:16:38.173Z
+    updated_at: 2026-07-14T00:17:58.687Z
+  integrations:
+    id: integrations
+    title: integrations
+    description: "Use this skill when connecting to external services (Mailcow,
+      Redis, DO) via direct curl/SDK instead of MCPs. Do NOT use for Supabase or
+      Stripe. MANDATORY: You MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/integrations
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/integrations
+    content_hash: 944848dabe6bfa3d
+    registered_at: 2026-07-14T00:16:38.403Z
+    updated_at: 2026-07-14T00:17:59.821Z
+  mailexpert:
+    id: mailexpert
+    title: mailexpert
+    description: "Use this skill when working on email infrastructure, delivery,
+      campaigns, CRM integration, or unified inbox. MANDATORY: You MUST read the
+      full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/mailexpert
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/mailexpert
+    content_hash: 197c429c5367ab31
+    registered_at: 2026-07-14T00:16:38.639Z
+    updated_at: 2026-07-14T00:18:02.813Z
+  marketplace:
+    id: marketplace
+    title: marketplace
+    description: "Use this skill when working on the UltraChat Skill & MCP
+      Marketplace, publishing, or payouts. MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/marketplace
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/marketplace
+    content_hash: 475df4f43f30042d
+    registered_at: 2026-07-14T00:16:39.081Z
+    updated_at: 2026-07-14T00:18:04.312Z
+  mcp-expert:
+    id: mcp-expert
+    title: mcp-expert
+    description: "Use this skill when managing or auditing the MCP infrastructure,
+      skills tools, or the Skill-Only Architecture. MANDATORY: You MUST read the
+      full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/mcp-expert
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/mcp-expert
+    content_hash: 24b807cfbe9eaa74
+    registered_at: 2026-07-14T00:16:39.505Z
+    updated_at: 2026-07-14T00:18:05.084Z
+  monitor:
+    id: monitor
+    title: monitor
+    description: "Use this skill to monitor and troubleshoot UltraChat across the
+      production DigitalOcean Docker droplet and (when running) local dev —
+      container health, in-container PM2, every production log over SSH, the
+      auto-deploy + self-healing pipeline, Redis, cost-sync workers, and the
+      durable Code Mode execution trace. MANDATORY: Read this file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/monitor
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/monitor
+    content_hash: 1f22ce2d87a72be1
+    registered_at: 2026-07-14T00:16:40.040Z
+    updated_at: 2026-07-14T00:18:06.421Z
+  notifications:
+    id: notifications
+    title: notifications
+    description: "Use this skill when you need to trigger macOS desktop
+      notifications to ping the user with important background task results.
+      MANDATORY: You MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/notifications
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/notifications
+    content_hash: c1be0bc960a9d5a7
+    registered_at: 2026-07-14T00:16:40.359Z
+    updated_at: 2026-07-14T00:18:08.922Z
+  pdf:
+    id: pdf
+    title: pdf
+    description: "Use this skill whenever interacting with PDF files (reading,
+      extracting, combining, splitting, OCR). MANDATORY: You MUST read the full
+      SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/pdf
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/pdf
+    content_hash: 62674839ddca69c3
+    registered_at: 2026-07-14T00:16:41.067Z
+    updated_at: 2026-07-14T00:18:11.325Z
+  pwa:
+    id: pwa
+    title: pwa
+    description: "Use this skill when developing Progressive Web Apps (PWA), service
+      workers, caching, or Local AI integration. MANDATORY: You MUST read the
+      full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/pwa
+    source_type: sync-winner
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/pwa
+    content_hash: d1e064af10e97321
+    registered_at: 2026-07-14T00:16:41.765Z
+    updated_at: 2026-07-14T00:18:14.353Z
+  refactor:
+    id: refactor
+    title: refactor
+    description: "Use this skill when you need to modularize complex files (>1000
+      lines) or extract services from bloated route handlers. MANDATORY: You
+      MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/refactor
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/refactor
+    content_hash: 4c962a9b448a02ec
+    registered_at: 2026-07-14T00:16:42.688Z
+    updated_at: 2026-07-14T00:18:15.585Z
+  scheduler:
+    id: scheduler
+    title: scheduler
+    description: "Use this skill when creating, modifying, or debugging scheduled
+      tasks, recurring jobs, or cron-based automation. Do NOT use for workflow
+      execution. MANDATORY: You MUST read the full SKILL.md file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/scheduler
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/scheduler
+    content_hash: 5caed85eaa94bba9
+    registered_at: 2026-07-14T00:16:43.678Z
+    updated_at: 2026-07-14T00:18:20.521Z
+  script-editor:
+    id: script-editor
+    title: script-editor
+    description: "Use this skill when you need to create, view, edit, or delete
+      automation scripts within the skill ecosystem. MANDATORY: You MUST read
+      the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/script-editor
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/script-editor
+    content_hash: 3638dd5eff24f0b0
+    registered_at: 2026-07-14T00:16:44.133Z
+    updated_at: 2026-07-14T00:18:21.511Z
+  scripts:
+    id: scripts
+    title: scripts
+    description: "Use this skill when looking for repository-wide automation and
+      maintenance utilities. MANDATORY: You MUST read the full SKILL.md file
+      before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/scripts
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/scripts
+    content_hash: 95778c3686b125ba
+    registered_at: 2026-07-14T00:16:44.691Z
+    updated_at: 2026-07-14T00:18:22.596Z
+  server:
+    id: server
+    title: server
+    description: "Use this skill when checking DigitalOcean infrastructure,
+      production health, Docker containers, in-container PM2, or the Mailcow
+      email stack. MANDATORY: You MUST read the full SKILL.md file before
+      executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/server
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/server
+    content_hash: 5e1cb3681894c2d1
+    registered_at: 2026-07-14T00:16:46.068Z
+    updated_at: 2026-07-14T00:18:25.891Z
+  ultrachat-project-management:
+    id: ultrachat-project-management
+    title: ultrachat-project-management
+    description: "UltraChat-specific project management overlay. Use alongside the
+      global project-management skill when managing UltraChat GitHub issues,
+      pull requests, sprint planning, or beta readiness checklists. Defines
+      beta-readiness, architecture reminders, deployment/feature-flag protocol,
+      and prioritization. Do NOT use for code implementation. MANDATORY: You
+      MUST read the full SKILL.md file before executing."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ultrachat-project-management
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ultrachat-project-management
+    content_hash: 81f38d3be7dbb72e
+    registered_at: 2026-07-14T00:16:48.655Z
+    updated_at: 2026-07-14T00:18:43.421Z
+  website-design:
+    id: website-design
+    title: website-design
+    description: "Use this skill when generating, auditing, or improving workspace
+      websites. Provides bleeding-edge design trend intelligence, DESIGN.md
+      integration, and a rich design context builder for the
+      WorkspaceLandingPageService. MANDATORY: Read this file before any website
+      generation prompt is written."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/website-design
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/website-design
+    content_hash: 57a4bfebcf5a73ee
+    registered_at: 2026-07-14T00:16:49.292Z
+    updated_at: 2026-07-14T00:18:47.128Z
+  workspace:
+    id: workspace
+    title: workspace
+    description: "Use this skill when designing, packaging, deploying, or testing
+      UltraChat workspaces, including `.ucw` template manifests, multi-tenant
+      VFS scoping, and projection runtime systems. MANDATORY: Read before
+      executing workspace tasks."
+    version: 0.0.0
+    tags: []
+    source: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/workspace
+    source_type: discovered
+    source_path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/workspace
+    content_hash: 262d353e0ce79788
+    registered_at: 2026-07-14T00:16:49.848Z
+    updated_at: 2026-07-14T00:18:48.673Z
+installs:
+  - skill_id: total-recall-project-management
+    path: /Users/greg/Github/total-recall/.agent/skills/total-recall-project-management
+    repo: /Users/greg/Github/total-recall
+    version: 3.14.1
+    content_hash: 0ffd2e3d7e92ac5a
+    registry_hash: 0ffd2e3d7e92ac5a
+    adapted: false
+    installed_at: 2026-07-14T00:13:40.689Z
+    discovered: true
+  - skill_id: accounting
+    path: /Users/greg/Github/festech.live/.agent/skills/accounting
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 9ec5c473363fa425
+    registry_hash: 9ec5c473363fa425
+    adapted: false
+    installed_at: 2026-07-14T00:16:11.675Z
+    discovered: true
+  - skill_id: domains
+    path: /Users/greg/Github/festech.live/.agent/skills/domains
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 53833abef1eb9d41
+    registry_hash: 53833abef1eb9d41
+    adapted: false
+    installed_at: 2026-07-14T00:16:12.057Z
+    discovered: true
+  - skill_id: festech-project-management
+    path: /Users/greg/Github/festech.live/.agent/skills/festech-project-management
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: ccead0ca367e4a4f
+    registry_hash: ccead0ca367e4a4f
+    adapted: false
+    installed_at: 2026-07-14T00:16:12.305Z
+    discovered: true
+  - skill_id: legal-quants
+    path: /Users/greg/Github/festech.live/.agent/skills/legal-quants
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 70f05f4207957636
+    registry_hash: 70f05f4207957636
+    adapted: false
+    installed_at: 2026-07-14T00:16:12.458Z
+    discovered: true
+  - skill_id: monetization
+    path: /Users/greg/Github/festech.live/.agent/skills/monetization
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: df9bbcc9ca24667c
+    registry_hash: df9bbcc9ca24667c
+    adapted: false
+    installed_at: 2026-07-14T00:16:12.613Z
+    discovered: true
+  - skill_id: translation
+    path: /Users/greg/Github/festech.live/.agent/skills/translation
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 8175e88f657b219b
+    registry_hash: 8175e88f657b219b
+    adapted: false
+    installed_at: 2026-07-14T00:16:13.707Z
+    discovered: true
+  - skill_id: web-design
+    path: /Users/greg/Github/festech.live/.agent/skills/web-design
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: d4120293dda2bbb0
+    registry_hash: d4120293dda2bbb0
+    adapted: false
+    installed_at: 2026-07-14T00:16:14.286Z
+    discovered: true
+  - skill_id: autonomous-improvement
+    path: /Users/greg/Github/festech.live/.agents/skills/autonomous-improvement
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: de251aa6c0c12fcc
+    registry_hash: de251aa6c0c12fcc
+    adapted: false
+    installed_at: 2026-07-14T00:16:14.859Z
+    discovered: true
+  - skill_id: bug-killer
+    path: /Users/greg/Github/festech.live/.agents/skills/bug-killer
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: a7308a138e1230a8
+    registry_hash: a7308a138e1230a8
+    adapted: false
+    installed_at: 2026-07-14T00:16:15.189Z
+    discovered: true
+  - skill_id: mail-expert
+    path: /Users/greg/Github/festech.live/.agents/skills/mail-expert
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 07b8f4c5c28f00e8
+    registry_hash: 07b8f4c5c28f00e8
+    adapted: false
+    installed_at: 2026-07-14T00:16:16.290Z
+    discovered: true
+  - skill_id: moogie-crm
+    path: /Users/greg/Github/moogie_crm/.agent/skills/moogie-crm
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 9ef21d3295cb05cb
+    registry_hash: 9ef21d3295cb05cb
+    adapted: false
+    installed_at: 2026-07-14T00:16:21.775Z
+    discovered: true
+  - skill_id: moogie-project-management
+    path: /Users/greg/Github/moogie_crm/.agent/skills/moogie-project-management
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 20f327f0eacd9562
+    registry_hash: 20f327f0eacd9562
+    adapted: false
+    installed_at: 2026-07-14T00:16:21.969Z
+    discovered: true
+  - skill_id: start
+    path: /Users/greg/Github/moogie_crm/.agent/skills/start
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 56fa2d09cbd312c7
+    registry_hash: 56fa2d09cbd312c7
+    adapted: false
+    installed_at: 2026-07-14T00:16:22.694Z
+    discovered: true
+  - skill_id: switch
+    path: /Users/greg/Github/moogie_crm/.agent/skills/switch
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 83d47bfcff5ed128
+    registry_hash: 83d47bfcff5ed128
+    adapted: false
+    installed_at: 2026-07-14T00:16:22.854Z
+    discovered: true
+  - skill_id: web-expert
+    path: /Users/greg/Github/moogie_crm/.agent/skills/web-expert
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 0abd1a98e341c385
+    registry_hash: 0abd1a98e341c385
+    adapted: false
+    installed_at: 2026-07-14T00:16:23.117Z
+    discovered: true
+  - skill_id: email
+    path: /Users/greg/Github/portfolio-site/.agent/skills/email
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: d812396eaf278627
+    registry_hash: d812396eaf278627
+    adapted: false
+    installed_at: 2026-07-14T00:16:24.363Z
+    discovered: true
+  - skill_id: frontend-design
+    path: /Users/greg/Github/portfolio-site/.agent/skills/frontend-design
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: f7fa37b1a29f5cd9
+    registry_hash: f7fa37b1a29f5cd9
+    adapted: false
+    installed_at: 2026-07-14T00:16:24.606Z
+    discovered: true
+  - skill_id: marketing
+    path: /Users/greg/Github/portfolio-site/.agent/skills/marketing
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 962263454f3db74c
+    registry_hash: 962263454f3db74c
+    adapted: false
+    installed_at: 2026-07-14T00:16:24.889Z
+    discovered: true
+  - skill_id: portfolio-project-management
+    path: /Users/greg/Github/portfolio-site/.agent/skills/portfolio-project-management
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 48799bd6c4a85d99
+    registry_hash: 48799bd6c4a85d99
+    adapted: false
+    installed_at: 2026-07-14T00:16:25.103Z
+    discovered: true
+  - skill_id: tr-cli-agents
+    path: /Users/greg/Github/portfolio-site/.agent/skills/tr-cli-agents
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 8235298c395e4ccc
+    registry_hash: 8235298c395e4ccc
+    adapted: false
+    installed_at: 2026-07-14T00:16:25.978Z
+    discovered: true
+  - skill_id: tr-research
+    path: /Users/greg/Github/portfolio-site/.agent/skills/tr-research
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: e0d0fedf085abf7d
+    registry_hash: e0d0fedf085abf7d
+    adapted: false
+    installed_at: 2026-07-14T00:16:26.239Z
+    discovered: true
+  - skill_id: tr-skill
+    path: /Users/greg/Github/portfolio-site/.agent/skills/tr-skill
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 82b7c01070cd14b4
+    registry_hash: 82b7c01070cd14b4
+    adapted: false
+    installed_at: 2026-07-14T00:16:26.593Z
+    discovered: true
+  - skill_id: tr-ssss
+    path: /Users/greg/Github/portfolio-site/.agent/skills/tr-ssss
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 6c6479088c51f011
+    registry_hash: 6c6479088c51f011
+    adapted: false
+    installed_at: 2026-07-14T00:16:26.837Z
+    discovered: true
+  - skill_id: rbac-fail-open-auditor
+    path: /Users/greg/Github/ssss/.claude/skills/rbac-fail-open-auditor
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 82654f7dee21e728
+    registry_hash: 82654f7dee21e728
+    adapted: false
+    installed_at: 2026-07-14T00:16:30.489Z
+    discovered: true
+  - skill_id: ssss-project-management
+    path: /Users/greg/Github/ssss/.claude/skills/ssss-project-management
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 0a05ace41fb586ca
+    registry_hash: 0a05ace41fb586ca
+    adapted: false
+    installed_at: 2026-07-14T00:16:32.193Z
+    discovered: true
+  - skill_id: ssss-registry-parity-auditor
+    path: /Users/greg/Github/ssss/.claude/skills/ssss-registry-parity-auditor
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: a62f7771c446d990
+    registry_hash: a62f7771c446d990
+    adapted: false
+    installed_at: 2026-07-14T00:16:32.684Z
+    discovered: true
+  - skill_id: docs
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/docs
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 47b912ea256d5d5d
+    registry_hash: 47b912ea256d5d5d
+    adapted: false
+    installed_at: 2026-07-14T00:16:36.407Z
+    discovered: true
+  - skill_id: elevenlabs
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/elevenlabs
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 5ec9f7063ed4b65d
+    registry_hash: 5ec9f7063ed4b65d
+    adapted: false
+    installed_at: 2026-07-14T00:16:36.975Z
+    discovered: true
+  - skill_id: extensionexpert
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/extensionexpert
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: b0215657a7072609
+    registry_hash: b0215657a7072609
+    adapted: false
+    installed_at: 2026-07-14T00:16:37.291Z
+    discovered: true
+  - skill_id: identity
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/identity
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 11e628b971e1a6b5
+    registry_hash: 11e628b971e1a6b5
+    adapted: false
+    installed_at: 2026-07-14T00:16:37.591Z
+    discovered: true
+  - skill_id: instructions
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/instructions
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 3df4652ca34ba887
+    registry_hash: 3df4652ca34ba887
+    adapted: false
+    installed_at: 2026-07-14T00:16:38.325Z
+    discovered: true
+  - skill_id: integrations
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/integrations
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 944848dabe6bfa3d
+    registry_hash: 944848dabe6bfa3d
+    adapted: false
+    installed_at: 2026-07-14T00:16:38.576Z
+    discovered: true
+  - skill_id: mailexpert
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/mailexpert
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 197c429c5367ab31
+    registry_hash: 197c429c5367ab31
+    adapted: false
+    installed_at: 2026-07-14T00:16:38.874Z
+    discovered: true
+  - skill_id: marketplace
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/marketplace
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 475df4f43f30042d
+    registry_hash: 475df4f43f30042d
+    adapted: false
+    installed_at: 2026-07-14T00:16:39.156Z
+    discovered: true
+  - skill_id: mcp-expert
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/mcp-expert
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 24b807cfbe9eaa74
+    registry_hash: 24b807cfbe9eaa74
+    adapted: false
+    installed_at: 2026-07-14T00:16:39.836Z
+    discovered: true
+  - skill_id: monitor
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/monitor
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 1f22ce2d87a72be1
+    registry_hash: 1f22ce2d87a72be1
+    adapted: false
+    installed_at: 2026-07-14T00:16:40.267Z
+    discovered: true
+  - skill_id: notifications
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/notifications
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: c1be0bc960a9d5a7
+    registry_hash: c1be0bc960a9d5a7
+    adapted: false
+    installed_at: 2026-07-14T00:16:40.757Z
+    discovered: true
+  - skill_id: pdf
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/pdf
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 62674839ddca69c3
+    registry_hash: 62674839ddca69c3
+    adapted: false
+    installed_at: 2026-07-14T00:16:41.315Z
+    discovered: true
+  - skill_id: refactor
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/refactor
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 4c962a9b448a02ec
+    registry_hash: 4c962a9b448a02ec
+    adapted: false
+    installed_at: 2026-07-14T00:16:42.976Z
+    discovered: true
+  - skill_id: scheduler
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/scheduler
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 5caed85eaa94bba9
+    registry_hash: 5caed85eaa94bba9
+    adapted: false
+    installed_at: 2026-07-14T00:16:44.058Z
+    discovered: true
+  - skill_id: script-editor
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/script-editor
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 3638dd5eff24f0b0
+    registry_hash: 3638dd5eff24f0b0
+    adapted: false
+    installed_at: 2026-07-14T00:16:44.424Z
+    discovered: true
+  - skill_id: scripts
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/scripts
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 95778c3686b125ba
+    registry_hash: 95778c3686b125ba
+    adapted: false
+    installed_at: 2026-07-14T00:16:44.983Z
+    discovered: true
+  - skill_id: server
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/server
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 5e1cb3681894c2d1
+    registry_hash: 5e1cb3681894c2d1
+    adapted: false
+    installed_at: 2026-07-14T00:16:46.215Z
+    discovered: true
+  - skill_id: ultrachat-project-management
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/ultrachat-project-management
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 81f38d3be7dbb72e
+    registry_hash: 81f38d3be7dbb72e
+    adapted: false
+    installed_at: 2026-07-14T00:16:48.973Z
+    discovered: true
+  - skill_id: website-design
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/website-design
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 57a4bfebcf5a73ee
+    registry_hash: 57a4bfebcf5a73ee
+    adapted: false
+    installed_at: 2026-07-14T00:16:49.503Z
+    discovered: true
+  - skill_id: workspace
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/workspace
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 262d353e0ce79788
+    registry_hash: 262d353e0ce79788
+    adapted: false
+    installed_at: 2026-07-14T00:16:50.155Z
+    discovered: true
+  - skill_id: asterisk
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/asterisk
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: de8ba048ccf99dd0
+    registry_hash: de8ba048ccf99dd0
+    adapted: false
+    installed_at: 2026-07-14T00:17:38.621Z
+    synced_at: 2026-07-14T00:17:38.621Z
+  - skill_id: asterisk
+    path: /Users/greg/Github/festech.live/.agent/skills/asterisk
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: de8ba048ccf99dd0
+    registry_hash: de8ba048ccf99dd0
+    adapted: false
+    installed_at: 2026-07-14T00:17:38.624Z
+    synced_at: 2026-07-14T00:17:38.624Z
+  - skill_id: asterisk
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/asterisk
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: de8ba048ccf99dd0
+    registry_hash: de8ba048ccf99dd0
+    adapted: false
+    installed_at: 2026-07-14T00:17:38.624Z
+    synced_at: 2026-07-14T00:17:38.624Z
+  - skill_id: asterisk
+    path: /Users/greg/Github/festech.live/.agents/skills/asterisk
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: de8ba048ccf99dd0
+    registry_hash: de8ba048ccf99dd0
+    adapted: false
+    installed_at: 2026-07-14T00:17:38.639Z
+    synced_at: 2026-07-14T00:17:38.639Z
+  - skill_id: asterisk
+    path: /Users/greg/Github/festech.live/.claude/skills/asterisk
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: de8ba048ccf99dd0
+    registry_hash: de8ba048ccf99dd0
+    adapted: false
+    installed_at: 2026-07-14T00:17:38.640Z
+    synced_at: 2026-07-14T00:17:38.640Z
+  - skill_id: asterisk
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/asterisk
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: de8ba048ccf99dd0
+    registry_hash: de8ba048ccf99dd0
+    adapted: false
+    installed_at: 2026-07-14T00:17:38.641Z
+    synced_at: 2026-07-14T00:17:38.641Z
+  - skill_id: cli-agents
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/cli-agents
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: df1bd2eb039b1181
+    registry_hash: df1bd2eb039b1181
+    adapted: false
+    installed_at: 2026-07-14T00:17:41.747Z
+    synced_at: 2026-07-14T00:17:41.747Z
+  - skill_id: cli-agents
+    path: /Users/greg/Github/dd/.agent/skills/cli-agents
+    repo: /Users/greg/Github/dd
+    version: 0.0.0
+    content_hash: df1bd2eb039b1181
+    registry_hash: df1bd2eb039b1181
+    adapted: false
+    installed_at: 2026-07-14T00:17:41.747Z
+    synced_at: 2026-07-14T00:17:41.747Z
+  - skill_id: cli-agents
+    path: /Users/greg/Github/ssss/.agent/skills/cli-agents
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: df1bd2eb039b1181
+    registry_hash: df1bd2eb039b1181
+    adapted: false
+    installed_at: 2026-07-14T00:17:41.792Z
+    synced_at: 2026-07-14T00:17:41.792Z
+  - skill_id: cli-agents
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/cli-agents
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: df1bd2eb039b1181
+    registry_hash: df1bd2eb039b1181
+    adapted: false
+    installed_at: 2026-07-14T00:17:41.792Z
+    synced_at: 2026-07-14T00:17:41.792Z
+  - skill_id: cli-agents
+    path: /Users/greg/Github/ssss/.claude/skills/cli-agents
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: df1bd2eb039b1181
+    registry_hash: df1bd2eb039b1181
+    adapted: false
+    installed_at: 2026-07-14T00:17:41.805Z
+    synced_at: 2026-07-14T00:17:41.805Z
+  - skill_id: cli-agents
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/cli-agents
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: df1bd2eb039b1181
+    registry_hash: df1bd2eb039b1181
+    adapted: false
+    installed_at: 2026-07-14T00:17:41.806Z
+    synced_at: 2026-07-14T00:17:41.806Z
+  - skill_id: code-mode
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/code-mode
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 40834007fe1eaa52
+    registry_hash: 40834007fe1eaa52
+    adapted: false
+    installed_at: 2026-07-14T00:17:43.097Z
+    synced_at: 2026-07-14T00:17:43.097Z
+  - skill_id: code-mode
+    path: /Users/greg/Github/total-recall/.agent/skills/code-mode
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 40834007fe1eaa52
+    registry_hash: 40834007fe1eaa52
+    adapted: false
+    installed_at: 2026-07-14T00:17:43.097Z
+    synced_at: 2026-07-14T00:17:43.097Z
+  - skill_id: code-mode
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/code-mode
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 40834007fe1eaa52
+    registry_hash: 40834007fe1eaa52
+    adapted: false
+    installed_at: 2026-07-14T00:17:43.097Z
+    synced_at: 2026-07-14T00:17:43.097Z
+  - skill_id: code-mode
+    path: /Users/greg/Github/total-recall/.agents/skills/code-mode
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 40834007fe1eaa52
+    registry_hash: 40834007fe1eaa52
+    adapted: false
+    installed_at: 2026-07-14T00:17:43.097Z
+    synced_at: 2026-07-14T00:17:43.097Z
+  - skill_id: code-mode
+    path: /Users/greg/Github/total-recall/.claude/skills/code-mode
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 40834007fe1eaa52
+    registry_hash: 40834007fe1eaa52
+    adapted: false
+    installed_at: 2026-07-14T00:17:43.098Z
+    synced_at: 2026-07-14T00:17:43.098Z
+  - skill_id: code-mode
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/code-mode
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 40834007fe1eaa52
+    registry_hash: 40834007fe1eaa52
+    adapted: false
+    installed_at: 2026-07-14T00:17:43.098Z
+    synced_at: 2026-07-14T00:17:43.098Z
+  - skill_id: database
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/database
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.581Z
+    synced_at: 2026-07-14T00:17:46.581Z
+  - skill_id: database
+    path: /Users/greg/Github/festech.live/.agent/skills/database
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.581Z
+    synced_at: 2026-07-14T00:17:46.581Z
+  - skill_id: database
+    path: /Users/greg/Github/moogie_crm/.agent/skills/database
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.581Z
+    synced_at: 2026-07-14T00:17:46.581Z
+  - skill_id: database
+    path: /Users/greg/Github/portfolio-site/.agent/skills/database
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.581Z
+    synced_at: 2026-07-14T00:17:46.581Z
+  - skill_id: database
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/database
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.582Z
+    synced_at: 2026-07-14T00:17:46.582Z
+  - skill_id: database
+    path: /Users/greg/Github/festech.live/.agents/skills/database
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.582Z
+    synced_at: 2026-07-14T00:17:46.582Z
+  - skill_id: database
+    path: /Users/greg/Github/festech.live/.claude/skills/database
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.582Z
+    synced_at: 2026-07-14T00:17:46.582Z
+  - skill_id: database
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/database
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 4863cdeee4cdd5a8
+    registry_hash: 4863cdeee4cdd5a8
+    adapted: false
+    installed_at: 2026-07-14T00:17:46.582Z
+    synced_at: 2026-07-14T00:17:46.582Z
+  - skill_id: deploy
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/deploy
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 72a21ac41905d645
+    registry_hash: 72a21ac41905d645
+    adapted: false
+    installed_at: 2026-07-14T00:17:47.986Z
+    synced_at: 2026-07-14T00:17:47.986Z
+  - skill_id: deploy
+    path: /Users/greg/Github/moogie_crm/.agent/skills/deploy
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 72a21ac41905d645
+    registry_hash: 72a21ac41905d645
+    adapted: false
+    installed_at: 2026-07-14T00:17:47.986Z
+    synced_at: 2026-07-14T00:17:47.986Z
+  - skill_id: deploy
+    path: /Users/greg/Github/portfolio-site/.agent/skills/deploy
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 72a21ac41905d645
+    registry_hash: 72a21ac41905d645
+    adapted: false
+    installed_at: 2026-07-14T00:17:47.986Z
+    synced_at: 2026-07-14T00:17:47.986Z
+  - skill_id: deploy
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/deploy
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 72a21ac41905d645
+    registry_hash: 72a21ac41905d645
+    adapted: false
+    installed_at: 2026-07-14T00:17:48.040Z
+    synced_at: 2026-07-14T00:17:48.040Z
+  - skill_id: deploy
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/deploy
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 72a21ac41905d645
+    registry_hash: 72a21ac41905d645
+    adapted: false
+    installed_at: 2026-07-14T00:17:48.041Z
+    synced_at: 2026-07-14T00:17:48.041Z
+  - skill_id: design
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/design
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 24e9ec58c96f7b62
+    registry_hash: 24e9ec58c96f7b62
+    adapted: false
+    installed_at: 2026-07-14T00:17:49.771Z
+    synced_at: 2026-07-14T00:17:49.771Z
+  - skill_id: design
+    path: /Users/greg/Github/moogie_crm/.agent/skills/design
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 24e9ec58c96f7b62
+    registry_hash: 24e9ec58c96f7b62
+    adapted: false
+    installed_at: 2026-07-14T00:17:49.771Z
+    synced_at: 2026-07-14T00:17:49.771Z
+  - skill_id: design
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/design
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 24e9ec58c96f7b62
+    registry_hash: 24e9ec58c96f7b62
+    adapted: false
+    installed_at: 2026-07-14T00:17:49.771Z
+    synced_at: 2026-07-14T00:17:49.771Z
+  - skill_id: design
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/design
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 24e9ec58c96f7b62
+    registry_hash: 24e9ec58c96f7b62
+    adapted: false
+    installed_at: 2026-07-14T00:17:49.774Z
+    synced_at: 2026-07-14T00:17:49.774Z
+  - skill_id: instruction-keeper
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/instruction-keeper
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 63fc983279b2e599
+    registry_hash: 63fc983279b2e599
+    adapted: false
+    installed_at: 2026-07-14T00:17:57.887Z
+    synced_at: 2026-07-14T00:17:57.887Z
+  - skill_id: instruction-keeper
+    path: /Users/greg/Github/total-recall/.agent/skills/instruction-keeper
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 63fc983279b2e599
+    registry_hash: 63fc983279b2e599
+    adapted: false
+    installed_at: 2026-07-14T00:17:57.887Z
+    synced_at: 2026-07-14T00:17:57.887Z
+  - skill_id: instruction-keeper
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/instruction-keeper
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 63fc983279b2e599
+    registry_hash: 63fc983279b2e599
+    adapted: false
+    installed_at: 2026-07-14T00:17:57.887Z
+    synced_at: 2026-07-14T00:17:57.887Z
+  - skill_id: instruction-keeper
+    path: /Users/greg/Github/total-recall/.agents/skills/instruction-keeper
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 63fc983279b2e599
+    registry_hash: 63fc983279b2e599
+    adapted: false
+    installed_at: 2026-07-14T00:17:57.887Z
+    synced_at: 2026-07-14T00:17:57.887Z
+  - skill_id: instruction-keeper
+    path: /Users/greg/Github/total-recall/.claude/skills/instruction-keeper
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 63fc983279b2e599
+    registry_hash: 63fc983279b2e599
+    adapted: false
+    installed_at: 2026-07-14T00:17:57.888Z
+    synced_at: 2026-07-14T00:17:57.888Z
+  - skill_id: instruction-keeper
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/instruction-keeper
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 63fc983279b2e599
+    registry_hash: 63fc983279b2e599
+    adapted: false
+    installed_at: 2026-07-14T00:17:57.888Z
+    synced_at: 2026-07-14T00:17:57.888Z
+  - skill_id: okf
+    path: /Users/greg/Github/ssss/.claude/skills/okf
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 997b37707ccdc2f8
+    registry_hash: 997b37707ccdc2f8
+    adapted: false
+    installed_at: 2026-07-14T00:18:10.469Z
+    synced_at: 2026-07-14T00:18:10.469Z
+  - skill_id: okf
+    path: /Users/greg/Github/total-recall/.agent/skills/okf
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 997b37707ccdc2f8
+    registry_hash: 997b37707ccdc2f8
+    adapted: false
+    installed_at: 2026-07-14T00:18:10.469Z
+    synced_at: 2026-07-14T00:18:10.469Z
+  - skill_id: okf
+    path: /Users/greg/Github/total-recall/.agents/skills/okf
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 997b37707ccdc2f8
+    registry_hash: 997b37707ccdc2f8
+    adapted: false
+    installed_at: 2026-07-14T00:18:10.469Z
+    synced_at: 2026-07-14T00:18:10.469Z
+  - skill_id: okf
+    path: /Users/greg/Github/total-recall/.claude/skills/okf
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 997b37707ccdc2f8
+    registry_hash: 997b37707ccdc2f8
+    adapted: false
+    installed_at: 2026-07-14T00:18:10.470Z
+    synced_at: 2026-07-14T00:18:10.470Z
+  - skill_id: push
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/push
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/total-recall/.agent/skills/push
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/festech.live/.agent/skills/push
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/moogie_crm/.agent/skills/push
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/portfolio-site/.agent/skills/push
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/push
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/total-recall/.agents/skills/push
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.421Z
+    synced_at: 2026-07-14T00:18:13.421Z
+  - skill_id: push
+    path: /Users/greg/Github/total-recall/.claude/skills/push
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.422Z
+    synced_at: 2026-07-14T00:18:13.422Z
+  - skill_id: push
+    path: /Users/greg/Github/festech.live/.agents/skills/push
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.422Z
+    synced_at: 2026-07-14T00:18:13.422Z
+  - skill_id: push
+    path: /Users/greg/Github/festech.live/.claude/skills/push
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.422Z
+    synced_at: 2026-07-14T00:18:13.422Z
+  - skill_id: push
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/push
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 11eb36a844c35006
+    registry_hash: 11eb36a844c35006
+    adapted: false
+    installed_at: 2026-07-14T00:18:13.422Z
+    synced_at: 2026-07-14T00:18:13.422Z
+  - skill_id: pwa
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/pwa
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: d1e064af10e97321
+    registry_hash: d1e064af10e97321
+    adapted: false
+    installed_at: 2026-07-14T00:18:14.353Z
+    synced_at: 2026-07-14T00:18:14.353Z
+  - skill_id: pwa
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/pwa
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: d1e064af10e97321
+    registry_hash: d1e064af10e97321
+    adapted: false
+    installed_at: 2026-07-14T00:18:14.353Z
+    synced_at: 2026-07-14T00:18:14.353Z
+  - skill_id: pwa
+    path: /Users/greg/Github/festech.live/.agent/skills/pwa
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: d1e064af10e97321
+    registry_hash: d1e064af10e97321
+    adapted: false
+    installed_at: 2026-07-14T00:18:14.353Z
+    synced_at: 2026-07-14T00:18:14.353Z
+  - skill_id: pwa
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/pwa
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: d1e064af10e97321
+    registry_hash: d1e064af10e97321
+    adapted: false
+    installed_at: 2026-07-14T00:18:14.354Z
+    synced_at: 2026-07-14T00:18:14.354Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/repo-expert
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.774Z
+    synced_at: 2026-07-14T00:18:18.774Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/total-recall/.agent/skills/repo-expert
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.775Z
+    synced_at: 2026-07-14T00:18:18.775Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/festech.live/.agent/skills/repo-expert
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.775Z
+    synced_at: 2026-07-14T00:18:18.775Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/moogie_crm/.agent/skills/repo-expert
+    repo: /Users/greg/Github/moogie_crm
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.775Z
+    synced_at: 2026-07-14T00:18:18.775Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/repo-expert
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.775Z
+    synced_at: 2026-07-14T00:18:18.775Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/total-recall/.agents/skills/repo-expert
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.789Z
+    synced_at: 2026-07-14T00:18:18.789Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/total-recall/.claude/skills/repo-expert
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.791Z
+    synced_at: 2026-07-14T00:18:18.791Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/festech.live/.agents/skills/repo-expert
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.791Z
+    synced_at: 2026-07-14T00:18:18.791Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/festech.live/.claude/skills/repo-expert
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.791Z
+    synced_at: 2026-07-14T00:18:18.791Z
+  - skill_id: repo-expert
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/repo-expert
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 035e6dbac000d776
+    registry_hash: 035e6dbac000d776
+    adapted: false
+    installed_at: 2026-07-14T00:18:18.791Z
+    synced_at: 2026-07-14T00:18:18.791Z
+  - skill_id: research
+    path: /Users/greg/Github/ssss/.claude/skills/research
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 401f578609f9f678
+    registry_hash: 401f578609f9f678
+    adapted: false
+    installed_at: 2026-07-14T00:18:19.831Z
+    synced_at: 2026-07-14T00:18:19.831Z
+  - skill_id: research
+    path: /Users/greg/Github/total-recall/.agent/skills/research
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 401f578609f9f678
+    registry_hash: 401f578609f9f678
+    adapted: false
+    installed_at: 2026-07-14T00:18:19.831Z
+    synced_at: 2026-07-14T00:18:19.831Z
+  - skill_id: research
+    path: /Users/greg/Github/dd/.agent/skills/research
+    repo: /Users/greg/Github/dd
+    version: 0.0.0
+    content_hash: 401f578609f9f678
+    registry_hash: 401f578609f9f678
+    adapted: false
+    installed_at: 2026-07-14T00:18:19.831Z
+    synced_at: 2026-07-14T00:18:19.831Z
+  - skill_id: research
+    path: /Users/greg/Github/ssss/.agent/skills/research
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 401f578609f9f678
+    registry_hash: 401f578609f9f678
+    adapted: false
+    installed_at: 2026-07-14T00:18:19.832Z
+    synced_at: 2026-07-14T00:18:19.832Z
+  - skill_id: research
+    path: /Users/greg/Github/total-recall/.agents/skills/research
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 401f578609f9f678
+    registry_hash: 401f578609f9f678
+    adapted: false
+    installed_at: 2026-07-14T00:18:19.832Z
+    synced_at: 2026-07-14T00:18:19.832Z
+  - skill_id: research
+    path: /Users/greg/Github/total-recall/.claude/skills/research
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 401f578609f9f678
+    registry_hash: 401f578609f9f678
+    adapted: false
+    installed_at: 2026-07-14T00:18:19.832Z
+    synced_at: 2026-07-14T00:18:19.832Z
+  - skill_id: security
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/security
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.800Z
+    synced_at: 2026-07-14T00:18:24.800Z
+  - skill_id: security
+    path: /Users/greg/Github/total-recall/.agent/skills/security
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.801Z
+    synced_at: 2026-07-14T00:18:24.801Z
+  - skill_id: security
+    path: /Users/greg/Github/festech.live/.agent/skills/security
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.801Z
+    synced_at: 2026-07-14T00:18:24.801Z
+  - skill_id: security
+    path: /Users/greg/Github/portfolio-site/.agent/skills/security
+    repo: /Users/greg/Github/portfolio-site
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.802Z
+    synced_at: 2026-07-14T00:18:24.802Z
+  - skill_id: security
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/security
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.802Z
+    synced_at: 2026-07-14T00:18:24.802Z
+  - skill_id: security
+    path: /Users/greg/Github/total-recall/.agents/skills/security
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.803Z
+    synced_at: 2026-07-14T00:18:24.803Z
+  - skill_id: security
+    path: /Users/greg/Github/total-recall/.claude/skills/security
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.803Z
+    synced_at: 2026-07-14T00:18:24.803Z
+  - skill_id: security
+    path: /Users/greg/Github/festech.live/.agents/skills/security
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.804Z
+    synced_at: 2026-07-14T00:18:24.804Z
+  - skill_id: security
+    path: /Users/greg/Github/festech.live/.claude/skills/security
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.805Z
+    synced_at: 2026-07-14T00:18:24.805Z
+  - skill_id: security
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/security
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 305cdd5eb59d8cf0
+    registry_hash: 305cdd5eb59d8cf0
+    adapted: false
+    installed_at: 2026-07-14T00:18:24.805Z
+    synced_at: 2026-07-14T00:18:24.805Z
+  - skill_id: skill
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/skill
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.422Z
+    synced_at: 2026-07-14T00:18:27.423Z
+  - skill_id: skill
+    path: /Users/greg/Github/total-recall/.agent/skills/skill
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.423Z
+    synced_at: 2026-07-14T00:18:27.423Z
+  - skill_id: skill
+    path: /Users/greg/Github/dd/.agent/skills/skill
+    repo: /Users/greg/Github/dd
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.423Z
+    synced_at: 2026-07-14T00:18:27.423Z
+  - skill_id: skill
+    path: /Users/greg/Github/ssss/.agent/skills/skill
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.424Z
+    synced_at: 2026-07-14T00:18:27.424Z
+  - skill_id: skill
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/skill
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.424Z
+    synced_at: 2026-07-14T00:18:27.424Z
+  - skill_id: skill
+    path: /Users/greg/Github/total-recall/.agents/skills/skill
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.424Z
+    synced_at: 2026-07-14T00:18:27.424Z
+  - skill_id: skill
+    path: /Users/greg/Github/total-recall/.claude/skills/skill
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.450Z
+    synced_at: 2026-07-14T00:18:27.450Z
+  - skill_id: skill
+    path: /Users/greg/Github/ssss/.claude/skills/skill
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.451Z
+    synced_at: 2026-07-14T00:18:27.451Z
+  - skill_id: skill
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/skill
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 0a15e7bf874a1807
+    registry_hash: 0a15e7bf874a1807
+    adapted: false
+    installed_at: 2026-07-14T00:18:27.451Z
+    synced_at: 2026-07-14T00:18:27.451Z
+  - skill_id: ssss
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ssss
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.915Z
+    synced_at: 2026-07-14T00:18:28.915Z
+  - skill_id: ssss
+    path: /Users/greg/Github/total-recall/.agent/skills/ssss
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.915Z
+    synced_at: 2026-07-14T00:18:28.915Z
+  - skill_id: ssss
+    path: /Users/greg/Github/dd/.agent/skills/ssss
+    repo: /Users/greg/Github/dd
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.915Z
+    synced_at: 2026-07-14T00:18:28.915Z
+  - skill_id: ssss
+    path: /Users/greg/Github/festech.live/.agent/skills/ssss
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.915Z
+    synced_at: 2026-07-14T00:18:28.915Z
+  - skill_id: ssss
+    path: /Users/greg/Github/ssss/.agent/skills/ssss
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.916Z
+    synced_at: 2026-07-14T00:18:28.916Z
+  - skill_id: ssss
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/ssss
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.917Z
+    synced_at: 2026-07-14T00:18:28.917Z
+  - skill_id: ssss
+    path: /Users/greg/Github/total-recall/.agents/skills/ssss
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.918Z
+    synced_at: 2026-07-14T00:18:28.918Z
+  - skill_id: ssss
+    path: /Users/greg/Github/festech.live/.agents/skills/ssss
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.918Z
+    synced_at: 2026-07-14T00:18:28.918Z
+  - skill_id: ssss
+    path: /Users/greg/Github/festech.live/.claude/skills/ssss
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.918Z
+    synced_at: 2026-07-14T00:18:28.918Z
+  - skill_id: ssss
+    path: /Users/greg/Github/ssss/.claude/skills/ssss
+    repo: /Users/greg/Github/ssss
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.919Z
+    synced_at: 2026-07-14T00:18:28.919Z
+  - skill_id: ssss
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/ssss
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: f648dd067ae4c673
+    registry_hash: f648dd067ae4c673
+    adapted: false
+    installed_at: 2026-07-14T00:18:28.919Z
+    synced_at: 2026-07-14T00:18:28.919Z
+  - skill_id: test
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/test
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.890Z
+    synced_at: 2026-07-14T00:18:33.890Z
+  - skill_id: test
+    path: /Users/greg/Github/total-recall/.agent/skills/test
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.891Z
+    synced_at: 2026-07-14T00:18:33.891Z
+  - skill_id: test
+    path: /Users/greg/Github/festech.live/.agent/skills/test
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.891Z
+    synced_at: 2026-07-14T00:18:33.891Z
+  - skill_id: test
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/test
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.891Z
+    synced_at: 2026-07-14T00:18:33.891Z
+  - skill_id: test
+    path: /Users/greg/Github/total-recall/.agents/skills/test
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.891Z
+    synced_at: 2026-07-14T00:18:33.891Z
+  - skill_id: test
+    path: /Users/greg/Github/total-recall/.claude/skills/test
+    repo: /Users/greg/Github/total-recall
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.891Z
+    synced_at: 2026-07-14T00:18:33.891Z
+  - skill_id: test
+    path: /Users/greg/Github/festech.live/.agents/skills/test
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.891Z
+    synced_at: 2026-07-14T00:18:33.891Z
+  - skill_id: test
+    path: /Users/greg/Github/festech.live/.claude/skills/test
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.892Z
+    synced_at: 2026-07-14T00:18:33.892Z
+  - skill_id: test
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/test
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: 21c5ac8d208928e8
+    registry_hash: 21c5ac8d208928e8
+    adapted: false
+    installed_at: 2026-07-14T00:18:33.892Z
+    synced_at: 2026-07-14T00:18:33.892Z
+  - skill_id: ui
+    path: /Users/greg/Github/ultrachat-ai-powered/.claude/skills/ui
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: b98c37e88cff2c3a
+    registry_hash: b98c37e88cff2c3a
+    adapted: false
+    installed_at: 2026-07-14T00:18:42.065Z
+    synced_at: 2026-07-14T00:18:42.065Z
+  - skill_id: ui
+    path: /Users/greg/Github/festech.live/.agent/skills/ui
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: b98c37e88cff2c3a
+    registry_hash: b98c37e88cff2c3a
+    adapted: false
+    installed_at: 2026-07-14T00:18:42.066Z
+    synced_at: 2026-07-14T00:18:42.066Z
+  - skill_id: ui
+    path: /Users/greg/Github/ultrachat-ai-powered/.agent/skills/ui
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: b98c37e88cff2c3a
+    registry_hash: b98c37e88cff2c3a
+    adapted: false
+    installed_at: 2026-07-14T00:18:42.066Z
+    synced_at: 2026-07-14T00:18:42.066Z
+  - skill_id: ui
+    path: /Users/greg/Github/festech.live/.agents/skills/ui
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: b98c37e88cff2c3a
+    registry_hash: b98c37e88cff2c3a
+    adapted: false
+    installed_at: 2026-07-14T00:18:42.066Z
+    synced_at: 2026-07-14T00:18:42.066Z
+  - skill_id: ui
+    path: /Users/greg/Github/festech.live/.claude/skills/ui
+    repo: /Users/greg/Github/festech.live
+    version: 0.0.0
+    content_hash: b98c37e88cff2c3a
+    registry_hash: b98c37e88cff2c3a
+    adapted: false
+    installed_at: 2026-07-14T00:18:42.066Z
+    synced_at: 2026-07-14T00:18:42.066Z
+  - skill_id: ui
+    path: /Users/greg/Github/ultrachat-ai-powered/.agents/skills/ui
+    repo: /Users/greg/Github/ultrachat-ai-powered
+    version: 0.0.0
+    content_hash: b98c37e88cff2c3a
+    registry_hash: b98c37e88cff2c3a
+    adapted: false
+    installed_at: 2026-07-14T00:18:42.067Z
+    synced_at: 2026-07-14T00:18:42.067Z

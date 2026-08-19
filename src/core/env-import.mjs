@@ -24,6 +24,23 @@ export const KNOWN_SECRET_KEYS = [];
 const SECRET_NAME_RE =
   /(?:^|_)(API[_-]?KEY|API[_-]?TOKEN|ACCESS[_-]?TOKEN|ACCESS[_-]?KEY|SECRET[_-]?KEY|PRIVATE[_-]?KEY|AUTH[_-]?TOKEN|CLIENT[_-]?SECRET|WEBHOOK[_-]?SECRET|PASSWORD|PASSWD|TOKEN|SECRET|KEY)$/i;
 
+/**
+ * The secrets store's own master password must never be imported into the
+ * store, and neither may anything else that controls access to it.
+ *
+ * TR_SECRETS_PASSWORD is exported into every shell by ~/.zshenv (from the
+ * macOS Keychain), so it shows up in the env scan like any other credential —
+ * and `secret import-env --all`, the command the help text recommends, would
+ * happily write it in. That is the key to the box stored inside the box: it
+ * cannot be read back without the value it holds, and it puts the one
+ * credential that protects everything else next to what it protects.
+ */
+const STORE_CONTROL_KEYS = new Set([
+  'TR_SECRETS_PASSWORD',
+  'TR_SECRETS_KEY_CACHE',
+  'TR_REMOTE_VAULT_TOKEN',
+]);
+
 /** Obvious non-secrets even if they match loosely */
 const SKIP_KEYS = new Set([
   'PATH',
@@ -174,6 +191,7 @@ export function parseEnvText(text) {
  */
 export function isCandidateKey(key) {
   if (!key || typeof key !== 'string') return false;
+  if (STORE_CONTROL_KEYS.has(key.toUpperCase())) return false;
   if (SKIP_KEYS.has(key) || SKIP_KEYS.has(key.toUpperCase())) return false;
   // skip pure PATH-like / numeric shell junk
   if (key.length < 4 || key.length > 128) return false;

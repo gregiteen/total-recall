@@ -3,7 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
-import { atomicWrite, safeStringify } from './vault.mjs';
+import { atomicWrite, safeStringify, writeNode } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
@@ -130,9 +130,8 @@ export async function runInferenceTask(slugs, { vaultDir, inboxDir, runtimeConfi
 
   // Write merge proposals
   if (mergeCandidates.length > 0) {
-    const proposalsDir = path.join(vaultDir, 'proposals');
     for (const candidate of mergeCandidates) {
-      writeMergeProposal(proposalsDir, candidate);
+      await writeMergeProposal(vaultDir, candidate);
     }
   }
 
@@ -259,30 +258,29 @@ function writeContradictionRecord(conflictsDir, contradiction) {
   );
 }
 
-function writeMergeProposal(proposalsDir, candidate) {
-  if (!fs.existsSync(proposalsDir)) {
-    fs.mkdirSync(proposalsDir, { recursive: true });
-  }
-
+async function writeMergeProposal(vaultDir, candidate) {
   const slug = `merge-proposal-${crypto.createHash('md5').update(candidate.node_a + candidate.node_b).digest('hex').slice(0, 8)}`;
   const now = new Date().toISOString();
+  const summary = `Merge ${candidate.node_a} and ${candidate.node_b}`;
 
-  const data = {
+  // proposals/ lives inside the vault, so this is a canonical write and has to
+  // clear the contract. The old atomicWrite emitted no title/description/
+  // timestamp, so every merge proposal ever written fails SSSS 0.9 §4.2.
+  return writeNode({
     type: 'proposal',
     slug,
-    category: 'memory-cleanup',
+    title: summary,
+    description: candidate.reason || 'Nodes appear to express the same concept differently.',
+    timestamp: now,
     status: 'draft',
     proposed_by: 'inference-engine',
     proposed_at: now,
     target_path: `${candidate.node_a},${candidate.node_b}`,
-    summary: `Merge ${candidate.node_a} and ${candidate.node_b}`,
+    summary,
     rationale: candidate.reason || 'Nodes appear to express the same concept differently.',
-  };
-
-  atomicWrite(
-    path.join(proposalsDir, `${slug}.md`),
-    safeStringify('', data),
-  );
+    proposal_topic: 'memory-cleanup',
+    body: '',
+  }, vaultDir, { agentRole: 'system' });
 }
 
 // ─── Memory Synthesizer ─────────────────────────────────────────────────────────

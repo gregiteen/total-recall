@@ -60,3 +60,27 @@ CUSTOM_WEBHOOK_SECRET=whsec_abc
     expect(candidates.every((c) => c.masked && !String(c.masked).includes('sk-xyz'))).toBe(true);
   });
 });
+
+describe('store-control keys are never importable', () => {
+  // TR_SECRETS_PASSWORD is exported into every shell by ~/.zshenv from the
+  // Keychain, so it appears in the env scan like any other credential. Before
+  // this guard, `secret import-env --all` — the command the help text
+  // recommends — wrote the store's own master password into the store it
+  // encrypts: unreadable without the value it holds, and the one credential
+  // protecting everything else parked next to what it protects.
+  it('rejects the secrets-store master password', () => {
+    expect(isCandidateKey('TR_SECRETS_PASSWORD')).toBe(false);
+    expect(isCandidateKey('tr_secrets_password')).toBe(false);
+  });
+
+  it('rejects the other store-control variables', () => {
+    expect(isCandidateKey('TR_SECRETS_KEY_CACHE')).toBe(false);
+    expect(isCandidateKey('TR_REMOTE_VAULT_TOKEN')).toBe(false);
+  });
+
+  it('still accepts ordinary credentials', () => {
+    expect(isCandidateKey('OPENAI_API_KEY')).toBe(true);
+    expect(isCandidateKey('STRIPE_SECRET_KEY')).toBe(true);
+    expect(isCandidateKey('TR_MESH_SYNC_TOKEN')).toBe(true);
+  });
+});

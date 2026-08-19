@@ -19,10 +19,10 @@ tags:
   - budget
   - sandbox
   - watchdog
-created: 2026-05-25T00:51:00.000Z
-updated: 2026-05-25T00:56:00.000Z
+created: '2026-05-25T00:51:00.000Z'
+updated: '2026-01-04T02:42:09.572Z'
 sentiment_polarity: descriptive
-last_accessed: 2026-05-26T23:03:03.507Z
+last_accessed: '2026-01-04T02:42:09.572Z'
 source:
   type: manual
   session_id: migration-repair
@@ -39,7 +39,16 @@ object: Total Recall Command & Architecture Help Reference
 decay:
   half_life_days: 180
   access_count: 1
-x_temporal_context: 2026-05-26T23:05:06.474Z
+x_temporal_context: '2026-05-26T23:05:06.474Z'
+description: Total Recall Command & Architecture Help Reference
+timestamp: '2026-05-25T00:56:00.000Z'
+x_citations:
+  - source: manual
+    title: Total Recall Command & Architecture Help Reference
+    url: 'session://migration-repair'
+    published: '2026-05-26T23:05:06.474Z'
+    relevance: 1
+    accessed: '2026-08-18T23:41:45.533Z'
 ---
 # Total Recall Command & Architecture Help Reference
 

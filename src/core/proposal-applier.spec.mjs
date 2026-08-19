@@ -98,15 +98,15 @@ describe('proposal listing and status machine', () => {
     expect(listProposals(vaultDir, { status: ['accepted', 'applied'] })).toHaveLength(2);
   });
 
-  it('refuses a status outside the state machine', () => {
+  it('refuses a status outside the state machine', async () => {
     writeProposalFile({ id: 'prop_a', topic: 'memory-cleanup', target: 'x,y' });
-    expect(() => setProposalStatus(vaultDir, 'prop_a', 'done')).toThrow(/Invalid proposal status/);
+    await expect(setProposalStatus(vaultDir, 'prop_a', 'done')).rejects.toThrow(/Invalid proposal status/);
     expect(PROPOSAL_STATUSES).toContain('superseded');
   });
 
-  it('preserves unrelated frontmatter across a status change', () => {
+  it('preserves unrelated frontmatter across a status change', async () => {
     writeProposalFile({ id: 'prop_a', topic: 'memory-cleanup', target: 'x,y' });
-    setProposalStatus(vaultDir, 'prop_a', 'rejected', { rejection_reason: 'nope' });
+    await setProposalStatus(vaultDir, 'prop_a', 'rejected', { rejection_reason: 'nope' });
     const p = getProposal(vaultDir, 'prop_a');
     expect(p.status).toBe('rejected');
     expect(p.proposed_by).toBe('kernel_optimizer_v1');
@@ -190,7 +190,7 @@ describe('undo', () => {
     await applyProposal(vaultDir, 'prop_u');
     expect(fs.readFileSync(path.join(vaultDir, 'facts', 'u-a.md'), 'utf8')).not.toBe(before);
 
-    const { reverted } = revertProposal(vaultDir, 'prop_u');
+    const { reverted } = await revertProposal(vaultDir, 'prop_u');
     expect(reverted).toBe(1);
     expect(fs.readFileSync(path.join(vaultDir, 'facts', 'u-a.md'), 'utf8')).toBe(before);
     // Back to `draft`, NOT `accepted`: `accepted` is the daemon's work queue, so
@@ -198,9 +198,9 @@ describe('undo', () => {
     expect(getProposal(vaultDir, 'prop_u').status).toBe('draft');
   });
 
-  it('fails loudly when no snapshot exists rather than silently doing nothing', () => {
+  it('fails loudly when no snapshot exists rather than silently doing nothing', async () => {
     writeProposalFile({ id: 'prop_n', topic: 'memory-cleanup', target: 'a,b' });
-    expect(() => revertProposal(vaultDir, 'prop_n')).toThrow(/No undo snapshot/);
+    await expect(revertProposal(vaultDir, 'prop_n')).rejects.toThrow(/No undo snapshot/);
   });
 
   it('keeps undo snapshots out of the vault scan', async () => {
@@ -221,7 +221,7 @@ describe('audit trail', () => {
     writeProposalFile({ id: 'prop_au', topic: 'memory-cleanup', target: 'au-a,au-b' });
 
     await applyProposal(vaultDir, 'prop_au', { actor: 'test' });
-    revertProposal(vaultDir, 'prop_au');
+    await revertProposal(vaultDir, 'prop_au');
 
     const lines = fs.readFileSync(path.join(vaultDir, '.events', 'proposals.jsonl'), 'utf8')
       .trim().split('\n').map(JSON.parse);
@@ -387,7 +387,7 @@ describe('revert does not feed the daemon queue', () => {
     writeProposalFile({ id: 'prop_loop', topic: 'memory-cleanup', target: 'loop-a,loop-b' });
 
     expect((await applyProposal(vaultDir, 'prop_loop')).ok).toBe(true);
-    revertProposal(vaultDir, 'prop_loop');
+    await revertProposal(vaultDir, 'prop_loop');
 
     const res = await applyAcceptedProposals(vaultDir);
     expect(res.applied).toBe(0);

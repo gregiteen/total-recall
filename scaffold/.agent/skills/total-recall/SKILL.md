@@ -3,15 +3,16 @@ name: total-recall
 provenance: total-recall
 description: >-
   Use this skill to operate Total Recall — portable memory, instructions,
-  openwiki, skill deploy, and secrets. MANDATORY: Read this file before changing
-  TR setup. Nested packages under modules/ are NOT agent skills.
-version: 3.14.1
+  openwiki, skills management, secrets store, mesh/headscale control server, and
+  the test suite. MANDATORY: Read this file before changing TR setup. Nested
+  packages under modules/ are NOT agent skills.
+version: 3.23.3
 repo_scoped: true
 ---
 
 # Total Recall — Master Agent Skill
 
-> **Product focus:** portable personal memory + IDE instructions + openwiki + skill deploy + secrets.
+> **Product focus:** portable personal memory + IDE instructions + openwiki + skills management + secrets + mesh.
 > **Only agent skill in this package.** Implementation helpers live in `modules/` (not skills).
 > Openwiki ships with the brain at `openwiki/`.
 
@@ -60,6 +61,18 @@ You MUST actively reference and apply this skill under the following specific ru
 *   **Trigger**: Immediately after performing any memory node writes.
 *   **Action**: Rebuild the instruction shims. If using CLI commands (`npx total-recall remember` / `forget`), recompilation runs automatically in the background (asynchronously via detached subprocesses) to minimize latency. If editing vault files directly, trigger manual compilation by sending a POST request to `/api/vault/compile` or running `npx total-recall compile`.
 
+### 5b. When handling ANY credential, API key, or password
+Never invent a new place to keep it. It goes in the encrypted secrets store —
+see **SECRETS STORE** below for `--stdin`, the one-repo binding rule, the
+`.env` migration path, and the health gates.
+
+### 5c. When reaching another machine, or editing device/node details
+Use the **MESH / CONTROL SERVER** section. Node details are entity fields on
+SSSS `mesh_node` documents — never hardcoded hostnames.
+
+### 5d. When running tests, typechecks, or builds
+See **TESTS**. Heavy runs go to the Mac Mini or the droplet, never the laptop.
+
 ### 6. When troubleshooting connections, port blocks, or sync errors
 *   **Trigger**: If the REST server is unreachable, ports are blocked, or the upstream sync tool encounters errors.
 *   **Action**: Refer to the active diagnostics manual within this skill to heal the local runtime.
@@ -105,6 +118,9 @@ Keep local skill definitions and invariant files updated by executing the sync r
 node .agent/skills/total-recall/scripts/sync-repo.mjs
 ```
 This utility fetches standard skill and invariant definitions from the upstream repository, merges them non-destructively preserving custom user nodes, and auto-recompiles the workspace.
+
+Everything below is the CLI equivalent — see **SKILLS MANAGEMENT** for the full
+registry/multi-repo reference.
 
 ### 5. Premium Browser Setup Wizard Onboarding
 For first-time system installations, migrations, or editor reconnections, launch the visual onboarding setup wizard:
@@ -315,6 +331,45 @@ curl -H "Authorization: Bearer <YOUR_PAT_TOKEN>" \
 
 ---
 
+## 🧩 SKILLS MANAGEMENT (`skill` subcommand)
+
+Two distinct layers. Confusing them is the usual cause of "my edit disappeared".
+
+| Layer | What it is | Commands |
+|---|---|---|
+| **Local brain** | Skills installed in one brain's `skills/` dir | `find` `install` `create` `edit` `scan` `list` `remove` `publish` |
+| **Registry + install map** | The catalog and every repo copy deployed from it | `register` `registry` `deploy` `status` `track` `discover` `sync` `push` `pull` |
+
+```bash
+npx total-recall skill list                  # what this brain has
+npx total-recall skill registry              # catalog entries (skills-registry/index.yaml)
+npx total-recall skill status                # registry + install map + DRIFT summary
+npx total-recall skill status <id>           # drift for one skill
+
+npx total-recall skill track /path/to/repo   # start managing a repo's .agent/skills
+npx total-recall skill discover              # scan tracked repos for skills
+npx total-recall skill sync                  # two-way reconcile across repos
+npx total-recall skill push                  # one-way: catalog/source → all installs
+npx total-recall skill pull                  # one-way: installs → source → fan-out
+npx total-recall skill deploy <id> --repo <path>   # copy into one repo
+```
+
+**Which direction to use.** `sync` picks a winner per skill (`--prefer
+newest|registry|install`, default `newest`). When you have just edited the
+canonical copy and want every repo to match it, use `push` — `sync` can pick a
+repo copy instead if its mtime is newer, which silently reverts your edit.
+`--dry-run` first, always.
+
+**No hardcoded repo paths.** Repos enter the set only via `skill track`, the
+project registry, `--repo`, `TR_SYNC_REPOS`, or cwd detection. Core must never
+name a product repo (this is an open-source invariant, not a preference).
+
+**`--include-core`** is off by default: the `total-recall` skill itself is not
+fanned out unless you ask, so a repo-local edit cannot clobber the master copy
+by accident.
+
+---
+
 ## 🔐 SECRETS STORE (separate from the memory vault — `secret` subcommand)
 
 API keys and credentials are **not** memory nodes. They live encrypted at
@@ -324,12 +379,87 @@ INSTRUCTIONS.md/skill surface (`secret check-surfaces` fails the build if one
 ever leaks in). Full reference: `npx total-recall secret --help`.
 
 ```bash
-npx total-recall secret set <key> <value>            # store (0600, optional AES)
-npx total-recall secret rotate <key> <new-value>      # replace + mark rotated
+npx total-recall secret set <key> --stdin            # store (0600, AES); --stdin keeps it out of argv/history
+npx total-recall secret rotate <key> --stdin          # replace + mark rotated
 npx total-recall secret get <key>                     # print value (audited)
 npx total-recall secret list                          # metadata only, no values
-npx total-recall secret export-env --path <repo>       # SSOT → local .env.local
+npx total-recall secret catalog                       # keys + providers + usage + rotation + cost
+npx total-recall secret export-env --path <repo>       # SSOT → local .env
 ```
+
+**Always prefer `--stdin`** (or `--from-clipboard` for `rotate`). A value passed
+as an argv string lands in shell history, in `ps` output, and in this
+transcript. `set`, `rotate` and `rekey` all accept it.
+
+### Master password and `rekey`
+
+The store is AES-256-GCM; the key is scrypt-derived (N=2^16, ~64 MB) from
+`TR_SECRETS_PASSWORD`. On macOS the password belongs in the **Keychain**
+(`security add-generic-password -s total-recall-secrets`), not in a dotfile —
+`rekey` picks the Keychain entry up automatically and rotates every carrier
+(LaunchAgent plist, env file, Keychain) in one transaction, verifying the
+retired password no longer decrypts before it commits.
+
+> **Processes hold the old password until restarted.** After a rekey, anything
+> still running with the retired value fails with `Failed to decrypt secrets
+> store: Unsupported state or unable to authenticate data`. Restart the daemon
+> and any launchd jobs.
+
+The derived key is cached in-process (bounded, keyed on salt **and** password
+digest, so neither a re-encrypt nor a rotation can be served a stale key). This
+matters because the KDF costs ~200 ms and a single dashboard load reads the
+store several times. `TR_SECRETS_KEY_CACHE=0` disables it.
+
+### Getting secrets OUT of `.env` files and INTO the store
+
+`import-env` is the **one-time migration**, not the steady state:
+
+```bash
+npx total-recall secret import-env --dry-run --all   # scan every known repo, change nothing
+npx total-recall secret import-env --all             # import everything new
+npx total-recall secret import-env KEY1 KEY2         # or just these
+```
+
+> **One credential → exactly ONE repo.** The store rejects a multi-repo binding,
+> and `import-env` derives the binding from *where it found the value* — so a
+> key sitting in six repos' `.env` files fails to import and `--repo` will not
+> override it. That is the rule working: one value in six repos means a leak of
+> any one repo burns all six. Either issue a distinct key per app, or bind it to
+> its owning repo explicitly:
+>
+> ```bash
+> printf '%s' "$VALUE" | npx total-recall secret set <key> --stdin --repos <owning-repo>
+> ```
+
+Once stored, the flow reverses — `.env` becomes a **projection of the store**:
+
+```bash
+npx total-recall secret export-env --path <repo> --dry-run
+npx total-recall secret export-env --all-projects        # every registered project
+npx total-recall secret export-env --no-global           # only keys bound to this repo
+```
+
+By default `export-env` merges only the TR-managed block, leaving hand-written
+lines alone; `--replace-all` overwrites the whole file.
+
+### Health gates (all exit non-zero on a finding)
+
+```bash
+npx total-recall secret check-surfaces    # a secret VALUE leaked into a compiled surface/openwiki
+npx total-recall secret shared            # same value reused under several key names / apps
+npx total-recall secret duplicates        # duplicate entries
+npx total-recall secret tracking-health   # a set secret with no live account/usage binding
+npx total-recall secret rotation-due      # overdue keys (--enqueue to create daemon tasks)
+```
+
+`shared` is the one that catches real risk: it reports when one credential backs
+multiple keys or apps, which defeats per-app revocation. `secret meta <key>
+--shared-ok` waives it deliberately.
+
+**Never** put a secret value in vault markdown, openwiki, a compiled
+INSTRUCTIONS.md, a skill surface, or a `.env.bak-*` file. Backups of `.env` are
+a common accident — they are usually **not** gitignored, so a `git add -A`
+commits live keys.
 
 ### Executed rotation — `rotate-auto` / `rotate-browser` (added 3.22.0)
 
@@ -412,6 +542,68 @@ that dead-ends back at a manual dashboard step.
 
 <!-- END INJECTED MEMORY -->
 
+
+---
+
+## 🕸️ MESH / CONTROL SERVER (`mesh` subcommand)
+
+Headscale administration — node inventory, ACL policy, and Tailscale SSH. This
+is how one machine reaches another (laptop → Mac Mini → droplet) without
+hardcoding hostnames anywhere.
+
+```bash
+npx total-recall mesh status                 # control-server reachability + credential state
+npx total-recall mesh nodes                  # every node and how to reach it
+npx total-recall mesh access <node>          # resolved access for one node
+npx total-recall mesh access import          # propose access from ~/.ssh/config (--apply to save)
+npx total-recall mesh ssh <node> 'uptime'    # run a command on a node
+npx total-recall mesh preauthkey             # enrollment key for `tailscale up --authkey`
+npx total-recall mesh policy get
+npx total-recall mesh policy init-ssh --dry-run
+```
+
+**Device details are entity fields, never literals.** Hostname, mesh IP, role,
+OS, location, capabilities and latency history live on the node's SSSS
+`mesh_node` document plus live discovery. Product code and UI bind to those
+fields — never to a personal machine name.
+
+**Mesh membership is the trust boundary.** Every node admitted to the tailnet
+inherits whatever the policy grants; audit `mesh nodes` before widening it.
+`policy` commands require the control server running with `policy.mode:
+database`.
+
+**WAN timeouts.** Laptop↔cloud probes need **≥10 s**. Shorter timeouts (1.5 s/3 s)
+falsely report a reachable cloud node as down while raw `curl /health` succeeds.
+
+---
+
+## 🧪 TESTS
+
+```bash
+npm test                    # vitest run — whole suite
+npx vitest run <path>       # one spec file
+```
+
+Current baseline: **288 spec files / 1493 tests, ~160 s** on the Mac Mini.
+
+> **Never run the full suite, a full typecheck, or a production build on the
+> laptop.** These go to the Mac Mini or the droplet — local runs cause slowdowns
+> and OOM kills. Sync and run remotely:
+>
+> ```bash
+> rsync -a --delete --exclude=node_modules/ --exclude=.git/ ./ mac-mini:~/github/total-recall/
+> ssh mac-mini 'export PATH=/opt/homebrew/bin:$PATH; cd ~/github/total-recall && npx vitest run'
+> ```
+>
+> A non-login `ssh` shell has no Homebrew on PATH — export it or use `bash -lc`,
+> otherwise the run dies with `command not found: npx` **and still exits 0**.
+
+**Never skip tests** to make a release look clean, and never use `--force` on a
+checker. Audit and clean up any rows, files, or mock entries a suite leaves
+behind in a live database.
+
+`npx` itself adds ~2 s of resolution overhead per invocation. For tight loops
+call the local binary directly: `node bin/total-recall.mjs <cmd>`.
 
 ---
 

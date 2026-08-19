@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { callLocalRuntime } from './runtime.mjs';
-import { atomicWrite, safeStringify } from './vault.mjs';
-import { getNodes, invalidate } from './vault-cache.mjs';
+import { atomicWrite, safeStringify, writeNode } from './vault.mjs';
+import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 
 /**
@@ -157,15 +157,21 @@ async function promoteToVault(draftNode, confidenceAdj, vaultDir) {
   data.updated = new Date().toISOString();
   data.x_promoted_at = new Date().toISOString();
 
-  // Compute target path in vault
-  const targetDir = path.join(vaultDir, data.category || 'concepts');
-  if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
-  }
+  // This is the doorway every research-derived fact walks through on its way
+  // into the vault, and it used to be a raw atomicWrite — so a draft whose
+  // frontmatter came out of an LLM entered the vault with whatever fields it
+  // happened to have. Promotion is a canonical write and has to clear the
+  // contract; the inbox copy is only removed once it does.
+  const result = await writeNode({ ...data, body: content }, vaultDir, { agentRole: 'system' })
+    .catch((err) => ({ success: false, error: err.message }));
 
-  const targetPath = path.join(targetDir, `${data.slug}.md`);
-  atomicWrite(targetPath, safeStringify(content, data));
-  invalidate(vaultDir);
+  if (result && result.success === false) {
+    logger.warn({
+      subsystem: 'conclusion-writer',
+      message: `Promotion rejected by contract for ${data.slug}: ${result.error}`,
+    });
+    return;
+  }
 
   // Remove from inbox
   try { fs.unlinkSync(draftNode._filepath); } catch { /* ignore */ }
@@ -181,6 +187,8 @@ async function applyRevision(draftNode, confidenceAdj, revisionInstructions) {
   data.x_revision_requested = revisionInstructions;
   data.updated = new Date().toISOString();
 
+  // ssss-raw-write: draftNode is an inbox draft, not a vault node — it is
+  // validated on promotion, not here.
   atomicWrite(draftNode._filepath, safeStringify(content, data));
 }
 
@@ -198,6 +206,8 @@ async function quarantineDraft(draftNode, reason, quarantineDir) {
   data.x_quarantined_at = new Date().toISOString();
 
   const targetPath = path.join(quarantineDir, `${data.slug}.md`);
+  // ssss-raw-write: quarantine is a holding pen outside the vault — a rejected
+  // draft must be parkable precisely when it cannot pass validation.
   atomicWrite(targetPath, safeStringify(content, data));
 
   try { fs.unlinkSync(draftNode._filepath); } catch { /* ignore */ }

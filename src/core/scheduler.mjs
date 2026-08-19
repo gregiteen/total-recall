@@ -183,6 +183,7 @@ export function persistTaskToDisk(task, queueDir) {
   }
 
   const raw = safeStringify(body || '', frontmatter);
+  // ssss-raw-write: scheduler/queue task envelope, not a vault node.
   atomicWrite(filepath, raw);
   task._filepath = filepath;
   return filepath;

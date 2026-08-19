@@ -74,6 +74,7 @@ const COMMANDS = {
   rebuild:  'rebuild.mjs',
   snapshot: 'snapshot.mjs',
   migrate:  'migrate.mjs',
+  backfill: 'backfill.mjs',
   ingest:   'ingest.mjs',
   import:   'import-rules.mjs',
   connect:  'connect.mjs',

@@ -18,6 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { writeNodeValidatedAsync } from './validated-write.mjs';
 import crypto from 'node:crypto';
 import { logger } from './logger.mjs';
 
@@ -130,19 +131,37 @@ function extractTitle(content, filename) {
 
 /**
  * Write a single repo-synced node to the vault.
- * Uses SSSS-compatible frontmatter format.
+ *
+ * Goes through the SSSS Core Contract rather than serializing frontmatter by
+ * hand. The hand-rolled version emitted neither `timestamp` (SSSS 0.9 §4.2
+ * universal) nor `schema_version`, so every node this ingested failed package
+ * validation — visible in a freshly initialized brain, where `init` runs this
+ * and the resulting facts/ node was the only invalid one it produced.
+ * prepareNodeForContract() fills both, and the kernel rejects anything still
+ * malformed instead of writing it.
  */
-function writeRepoNode(slug, title, content, repoName, relPath, vaultDir) {
+async function writeRepoNode(slug, title, content, repoName, relPath, vaultDir) {
   const category = 'facts';
-  const categoryDir = path.join(vaultDir, category);
-  if (!fs.existsSync(categoryDir)) {
-    fs.mkdirSync(categoryDir, { recursive: true });
+  const now = new Date().toISOString();
+
+  // Preserve the original creation time across re-ingests so decay and
+  // chronology survive a content change.
+  let created = now;
+  const nodePath = path.join(vaultDir, category, `${slug}.md`);
+  if (fs.existsSync(nodePath)) {
+    try {
+      const createdMatch = fs
+        .readFileSync(nodePath, 'utf8')
+        .match(/^created:\s*"?([^"\n]+)"?$/m);
+      if (createdMatch) created = createdMatch[1];
+    } catch { /* fall back to now */ }
   }
 
-  const now = new Date().toISOString();
   const node = {
+    type: 'memory',
     slug,
     title: title.substring(0, 200),
+    description: `Auto-ingested from ${repoName}/${relPath}`,
     category,
     status: 'active',
     importance: 2,
@@ -157,46 +176,39 @@ function writeRepoNode(slug, title, content, repoName, relPath, vaultDir) {
     subject: 'repo',
     predicate: 'documents',
     object: repoName,
-    source: `repo-sync:${repoName}:${relPath}`,
-    decay: 0,
-    created: now,
+    // MemoryNodeSchema declares both of these as OBJECTS. The hand-rolled
+    // writer emitted `source` as a string and `decay` as a number, and because
+    // it wrote with raw writeFileSync nothing ever checked — the malformed
+    // shape only surfaced once this went through the contract.
+    source: {
+      type: 'repo-sync',
+      session_id: `${repoName}:${relPath}`,
+      agent: 'repo-sync',
+      evidence_count: 1,
+    },
+    decay: {
+      half_life_days: 365,
+      access_count: 0,
+    },
+    created,
     updated: now,
     last_accessed: now,
-    type: 'memory',
-    description: `Auto-ingested from ${repoName}/${relPath}`,
+    body: content,
   };
 
-  // Build frontmatter
-  const lines = ['---'];
-  for (const [key, value] of Object.entries(node)) {
-    lines.push(`${key}: ${JSON.stringify(value)}`);
+  const result = await writeNodeValidatedAsync(node, vaultDir);
+  if (!result.success) {
+    const reason = (result.validation?.errors || []).join('; ') || result.message || 'unknown';
+    throw new Error(`Rejected by SSSS contract: ${reason}`);
   }
-  lines.push('---');
-  lines.push(content);
-
-  const filePath = path.join(categoryDir, `${slug}.md`);
-
-  // If an existing file exists, preserve the created timestamp
-  if (fs.existsSync(filePath)) {
-    try {
-      const existing = fs.readFileSync(filePath, 'utf8');
-      const createdMatch = existing.match(/^created:\s*"?([^"\n]+)"?$/m);
-      if (createdMatch) {
-        const idx = lines.findIndex(l => l.startsWith('created:'));
-        if (idx >= 0) lines[idx] = `created: ${JSON.stringify(createdMatch[1])}`;
-      }
-    } catch { /* use new timestamp */ }
-  }
-
-  fs.writeFileSync(filePath, lines.join('\n'));
-  return filePath;
+  return nodePath;
 }
 
 /**
  * Sync a single repo: scan, hash-diff, ingest new/changed files.
  * Returns { repo, ingested, skipped, errors, deleted }.
  */
-function syncRepo(project) {
+async function syncRepo(project) {
   const repoPath = project.path;
   const repoName = project.name || path.basename(repoPath);
   const vaultDir = path.join(project.brainDir, 'memory-vault');
@@ -236,7 +248,7 @@ function syncRepo(project) {
       const content = fs.readFileSync(filePath, 'utf8');
       const slug = slugFromRelPath(repoName, relPath);
       const title = extractTitle(content, path.basename(filePath));
-      writeRepoNode(slug, title, content, repoName, relPath, vaultDir);
+      await writeRepoNode(slug, title, content, repoName, relPath, vaultDir);
       ingested++;
     } catch (err) {
       logger.warn('repo-sync', `Error ingesting ${repoName}/${relPath}: ${err.message}`);
@@ -274,7 +286,7 @@ function syncRepo(project) {
  *
  * @returns {{ repos: Array, totalIngested: number, totalSkipped: number }}
  */
-export function syncAllRepos() {
+export async function syncAllRepos() {
   const registry = loadProjectRegistry();
   const results = [];
   let totalIngested = 0;
@@ -285,7 +297,7 @@ export function syncAllRepos() {
     if (!fs.existsSync(project.path)) continue;
 
     try {
-      const result = syncRepo(project);
+      const result = await syncRepo(project);
       results.push(result);
       totalIngested += result.ingested;
       totalSkipped += result.skipped;
@@ -307,7 +319,7 @@ export function syncAllRepos() {
 /**
  * Sync a single repo by path (used during init).
  */
-export function syncSingleRepo(projectPath, brainDir) {
+export async function syncSingleRepo(projectPath, brainDir) {
   const project = {
     name: path.basename(projectPath),
     path: projectPath,

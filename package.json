@@ -1,7 +1,7 @@
 {
   "name": "total-recall-brain",
   "version": "3.23.3",
-  "description": "Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.",
+  "description": "Personal AI system \u2014 database-free, SSSS-powered intelligence engine deployable to any POSIX host.",
   "type": "module",
   "workspaces": [
     "frontend"
@@ -42,7 +42,8 @@
     "routes:manifest": "node scripts/generate-route-manifest.mjs",
     "clean": "rm -rf scratch/* .remember/* *.log",
     "check:dist": "node scripts/check-dist-freshness.mjs",
-    "prepublishOnly": "npm run check:dist"
+    "prepublishOnly": "npm run check:dist",
+    "check:ssss-registry": "node scripts/check-ssss-registry.mjs"
   },
   "repository": {
     "type": "git",

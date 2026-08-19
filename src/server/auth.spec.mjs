@@ -159,3 +159,81 @@ describe('server auth request locality', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('session cookie Secure flag', () => {
+  let tmpDir;
+  let prevAgentDir;
+  let authMod;
+
+  function cookieRes() {
+    return {
+      cookies: [],
+      statusCode: 200,
+      cookie(name, value, options) { this.cookies.push({ name, value, options }); return this; },
+      clearCookie(name, options) { this.cookies.push({ name, value: null, options }); return this; },
+      status(code) { this.statusCode = code; return this; },
+      json(payload) { this.body = payload; return this; },
+    };
+  }
+
+  async function loginWith(secureConnection, requireHttps) {
+    // brainDir is <AGENT_DIR>/skills/total-recall — security.yml lives under that.
+    const configDir = path.join(tmpDir, 'skills', 'total-recall', 'config');
+    fs.mkdirSync(configDir, { recursive: true });
+    const bcrypt = (await import('bcrypt')).default;
+    const hash = await bcrypt.hash('correct-horse-battery', 10);
+    fs.writeFileSync(path.join(configDir, 'security.yml'), [
+      'dashboard:',
+      `  password_hash: "${hash}"`,
+      'network:',
+      `  require_https: ${requireHttps}`,
+      '',
+    ].join('\n'));
+
+    vi.resetModules();
+    authMod = await import('./auth.mjs');
+    const response = cookieRes();
+    await authMod.loginHandler({
+      body: { password: 'correct-horse-battery' },
+      ip: '127.0.0.1',
+      socket: { remoteAddress: '127.0.0.1' },
+      secure: secureConnection,
+    }, response);
+    return response;
+  }
+
+  beforeEach(() => {
+    prevAgentDir = process.env.AGENT_DIR;
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'total-recall-cookie-'));
+    process.env.AGENT_DIR = tmpDir;
+  });
+
+  afterEach(() => {
+    if (prevAgentDir === undefined) delete process.env.AGENT_DIR;
+    else process.env.AGENT_DIR = prevAgentDir;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // The server has no HTTPS listener — it only ever calls app.listen() — so a
+  // Secure cookie derived from config intent rather than the live connection is
+  // silently dropped by the browser on every origin except localhost. Login
+  // returned 200 with no session stored, and the next request 401'd back to the
+  // login page. That locked the dashboard out over its mesh bind.
+  it('omits Secure when the request arrived over plain HTTP', async () => {
+    const response = await loginWith(false, true);
+    const cookie = response.cookies.find((c) => c.name === 'session');
+    expect(cookie).toBeTruthy();
+    expect(cookie.options.secure).toBe(false);
+    expect(cookie.options.httpOnly).toBe(true);
+  });
+
+  it('sets Secure when the request arrived over TLS', async () => {
+    const response = await loginWith(true, true);
+    expect(response.cookies.find((c) => c.name === 'session').options.secure).toBe(true);
+  });
+
+  it('still sets Secure behind a TLS proxy when require_https is false', async () => {
+    const response = await loginWith(true, false);
+    expect(response.cookies.find((c) => c.name === 'session').options.secure).toBe(true);
+  });
+});

@@ -13,6 +13,12 @@ vi.mock('./operation-validator.mjs', () => ({
 vi.mock('./vault.mjs', () => ({
   safeStringify: vi.fn((body, fm) => `---\ntype: ${fm.type}\n---\n${body}`),
   atomicWrite: vi.fn(),
+  // Mirrors the real rule: interior dots are allowed (domain-style repo names
+  // produce them), path separators and `..` are not.
+  isSafeVaultName: vi.fn((name) => {
+    const value = String(name);
+    return /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/.test(value) && !value.includes('..');
+  }),
 }));
 
 vi.mock('./vault-cache.mjs', () => ({

@@ -52,6 +52,55 @@ describe('crypto module', () => {
     }, 15000);
   });
 
+  // The KDF is deliberately expensive, so its result is cached. These cover the
+  // property that makes that safe: a cache hit is only ever possible for the
+  // exact (password, salt) pair that produced it. A cache that could be fooled
+  // by either half would hand out a key that decrypts nothing — or worse, that
+  // survives a master-password rotation.
+  describe('derived-key cache', () => {
+    it('returns the same key material on a repeat derivation', async () => {
+      const first = await deriveKey('cache-password', 'cache-salt');
+      const second = await deriveKey('cache-password', 'cache-salt');
+      expect(second.equals(first)).toBe(true);
+    }, 20000);
+
+    it('does not serve a cached key to a different password', async () => {
+      const mine = await deriveKey('cache-password-a', 'shared-salt');
+      const theirs = await deriveKey('cache-password-b', 'shared-salt');
+      expect(theirs.equals(mine)).toBe(false);
+    }, 20000);
+
+    it('does not serve a cached key after the salt changes', async () => {
+      const before = await deriveKey('rotating-password', 'salt-before');
+      const after = await deriveKey('rotating-password', 'salt-after');
+      expect(after.equals(before)).toBe(false);
+    }, 20000);
+
+    it('still decrypts correctly once clearDerivedKeyCache() has dropped the entry', async () => {
+      const mod = await import('./crypto.mjs');
+      const password = 'password-survives-cache-clear';
+      const encrypted = await encryptSecrets({ token: 'sk-live-xyz' }, password);
+      expect(await decryptSecrets(encrypted, password)).toEqual({ token: 'sk-live-xyz' });
+      mod.clearDerivedKeyCache();
+      expect(await decryptSecrets(encrypted, password)).toEqual({ token: 'sk-live-xyz' });
+    }, 30000);
+
+    it('rejects the retired password after a re-encrypt, cache warm', async () => {
+      const oldPassword = 'retired-master-password';
+      const newPassword = 'rotated-master-password';
+      const payload = { api_key: 'sk-rotate' };
+
+      const before = await encryptSecrets(payload, oldPassword);
+      expect(await decryptSecrets(before, oldPassword)).toEqual(payload);
+
+      // Cache is now warm for the OLD password. Re-encrypting must not let it
+      // decrypt the new store.
+      const after = await encryptSecrets(payload, newPassword);
+      await expect(decryptSecrets(after, oldPassword)).rejects.toThrow();
+      expect(await decryptSecrets(after, newPassword)).toEqual(payload);
+    }, 40000);
+  });
+
   describe('encryptSecrets / decryptSecrets roundtrip', () => {
     it('roundtrips a simple object correctly', async () => {
       const original = { api_key: 'sk-abc123', count: 42 };

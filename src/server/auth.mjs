@@ -355,6 +355,42 @@ export function requireSandboxEnabled(req, res, next) {
   next();
 }
 
+/**
+ * Cookie options for the dashboard session.
+ *
+ * `secure` has to describe the connection that is actually in use, not the
+ * connection the config wishes for. It was previously derived from
+ * `nodeEnv !== 'development' && require_https !== false`, and since nodeEnv
+ * defaults to 'production' and the server only ever calls app.listen() — there
+ * is no HTTPS listener anywhere in it — every login over the mesh bind issued a
+ * `Secure` cookie on a plain-HTTP response. Browsers drop those, so login
+ * returned 200, no session was stored, and the next request 401'd straight back
+ * to the login page. http://localhost is exempt as a trustworthy origin, which
+ * is why this looked fine locally and only bit when reaching the dashboard by
+ * its host or mesh IP.
+ *
+ * Express resolves `req.secure` through `trust proxy`, so a deployment behind
+ * an HTTPS-terminating reverse proxy still gets `Secure` set.
+ */
+function sessionCookieOptions(req, maxAge) {
+  const config = loadSecurityConfig();
+  const isSecureConnection = req?.secure === true;
+
+  if (config.network?.require_https !== false && !isSecureConnection) {
+    logger.warn('auth',
+      'require_https is set but this request arrived over plain HTTP; issuing the session '
+      + 'cookie without Secure so login works. Terminate TLS in front of the dashboard, or '
+      + 'set network.require_https: false to silence this.');
+  }
+
+  return {
+    httpOnly: true,
+    secure: isSecureConnection,
+    maxAge,
+    sameSite: 'lax',
+  };
+}
+
 export async function loginHandler(req, res) {
   const ip = req.ip || req.socket?.remoteAddress;
   if (ip && watchdog.isIpBlocked(ip)) {
@@ -383,13 +419,9 @@ export async function loginHandler(req, res) {
 
   const ttlHours = config.dashboard?.session_ttl_hours || 24;
   const token = jwt.sign({ user: 'admin' }, JWT_SECRET, { expiresIn: `${ttlHours}h` });
-  
-  res.cookie('session', token, {
-    httpOnly: true,
-    secure: nodeEnv !== 'development' && config.network?.require_https !== false,
-    maxAge: ttlHours * 60 * 60 * 1000,
-    sameSite: 'lax'
-  });
+
+  res.cookie('session', token, sessionCookieOptions(req, ttlHours * 60 * 60 * 1000));
+
   
   const requiresReset = !!config.dashboard?.force_password_reset;
   res.json({ success: true, requiresPasswordReset: requiresReset });
@@ -475,6 +507,8 @@ export async function verifyDashboardPassword(password) {
 }
 
 export function logoutHandler(req, res) {
-  res.clearCookie('session');
+  // Attributes must match those the cookie was set with or the browser keeps it.
+  const { maxAge, ...clearOptions } = sessionCookieOptions(req, 0);
+  res.clearCookie('session', clearOptions);
   res.json({ success: true });
 }

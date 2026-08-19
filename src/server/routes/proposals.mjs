@@ -90,11 +90,11 @@ proposalsRouter.post('/api/proposals/:id/apply', requireAuth, requireScope('memo
   }
 });
 
-proposalsRouter.post('/api/proposals/:id/reject', requireAuth, requireScope('memory:write'), (req, res) => {
+proposalsRouter.post('/api/proposals/:id/reject', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const vaultDir = resolveVaultFromQuery(req);
     const reason = req.body?.reason || 'Rejected via API.';
-    res.json(setProposalStatus(vaultDir, req.params.id, 'rejected', {
+    res.json(await setProposalStatus(vaultDir, req.params.id, 'rejected', {
       rejection_reason: reason,
       reviewed_by: req.body?.actor || 'api',
     }));
@@ -104,9 +104,9 @@ proposalsRouter.post('/api/proposals/:id/reject', requireAuth, requireScope('mem
   }
 });
 
-proposalsRouter.post('/api/proposals/:id/revert', requireAuth, requireScope('memory:write'), (req, res) => {
+proposalsRouter.post('/api/proposals/:id/revert', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
-    res.json(revertProposal(resolveVaultFromQuery(req), req.params.id));
+    res.json(await revertProposal(resolveVaultFromQuery(req), req.params.id));
   } catch (err) {
     if (/No undo snapshot|not found/i.test(err.message)) return res.status(404).json({ error: err.message });
     serverError(res, err);

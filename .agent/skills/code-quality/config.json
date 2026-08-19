@@ -1,17 +1,29 @@
 {
   "version": 3,
   "toolchain": "javascript",
-  "repoDescription": "Total Recall brain — Node ESM, no TypeScript, no ESLint. Quality here means: dist stays in sync with src, the open-source path invariant holds, and the SSSS reference kernel still passes its own suites.",
+  "repoDescription": "Total Recall brain \u2014 Node ESM, no TypeScript, no ESLint. Quality here means: dist stays in sync with src, the open-source path invariant holds, and the SSSS reference kernel still passes its own suites.",
   "globalLock": true,
-  "memory": { "maxOldSpaceMb": 4096 },
-  "lock": { "staleAfterMinutes": 45 },
-  "sourceExtensions": [".mjs", ".js", ".cjs"],
+  "memory": {
+    "maxOldSpaceMb": 4096
+  },
+  "lock": {
+    "staleAfterMinutes": 45
+  },
+  "sourceExtensions": [
+    ".mjs",
+    ".js",
+    ".cjs"
+  ],
   "checks": [
     {
       "id": "dist-freshness",
       "tier": "fast",
-      "description": "Published dist must not lag src — prepublishOnly depends on this.",
-      "cmd": ["npm", "run", "check:dist"],
+      "description": "Published dist must not lag src \u2014 prepublishOnly depends on this.",
+      "cmd": [
+        "npm",
+        "run",
+        "check:dist"
+      ],
       "parser": "generic"
     },
     {
@@ -19,7 +31,11 @@
       "tier": "fast",
       "kind": "grep-forbid",
       "description": "INVARIANT: TR core must never hardcode a personal home path or name a third-party product repo. Multi-repo support is path-only (register/track/--repo/TR_SYNC_REPOS/cwd).",
-      "extensions": [".mjs", ".js", ".cjs"],
+      "extensions": [
+        ".mjs",
+        ".js",
+        ".cjs"
+      ],
       "ignorePaths": [
         "^node_modules/",
         "^scratch/",
@@ -52,18 +68,26 @@
     },
     {
       "id": "ssss-registry",
-      "tier": "full",
-      "description": "SSSS effective-registry verification via the shipped @ssss/cli (v0.9).",
-      "cmd": ["npx", "ssss", "registry", "verify"],
+      "tier": "fast",
+      "description": "Composed SSSS registry must match the committed lock. The old command omitted --lock, so it exited 1 on a usage error and never verified anything.",
+      "cmd": [
+        "npm",
+        "run",
+        "check:ssss-registry"
+      ],
       "parser": "generic"
     },
     {
       "id": "test",
-      "tier": "full",
-      "description": "Full vitest suite. Heavy — prefer the Mac Mini or droplet over the laptop.",
-      "cmd": ["npm", "test"],
+      "tier": "remote",
+      "description": "Full vitest suite \u2014 REMOTE ONLY. Running it locally violates the never-run-heavy-node-processes-on-the-laptop invariant; the v2 daemon incident pinned this 8GB machine at load 644. Run on the Mac Mini.",
+      "cmd": [
+        "npm",
+        "test"
+      ],
       "parser": "generic",
-      "timeoutSeconds": 1800
+      "timeoutSeconds": 1800,
+      "remoteHint": "ssh mac-mini 'cd ~/Github/total-recall && export PATH=/opt/homebrew/bin:$PATH && npx vitest run'"
     }
   ]
 }

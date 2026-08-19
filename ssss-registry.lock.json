@@ -1,0 +1,401 @@
+{
+  "version": 1,
+  "core_spec_version": "0.9",
+  "extensions": {},
+  "primitives": [
+    {
+      "family": "actor",
+      "canonical_filename": "ASSISTANT.md",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "name"
+      ],
+      "spec_ref": "§5.4 assistant",
+      "type": "assistant",
+      "qualified_type": "ssss:assistant",
+      "registry": "core"
+    },
+    {
+      "family": "meta",
+      "canonical_filename": null,
+      "append_only": false,
+      "portability": "tenant_private",
+      "required_fields": [
+        "type",
+        "conflict_id",
+        "status",
+        "new_slug",
+        "existing_slug",
+        "detected_at"
+      ],
+      "enums": {
+        "status": [
+          "pending",
+          "resolved"
+        ]
+      },
+      "spec_ref": "§5.4 conflict",
+      "type": "conflict",
+      "qualified_type": "ssss:conflict",
+      "registry": "core"
+    },
+    {
+      "family": "transcript",
+      "canonical_filename": "CONVERSATION.md",
+      "append_only": true,
+      "portability": "tenant_private",
+      "required_fields": [
+        "type",
+        "thread_id"
+      ],
+      "spec_ref": "§5.4 conversation",
+      "type": "conversation",
+      "qualified_type": "ssss:conversation",
+      "registry": "core"
+    },
+    {
+      "family": "knowledge",
+      "canonical_filename": null,
+      "filename_convention": "kebab-case slug matching the `slug` field",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "slug",
+        "category",
+        "title",
+        "status",
+        "schema_version"
+      ],
+      "required_when": {
+        "schema_version==2": [
+          "confidence",
+          "importance",
+          "modality",
+          "subject",
+          "predicate",
+          "object",
+          "sentiment_polarity"
+        ]
+      },
+      "enums": {
+        "category": [
+          "invariants",
+          "patterns",
+          "anti-patterns",
+          "preferences",
+          "decisions",
+          "concepts",
+          "facts",
+          "lore"
+        ],
+        "modality": [
+          "must",
+          "must_not",
+          "should",
+          "should_not",
+          "descriptive",
+          "preference"
+        ],
+        "sentiment_polarity": [
+          "directive_must",
+          "directive_must_not",
+          "descriptive",
+          "preference"
+        ],
+        "priority": [
+          "absolute",
+          "high",
+          "normal",
+          "low"
+        ]
+      },
+      "spec_ref": "§5.4 memory",
+      "type": "memory",
+      "qualified_type": "ssss:memory",
+      "registry": "core"
+    },
+    {
+      "family": "meta",
+      "canonical_filename": null,
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "migration_id",
+        "from_version",
+        "to_version",
+        "status",
+        "description"
+      ],
+      "spec_ref": "§5.4 migration",
+      "type": "migration",
+      "qualified_type": "ssss:migration",
+      "registry": "core"
+    },
+    {
+      "family": "catalog",
+      "canonical_filename": "MODEL.md",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "model_id",
+        "provider"
+      ],
+      "spec_ref": "§5.4 model",
+      "type": "model",
+      "qualified_type": "ssss:model",
+      "registry": "core"
+    },
+    {
+      "family": "capability",
+      "canonical_filename": null,
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "slug",
+        "name",
+        "sandbox_entry"
+      ],
+      "spec_ref": "§5.4 page",
+      "type": "page",
+      "qualified_type": "ssss:page",
+      "registry": "core"
+    },
+    {
+      "family": "meta",
+      "canonical_path": "primitives/<namespace>/<id>.md",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "primitive_id",
+        "namespace",
+        "version",
+        "name",
+        "mutation",
+        "portability",
+        "scopes",
+        "fields"
+      ],
+      "optional_fields": [
+        "language",
+        "aliases",
+        "path_template",
+        "capabilities",
+        "events",
+        "projections",
+        "ui",
+        "migrations",
+        "requires"
+      ],
+      "immutable_fields": [
+        "primitive_id",
+        "namespace"
+      ],
+      "enums": {
+        "mutation": [
+          "replace",
+          "append"
+        ],
+        "portability": [
+          "structural",
+          "tenant_private",
+          "resource_bound"
+        ],
+        "scopes": [
+          "system",
+          "account",
+          "workspace",
+          "user"
+        ]
+      },
+      "patterns": {
+        "primitive_id": "^[a-z][a-z0-9_-]{0,63}:[a-z][a-z0-9_-]{0,127}$",
+        "namespace": "^[a-z][a-z0-9_-]{0,63}$",
+        "language": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+      },
+      "notes": "A governed, versioned definition for a repository, extension, workspace, or user primitive. Natural-language labels may use any language; stable field, enum, capability, and action identifiers are never translated.",
+      "spec_ref": "§5.4 primitive",
+      "type": "primitive",
+      "qualified_type": "ssss:primitive",
+      "registry": "core"
+    },
+    {
+      "family": "meta",
+      "canonical_filename": null,
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "release_id",
+        "version",
+        "schema_version",
+        "summary",
+        "released_at"
+      ],
+      "spec_ref": "§5.4 release",
+      "type": "release",
+      "qualified_type": "ssss:release",
+      "registry": "core"
+    },
+    {
+      "family": "governance",
+      "canonical_filename": null,
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "name"
+      ],
+      "optional_fields": [
+        "description",
+        "scope"
+      ],
+      "spec_ref": "§5.4 rule",
+      "type": "rule",
+      "qualified_type": "ssss:rule",
+      "registry": "core"
+    },
+    {
+      "family": "transcript",
+      "canonical_filename": "RUN.md",
+      "append_only": true,
+      "portability": "tenant_private",
+      "required_fields": [
+        "type",
+        "run_id",
+        "workflow_id"
+      ],
+      "optional_fields": [
+        "task_id",
+        "task_path",
+        "workspace_id",
+        "status",
+        "step_count",
+        "started_at",
+        "ended_at",
+        "claimed_by",
+        "provenance"
+      ],
+      "enums": {
+        "status": [
+          "queued",
+          "claimed",
+          "running",
+          "waiting_for_human",
+          "succeeded",
+          "failed",
+          "canceled",
+          "retrying",
+          "dead_letter"
+        ]
+      },
+      "spec_ref": "§5.4 run",
+      "type": "run",
+      "qualified_type": "ssss:run",
+      "registry": "core"
+    },
+    {
+      "family": "governance",
+      "canonical_filename": "ROLE.md",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "name",
+        "permissions"
+      ],
+      "optional_fields": [
+        "description"
+      ],
+      "spec_ref": "§5.4 security_role",
+      "type": "security_role",
+      "qualified_type": "ssss:security_role",
+      "registry": "core"
+    },
+    {
+      "family": "capability",
+      "canonical_filename": "SKILL.md",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "name",
+        "description"
+      ],
+      "notes": "Compatible with the open Agent Skills standard (name + description). The `type: skill` discriminator is REQUIRED for SSSS-managed manifests.",
+      "spec_ref": "§5.4 skill",
+      "type": "skill",
+      "qualified_type": "ssss:skill",
+      "registry": "core"
+    },
+    {
+      "family": "work",
+      "canonical_filename": null,
+      "append_only": false,
+      "portability": "tenant_private",
+      "required_fields": [
+        "type",
+        "priority",
+        "category",
+        "status"
+      ],
+      "optional_fields": [
+        "workflow_id",
+        "workflow_path",
+        "trigger_id",
+        "trigger_type",
+        "trigger_event_id",
+        "scheduled_for",
+        "dedupe_key",
+        "claim_id",
+        "claimed_by",
+        "claimed_at",
+        "attempts",
+        "next_attempt_at"
+      ],
+      "enums": {
+        "status": [
+          "pending",
+          "in_progress",
+          "done",
+          "failed"
+        ]
+      },
+      "spec_ref": "§5.4 task",
+      "type": "task",
+      "qualified_type": "ssss:task",
+      "registry": "core"
+    },
+    {
+      "family": "work",
+      "canonical_filename": "WORKFLOW.md",
+      "append_only": false,
+      "portability": "structural",
+      "required_fields": [
+        "type",
+        "name"
+      ],
+      "optional_fields": [
+        "workflow_id",
+        "slug",
+        "description",
+        "triggers",
+        "isActive",
+        "priority",
+        "misfire_policy",
+        "concurrency"
+      ],
+      "spec_ref": "§5.4 workflow",
+      "type": "workflow",
+      "qualified_type": "ssss:workflow",
+      "registry": "core"
+    }
+  ],
+  "integrity": "sha256:5d09322ec4181cf897bc282eb44ca4ea135546d2e12a9c418d013bf48f710278"
+}

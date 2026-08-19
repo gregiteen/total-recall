@@ -3,9 +3,27 @@ import path from 'path';
 import matter from 'gray-matter';
 import { logger } from './logger.mjs';
 
-// Slug allowlist shared with validated-write.mjs — a slug is a filename;
-// anything outside this set risks path traversal on delete.
-const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
+// Slug allowlist shared with validated-write.mjs — a slug is a filename, so it
+// must not be able to escape its category directory.
+//
+// Dots are permitted in the interior because repository names legitimately
+// contain them — any domain-style name (`example.com`) produces a slug with a
+// dot on ingest, and the stricter rule rejected thousands of real nodes over an
+// ordinary character. What enables traversal is a path separator or `..`, and
+// neither is reachable here — separators are outside the character class, a
+// leading dot or dash is excluded by the first-character rule, and `..` is
+// rejected outright below.
+const SAFE_NAME = /^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/;
+
+/**
+ * True when `name` is safe to use as a path segment.
+ */
+export function isSafeVaultName(name) {
+  const value = String(name);
+  if (!SAFE_NAME.test(value)) return false;
+  if (value.includes('..')) return false;
+  return true;
+}
 
 /**
  * Atomic file write using write-then-rename to prevent partial corruption.
@@ -158,7 +176,7 @@ export async function writeNode(node, vaultDir, options = {}) {
  * @returns {boolean}
  */
 export function deleteNode(slug, vaultDir) {
-  if (!SAFE_NAME.test(slug)) return false;
+  if (!isSafeVaultName(slug)) return false;
   if (!fs.existsSync(vaultDir)) return false;
   
   // Scan category directories directly instead of loading entire vault

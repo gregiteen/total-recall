@@ -8,11 +8,12 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import matter from 'gray-matter';
 import { processOperationAsync } from './operation-validator.mjs';
-import { safeStringify } from './vault.mjs';
+import { safeStringify, isSafeVaultName } from './vault.mjs';
 import { invalidate } from './vault-cache.mjs';
-
-const SAFE_NAME = /^[a-zA-Z0-9_-]+$/;
 
 /**
  * Normalize a vault node so package universal frontmatter + TR memory v2 pass.
@@ -107,10 +108,10 @@ function buildEnvelope(node, options = {}) {
   const prepared = prepareNodeForContract(node);
   const { body, _filePath, _layer, _filepath, ...frontmatter } = prepared;
 
-  if (!SAFE_NAME.test(String(frontmatter.slug))) {
+  if (!isSafeVaultName(frontmatter.slug)) {
     throw new Error(`Invalid slug: ${frontmatter.slug}`);
   }
-  if (!SAFE_NAME.test(String(frontmatter.category))) {
+  if (!isSafeVaultName(frontmatter.category)) {
     throw new Error(`Invalid category: ${frontmatter.category}`);
   }
 
@@ -165,4 +166,66 @@ export async function writeNodeValidatedAsync(node, vaultDir, options = {}) {
  */
 export function validateNode(node, vaultDir) {
   return writeNodeValidatedAsync(node, vaultDir, { dryRun: true });
+}
+
+/**
+ * Resolve the vault root that owns a node file.
+ *
+ * Walks up looking for a `memory-vault` directory. Falls back to the
+ * grandparent (i.e. the parent of the category folder) so scoped roots and
+ * test fixtures that do not use the canonical name still work.
+ */
+export function resolveVaultDir(filePath) {
+  if (!filePath) return null;
+  let cur = path.dirname(path.resolve(filePath));
+  while (cur && cur !== path.dirname(cur)) {
+    if (path.basename(cur) === 'memory-vault') return cur;
+    cur = path.dirname(cur);
+  }
+  return path.dirname(path.dirname(path.resolve(filePath)));
+}
+
+/**
+ * Read a node off disk, mutate its frontmatter, and write it back through the
+ * Core Contract.
+ *
+ * Stampers (confidence decay, cutoff-risk flags, supersede markers, priority
+ * escalation) used to read → mutate → atomicWrite, which skipped validation
+ * entirely: a stamper could lower `confidence` below its floor or drop a
+ * required field and nothing would notice until a much later read failed.
+ *
+ * The on-disk location is preserved via an explicit path override. Without it
+ * the envelope would recompute `<category>/<slug>.md`, and any node whose
+ * folder is outside the closed memory-category enum (daily/, corrections/,
+ * queries/, system/) would be rewritten to a new location while the original
+ * was left behind as an orphan.
+ *
+ * @param {string} filePath  Absolute path to an existing node file
+ * @param {(data: object, body: string) => (object|void)} mutate
+ *        Mutates frontmatter in place, or returns `{ data, body }` to replace.
+ * @param {object} [options] Passed through to writeNodeValidatedAsync
+ * @returns {Promise<object>} Operation response, or `{ success: false }`
+ */
+export async function updateNodeInPlace(filePath, mutate, options = {}) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { success: false, error: `Node file not found: ${filePath}` };
+  }
+
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const parsed = matter(raw);
+  const data = { ...parsed.data };
+  let body = parsed.content;
+
+  const replacement = mutate(data, body);
+  const nextData = replacement?.data || data;
+  if (replacement && typeof replacement.body === 'string') body = replacement.body;
+
+  const vaultDir = options.vaultDir || resolveVaultDir(filePath);
+  const relativePath = path.relative(vaultDir, path.resolve(filePath))
+    .split(path.sep).join('/');
+
+  return writeNodeValidatedAsync({ ...nextData, body }, vaultDir, {
+    ...options,
+    path: relativePath,
+  });
 }

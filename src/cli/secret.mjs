@@ -202,6 +202,11 @@ function printHelp() {
       remove <name>        Delete a target
       deploy <name>        Push the SSOT projection to that target now
                             [--dry-run] [--keys k1,k2]
+    diff-env              Compare repo .env files against the store (no values printed)
+      --path <dir>        Single repo (default: every project-registry path)
+      --filename .env     File to compare (default .env; server/<name> also checked)
+      --strict            Exit 1 on any drift or unadopted key
+      --layer project     Compare against the project-local store (default: global)
     import-env            One-time migrate: scan local .env → store (not the steady-state path)
       --all / --file / --overwrite / --dry-run
     catalog               Full catalog: keys, providers, usage, rotation, cost, tracking
@@ -464,6 +469,9 @@ function parseArgs(args) {
         break;
       case '--path':
         out.path = args[++i];
+        break;
+      case '--layer':
+        out.layer = args[++i];
         break;
       case '--all-projects':
         out.allProjects = true;
@@ -1421,6 +1429,82 @@ export default async function secretCli(argv) {
       if (result.examplePath) console.log(`     example: ${result.examplePath}`);
       console.log(`     store:  ${result.store}`);
       console.log(`     (values written with mode 0600; not printed)\n`);
+      return;
+    }
+
+    if (opts.command === 'diff-env') {
+      const { diffEnvAgainstStore, resolveEnvFiles } = await import('../core/secrets-env-diff.mjs');
+      const { loadProjectRegistry } = await import('../core/secrets-env-export.mjs');
+      const { globalBrainDir } = await import('../core/config.mjs');
+
+      // Compare against the GLOBAL store, not whichever layer the cwd resolves
+      // to. A repo with its own .agent/ shadows the global store, so running
+      // this from inside one would diff .env files against a project-local
+      // store and report drift that is really just two different stores —
+      // which is how the real drift stayed invisible. --layer project opts in.
+      const compareBrainDir = opts.layer === 'project' ? brainDir : globalBrainDir;
+
+      const roots = opts.path
+        ? [path.resolve(opts.path)]
+        : loadProjectRegistry()
+          .map((entry) => (typeof entry === 'string' ? entry : entry.path || entry.root))
+          .filter(Boolean);
+
+      const files = resolveEnvFiles(roots, opts.filename ? [opts.filename] : ['.env']);
+      if (!files.length) {
+        console.log('\n  No .env files found for the configured projects.\n');
+        return;
+      }
+
+      const { totals, rows, storeKeyCount } = await diffEnvAgainstStore(compareBrainDir, files);
+
+      console.log(`\n  Secrets store vs .env — ${files.length} file(s), ${storeKeyCount} keys in store`);
+      console.log(`  store: ${compareBrainDir.replace(os.homedir(), '~')}\n`);
+      console.log(`    identical to store : ${totals.match}`);
+      console.log(`    DRIFTED            : ${totals.drift}`);
+      console.log(`    name collisions    : ${totals.collision}`);
+      console.log(`    only in .env       : ${totals.only_env}`);
+      console.log(`    placeholders       : ${totals.placeholder}`);
+
+      const drifted = rows.filter((r) => r.status === 'drift');
+      if (drifted.length) {
+        console.log('\n  Drift — the same key holds different values in the two places.');
+        console.log('  Equal lengths mean the same credential format, i.e. a rotation that');
+        console.log('  landed on one side only. Decide which side is live before exporting.\n');
+        for (const r of drifted) {
+          const shape = r.sameShape ? 'same shape' : 'different shape';
+          console.log(`    ${r.key.padEnd(34)} env=${String(r.envLength).padStart(3)}ch  store=${String(r.storeLength).padStart(3)}ch  (${shape})`);
+          console.log(`      ${r.file.replace(os.homedir(), '~')}`);
+        }
+      }
+
+      const collisions = rows.filter((r) => r.status === 'collision');
+      if (collisions.length) {
+        console.log('\n  Name collisions — the store entry is bound to a different repo, so');
+        console.log('  these are two products\' credentials sharing a variable name, not');
+        console.log('  staleness. Exporting would overwrite one product with the other\'s.\n');
+        const seen = new Set();
+        for (const r of collisions) {
+          const line = `${r.key}|${r.binding}|${r.envRepo}`;
+          if (seen.has(line)) continue;
+          seen.add(line);
+          console.log(`    ${r.key.padEnd(30)} store bound to '${r.binding}' · .env belongs to '${r.envRepo}'`);
+        }
+      }
+
+      const onlyEnv = rows.filter((r) => r.status === 'only_env');
+      if (onlyEnv.length) {
+        console.log('\n  Present in .env but absent from the store (import to adopt):\n');
+        for (const r of onlyEnv) {
+          console.log(`    ${r.key.padEnd(34)} ${r.file.replace(os.homedir(), '~')}`);
+        }
+      }
+
+      console.log('');
+      if (opts.strict && (totals.drift > 0 || totals.only_env > 0)) {
+        console.error('  diff-env --strict: store is not the source of truth for every key.');
+        process.exit(1);
+      }
       return;
     }
 
