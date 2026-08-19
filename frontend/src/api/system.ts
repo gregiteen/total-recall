@@ -77,6 +77,32 @@ export async function restartDaemon(): Promise<{ success: boolean; message: stri
   return res.json()
 }
 
+export interface RestartResult {
+  success: boolean
+  scheduled: boolean
+  message: string
+  supervisor?: { supervised: boolean; kind: string | null; label: string | null; reason: string }
+}
+
+/**
+ * Restart the brain server itself. Answers 409 on a host where nothing would
+ * respawn the process — that is a real answer, not a failure, so the message is
+ * surfaced rather than thrown.
+ */
+export async function restartServer(): Promise<RestartResult> {
+  const res = await apiFetch(`${API_BASE}/api/server/restart`, { method: 'POST' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok && res.status !== 409) {
+    throw new Error(data.message || data.error || `Restart server API error: ${res.status}`)
+  }
+  return {
+    success: Boolean(data.success),
+    scheduled: Boolean(data.scheduled),
+    message: data.message || (data.scheduled ? 'Server restarting.' : 'Server did not restart.'),
+    supervisor: data.supervisor,
+  }
+}
+
 export async function fetchBrains(): Promise<Record<string, unknown>[]> {
   const res = await apiFetch(`${API_BASE}/api/brains`)
   const data = await res.json()

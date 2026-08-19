@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-19T18:13:50.475Z
+generated_at: 2026-08-19T19:11:36.725Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (569 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (571 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -90,7 +90,7 @@ frontend/
   src/
     api/  (29 items)
     assets/  (3 items)
-    components/  (30 items)
+    components/  (32 items)
     pages/  (59 items)
     utils/  (1 items)
 infra/
@@ -123,7 +123,7 @@ scripts/  (13 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (224 items)
+  core/  (226 items)
   server/
     routes/  (90 items)
 templates/
@@ -339,7 +339,7 @@ templates/
 - `DELETE /api/memory/:slug`
 - `POST /api/memory/search/semantic`
 
-### mesh (15 endpoints)
+### mesh (16 endpoints)
 
 - `GET /api/mesh/leader`
 - `GET /api/mesh/nodes`
@@ -348,9 +348,9 @@ templates/
 - `POST /api/mesh/access/import`
 - `GET /api/mesh/enrollment`
 - `POST /api/mesh/enroll`
+- `POST /api/mesh/preauthkey`
 - `GET /api/mesh/io`
 - `GET /api/mesh/interfaces`
-- `GET /api/mesh/lan`
 
 ### models (5 endpoints)
 
@@ -462,7 +462,7 @@ templates/
 
 - `POST /api/sync/remote-vault/proposals/:id/decision`
 
-### system (8 endpoints)
+### system (9 endpoints)
 
 - `GET /api/logs/:type`
 - `POST /api/diagnostics/agents`
@@ -472,6 +472,7 @@ templates/
 - `GET /api/usage`
 - `GET /api/usage/providers`
 - `POST /api/daemon/restart`
+- `POST /api/server/restart`
 
 ### tasks (3 endpoints)
 
@@ -560,6 +561,7 @@ templates/
 - MeshTopology
 - MobilePairing
 - ResearchAgendaTab
+- TailnetEnroll
 - TaskQueueTab
 - UsageChart
 - VoiceInput
@@ -567,7 +569,7 @@ templates/
 
 ## Core Modules
 
-104 modules in `src/core/`:
+105 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
@@ -644,6 +646,7 @@ templates/
 - **secrets-rotate** — exports: buildBrowserRotatePrompt, enqueueRotationDueTasks, rotateSecretAndExport, runSecretsRotationCheck, runSecretsExportAll, getBrowserRotateAssist, rotateViaBrowser, rotateAuto
 - **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets
 - **secrets-sync** — exports: getSecretsChecksum, pullSecretsFromLeader, fetchLeaderChecksum, syncLoop
+- **server-restart** — exports: detectSupervisor, requestSelfRestart, packageVersionOnDisk
 - **session-watcher** — exports: createSessionEntry, parseClaudeCode, parseCodex, parseGeminiCli, parseAntigravity, parseCursor, parseVSCode, contentFingerprint
 - **skills-registry** — exports: resolveRegistryDir, resolveRegistryPath, emptyRegistry, loadRegistry, saveRegistry, hashSkillContent, readSkillMeta, registerSkill
 - **snapshot** — exports: getSnapshotsDir, createSnapshot, listSnapshots, rollbackVault

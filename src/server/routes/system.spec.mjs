@@ -89,4 +89,39 @@ describe('System Router', () => {
     expect(res.body.message).toMatch(/restarted/i);
     expect(res.body.pid).toBe(12345);
   });
+
+  it('POST /api/server/restart schedules a restart on a supervised host', async () => {
+    vi.doMock('../../core/server-restart.mjs', () => ({
+      requestSelfRestart: vi.fn(() => ({
+        scheduled: true,
+        supervisor: { supervised: true, kind: 'launchd', label: 'com.totalrecall.brain', reason: 'owns pid' },
+        delayMs: 750,
+      })),
+    }));
+
+    const res = await request(app).post('/api/server/restart');
+    expect(res.status).toBe(200);
+    expect(res.body.scheduled).toBe(true);
+    expect(res.body.supervisor.kind).toBe('launchd');
+  });
+
+  it('POST /api/server/restart answers 409 rather than taking an unsupervised host down', async () => {
+    vi.resetModules();
+    vi.doMock('../../core/server-restart.mjs', () => ({
+      requestSelfRestart: vi.fn(() => ({
+        scheduled: false,
+        supervisor: { supervised: false, kind: null, label: null, reason: 'no launchd job reports this pid' },
+        reason: 'refusing to exit: no supervisor would restart this process',
+      })),
+    }));
+    const { systemRouter: freshRouter } = await import('./system.mjs');
+    const freshApp = express();
+    freshApp.use(express.json());
+    freshApp.use(freshRouter);
+
+    const res = await request(freshApp).post('/api/server/restart');
+    expect(res.status).toBe(409);
+    expect(res.body.scheduled).toBe(false);
+    expect(res.body.message).toMatch(/refusing to exit/);
+  });
 });

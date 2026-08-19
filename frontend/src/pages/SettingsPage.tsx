@@ -7,6 +7,7 @@ import {
   checkUpdate,
   runUpdate,
   restartDaemon,
+  restartServer,
   triggerRecompile,
   apiFetch,
   getApiBase,
@@ -53,6 +54,40 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [restartingDaemon, setRestartingDaemon] = useState(false);
+  const [restartingServer, setRestartingServer] = useState(false);
+
+  const handleRestartServer = async () => {
+    setRestartingServer(true);
+    setUpdateMessage(null);
+    try {
+      const res = await restartServer();
+      setUpdateMessage(res.message);
+      if (res.scheduled) {
+        // The server is about to drop this connection on purpose. Poll health
+        // until it answers again instead of leaving the page looking hung.
+        setTimeout(function poll(attempt = 0) {
+          fetchHealth()
+            .then((h) => {
+              setHealth(h);
+              setUpdateMessage('Server restarted — reconnected.');
+              setRestartingServer(false);
+            })
+            .catch(() => {
+              if (attempt >= 20) {
+                setUpdateMessage('Server restarted but has not answered yet — reload in a moment.');
+                setRestartingServer(false);
+                return;
+              }
+              setTimeout(() => poll(attempt + 1), 1500);
+            });
+        }, 2000);
+        return;
+      }
+    } catch (err: unknown) {
+      setUpdateMessage('Restart error: ' + (err as Error).message);
+    }
+    setRestartingServer(false);
+  };
 
   const handleRestartDaemon = async () => {
     setRestartingDaemon(true);
@@ -142,10 +177,17 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
           s?.up_to_date != null ? `${s.up_to_date} current` : null,
           s?.latest ? `latest ${s.latest}` : null,
         ].filter(Boolean);
+        // Say what actually happened to this server, rather than telling the
+        // user to go work out whether a restart is needed.
+        const restartNote = res.restart?.scheduled
+          ? ' Server is restarting into the new code.'
+          : res.restart?.required
+            ? ` Server still runs the old code — ${res.restart.reason}`
+            : '';
         setUpdateMessage(
           bits.length
-            ? `Update complete — ${bits.join(' · ')}. Restart daemon/server if this host still runs old code.`
-            : res.message || 'Update complete.',
+            ? `Update complete — ${bits.join(' · ')}.${restartNote}`
+            : (res.message || 'Update complete.') + restartNote,
         );
       } else {
         const failDetail = (res.summary?.results || [])
@@ -1014,6 +1056,16 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
                 style={{ fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}
               >
                 {restartingDaemon ? 'Restarting…' : 'Restart Daemon'}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={handleRestartServer}
+                disabled={restartingServer}
+                data-testid="restart-server"
+                title="Restart the brain server so newly installed code is the code that runs"
+                style={{ fontSize: 13, padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}
+              >
+                {restartingServer ? 'Restarting…' : 'Restart Server'}
               </button>
               <button 
                 className="btn-primary"
