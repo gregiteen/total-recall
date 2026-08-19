@@ -3,6 +3,7 @@ type: memory
 slug: topic-research-sop
 category: preferences
 title: "Standard Operating Procedure for Topic Research"
+description: "How the agent handles a research request: queue it to the background daemon, keep one living scratch document, and compile so it is searchable."
 status: active
 confidence: 1
 importance: 5
@@ -32,6 +33,7 @@ schema_version: 2
 x_temporal_context: "2026-05-25T22:36:21.376Z"
 priority: absolute
 immutable: true
+timestamp: "2026-05-25T22:36:21.376Z"
 ---
 
 # Standard Operating Procedure for Topic Research

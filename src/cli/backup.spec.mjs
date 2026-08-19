@@ -80,6 +80,40 @@ describe('CLI Backup — --push-git mode', () => {
     spawnMock.mockRestore();
   });
 
+  it('pushes a clean vault when the remote is behind (frozen-backup regression)', async () => {
+    // Two scheduled jobs sharing the "backup" remote name but pointing at
+    // different URLs: whichever ran second re-pointed the remote, saw a clean
+    // tree, and returned "nothing to push" — so that destination silently
+    // stopped receiving backups for months while every run reported success.
+    // A clean tree only means "nothing new to COMMIT", never "remote is current".
+    const LOCAL = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const REMOTE_BEHIND = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const spawnMock = vi.spyOn(cp, 'spawnSync').mockImplementation((cmd, args) => {
+      if (cmd === 'which') return { status: 0, stdout: Buffer.from('/usr/bin/git'), stderr: Buffer.from('') };
+      if (cmd === 'git') {
+        if (args.includes('--porcelain')) return { status: 0, stdout: Buffer.from(''), stderr: Buffer.from('') };
+        if (args.includes('get-url')) return { status: 0, stdout: Buffer.from('git@github.com:test/brain.git'), stderr: Buffer.from('') };
+        if (args.includes('rev-parse')) return { status: 0, stdout: Buffer.from(LOCAL), stderr: Buffer.from('') };
+        if (args.includes('ls-remote')) return { status: 0, stdout: Buffer.from(`${REMOTE_BEHIND}\trefs/heads/main`), stderr: Buffer.from('') };
+        return { status: 0, stdout: Buffer.from(''), stderr: Buffer.from('') };
+      }
+      return { status: 0, stdout: Buffer.from(''), stderr: Buffer.from('') };
+    });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await backup(['--push-git', 'git@github.com:test/brain.git']);
+
+    const subcommands = spawnMock.mock.calls.filter(c => c[0] === 'git').map(c => c[1][0]);
+    expect(subcommands).toContain('push');
+
+    const output = consoleSpy.mock.calls.flat().join(' ');
+    expect(output).toContain('behind');
+    expect(output).not.toContain('unchanged');
+
+    consoleSpy.mockRestore();
+    spawnMock.mockRestore();
+  });
+
   it('skips commit and push when vault is unchanged', async () => {
     const spawnMock = vi.spyOn(cp, 'spawnSync').mockImplementation((cmd, args) => {
       if (cmd === 'which') return { status: 0, stdout: Buffer.from('/usr/bin/git'), stderr: Buffer.from('') };

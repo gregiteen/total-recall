@@ -3,6 +3,7 @@ type: memory
 slug: always-websearch-gap
 category: preferences
 title: "Always Perform Web Search for Cutoff Gap"
+description: "Web-search to confirm any fact that falls in or past the training-cutoff gap, rather than answering from weights."
 status: active
 confidence: 1
 importance: 5
@@ -32,6 +33,7 @@ schema_version: 2
 x_temporal_context: "2026-05-25T22:36:21.376Z"
 priority: absolute
 immutable: true
+timestamp: "2026-05-25T22:36:21.376Z"
 ---
 
 # Always Perform Web Search for Cutoff Gap
