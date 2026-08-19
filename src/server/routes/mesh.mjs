@@ -16,6 +16,7 @@ import {
   readSshConfig,
   resolveNodeAccess,
 } from '../../core/mesh-access.mjs';
+import { createHeadscalePreAuthKey, resolveHeadscaleConfig } from '../../core/headscale-client.mjs';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
 import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
 import {
@@ -261,6 +262,45 @@ router.post('/api/mesh/enroll', requireAuth, requireScope('config:write'), async
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message || 'enrollment failed' });
+  }
+});
+
+/**
+ * POST /api/mesh/preauthkey
+ * Mint an enrollment key for a NEW device (a phone, a tablet, another laptop).
+ *
+ * /api/mesh/enroll only ever enrolls THIS host, so adding a phone had no API at
+ * all and the only route in was the CLI — which a phone user does not have.
+ *
+ * Body: { reusable?: boolean, ephemeral?: boolean, ttlMinutes?: number }
+ */
+router.post('/api/mesh/preauthkey', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    const reusable = req.body?.reusable === true;
+    const ephemeral = req.body?.ephemeral === true;
+    // Short by default: an enrollment key is a bearer credential, and the window
+    // only has to cover walking to the device. Capped so a UI cannot mint a
+    // long-lived key by accident.
+    const requested = Number(req.body?.ttlMinutes);
+    const ttlMinutes = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 60) : 15;
+
+    const { key, expiration } = await createHeadscalePreAuthKey(
+      { reusable, ephemeral, ttlMinutes },
+      BRAIN_DIR,
+    );
+    res.json({
+      success: true,
+      key,
+      expiration,
+      reusable,
+      ephemeral,
+      ttl_minutes: ttlMinutes,
+      // Surfaced so the UI can show the exact control-server URL to type into a
+      // phone; never include the token, only the URL.
+      login_server: await resolveHeadscaleConfig(BRAIN_DIR).then((c) => c.url).catch(() => null),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message || 'could not mint enrollment key' });
   }
 });
 

@@ -348,6 +348,10 @@
     "path": "/api/mesh/nodes"
   },
   {
+    "method": "POST",
+    "path": "/api/mesh/preauthkey"
+  },
+  {
     "method": "GET",
     "path": "/api/network/audit"
   },

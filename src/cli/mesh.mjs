@@ -108,6 +108,15 @@ export default async function meshCli(argv = []) {
   const vaultRoot = path.join(brainDir, 'memory-vault');
   const command = args.shift();
 
+  // `--help` after a subcommand must never EXECUTE that subcommand. Only the
+  // bare `mesh --help` was handled, so `mesh preauthkey --help` fell straight
+  // into the preauthkey branch and MINTED A LIVE ENROLLMENT KEY for someone who
+  // had asked for usage text — a credential issued by a help flag.
+  if (args.includes('--help') || args.includes('-h')) {
+    printHelp();
+    return;
+  }
+
   try {
     if (command === 'status') {
       const info = await describeHeadscaleAvailability(brainDir);
