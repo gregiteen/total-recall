@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.25.1] — 2026-08-19
+
+### 🐛 Bug Fixes
+- **Tailnet enrollment instructions were unreachable when you needed them**: the steps existed but lived inside the *after you mint a key* branch behind a collapsed `<details>`, and the control-server URL was read off the minted key. So step one — the URL you must enter on the device before anything else — stayed invisible until a 15-minute countdown was already running. The URL now comes from `GET /api/mesh/enrollment` (config, not a key) and renders immediately with a copy button, and the phone steps are open by default above the key.
+- **The iOS steps were missing the one that actually blocks people**: a device previously signed into Tailscale's own service must have **Reset Keychain** turned on, and the app must be signed out first and force-quit after the setting changes. Skipping the keychain reset is the usual reason sign-in keeps reverting to the public control plane. Android now has its own section, and the in-app "Use custom coordination server" route is presented as the secondary path since that menu is unreliable on some builds.
+
 ## [3.25.0] — 2026-08-19
 
 ### 🚀 Features
