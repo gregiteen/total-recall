@@ -321,38 +321,67 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
   // Note: Only invariants, preferences, and anti-patterns are included in instructions,
   // enforcing Category Partitioning (concepts, decisions, facts are search-only).
   const isImportant = (n) => n.importance === undefined || n.importance >= 3;
-  const invariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active' && !isExpired(n) && isImportant(n));
-  const preferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active' && !isExpired(n) && isImportant(n));
-  const corrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n) && isImportant(n));
+  
+  // Determine current project/repo context to prevent cross-repo pollution
+  const currentRepoName = path.basename(process.cwd()).toLowerCase();
+  
+  const isRelevantToRepo = (n) => {
+    // If explicitly marked global or no repo restriction, it applies everywhere
+    if (n.scope === 'global' || n._layer === 'global') {
+      // If the node text explicitly binds to specific other repos, skip it
+      if (Array.isArray(n.repos) && n.repos.length > 0) {
+        return n.repos.some(r => r.toLowerCase() === currentRepoName);
+      }
+      return true;
+    }
+    // If tagged with specific repos or project name
+    if (Array.isArray(n.repos) && n.repos.length > 0) {
+      return n.repos.some(r => r.toLowerCase() === currentRepoName);
+    }
+    if (n.project && typeof n.project === 'string') {
+      return n.project.toLowerCase() === currentRepoName;
+    }
+    return true;
+  };
 
-  // Deduplicate nodes by compacted content hash (OKF non-destructive merge pattern).
-  // When two nodes produce identical compacted text, keep the one with higher importance.
-  const deduplicateNodes = (list) => {
+  const rawInvariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
+  const rawPreferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
+  const rawCorrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
+
+  // Deduplicate nodes by normalized content key and rank by priority/importance
+  const deduplicateAndRankNodes = (list, maxCount = 15) => {
     const seen = new Map();
     const deduped = [];
-    for (const n of list) {
-      const key = (n.body || n.content || '').trim().toLowerCase().substring(0, 200);
-      if (seen.has(key)) {
-        const existing = seen.get(key);
-        if ((n.importance || 3) > (existing.importance || 3)) {
-          // Replace with higher-importance node
-          const idx = deduped.indexOf(existing);
-          if (idx !== -1) deduped[idx] = n;
-          seen.set(key, n);
-        }
-        // else skip the lower-importance duplicate
-      } else {
-        seen.set(key, n);
+    
+    // Sort by importance (descending) and priority (absolute first)
+    const sorted = [...list].sort((a, b) => {
+      const aAbs = a.priority === 'absolute' ? 10 : 0;
+      const bAbs = b.priority === 'absolute' ? 10 : 0;
+      const aScore = (a.importance || 3) + aAbs;
+      const bScore = (b.importance || 3) + bAbs;
+      return bScore - aScore;
+    });
+
+    for (const n of sorted) {
+      // Normalize content to catch paraphrased/duplicate directives
+      const rawText = (n.body || n.content || n.title || '').trim().toLowerCase();
+      const normKey = rawText.replace(/[^a-z0-9]/g, '').substring(0, 120);
+      
+      if (!seen.has(normKey)) {
+        seen.set(normKey, n);
         deduped.push(n);
       }
     }
-    return deduped;
+    return deduped.slice(0, maxCount);
   };
 
+  const invariants = deduplicateAndRankNodes(rawInvariants, 15);
+  const preferences = deduplicateAndRankNodes(rawPreferences, 10);
+  const corrections = deduplicateAndRankNodes(rawCorrections, 15);
+
   const formatNodes = async (list) => {
-    const unique = deduplicateNodes(list);
     const formatted = [];
-    for (const n of unique) {
+    for (const n of list) {
       const snippet = await compactNode(n, derivedDir, force);
       formatted.push(snippet.startsWith('-') ? snippet : `- ${snippet}`);
     }
