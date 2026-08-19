@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo, type CSSProperties, type ReactNode } from 'react'
 import {
   listApiKeys,
   issueApiKey,
@@ -294,36 +294,36 @@ export default function SecretsPage() {
     }
   }
 
+  // The loaders below set state synchronously before their first await, which
+  // react-hooks/set-state-in-effect rightly rejects inside an effect body. The
+  // original code dodged it with setTimeout(..., 0); yielding a microtask does
+  // the same job a macrotask sooner, and unlike the timeout it can be cancelled
+  // — so a fast unmount no longer sets state on a dead component.
   useEffect(() => {
-    if (tab === 'sync') {
-      setTimeout(() => void loadSyncData(), 0)
+    if (tab !== 'sync') return
+    let cancelled = false
+    void Promise.resolve().then(() => {
+      if (!cancelled) void loadSyncData()
+    })
+    return () => {
+      cancelled = true
     }
   }, [tab, loadSyncData])
 
+  /**
+   * Loads the secrets catalog — and ONLY the catalog.
+   *
+   * This used to await, in series: config, then the Gemini / Claude / OpenAI /
+   * OpenRouter model lists, and finally the catalog. The page's actual content
+   * therefore sat behind four external vendor round-trips, and the spinner ran
+   * until the slowest one answered. The model lists belong to the config tab
+   * and are fetched separately (and lazily) below.
+   */
   const loadCatalog = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      
-    try {
-      const config = await fetchConfigJson()
-      if (!config.secrets) config.secrets = {}
-      if (!config.brain) config.brain = {}
-      setConfigData(config)
-
-      const gem = await fetchGeminiModels().catch(() => [])
-      setGeminiModels(gem)
-      const cla = await fetchClaudeModels().catch(() => [])
-      setClaudeModels(cla)
-      const open = await fetchOpenaiModels().catch(() => [])
-      setOpenaiModels(open)
-      const or = await fetchOpenRouterModels().catch(() => [])
-      setOrModels(or)
-    } catch {
-      // ignore fetching models error
-    }
-
-    const data = await fetchSecretsCatalog()
+      const data = await fetchSecretsCatalog()
       setCatalog(data)
       const skey = selectedKeyRef.current
       if (skey) {
@@ -340,6 +340,35 @@ export default function SecretsPage() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  const loadConfig = useCallback(async () => {
+    try {
+      const config = await fetchConfigJson()
+      if (!config.secrets) config.secrets = {}
+      if (!config.brain) config.brain = {}
+      setConfigData(config)
+    } catch {
+      // config is only needed by the config tab; its absence must not blank the page
+    }
+  }, [])
+
+  /**
+   * Vendor model lists, concurrently rather than in series. Each already
+   * degrades to [] on its own, so one slow or unauthorized vendor cannot hold
+   * up the other three.
+   */
+  const loadModels = useCallback(async () => {
+    const [gem, cla, open, or] = await Promise.all([
+      fetchGeminiModels().catch(() => []),
+      fetchClaudeModels().catch(() => []),
+      fetchOpenaiModels().catch(() => []),
+      fetchOpenRouterModels().catch(() => []),
+    ])
+    setGeminiModels(gem)
+    setClaudeModels(cla)
+    setOpenaiModels(open)
+    setOrModels(or)
   }, [])
 
   const loadPats = useCallback(async () => {
@@ -360,12 +389,27 @@ export default function SecretsPage() {
   }, [])
 
   useEffect(() => {
-    setTimeout(() => {
+    let cancelled = false
+    void Promise.resolve().then(() => {
+      if (cancelled) return
       void loadCatalog()
       void loadPats()
       void loadWebAuthn()
-    }, 0)
-  }, [loadCatalog, loadPats, loadWebAuthn])
+      void loadConfig()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [loadCatalog, loadPats, loadWebAuthn, loadConfig])
+
+  // Vendor model lists are only rendered by the 'cloud' tab — don't pay for
+  // them until it is opened, and only pay once.
+  const modelsLoadedRef = useRef(false)
+  useEffect(() => {
+    if (tab !== 'cloud' || modelsLoadedRef.current) return
+    modelsLoadedRef.current = true
+    void loadModels()
+  }, [tab, loadModels])
 
   
   const updateSecretsProp = (prop: string, value: string) => {
@@ -402,7 +446,11 @@ export default function SecretsPage() {
 
   // metaForm hoisted
 
-  function openKey(k: SecretCatalogKey, sectionId?: string) {
+  // useCallback with an empty dep list: every setter below is a stable React
+  // setter and the ref is stable, so this identity never needs to change. That
+  // is what lets the memoized SecretKeyRow skip re-rendering — a fresh arrow
+  // function per row per render would defeat memo() entirely.
+  const openKey = useCallback((k: SecretCatalogKey, sectionId?: string) => {
     selectedKeyRef.current = k.key
     setSelected(k)
     setEdit(metaForm(k))
@@ -418,7 +466,7 @@ export default function SecretsPage() {
         return next
       })
     }
-  }
+  }, [])
 
   async function registerPasskey() {
     if (!browserSupportsWebAuthn()) {
@@ -623,30 +671,33 @@ export default function SecretsPage() {
     }
   }
 
-  const keys = (catalog?.keys || []).filter((k) => {
-    if (!filter.trim()) return true
-    const q = filter.toLowerCase()
-    return (
-      k.key.toLowerCase().includes(q) ||
-      (k.provider || '').toLowerCase().includes(q) ||
-      (k.repos || []).some((r) => r.toLowerCase().includes(q)) ||
-      (k.label || '').toLowerCase().includes(q)
+  /**
+   * Filtered key list.
+   *
+   * There were two copies of this predicate — this one, recomputed on EVERY
+   * render, and a second inside the repoSections memo. With ~35 pieces of state
+   * on this component, "every render" means every keystroke anywhere, every
+   * save, every reveal. One memoized predicate now feeds both consumers, so
+   * they can also never disagree about what "matching" means.
+   */
+  const keys = useMemo(() => {
+    const all = catalog?.keys || []
+    const q = filter.trim().toLowerCase()
+    if (!q) return all
+    return all.filter(
+      (k) =>
+        k.key.toLowerCase().includes(q) ||
+        (k.provider || '').toLowerCase().includes(q) ||
+        (k.repos || []).some((r) => r.toLowerCase().includes(q)) ||
+        (k.label || '').toLowerCase().includes(q)
     )
-  })
+  }, [catalog, filter])
 
   /** Group filtered keys into repo sections (one key → one repo; multi = error; none = developer). */
   const repoSections = useMemo<{ id: string; label: string; kind: 'error' | 'developer' | 'repo' | 'provider'; keys: SecretCatalogKey[] }[]>(() => {
     if (!catalog?.keys) return []
-    const f = filter.toLowerCase()
-    const filtered = catalog.keys.filter(
-      (k) =>
-        k.key.toLowerCase().includes(f) ||
-        (k.provider || '').toLowerCase().includes(f) ||
-        (k.repos || []).some((r) => r.toLowerCase().includes(f)) ||
-        (k.label || '').toLowerCase().includes(f)
-    )
-    return groupBy === 'api' ? groupKeysByProvider(filtered) : groupKeysByRepo(filtered)
-  }, [catalog, filter, groupBy])
+    return groupBy === 'api' ? groupKeysByProvider(keys) : groupKeysByRepo(keys)
+  }, [catalog, keys, groupBy])
 
   // Default accordion: open errors + first product/developer section only
   useEffect(() => {
@@ -1324,8 +1375,9 @@ export default function SecretsPage() {
                           <SecretKeyRow
                             key={`${sec.id}::${k.key}`}
                             k={k}
+                            sectionId={sec.id}
                             selected={selected?.key === k.key}
-                            onOpen={() => openKey(k, sec.id)}
+                            onOpen={openKey}
                             groupBy={groupBy}
                           />
                         ))}
@@ -2565,21 +2617,28 @@ function groupKeysByRepo(keys: SecretCatalogKey[]): {
 }
 
 /** Compact single-line-ish row for long catalogs */
-function SecretKeyRow({
+/**
+ * memo()'d because the catalog renders ~100 of these and the list re-renders
+ * on every keystroke in the filter box. Paired with the stable `onOpen`
+ * above, an unrelated state change now re-renders zero rows.
+ */
+const SecretKeyRow = memo(function SecretKeyRow({
   k,
   selected,
+  sectionId,
   onOpen,
   groupBy,
 }: {
   k: SecretCatalogKey
   selected: boolean
-  onOpen: () => void
+  sectionId?: string
+  onOpen: (k: SecretCatalogKey, sectionId?: string) => void
   groupBy?: 'repo' | 'api'
 }) {
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={() => onOpen(k, sectionId)}
       style={{
         width: '100%',
         display: 'grid',
@@ -2668,7 +2727,7 @@ function SecretKeyRow({
       <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>›</span>
     </button>
   )
-}
+})
 
 function SummaryCard({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (

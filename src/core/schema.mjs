@@ -23,9 +23,32 @@ export const MemoryNodeSchema = z.object({
   slug: z.string(),
   category: z.string(),
   title: z.string(),
+  // SSSS 0.9 universal frontmatter (§4.2) is `type`/`title`/`description`/
+  // `timestamp`. `timestamp` was not declared here at all, so nothing in this
+  // schema could notice its absence — which is how 743 of the 912 nodes in the
+  // global vault ended up without one, and how all four scaffold seeds shipped
+  // failing the package validator.
+  //
+  // Kept `.optional()` deliberately: writeNodeValidated() fills both fields
+  // before this schema ever runs, so new writes are conformant, while the
+  // historical nodes that predate that backfill still parse on READ. Tighten to
+  // required only once those are migrated — otherwise recall breaks on the vault
+  // it is meant to read.
   description: z.string().optional(),
+  // ssssDatetime(), not z.string(): YAML parses an unquoted ISO timestamp into a
+  // Date, so a plain string check rejects the very frontmatter the vault writes.
+  // The preprocessor normalizes Date -> ISO string, which is why every other
+  // datetime field in this file uses it.
+  timestamp: ssssDatetime().optional(),
   resource: z.string().optional(),
-  status: z.enum(['active', 'superseded', 'deprecated', 'draft']),
+  // `archived` is a first-class Total Recall status, not a legacy artifact:
+  // repo-sync rewrites ingested nodes to it, clarity-rewriter sets it when a
+  // correction deletes a fact, fact-seeker and remember use it, and dream and
+  // the API both read it. The enum simply never listed it, so 574 nodes — the
+  // most common status in the vault — failed validation against a rule the
+  // host's own writers contradict. SSSS 0.9 puts no enum on memory.status at
+  // all, so this is a host restriction, not a spec requirement.
+  status: z.enum(['active', 'superseded', 'deprecated', 'draft', 'archived']),
   confidence: z.number().min(0).max(1).optional(),
   importance: z.number().int().min(1).max(5).optional(),
   created: ssssDatetime().optional(),

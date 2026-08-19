@@ -851,7 +851,7 @@ export default async function init(args) {
       // Auto-sync all .md files from the repo into the vault
       try {
         const { syncSingleRepo } = await import('../core/repo-sync.mjs');
-        const syncResult = syncSingleRepo(cwd, brainDir);
+        const syncResult = await syncSingleRepo(cwd, brainDir);
         if (syncResult.ingested > 0) {
           logOk(`Auto-synced ${syncResult.ingested} files from repo into Total Recall`);
         }

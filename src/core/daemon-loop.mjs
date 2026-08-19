@@ -241,7 +241,7 @@ async function main() {
 
   // Initial repo sync — auto-ingest all .md files from registered repos
   try {
-    const syncResult = syncAllRepos();
+    const syncResult = await syncAllRepos();
     logger.info({
       subsystem: 'daemon-loop',
       message: `Boot repo-sync: ${syncResult.totalIngested} new files across ${syncResult.repos.length} repos`,
@@ -401,7 +401,7 @@ async function main() {
 
         // Periodic repo sync — pick up any new/changed .md files in registered repos
         try {
-          const syncResult = syncAllRepos();
+          const syncResult = await syncAllRepos();
           if (syncResult.totalIngested > 0) {
             logger.info({
               subsystem: 'daemon-loop',

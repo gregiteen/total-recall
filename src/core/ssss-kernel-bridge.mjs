@@ -499,9 +499,27 @@ export function scanDirectCanonicalWrites(rootDir = path.resolve('src'), options
 }
 
 /**
- * Modules that write memory-like markdown without going through Operation Contract.
- * Heuristic: atomicWrite/writeNode call sites outside the approved contract surface.
+ * Modules that write vault nodes without going through the Operation Contract.
+ *
+ * The previous heuristic was wrong in both directions. It flagged any use of
+ * `writeNode(`, which is the *correct* path — vault.writeNode delegates to
+ * writeNodeValidatedAsync — so eleven compliant modules showed up as
+ * violations. And it only matched `atomicWrite(...".md")`, so it missed every
+ * bypass whose target is a variable: dream.writeDailyNote hand-assembled a YAML
+ * string and wrote it to `filePath`, which is exactly the write this gate
+ * exists to catch.
+ *
+ * What actually constitutes a bypass is the write target, not the call name: a
+ * raw write into the vault (memory-vault, vaultDir, a node's own _filepath)
+ * skips validation. Raw writes into the staging areas — memory-inbox/ and
+ * scheduler/queue/ — are legitimate; those files are not vault nodes and are
+ * promoted through the contract later.
  */
+const RAW_WRITE_CALL = /\b(?:atomicWrite|fs\.writeFileSync|writeFileSync)\s*\(/;
+const VAULT_TARGET = /\b(?:vaultDir|vaultRoot|memory-vault|_filepath|_filePath|proposalsDir|dailyDir)\b/;
+const RAW_WRITE_WAIVER = /ssss-raw-write:/;
+const STAGING_TARGET = /\b(?:inboxDir|queueDir|conflictsDir|quarantineDir|INBOX_DIR|QUEUE_DIR|agendaFile|snapshotPath)\b/;
+
 export function listUnapprovedCanonicalWriters(rootDir = path.resolve('src/core')) {
   const approved = new Set(DIRECT_WRITE_APPROVED.map((p) => path.normalize(p)));
   const writers = [];
@@ -515,13 +533,35 @@ export function listUnapprovedCanonicalWriters(rootDir = path.resolve('src/core'
       if (!entry.name.endsWith('.mjs')) continue;
       const relative = path.relative(process.cwd(), absolute).split(path.sep).join('/');
       if (approved.has(relative) || approved.has(path.normalize(relative))) continue;
-      const text = fs.readFileSync(absolute, 'utf8');
-      if (/\bwriteNode\s*\(/.test(text) || /\batomicWrite\s*\([^)]*\.md/.test(text)) {
-        writers.push(relative);
+
+      const lines = fs.readFileSync(absolute, 'utf8').split('\n');
+      const offenses = [];
+      for (let i = 0; i < lines.length; i += 1) {
+        if (!RAW_WRITE_CALL.test(lines[i])) continue;
+        // A call can wrap onto the next line; check the target on both.
+        const window = `${lines[i]}\n${lines[i + 1] || ''}`;
+        if (STAGING_TARGET.test(window)) continue;
+        if (!VAULT_TARGET.test(window)) continue;
+        // Waivers are per call site, never per file: a file allowlisted once
+        // for a legitimate reason silently absolves every raw write added to it
+        // later, which is how these bypasses stayed invisible.
+        //
+        // Only the comment block *immediately* above counts. A fixed look-back
+        // window has the same leak in miniature — one waived write would cover
+        // an unwaived one a line or two below it.
+        let waived = false;
+        for (let j = i - 1; j >= 0; j -= 1) {
+          const above = lines[j].trim();
+          if (!above.startsWith('//') && !above.startsWith('*') && !above.startsWith('/*')) break;
+          if (RAW_WRITE_WAIVER.test(above)) { waived = true; break; }
+        }
+        if (waived) continue;
+        offenses.push({ line: i + 1, source: lines[i].trim() });
       }
+      if (offenses.length) writers.push({ file: relative, offenses });
     }
   }
-  return writers.sort();
+  return writers.sort((a, b) => a.file.localeCompare(b.file));
 }
 
 export function resolveHostDefinition(type) {

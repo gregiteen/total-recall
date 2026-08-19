@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import { loadNodes, writeNode, atomicWrite } from './vault.mjs';
+import { updateNodeInPlace } from './validated-write.mjs';
 import { proposalKey } from './optimizer.mjs';
 import { logger } from './logger.mjs';
 
@@ -192,12 +193,14 @@ export function getProposal(vaultDir, id) {
 /**
  * Move a proposal to a new status, preserving every other frontmatter field.
  *
- * Writes the file directly rather than via writeNode(): the proposal already
- * passed the contract on creation, and a status transition must not be able to
- * fail on an unrelated schema change months later — that would strand the
- * proposal in a state no command can clear.
+ * Goes through the contract first so a transition also repairs frontmatter that
+ * predates the current schema. It falls back to a direct write when validation
+ * fails, because a status change must never be blocked by an unrelated schema
+ * change months later — that would strand the proposal in a state no command
+ * can clear, which is the failure this function was originally written to
+ * avoid. The fallback is logged so the invalid node still gets surfaced.
  */
-export function setProposalStatus(vaultDir, id, status, extra = {}) {
+export async function setProposalStatus(vaultDir, id, status, extra = {}) {
   if (!PROPOSAL_STATUSES.includes(status)) {
     throw new Error(`Invalid proposal status: ${status}`);
   }
@@ -207,7 +210,20 @@ export function setProposalStatus(vaultDir, id, status, extra = {}) {
   const raw = fs.readFileSync(proposal._filePath, 'utf8');
   const { data, content } = matter(raw);
   const next = { ...data, ...extra, status, status_changed_at: new Date().toISOString() };
-  atomicWrite(proposal._filePath, matter.stringify(content, next));
+
+  const result = await updateNodeInPlace(proposal._filePath, (nodeData) => {
+    Object.assign(nodeData, next);
+  }, { vaultDir });
+
+  if (!result.success) {
+    logger.warn('proposal-applier',
+      `Proposal ${id} failed contract validation; writing status transition directly`, {
+        errors: result.validation?.errors || [result.error],
+      });
+    // ssss-raw-write: deliberate fallback — see setProposalStatus doc comment.
+    atomicWrite(proposal._filePath, matter.stringify(content, next));
+  }
+
   return { ...next, _filePath: proposal._filePath };
 }
 
@@ -236,7 +252,7 @@ function writeUndoSnapshot(vaultDir, proposalId, filePaths) {
  * Restore a proposal's snapshot and return the proposal to `accepted`.
  * @returns {{ reverted: number, deleted: number }}
  */
-export function revertProposal(vaultDir, id) {
+export async function revertProposal(vaultDir, id) {
   const snapshotPath = path.join(undoDir(vaultDir), `${id}.json`);
   if (!fs.existsSync(snapshotPath)) {
     throw new Error(`No undo snapshot for proposal ${id} — cannot revert.`);
@@ -260,7 +276,7 @@ export function revertProposal(vaultDir, id) {
   // reverting into it means the next dream cycle re-applies the very thing that
   // was just undone — an undo/redo loop with no human in it. A revert is a
   // human saying "not this"; it must land somewhere only a human can move it out of.
-  setProposalStatus(vaultDir, id, 'draft', {
+  await setProposalStatus(vaultDir, id, 'draft', {
     reverted_at: new Date().toISOString(),
     review_reason: 'Previously applied and reverted; re-apply only after confirming the merge is correct.',
   });
@@ -420,11 +436,11 @@ export async function applyProposal(vaultDir, id, opts = {}) {
   if (dryRun) return { ...result, dryRun: true };
 
   if (result.ok) {
-    setProposalStatus(vaultDir, id, 'applied', { applied_at: new Date().toISOString(), applied_by: actor });
+    await setProposalStatus(vaultDir, id, 'applied', { applied_at: new Date().toISOString(), applied_by: actor });
   } else if (result.supersede) {
     // The world moved on — the proposal was never wrong, it is just no longer
     // actionable. Marking it `rejected` would misreport the gate's accuracy.
-    setProposalStatus(vaultDir, id, 'superseded', { superseded_reason: result.reason });
+    await setProposalStatus(vaultDir, id, 'superseded', { superseded_reason: result.reason });
   }
 
   appendProposalAudit(vaultDir, {

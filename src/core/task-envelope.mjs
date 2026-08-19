@@ -201,6 +201,7 @@ export function persistEnvelope(envelope, queueDir) {
   for (const key of Object.keys(frontmatter)) {
     if (frontmatter[key] === undefined) delete frontmatter[key];
   }
+  // ssss-raw-write: scheduler/queue task envelope, not a vault node.
   atomicWrite(filepath, safeStringify(body || task.intent || '', frontmatter));
   task._filepath = filepath;
   return task;

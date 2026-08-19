@@ -3,7 +3,8 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import matter from 'gray-matter';
-import { writeNode, atomicWrite, walkMd } from './vault.mjs';
+import { writeNode, walkMd } from './vault.mjs';
+import { updateNodeInPlace } from './validated-write.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir } from './config.mjs';
@@ -13,68 +14,58 @@ import { loadQueue } from './research-queue.mjs';
  * Write a daily dream-cycle summary to memory-vault/daily/YYYY-MM-DD.md.
  * SSSS node natively; Obsidian Daily Notes plugin reads these files directly.
  */
-function writeDailyNote(vaultDir, summaryLines) {
+async function writeDailyNote(vaultDir, summaryLines) {
   const today = new Date().toISOString().slice(0, 10);
   const now = new Date().toISOString();
-  const dailyDir = path.join(vaultDir, 'daily');
-  if (!fs.existsSync(dailyDir)) fs.mkdirSync(dailyDir, { recursive: true });
+  const filePath = path.join(vaultDir, 'daily', `${today}.md`);
+  const runBlock = [
+    `## Dream Cycle \u2013 ${now}`,
+    '',
+    ...summaryLines.map((l) => `- ${l}`),
+  ].join('\n');
 
-  const filePath = path.join(dailyDir, `${today}.md`);
-
+  // Append to an existing note rather than replacing it: several dream cycles
+  // can run in one day and each one's summary is worth keeping.
   if (fs.existsSync(filePath)) {
-    // Append this run's summary to the existing note
-    const existing = fs.readFileSync(filePath, 'utf8');
-    const runBlock = `\n## Dream Cycle – ${now}\n\n${summaryLines.map(l => `- ${l}`).join('\n')}\n`;
-    atomicWrite(filePath, existing.trimEnd() + runBlock);
-    return;
+    return updateNodeInPlace(filePath, (data, body) => {
+      data.updated = now;
+      data.last_accessed = now;
+      return { data, body: `${body.trimEnd()}\n\n${runBlock}\n` };
+    }, { vaultDir, agentRole: 'system' });
   }
 
-  const frontmatter = [
-    '---',
-    'type: memory',
-    `slug: "daily-${today}"`,
-    'category: daily',
-    `title: "Daily Note: ${today}"`,
-    'status: active',
-    'confidence: 1.0',
-    'importance: 2',
-    `created: "${now}"`,
-    `updated: "${now}"`,
-    `last_accessed: "${now}"`,
-    'source:',
-    '  type: dream-cycle',
-    `  session_id: "dream-${today}"`,
-    '  evidence_count: 1',
-    'supersedes: []',
-    'superseded_by: null',
-    'contradicts: []',
-    'tags: [daily, dream-cycle]',
-    'related: []',
-    'routes_to_skills: []',
-    'sentiment_polarity: descriptive',
-    'sentiment_target: system',
-    'modality: should',
-    'subject: system',
-    'predicate: ran',
-    'object: dream-cycle',
-    'decay:',
-    '  half_life_days: 30',
-    '  access_count: 0',
-    'schema_version: 2',
-    '---',
-    ''
-  ].join('\n');
-
-  const body = [
-    `# Daily Note: ${today}`,
-    '',
-    `## Dream Cycle – ${now}`,
-    '',
-    ...summaryLines.map(l => `- ${l}`),
-    ''
-  ].join('\n');
-
-  atomicWrite(filePath, frontmatter + body);
+  // The frontmatter here used to be a hand-assembled YAML string, which is why
+  // every daily note predates SSSS 0.9 universal frontmatter: a literal block
+  // cannot pick up new required fields. prepareNodeForContract fills them.
+  return writeNode({
+    type: 'memory',
+    slug: `daily-${today}`,
+    category: 'daily',
+    title: `Daily Note: ${today}`,
+    description: `Dream-cycle summary for ${today}.`,
+    status: 'active',
+    confidence: 1.0,
+    importance: 2,
+    created: now,
+    updated: now,
+    last_accessed: now,
+    source: { type: 'dream-cycle', session_id: `dream-${today}`, evidence_count: 1 },
+    supersedes: [],
+    superseded_by: null,
+    contradicts: [],
+    tags: ['daily', 'dream-cycle'],
+    related: [],
+    routes_to_skills: [],
+    sentiment_polarity: 'descriptive',
+    sentiment_target: 'system',
+    modality: 'should',
+    subject: 'system',
+    predicate: 'ran',
+    object: 'dream-cycle',
+    decay: { half_life_days: 30, access_count: 0 },
+    schema_version: 2,
+    body: [`# Daily Note: ${today}`, '', runBlock, ''].join('\n'),
+  }, vaultDir, { path: `daily/${today}.md`, agentRole: 'system' });
 }
 import { detectConflicts, quarantineConflict } from './steering.mjs';
 import { compileSurface } from './surface.mjs';
@@ -587,7 +578,7 @@ export async function runDreamCycle({
   // Write daily note summary (native SSSS node; Obsidian Daily Notes reads it directly)
   try {
     const existingNodes = getNodes(vaultDir);
-    writeDailyNote(vaultDir, [
+    await writeDailyNote(vaultDir, [
       `Modified vault files scanned: ${modified.length}`,
       `REM candidates: ${candidates.length} (promoted ${promotedCount}, conflicted ${conflictedCount})`,
       `Active nodes: ${existingNodes.filter(n => n.status === 'active').length}`,

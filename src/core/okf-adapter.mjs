@@ -498,6 +498,7 @@ export function generateLiveIndex(vaultDir) {
     }
     indexContent += '\n';
   }
+  // ssss-raw-write: OKF bundle manifest, not a memory node (excluded from node walks).
   fs.writeFileSync(path.join(vaultDir, 'index.md'), indexContent, 'utf8');
 }
 
@@ -538,6 +539,7 @@ export function generateLiveLog(vaultDir) {
   } else {
     logContent += 'No update history available.\n';
   }
+  // ssss-raw-write: OKF bundle changelog, not a memory node (excluded from node walks).
   fs.writeFileSync(path.join(vaultDir, 'log.md'), logContent, 'utf8');
 }
 

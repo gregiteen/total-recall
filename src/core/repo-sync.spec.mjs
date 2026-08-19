@@ -30,14 +30,17 @@ describe('repo-sync', () => {
     vi.clearAllMocks();
   });
 
-  it('syncSingleRepo returns an object', () => {
+  // syncSingleRepo/syncAllRepos became async when node writes moved onto the
+  // SSSS Core Contract (writeNodeValidatedAsync). Without the await these
+  // assertions ran against a Promise and passed for the wrong reason.
+  it('syncSingleRepo returns an object', async () => {
     fs.existsSync.mockReturnValue(false);
-    const result = syncSingleRepo('/some/path', '/brain/dir');
+    const result = await syncSingleRepo('/some/path', '/brain/dir');
     expect(result).toHaveProperty('repo');
     expect(result).toHaveProperty('ingested');
   });
 
-  it('syncAllRepos returns repos array', () => {
+  it('syncAllRepos returns repos array', async () => {
     fs.existsSync.mockReturnValue(false);
     fs.readFileSync.mockImplementation((path) => {
       if (path && path.toString().includes('project-registry.json')) {
@@ -45,7 +48,7 @@ describe('repo-sync', () => {
       }
       return '';
     });
-    const result = syncAllRepos();
+    const result = await syncAllRepos();
     expect(result).toHaveProperty('repos');
     expect(result).toHaveProperty('totalIngested');
   });

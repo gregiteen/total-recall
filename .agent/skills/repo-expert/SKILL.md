@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-17T03:12:00.131Z
+generated_at: 2026-08-19T00:57:07.581Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (554 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (568 files), Markdown (261 files), TypeScript (128 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -119,13 +119,13 @@ scaffold/
 scratch/
   dummy-repo/
     .agent/  (1 items)
-scripts/  (12 items)
+scripts/  (13 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (216 items)
+  core/  (224 items)
   server/
-    routes/  (89 items)
+    routes/  (90 items)
 templates/
   default-config/  (4 items)
   obsidian-queries/  (4 items)
@@ -139,11 +139,12 @@ templates/
 
 ## CLI Commands
 
-52 commands in `src/cli/`:
+53 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
 | agent-dir | agent-dir.mjs | Shared `.agent/` directory resolver for CLI commands. |
+| backfill | backfill.mjs |  |
 | backup | backup.mjs | total-recall backup |
 | brain | brain.mjs |  |
 | chat | chat.mjs | Total Recall CLI Chat Interface |
@@ -182,8 +183,7 @@ templates/
 | research | research.mjs | src/cli/research.mjs |
 | reset-password | reset-password.mjs | Read a password without echoing it, and without it ever beco |
 | restore | restore.mjs | total-recall restore |
-| secret | secret.mjs | total-recall secret — manage API keys and credentials (not i |
-| ... | +12 more | |
+| ... | +13 more | |
 
 ## API Routes
 
@@ -566,7 +566,7 @@ templates/
 
 ## Core Modules
 
-102 modules in `src/core/`:
+104 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
@@ -577,7 +577,7 @@ templates/
 - **conflict-detector** — exports: detectSemanticConflicts, scanVaultForConflicts, detectPatchConflict, computeFileHash, autoResolveConflict, applyAutoResolution, detectAndResolve, writeConflicts
 - **context-compiler** — exports: compileContext, previewContext
 - **crons** — exports: runCrons
-- **crypto** — exports: deriveKey, deriveKeySync, encryptSecrets, encryptSecretsSync, decryptSecrets, decryptSecretsSync, generateSignatureKeyPair, signPayload
+- **crypto** — exports: clearDerivedKeyCache, deriveKey, deriveKeySync, encryptSecrets, encryptSecretsSync, decryptSecrets, decryptSecretsSync, generateSignatureKeyPair
 - **daemon-control** — exports: readPid, getDaemonStatus, startDaemon, stopDaemon, ensureDaemonRunning
 - **daemon-loop** — exports: writeInterrupt, acquirePidLock, releasePidLock
 - **device-io** — exports: buildIoProfileFromSignals, uiHintsFromIo, detectDeviceIo, mergeIoProfiles
@@ -635,6 +635,7 @@ templates/
 - **schema**
 - **search** — exports: semanticSearch
 - **secret-integration-research** — exports: gatherCodeUsageContext, parseAiJson, inferSecretIntegrationWithAi, buildIntegrationResearchBrief, maybeEnqueueIntegrationResearch, cancelBogusApiIntegrationQueueItems
+- **secrets-env-diff** — exports: isPlaceholderValue, classify, resolveEnvFiles, repoOfEnvFile, diffEnvAgainstStore, defaultBrainDir
 - **secrets-env-export** — exports: mergeEnvManagedBlock, projectSlugFromPath, loadProjectRegistry, secretMatchesTarget, buildEnvProjection, exportEnvToProject, exportEnvToRegistry, buildDeploySecretsPayload
 - **secrets-keychain** — exports: keychainAvailable, readKeychainPassword, writeKeychainPassword, describeKeychainCarrier
 - **secrets-rekey** — exports: readMasterPasswordFromCarrierText, updateMasterPasswordCarrierText, readMasterPasswordFromCarrier, generateSecretsMasterPassword, rekeySecretsTransaction
@@ -660,10 +661,11 @@ templates/
 - **tts** — exports: loadVoiceConfig, synthesize, isTtsEnabled
 - **usage-fetcher** — exports: fetchAllProviderUsage, usageCachePath, readCachedUsage, refreshProviderUsage
 - **usage-tracker** — exports: calculateCurrentCost, syncUsageLedger, loadBudgetConfig, checkBudgetSafety
-- **validated-write** — exports: prepareNodeForContract, writeNodeValidated, writeNodeValidatedAsync, validateNode
+- **validated-write** — exports: prepareNodeForContract, writeNodeValidated, writeNodeValidatedAsync, validateNode, resolveVaultDir, updateNodeInPlace
+- **vault-backfill** — exports: walkVaultNodes, normalizeLegacyShapes, diffNode, analyzeVault, backfillVault
 - **vault-cache** — exports: getNodes, invalidate, start
 - **vault-watcher** — exports: startVaultWatcher
-- **vault** — exports: atomicWrite, safeStringify, walkMd, loadNodes, loadMergedNodes, writeNode, deleteNode, createMemoryNode
+- **vault** — exports: isSafeVaultName, atomicWrite, safeStringify, walkMd, loadNodes, loadMergedNodes, writeNode, deleteNode
 - **vector-field** — exports: compileField, sampleField, loadField, recomputeVelocities, fieldStats
 - **vector-store**
 - **vfs-documents** — exports: defaultVaultRoot, listVfsDocuments, listVfsDocumentsUnder, findVfsDocument, findVfsDocumentByType, findVfsDocumentByPath
@@ -690,7 +692,7 @@ templates/
 
 ## Config Files
 
-- **package.json scripts**: dev, start, test, routes:manifest, clean, check:dist, prepublishOnly
+- **package.json scripts**: dev, start, test, routes:manifest, clean, check:dist, prepublishOnly, check:ssss-registry
 - vitest.config.ts
 - .env.example
 - AGENTS.md

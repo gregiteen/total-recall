@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.24.0] — 2026-08-19
+
+### 🚀 Features
+- **SSSS Core Contract Vault Backfill (`total-recall backfill`)**: Added automated tooling to inspect, analyze, and repair historical memory vault nodes to comply with the SSSS v2 contract in place, with automatic pre-repair snapshotting and validation.
+- **Mesh CLI & Headscale Control Administration (`total-recall mesh`)**: Expanded headscale mesh management CLI with node reachability analysis, direct SSH sessions (`mesh ssh`), ACL policy configuration (`mesh policy get/set/init-ssh`), and pre-auth key generation.
+- **Secrets Environment Diff & Rotation Framework**: Added environment differential analysis for secrets (`secrets-env-diff.mjs`), authenticated browser rotation profile management (`browser-session.mjs`), and provider credential rotation recipes.
+- **Strict Scope Auth Enforcement**: Hardened server route handlers with granular scope checks and validation.
+
+### 🧪 Testing & Code Quality
+- Added unit test specs for `backfill.mjs`, `mesh.mjs`, `browser-session.mjs`, `provider-rotation-recipes.mjs`, `tailscale-cli.mjs`, and `embeddings.mjs`.
+- Updated release scripts to enforce project test spec coverage and fast code-quality gates.
+
 ## [3.23.3] — 2026-08-15
 
 ### 🐛 Bug Fixes

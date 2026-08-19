@@ -30,6 +30,7 @@ const EXCLUDES = [
   'memory-derived/',
   'memory-inbox/',
   'scheduler/',
+  'browser-profile/',
   '*.enc',
   '.extension-connected',
   'graph.canvas',

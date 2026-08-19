@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import crypto from 'crypto';
 import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
+import { updateNodeInPlace } from './validated-write.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
@@ -379,34 +380,37 @@ async function escalateViolatedRules(violations, nodes, vaultDir) {
     if (!node || !node._filepath) continue;
 
     try {
-      const raw = fs.readFileSync(node._filepath, 'utf8');
-      const { data, content } = matter(raw);
+      const result = await updateNodeInPlace(node._filepath, (data) => {
+        // Track violation count
+        const violationCount = (data.x_violation_count || 0) + 1;
+        data.x_violation_count = violationCount;
 
-      // Track violation count
-      const violationCount = (data.x_violation_count || 0) + 1;
-      data.x_violation_count = violationCount;
+        // Bump importance (max 5)
+        if (data.importance < 5) {
+          data.importance = Math.min(5, data.importance + 1);
+        }
 
-      // Bump importance (max 5)
-      if (data.importance < 5) {
-        data.importance = Math.min(5, data.importance + 1);
-      }
+        // Bump confidence (max 1.0)
+        if (data.confidence < 1.0) {
+          data.confidence = Math.min(1.0, data.confidence + 0.05);
+        }
 
-      // Bump confidence (max 1.0)
-      if (data.confidence < 1.0) {
-        data.confidence = Math.min(1.0, data.confidence + 0.05);
-      }
+        // Auto-escalate to priority: absolute after 3+ violations
+        if (violationCount >= 3 && data.priority !== 'absolute') {
+          data.priority = 'absolute';
+          logger.info({
+            subsystem: 'compliance-auditor',
+            message: `ESCALATED rule "${data.slug}" to priority: absolute after ${violationCount} violations.`,
+          });
+        }
 
-      // Auto-escalate to priority: absolute after 3+ violations
-      if (violationCount >= 3 && data.priority !== 'absolute') {
-        data.priority = 'absolute';
-        logger.info({
-          subsystem: 'compliance-auditor',
-          message: `ESCALATED rule "${data.slug}" to priority: absolute after ${violationCount} violations.`,
+        data.updated = new Date().toISOString();
+      }, { vaultDir });
+      if (!result.success) {
+        logger.debug('post-mortem', `escalate skipped for ${v.rule_slug}`, {
+          errors: result.validation?.errors || [result.error],
         });
       }
-
-      data.updated = new Date().toISOString();
-      atomicWrite(node._filepath, safeStringify(content, data));
     } catch {
       // Skip if we can't update
     }

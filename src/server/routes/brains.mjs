@@ -218,7 +218,7 @@ router.get('/api/brains/:id/nodes', requireAuth, requireScope('ssss:read', 'memo
 router.post('/api/brains/sync', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
     const { syncAllRepos } = await import('../../core/repo-sync.mjs');
-    const result = syncAllRepos();
+    const result = await syncAllRepos();
     res.json({
       ok: true,
       totalIngested: result.totalIngested,

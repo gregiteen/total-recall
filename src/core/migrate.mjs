@@ -20,7 +20,11 @@ export async function runMigration(vaultDir, fromVersion, toVersion, migrationFn
 
   // 1. Safety Snapshot
   logger.info('migration', 'Creating pre-migration safety snapshot...');
-  const snapshotId = await createSnapshot(vaultDir);
+  const snapshot = createSnapshot(`pre-migration-v${fromVersion}-to-v${toVersion}`, vaultDir);
+  if (!snapshot.success) {
+    throw new Error(`Refusing to migrate without a safety snapshot: ${snapshot.error}`);
+  }
+  const snapshotId = snapshot.snapshot_id;
   logger.info('migration', `Safety snapshot created: ${snapshotId}`);
 
   const migrationId = `mig_${crypto.randomBytes(6).toString('hex')}`;
