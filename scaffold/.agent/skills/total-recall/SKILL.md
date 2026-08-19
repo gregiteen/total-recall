@@ -591,8 +591,9 @@ Current baseline: **288 spec files / 1493 tests, ~160 s** on the Mac Mini.
 > and OOM kills. Sync and run remotely:
 >
 > ```bash
-> rsync -a --delete --exclude=node_modules/ --exclude=.git/ ./ mac-mini:~/github/total-recall/
-> ssh mac-mini 'export PATH=/opt/homebrew/bin:$PATH; cd ~/github/total-recall && npx vitest run'
+> REMOTE=build-host; REMOTE_DIR=code/total-recall   # your own host and path
+> rsync -a --delete --exclude=node_modules/ --exclude=.git/ ./ "$REMOTE:$REMOTE_DIR/"
+> ssh "$REMOTE" "export PATH=/opt/homebrew/bin:\$PATH; cd $REMOTE_DIR && npx vitest run"
 > ```
 >
 > A non-login `ssh` shell has no Homebrew on PATH — export it or use `bash -lc`,

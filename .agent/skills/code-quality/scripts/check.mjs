@@ -332,12 +332,21 @@ function parseOutput(text, parserName, checkId) {
  * flagged as not-yet-covered. This is what makes "is this report stale?" a
  * question with a real answer instead of a warning banner.
  */
-function trackedSources() {
+/**
+ * Tracked files, filtered to an extension set.
+ *
+ * `extensions` exists because this used to filter by the GLOBAL
+ * config.sourceExtensions only, so a check declaring its own extensions could
+ * merely narrow that set and never widen it. A grep-forbid rule over .md/.yaml
+ * therefore matched zero files and reported a clean pass — a gate that scans
+ * nothing reads exactly like a gate that found nothing.
+ */
+function trackedSources(extensions) {
   try {
     const out = execFileSync('git', ['ls-files', '-z'], {
       cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000
     });
-    const exts = new Set(config.sourceExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.vue', '.svelte']);
+    const exts = new Set(extensions || config.sourceExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.vue', '.svelte']);
     return out.split('\0').filter((f) => f && exts.has(path.extname(f)));
   } catch {
     return [];
@@ -375,7 +384,7 @@ function gitHead() {
  * repo-wide.
  */
 function grepScopeFiles(check) {
-  const all = trackedSources();
+  const all = trackedSources(check.extensions);
   if ((check.scope || 'all') !== 'changed') return all;
   const baseline = check.baseline || 'origin/HEAD';
   let changed;
@@ -400,12 +409,20 @@ function runGrepForbid(check) {
   }));
   const exts = new Set(check.extensions || config.sourceExtensions || ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py']);
   const ignore = (check.ignorePaths || []).map((p) => new RegExp(p));
+  // Optional allowlist: when present, ONLY files matching one of these path
+  // regexes are scanned. Needed for a rule that applies to one subtree with
+  // different extensions than the repo-wide rule — expressing "scaffold/ only"
+  // with ignorePaths alone would mean listing every other directory.
+  const only = (check.paths || []).map((p) => new RegExp(p));
 
+  let scanned = 0;
   for (const rel of grepScopeFiles(check)) {
+    if (only.length && !only.some((re) => re.test(rel))) continue;
     if (!exts.has(path.extname(rel))) continue;
     if (ignore.some((re) => re.test(rel))) continue;
     let text;
     try { text = readFileSync(path.join(REPO_ROOT, rel), 'utf8'); } catch { continue; }
+    scanned++;
     const lines = text.split('\n');
     for (const { re, message, code } of patterns) {
       for (let i = 0; i < lines.length; i++) {
@@ -418,9 +435,20 @@ function runGrepForbid(check) {
       }
     }
   }
+  if (scanned === 0) {
+    // Never report clean for a rule that looked at nothing — that is how a
+    // misconfigured extension list turns an invariant into decoration.
+    findings.push({
+      file: '.agent/skills/code-quality/config.json', line: 1, col: 1,
+      code: 'CQ-EMPTY-SCOPE', check: check.id, severity: 'error',
+      message: `grep-forbid check "${check.id}" matched 0 files — check its extensions/paths/ignorePaths.`,
+      snippet: `extensions=${JSON.stringify(check.extensions || null)} paths=${JSON.stringify(check.paths || null)}`
+    });
+  }
+
   return Promise.resolve({
     id: check.id, ok: findings.length === 0, exitCode: findings.length ? 1 : 0,
-    timedOut: false, durationMs: 0, findings,
+    timedOut: false, durationMs: 0, findings, scanned,
     raw: findings.map((f) => `${f.file}:${f.line}: ${f.code} ${f.message}`).join('\n')
   });
 }

@@ -27,6 +27,13 @@ const EXCLUDES = [
   'sessions/',
   'backups/',
   'config/',
+  // The skills registry is developer-local state: it records absolute
+  // source_paths of every repo on THIS machine. Syncing it shipped 562 lines of
+  // /Users/<name>/... and named 16 third-party repos inside the npm tarball —
+  // an open-source-invariant violation and a disclosure of the author's whole
+  // project inventory. New brains start with an empty catalog by design
+  // (loadRegistry returns emptyRegistry() when the file is absent).
+  'skills-registry/',
   'memory-derived/',
   'memory-inbox/',
   'scheduler/',

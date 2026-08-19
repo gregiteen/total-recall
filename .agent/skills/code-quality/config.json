@@ -67,6 +67,56 @@
       ]
     },
     {
+      "id": "shipped-package-paths",
+      "tier": "fast",
+      "kind": "grep-forbid",
+      "description": "INVARIANT: everything listed in package.json:files goes out in the npm tarball, so the whole shipped surface is subject to the open-source path rule -- not just core JS. open-source-paths scans only .mjs/.js/.cjs and ignores docs/ and scaffold/, which is how a synced skills-registry shipped 562 lines of /Users/<name>/... naming 16 third-party repos, ARCHITECTURE.md shipped file:///Users/... links, and two brand comments named a third-party product repo.",
+      "paths": [
+        "^scaffold/",
+        "^docs/(ARCHITECTURE|IDE_INTEGRATION)\\.md$",
+        "^README\\.md$",
+        "^frontend/src/",
+        "^templates/",
+        "^extension/",
+        "^bin/"
+      ],
+      "extensions": [
+        ".mjs",
+        ".js",
+        ".cjs",
+        ".ts",
+        ".tsx",
+        ".css",
+        ".md",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".html"
+      ],
+      "ignorePaths": [
+        "^node_modules/",
+        "\\.spec\\.(ts|tsx|mjs)$",
+        "\\.test\\.(ts|tsx|mjs)$"
+      ],
+      "patterns": [
+        {
+          "pattern": "/Users/[a-zA-Z0-9._-]+/",
+          "code": "TR-SHIP-001",
+          "message": "Shipped package contains an absolute home path. Use a generic placeholder (<home>) \u2014 this goes out in the npm tarball."
+        },
+        {
+          "pattern": "~/(Github|github)/",
+          "code": "TR-SHIP-002",
+          "message": "Shipped package contains a personal ~/Github path."
+        },
+        {
+          "pattern": "(festech\\.live|ultrachat|portfolio-site|moogie_crm|documenso)",
+          "code": "TR-SHIP-003",
+          "message": "Shipped package names a third-party product repo."
+        }
+      ]
+    },
+    {
       "id": "ssss-registry",
       "tier": "fast",
       "description": "Composed SSSS registry must match the committed lock. The old command omitted --lock, so it exited 1 on a usage error and never verified anything.",

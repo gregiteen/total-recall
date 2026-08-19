@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-19T19:11:36.725Z
+generated_at: 2026-08-19T19:35:11.002Z
 generated_from: total-recall
 ---
 

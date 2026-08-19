@@ -113,7 +113,7 @@ Total Recall partitions your sovereign brain memory into two virtual directories
     ├── memory-vault/                           # General user preferences
     └── memory-derived/                         # Ephemeral caches
 
-/Users/greg/Github/total-recall/                <-- LOCAL PROJECT BRAIN LAYER
+<your-project>/                                 <-- LOCAL PROJECT BRAIN LAYER
 └── .agent/skills/total-recall/
     ├── memory-vault/                           # Project-specific facts
     └── memory-derived/                         # Unified project-local compiled index
@@ -130,7 +130,7 @@ Total Recall partitions your sovereign brain memory into two virtual directories
 
 ## 🌀 The Daemon Loop & Priority Task Scheduler
 
-The background daemon (`dream.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](file:///Users/greg/Github/total-recall/src/core/scheduler.mjs)) and task execution loops:
+The background daemon (`dream.mjs`) manages the **Continuous Intelligent Scheduler** ([src/core/scheduler.mjs](src/core/scheduler.mjs)) and task execution loops:
 
 ### 1. Priority-Driven Queue Mechanics
 Tasks are enqueued dynamically as standard Markdown files (`type: task`) located in your vault's `scheduler/queue/` directory. The scheduler resolves an **Effective Priority** by multiplying the task's base `priority` (10 to 100) by a strictly-regulated **layer weight** (`LAYER_WEIGHTS`), prioritizing critical correctness and active developer guidance over passive exploration:
@@ -159,7 +159,7 @@ When the active developer queues are empty, the scheduler **automatically auto-g
 
 ## 🏃 hard Task Execution
 
-Pending priority tasks are executed by the **Task Runner** ([src/core/task_runner.mjs](file:///Users/greg/Github/total-recall/src/core/task_runner.mjs)):
+Pending priority tasks are executed by the **Task Runner** ([src/core/task_runner.mjs](src/core/task_runner.mjs)):
 - **State Machine Updates**: Tasks transition transparently through states: `pending` → `in_progress` → `done` or `failed` (logging full exceptions to disk).
 - **Subagent Routing**: Routes tasks to specialized subagents depending on category:
   - `proactive-research`: Spawns autonomous web crawls and gathers cited research reports (`research.mjs`).
@@ -224,7 +224,7 @@ Total Recall consolidates all data folders under the meta-skill `skills/total-re
 
 ## 💬 Interactive CLI Agent Chat REPL
 
-Total Recall features a native terminal-based chat REPL (`npx total-recall chat`) running [src/cli/chat.mjs](file:///Users/greg/Github/total-recall/src/cli/chat.mjs) that enables direct, conversational access to your active brain kernel from the terminal:
+Total Recall features a native terminal-based chat REPL (`npx total-recall chat`) running [src/cli/chat.mjs](src/cli/chat.mjs) that enables direct, conversational access to your active brain kernel from the terminal:
 
 - **CLI-Agent Execution**: Conversation turns are dispatched dynamically to your prioritized **Unified Headless CLI Agents Registry** (`antigravity`, `gemini`, `claude`, `codex`) via `spawnSync`.
 - **Pre-flight Health Routing**: Upon starting, `chat` checks agent binary availability, selecting the highest-priority active subagent found in your `$PATH`.
@@ -243,7 +243,7 @@ For web dashboard access, Total Recall strictly avoids external third-party OAut
 - **TLS Protection**: The daemon blocks non-secure remote connections, requiring active HTTPS TLS layers (automated via Caddy proxying) for all production traffic.
 
 ### 2. Personal Access Token (PAT) Key Lifecycle Manager
-Headless tools, IDE editors, and session Relays authenticate via standard HTTP Bearer headers (`Authorization: Bearer tr_<token>`), managed by the **Keys Lifecycle Manager** ([src/server/keys.mjs](file:///Users/greg/Github/total-recall/src/server/keys.mjs)):
+Headless tools, IDE editors, and session Relays authenticate via standard HTTP Bearer headers (`Authorization: Bearer tr_<token>`), managed by the **Keys Lifecycle Manager** ([src/server/keys.mjs](src/server/keys.mjs)):
 - **SHA-256 Hash Preservation**: To eliminate credential exposure risk, the server **never writes tokens to disk in plaintext**. It persists only a timing-safe SHA-256 hash (`token_hash`) and a short identifying prefix (`token_prefix`) inside the owner-exclusive `config/keys.jsonl` file (written with `0o600` access modes). Diffs are cleanly git-versioned.
 - **Timing-Attack Protection**: Inbound Bearer PAT tokens are verified using cryptographically secure timing-safe comparisons (`crypto.timingSafeEqual`) on SHA-256 hashes, eliminating timing vector leaks.
 - **Role-Based Granular Scopes**: Validated PAT keys carry granular permission scopes (e.g., `chat:write`, `memory:read`, `sandbox:run`), permitting fine-grained access control boundaries for different editors.

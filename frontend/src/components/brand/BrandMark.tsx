@@ -1,4 +1,4 @@
-/** Official Total Recall brand marks from portfolio-site assets/logos. */
+/** Official Total Recall brand marks. */
 
 export type BrandVariant = 'lockup' | 'icon' | 'badge' | 'mark'
 
