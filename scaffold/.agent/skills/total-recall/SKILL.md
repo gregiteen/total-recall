@@ -597,6 +597,19 @@ Current baseline: **288 spec files / 1493 tests, ~160 s** on the Mac Mini.
 >
 > A non-login `ssh` shell has no Homebrew on PATH — export it or use `bash -lc`,
 > otherwise the run dies with `command not found: npx` **and still exits 0**.
+>
+> **Never read a test result through a pipe.** `vitest run` exits 1 correctly on
+> failure, but `npx vitest run | tail -20` reports *tail's* status — always 0 —
+> so a red suite looks green. On 2026-08-19 this cost a full re-run and a wrong
+> "the suite exits 0 on failure" claim about the repo; the defect was the
+> pipeline, not vitest. Capture to a file and check the code separately:
+>
+> ```bash
+> npx vitest run > /tmp/t.log 2>&1; echo "exit=$?"; tail -20 /tmp/t.log
+> ```
+>
+> `check.mjs` is unaffected — it spawns without a shell and reads the real exit
+> code — so prefer the gate over hand-rolled invocations.
 
 **Never skip tests** to make a release look clean, and never use `--force` on a
 checker. Audit and clean up any rows, files, or mock entries a suite leaves
