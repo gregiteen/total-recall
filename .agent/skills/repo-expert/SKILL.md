@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-19T01:55:56.154Z
+generated_at: 2026-08-19T02:05:00.390Z
 generated_from: total-recall
 ---
 
@@ -462,7 +462,7 @@ templates/
 
 - `POST /api/sync/remote-vault/proposals/:id/decision`
 
-### system (7 endpoints)
+### system (8 endpoints)
 
 - `GET /api/logs/:type`
 - `POST /api/diagnostics/agents`
@@ -471,6 +471,7 @@ templates/
 - `POST /api/tasks/:id/retry`
 - `GET /api/usage`
 - `GET /api/usage/providers`
+- `POST /api/daemon/restart`
 
 ### tasks (3 endpoints)
 

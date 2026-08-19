@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.24.1] — 2026-08-19
+
+### 🐛 Bug Fixes & Improvements
+- **Semver-accurate Update Checking**: Fixed update check endpoint and client logic to use semver `needsUpdate` comparison rather than strict string inequality (`current !== latest`), preventing false "update available" alerts when running the latest or development versions.
+- **Source Monorepo Version Detection**: Ensured `inspectProjectPackage` resolves the repository's own `package.json` version for source trees instead of reading stale nested package definitions in `node_modules`.
+- **Dismissible Update Banners**: Added dismiss (`✕`) functionality for the chat dashboard update banner with `localStorage` memory across versions.
+- **Instant Health Page Update Refresh**: Automatically refreshes update state after running package updates so update banners and badges clear immediately without requiring a full browser reload.
+- **Daemon Restart Support**: Added `POST /api/daemon/restart` endpoint and UI "Restart Daemon" controls on both the Health and Settings pages.
+
 ## [3.24.0] — 2026-08-19
 
 ### 🚀 Features

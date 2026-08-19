@@ -76,4 +76,17 @@ describe('System Router', () => {
       expect(res.body).toHaveProperty('tasks');
     }
   });
+
+  it('POST /api/daemon/restart restarts the daemon and returns success', async () => {
+    vi.doMock('../../core/daemon-control.mjs', () => ({
+      stopDaemon: vi.fn(() => true),
+      startDaemon: vi.fn(() => 12345),
+    }));
+
+    const res = await request(app).post('/api/daemon/restart');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.message).toMatch(/restarted/i);
+    expect(res.body.pid).toBe(12345);
+  });
 });

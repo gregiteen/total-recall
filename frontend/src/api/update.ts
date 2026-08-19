@@ -15,13 +15,10 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
   // Normalize snake_case API fields for the Settings UI
   const currentVersion = data.currentVersion ?? data.current ?? ''
   const latestVersion = data.latestVersion ?? data.latest ?? ''
-  // Prefer host package comparison; fall back to API flag (includes consumers behind).
-  const hostBehind =
-    Boolean(latestVersion && currentVersion && latestVersion !== currentVersion)
   return {
     currentVersion,
     latestVersion,
-    updateAvailable: hostBehind || Boolean(data.updateAvailable ?? data.update_available),
+    updateAvailable: Boolean(data.updateAvailable ?? data.update_available),
   }
 }
 

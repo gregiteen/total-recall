@@ -169,20 +169,24 @@ export function inspectProjectPackage(projectRoot) {
   } catch {
     return { declared: null, installed: null, isSourceTree: false, packageName: null };
   }
-  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-  const declared = deps[PACKAGE_NAME] || null;
-  let installed = null;
-  const nm = path.join(projectRoot, 'node_modules', PACKAGE_NAME, 'package.json');
-  if (fs.existsSync(nm)) {
-    try {
-      installed = JSON.parse(fs.readFileSync(nm, 'utf8')).version || null;
-    } catch {
-      installed = null;
-    }
-  }
   const isSourceTree =
     pkg.name === PACKAGE_NAME &&
     fs.existsSync(path.join(projectRoot, 'src', 'server', 'index.mjs'));
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const declared = deps[PACKAGE_NAME] || null;
+  let installed = null;
+  if (isSourceTree) {
+    installed = pkg.version || null;
+  } else {
+    const nm = path.join(projectRoot, 'node_modules', PACKAGE_NAME, 'package.json');
+    if (fs.existsSync(nm)) {
+      try {
+        installed = JSON.parse(fs.readFileSync(nm, 'utf8')).version || null;
+      } catch {
+        installed = null;
+      }
+    }
+  }
   return { declared, installed, isSourceTree, packageName: pkg.name || null };
 }
 
