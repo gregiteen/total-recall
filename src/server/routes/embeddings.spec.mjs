@@ -1,18 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+
+// vi.mock is hoisted above the imports, which is the only way to stub auth here:
+// embeddings.mjs does `router.use('/api/embeddings', requireAuth)` at module
+// scope, so the router captures the real middleware the moment it is imported.
+// A vi.spyOn in beforeEach replaces the module export long after that binding
+// was taken, leaving the routes still guarded — every request came back 401.
+vi.mock('../auth.mjs', async (importOriginal) => ({
+  ...(await importOriginal()),
+  requireAuth: (req, res, next) => next(),
+  requireScope: () => (req, res, next) => next(),
+}));
+
 import embeddingsRouter from './embeddings.mjs';
 import * as ollamaEmbeddings from '../../core/ollama-embeddings.mjs';
-import * as authModule from '../auth.mjs';
 
 describe('routes: embeddings', () => {
   let app;
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    // Mock requireAuth and requireScope to pass through in tests
-    vi.spyOn(authModule, 'requireAuth').mockImplementation((req, res, next) => next());
-    vi.spyOn(authModule, 'requireScope').mockReturnValue((req, res, next) => next());
 
     app = express();
     app.use(express.json());
