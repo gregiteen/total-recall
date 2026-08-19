@@ -20,7 +20,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const SKILL_DIR = path.resolve(__dirname, '..');
 const REPORT_JSON = path.join(SKILL_DIR, 'reports', 'latest.json');
 const REPORT_TXT = path.join(SKILL_DIR, 'reports', 'latest.txt');
