@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.25.0] — 2026-08-19
+
+### 🚀 Features
+- **Updating now restarts the server**: `POST /api/update/run` installed the new package and returned a summary while the running process kept serving the modules Node had already loaded — the update banner cleared, so a finished update was indistinguishable from a running one, and the only restart control that existed was for the daemon. The route now restarts the server when an update replaced the code behind it, and a new `POST /api/server/restart` plus a **Restart Server** button in Settings do it on demand. The trigger is the package manifest **on disk** compared against the version this process booted with — `updated > 0` counts registered projects, and some other project's `node_modules` changing is no reason to bounce this server, while a source tree is never touched by an npm install at all.
+- **A restart that cannot become an outage**: exiting a process nothing would respawn is not a restart. Supervision is *proven* rather than assumed — the launchd job or systemd unit must report **our** pid — and hosts under a supervisor we cannot query (docker restart policies, pm2, runit) opt in with `TR_SUPERVISED=1`. Otherwise the API answers `409` with the reason and stays up. `force` is deliberately not accepted over HTTP: an API caller must not be able to take the server down permanently. The restart is a SIGTERM to ourselves, not `process.exit`, so the existing shutdown path drains and **releases the server PID lock** — skipping that would leave the respawned instance hitting the singleton guard and exiting immediately, turning a restart into a stop.
+- **Add a device to the tailnet from the UI**: enrolling a phone previously required `total-recall mesh preauthkey` — a CLI, on the machine you are not holding. Settings now mints a short-lived enrollment key with a QR code, shows the control-server URL to paste into "Use custom coordination server", counts the TTL down and replaces the QR with "key expired" rather than leaving a dead code that still looks scannable. Backed by `POST /api/mesh/preauthkey` (`config:write`, TTL default 15 min, hard-capped at 60).
+
+### 🐛 Bug Fixes
+- **`mesh <subcommand> --help` minted a live pre-auth key**: only the bare `mesh --help` was handled, so `--help` after a subcommand fell through into execution — a credential issued by a help flag. (One key leaked this way during development and was expired via the headscale API.)
+- **`/api/update/run` no longer reports completion while npm is still writing**: the host install was `detached` + `unref()`ed, so the endpoint answered before any files had been replaced. It is now awaited, and its real exit is reported as `host_install`.
+- **Tailnet enrollment read a field that does not exist**: `access_resolved.ssh_user` — the account is `user`, and `complete` is the resolver's own verdict on whether it is known. Caught by the frontend `tsc -b`, which the test suite does not run.
+
 ## [3.24.2] — 2026-08-19
 
 ### 🐛 Bug Fixes & Improvements

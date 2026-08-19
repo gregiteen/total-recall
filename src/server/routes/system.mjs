@@ -3,10 +3,13 @@
  *
  * GET  /api/logs/:type           — Read last 200 lines of server or daemon log
  * POST /api/diagnostics/agents   — Run upgrade --agents diagnostics
- * POST /api/diagnostics/agents   — Run upgrade --agents diagnostics
+ * GET  /api/pairing              — Reachable URLs for the mobile pairing QR
  * GET  /api/tasks/failed         — List failed tasks from the DLQ
  * POST /api/tasks/:id/retry      — Re-queue a failed task
  * GET  /api/usage                — Usage ledger + cost summary
+ * GET  /api/usage/providers      — Spend as the providers report it
+ * POST /api/daemon/restart       — Restart the Active Intelligence daemon
+ * POST /api/server/restart       — Restart this server (supervised hosts only)
  */
 
 import { Router } from 'express';
@@ -212,6 +215,40 @@ router.post('/api/daemon/restart', requireAuth, requireScope('config:write'), as
     stopDaemon();
     const pid = startDaemon();
     res.json({ success: true, message: `Daemon restarted successfully (PID ${pid})`, pid });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/server/restart
+ * Restarts the brain server itself, so freshly installed code is the code that
+ * is actually running.
+ *
+ * `force` is deliberately NOT accepted from HTTP. Forcing an exit on a host
+ * where nothing would respawn us is not a restart, it is an outage, and an API
+ * caller must not be able to cause one. Hosts under a supervisor we cannot
+ * query (docker restart policies, pm2, runit) opt in with TR_SUPERVISED=1.
+ */
+router.post('/api/server/restart', requireAuth, requireScope('config:write'), async (_req, res) => {
+  try {
+    const { requestSelfRestart } = await import('../../core/server-restart.mjs');
+    const result = requestSelfRestart();
+    if (!result.scheduled) {
+      return res.status(409).json({
+        success: false,
+        scheduled: false,
+        supervisor: result.supervisor,
+        message: result.reason,
+      });
+    }
+    logger.info('server', `Restart requested via API — ${result.supervisor.reason}`);
+    res.json({
+      success: true,
+      scheduled: true,
+      supervisor: result.supervisor,
+      message: `Server restarting (${result.supervisor.label}). It should be back in a few seconds.`,
+    });
   } catch (err) {
     serverError(res, err);
   }

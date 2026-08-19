@@ -13,8 +13,34 @@ import {
   needsUpdate,
   isPackageAutoUpdateEnabled,
 } from '../../core/package-auto-update.mjs';
+import { packageVersionOnDisk, requestSelfRestart } from '../../core/server-restart.mjs';
 
 const router = Router();
+
+/**
+ * Install into the host root and WAIT for it.
+ *
+ * This used to be `detached: true` + `unref()`, which meant the endpoint
+ * answered "update complete" while npm was still writing files — the same
+ * class of lie as reporting an update finished while the old code kept
+ * running. We need the exit anyway: the restart decision below reads the
+ * manifest on disk, and reading it before npm has replaced it would see the
+ * old version and skip the restart.
+ *
+ * @returns {Promise<{ok: boolean, code?: number, error?: string}>}
+ */
+function installIntoHostRoot(latest) {
+  return new Promise((resolve) => {
+    const proc = spawn('npm', ['install', `${PACKAGE_NAME}@${latest}`, '--save'], {
+      cwd: ROOT,
+      stdio: 'ignore',
+    });
+    // spawn reports a missing binary or bad cwd as an 'error' EVENT, not a
+    // throw, and an unhandled 'error' on an EventEmitter kills the server.
+    proc.on('error', (err) => resolve({ ok: false, error: err.message }));
+    proc.on('close', (code) => resolve({ ok: code === 0, code }));
+  });
+}
 
 router.get('/api/update/check', requireAuth, async (_req, res) => {
   try {
@@ -75,6 +101,11 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
     const dryRun = Boolean(req.body?.dryRun);
     const force = req.body?.force !== false;
     const roots = Array.isArray(req.body?.roots) ? req.body.roots : undefined;
+    const restartWanted = req.body?.restart !== false;
+
+    // The version this process is actually RUNNING, captured before anything is
+    // installed over it.
+    const versionBefore = packageVersionOnDisk(ROOT);
 
     // Fire multi-project updater (awaits — install can take minutes; client should timeout high)
     const summary = await runPackageAutoUpdate({
@@ -86,17 +117,13 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
       save: true,
     });
 
-    // Also kick a local install in ROOT when this host is a consumer (non-source)
+    // Also install into ROOT when this host is a consumer (non-source)
     const hostInfo = inspectProjectPackage(ROOT);
+    let hostInstall = null;
     if (!hostInfo.isSourceTree && (hostInfo.declared || hostInfo.installed) && !dryRun) {
       const latest = summary.latest || (await fetchLatestNpmVersionAsync());
       if (latest && needsUpdate(hostInfo.installed, latest)) {
-        const proc = spawn('npm', ['install', `${PACKAGE_NAME}@${latest}`, '--save'], {
-          cwd: ROOT,
-          detached: true,
-          stdio: 'ignore',
-        });
-        proc.unref();
+        hostInstall = await installIntoHostRoot(latest);
       }
     }
 
@@ -114,17 +141,49 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
     if (failed) parts.push(`${failed} failed`);
     const detail = parts.length ? parts.join(', ') : 'no projects checked';
 
+    // Restart only when the update replaced the code backing THIS process.
+    // Some other project's node_modules changing is no reason to bounce the
+    // server, and a source tree is never touched by an npm install at all.
+    const versionAfter = packageVersionOnDisk(ROOT);
+    const selfReplaced = Boolean(versionBefore && versionAfter && versionBefore !== versionAfter);
+    let restart = {
+      scheduled: false,
+      required: selfReplaced,
+      reason: selfReplaced
+        ? 'restart not requested'
+        : 'this server is already running the installed code',
+    };
+    if (selfReplaced && !dryRun && restartWanted) {
+      const outcome = requestSelfRestart();
+      restart = {
+        scheduled: outcome.scheduled,
+        required: true,
+        supervisor: outcome.supervisor,
+        reason: outcome.scheduled
+          ? `restarting into v${versionAfter} (${outcome.supervisor.label})`
+          : outcome.reason,
+      };
+    }
+
+    const restartNote = restart.scheduled
+      ? ` Restarting into v${versionAfter} now.`
+      : restart.required
+        ? ` This server is still running v${versionBefore} — restart it to pick up v${versionAfter}.`
+        : '';
+
     res.json({
       success: ok,
       updating: !dryRun && ok,
       message: dryRun
         ? `Dry-run complete — ${detail}`
         : ok
-          ? `Package auto-update finished for registered projects (${detail}). Latest: ${summary?.latest || 'n/a'}`
+          ? `Package auto-update finished for registered projects (${detail}). Latest: ${summary?.latest || 'n/a'}.${restartNote}`
           : summary?.reason === 'npm-view-failed'
             ? 'Could not resolve latest version from npm (network or registry). Try again.'
             : `Package auto-update finished with errors (${detail}). Latest: ${summary?.latest || 'n/a'}`,
       summary,
+      host_install: hostInstall,
+      restart,
     });
   } catch (err) {
     serverError(res, err);

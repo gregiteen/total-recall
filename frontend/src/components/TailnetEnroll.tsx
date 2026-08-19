@@ -55,7 +55,10 @@ export function TailnetEnroll() {
 
   const expired = secondsLeft !== null && secondsLeft <= 0;
   const loginServer = minted?.login_server ?? null;
-  const unknownAccess = nodes.filter((n) => !n.access_resolved?.ssh_user && !n.self);
+  // `complete` is the resolver's own verdict: false when the login account is
+  // unknown and the node would refuse you. No resolved access at all counts as
+  // unknown too. (There is no `ssh_user` field — the account is `user`.)
+  const unknownAccess = nodes.filter((n) => !n.self && n.access_resolved?.complete !== true);
 
   return (
     <section data-testid="tailnet-enroll" style={{ marginTop: 24 }}>

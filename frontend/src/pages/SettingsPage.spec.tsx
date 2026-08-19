@@ -54,4 +54,35 @@ describe('SettingsPage', () => {
     expect(await screen.findByTestId('settings-error')).toBeInTheDocument();
     expect(screen.getByText(/Config JSON API error: 500/i)).toBeInTheDocument();
   }, 10000);
+
+  it('restarts the server from the UI and reports the outcome', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.fetchConfigJson).mockResolvedValue({
+      security: { bind: {}, network: {}, rate_limits: {}, sandbox: {}, dashboard: {}, api: {} },
+      budget: { budget: {} },
+      brain: {},
+      secrets: {},
+    } as never);
+    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy', version: '1.0.0' } as never);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false } as never);
+    vi.mocked(api.restartServer).mockResolvedValue({
+      success: false,
+      scheduled: false,
+      message: 'refusing to exit: no supervisor would restart this process',
+    } as never);
+
+    await act(async () => {
+      render(<SettingsPage />);
+    });
+
+    const button = await screen.findByTestId('restart-server', {}, { timeout: 4000 });
+    await act(async () => {
+      button.click();
+    });
+
+    expect(api.restartServer).toHaveBeenCalled();
+    // An unsupervised host is a real answer, surfaced verbatim — not swallowed
+    // and not presented as a successful restart.
+    expect(screen.getByText(/refusing to exit/i)).toBeInTheDocument();
+  }, 10000);
 });

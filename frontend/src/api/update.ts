@@ -22,9 +22,18 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
   }
 }
 
+export interface UpdateRestartInfo {
+  /** true when the update replaced the code this server is running */
+  required: boolean
+  /** true when a restart into that code has been scheduled */
+  scheduled: boolean
+  reason: string
+}
+
 export async function runUpdate(): Promise<{
   success: boolean
   message: string
+  restart?: UpdateRestartInfo
   summary?: {
     latest?: string
     updated?: number
@@ -49,6 +58,13 @@ export async function runUpdate(): Promise<{
   return {
     success,
     message: data.message || (success ? 'Package auto-update finished' : 'Package auto-update failed'),
+    restart: data.restart
+      ? {
+          required: Boolean(data.restart.required),
+          scheduled: Boolean(data.restart.scheduled),
+          reason: String(data.restart.reason ?? ''),
+        }
+      : undefined,
     summary: data.summary,
   }
 }

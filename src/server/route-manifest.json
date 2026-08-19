@@ -580,6 +580,10 @@
     "path": "/api/secrets/usage"
   },
   {
+    "method": "POST",
+    "path": "/api/server/restart"
+  },
+  {
     "method": "GET",
     "path": "/api/sessions"
   },
