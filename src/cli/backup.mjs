@@ -116,6 +116,33 @@ function printHelp() {
 `);
 }
 
+function ensureBrainGitignore(SKILL_DIR) {
+  const gitignorePath = path.join(SKILL_DIR, '.gitignore');
+  const entries = [
+    'memory-derived/', 'sessions/', '*.backup', 'logs/', 'node_modules/',
+    'memory-vault/.events/', 'browser-profile/', '.snapshots/', 'daemon.pid',
+  ];
+  let existing = '';
+  if (fs.existsSync(gitignorePath)) existing = fs.readFileSync(gitignorePath, 'utf8');
+  const missing = entries.filter((e) => !existing.split('\n').some((l) => l.trim() === e));
+  if (missing.length === 0) return 0;
+  fs.appendFileSync(
+    gitignorePath,
+    '\n# Auto-added by total-recall backup — runtime/derived/sensitive, never versioned\n'
+      + missing.join('\n') + '\n',
+  );
+  console.error(`  \u2705 .gitignore: added ${missing.length} protected entr${missing.length === 1 ? 'y' : 'ies'}`);
+  // Anything already tracked must also be untracked, or the ignore is inert.
+  for (const e of missing) {
+    const tracked = git(SKILL_DIR, 'ls-files', e.replace(/\/$/, ''));
+    if (tracked.ok && tracked.stdout) {
+      git(SKILL_DIR, 'rm', '-r', '--cached', '-f', '-q', e.replace(/\/$/, ''));
+      console.error(`  \u2705 untracked ${e} (kept on disk)`);
+    }
+  }
+  return missing.length;
+}
+
 async function pushGitBackup(remote, layer = 'auto') {
   const SKILL_DIR = getSkillDir(layer);
   if (!commandExists('git')) {
@@ -128,6 +155,19 @@ async function pushGitBackup(remote, layer = 'auto') {
     console.error('  Run: npx total-recall init');
     process.exit(1);
   }
+
+  // A brain is memory, not runtime state. Three classes of file have each
+  // broken a real backup by being versioned:
+  //   memory-vault/.events/  append-only logs; default.jsonl reached 306MB and
+  //                          GitHub hard-rejects >100MB, silently killing every
+  //                          global backup for 5 weeks (2026-07-14 -> 08-19).
+  //   browser-profile/       the rotation Chromium profile — live Stripe/GitHub
+  //                          cookies and Login Data. Was tracked and one
+  //                          successful push from landing on GitHub.
+  //   .snapshots/            ~46MB vault tarballs stored inside the vault.
+  // Enforced on every push, not just --install, so brains created before this
+  // rule are corrected on their next backup.
+  ensureBrainGitignore(SKILL_DIR);
 
   // Initialise the skill folder as a git repo if needed
   const gitDir = path.join(SKILL_DIR, '.git');
@@ -170,6 +210,29 @@ async function pushGitBackup(remote, layer = 'auto') {
   const stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   if (!status.stdout) {
+    // A clean working tree does NOT mean the remote is current. Two scheduled
+    // jobs pointing the shared "backup" remote at different URLs is enough to
+    // break this: whichever ran second re-pointed the remote, found the tree
+    // clean, and returned "nothing to push" — so that destination silently
+    // froze for months while every run reported success. Only skip when the
+    // remote actually has our HEAD.
+    const head = git(SKILL_DIR, 'rev-parse', 'HEAD');
+    const localSha = head.ok ? (head.stdout || '').trim() : '';
+    const remoteHead = git(SKILL_DIR, 'ls-remote', remote, 'main');
+    const remoteSha = remoteHead.ok ? (remoteHead.stdout || '').split(/\s+/)[0] : '';
+    // No local commit to compare, or the remote already has it: genuinely
+    // nothing to do. Only a KNOWN mismatch justifies pushing a clean tree.
+    if (!localSha || remoteSha === localSha) {
+      console.error(`  ✅ Brain unchanged — nothing to push (${stamp})`);
+      return;
+    }
+    if (remoteSha) {
+      console.error(`  📤 Working tree clean but ${remote} is behind — pushing existing commits...`);
+      const p = git(SKILL_DIR, 'push', remote, 'HEAD:main');
+      if (p.ok) console.error(`  ✅ Brain pushed to backup (${stamp})`);
+      else console.error(`  ❌ Push failed: ${p.stderr || p.stdout}`);
+      return;
+    }
     console.error(`  ✅ Brain unchanged — nothing to push (${stamp})`);
     return;
   }

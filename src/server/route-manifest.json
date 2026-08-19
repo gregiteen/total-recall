@@ -104,6 +104,10 @@
     "path": "/api/context/stream"
   },
   {
+    "method": "POST",
+    "path": "/api/daemon/restart"
+  },
+  {
     "method": "GET",
     "path": "/api/dashboard/instructions"
   },
