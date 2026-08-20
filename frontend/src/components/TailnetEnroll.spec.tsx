@@ -127,4 +127,27 @@ describe('TailnetEnroll', () => {
     expect(screen.getByTestId('enroll-approve')).toBeTruthy();
   });
 
+  it('gives real steps for clearing the keychain, not just the instruction to do it', async () => {
+    // "Turn on Reset Keychain" is not an instruction if you cannot find the
+    // toggle. It is buried in the iOS Settings app list, below Game Center.
+    render(<TailnetEnroll />);
+    expect(await screen.findByTestId('enroll-keychain-steps')).toBeTruthy();
+    expect(screen.getAllByText(/past Game Center and TV Provider/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/swipe Tailscale away/i)).toBeTruthy();
+    // Clearing the keychain can blank the control-server URL, which silently
+    // sends the app back to Tailscale's public service.
+    expect(screen.getByText(/can blank it/i)).toBeTruthy();
+  });
+
+  it('covers Android and ChromeOS, and says the key works there unlike iOS', async () => {
+    render(<TailnetEnroll />);
+    expect(await screen.findByTestId('enroll-android')).toBeTruthy();
+    expect(screen.getByTestId('enroll-chromeos')).toBeTruthy();
+    // Android exposes "Use an auth key"; iOS has no equivalent. Telling people
+    // the key never works on mobile would send Android users down the slow path.
+    expect(screen.getByText(/Use an auth key/i)).toBeTruthy();
+    // Crostini installs are known to crash the container on later startups.
+    expect(screen.getByText(/Crostini/i)).toBeTruthy();
+  });
+
 });

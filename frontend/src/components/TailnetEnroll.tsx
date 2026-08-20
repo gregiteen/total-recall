@@ -147,8 +147,8 @@ export function TailnetEnroll() {
           </p>
           <p style={{ fontSize: 12, margin: '0 0 8px', color: '#f59e0b' }}>
             <strong>If the code on the device never changes</strong> between sign-in attempts, it is a stale
-            one replayed from the iOS keychain and no amount of retrying will register it. Turn on{' '}
-            <strong>Reset Keychain</strong>, force-quit, sign in again — the code must be different.
+            one replayed from the iOS keychain and no amount of retrying will register it. Follow{' '}
+            <strong>How to clear the keychain (iOS)</strong> below — the code must come back different.
           </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
@@ -189,19 +189,21 @@ export function TailnetEnroll() {
               <strong>Alternate Coordination Server URL</strong>.
             </li>
             <li>
-              <strong>Turn on “Reset Keychain”.</strong> Treat this as required, not optional. The app keeps
-              its node key in the iOS keychain and will otherwise replay an old registration id forever —
-              force-quitting does not clear it, and the server rejects the stale id every time while the
-              phone keeps showing a page that looks perfectly valid.
+              <strong>Turn on “Reset Keychain”</strong> — same panel, just below the URL. Treat this as
+              required, not optional: the app keeps its node key in the iOS keychain and will otherwise
+              replay an old registration id forever. Force-quitting does not clear it, and the server
+              rejects the stale id every time while the phone keeps showing a page that looks perfectly
+              valid. Full steps under <em>How to clear the keychain</em> below.
             </li>
             <li>Force-quit Tailscale from the app switcher, then reopen it — the setting is read at launch.</li>
             <li>Tap the plain <strong>Sign in</strong> option (not SSO). It should open this control server's page.</li>
             <li>
               The page will say <em>“run the command below in the headscale server”</em>. That is expected —
               copy the line it shows and paste it into <strong>Device waiting for approval?</strong> above.
-              <strong> Do not use the enrollment key below on a phone:</strong> the Tailscale iOS app does not
-              accept pre-auth keys against a custom control server, so interactive sign-in plus approval here
-              is the only route that works.
+              <strong> Do not use the enrollment key below on an iPhone or iPad:</strong> the Tailscale iOS
+              app does not accept pre-auth keys against a custom control server, so interactive sign-in plus
+              approval here is the only route that works. Android and ChromeOS <em>do</em> accept the key —
+              see below.
             </li>
           </ol>
           <p style={{ opacity: 0.75, margin: 0 }}>
@@ -211,15 +213,74 @@ export function TailnetEnroll() {
           </p>
         </details>
 
-        <details style={{ fontSize: 12, marginTop: 8 }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>On Android</summary>
+        <details open style={{ fontSize: 12, marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }} data-testid="enroll-keychain-steps">
+            How to clear the keychain (iOS)
+          </summary>
           <ol style={{ paddingLeft: 18, lineHeight: 1.7, margin: '4px 0 0' }}>
-            <li>Install Tailscale from Google Play and make sure it is signed out.</li>
-            <li>Open the app, tap the account icon, then <strong>Log in…</strong>.</li>
-            <li>Open the top-right options menu → <strong>Use custom coordination server</strong>.</li>
-            <li>Enter the control server above. If it accepts the key below, use it; if it shows a
-                “run this command” page instead, approve it above like iOS.</li>
+            <li>Open the iOS <strong>Settings</strong> app — not Tailscale's own settings.</li>
+            <li>
+              Scroll to the bottom, <strong>past Game Center and TV Provider</strong>, into the
+              alphabetical list of installed apps. Tap <strong>Tailscale</strong>.
+            </li>
+            <li>Turn <strong>Reset Keychain</strong> on.</li>
+            <li>
+              While you are there, check <strong>Alternate Coordination Server URL</strong> still reads{' '}
+              <code>{loginServer ?? 'your control server'}</code> — clearing the keychain can blank it, and
+              an empty box sends the app back to Tailscale's public service.
+            </li>
+            <li>
+              Leave Settings. Open the app switcher and <strong>swipe Tailscale away</strong>. Backgrounding
+              is not enough; the setting is read at launch.
+            </li>
+            <li>Reopen Tailscale and tap the plain <strong>Sign in</strong> (not SSO).</li>
+            <li>
+              <strong>Check the code changed.</strong> If it is the same string as last time, the keychain
+              did not clear — repeat from step 1.
+            </li>
           </ol>
+        </details>
+
+        <details style={{ fontSize: 12, marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }} data-testid="enroll-android">
+            On Android
+          </summary>
+          <p style={{ margin: '4px 0 6px', opacity: 0.85 }}>
+            Android is <strong>not</strong> like iOS here — it accepts an enrollment key directly, so you can
+            use the key below and skip interactive approval entirely.
+          </p>
+          <ol style={{ paddingLeft: 18, lineHeight: 1.7, margin: '0 0 6px' }}>
+            <li>Install Tailscale from Google Play or F-Droid.</li>
+            <li>Open the app → <strong>settings menu (upper-right)</strong> → <strong>Accounts</strong>.</li>
+            <li>
+              Choose <strong>Use an alternate server</strong> and enter{' '}
+              <code>{loginServer ?? 'your control server'}</code>.
+            </li>
+            <li>
+              Back to <strong>Accounts</strong>, choose <strong>Use an auth key</strong>, and paste the
+              enrollment key below. Then tap <strong>login</strong> on the main screen.
+            </li>
+          </ol>
+          <p style={{ margin: 0, opacity: 0.75 }}>
+            Prefer the browser flow? Stop after step 3 and follow the prompts — if it shows a “run this
+            command” page, approve it above exactly like iOS.
+          </p>
+        </details>
+
+        <details style={{ fontSize: 12, marginTop: 8 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }} data-testid="enroll-chromeos">
+            On a Chromebook (ChromeOS)
+          </summary>
+          <p style={{ margin: '4px 0 6px', opacity: 0.85 }}>
+            Install the <strong>Android app from Google Play</strong> and follow the Android steps above —
+            that is the supported route, and the enrollment key works.
+          </p>
+          <p style={{ margin: 0, opacity: 0.75 }}>
+            Avoid installing inside the Crostini Linux container: it is known to crash the container on
+            subsequent startups. Running the Android app also keeps the credentials out of the VM, and one
+            install covers every VM on the machine. If managed policy blocks Play Store apps, there is
+            currently no alternative install path.
+          </p>
         </details>
       </div>
 
@@ -243,7 +304,7 @@ export function TailnetEnroll() {
           Ephemeral (drops off the list when offline)
         </label>
         <button type="button" onClick={mint} disabled={busy} data-testid="enroll-mint" style={{ cursor: busy ? 'wait' : 'pointer' }}>
-          {busy ? 'Minting…' : minted ? 'Mint another key' : 'Get enrollment key (computers)'}
+          {busy ? 'Minting…' : minted ? 'Mint another key' : 'Get enrollment key (computers, Android, ChromeOS)'}
         </button>
       </div>
 

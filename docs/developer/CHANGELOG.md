@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.25.5] — 2026-08-19
+
+### 🐛 Bug Fixes
+- **"Turn on Reset Keychain" is not an instruction if you cannot find the toggle.** The enrollment card now carries the actual procedure: iOS Settings → scroll past Game Center and TV Provider into the app list → Tailscale → Reset Keychain, then force-quit from the app switcher and sign in again. It also warns that clearing the keychain can blank the Alternate Coordination Server URL — an empty box silently sends the app back to Tailscale's public service — and ends with the check that matters: the code must come back **different**.
+- **Android was documented as if it were iOS.** It is not: the Android app exposes *Accounts → Use an auth key*, so the enrollment key works there and interactive approval is unnecessary. Telling Android users the key never works on mobile sent them down the slow path for no reason. Steps are now Android's own (settings menu → Accounts → Use an alternate server → Use an auth key).
+- **ChromeOS added**: install the Android app from Google Play and follow the Android steps. Explicitly warns against installing inside the Crostini Linux container, which is known to crash the container on subsequent startups; the Android app also keeps credentials out of the VM and one install covers every VM on the machine.
+- The enrollment key button is relabelled **(computers, Android, ChromeOS)** — only iOS and iPadOS cannot use it.
+
 ## [3.25.4] — 2026-08-19
 
 ### 🐛 Bug Fixes
