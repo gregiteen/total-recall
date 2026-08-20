@@ -363,7 +363,10 @@ router.post('/api/mesh/register-node', requireAuth, requireScope('config:write')
     res.status(stale ? 409 : 500).json({
       success: false,
       message: stale
-        ? 'That registration id is no longer valid — it expires quickly. Reopen sign-in on the device to get a fresh one.'
+        ? 'headscale has already forgotten that registration id. Reopening sign-in is usually NOT enough — '
+          + 'iOS keeps its node key in the keychain and replays the same id forever, while the device keeps '
+          + 'showing a page that looks perfectly valid. If the id you see does not change, turn on '
+          + 'Settings → Tailscale → Reset Keychain, force-quit the app, then sign in again.'
         : msg || 'could not register device',
     });
   }

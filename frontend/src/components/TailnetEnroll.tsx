@@ -145,6 +145,11 @@ export function TailnetEnroll() {
             If a device shows “run the command below in the headscale server”, paste that whole line
             (or just the <code>hskey-authreq-…</code> part) here.
           </p>
+          <p style={{ fontSize: 12, margin: '0 0 8px', color: '#f59e0b' }}>
+            <strong>If the code on the device never changes</strong> between sign-in attempts, it is a stale
+            one replayed from the iOS keychain and no amount of retrying will register it. Turn on{' '}
+            <strong>Reset Keychain</strong>, force-quit, sign in again — the code must be different.
+          </p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
               type="text"

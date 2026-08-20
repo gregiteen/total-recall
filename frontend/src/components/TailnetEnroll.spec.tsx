@@ -59,7 +59,10 @@ describe('TailnetEnroll', () => {
 
   it('keeps the Reset Keychain step visible — skipping it is why sign-in reverts to the public service', async () => {
     render(<TailnetEnroll />);
-    expect(await screen.findByText(/Reset Keychain/i)).toBeTruthy();
+    // Mentioned in the numbered step AND in the stale-code warning: both places
+    // matter, so assert presence rather than uniqueness.
+    const hits = await screen.findAllByText(/Reset Keychain/i);
+    expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
   it('lists mesh nodes', async () => {
@@ -115,4 +118,13 @@ describe('TailnetEnroll', () => {
     render(<TailnetEnroll />);
     await waitFor(() => expect(screen.getByTestId('enroll-access-warning')).toHaveTextContent('no recorded login account'));
   });
+  it('warns that an unchanging code means a keychain replay, not a retry problem', async () => {
+    // Learned the hard way: three sign-in attempts returned the same stale id,
+    // and "reopen sign-in" -- the obvious advice -- never worked. Only clearing
+    // the keychain did. The UI has to say that, or it sends people in circles.
+    render(<TailnetEnroll />);
+    expect(await screen.findByText(/never changes/i)).toBeTruthy();
+    expect(screen.getByTestId('enroll-approve')).toBeTruthy();
+  });
+
 });
