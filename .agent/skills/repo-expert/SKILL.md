@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-20T17:48:58.057Z
+generated_at: 2026-08-20T18:13:11.261Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (580 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (582 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -123,7 +123,7 @@ scripts/  (14 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (235 items)
+  core/  (237 items)
   server/
     routes/  (90 items)
 templates/
@@ -569,13 +569,14 @@ templates/
 
 ## Core Modules
 
-109 modules in `src/core/`:
+110 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
 - **bound-hosts** — exports: registerBoundHost, unregisterBoundHost, getBoundHosts, resetBoundHosts, isLoopbackHost, isReachableFromOtherDevices
 - **brain-state** — exports: isBrainState, rsyncExcludes, findBrainState
 - **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
+- **cache-prune** — exports: sessionIngestedGuard, isProtected, pruneCaches, formatBytes, maybePruneCaches
 - **clarity-rewriter** — exports: runClarityReview, runStalenessCheck, runFactSeeker, runCutoffAudit, writeCorrection
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
 - **config** — exports: getEnvVar, detectProjectBrain, getActiveBrains, resolveBrainLayer
