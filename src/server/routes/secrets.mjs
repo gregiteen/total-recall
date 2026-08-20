@@ -599,6 +599,7 @@ router.post('/api/secrets', requireAuth, requireScope('keys:write', 'config:writ
       monthly_cap_usd: body.monthly_cap_usd ?? catalog?.default_monthly_cap_usd,
       api_docs_url: body.api_docs_url || catalog?.docs_url,
       headscale_url: body.headscale_url,
+      headscale_log_command: body.headscale_log_command,
       rotate_every_days: body.rotate_every_days,
       auto_rotate: body.auto_rotate,
       notes: body.notes,

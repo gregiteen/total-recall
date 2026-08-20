@@ -356,6 +356,18 @@
     "path": "/api/mesh/register-node"
   },
   {
+    "method": "DELETE",
+    "path": "/api/mesh/watch"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/watch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/watch"
+  },
+  {
     "method": "GET",
     "path": "/api/network/audit"
   },
