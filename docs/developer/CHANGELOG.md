@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.25.4] — 2026-08-19
+
+### 🐛 Bug Fixes
+- **The pairing error told you to do the thing that does not work**: when headscale has forgotten a registration id, the approval endpoint said "reopen sign-in on the device to get a fresh one". Verified live during a real enrollment — reopening sign-in returns the *same* id indefinitely, because iOS keeps the node key in the keychain and replays it while the device shows a page that looks perfectly valid. Three attempts failed on that advice; clearing the keychain was the only thing that worked. The message and the UI now say so, and the approval box warns that an unchanging code is a keychain replay rather than a retry problem — the one observable signal that tells the two apart.
+
 ## [3.25.3] — 2026-08-19
 
 ### 🐛 Bug Fixes
