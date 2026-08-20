@@ -75,4 +75,27 @@ describe('sync-repo', () => {
     }
     expect(threw).toBe(true);
   });
+
+  it('never overwrites per-brain state (research queue, skills catalog)', () => {
+    // A template sync across 13 repos would otherwise have destroyed one
+    // repo's 7 queued research topics and its 68-line skills catalog.
+    const src = path.join(dir, 'templates', 'total-recall');
+    fs.mkdirSync(path.join(src, 'skills-registry'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'SKILL.md'), '# fresh template body\n');
+    fs.writeFileSync(path.join(src, 'research-queue.jsonl'), '{"topic":"FROM-TEMPLATE"}\n');
+    fs.writeFileSync(path.join(src, 'skills-registry', 'index.yaml'), 'skills: {}\n');
+
+    const brain = path.join(dir, 'agent/skills/total-recall');
+    fs.mkdirSync(path.join(brain, 'skills-registry'), { recursive: true });
+    fs.writeFileSync(path.join(brain, 'research-queue.jsonl'), '{"topic":"MINE"}\n');
+    fs.writeFileSync(path.join(brain, 'skills-registry', 'index.yaml'), 'skills: {mine: 1}\n');
+
+    run(['--source', path.join(dir, 'templates')]);
+
+    expect(fs.readFileSync(path.join(brain, 'research-queue.jsonl'), 'utf8')).toContain('MINE');
+    expect(fs.readFileSync(path.join(brain, 'skills-registry/index.yaml'), 'utf8')).toContain('mine');
+    // ...while real template content still lands
+    expect(fs.readFileSync(path.join(brain, 'SKILL.md'), 'utf8')).toContain('fresh template body');
+  });
+
 });

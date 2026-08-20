@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-19T19:55:19.501Z
+generated_at: 2026-08-20T15:15:34.042Z
 generated_from: total-recall
 ---
 
@@ -339,7 +339,7 @@ templates/
 - `DELETE /api/memory/:slug`
 - `POST /api/memory/search/semantic`
 
-### mesh (16 endpoints)
+### mesh (17 endpoints)
 
 - `GET /api/mesh/leader`
 - `GET /api/mesh/nodes`
@@ -349,8 +349,8 @@ templates/
 - `GET /api/mesh/enrollment`
 - `POST /api/mesh/enroll`
 - `POST /api/mesh/preauthkey`
+- `POST /api/mesh/register-node`
 - `GET /api/mesh/io`
-- `GET /api/mesh/interfaces`
 
 ### models (5 endpoints)
 

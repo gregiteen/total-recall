@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey } from '../api/mesh';
+import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey, registerNode } from '../api/mesh';
 import type { MeshNode, PreAuthKey } from '../api/mesh';
 
 /**
@@ -25,6 +25,9 @@ export function TailnetEnroll() {
   // config, not a property of a key. Reading it only off a minted key meant the
   // URL stayed invisible until a 15-minute countdown was already running.
   const [controlServer, setControlServer] = useState<string | null>(null);
+  const [authId, setAuthId] = useState('');
+  const [approving, setApproving] = useState(false);
+  const [approved, setApproved] = useState<string | null>(null);
 
   useEffect(() => {
     fetchNodes()
@@ -58,6 +61,26 @@ export function TailnetEnroll() {
       setError(e instanceof Error ? e.message : 'could not mint an enrollment key');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const approve = async () => {
+    setApproving(true);
+    setError(null);
+    setApproved(null);
+    try {
+      // Accept a pasted whole command as well as a bare id — the device shows
+      // the id inside `headscale nodes register --user X --key <id>`, and
+      // making someone extract a substring by hand is a needless failure.
+      const match = authId.match(/hskey-authreq-[A-Za-z0-9._-]+/);
+      const res = await registerNode(match ? match[0] : authId.trim());
+      setApproved(res.message);
+      setAuthId('');
+      setNodes(await fetchNodes().catch(() => nodes));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not approve device');
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -105,6 +128,48 @@ export function TailnetEnroll() {
           </div>
         </div>
 
+        {/*
+          Approving an interactively-registered device is the ONLY route that
+          works for iOS: the upstream Tailscale app refuses a pre-auth key when
+          pointed at a custom control server, so a phone always lands on
+          headscale's "run this command on the server" page. Until this panel
+          existed, finishing that required SSH and a CLI -- on the machine you
+          are not holding.
+        */}
+        <div
+          data-testid="enroll-approve"
+          style={{ margin: '0 0 12px', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}
+        >
+          <strong style={{ fontSize: 12 }}>Device waiting for approval?</strong>
+          <p style={{ fontSize: 12, opacity: 0.75, margin: '4px 0 8px' }}>
+            If a device shows “run the command below in the headscale server”, paste that whole line
+            (or just the <code>hskey-authreq-…</code> part) here.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              value={authId}
+              onChange={(e) => setAuthId(e.target.value)}
+              placeholder="hskey-authreq-…"
+              data-testid="enroll-authid"
+              style={{ flex: 1, minWidth: 220, fontFamily: 'var(--font-mono)', fontSize: 12 }}
+            />
+            <button
+              type="button"
+              onClick={approve}
+              disabled={approving || !authId.trim()}
+              data-testid="enroll-approve-btn"
+            >
+              {approving ? 'Approving…' : 'Approve device'}
+            </button>
+          </div>
+          {approved && (
+            <p data-testid="enroll-approved" style={{ fontSize: 12, color: '#10b981', margin: '8px 0 0' }}>
+              {approved}
+            </p>
+          )}
+        </div>
+
         <details open style={{ fontSize: 12 }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>On a phone (iOS)</summary>
           <ol style={{ paddingLeft: 18, lineHeight: 1.7, marginBottom: 6 }}>
@@ -119,12 +184,20 @@ export function TailnetEnroll() {
               <strong>Alternate Coordination Server URL</strong>.
             </li>
             <li>
-              <strong>If this device was ever signed into Tailscale's own service, turn on “Reset Keychain”.</strong>{' '}
-              Skipping this is the usual reason the app keeps going back to the public login.
+              <strong>Turn on “Reset Keychain”.</strong> Treat this as required, not optional. The app keeps
+              its node key in the iOS keychain and will otherwise replay an old registration id forever —
+              force-quitting does not clear it, and the server rejects the stale id every time while the
+              phone keeps showing a page that looks perfectly valid.
             </li>
             <li>Force-quit Tailscale from the app switcher, then reopen it — the setting is read at launch.</li>
             <li>Tap the plain <strong>Sign in</strong> option (not SSO). It should open this control server's page.</li>
-            <li>Authenticate with the key below.</li>
+            <li>
+              The page will say <em>“run the command below in the headscale server”</em>. That is expected —
+              copy the line it shows and paste it into <strong>Device waiting for approval?</strong> above.
+              <strong> Do not use the enrollment key below on a phone:</strong> the Tailscale iOS app does not
+              accept pre-auth keys against a custom control server, so interactive sign-in plus approval here
+              is the only route that works.
+            </li>
           </ol>
           <p style={{ opacity: 0.75, margin: 0 }}>
             The in-app route — account icon → <strong>Log in…</strong> → options menu →{' '}
@@ -139,7 +212,8 @@ export function TailnetEnroll() {
             <li>Install Tailscale from Google Play and make sure it is signed out.</li>
             <li>Open the app, tap the account icon, then <strong>Log in…</strong>.</li>
             <li>Open the top-right options menu → <strong>Use custom coordination server</strong>.</li>
-            <li>Enter the control server above, then authenticate with the key below.</li>
+            <li>Enter the control server above. If it accepts the key below, use it; if it shows a
+                “run this command” page instead, approve it above like iOS.</li>
           </ol>
         </details>
       </div>
@@ -164,7 +238,7 @@ export function TailnetEnroll() {
           Ephemeral (drops off the list when offline)
         </label>
         <button type="button" onClick={mint} disabled={busy} data-testid="enroll-mint" style={{ cursor: busy ? 'wait' : 'pointer' }}>
-          {busy ? 'Minting…' : minted ? 'Mint another key' : 'Get enrollment key'}
+          {busy ? 'Minting…' : minted ? 'Mint another key' : 'Get enrollment key (computers)'}
         </button>
       </div>
 

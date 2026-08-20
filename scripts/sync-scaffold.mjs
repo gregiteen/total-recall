@@ -34,6 +34,10 @@ const EXCLUDES = [
   // project inventory. New brains start with an empty catalog by design
   // (loadRegistry returns emptyRegistry() when the file is absent).
   'skills-registry/',
+  // The research queue is per-brain runtime state, not a template. It was
+  // shipping the developer's own queued topics and notes in the npm tarball,
+  // and syncing it into a repo would overwrite that repo's real queue.
+  'research-queue.jsonl',
   'memory-derived/',
   'memory-inbox/',
   'scheduler/',

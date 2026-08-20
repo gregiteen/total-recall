@@ -135,16 +135,30 @@ function writePreservingInjectedBlock(srcFile, dstFile) {
   return 'updated';
 }
 
+// Per-brain state a template must NEVER overwrite. memory-vault was always
+// here; the rest were not, and a sync across repos would have destroyed one
+// repo's 7 queued research topics and its 68-line skills catalog. If a file
+// records what THIS brain has done, it is state, not a template.
+const STATE_DIRS = new Set([
+  'memory-vault', 'memory-derived', 'memory-inbox', 'sessions', 'logs',
+  'scheduler', 'config', 'backups', 'browser-profile', 'skills-registry',
+  '.snapshots', '.git', 'node_modules',
+]);
+const STATE_FILES = new Set([
+  'research-queue.jsonl', 'daemon.pid', '.extension-connected', 'graph.canvas',
+]);
+
 function walk(dir) {
   const out = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
     if (e.isDirectory()) {
-      // memory-vault is the user's own memory. A template must never overwrite it.
-      if (e.name === 'memory-vault' || e.name === 'memory-derived' || e.name === 'sessions') continue;
-      if (e.name === '.git' || e.name === 'node_modules') continue;
+      if (STATE_DIRS.has(e.name)) continue;
       out.push(...walk(p));
-    } else out.push(p);
+    } else {
+      if (STATE_FILES.has(e.name) || e.name.endsWith('.enc')) continue;
+      out.push(p);
+    }
   }
   return out;
 }
