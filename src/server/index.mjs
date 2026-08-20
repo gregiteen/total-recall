@@ -783,6 +783,12 @@ const serverSecurityConfig = loadSecurityConfig();
 const PORT = configPort || serverSecurityConfig.bind?.port || 3000;
 import { getMeshIp } from '../core/mesh.mjs';
 import { resolveServerHost } from '../core/network-bind.mjs';
+import {
+  registerBoundHost,
+  getBoundHosts,
+  isReachableFromOtherDevices,
+} from '../core/bound-hosts.mjs';
+import { startMeshBindWatch } from '../core/mesh-late-bind.mjs';
 
 const meshIp = getMeshIp();
 const bindResolution = resolveServerHost({
@@ -835,10 +841,37 @@ try {
 
 const server = app.listen(PORT, HOST, () => {
   setupUpgradeHandler(server);
+  registerBoundHost(HOST);
   if (HOST !== configuredHost) {
     logger.error("server", `Refusing public bind '${configuredHost}' in production. Bound to ${HOST}.`);
   }
   logger.info("server", `Total Recall Brain v3.0.0 is listening on http://${HOST}:${PORT}`);
+
+  // Only meaningful once the socket is up: asking before the callback fires
+  // reads an empty set, which is "unknown", so the watch never armed.
+  if (isReachableFromOtherDevices() === false) {
+    logger.warn(
+      'server',
+      `Bound to loopback only — no other device can reach this brain at :${PORT}. `
+      + 'Watching for a mesh address in case the mesh client is still starting.',
+    );
+    startMeshBindWatch({
+      getMeshIp,
+      boundHosts: getBoundHosts,
+      logger,
+      // Never fatal: loopback is already serving, so a failure here is the
+      // status quo rather than an outage.
+      bind: (ip) =>
+        new Promise((resolve, reject) => {
+          const extra = app.listen(PORT, ip, () => {
+            setupUpgradeHandler(extra);
+            registerBoundHost(ip);
+            resolve();
+          });
+          extra.once('error', reject);
+        }),
+    });
+  }
 });
 server.on('error', (err) => {
   logger.error('server', `Failed to bind ${HOST}:${PORT}: ${err.message}. Exiting.`);
@@ -850,6 +883,7 @@ server.on('error', (err) => {
 if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
   const localServer = app.listen(PORT, '127.0.0.1', () => {
     setupUpgradeHandler(localServer);
+    registerBoundHost('127.0.0.1');
     logger.info("server", `Total Recall Brain v3.0.0 is ALSO listening on http://127.0.0.1:${PORT}`);
   });
   localServer.on('error', (err) => {
@@ -858,6 +892,7 @@ if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
     process.exit(1);
   });
 }
+
 
   logger.info("server", "┌─────────────────────────────────────────────┐");
   logger.info("server", "│  Total Recall Brain v3.0.0                  │");

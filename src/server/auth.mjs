@@ -36,7 +36,17 @@ export function loadSecurityConfig() {
       dashboard: {},
       api: { pats: [], allow_static_pats: false },
       network: { require_https: true, public_health: false, allowed_origins: [], trusted_proxies: [] },
-      bind: { host: '127.0.0.1', port: 3000, allow_public_bind: false },
+      // No `host` here, deliberately. This default used to say '127.0.0.1',
+      // which `resolveServerHost()` cannot tell apart from a user who typed
+      // that address on purpose — configuredHost wins over meshIp, so a mesh
+      // address was discovered and then thrown away. Every install without a
+      // config file bound loopback only, permanently and silently: the brain
+      // answered fine on its own console and was invisible to every other
+      // device, while the pairing card went on recommending the mesh URL.
+      // Leaving it unset lets the precedence do its job — explicit config,
+      // else mesh, else loopback. Public binds are still gated by
+      // allow_public_bind below.
+      bind: { port: 3000, allow_public_bind: false },
       rate_limits: { api_requests_per_minute: 1200 },
       sandbox: { enabled: false }
     };

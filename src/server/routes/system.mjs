@@ -126,12 +126,17 @@ router.get('/api/pairing', requireAuth, requireScope('config:read'), async (_req
   try {
     const { buildPairingInfo } = await import('../../core/pairing.mjs');
     const { getMeshIp } = await import('../../core/mesh.mjs');
+    const { getBoundHosts } = await import('../../core/bound-hosts.mjs');
     const protocol = _req.secure || String(_req.headers['x-forwarded-proto'] || '').includes('https')
       ? 'https'
       : 'http';
+    // The addresses this process actually bound — not a guess. Deriving them
+    // let the card recommend, and draw a QR code for, an address nothing was
+    // listening on, while reporting no problem at all.
     const info = buildPairingInfo({
       protocol,
       meshIp: getMeshIp(),
+      listenHosts: getBoundHosts(),
     });
     res.json(info);
   } catch (err) {
