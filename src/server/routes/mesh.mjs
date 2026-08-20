@@ -373,6 +373,61 @@ router.post('/api/mesh/register-node', requireAuth, requireScope('config:write')
 });
 
 /**
+ * Watch mode: arm the server to approve the next device that asks.
+ *
+ * POST   /api/mesh/watch   arm    (body: { ttlMinutes? })
+ * GET    /api/mesh/watch   status
+ * DELETE /api/mesh/watch   disarm
+ *
+ * This is the flow that actually works. The device generates a registration id
+ * and waits; the server approves it. Nothing is typed, copied or scanned —
+ * which matters because no Tailscale client can scan a QR to authenticate, and
+ * carrying a 40-character key from a laptop to a phone by hand is not a flow
+ * anyone completes.
+ */
+router.post('/api/mesh/watch', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    const { startWatch } = await import('../../core/registration-watch.mjs');
+    const ttlMinutes = Number(req.body?.ttlMinutes);
+    const result = await startWatch({
+      brainDir: BRAIN_DIR,
+      ttlMs: Number.isFinite(ttlMinutes) ? ttlMinutes * 60_000 : undefined,
+      register: async (authId) => {
+        const user = await resolveHeadscaleUser(BRAIN_DIR);
+        const q = `?user=${encodeURIComponent(user)}&key=${encodeURIComponent(authId)}`;
+        const out = await headscaleFetch(`/api/v1/node/register${q}`, { method: 'POST' }, BRAIN_DIR);
+        const parsed = typeof out === 'string' ? JSON.parse(out) : out;
+        const node = parsed?.node || null;
+        return { id: node?.id ?? null, name: node?.givenName || node?.name || null, ip_addresses: node?.ipAddresses || [] };
+      },
+    });
+    // `unavailable` is a real answer, not a failure: it tells the UI to offer
+    // the manual paste box instead of a button that cannot work here.
+    res.status(result.state === 'unavailable' ? 409 : 200).json(result);
+  } catch (err) {
+    res.status(500).json({ state: 'error', error: err.message || 'could not start watch' });
+  }
+});
+
+router.get('/api/mesh/watch', requireAuth, requireScope('config:read'), async (_req, res) => {
+  try {
+    const { getWatchStatus } = await import('../../core/registration-watch.mjs');
+    res.json(getWatchStatus());
+  } catch (err) {
+    res.status(500).json({ state: 'error', error: err.message });
+  }
+});
+
+router.delete('/api/mesh/watch', requireAuth, requireScope('config:write'), async (_req, res) => {
+  try {
+    const { stopWatch } = await import('../../core/registration-watch.mjs');
+    res.json(stopWatch());
+  } catch (err) {
+    res.status(500).json({ state: 'error', error: err.message });
+  }
+});
+
+/**
  * This host's I/O capability profile for agent UI generation
  * (screen, touch, mic, speaker, keyboard, camera, headless, …).
  */

@@ -314,6 +314,11 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   assign('notes', (v) => (v == null || v === '' ? null : String(v)));
   assign('project_path', (v) => (v == null || v === '' ? null : String(v)));
   assign('headscale_url', (v) => (v == null || v === '' ? null : String(v)));
+  // Command that prints the headscale server log. Watch mode needs it because
+  // headscale exposes no pending-registration API -- a device waiting to be
+  // approved is visible only in the log. Kept as config so no host is ever
+  // named in code.
+  assign('headscale_log_command', (v) => (v == null || v === '' ? null : String(v)));
   // Live provider account / usage / subscription tracking (provider-account-sync)
   assign('tracking_exempt', (v) => !!v);
   assign('tracking_status', (v) => {
@@ -523,6 +528,7 @@ export async function listSecretsMeta(brainDir) {
       updated_at: m.updated_at || null,
       rotated_at: m.rotated_at || null,
       headscale_url: m.headscale_url || null,
+      headscale_log_command: m.headscale_log_command || null,
       usage_30d: usage,
       tiers: catalog?.tiers || [],
       // Provider account/usage tracking (must be ok or exempt — else error)
@@ -762,6 +768,8 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     monthly_cap_usd: opts.monthly_cap_usd !== undefined ? opts.monthly_cap_usd : prev.monthly_cap_usd,
     api_docs_url: opts.api_docs_url !== undefined ? opts.api_docs_url : prev.api_docs_url,
     headscale_url: opts.headscale_url !== undefined ? opts.headscale_url : prev.headscale_url,
+    headscale_log_command:
+      opts.headscale_log_command !== undefined ? opts.headscale_log_command : prev.headscale_log_command,
     rotate_every_days: opts.rotate_every_days !== undefined ? opts.rotate_every_days : prev.rotate_every_days,
     auto_rotate: opts.auto_rotate !== undefined ? opts.auto_rotate : prev.auto_rotate,
     notes: opts.notes !== undefined ? opts.notes : prev.notes,

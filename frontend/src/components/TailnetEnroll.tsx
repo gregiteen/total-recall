@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey, registerNode } from '../api/mesh';
+import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey, registerNode, startWatch, getWatchStatus, stopWatch } from '../api/mesh';
+import type { WatchStatus } from '../api/mesh';
 import type { MeshNode, PreAuthKey } from '../api/mesh';
 
 /**
@@ -28,6 +29,7 @@ export function TailnetEnroll() {
   const [authId, setAuthId] = useState('');
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState<string | null>(null);
+  const [watch, setWatch] = useState<WatchStatus | null>(null);
 
   useEffect(() => {
     fetchNodes()
@@ -62,6 +64,34 @@ export function TailnetEnroll() {
     } finally {
       setBusy(false);
     }
+  };
+
+  // Poll while armed. The server holds the watch; this only mirrors it, so a
+  // page reload cannot orphan a running watch.
+  useEffect(() => {
+    if (watch?.state !== 'watching') return undefined;
+    const id = setInterval(async () => {
+      try {
+        const st = await getWatchStatus();
+        setWatch(st);
+        if (st.state === 'registered') setNodes(await fetchNodes().catch(() => nodes));
+      } catch { /* transient */ }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [watch?.state, nodes]);
+
+  const arm = async () => {
+    setError(null);
+    setApproved(null);
+    try {
+      setWatch(await startWatch(5));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not start watching');
+    }
+  };
+
+  const disarm = async () => {
+    try { setWatch(await stopWatch()); } catch { setWatch(null); }
   };
 
   const approve = async () => {
@@ -136,11 +166,63 @@ export function TailnetEnroll() {
           existed, finishing that required SSH and a CLI -- on the machine you
           are not holding.
         */}
+        {/*
+          The primary action. The device generates the id and waits; the server
+          approves it. Nothing is typed, copied or scanned — which matters
+          because no Tailscale client scans QR codes to authenticate, and moving
+          a 40-character key from a laptop to a phone by hand is not a flow
+          anyone finishes.
+        */}
         <div
+          data-testid="enroll-watch"
+          style={{ margin: '0 0 12px', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}
+        >
+          <strong style={{ fontSize: 12 }}>Add a device</strong>
+          <p style={{ fontSize: 12, opacity: 0.75, margin: '4px 0 8px' }}>
+            Press this, then sign in on the device. It joins on its own — nothing to copy.
+          </p>
+
+          {watch?.state === 'watching' ? (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span data-testid="watch-active" style={{ fontSize: 12, color: '#10b981' }}>
+                ● Watching — sign in on the device now
+                {typeof watch.remaining_ms === 'number'
+                  ? ` (${Math.ceil(watch.remaining_ms / 1000)}s left)`
+                  : ''}
+              </span>
+              <button type="button" onClick={disarm} data-testid="watch-stop">Stop</button>
+            </div>
+          ) : (
+            <button type="button" onClick={arm} data-testid="watch-start">
+              Watch for a device
+            </button>
+          )}
+
+          {watch?.state === 'registered' && (
+            <p data-testid="watch-registered" style={{ fontSize: 12, color: '#10b981', margin: '8px 0 0' }}>
+              {watch.node?.name || 'Device'} joined the tailnet
+              {watch.node?.ip_addresses?.[0] ? ` (${watch.node.ip_addresses[0]})` : ''}.
+            </p>
+          )}
+          {watch?.state === 'expired' && (
+            <p data-testid="watch-expired" style={{ fontSize: 12, color: '#f59e0b', margin: '8px 0 0' }}>
+              Nothing signed in before the watch ran out. Press it again when the device is ready.
+            </p>
+          )}
+          {watch?.state === 'unavailable' && (
+            <p data-testid="watch-unavailable" style={{ fontSize: 12, color: '#f59e0b', margin: '8px 0 0' }}>
+              {watch.error} Use the manual box below in the meantime.
+            </p>
+          )}
+        </div>
+
+        <details
           data-testid="enroll-approve"
           style={{ margin: '0 0 12px', padding: 12, borderRadius: 8, border: '1px solid var(--border)' }}
         >
-          <strong style={{ fontSize: 12 }}>Device waiting for approval?</strong>
+          <summary style={{ cursor: 'pointer' }}>
+            <strong style={{ fontSize: 12 }}>Device waiting for approval? (manual)</strong>
+          </summary>
           <p style={{ fontSize: 12, opacity: 0.75, margin: '4px 0 8px' }}>
             If a device shows “run the command below in the headscale server”, paste that whole line
             (or just the <code>hskey-authreq-…</code> part) here.
@@ -173,7 +255,7 @@ export function TailnetEnroll() {
               {approved}
             </p>
           )}
-        </div>
+        </details>
 
         <details open style={{ fontSize: 12 }}>
           <summary style={{ cursor: 'pointer', fontWeight: 600 }}>On a phone (iOS)</summary>

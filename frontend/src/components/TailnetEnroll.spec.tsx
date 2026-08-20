@@ -6,8 +6,12 @@ vi.mock('../api/mesh', () => ({
   fetchNodes: vi.fn(),
   fetchEnrollmentStatus: vi.fn(),
   mintPreAuthKey: vi.fn(),
+  registerNode: vi.fn(),
+  startWatch: vi.fn(),
+  getWatchStatus: vi.fn(),
+  stopWatch: vi.fn(),
 }));
-import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey } from '../api/mesh';
+import { fetchNodes, fetchEnrollmentStatus, mintPreAuthKey, startWatch } from '../api/mesh';
 
 const node = (over = {}) => ({
   hostname: 'laptop', ip: '100.64.0.3', online: true, self: false, os: 'macOS', ...over,
@@ -148,6 +152,30 @@ describe('TailnetEnroll', () => {
     expect(screen.getByText(/Use an auth key/i)).toBeTruthy();
     // Crostini installs are known to crash the container on later startups.
     expect(screen.getByText(/Crostini/i)).toBeTruthy();
+  });
+
+  it('leads with a watch button rather than a key to carry between devices', async () => {
+    // No Tailscale client can scan a QR to authenticate, and nobody types a
+    // 40-character secret from a laptop into a phone. The device generates the
+    // id and waits; the server approves it.
+    vi.mocked(startWatch).mockResolvedValue({ state: 'watching', remaining_ms: 300000 } as never);
+    render(<TailnetEnroll />);
+    const btn = await screen.findByTestId('watch-start');
+    fireEvent.click(btn);
+    await waitFor(() => expect(screen.getByTestId('watch-active')).toBeTruthy());
+    expect(startWatch).toHaveBeenCalled();
+  });
+
+  it('says watch mode is unavailable instead of offering a button that cannot work', async () => {
+    vi.mocked(startWatch).mockResolvedValue({
+      state: 'unavailable',
+      error: 'no log source is configured.',
+    } as never);
+    render(<TailnetEnroll />);
+    fireEvent.click(await screen.findByTestId('watch-start'));
+    await waitFor(() => expect(screen.getByTestId('watch-unavailable')).toBeTruthy());
+    // and the manual path is still reachable
+    expect(screen.getByTestId('enroll-approve')).toBeTruthy();
   });
 
 });

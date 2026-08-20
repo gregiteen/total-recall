@@ -303,6 +303,38 @@ export async function registerNode(authId: string, user?: string): Promise<Regis
   return data as RegisteredNode;
 }
 
+export interface WatchStatus {
+  state: 'idle' | 'watching' | 'registered' | 'expired' | 'stopped' | 'unavailable' | 'error';
+  id?: string | null;
+  node?: { id: string | null; name: string | null; ip_addresses: string[] } | null;
+  error?: string | null;
+  remaining_ms?: number;
+  source?: string;
+}
+
+/** Arm the server to approve the next device that signs in. */
+export async function startWatch(ttlMinutes?: number): Promise<WatchStatus> {
+  const res = await apiFetch(`${API_BASE}/api/mesh/watch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ttlMinutes ? { ttlMinutes } : {}),
+  });
+  // 409 means watch mode is not available here — a real answer the UI acts on,
+  // not an error to throw away.
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && res.status !== 409) throw new Error(data.error || `watch failed: ${res.status}`);
+  return data as WatchStatus;
+}
+
+export async function getWatchStatus(): Promise<WatchStatus> {
+  return get('/api/mesh/watch');
+}
+
+export async function stopWatch(): Promise<WatchStatus> {
+  const res = await apiFetch(`${API_BASE}/api/mesh/watch`, { method: 'DELETE' });
+  return (await res.json().catch(() => ({ state: 'idle' }))) as WatchStatus;
+}
+
 export async function fetchEnrollmentStatus(): Promise<EnrollmentStatus> {
   return get('/api/mesh/enrollment');
 }
