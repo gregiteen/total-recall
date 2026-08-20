@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.25.2] — 2026-08-19
+
+### 🚀 Features
+- **Approve a device from the UI** (`POST /api/mesh/register-node`): the Tailscale iOS app does not accept pre-auth keys against a custom control server — an upstream app limitation — so a phone always lands on headscale's "run this command on the server" page and waits for server-side approval. Until now that approval was reachable only over SSH and a CLI, on the machine you are not holding. Settings now takes the line the device shows (whole command or bare id) and registers it. The `hskey-authreq-` prefix is validated up front so a malformed paste gets a usable message instead of headscale's opaque 500.
+
+### 🐛 Bug Fixes
+- **The iOS enrollment steps contradicted themselves**: they sent you into interactive sign-in and then told you to authenticate with the pre-auth key, which that flow has no field for. The key card is now labelled for computers, and the phone steps say the "run this command" page is expected and point at the approval box.
+- **`sync-repo` could destroy a brain's own state** (data loss; upgrade from 3.25.1): it skipped `memory-vault/` but nothing else, so a template sync overwrote `research-queue.jsonl` and `skills-registry/index.yaml` — files that record what *that* brain has done. Caught while propagating across 16 repos: one had 7 queued research topics and a 68-line skills catalog that the sync would have replaced with template contents. The skill's Core Directive #4 tells agents to run this, so the blast radius was every brain. Now skips per-brain state as a class — `memory-inbox/`, `logs/`, `scheduler/`, `config/`, `backups/`, `browser-profile/`, `skills-registry/`, `.snapshots/`, `research-queue.jsonl`, `daemon.pid`, `.extension-connected`, `graph.canvas`, `*.enc` — rather than naming one directory and hoping.
+- **The npm tarball shipped the developer's research queue**: `research-queue.jsonl` is per-brain runtime state, but `sync-scaffold` copied it into `scaffold/`, so seven queued topics and their notes went out in the package. Excluded from the sync and removed from the scaffold. (Same failure as the `skills-registry` leak fixed in 3.25.0: state kept being treated as a template.)
+
 ## [3.25.1] — 2026-08-19
 
 ### 🐛 Bug Fixes

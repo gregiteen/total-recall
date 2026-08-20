@@ -16,7 +16,15 @@ import {
   readSshConfig,
   resolveNodeAccess,
 } from '../../core/mesh-access.mjs';
-import { createHeadscalePreAuthKey, resolveHeadscaleConfig } from '../../core/headscale-client.mjs';
+import {
+  createHeadscalePreAuthKey,
+  resolveHeadscaleConfig,
+  resolveHeadscaleUser,
+  headscaleFetch,
+} from '../../core/headscale-client.mjs';
+
+// headscale rejects anything else with a 500; validate up front instead.
+const AUTH_REQUEST_PREFIX = 'hskey-authreq-';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
 import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
 import {
@@ -301,6 +309,63 @@ router.post('/api/mesh/preauthkey', requireAuth, requireScope('config:write'), a
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message || 'could not mint enrollment key' });
+  }
+});
+
+/**
+ * POST /api/mesh/register-node
+ * Approve a device that registered interactively.
+ *
+ * This is the ONLY path that works for iOS. The upstream Tailscale iOS app
+ * does not accept a pre-auth key when pointed at a custom control server, so a
+ * phone always lands on headscale's "run this command on the server" page and
+ * waits for server-side approval. Without this endpoint that approval was only
+ * reachable over SSH + CLI, which is exactly the machine the user is not
+ * holding.
+ *
+ * Body: { auth_id, user? }
+ */
+router.post('/api/mesh/register-node', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    const authId = String(req.body?.auth_id || '').trim();
+    if (!authId) {
+      return res.status(400).json({ success: false, message: 'auth_id is required (the hskey-authreq-… value shown on the device)' });
+    }
+    // Fail with the fix rather than passing a malformed id through to a 500.
+    if (!authId.startsWith(AUTH_REQUEST_PREFIX)) {
+      return res.status(400).json({
+        success: false,
+        message: `that does not look like a registration id — expected it to start with "${AUTH_REQUEST_PREFIX}". `
+          + 'Copy the whole value from the device screen, not the surrounding command.',
+      });
+    }
+
+    const user = await resolveHeadscaleUser(BRAIN_DIR, req.body?.user);
+    const query = `?user=${encodeURIComponent(user)}&key=${encodeURIComponent(authId)}`;
+    const result = await headscaleFetch(`/api/v1/node/register${query}`, { method: 'POST' }, BRAIN_DIR);
+    const node = (typeof result === 'string' ? JSON.parse(result) : result)?.node ?? null;
+
+    res.json({
+      success: true,
+      user,
+      node: node && {
+        id: node.id ?? null,
+        name: node.name ?? node.givenName ?? null,
+        ip_addresses: node.ipAddresses ?? [],
+        online: node.online ?? false,
+      },
+      message: node?.name ? `${node.name} joined the tailnet.` : 'Device registered.',
+    });
+  } catch (err) {
+    const msg = String(err?.message || '');
+    // headscale answers 500 for an expired/unknown id; say so in those terms.
+    const stale = /not found|expired|invalid/i.test(msg);
+    res.status(stale ? 409 : 500).json({
+      success: false,
+      message: stale
+        ? 'That registration id is no longer valid — it expires quickly. Reopen sign-in on the device to get a fresh one.'
+        : msg || 'could not register device',
+    });
   }
 });
 

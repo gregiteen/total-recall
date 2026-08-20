@@ -37,7 +37,7 @@ describe('TailnetEnroll', () => {
     expect((await screen.findByTestId('enroll-login-server')).textContent).toContain(
       'https://control.example.org',
     );
-    expect(screen.getByText(/On a phone/i)).toBeTruthy();
+    expect(screen.getByText('On a phone (iOS)')).toBeTruthy();
     expect(mintPreAuthKey).not.toHaveBeenCalled();
   });
 

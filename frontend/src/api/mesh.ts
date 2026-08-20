@@ -1,4 +1,4 @@
-import { get, post } from './_base';
+import { get, post, apiFetch, API_BASE } from './_base';
 
 export interface MeshInterfaceSummary {
   name: string;
@@ -278,6 +278,31 @@ export interface EnrollResult {
 }
 
 /** Enrollment state of this node on the mesh control server. */
+export interface RegisteredNode {
+  success: boolean;
+  user?: string;
+  message: string;
+  node?: { id: string | null; name: string | null; ip_addresses: string[]; online: boolean } | null;
+}
+
+/**
+ * Approve a device that registered interactively.
+ *
+ * iOS has no other option: the upstream Tailscale app refuses pre-auth keys
+ * against a custom control server, so a phone always ends up on headscale's
+ * "run this on the server" page waiting for approval.
+ */
+export async function registerNode(authId: string, user?: string): Promise<RegisteredNode> {
+  const res = await apiFetch(`${API_BASE}/api/mesh/register-node`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auth_id: authId, ...(user ? { user } : {}) }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || `register failed: ${res.status}`);
+  return data as RegisteredNode;
+}
+
 export async function fetchEnrollmentStatus(): Promise<EnrollmentStatus> {
   return get('/api/mesh/enrollment');
 }
