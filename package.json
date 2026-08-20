@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.25.1",
+  "version": "3.25.2",
   "description": "Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.",
   "type": "module",
   "workspaces": [
