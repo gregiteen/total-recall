@@ -51,4 +51,14 @@ describe('MobilePairing', () => {
     expect(screen.getByTestId('pairing-qr')).toBeTruthy();
     expect(screen.getByTestId('pairing-warnings')).toBeTruthy();
   });
+  it('sends you to enrol the device instead of hand-waving "log into your tailnet"', async () => {
+    // The old copy said "Log into your tailnet/headscale server" -- five words
+    // covering an iOS flow that needs the alternate coordination server, a
+    // keychain reset and server-side approval. Scanning a 100.64.x.x QR from a
+    // phone that has not joined just times out.
+    render(<MobilePairing />);
+    expect(await screen.findByText(/Add a device to the tailnet/i)).toBeTruthy();
+    expect(screen.getByText(/Reset Keychain/i)).toBeTruthy();
+  });
+
 });
