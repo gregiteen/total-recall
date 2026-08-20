@@ -12,6 +12,8 @@
  */
 
 import { execSync } from 'node:child_process';
+import { rsyncExcludes } from '../src/core/brain-state.mjs';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,35 +21,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = path.join(ROOT, '.agent', 'skills', 'total-recall') + '/';
 const TARGET = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall') + '/';
 
-// ── Step 1: Sync everything EXCEPT the memory-vault ──
-// These are runtime/personal dirs that never ship
-const EXCLUDES = [
-  'node_modules',
-  'logs/',
-  'sessions/',
-  'backups/',
-  'config/',
-  // The skills registry is developer-local state: it records absolute
-  // source_paths of every repo on THIS machine. Syncing it shipped 562 lines of
-  // /Users/<name>/... and named 16 third-party repos inside the npm tarball —
-  // an open-source-invariant violation and a disclosure of the author's whole
-  // project inventory. New brains start with an empty catalog by design
-  // (loadRegistry returns emptyRegistry() when the file is absent).
-  'skills-registry/',
-  // The research queue is per-brain runtime state, not a template. It was
-  // shipping the developer's own queued topics and notes in the npm tarball,
-  // and syncing it into a repo would overwrite that repo's real queue.
-  'research-queue.jsonl',
-  'memory-derived/',
-  'memory-inbox/',
-  'scheduler/',
-  'browser-profile/',
-  '*.enc',
-  '.extension-connected',
-  'graph.canvas',
-  // Exclude the ENTIRE vault — we handle it separately via allowlist
-  'memory-vault/',
-];
+// ── Step 1: Sync everything EXCEPT per-brain state ──
+// The exclusion list is NOT maintained here. It lives in src/core/brain-state.json
+// because this file, sync-repo.mjs and the scaffold each used to keep their own
+// copy, and every drift between them shipped or destroyed a file.
+const EXCLUDES = [...rsyncExcludes(), '.extension-connected', 'graph.canvas'];
 
 const excludeArgs = EXCLUDES.map(e => `--exclude='${e}'`).join(' ');
 
@@ -99,6 +77,14 @@ try {
       console.log(`   🗑 Removed non-curated node: ${rel}`);
     }
   }
+
+  // The manifest must travel with sync-repo.mjs: that script runs inside a
+  // brain, where src/core is not importable. Copied after the rsync so the
+  // canonical version wins over the live brain's copy.
+  const manifestDst = path.join(TARGET, 'scripts', 'brain-state.json');
+  fs.mkdirSync(path.dirname(manifestDst), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'src', 'core', 'brain-state.json'), manifestDst);
+  console.log('   \u2713 brain-state.json → scaffold/scripts/');
 
   console.log(`\n✅ Scaffold synced. ${vaultSynced} curated vault node(s) shipped.`);
 } catch (err) {

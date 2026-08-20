@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-20T15:18:35.106Z
+generated_at: 2026-08-20T15:29:02.308Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (571 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (574 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -119,11 +119,11 @@ scaffold/
 scratch/
   dummy-repo/
     .agent/  (1 items)
-scripts/  (13 items)
+scripts/  (14 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (226 items)
+  core/  (229 items)
   server/
     routes/  (90 items)
 templates/
@@ -569,10 +569,11 @@ templates/
 
 ## Core Modules
 
-105 modules in `src/core/`:
+106 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
+- **brain-state** — exports: isBrainState, rsyncExcludes, findBrainState
 - **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
 - **clarity-rewriter** — exports: runClarityReview, runStalenessCheck, runFactSeeker, runCutoffAudit, writeCorrection
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
