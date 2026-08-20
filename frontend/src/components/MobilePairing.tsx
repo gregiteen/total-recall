@@ -243,7 +243,17 @@ export function MobilePairing() {
 
       <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(59, 130, 246, 0.06)', borderRadius: 8, border: '1px solid rgba(59, 130, 246, 0.15)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
         <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>📱 How to connect your phone:</div>
-        <div><strong>Option A (WireGuard / Mesh — Recommended):</strong> Install the standard <em>Tailscale</em> app on your phone (iOS App Store / Google Play). Log into your tailnet/headscale server. Scan the <code>100.64.x.x</code> QR code above.</div>
+        <div>
+          <strong>Option A (WireGuard / Mesh — Recommended):</strong> The device has to be <em>on the tailnet</em>
+          before a <code>100.64.x.x</code> address can reach anything — scanning this QR from a phone that has not
+          joined will simply time out. Join it first in{' '}
+          <strong>Add a device to the tailnet</strong>, directly below, which has the per-platform steps.
+          <div style={{ marginTop: 4, opacity: 0.85 }}>
+            Short version: <strong>Android / ChromeOS</strong> take an enrollment key directly. <strong>iOS</strong>
+            {' '}cannot — it needs the alternate coordination server set in iOS Settings, <em>Reset Keychain</em> turned
+            on, and then approval from that card. Once joined, come back and scan the <code>100.64.x.x</code> code.
+          </div>
+        </div>
         <div style={{ marginTop: 4 }}><strong>Option B (Local Home Wi-Fi):</strong> Check <strong>Allow Public Bind</strong> in <em>Network & Binding</em> below, restart the server, and scan your local Wi-Fi LAN QR code (e.g. <code>192.168.x.x</code>).</div>
       </div>
     </div>

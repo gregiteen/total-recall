@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.25.6] — 2026-08-19
+
+### 🐛 Bug Fixes
+- **Mobile Device Pairing said "Log into your tailnet/headscale server"** — five words covering the entire flow that fails. A `100.64.x.x` QR cannot reach anything from a device that has not joined the tailnet; it simply times out, with nothing on screen explaining why. The card now says the device must join first, points at the enrolment card below it, and carries the one-line difference that matters: Android and ChromeOS take an enrollment key directly, iOS needs the alternate coordination server, Reset Keychain, and server-side approval.
+
 ## [3.25.5] — 2026-08-19
 
 ### 🐛 Bug Fixes
