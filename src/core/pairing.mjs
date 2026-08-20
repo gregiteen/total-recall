@@ -1,6 +1,18 @@
 /**
  * Mobile pairing endpoints — reachable URLs for QR codes.
  * Never hardcodes personal hostnames; derives from live interfaces + server port.
+ *
+ * `listenHosts` MUST be the addresses the server actually bound. This used to be
+ * derived as "loopback plus whatever getMeshIp() says right now", which is a
+ * guess that silently fabricates a binding: a brain that lost the boot race
+ * against the mesh client is listening on loopback alone, yet the derivation
+ * claimed the mesh address too. The card then recommended that address and drew
+ * a QR code for it, with no warning, because every reachability check below
+ * reads these hosts. One machine served that dead QR for a week.
+ *
+ * When the caller cannot observe the real bindings the result is still returned,
+ * but flagged `listen_hosts_source: 'derived'` and `reachable_from_other_devices:
+ * null` — unknown, which the UI must not render as working.
  */
 import { listLocalInterfaces, isLanIpv4, isOverlayIpv4 } from './network-interfaces.mjs';
 import { getMeshIp } from './mesh.mjs';
@@ -21,9 +33,9 @@ export function buildPairingInfo(opts = {}) {
     ? opts.listInterfaces()
     : listLocalInterfaces();
   const meshIp = opts.meshIp !== undefined ? opts.meshIp : getMeshIp();
-  const listenHosts = Array.isArray(opts.listenHosts)
-    ? opts.listenHosts
-    : deriveListenHosts(meshIp);
+  const observedHosts = Array.isArray(opts.listenHosts) && opts.listenHosts.length > 0;
+  const listenHosts = observedHosts ? opts.listenHosts : deriveListenHosts();
+  const listenHostsSource = observedHosts ? 'actual' : 'derived';
 
   /** @type {Array<{ kind: string, label: string, ip: string, url: string, interface?: string, recommended: boolean, reachable_hint: string }>} */
   const endpoints = [];
@@ -41,6 +53,8 @@ export function buildPairingInfo(opts = {}) {
       interface: ifaceName || null,
       recommended: !!recommended,
       reachable_hint: hint,
+      // Filled in below, once listenHosts is known to be observed or guessed.
+      listening: null,
     });
   };
 
@@ -143,10 +157,32 @@ export function buildPairingInfo(opts = {}) {
     warnings.push(`Mesh IP ${meshIp} is present but may not be the active listen address.`);
   }
 
+  // Only claim a per-endpoint verdict when the bindings were observed. A guess
+  // that renders as a green tick is worse than no tick at all.
+  for (const e of endpoints) {
+    e.listening = observedHosts ? isListening(e.ip) : null;
+  }
+
+  const reachable = observedHosts
+    ? listenHosts.some((h) => h !== '127.0.0.1' && h !== '::1' && h !== 'localhost')
+    : null;
+
+  if (reachable === false) {
+    // The headline problem, stated first: no QR on this card can work.
+    warnings.unshift(
+      `This brain is listening on loopback only (${listenHosts.join(', ')}), so no other `
+      + 'device can open its UI — a phone scanning any code here will fail to connect. '
+      + 'This usually means the mesh client was still starting when the brain launched. '
+      + 'Restart the brain once the mesh is up, or set a bind host, and this resolves.',
+    );
+  }
+
   return {
     port,
     protocol,
     listen_hosts: listenHosts,
+    listen_hosts_source: listenHostsSource,
+    reachable_from_other_devices: reachable,
     preferred_url: preferred?.url || null,
     endpoints,
     warnings,
@@ -154,15 +190,18 @@ export function buildPairingInfo(opts = {}) {
   };
 }
 
-function deriveListenHosts(meshIp) {
+/**
+ * Last-resort guess for callers that cannot observe the real sockets.
+ *
+ * Deliberately does NOT include the mesh address. `getMeshIp()` reporting one
+ * means the mesh client is up *now* — it says nothing about whether this
+ * process bound it, and assuming so is exactly the bug this module documents.
+ * Only an explicitly configured host is added, because that one was at least
+ * requested.
+ */
+function deriveListenHosts() {
   const hosts = new Set(['127.0.0.1']);
-  if (meshIp) hosts.add(meshIp);
   const envHost = process.env.HOST || process.env.TR_HOST;
   if (envHost) hosts.add(envHost);
-  // Production dual-bind pattern in server/index.mjs
-  if (meshIp && meshIp !== '127.0.0.1') {
-    hosts.add(meshIp);
-    hosts.add('127.0.0.1');
-  }
   return [...hosts];
 }

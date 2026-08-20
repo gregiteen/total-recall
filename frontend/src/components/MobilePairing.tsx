@@ -10,6 +10,8 @@ export interface PairingEndpoint {
   interface?: string | null;
   recommended: boolean;
   reachable_hint: string;
+  /** null when the server could not observe its own sockets. */
+  listening?: boolean | null;
 }
 
 export interface PairingInfo {
@@ -19,6 +21,10 @@ export interface PairingInfo {
   endpoints: PairingEndpoint[];
   warnings: string[];
   listen_hosts: string[];
+  /** 'actual' = observed sockets. 'derived' = a guess; do not render as fact. */
+  listen_hosts_source?: 'actual' | 'derived';
+  /** null means unknown — must not be shown as either working or broken. */
+  reachable_from_other_devices?: boolean | null;
 }
 
 export function MobilePairing() {
@@ -67,6 +73,8 @@ export function MobilePairing() {
         ],
         warnings: ['Could not load live network endpoints from the brain.'],
         listen_hosts: [],
+        listen_hosts_source: 'derived',
+        reachable_from_other_devices: null,
       });
     } finally {
       setLoading(false);
@@ -78,6 +86,9 @@ export function MobilePairing() {
   }, []);
 
   const selected = info?.endpoints?.find((e) => e.url === selectedUrl) || null;
+  // Observed, not guessed. `undefined`/`null` means the server could not tell
+  // us — that is not the same as broken, so it must not raise this banner.
+  const unreachable = info?.reachable_from_other_devices === false;
   const isLoopback =
     selected?.kind === 'loopback' ||
     selectedUrl.includes('127.0.0.1') ||
@@ -110,6 +121,39 @@ export function MobilePairing() {
         Scan with your phone to open this Total Recall dashboard. Prefer <strong>LAN</strong> on the same
         Wi‑Fi, or <strong>Tailscale/mesh</strong> if the phone is on your tailnet.
       </p>
+
+      {unreachable && (
+        <div
+          role="alert"
+          data-testid="pairing-unreachable"
+          style={{
+            marginBottom: 16,
+            padding: '12px 14px',
+            borderRadius: 8,
+            border: '1px solid #ef4444',
+            background: 'rgba(239, 68, 68, 0.08)',
+            color: 'var(--text-primary)',
+            fontSize: 13,
+            lineHeight: 1.55,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>
+            No other device can reach this brain
+          </div>
+          <div style={{ color: 'var(--text-secondary)' }}>
+            It is listening on{' '}
+            <code>{info?.listen_hosts?.join(', ') || 'loopback'}</code> only, so every code on this
+            card is a dead address — a phone that scans one will time out no matter how it is
+            connected. This normally means the mesh client was still starting when the brain
+            launched, so the brain never got a mesh address to bind.
+            <div style={{ marginTop: 6 }}>
+              <strong>Fix:</strong> restart the brain now that the mesh is up. It re-checks for a
+              mesh address on its own for the first few minutes after launch, so a restart is
+              usually all this needs.
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div data-testid="pairing-loading" style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>
@@ -149,7 +193,33 @@ export function MobilePairing() {
             data-testid="pairing-qr"
           >
             {selectedUrl ? (
-              <QRCodeSVG value={selectedUrl} size={150} level="M" includeMargin />
+              <div style={{ position: 'relative' }}>
+                {/* Greyed rather than hidden: the address is still the right one
+                    to reach for once the bind is fixed. */}
+                <div style={{ opacity: unreachable ? 0.15 : 1 }}>
+                  <QRCodeSVG value={selectedUrl} size={150} level="M" includeMargin />
+                </div>
+                {unreachable && (
+                  <div
+                    data-testid="pairing-qr-dead"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      textAlign: 'center',
+                      padding: 8,
+                      color: '#b91c1c',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Nothing is listening on this address
+                  </div>
+                )}
+              </div>
             ) : (
               <div style={{ width: 150, height: 150 }} />
             )}
@@ -173,6 +243,7 @@ export function MobilePairing() {
                     <option key={ep.url} value={ep.url}>
                       {ep.label}
                       {ep.recommended ? ' ★' : ''} — {ep.url}
+                      {ep.listening === false ? ' (not listening)' : ''}
                     </option>
                   ))}
                 </select>

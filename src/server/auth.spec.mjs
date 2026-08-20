@@ -237,3 +237,26 @@ describe('session cookie Secure flag', () => {
     expect(response.cookies.find((c) => c.name === 'session').options.secure).toBe(true);
   });
 });
+
+describe('loadSecurityConfig defaults', () => {
+  it('does not pin bind.host, so a discovered mesh address can be used', async () => {
+    // A default that is indistinguishable from a user's explicit choice is not
+    // a default. `bind.host: '127.0.0.1'` here beat the discovered mesh address
+    // in resolveServerHost(), so every install without a security.yml bound
+    // loopback only -- permanently, with no warning, while the pairing card
+    // went on recommending a mesh URL nothing was listening on.
+    const fsMod = await import('node:fs');
+    const spy = vi.spyOn(fsMod.default, 'existsSync').mockReturnValue(false);
+    try {
+      const { loadSecurityConfig } = await import('./auth.mjs');
+      const cfg = loadSecurityConfig();
+      expect(cfg.bind).toBeDefined();
+      expect(cfg.bind.host).toBeUndefined();
+      // The public-bind guard is the thing that actually protects the host,
+      // and it must survive this change.
+      expect(cfg.bind.allow_public_bind).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
