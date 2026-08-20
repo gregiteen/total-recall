@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-20T16:04:36.416Z
+generated_at: 2026-08-20T17:35:14.954Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (574 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (580 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -123,7 +123,7 @@ scripts/  (14 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (229 items)
+  core/  (235 items)
   server/
     routes/  (90 items)
 templates/
@@ -339,7 +339,7 @@ templates/
 - `DELETE /api/memory/:slug`
 - `POST /api/memory/search/semantic`
 
-### mesh (17 endpoints)
+### mesh (20 endpoints)
 
 - `GET /api/mesh/leader`
 - `GET /api/mesh/nodes`
@@ -350,7 +350,7 @@ templates/
 - `POST /api/mesh/enroll`
 - `POST /api/mesh/preauthkey`
 - `POST /api/mesh/register-node`
-- `GET /api/mesh/io`
+- `POST /api/mesh/watch`
 
 ### models (5 endpoints)
 
@@ -569,10 +569,11 @@ templates/
 
 ## Core Modules
 
-106 modules in `src/core/`:
+109 modules in `src/core/`:
 
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
+- **bound-hosts** — exports: registerBoundHost, unregisterBoundHost, getBoundHosts, resetBoundHosts, isLoopbackHost, isReachableFromOtherDevices
 - **brain-state** — exports: isBrainState, rsyncExcludes, findBrainState
 - **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
 - **clarity-rewriter** — exports: runClarityReview, runStalenessCheck, runFactSeeker, runCutoffAudit, writeCorrection
@@ -606,6 +607,7 @@ templates/
 - **mesh-access** — exports: parseSshConfig, readSshConfig, sshConfigMatchScore, findSshConfigEntryForNode, accessFromSshConfigEntry, classifyTailscaleVariant, meshSshFromVariant, resolveNodeAccess
 - **mesh-auth** — exports: normalizeRemoteAddress, isMeshOrLoopbackAddress, getMeshSyncToken, getMeshSyncAuthorization, requireMeshSyncAuth
 - **mesh-enroll** — exports: resetAutoEnrollThrottle, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled, buildUpArgs
+- **mesh-late-bind** — exports: startMeshBindWatch
 - **mesh** — exports: normalizeHostname, meshNodeDocSlug, meshNodeKey, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname
 - **migrate** — exports: runMigration, testMigration
 - **network-bind** — exports: resolveServerHost
@@ -628,6 +630,7 @@ templates/
 - **provider-catalog** — exports: getProvider, providerForKeyName, listProviders
 - **provider-rotation-recipes** — exports: getRecipe, listVerifiedRecipes, valueLooksValid
 - **quick-capture** — exports: isValidSource, captureMessage, listCaptureInbox
+- **registration-watch** — exports: resolveLogSource, latestAuthId, getWatchStatus, clearWatchResult, stopWatch, startWatch
 - **remote-vault-sync** — exports: importRemoteBundle, runSync
 - **repo-sync** — exports: syncAllRepos, syncSingleRepo
 - **research-queue** — exports: compileResearchProjectSummary, syncResearchProjectNode, loadQueue, saveQueue, listQueue, addToQueue, updateQueueItem, removeFromQueue
