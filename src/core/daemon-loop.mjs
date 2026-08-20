@@ -337,6 +337,38 @@ async function main() {
         }
       }
 
+      // Bound the caches. Internally throttled to once every six hours via a
+      // marker file, so calling it on the heartbeat costs a stat. Nothing
+      // pruned anything before this: one brain reached 3.2 GB, half of it a
+      // single unrotated daemon.log.
+      if (taskCount > 0 && taskCount % (60000 / TASK_SLEEP_MS) === 0) {
+        try {
+          const { maybePruneCaches, formatBytes } = await import('./cache-prune.mjs');
+          const pruned = maybePruneCaches({ brainDir: BRAIN_DIR });
+          if (pruned && pruned.freed_bytes > 0) {
+            logger.info(
+              'daemon-loop',
+              `Pruned caches: freed ${formatBytes(pruned.freed_bytes)} across ${pruned.removed} file(s)`,
+            );
+          }
+          for (const r of pruned?.results || []) {
+            if (r.skipped) logger.warn('daemon-loop', `Cache policy ${r.id} skipped — ${r.skipped}`);
+            // Retention is not the same as nothing-to-do. A policy that keeps
+            // everything it looked at should say so, or a cache that never
+            // shrinks looks like a cache that was already small.
+            if (r.retained > 0) {
+              logger.info(
+                'daemon-loop',
+                `Cache policy ${r.id} retained ${r.retained} file(s) — guard withheld them as unsafe to delete`,
+              );
+            }
+          }
+        } catch (err) {
+          // Housekeeping must never take the daemon down.
+          logger.warn('daemon-loop', `Cache prune failed: ${err.message}`);
+        }
+      }
+
       // Periodically patch own mesh node (heartbeat)
       if (taskCount > 0 && taskCount % (60000 / TASK_SLEEP_MS) === 0) {
         try {
