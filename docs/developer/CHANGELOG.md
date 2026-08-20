@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.25.3] — 2026-08-19
+
+### 🐛 Bug Fixes
+- **One answer to "template or state?"**, instead of four that drift. Three releases running, a per-brain state file was treated as a template and either published or used to overwrite a real brain's data — `skills-registry/index.yaml` in 3.25.0, `research-queue.jsonl` in 3.25.2 — and each was fixed one file at a time, which is why there was a third. The list now lives once in `src/core/brain-state.json`; `sync-scaffold` derives its rsync excludes from it, and `sync-repo` reads a copy that ships beside it. Classification matches a state directory at **any** depth and by extension (`.enc`, `.backup`, `.log`), so new secret and backup files are covered on arrival rather than after an incident.
+- **`sync-repo` now refuses to run without the manifest** rather than falling back to a built-in list. A stale fallback is precisely the failure this mechanism exists to end.
+- **New release-blocking gate** (`scripts/check-scaffold-state.mjs`, wired into the quality gates and the release pre-flight): fails if the shipped scaffold carries any per-brain state, or if the manifest travelling with `sync-repo` has drifted from the canonical one.
+- **The scaffold was carrying a 30MB copy of the developer's brain git repository**, rsynced in from the live brain. It never reached the tarball — npm excludes `.git` — but it sat in the template and would have been copied into every brain by a template sync. Removed, and `.git` is now classified as state so it cannot return.
+
 ## [3.25.2] — 2026-08-19
 
 ### 🚀 Features

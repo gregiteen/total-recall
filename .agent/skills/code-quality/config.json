@@ -117,6 +117,16 @@
       ]
     },
     {
+      "id": "scaffold-brain-state",
+      "tier": "fast",
+      "description": "INVARIANT: the shipped scaffold must carry no per-brain state, and the brain-state manifest travelling with sync-repo must match the canonical one. Three releases running, a state file was treated as a template and either published or used to overwrite a real brain's data.",
+      "cmd": [
+        "node",
+        "scripts/check-scaffold-state.mjs"
+      ],
+      "parser": "generic"
+    },
+    {
       "id": "ssss-registry",
       "tier": "fast",
       "description": "Composed SSSS registry must match the committed lock. The old command omitted --lock, so it exited 1 on a usage error and never verified anything.",

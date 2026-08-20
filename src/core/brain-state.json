@@ -1,0 +1,47 @@
+{
+  "$comment": [
+    "CANONICAL: what belongs to ONE brain and is therefore NOT a template.",
+    "",
+    "Three releases in a row shipped or clobbered a file because this list lived",
+    "in several places at once and they drifted:",
+    "  3.25.0  skills-registry/index.yaml shipped 562 lines of /Users/<name>/...",
+    "          naming 16 third-party repos inside the npm tarball",
+    "  3.25.2  research-queue.jsonl shipped the developer's queued topics, and",
+    "          sync-repo would have overwritten one repo's 7 real entries",
+    "",
+    "A path listed here must never be: published in the package, written into",
+    "scaffold/, or overwritten by a template sync. If a file records what THIS",
+    "brain has done, seen, or been configured with, it belongs here.",
+    "",
+    "This is NOT the backup-exclusion list. Some of these (config/,",
+    "skills-registry/) are state worth backing up; they simply are not templates.",
+    "Backup exclusions live in ensureBrainGitignore and answer a different",
+    "question: ephemeral, oversized, or sensitive."
+  ],
+  "dirs": [
+    "memory-vault",
+    "memory-derived",
+    "memory-inbox",
+    "sessions",
+    "logs",
+    "scheduler",
+    "config",
+    "backups",
+    "browser-profile",
+    "skills-registry",
+    ".snapshots",
+    ".git",
+    "node_modules"
+  ],
+  "files": [
+    "research-queue.jsonl",
+    "daemon.pid",
+    ".extension-connected",
+    "graph.canvas"
+  ],
+  "extensions": [
+    ".enc",
+    ".backup",
+    ".log"
+  ]
+}
