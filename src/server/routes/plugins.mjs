@@ -41,7 +41,7 @@ const CURATED_CATALOG = [
     description: "Continuous scientific capability intelligence, curiosity-driven research graph weaver, and benchmark ledger.",
     tags: ["science", "benchmarks", "curiosity", "graph"],
     author: "Total Recall Ecosystem",
-    sourceUrl: "./.agent/plugins/scientific-frontiers",
+    sourceUrl: "https://github.com/gregiteen/scientific-frontiers-engine.git",
     rating: 4.9,
     reviewCount: 142,
     installCount: "3.2k",
