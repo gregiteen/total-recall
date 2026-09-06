@@ -1,6 +1,7 @@
 import { listPlugins } from './list.mjs';
 import { installPlugin } from './install.mjs';
 import { removePlugin } from './remove.mjs';
+import { searchCatalog } from './search.mjs';
 import { getPlugin } from '../../core/plugin-loader.mjs';
 
 function printHelp() {
@@ -11,6 +12,8 @@ Usage:
   npx total-recall plugin <command> [options]
 
 Commands:
+  search [query]            Search plugin catalog (--json for pipelines)
+  catalog                   Browse the full catalog
   list                      List all installed plugins (project & global)
   install <path|git-url>    Install or link a plugin
                               --link, -l    Symlink local directory instead of copying
@@ -38,6 +41,11 @@ export async function run(argv = []) {
 
   const command = args[0];
   const rest = args.slice(1);
+
+  if (command === 'search' || command === 'catalog' || command === 'find') {
+    await searchCatalog(rest);
+    return;
+  }
 
   if (!command || command === 'list') {
     await listPlugins(rest);

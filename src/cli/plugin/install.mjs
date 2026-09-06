@@ -3,13 +3,21 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { validatePluginManifest } from '../../core/plugin-loader.mjs';
+import { CURATED_CATALOG } from '../../server/routes/plugins.mjs';
 
 export async function installPlugin(args = []) {
   const isGlobal = args.includes('--global') || args.includes('-g');
   const isLink = args.includes('--link') || args.includes('-l');
   const cleanArgs = args.filter(a => a !== '--global' && a !== '-g' && a !== '--link' && a !== '-l');
 
-  const source = cleanArgs[0];
+  let source = cleanArgs[0];
+  if (source) {
+    const matched = CURATED_CATALOG.find(p => p.id.toLowerCase() === source.toLowerCase());
+    if (matched) {
+      console.log(`📦 Resolving plugin '${matched.id}' from catalog: ${matched.sourceUrl}`);
+      source = matched.sourceUrl;
+    }
+  }
 
   if (!source) {
     console.error('❌ Error: Missing plugin source path or git URL.');

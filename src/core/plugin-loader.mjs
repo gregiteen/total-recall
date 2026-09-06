@@ -144,6 +144,8 @@ export function getPlugin(id, projectRoot = process.cwd()) {
   return plugins.find(p => p.id === id) || null;
 }
 
+export const getPluginById = getPlugin;
+
 /**
  * Collect all SSSS categories declared across all active, valid plugins.
  */

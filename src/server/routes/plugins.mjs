@@ -33,7 +33,7 @@ function saveRatings(projectRoot, ratings) {
   fs.writeFileSync(filePath, JSON.stringify(ratings, null, 2), "utf8");
 }
 
-const CURATED_CATALOG = [
+export const CURATED_CATALOG = [
   {
     id: "scientific-frontiers",
     name: "Scientific Frontiers Engine",
