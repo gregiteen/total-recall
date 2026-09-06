@@ -56,14 +56,14 @@ Wire an IDE editor or client application to your remote brain.
   ```bash
   npx total-recall connect <client> [options]
   ```
-- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `aider`, `http-api`, `obsidian`, `generic`
+- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `aider`, `pi`, `hermes`, `dsh`, `openclaw`, `http-api`, `obsidian`, `generic`
 - **Options**:
   - `--brain <url>`: remote brain API base URL.
   - `--token <pat>`: Personal Access Token to embed in generated config targets.
   - `--vault <path>`: Obsidian vault target directory path.
   - `--force`: Overwrite existing projection and rules files.
 
-*Symlink clients (`claude-code`, `codex`, `antigravity`, `gemini`) create a platform symlink linking editor shims (like `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md`) to the compiled rules. File-based clients (`cursor`, `aider`) write standard rule files directly.*
+*Symlink clients (`claude-code`, `codex`, `antigravity`, `gemini`, `pi`, `dsh`, `openclaw`) create a platform symlink linking editor shims (like `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md`) to the compiled rules. File-based clients (`cursor`, `cline`, `hermes`, `aider`) write standard rule and memory files directly.*
 
 ---
 
@@ -251,6 +251,53 @@ Verify system health, connected clients registry, and daemon loops.
   ```
 - **Options**:
   - `--json`: Emit machine-readable system metrics.
+
+---
+
+### `mesh`
+Control-server (Headscale) mesh administration, cluster capability auditing, and remote execution.
+- **Usage**:
+  ```bash
+  npx total-recall mesh <command> [options]
+  ```
+- **Commands**:
+  - `status`: Show control-server reachability and credentials.
+  - `doctor [--json]`: Concurrently audit reachability, runtimes (`node`, `docker`, `git`), and AI harnesses (`agy`, `claude`, `codex`, `gemini`, `ollama`) across all cluster nodes.
+  - `nodes`: List registered mesh nodes and resolved network endpoints.
+  - `ssh <node> [cmd…]`: Open an interactive or command-bound SSH session using recorded access.
+  - `exec <node> [--json] <cmd…>`: Execute non-interactive remote commands over SSH with standardized `$PATH` export and structured exit code output.
+  - `access <node>`: Show or configure recorded login account, SSH port, and key path.
+  - `access import [--apply]`: Propose and optionally save access configs from `~/.ssh/config`.
+  - `preauthkey [--reusable] [--ephemeral]`: Mint enrollment pre-authentication keys for new tailnet devices.
+  - `policy <get|set|init-ssh>`: Manage Headscale ACL policies and initialize mesh-wide Tailscale SSH.
+
+---
+
+### `harness`
+Meta-Harness orchestration across connected external IDEs, CLI tools, and local neural models.
+- **Usage**:
+  ```bash
+  npx total-recall harness <command> [options]
+  ```
+- **Commands**:
+  - `list`: Inspect all supported developer harnesses (`agy`, `claude`, `codex`, `gemini`, `ollama`) with availability and binary locations.
+  - `dispatch <id> [--node <node>] "<task>"`: Headlessly invoke a specific harness with task instructions. Supports cross-mesh execution via `--node` and non-interactive `pipe_stdin` for Ollama models (e.g. `gemma4:latest`).
+  - `council "<task>"`: Execute multi-harness consensus deliberations concurrently across all available engines and compare responses.
+
+---
+
+### `agent`
+Lightweight process controller for background subagent tasks across local and remote mesh nodes.
+- **Usage**:
+  ```bash
+  npx total-recall agent <command> [options]
+  ```
+- **Commands**:
+  - `list [--json]`: List all running, completed, or failed agent processes from `sessions/agents.json`.
+  - `spawn <harness> [--node <node>] [--name <label>] "<task>"`: Spawn an agent task detached in the background with stdout/stderr automatically redirected to session logs.
+  - `status [id]`: Display execution state, PID, runtime harness, and log file path.
+  - `logs <id> [--tail <n>]`: Stream recent log lines from local storage or over mesh SSH for remote nodes.
+  - `kill <id|pid>`: Terminate an active agent process locally or across the mesh.
 
 ---
 

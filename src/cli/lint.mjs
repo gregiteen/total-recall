@@ -22,13 +22,14 @@ import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(args) {
-  const opts = { vault: null, strict: false, json: false, help: false, okf: false };
+  const opts = { vault: null, strict: false, json: false, help: false, okf: false, plugins: false };
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--vault': opts.vault = args[++i]; break;
       case '--strict': opts.strict = true; break;
       case '--json': opts.json = true; break;
       case '--okf': opts.okf = true; break;
+      case '--plugins': opts.plugins = true; break;
       case '--help': case '-h': opts.help = true; break;
     }
   }
@@ -37,10 +38,11 @@ function parseArgs(args) {
 
 function printHelp() {
   console.log(`
-  total-recall lint — Validate vault nodes against SSSS schema v2 or OKF spec
+  total-recall lint — Validate vault nodes against SSSS schema v2, OKF spec, or plugins
 
   Scans all .md files in the memory vault and validates their YAML
-  frontmatter against the Zod schemas or checks for OKF compliance.
+  frontmatter against the Zod schemas, checks OKF compliance, or validates
+  installed plugin.json manifests.
 
   Usage: total-recall lint [options]
 
@@ -50,6 +52,7 @@ function printHelp() {
     --project          Lint the project vault for the current repo
     --strict           Treat warnings as errors (exit 1 on any issue)
     --okf              Verify OKF v0.1 draft metadata compliance
+    --plugins          Validate all installed plugin manifests (plugin.json)
     --json             Output results as JSONL
     --help, -h         Show this help
 
@@ -97,6 +100,47 @@ export default async function lint(args) {
     }
 
     if (!report.pass) {
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (opts.plugins) {
+    const { discoverPlugins } = await import('../core/plugin-loader.mjs');
+    const plugins = discoverPlugins(process.cwd());
+    let pluginErrors = 0;
+
+    if (!opts.json) {
+      console.error(`\n  🔌 Linting installed plugins:\n`);
+    }
+
+    for (const p of plugins) {
+      if (!p.valid) {
+        pluginErrors += p.errors.length;
+        if (opts.json) {
+          console.log(JSON.stringify({ plugin: p.id, manifestPath: p.manifestPath, level: 'error', errors: p.errors }));
+        } else {
+          console.error(`  ❌ Plugin '${p.id}' (${p.manifestPath}):`);
+          for (const err of p.errors) {
+            console.error(`       ${err}`);
+          }
+        }
+      } else {
+        if (opts.json) {
+          console.log(JSON.stringify({ plugin: p.id, manifestPath: p.manifestPath, level: 'info', valid: true }));
+        } else {
+          console.error(`  ✅ Plugin '${p.id}' (v${p.manifest.version || '0.0.0'}): valid`);
+        }
+      }
+    }
+
+    if (!opts.json) {
+      console.error(`\n  ── Plugin Results ──`);
+      console.error(`     Total plugins scanned: ${plugins.length}`);
+      console.error(`     Errors:               ${pluginErrors}\n`);
+    }
+
+    if (pluginErrors > 0) {
       process.exit(1);
     }
     return;

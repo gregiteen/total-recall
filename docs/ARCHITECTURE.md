@@ -58,7 +58,7 @@ The session relay is a silent Node.js daemon that:
 
 ---
 
-### Component 2: The Sovereign Brain Server
+### Component 2: The Central Brain Server
 
 The brain server runs the primary REST API, compiles instructions, runs the background daemons, and maintains the Virtual File System (VFS).
 
@@ -81,14 +81,16 @@ The Setup Web Wizard is served by a local Express instance during installation/d
 - **File-Native Indexes**: Vector indexes are written directly to plain JSONL (`embeddings.jsonl`) under the meta-skill's `memory-derived/` directory, backed by a high-speed cosine memory cache (`embeddings-cache.json`) for <50ms lookup times.
 - **Auto-Healing Dimension Mismatch Purging**: If you switch embedding models (e.g. from a 384-dim Ollama model to the 768-dim Google API), the engine detects the dimension length mismatch, automatically clears out the obsolete cache files, and indexes the entire vault cleanly from scratch.
 
-#### 2. 🤖 Headless CLI Agent Dispatch Framework
-Total Recall completely eliminates heavy local GPU hardware overhead (Ollama and local VM models are fully deprecated). Instead, cognitive tasks (post-mortems, web research crawls, and dream cycle updates) are routed to specialized, headlessly spawned CLI agents running via non-interactive subshells (`spawnSync`):
+#### 2. 🤖 Meta Harness & Headless CLI Agent Dispatch
+Total Recall executes background cognitive tasks (post-mortems, web research crawls, dream cycle updates, and multi-agent councils) through headlessly spawned CLI agent harnesses and local neural models:
 
-- **Antigravity CLI** (`antigravity`): Ingests massive token context bounds for broad log post-mortems and repository-wide gap discovery.
-- **Claude Code** (`claude`): Resolves complex logical rules, verifies integration tests, and performs precise SSSS ontology checking.
-- **Codex CLI** (`codex`): Executes sandboxed test suites and automated file writes.
+- **Antigravity CLI** (`agy`): Ingests massive token context bounds for broad log post-mortems, complex reasoning, and repository-wide gap discovery.
+- **Claude Code** (`claude`): Resolves complex logical rules, verifies integration tests, and performs terminal-native codebase refactoring.
+- **Codex CLI** (`codex`): Executes sandboxed test suites and automated program synthesis.
+- **Gemini CLI** (`gemini`): Fast utility completions and lightweight tool chaining.
+- **Ollama Local LLM** (`ollama`): Zero-token-cost local neural inference (e.g. `gemma4:latest`) executing non-interactively via standard input piping (`pipe_stdin`).
 
-All dispatches are configured via the prioritized execution registry in `~/.agent/skills/total-recall/skills/cli-agents/agents.yml` and utilize the **Dynamic Model Selector (`resolveGenerativeModel`)** to dynamically translate general aliases (`flash`, `pro`, `default`) into the active, optimal model endpoints.
+All dispatches can run locally or route remotely across the Headscale mesh (`--node <target>`). Multi-agent consensus deliberations can be executed concurrently using `total-recall harness council "<task>"`. Dispatches are also configured via the prioritized execution registry in `~/.agent/skills/total-recall/skills/cli-agents/agents.yml` utilizing the **Dynamic Model Selector (`resolveGenerativeModel`)**.
 
 #### 3. 📂 Progressive Disclosure Surface Compiler
 - Avoids prompt bloat by keeping active system prompts under 1,000 tokens.
@@ -104,7 +106,7 @@ All dispatches are configured via the prioritized execution registry in `~/.agen
 
 ## 🧠 The Dual-Layer Brain Cascade
 
-Total Recall partitions your sovereign brain memory into two virtual directories:
+Total Recall partitions your brain memory into two virtual directories:
 
 ```
 ~ (User Home)
@@ -232,9 +234,74 @@ Total Recall features a native terminal-based chat REPL (`npx total-recall chat`
 
 ---
 
+---
+
+## 🧩 Plugin System & Extension Architecture
+
+Total Recall features a decentralized, filesystem-native plugin system that allows modular capability suites, background scholarly daemons, and custom SSSS graph schemas to extend the memory kernel without modifying core packages.
+
+### 1. Plugin Manifest Specification (`plugin.json`)
+Every plugin is a self-contained directory under `.agent/plugins/<id>/` (or global `~/.agent/plugins/<id>/`) containing a validated `plugin.json` conforming to `metadata.plugin.schema.json`:
+- **Metadata**: Unique lowercase kebab-case `id`, semantic `version`, `name`, and `description`.
+- **Custom SSSS Categories**: Declares domain-specific memory node categories (`ssss_schemas.categories`) with schemas and templates automatically registered during vault builds.
+- **Surface Compilation Hook**: Defines a custom context generator script (`compile.generator`) and watch triggers that assemble prioritized evolving context surfaces (up to 500k tokens).
+- **Background Tasks & Daemons**: Registers recurring cron envelopes (`tasks`) and execution entrypoints (`entrypoint`) automatically picked up by the daemon loop.
+- **Pure Unix CLI Commands**: Exposes first-class CLI commands (`cli.command` and `cli.handler`) seamlessly routed under `total-recall <command>`.
+
+### 2. Plugin Discovery & Lifecycle (`src/core/plugin-loader.mjs`)
+- **Layered Discovery**: Scans project-level (`.agent/plugins/`) and global-level (`~/.agent/plugins/`) directories. Project plugins take precedence over global plugins with identical IDs.
+- **Strict Schema Validation**: Validates all manifests against the plugin schema prior to runtime execution, flagging errors without breaking host brain stability.
+- **Symlink & Development Linking**: Developers can link in-progress plugins using `total-recall plugin install <path> --link` (or via the web UI) to enable real-time edits without reinstallation.
+
+### 3. Web Dashboard & Rating System (`frontend/src/pages/PluginsPage.tsx`)
+- **Plugin Management UI**: Dedicated `/plugins` dashboard view for browsing installed extensions, inspecting raw manifests, exploring documentation, and one-click uninstallation.
+- **Curated Discovery Catalog**: Browsable catalog of ecosystem plugins (Scientific Frontiers Engine, Meta-Harness, Code Quality & SSSS Conformance, Chrome DevTools) with single-click installation.
+- **Interactive 5-Star Rating System**: Persistent local ratings and reviews (`.agent/config/plugin-ratings.json`), verified badges, and sorting by rating, reviews, or alphabetical order.
+
+---
+
+## 🌐 Mesh Compute Topology & Meta-Harness Layer
+
+Total Recall unifies developer machines, remote compute nodes, and cloud servers across a private **Headscale WireGuard mesh network** (`headscale.ultrachat.app`, tailnet `100.64.0.0/10`), providing zero-configuration cross-host execution without third-party cloud dependencies or open incoming firewall ports.
+
+### 1. Mesh Compute Topology & Diagnostics
+
+Each machine on the network is tracked as an SSSS `mesh_node` entity in the vault (`memory-vault/system/mesh-nodes/<slug>.md`). Remote execution is mediated by the mesh runtime:
+
+- **Non-Interactive Command Execution (`total-recall mesh exec <node> <cmd…>`)**: Executes commands remotely over SSH with sanitized `$PATH` exports (`/opt/homebrew/bin`, `/usr/local/bin`, `$HOME/.local/bin`) directly prepended, eliminating subshell quoting fragility on Darwin and Linux.
+- **Cluster Diagnostics (`total-recall mesh doctor`)**: Concurrently audits reachability, development runtimes (`node`, `docker`, `git`), and AI harnesses (`agy`, `claude`, `codex`, `gemini`, `ollama`) across all cluster nodes, formatting the results into character-aligned terminal tables or structured JSON (`--json`).
+- **Cryptographic SSH Access Resolution**: Automatically resolves SSH user, port, and key path from the local `mesh_node` entity or `~/.ssh/config` using `IdentitiesOnly=yes` pinning.
+
+### 2. Meta-Harness Layer (`src/core/meta-harness.mjs`)
+
+The Meta-Harness treats external AI CLI tools and local neural models as pluggable execution engines:
+
+| Harness ID | Engine | Execution Mode | Role |
+| :--- | :--- | :--- | :--- |
+| `agy` | Google Antigravity | CLI arguments | Frontier reasoning, broad context analysis |
+| `claude` | Anthropic Claude Code | CLI arguments (`-p`) | Codebase refactoring, terminal tasks |
+| `codex` | OpenAI Codex | CLI arguments (`exec`) | Program synthesis, sandboxed mutation |
+| `gemini` | Google Gemini CLI | CLI arguments | Lightweight utilities, tool chaining |
+| `ollama` | Ollama Local LLM | `pipe_stdin` | Zero-token-cost local neural inference |
+
+- **Multi-Harness Council (`total-recall harness council "<task>"`)**: Runs concurrent deliberative queries across all available local harnesses, compiling multiple perspectives into a structured comparative report.
+- **Cross-Node Harness Dispatch (`total-recall harness dispatch <id> --node <node> "<task>"`)**: Dispatches tasks to a specific harness located on another mesh node (e.g. running `ollama` models on a dedicated local machine like `macmini`).
+
+### 3. Agent Process Management (`src/core/agent-manager.mjs`)
+
+The agent management layer provides process supervision for background subagents across the cluster:
+
+- **Lifecycle Tracking (`sessions/agents.json`)**: Tracks running agent processes with unique IDs, PIDs, harnesses, target nodes, and execution statuses (`running`, `completed`, `failed`, `stopped`).
+- **Detached Execution**: Spawns subagents in the background (`total-recall agent spawn <harness> "<task>"`) with stdout/stderr automatically streamed to session logs (`sessions/logs/`).
+- **Remote Observability & Control**:
+  - `total-recall agent logs <id>`: Tails logs in real time from local files or over mesh SSH.
+  - `total-recall agent kill <id>`: Sends termination signals (`SIGTERM` or remote `kill`) to shut down runaway processes.
+
+---
+
 ## 🔒 Session Security & Token Management
 
-Total Recall implements role-based granular authorization schemas to protect your sovereign brain while maintaining 100% database-free isolation.
+Total Recall implements role-based granular authorization schemas to protect your brain while maintaining 100% database-free isolation.
 
 ### 1. Local Dashboard Session Management (JWT-based)
 For web dashboard access, Total Recall strictly avoids external third-party OAuth provider dependencies (e.g. Google, GitHub, Auth0) to protect your privacy and ensure standalone local operation:

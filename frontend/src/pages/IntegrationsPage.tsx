@@ -67,6 +67,13 @@ const PRESETS: Preset[] = [
     snippet: () => `Pushes truncated memory surface projections to autonomous Hermes.`
   },
   {
+    id: 'dsh',
+    name: 'DeepSeek Harness (dsh)',
+    surface: 'AGENTS.md / ~/.dsh/memory/MEMORY.md',
+    command: 'npx total-recall connect dsh',
+    snippet: () => `Integrates SSSS memory and skills into DeepSeek Harness agent runtimes.`
+  },
+  {
     id: 'openclaw',
     name: 'OpenClaw',
     surface: 'MEMORY.md',

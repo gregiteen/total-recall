@@ -10,6 +10,7 @@ import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
 } from './memory-layers.mjs';
+import { assemblePluginContexts } from './plugin-context.mjs';
 
 /**
  * Extract [[slug]] wikilink references and relative Markdown link targets from body text.
@@ -306,7 +307,7 @@ async function compactNode(node, derivedDir, force = false) {
   return compacted;
 }
 
-export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir, force = false } = {}) {
+export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir, force = false, vaultDir, projectRoot } = {}) {
   // 1. Filter expired rules. Compilation must remain a pure projection step;
   // archival is handled by explicit memory operations.
   const now = new Date();
@@ -481,6 +482,21 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
     }
   }
 
+  // 5. Inject Evolving Plugin Context
+  try {
+    const pluginContext = await assemblePluginContexts({
+      projectRoot: projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd()),
+      vaultDir,
+      nodes,
+      derivedDir
+    });
+    if (pluginContext) {
+      combined += pluginContext;
+    }
+  } catch (err) {
+    console.error('Error injecting plugin context:', err);
+  }
+
   return combined.trim();
 }
 
@@ -546,15 +562,21 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
  * Map of client names → shim file paths they require.
  */
 const CLIENT_SHIMS = {
-  cursor:        ['.cursorrules'],
-  claude:        ['CLAUDE.md'],
-  'claude-code': ['CLAUDE.md'],
-  cline:         ['.clinerules/total-recall.md'],
-  antigravity:   ['AGENTS.md', '.agents/rules/AGENTS.md'],
-  gemini:        ['GEMINI.md', '.agents/rules/GEMINI.md'],
-  codex:         ['AGENTS.md'],
-  vscode:        ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
-  githubCopilot: ['.github/copilot-instructions.md']
+  cursor:             ['.cursorrules'],
+  claude:             ['CLAUDE.md'],
+  'claude-code':      ['CLAUDE.md'],
+  cline:              ['.clinerules/total-recall.md'],
+  antigravity:        ['AGENTS.md', '.agents/rules/AGENTS.md'],
+  gemini:             ['GEMINI.md', '.agents/rules/GEMINI.md'],
+  codex:              ['AGENTS.md'],
+  vscode:             ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
+  githubCopilot:      ['.github/copilot-instructions.md'],
+  pi:                 ['AGENTS.md'],
+  hermes:             ['.hermes/memories/MEMORY.md'],
+  'hermes-agent':     ['.hermes/memories/MEMORY.md'],
+  dsh:                ['AGENTS.md'],
+  'deepseek-harness': ['AGENTS.md'],
+  openclaw:           ['MEMORY.md', 'AGENTS.md']
 };
 
 /**

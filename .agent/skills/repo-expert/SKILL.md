@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-08-20T18:13:11.261Z
+generated_at: 2026-09-06T09:08:27.807Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (582 files), Markdown (261 files), TypeScript (130 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (605 files), Markdown (271 files), TypeScript (132 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -33,6 +33,7 @@ generated_from: total-recall
     code-mode/  (6 items)
     code-quality/  (9 items)
     instruction-keeper/  (8 items)
+    meta-harness/  (1 items)
     okf/  (5 items)
     project-management/  (6 items)
     push/  (7 items)
@@ -62,7 +63,7 @@ docs/
   infra/  (3 items)
   projects/
     archived/  (8 items)
-    completed/  (46 items)
+    completed/  (48 items)
     in-progress/  (0 items)
     planned/  (3 items)
   reference/  (6 items)
@@ -88,10 +89,10 @@ frontend/
   public/
     brand/  (4 items)
   src/
-    api/  (29 items)
+    api/  (30 items)
     assets/  (3 items)
     components/  (32 items)
-    pages/  (59 items)
+    pages/  (60 items)
     utils/  (1 items)
 infra/
   headscale/  (3 items)
@@ -115,7 +116,8 @@ models/
     total-recall/  (1 items)
 scaffold/
   .agent/
-    skills/  (1 items)
+    plugins/  (0 items)
+    skills/  (2 items)
 scratch/
   dummy-repo/
     .agent/  (1 items)
@@ -123,9 +125,10 @@ scripts/  (14 items)
 src/
   cli/
     ingest/  (4 items)
-  core/  (237 items)
+    plugin/  (5 items)
+  core/  (249 items)
   server/
-    routes/  (90 items)
+    routes/  (94 items)
 templates/
   default-config/  (4 items)
   obsidian-queries/  (4 items)
@@ -139,11 +142,12 @@ templates/
 
 ## CLI Commands
 
-53 commands in `src/cli/`:
+55 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
 | agent-dir | agent-dir.mjs | Shared `.agent/` directory resolver for CLI commands. |
+| agent | agent.mjs |  |
 | backfill | backfill.mjs |  |
 | backup | backup.mjs | total-recall backup |
 | brain | brain.mjs |  |
@@ -161,11 +165,12 @@ templates/
 | forget | forget.mjs |  |
 | friction | friction.mjs | CLI command to run Friction Detection on logs |
 | generate-pat | generate-pat.mjs |  |
+| harness | harness.mjs |  |
 | hash-password | hash-password.mjs |  |
 | help | help.mjs | total-recall help |
 | import-rules | import-rules.mjs | src/cli/import-rules.mjs |
 | ingest-okf | ingest-okf.mjs |  |
-| ingest-openwiki | ingest-openwiki.mjs |  |
+| ingest-openwiki | ingest-openwiki.mjs | Discover and ingest OpenWiki hubs declared by installed plug |
 | ingest | ingest.mjs | total-recall ingest |
 | init | init.mjs | total-recall init |
 | integration-dispatcher | integration-dispatcher.mjs | Dynamic SSSS-driven Integration Dispatcher. |
@@ -181,13 +186,11 @@ templates/
 | remember | remember.mjs | Parse a human-friendly duration string and return a Date in  |
 | repo-expert-generate | repo-expert-generate.mjs | repo-expert-generate.mjs — Auto-generate repo-expert SKILL.m |
 | research | research.mjs | src/cli/research.mjs |
-| reset-password | reset-password.mjs | Read a password without echoing it, and without it ever beco |
-| restore | restore.mjs | total-recall restore |
-| ... | +13 more | |
+| ... | +15 more | |
 
 ## API Routes
 
-44 route modules in `src/server/routes/`:
+46 route modules in `src/server/routes/`:
 
 ### auth (6 endpoints)
 
@@ -339,6 +342,13 @@ templates/
 - `DELETE /api/memory/:slug`
 - `POST /api/memory/search/semantic`
 
+### mesh-presence (4 endpoints)
+
+- `GET /api/mesh/presence`
+- `GET /api/mesh/presence/local`
+- `POST /api/mesh/presence/resolve`
+- `POST /api/mesh/dispatch`
+
 ### mesh (20 endpoints)
 
 - `GET /api/mesh/leader`
@@ -376,6 +386,15 @@ templates/
 - `DELETE /api/notifications/rules/:id`
 - `GET /api/notifications/history`
 - `POST /api/notifications/test`
+
+### plugins (6 endpoints)
+
+- `GET /api/plugins`
+- `GET /api/plugins/catalog`
+- `POST /api/plugins/:id/rate`
+- `POST /api/plugins/install`
+- `DELETE /api/plugins/:id`
+- `GET /api/plugins/:id`
 
 ### proposals (6 endpoints)
 
@@ -538,6 +557,7 @@ templates/
 - OkfPage
 - OnboardingPage
 - OpenWikiPage
+- PluginsPage
 - RulesPage
 - SandboxPage
 - SecretsPage
@@ -569,8 +589,9 @@ templates/
 
 ## Core Modules
 
-110 modules in `src/core/`:
+117 modules in `src/core/`:
 
+- **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, spawnAgent, killAgent, getAgentLogs
 - **append-log** — exports: compactAppendLogs
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
 - **bound-hosts** — exports: registerBoundHost, unregisterBoundHost, getBoundHosts, resetBoundHosts, isLoopbackHost, isReachableFromOtherDevices
@@ -581,6 +602,7 @@ templates/
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
 - **config** — exports: getEnvVar, detectProjectBrain, getActiveBrains, resolveBrainLayer
 - **conflict-detector** — exports: detectSemanticConflicts, scanVaultForConflicts, detectPatchConflict, computeFileHash, autoResolveConflict, applyAutoResolution, detectAndResolve, writeConflicts
+- **context-cache** — exports: loadSectionCache, saveSectionCache, computeSectionHash, getCachedSection, manageContextBudget
 - **context-compiler** — exports: compileContext, previewContext
 - **crons** — exports: runCrons
 - **crypto** — exports: clearDerivedKeyCache, deriveKey, deriveKeySync, encryptSecrets, encryptSecretsSync, decryptSecrets, decryptSecretsSync, generateSignatureKeyPair
@@ -593,6 +615,7 @@ templates/
 - **emergency-alerts** — exports: writeEmergencyAlert, clearEmergencyAlerts, readEmergencyAlerts, runStartupHealthCheck
 - **env-import** — exports: inferProvider, maskSecret, parseEnvText, isCandidateKey, defaultEnvFilePaths, scanEnvSources, publicScanResult, importEnvSecrets
 - **evolution** — exports: runSsssEvalWorkflow, proposeSchemaUpgrades, applySchemaUpgrade
+- **evolving-context** — exports: compileEvolvingContext
 - **fact-seeker** — exports: getLocalizedDateTime, formatBeautifulDate, loadAgenda, addToAgenda, markTopicResearched, getNextAgendaTopic, inferTopicsFromSession, buildMultiNoteGraph
 - **fast-recall** — exports: fastSearch
 - **friction** — exports: detectFriction
@@ -606,10 +629,12 @@ templates/
 - **memory-layers** — exports: normalizeMemoryLayer, inferMemoryLayer, memoryLayerRoutingWeight, buildMemoryLayerIndex
 - **memory-title** — exports: stripSelfCapturedTitlePrefix, isSelfCapturedEchoTitle, defaultTitleFromBody, normalizeMemoryTitle
 - **mesh-access** — exports: parseSshConfig, readSshConfig, sshConfigMatchScore, findSshConfigEntryForNode, accessFromSshConfigEntry, classifyTailscaleVariant, meshSshFromVariant, resolveNodeAccess
+- **mesh-activity** — exports: getLocalIdleSeconds, detectActiveSurface, getLocalPresence, resolveActiveDevice
 - **mesh-auth** — exports: normalizeRemoteAddress, isMeshOrLoopbackAddress, getMeshSyncToken, getMeshSyncAuthorization, requireMeshSyncAuth
 - **mesh-enroll** — exports: resetAutoEnrollThrottle, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled, buildUpArgs
 - **mesh-late-bind** — exports: startMeshBindWatch
 - **mesh** — exports: normalizeHostname, meshNodeDocSlug, meshNodeKey, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname
+- **meta-harness** — exports: detectHarnesses, dispatchTask, runCouncil
 - **migrate** — exports: runMigration, testMigration
 - **network-bind** — exports: resolveServerHost
 - **network-interfaces** — exports: classifyInterfaceKind, isLanIpv4, isOverlayIpv4, listLocalInterfaces, summarizeInterfacesForEntity, listLocalLanCidrs
@@ -623,6 +648,8 @@ templates/
 - **pairing** — exports: buildPairingInfo
 - **parallel-context** — exports: streamParallelContext, checkFlashHealth
 - **pid-lock** — exports: entryPathHint, readProcessCommand, shouldHonorPidLock
+- **plugin-context** — exports: assemblePluginContexts, startPluginDirectedWatcher
+- **plugin-loader** — exports: validatePluginManifest, discoverPlugins, getPlugin, getPluginCategories, getPluginWatchPaths
 - **post-mortem** — exports: readSessionTranscript, runPostMortem, runComplianceAudit
 - **project-brain** — exports: resolveProjectBrainPaths, ensureOpenWiki, ensureCoreSkillPackage, writeBrainIdentity, ensureFullProjectBrain, registerProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
 - **proposal-applier** — exports: findDissimilarPair, appendProposalAudit, listProposals, getProposal, setProposalStatus, revertProposal, hasHandler, applyProposal
@@ -687,6 +714,7 @@ templates/
 - **code-mode**: "Use this skill when working on the Code Mode Infrastructure, sandbox VFS, or instruction-led architecture. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **code-quality**: "Use this skill before committing, publishing, or deploying Total Recall, and whenever fixing errors from a quality gate. This repo is plain Node ESM — it has NO TypeScript and NO ESLint installed, so do NOT run tsc, eslint, npm run typecheck, or npm run lint (they do not exist here). Its gates are dist freshness, the open-source path invariant, SSSS registry verification, and vitest. Run checks as BACKGROUND jobs via scripts/check.mjs. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **instruction-keeper**: Use this skill when managing the lifecycle and version control of system
+- **meta-harness**: Meta Harness & Agent Management Layer to orchestrate and delegate tasks across all connected IDE harnesses (Antigravity, Claude Code, Codex, Gemini, Ollama) and the computer generally.
 - **okf**: Use this skill to access information about Google's Open Knowledge Format
 - **project-management**: "Use this skill when managing project documentation, GitHub issues, pull requests, and project tracker checklists in ANY repository. Defines the universal 4-file (PRD/ARCHITECTURE/DEVELOPMENT_PLAN/PROJECT_TRACKER) Kanban documentation system shared across all repos. Do NOT use for code implementation. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **push**: "Use this skill when preparing, testing, version-bumping, and publishing a new release of the Total Recall package to npm and GitHub. Do NOT use for regular local feature commits."

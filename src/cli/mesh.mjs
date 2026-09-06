@@ -41,8 +41,10 @@ function printHelp() {
   Usage: total-recall mesh <command> [options]
 
     status                 Control-server reachability and credential state
+    doctor                 Probe reachability & compute capabilities across all nodes
     nodes                  List mesh nodes and how to reach each one
     ssh <node> [cmd…]      Open a session using the node's recorded access
+    exec <node> <cmd…>     Execute a command on a node non-interactively (--json)
     access <node>          Show resolved access for a node
     access <node> --user <u> [--port <n>] [--host <h>] [--identity <path>]
                            Record how to reach a node
@@ -121,6 +123,91 @@ export default async function meshCli(argv = []) {
     if (command === 'status') {
       const info = await describeHeadscaleAvailability(brainDir);
       console.log(JSON.stringify(info, null, 2));
+      return;
+    }
+
+    if (command === 'doctor' || command === 'diagnostics') {
+      console.log('\n🩺 Total Recall — Mesh Diagnostics & Compute Capability Audit\n');
+      const enriched = listEnrichedMeshNodes(vaultRoot);
+      const isJson = args.includes('--json');
+
+      const stripAnsi = (s) => String(s || '').replace(/\x1b\[[0-9;]*m/g, '');
+      const pad = (s, l) => String(s || '') + ' '.repeat(Math.max(0, l - stripAnsi(s).length));
+      const probeNodes = enriched.filter(n => n.ip);
+      const results = [];
+
+      for (const node of probeNodes) {
+        const resolved = resolveNodeAccess(node);
+        const nodeInfo = {
+          hostname: node.hostname,
+          ip: node.ip,
+          self: !!node.self,
+          online: !!node.online,
+          sshConfigured: resolved.complete,
+          sshTarget: resolved.target,
+          runtimes: [],
+          harnesses: [],
+          reachable: false,
+          error: null
+        };
+
+        if (node.self) {
+          try {
+            const { detectHarnesses } = await import('../core/meta-harness.mjs');
+            nodeInfo.harnesses = detectHarnesses().filter(h => h.available).map(h => h.id);
+          } catch {}
+          nodeInfo.runtimes = ['node', 'git'];
+          nodeInfo.reachable = true;
+        } else if (resolved.complete) {
+          try {
+            const probeCmd = 'echo "agy=$(which agy 2>/dev/null) claude=$(which claude 2>/dev/null) codex=$(which codex 2>/dev/null) gemini=$(which gemini 2>/dev/null) ollama=$(which ollama 2>/dev/null) docker=$(which docker 2>/dev/null) node=$(which node 2>/dev/null) git=$(which git 2>/dev/null)"';
+            const { execMeshCommand } = await import('../core/mesh.mjs');
+            const res = await execMeshCommand(node.hostname, probeCmd, { vaultRoot, timeoutMs: 4000 });
+            nodeInfo.reachable = res.success;
+            if (res.success) {
+              const parts = res.stdout.split(/\s+/);
+              for (const part of parts) {
+                const [k, v] = part.split('=');
+                if (v && v.trim()) {
+                  if (['agy', 'claude', 'codex', 'gemini', 'ollama'].includes(k)) {
+                    nodeInfo.harnesses.push(k);
+                  } else {
+                    nodeInfo.runtimes.push(k);
+                  }
+                }
+              }
+            } else {
+              nodeInfo.error = res.stderr || 'Probe failed';
+            }
+          } catch (err) {
+            nodeInfo.reachable = false;
+            nodeInfo.error = err.message;
+          }
+        } else {
+          nodeInfo.reachable = false;
+          nodeInfo.error = 'No recorded SSH login';
+        }
+
+        results.push(nodeInfo);
+      }
+
+      if (isJson) {
+        console.log(JSON.stringify(results, null, 2));
+        return;
+      }
+
+      console.log('┌──────────────────────────────────────────┬────────────────┬──────────────────┬──────────────────┬──────────────────────────────────────┬──────────────────────────┐');
+      console.log(`│ ${pad('Node', 40)} │ ${pad('Mesh IP', 14)} │ ${pad('Role', 16)} │ ${pad('Mesh SSH', 16)} │ ${pad('Harnesses', 36)} │ ${pad('Runtimes', 24)} │`);
+      console.log('├──────────────────────────────────────────┼────────────────┼──────────────────┼──────────────────┼──────────────────────────────────────┼──────────────────────────┤');
+
+      for (const r of results) {
+        const roleStr = r.self ? '\x1b[36mLocal (Self)\x1b[0m' : (r.online ? '\x1b[32mOnline Peer\x1b[0m' : '\x1b[90mOffline\x1b[0m');
+        const sshStr = r.self ? '—' : (r.reachable ? '\x1b[32mReachable ✅\x1b[0m' : '\x1b[31mUnreachable ❌\x1b[0m');
+        const hStr = r.harnesses.length ? r.harnesses.join(', ') : '—';
+        const runStr = r.runtimes.length ? r.runtimes.join(', ') : '—';
+        console.log(`│ ${pad(r.hostname, 40)} │ ${pad(r.ip, 14)} │ ${pad(roleStr, 16)} │ ${pad(sshStr, 16)} │ ${pad(hStr, 36)} │ ${pad(runStr, 24)} │`);
+      }
+      console.log('└──────────────────────────────────────────┴────────────────┴──────────────────┴──────────────────┴──────────────────────────────────────┴──────────────────────────┘\n');
       return;
     }
 
@@ -225,6 +312,33 @@ export default async function meshCli(argv = []) {
       process.exitCode = res.status ?? 1;
       return;
     }
+
+    if (command === 'exec') {
+      const target = args.shift();
+      if (!target || !args.length) {
+        fail('`exec` requires a node name and a command.', 'Example: total-recall mesh exec macmini uptime');
+        return;
+      }
+      const jsonMode = args.includes('--json');
+      const filteredArgs = args.filter((a) => a !== '--json');
+      const cmd = filteredArgs.join(' ');
+
+      try {
+        const { execMeshCommand } = await import('../core/mesh.mjs');
+        const res = await execMeshCommand(target, cmd, { vaultRoot });
+        if (jsonMode) {
+          console.log(JSON.stringify(res, null, 2));
+        } else {
+          if (res.stdout) console.log(res.stdout);
+          if (res.stderr) console.error(res.stderr);
+        }
+        process.exitCode = res.exitCode;
+      } catch (err) {
+        fail(`Execution failed: ${err.message}`);
+      }
+      return;
+    }
+
 
     if (command === 'access') {
       const target = args.shift();

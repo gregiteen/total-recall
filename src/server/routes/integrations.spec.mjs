@@ -102,5 +102,31 @@ describe('Integrations Router', () => {
         expect.arrayContaining(['--brain', 'http://localhost:3000'])
       );
     });
+
+    it('connects dsh (DeepSeek Harness) successfully', async () => {
+      connect.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .post('/api/integrations/connect?client=dsh');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(connect).toHaveBeenCalledWith(
+        expect.arrayContaining(['dsh', '--token', 'tr_test_token'])
+      );
+    });
+
+    it('connects hermes successfully', async () => {
+      connect.mockResolvedValue(undefined);
+
+      const res = await request(app)
+        .post('/api/integrations/connect?client=hermes');
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(connect).toHaveBeenCalledWith(
+        expect.arrayContaining(['hermes', '--token', 'tr_test_token'])
+      );
+    });
   });
 });

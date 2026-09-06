@@ -22,6 +22,8 @@ Classification for the portable-memory product focus. Commands remain available 
 | `skill` | Registry, deploy, track, multi-repo sync |
 | `secret` / `secrets` | Secrets store + usage (not vault) |
 | `mesh` | Control server: nodes, ACL policy, Tailscale SSH |
+| `harness` | Multi-harness orchestration, task dispatch, council consensus |
+| `agent` | Process controller (spawn, list, logs, kill) across mesh |
 | `brain` | List / register / ensure / unregister project brains |
 | `status` | Health / brain connection summary |
 | `doctor` | Environment diagnostics |

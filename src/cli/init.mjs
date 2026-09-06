@@ -199,6 +199,7 @@ export default async function init(args) {
 
   const dirs = [
     path.join(agentDir, 'skills'),
+    path.join(agentDir, 'plugins'),
   ];
 
   let created = 0;

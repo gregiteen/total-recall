@@ -147,10 +147,28 @@ describe('detectActiveSkillTargets (project scope)', () => {
     expect(codex.active).toBe(false);
   });
 
+  it('activates Hermes Agent when .hermes/ marker exists', () => {
+    fs.mkdirSync(path.join(tmp, '.hermes'), { recursive: true });
+    const t = detectActiveSkillTargets({ scope: 'project', cwd: tmp, env: {} });
+    const hermes = t.find(x => x.id === 'hermes');
+    expect(hermes.active).toBe(true);
+    expect(hermes.destDir).toBe(path.join(tmp, '.hermes', 'skills'));
+  });
+
+  it('activates DeepSeek Harness when .dsh/ marker exists', () => {
+    fs.mkdirSync(path.join(tmp, '.dsh'), { recursive: true });
+    const t = detectActiveSkillTargets({ scope: 'project', cwd: tmp, env: {} });
+    const dsh = t.find(x => x.id === 'dsh');
+    expect(dsh.active).toBe(true);
+    expect(dsh.destDir).toBe(path.join(tmp, '.agents', 'skills'));
+  });
+
   it('inactive when no markers and no env', () => {
     const t = detectActiveSkillTargets({ scope: 'project', cwd: tmp, env: {} });
     expect(t.find(x => x.id === 'claude-code').active).toBe(false);
     expect(t.find(x => x.id === 'agents').active).toBe(false);
+    expect(t.find(x => x.id === 'hermes').active).toBe(false);
+    expect(t.find(x => x.id === 'dsh').active).toBe(false);
   });
 });
 
