@@ -102,7 +102,7 @@ export async function spawnAgent(harnessId, taskPrompt, options = {}) {
 
     if (!isSelf) {
       const id = `agent-${harnessId}-${Date.now().toString(36)}`;
-      const remoteCmd = `node ~/github/total-recall/bin/total-recall.mjs agent spawn ${harnessId} ${JSON.stringify(taskPrompt)} ${options.name ? `--name ${JSON.stringify(options.name)}` : ''} --json`;
+      const remoteCmd = `total-recall agent spawn ${harnessId} ${JSON.stringify(taskPrompt)} ${options.name ? `--name ${JSON.stringify(options.name)}` : ''} --json`;
       const execResult = await execMeshCommand(options.node, remoteCmd, {
         vaultRoot: options.vaultRoot,
       });
@@ -232,7 +232,7 @@ export async function killAgent(idOrPid) {
 
   if (target.remote && target.node) {
     const { execMeshCommand } = await import('./mesh.mjs');
-    const remoteCmd = `node ~/github/total-recall/bin/total-recall.mjs agent kill ${target.id}`;
+    const remoteCmd = `total-recall agent kill ${target.id}`;
     await execMeshCommand(target.node, remoteCmd);
     target.status = 'killed';
     target.endedAt = new Date().toISOString();
@@ -270,7 +270,7 @@ export async function getAgentLogs(idOrPid, tailLines = 50) {
 
   if (target.remote && target.node) {
     const { execMeshCommand } = await import('./mesh.mjs');
-    const remoteCmd = `node ~/github/total-recall/bin/total-recall.mjs agent logs ${target.id} --tail ${tailLines}`;
+    const remoteCmd = `total-recall agent logs ${target.id} --tail ${tailLines}`;
     const res = await execMeshCommand(target.node, remoteCmd);
     return res.stdout || res.stderr || '(No logs returned from remote node)';
   }

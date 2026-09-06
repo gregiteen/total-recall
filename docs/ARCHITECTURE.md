@@ -262,7 +262,7 @@ Every plugin is a self-contained directory under `.agent/plugins/<id>/` (or glob
 
 ## 🌐 Mesh Compute Topology & Meta-Harness Layer
 
-Total Recall unifies developer machines, remote compute nodes, and cloud servers across a private **Headscale WireGuard mesh network** (`headscale.ultrachat.app`, tailnet `100.64.0.0/10`), providing zero-configuration cross-host execution without third-party cloud dependencies or open incoming firewall ports.
+Total Recall unifies developer machines, remote compute nodes, and cloud servers across a private **Headscale WireGuard mesh network** (tailnet `100.64.0.0/10`), providing zero-configuration cross-host execution without third-party cloud dependencies or open incoming firewall ports.
 
 ### 1. Mesh Compute Topology & Diagnostics
 
