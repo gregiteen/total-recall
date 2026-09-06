@@ -92,6 +92,12 @@ const COMMANDS = {
   collab:   'collab.mjs',
   command:  'command.mjs',
   export:   'export.mjs',
+  harness:  'harness.mjs',
+  watch:    'rebuild.mjs',
+  agent:    'agent.mjs',
+  agents:   'agent.mjs',
+  plugin:   'plugin/index.mjs',
+  plugins:  'plugin/index.mjs',
 };
 function printHelp() {
   console.log(`
@@ -110,8 +116,11 @@ function printHelp() {
     task <cmd>          Enqueue daemon work (open envelope)
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync
+    plugin <cmd>        Plugin manager: list, install, remove, info
     secret <cmd>        Secrets store + usage (not the vault)
     mesh <cmd>          Control-server mesh: nodes, ACL policy, Tailscale SSH
+    harness <cmd>       Meta-harness orchestration & council across IDEs & local LLMs
+    agent <cmd>         Process controller: spawn, list, logs, kill across mesh
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics
 

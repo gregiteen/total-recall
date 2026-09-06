@@ -123,6 +123,8 @@ import ttsRouter          from './routes/tts.mjs';
 import updateRouter       from './routes/update.mjs';
 import { rulesRouter }    from './routes/rules.mjs';
 import notificationsRouter from './routes/notifications.mjs';
+import meshPresenceRouter from './routes/mesh-presence.mjs';
+import pluginsRouter      from './routes/plugins.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -239,6 +241,8 @@ router.use(updateRouter);
 router.use(ssssRouter);
 router.use(rulesRouter);
 router.use(notificationsRouter);
+router.use(meshPresenceRouter);
+router.use(pluginsRouter);
 
 export { router as restRouter };
 export default router;

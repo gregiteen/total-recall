@@ -28,6 +28,30 @@ const CLIENTS = {
     mode: 'hermes',
     memoryPath: path.join(os.homedir(), '.hermes', 'memories', 'MEMORY.md'),
     userPath:   path.join(os.homedir(), '.hermes', 'memories', 'USER.md'),
+    skillsProjection: { scope: 'project', dir: path.join('.hermes', 'skills') }
+  },
+  'hermes-agent': {
+    label: 'Hermes Agent',
+    mode: 'hermes',
+    memoryPath: path.join(os.homedir(), '.hermes', 'memories', 'MEMORY.md'),
+    userPath:   path.join(os.homedir(), '.hermes', 'memories', 'USER.md'),
+    skillsProjection: { scope: 'project', dir: path.join('.hermes', 'skills') }
+  },
+  dsh: {
+    label: 'DeepSeek Harness (dsh)',
+    mode: 'dsh',
+    globalMemoryPath: path.join(os.homedir(), '.dsh', 'memory', 'MEMORY.md'),
+    globalUserPath:   path.join(os.homedir(), '.dsh', 'memory', 'user.md'),
+    localTarget: 'AGENTS.md',
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
+  },
+  'deepseek-harness': {
+    label: 'DeepSeek Harness',
+    mode: 'dsh',
+    globalMemoryPath: path.join(os.homedir(), '.dsh', 'memory', 'MEMORY.md'),
+    globalUserPath:   path.join(os.homedir(), '.dsh', 'memory', 'user.md'),
+    localTarget: 'AGENTS.md',
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   openclaw: {
     label: 'OpenClaw',
@@ -163,6 +187,10 @@ function printHelp() {
     antigravity
     gemini
     aider
+    pi
+    hermes
+    dsh
+    openclaw
     http-api
     obsidian
     generic
@@ -797,14 +825,71 @@ export default async function connect(args) {
     result.notes.push(`  ~/.pi/agent/AGENTS.md → ${instructionsPath}`);
   } else if (preset.mode === 'hermes') {
     // Hermes: write compiled MEMORY.md to ~/.hermes/memories/MEMORY.md (max 2200 chars)
+    // and project-local .hermes/memories/MEMORY.md if inside a project workspace
     const instructions = readInstructions(cwd, agentDir);
     if (!instructions) throw new Error('No INSTRUCTIONS.md found. Run npx total-recall init or compile first.');
-    fs.mkdirSync(path.dirname(preset.memoryPath), { recursive: true });
+    const homeDir = process.env.HOME || os.homedir();
+    const globalMemPath = path.join(homeDir, '.hermes', 'memories', 'MEMORY.md');
     const capped = instructions.slice(0, 2200);
-    fs.writeFileSync(preset.memoryPath, capped, 'utf8');
-    result.projection = { targetPath: preset.memoryPath, action: 'written' };
-    result.notes.push(`  Hermes MEMORY.md (${capped.length} chars) → ${preset.memoryPath}`);
+
+    let wroteGlobal = false;
+    try {
+      fs.mkdirSync(path.dirname(globalMemPath), { recursive: true });
+      fs.writeFileSync(globalMemPath, capped, 'utf8');
+      wroteGlobal = true;
+    } catch {
+      // Gracefully continue if global directory is unwritable in sandbox
+    }
+
+    let localMemPath = null;
+    if (!isHome) {
+      localMemPath = path.join(cwd, '.hermes', 'memories', 'MEMORY.md');
+      fs.mkdirSync(path.dirname(localMemPath), { recursive: true });
+      fs.writeFileSync(localMemPath, capped, 'utf8');
+    }
+
+    result.projection = { targetPath: localMemPath || globalMemPath, action: 'written' };
+    if (wroteGlobal) {
+      result.notes.push(`  Hermes MEMORY.md (${capped.length} chars) → ${globalMemPath}`);
+    }
+    if (localMemPath) {
+      result.notes.push(`  Hermes local MEMORY.md → ${localMemPath}`);
+    }
     result.notes.push('  Note: Hermes has a 2,200-char limit on MEMORY.md. Total Recall auto-caps this.');
+  } else if (preset.mode === 'dsh') {
+    // DeepSeek Harness: write global ~/.dsh/memory/MEMORY.md and symlink project AGENTS.md
+    const instructions = readInstructions(cwd, agentDir);
+    if (!instructions) throw new Error('No INSTRUCTIONS.md found. Run npx total-recall init or compile first.');
+    const homeDir = process.env.HOME || os.homedir();
+    const globalMemPath = path.join(homeDir, '.dsh', 'memory', 'MEMORY.md');
+
+    let wroteGlobal = false;
+    try {
+      fs.mkdirSync(path.dirname(globalMemPath), { recursive: true });
+      fs.writeFileSync(globalMemPath, instructions, 'utf8');
+      wroteGlobal = true;
+    } catch {
+      // Gracefully continue if global directory is unwritable in sandbox
+    }
+
+    const agentsPath = path.join(cwd, preset.localTarget);
+    if (pathExists(agentsPath)) {
+      if (opts.force) {
+        try {
+          fs.unlinkSync(agentsPath);
+        } catch {
+          fs.rmSync(agentsPath, { force: true, recursive: true });
+        }
+        fs.symlinkSync('INSTRUCTIONS.md', agentsPath);
+      }
+    } else {
+      fs.symlinkSync('INSTRUCTIONS.md', agentsPath);
+    }
+    result.projection = { targetPath: agentsPath, action: 'symlinked' };
+    if (wroteGlobal) {
+      result.notes.push(`  DeepSeek Harness MEMORY.md → ${globalMemPath}`);
+    }
+    result.notes.push(`  DeepSeek Harness AGENTS.md → INSTRUCTIONS.md`);
   } else if (preset.mode === 'openclaw') {
     // OpenClaw: write MEMORY.md + symlink AGENTS.md in cwd
     const instructions = readInstructions(cwd, agentDir);

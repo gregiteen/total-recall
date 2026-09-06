@@ -88,6 +88,9 @@ router.get('/api/integrations/active', requireAuth, (req, res) => {
         'gemini':      [path.join(HOME, '.gemini')],
         'pi':          [path.join(HOME, '.pi', 'agent')],
         'hermes':      [path.join(HOME, '.hermes')],
+        'hermes-agent':[path.join(HOME, '.hermes')],
+        'dsh':         [path.join(HOME, '.dsh')],
+        'deepseek-harness': [path.join(HOME, '.dsh')],
         'openclaw':    [path.join(HOME, '.openclaw')],
       };
 
@@ -116,7 +119,8 @@ router.post('/api/integrations/connect', requireAuth, (req, res) => {
     if (!client) return badRequest(res, 'client is required');
 
     const validClients = [
-      'vscode', 'pi', 'hermes', 'openclaw', 'cursor', 'cline', 'claude-code',
+      'vscode', 'pi', 'hermes', 'hermes-agent', 'dsh', 'deepseek-harness',
+      'openclaw', 'cursor', 'cline', 'claude-code',
       'codex', 'gemini', 'aider', 'http-api', 'obsidian',
       'generic', 'antigravity'
     ];

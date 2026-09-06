@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {
@@ -8,6 +8,7 @@ import {
 } from './vfs-documents.mjs';
 import { logger } from './logger.mjs';
 import { STATUS_TIMEOUT_MS, resolveTailscaleBinary } from './tailscale-cli.mjs';
+import { buildSshArgs, resolveNodeAccess } from './mesh-access.mjs';
 
 const CACHE_MS = 2_000;
 
@@ -356,6 +357,67 @@ export async function setMeshNodeAccess(nameOrAddress, accessPatch, options = {}
 }
 
 /**
+ * Ensure every live mesh peer has an entity document.
+ *
+ * `patchOwnMeshNode()` describes only the machine it runs on, so a peer that
+ * will never run a brain can never be described: a phone cannot run one, a
+ * control-plane droplet may not, and a machine that is simply switched off
+ * never gets the chance. On a five-node tailnet that left three nodes with no
+ * entity at all — including the always-on host, which is the one an agent is
+ * most likely to need access details for.
+ *
+ * Offline peers are deliberately skipped rather than created. A node that has
+ * not been seen in weeks is usually a dead registration, and minting an entity
+ * for it re-legitimises something the operator may be trying to retire. They
+ * are reported instead, so the choice stays with the person.
+ *
+ * Creation goes through `setMeshNodeAccess`, so it is the same Operation
+ * Contract path as every other entity write — never a raw file write.
+ *
+ * Discovery and the writer are injectable so this is testable without a live
+ * tailnet or a real vault; production callers pass neither.
+ *
+ * @param {{vaultRoot?: string, includeOffline?: boolean, peers?: object[],
+ *          entities?: object[], write?: Function}} [options]
+ * @returns {Promise<{created: string[], skipped_offline: string[], existing: number}>}
+ */
+export async function ensureMeshNodeEntities(options = {}) {
+  const vaultRoot = options.vaultRoot || defaultVaultRoot();
+  const peers = options.peers || getMeshPeers({ includeSelf: true });
+  const entities = options.entities || listMeshNodeEntities(vaultRoot);
+  const write = options.write || ((host) => setMeshNodeAccess(host, {}, { vaultRoot }));
+
+  const knownKeys = new Set(entities.map((e) => meshNodeKey(e.hostname)).filter(Boolean));
+  const knownIps = new Set(entities.map((e) => e.ip).filter(Boolean).map(String));
+
+  const created = [];
+  const skippedOffline = [];
+
+  for (const peer of peers) {
+    if (!peer.hostname) continue;
+    // Match on either identity: the same host can be recorded under a bare or
+    // suffixed name, and creating a second document for it is the duplicate
+    // problem meshNodeKey exists to prevent.
+    if (knownKeys.has(meshNodeKey(peer.hostname))) continue;
+    if (peer.ip && knownIps.has(String(peer.ip))) continue;
+
+    if (!peer.online && !options.includeOffline) {
+      skippedOffline.push(peer.hostname);
+      continue;
+    }
+
+    const res = await write(peer.hostname);
+    if (res.written) {
+      created.push(peer.hostname);
+      knownKeys.add(meshNodeKey(peer.hostname));
+      if (peer.ip) knownIps.add(String(peer.ip));
+    }
+  }
+
+  return { created, skipped_offline: skippedOffline, existing: entities.length };
+}
+
+/**
  * Upsert **this** node's mesh_node entity from live discovery.
  * Does not hardcode device names — slug and fields come from Tailscale self.
  * Preserves existing entity variables (role, labels, capabilities, notes, body).
@@ -507,3 +569,114 @@ export async function patchOwnMeshNode(options = {}) {
     result,
   };
 }
+
+/**
+ * Execute a command on a remote mesh node over SSH.
+ *
+ * @param {string} target - Node hostname or IP
+ * @param {string} command - Shell command to execute
+ * @param {object} options
+ * @param {string} [options.vaultRoot]
+ * @param {number} [options.timeoutMs=60000]
+ * @param {boolean} [options.loginShell=true]
+ * @returns {Promise<{ node: string, hostname: string, ip: string, exitCode: number, success: boolean, stdout: string, stderr: string }>}
+ */
+export async function execMeshCommand(target, command, options = {}) {
+  const { vaultRoot = defaultVaultRoot(), timeoutMs = 60_000, loginShell = true } = options;
+  const node = findMeshNode(target, vaultRoot);
+  if (!node) {
+    throw new Error(`No mesh node matches "${target}".`);
+  }
+  const resolved = resolveNodeAccess(node);
+  if (!resolved.complete) {
+    throw new Error(
+      `No login account recorded for ${node.hostname}. Run 'total-recall mesh access ${target} --user <login>'`,
+    );
+  }
+
+  const standardPath = 'export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$PATH";';
+  const remoteCommand = `${standardPath} ${command}`;
+  const sshArgs = buildSshArgs(resolved, {
+    command: remoteCommand,
+    extraOptions: ['BatchMode=yes', 'ConnectTimeout=10'],
+  });
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ssh', sshArgs);
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGTERM');
+      reject(new Error(`Command on "${target}" timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+
+    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) return;
+      resolve({
+        node: target,
+        hostname: node.hostname,
+        ip: node.ip,
+        exitCode: code ?? 1,
+        success: code === 0,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Resolves the primary or Cloudflare Tunnel fallback URL for mesh control plane access.
+ * Returns { url, source, is_fallback }
+ *
+ * @param {object} [options]
+ * @param {string} [options.url]
+ * @param {string} [options.loginServer]
+ * @returns {{ url: string|null, source: string, is_fallback: boolean }}
+ */
+export function resolveMeshControlUrl(options = {}) {
+  const explicit = options.url || options.loginServer;
+  if (explicit && String(explicit).trim()) {
+    const clean = String(explicit).trim();
+    return {
+      url: clean.endsWith('/') ? clean.slice(0, -1) : clean,
+      source: 'explicit',
+      is_fallback: false
+    };
+  }
+
+  const envPrimary = process.env.TR_LOGIN_SERVER || process.env.TR_HEADSCALE_URL;
+  if (envPrimary && envPrimary.trim()) {
+    const clean = envPrimary.trim();
+    return {
+      url: clean.endsWith('/') ? clean.slice(0, -1) : clean,
+      source: 'env_primary',
+      is_fallback: false
+    };
+  }
+
+  const envTunnel = process.env.TR_CLOUDFLARE_TUNNEL_URL || process.env.CF_TUNNEL_URL;
+  if (envTunnel && envTunnel.trim()) {
+    const clean = envTunnel.trim();
+    return {
+      url: clean.endsWith('/') ? clean.slice(0, -1) : clean,
+      source: 'cloudflare_tunnel_fallback',
+      is_fallback: true
+    };
+  }
+
+  return { url: null, source: 'none', is_fallback: false };
+}
+

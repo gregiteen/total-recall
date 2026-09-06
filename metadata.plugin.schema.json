@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/total-recall/total-recall/blob/main/metadata.plugin.schema.json",
+  "title": "Total Recall Plugin Manifest Schema",
+  "description": "Schema for plugin.json manifests in the Total Recall AI OS",
+  "type": "object",
+  "required": ["id", "name", "version", "description"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,63}$",
+      "description": "Unique plugin identifier in kebab-case, e.g. scientific-frontiers"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Human-readable name of the plugin"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic versioning (e.g. 1.0.0)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 500,
+      "description": "Description of the plugin's capability and purpose"
+    },
+    "license": {
+      "type": "string",
+      "default": "MIT"
+    },
+    "entrypoint": {
+      "type": "string",
+      "description": "Path to background daemon or runtime binary"
+    },
+    "cli": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string" },
+        "handler": { "type": "string" },
+        "binary": { "type": "string" },
+        "subcommands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "compile": {
+      "type": "object",
+      "properties": {
+        "generator": { "type": "string", "description": "Custom JS module implementing generateContext()" },
+        "watch": { "type": "array", "items": { "type": "string" } },
+        "output": { "type": "string" },
+        "auto": { "type": "boolean" }
+      }
+    },
+    "ssss_schemas": {
+      "type": "object",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "node_type": { "type": "string", "default": "memory" },
+              "template": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["intent", "schedule"],
+        "properties": {
+          "intent": { "type": "string" },
+          "schedule": { "type": "string" },
+          "capability": { "type": "string" }
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "route": { "type": "string" },
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "openwiki_hub": { "type": "string" }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "channels": { "type": "array", "items": { "type": "string" } },
+        "min_tier": { "type": "string" }
+      }
+    }
+  }
+}

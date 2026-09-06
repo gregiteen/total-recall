@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import './App.css'
-import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
+import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth, fetchPlugins, type PluginInfo } from './api'
 import type { HealthData } from './types'
 import LoginPage from './pages/LoginPage'
 import ChatPage from './pages/ChatPage'
@@ -19,6 +19,7 @@ import RulesPage from './pages/RulesPage'
 import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
 import OpenWikiPage from './pages/OpenWikiPage'
+import PluginsPage from './pages/PluginsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { isOnboardingComplete } from './utils/onboarding'
@@ -86,6 +87,12 @@ interface SidebarProps {
 const getNavLinkClass = ({ isActive }: { isActive: boolean }) => `nav-link ${isActive ? 'active' : ''}`;
 
 function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProps) {
+  const [plugins, setPlugins] = useState<PluginInfo[]>([])
+
+  useEffect(() => {
+    fetchPlugins().then(setPlugins).catch(() => {})
+  }, [])
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -158,6 +165,36 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           </svg>
           OpenWiki
         </NavLink>
+        <NavLink to="/plugins" className={getNavLinkClass} id="nav-plugins">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+          </svg>
+          Plugins
+        </NavLink>
+
+        {plugins.length > 0 && (
+          <>
+            <div className="nav-section-label">Plugins</div>
+            {plugins.map((p) => (
+              <NavLink
+                key={p.id}
+                to={`/openwiki?plugin=${encodeURIComponent(p.id)}`}
+                className={getNavLinkClass}
+                id={`nav-plugin-${p.id}`}
+                title={p.description}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+                {p.name}
+              </NavLink>
+            ))}
+          </>
+        )}
 
         <div className="nav-section-label">Account</div>
         <NavLink to="/network" className={getNavLinkClass} id="nav-network">
@@ -396,6 +433,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
             <Route path="/openwiki" element={<OpenWikiPage activeBrainId={activeBrainId} />} />
+            <Route path="/plugins" element={<PluginsPage activeBrainId={activeBrainId} />} />
             <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
             <Route path="/keys" element={<Navigate to="/secrets" replace />} />
             <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />

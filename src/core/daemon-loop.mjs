@@ -383,8 +383,22 @@ async function main() {
               message: `Mesh re-enrolled via ${enrollment.method || 'unknown'}`,
             });
           }
-          const { patchOwnMeshNode } = await import('./mesh.mjs');
+          const { patchOwnMeshNode, ensureMeshNodeEntities } = await import('./mesh.mjs');
           await patchOwnMeshNode();
+          // Self-patching describes only this machine, so peers that will never
+          // run a brain — a phone, an always-on host without one — stay
+          // undescribed forever. The leader fills those in; offline peers are
+          // reported rather than created, since a long-dead registration should
+          // not be re-legitimised by housekeeping.
+          if (await isLeader()) {
+            const ents = await ensureMeshNodeEntities();
+            if (ents.created.length) {
+              logger.info({
+                subsystem: 'daemon-loop',
+                message: `Created mesh entities for ${ents.created.join(', ')}`,
+              });
+            }
+          }
           // renewLease is a no-op shim (re-checks isLeader); kept for API stability.
           if (await isLeader()) {
             await renewLease();

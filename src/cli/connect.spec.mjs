@@ -23,19 +23,24 @@ vi.mock('../core/surface.mjs', () => ({
   })
 }));
 
-// We need to control cwd and AGENT_DIR so connect writes to a safe temp dir
+// We need to control cwd, AGENT_DIR, and HOME so connect writes to a safe temp dir
 let tmpProject;
 let tmpAgentDir;
+let tmpHome;
 let origCwd;
 let origAgentDir;
+let origHome;
 
 beforeEach(() => {
   tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-connect-proj-'));
   tmpAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-connect-agent-'));
+  tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-connect-home-'));
   origCwd = process.cwd();
   origAgentDir = process.env.AGENT_DIR;
+  origHome = process.env.HOME;
   process.chdir(tmpProject);
   process.env.AGENT_DIR = tmpAgentDir;
+  process.env.HOME = tmpHome;
 
   // INSTRUCTIONS.md must exist for file/symlink projections
   fs.writeFileSync(
@@ -49,8 +54,11 @@ afterEach(() => {
   process.chdir(origCwd);
   if (origAgentDir === undefined) delete process.env.AGENT_DIR;
   else process.env.AGENT_DIR = origAgentDir;
+  if (origHome === undefined) delete process.env.HOME;
+  else process.env.HOME = origHome;
   fs.rmSync(tmpProject, { recursive: true, force: true });
   fs.rmSync(tmpAgentDir, { recursive: true, force: true });
+  fs.rmSync(tmpHome, { recursive: true, force: true });
 });
 
 async function runConnect(clientArgs) {
@@ -195,6 +203,58 @@ describe('connect — repo skills projected as slash commands', () => {
   });
 });
 
+describe('connect — Hermes Agent projection', () => {
+  it('writes MEMORY.md to ~/.hermes/memories/MEMORY.md and local .hermes/memories/MEMORY.md', async () => {
+    await runConnect(['hermes']);
+    const localTarget = path.join(tmpProject, '.hermes', 'memories', 'MEMORY.md');
+    expect(fs.existsSync(localTarget)).toBe(true);
+    const content = fs.readFileSync(localTarget, 'utf8');
+    expect(content).toContain('FIXTURE_CONTENT');
+  });
+
+  it('registers hermes in clients.json', async () => {
+    await runConnect(['hermes']);
+    const registry = JSON.parse(
+      fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'), 'utf8')
+    );
+    expect(registry.clients.hermes).toBeDefined();
+    expect(registry.clients.hermes.mode).toBe('hermes');
+  });
+});
+
+describe('connect — DeepSeek Harness (dsh) projection', () => {
+  it('creates AGENTS.md as a symlink and writes ~/.dsh/memory/MEMORY.md', async () => {
+    await runConnect(['dsh']);
+    const targetPath = path.join(tmpProject, 'AGENTS.md');
+    expect(fs.existsSync(targetPath)).toBe(true);
+    const stat = fs.lstatSync(targetPath);
+    expect(stat.isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(targetPath)).toBe('INSTRUCTIONS.md');
+  });
+
+  it('projects repo skills to <project>/.agents/skills for dsh', async () => {
+    const dir = path.join(tmpAgentDir, 'skills', 'test-skill');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'SKILL.md'),
+      '---\nname: test-skill\ndescription: "A test skill"\n---\nBody.\n',
+      'utf8'
+    );
+    await runConnect(['dsh']);
+    const link = path.join(tmpProject, '.agents', 'skills', 'test-skill');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  });
+
+  it('registers dsh in clients.json', async () => {
+    await runConnect(['dsh']);
+    const registry = JSON.parse(
+      fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'clients.json'), 'utf8')
+    );
+    expect(registry.clients.dsh).toBeDefined();
+    expect(registry.clients.dsh.mode).toBe('dsh');
+  });
+});
+
 describe('connect — Core skills seeding', () => {
   it('seeds the master total-recall skill folder during connection bootstrap', async () => {
     // Delete pre-created instructions to trigger connection bootstrapping
@@ -208,4 +268,5 @@ describe('connect — Core skills seeding', () => {
     expect(fs.existsSync(path.join(skillPath, "evals", "evals.json"))).toBe(true);
   }, 30000);
 });
+
 

@@ -58,6 +58,20 @@ export const IDE_SKILLS = [
     // project-local dir, so project skills are opt-in (namespaced) via connect.
     project: null,
     global:  { dir: ['.codex', 'skills'], markers: ['.codex'] }
+  },
+  {
+    id: 'hermes',
+    label: 'Hermes Agent',
+    clients: ['hermes', 'hermes-agent'],
+    project: { dir: ['.hermes', 'skills'], markers: ['.hermes'], env: ['HERMES_AGENT', 'HERMES_HOME'] },
+    global:  { dir: ['.hermes', 'skills'], markers: ['.hermes'] }
+  },
+  {
+    id: 'dsh',
+    label: 'DeepSeek Harness',
+    clients: ['dsh', 'deepseek-harness', 'deepseek'],
+    project: { dir: ['.agents', 'skills'], markers: ['.dsh', '.agents'], env: ['DSH_AGENT', 'DEEPSEEK_HARNESS'] },
+    global:  { dir: ['.dsh', 'skills'], markers: ['.dsh'] }
   }
 ];
 

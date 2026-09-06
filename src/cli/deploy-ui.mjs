@@ -692,6 +692,9 @@ export function startDeployUI(port = 3001) {
           'gemini':      [HOME + '/.gemini'],
           'pi':          [HOME + '/.pi/agent'],
           'hermes':      [HOME + '/.hermes'],
+          'hermes-agent':[HOME + '/.hermes'],
+          'dsh':         [HOME + '/.dsh'],
+          'deepseek-harness': [HOME + '/.dsh'],
           'openclaw':    [HOME + '/.openclaw'],
           'obsidian':    [HOME + '/Library/Application Support/obsidian', HOME + '/.config/obsidian'],
         };
@@ -725,6 +728,9 @@ export function startDeployUI(port = 3001) {
             'gemini':      { client: 'gemini',       label: 'Gemini CLI' },
             'pi':          { client: 'pi',           label: 'Pi Coding Agent' },
             'hermes':      { client: 'hermes',       label: 'Hermes Agent' },
+            'hermes-agent':{ client: 'hermes-agent', label: 'Hermes Agent' },
+            'dsh':         { client: 'dsh',          label: 'DeepSeek Harness (dsh)' },
+            'deepseek-harness': { client: 'deepseek-harness', label: 'DeepSeek Harness' },
             'openclaw':    { client: 'openclaw',     label: 'OpenClaw' },
           };
 

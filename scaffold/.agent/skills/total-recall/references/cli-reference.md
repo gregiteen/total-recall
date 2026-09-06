@@ -23,7 +23,7 @@ Rebuild the derived indexes and compile memory surfaces.
 ### 1.3 `connect`
 Configure an IDE or external client to bind to the Total Recall local server.
 *   **Syntax**: `npx total-recall connect <client> [options]`
-*   **Supported Clients**: `vscode`, `cursor`, `cline`, `codex`, `antigravity`, `gemini`, `aider`, `obsidian`, `pi`, `hermes`, `openclaw`, `generic`.
+*   **Supported Clients**: `vscode`, `cursor`, `cline`, `codex`, `antigravity`, `gemini`, `aider`, `obsidian`, `pi`, `hermes`, `dsh`, `openclaw`, `generic`.
 *   **Options**:
     *   `--brain <url>`: Override default brain server URL.
     *   `--token <PAT>`: Inject bearer PAT credentials for authenticating requests.
@@ -37,6 +37,29 @@ Run system diagnostic suites and heal environment inconsistencies.
 ### 1.5 `resolve`
 Manually resolve quarantined memory conflicts.
 *   **Syntax**: `npx total-recall resolve --supersede <node-slug> | --keep <node-slug>`
+
+### 1.6 `mesh`
+Control-server (Headscale) mesh administration, cluster capability auditing, and remote execution.
+*   **Syntax**: `npx total-recall mesh <status|doctor|nodes|ssh|exec|access|preauthkey|policy> [options]`
+*   **Key Subcommands**:
+    *   `mesh doctor [--json]`: Audit SSH reachability, runtimes (`node`, `docker`, `git`), and AI harnesses across all mesh nodes.
+    *   `mesh exec <node> [--json] <cmd…>`: Non-interactive remote command execution over WireGuard SSH.
+    *   `mesh ssh <node> [cmd…]`: Interactive or one-shot SSH session using recorded node credentials.
+
+### 1.7 `harness`
+Meta-harness orchestration layer across connected IDEs, CLI agents, and local neural runtimes.
+*   **Syntax**: `npx total-recall harness <list|dispatch|council> [options]`
+*   **Supported Harnesses**: `agy` (Google Antigravity), `claude` (Claude Code), `codex` (OpenAI Codex), `gemini` (Google Gemini), `ollama` (Local Neural Models via `pipe_stdin`).
+*   **Options**:
+    *   `--node <node>`: Route harness execution remotely to a target mesh node.
+
+### 1.8 `agent`
+Process controller for background agent tasks across the local machine and remote mesh nodes.
+*   **Syntax**: `npx total-recall agent <list|spawn|status|logs|kill> [options]`
+*   **Key Subcommands**:
+    *   `agent spawn <harness> [--node <node>] [--name <label>] "<task>"`: Spawn a background subagent task.
+    *   `agent logs <id> [--tail <n>]`: Stream agent execution logs locally or over mesh SSH.
+    *   `agent kill <id|pid>`: Terminate an active agent process locally or across the mesh.
 
 ---
 
