@@ -180,7 +180,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             {plugins.map((p) => (
               <NavLink
                 key={p.id}
-                to={`/openwiki?plugin=${encodeURIComponent(p.id)}`}
+                to={`/plugins?id=${encodeURIComponent(p.id)}`}
                 className={getNavLinkClass}
                 id={`nav-plugin-${p.id}`}
                 title={p.description}

@@ -424,4 +424,94 @@ router.get("/api/plugins/:id", requireAuth, requireScope("config:read"), (req, r
   }
 });
 
+/**
+ * POST /api/plugins/:id/run
+ * Executes a plugin CLI handler and returns captured stdout/stderr.
+ */
+router.post("/api/plugins/:id/run", requireAuth, requireScope("config:read"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { subcommand = "", args = [] } = req.body || {};
+    const projectRoot = req.body?.projectRoot || process.cwd();
+    const plugin = getPluginById(id, projectRoot);
+
+    if (!plugin) {
+      return badRequest(res, "Plugin " + id + " not found");
+    }
+
+    if (!plugin.manifest?.cli?.handler) {
+      return badRequest(res, "Plugin " + id + " does not declare a CLI handler");
+    }
+
+    const absHandler = path.resolve(plugin.dir, plugin.manifest.cli.handler);
+    if (!fs.existsSync(absHandler)) {
+      return badRequest(res, "Plugin CLI handler file not found: " + absHandler);
+    }
+
+    const logs = [];
+    const origLog = console.log;
+    const origError = console.error;
+    console.log = (...a) => logs.push(a.map(x => typeof x === "object" ? JSON.stringify(x, null, 2) : String(x)).join(" "));
+    console.error = (...a) => logs.push("[error] " + a.map(x => typeof x === "object" ? JSON.stringify(x, null, 2) : String(x)).join(" "));
+
+    try {
+      const handlerMod = await import(absHandler + "?t=" + Date.now());
+      const argv = ["node", "total-recall", id, ...(subcommand ? [subcommand] : []), ...(Array.isArray(args) ? args : [])];
+      if (handlerMod.run) {
+        await handlerMod.run(argv);
+      } else if (handlerMod.default) {
+        await handlerMod.default(argv.slice(3));
+      }
+    } finally {
+      console.log = origLog;
+      console.error = origError;
+    }
+
+    res.json({
+      success: true,
+      pluginId: id,
+      output: logs.join("\n")
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/plugins/:id/readme
+ * Returns the README markdown content for the plugin.
+ */
+router.get("/api/plugins/:id/readme", requireAuth, requireScope("config:read"), (req, res) => {
+  try {
+    const { id } = req.params;
+    const projectRoot = req.query?.root || process.cwd();
+    const plugin = getPluginById(id, projectRoot);
+
+    if (!plugin) {
+      return badRequest(res, "Plugin " + id + " not found");
+    }
+
+    const candidates = [
+      path.join(plugin.dir, "README.md"),
+      path.join(plugin.dir, "readme.md")
+    ];
+
+    let content = "# " + (plugin.manifest?.name || id) + "\n\n" + (plugin.manifest?.description || "");
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        content = fs.readFileSync(cand, "utf8");
+        break;
+      }
+    }
+
+    res.json({
+      success: true,
+      pluginId: id,
+      readme: content
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
 export default router;

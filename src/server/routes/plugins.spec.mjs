@@ -110,4 +110,19 @@ describe('plugins router', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('Missing source path');
   });
+
+  it('GET /api/plugins/:id/readme returns markdown content', async () => {
+    const res = await request(app).get('/api/plugins/scientific-frontiers/readme');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.readme).toContain('Scientific Frontiers');
+  });
+
+  it('POST /api/plugins/:id/run returns 400 when plugin has no cli handler', async () => {
+    const res = await request(app)
+      .post('/api/plugins/scientific-frontiers/run')
+      .send({ subcommand: 'status' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('does not declare a CLI handler');
+  });
 });
