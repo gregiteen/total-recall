@@ -5,10 +5,12 @@ import {
   installPlugin, 
   removePlugin, 
   ratePlugin,
+  runPluginCommand,
+  fetchPluginReadme,
   type PluginInfo, 
   type CatalogPlugin 
 } from "../api"
-import { Link } from "react-router-dom"
+import { useSearchParams } from "react-router-dom"
 
 interface PluginsPageProps {
   activeBrainId?: string | null
@@ -94,6 +96,7 @@ function InteractiveRater({
 }
 
 export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
   const [catalog, setCatalog] = useState<CatalogPlugin[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,7 +104,16 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"rating" | "reviews" | "name">("rating")
   const [installModalOpen, setInstallModalOpen] = useState(false)
-  const [manifestModalPlugin, setManifestModalPlugin] = useState<PluginInfo | null>(null)
+
+  // Plugin Detail & Runner Modal State
+  const [detailModalPlugin, setDetailModalPlugin] = useState<PluginInfo | null>(null)
+  const [detailTab, setDetailTab] = useState<"runner" | "readme" | "schemas" | "tasks" | "manifest">("runner")
+  const [subcommand, setSubcommand] = useState("")
+  const [customArgs, setCustomArgs] = useState("")
+  const [executing, setExecuting] = useState(false)
+  const [consoleOutput, setConsoleOutput] = useState("")
+  const [readmeText, setReadmeText] = useState("")
+  const [readmeLoading, setReadmeLoading] = useState(false)
 
   // Install Form State
   const [installSource, setInstallSource] = useState("")
@@ -127,6 +139,55 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   useEffect(() => {
     loadData()
   }, [loadData, activeBrainId])
+
+  const openDetail = async (p: PluginInfo, tab: "runner" | "readme" | "schemas" | "tasks" | "manifest" = "runner") => {
+    setDetailModalPlugin(p)
+    const subcommands = (p.manifest as any)?.cli?.subcommands as Array<{ name: string; description: string }> | undefined
+    const defaultSub = subcommands?.[0]?.name || (p.cli?.command === "git-sentinel" ? "audit" : "status")
+    setSubcommand(defaultSub)
+    setCustomArgs("")
+    setConsoleOutput("")
+    setDetailTab(tab)
+    setReadmeLoading(true)
+    try {
+      const rm = await fetchPluginReadme(p.id)
+      setReadmeText(rm)
+    } finally {
+      setReadmeLoading(false)
+    }
+  }
+
+  const closeDetail = () => {
+    setDetailModalPlugin(null)
+    if (searchParams.has("id")) {
+      const next = new URLSearchParams(searchParams)
+      next.delete("id")
+      setSearchParams(next)
+    }
+  }
+
+  const handleExecute = async () => {
+    if (!detailModalPlugin) return
+    setExecuting(true)
+    const args = customArgs.trim() ? customArgs.trim().split(/\s+/) : []
+    const res = await runPluginCommand(detailModalPlugin.id, subcommand, args)
+    setExecuting(false)
+    if (res.success) {
+      setConsoleOutput(res.output || "(Command completed with no output)")
+    } else {
+      setConsoleOutput(`❌ Error: ${res.error || "Failed to execute command"}`)
+    }
+  }
+
+  useEffect(() => {
+    const idParam = searchParams.get("id")
+    if (idParam && plugins.length > 0) {
+      const match = plugins.find(p => p.id === idParam)
+      if (match && (!detailModalPlugin || detailModalPlugin.id !== idParam)) {
+        openDetail(match, "runner")
+      }
+    }
+  }, [searchParams, plugins])
 
   const handleInstallSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
@@ -595,9 +656,29 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                     borderTop: "1px solid var(--border)", 
                     paddingTop: "14px" 
                   }}>
-                    <div style={{ display: "flex", gap: "8px" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      {p.cli?.command && (
+                        <button
+                          onClick={() => openDetail(p, "runner")}
+                          style={{
+                            background: "var(--accent-muted)",
+                            border: "1px solid var(--border-accent)",
+                            color: "var(--accent-hover)",
+                            borderRadius: "var(--radius-sm)",
+                            padding: "5px 12px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px"
+                          }}
+                        >
+                          ▶ Run
+                        </button>
+                      )}
                       <button
-                        onClick={() => setManifestModalPlugin(p)}
+                        onClick={() => openDetail(p, "readme")}
                         style={{
                           background: "none",
                           border: "1px solid var(--border)",
@@ -608,25 +689,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                           cursor: "pointer"
                         }}
                       >
-                        Manifest
+                        Inspect
                       </button>
-                      <Link
-                        to={`/openwiki?plugin=${encodeURIComponent(p.id)}`}
-                        style={{
-                          background: "none",
-                          border: "1px solid var(--border-accent)",
-                          color: "var(--accent-hover)",
-                          borderRadius: "var(--radius-sm)",
-                          padding: "5px 10px",
-                          fontSize: "12px",
-                          textDecoration: "none",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px"
-                        }}
-                      >
-                        Docs →
-                      </Link>
                     </div>
 
                     <button
@@ -859,8 +923,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
         </div>
       )}
 
-      {/* Manifest Modal */}
-      {manifestModalPlugin && (
+      {/* Plugin Detail & Interactive Runner Modal */}
+      {detailModalPlugin && (
         <div style={{
           position: "fixed",
           inset: 0,
@@ -869,45 +933,396 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
           alignItems: "center",
           justifyContent: "center",
           zIndex: 1000,
-          backdropFilter: "blur(4px)"
+          backdropFilter: "blur(6px)",
+          padding: "20px"
         }}>
           <div style={{
             background: "var(--bg-secondary)",
             border: "1px solid var(--border-accent)",
             borderRadius: "var(--radius-xl)",
-            padding: "28px",
+            padding: "24px 28px",
             width: "100%",
-            maxWidth: "680px",
-            maxHeight: "80vh",
+            maxWidth: "760px",
+            maxHeight: "88vh",
             display: "flex",
-            flexDirection: "column"
+            flexDirection: "column",
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.5)"
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h2 style={{ margin: 0, fontSize: "18px" }}>
-                Manifest: {manifestModalPlugin.name} ({manifestModalPlugin.id})
-              </h2>
+            {/* Modal Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "10px",
+                  background: "var(--accent-muted)",
+                  color: "var(--accent-hover)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "22px"
+                }}>
+                  🧩
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>{detailModalPlugin.name}</h2>
+                    <span style={{
+                      fontSize: "11px",
+                      fontWeight: "600",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      background: detailModalPlugin.valid ? "var(--success-muted)" : "var(--error-muted)",
+                      color: detailModalPlugin.valid ? "var(--success)" : "var(--error)",
+                      border: `1px solid ${detailModalPlugin.valid ? "rgba(52, 211, 153, 0.2)" : "rgba(248, 113, 113, 0.2)"}`
+                    }}>
+                      v{detailModalPlugin.version}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                    id: {detailModalPlugin.id}
+                  </span>
+                </div>
+              </div>
+
               <button
-                onClick={() => setManifestModalPlugin(null)}
-                style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: "20px", cursor: "pointer" }}
+                onClick={closeDetail}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-secondary)",
+                  fontSize: "24px",
+                  cursor: "pointer",
+                  lineHeight: 1
+                }}
               >
                 ×
               </button>
             </div>
 
-            <pre style={{
-              flex: 1,
-              overflow: "auto",
-              background: "var(--bg-primary)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)",
-              padding: "16px",
-              fontFamily: "var(--font-mono)",
-              fontSize: "13px",
-              color: "var(--accent-hover)",
-              margin: 0
+            {/* Sub-Navigation Tabs */}
+            <div style={{
+              display: "flex",
+              gap: "6px",
+              borderBottom: "1px solid var(--border)",
+              paddingBottom: "12px",
+              marginBottom: "18px",
+              overflowX: "auto"
             }}>
-              {JSON.stringify(manifestModalPlugin.manifest || manifestModalPlugin, null, 2)}
-            </pre>
+              <button
+                onClick={() => setDetailTab("runner")}
+                style={{
+                  background: detailTab === "runner" ? "var(--bg-elevated)" : "transparent",
+                  color: detailTab === "runner" ? "var(--accent-hover)" : "var(--text-secondary)",
+                  border: detailTab === "runner" ? "1px solid var(--border-accent)" : "1px solid transparent",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                <span>⚡ Interactive Runner</span>
+              </button>
+
+              <button
+                onClick={() => setDetailTab("readme")}
+                style={{
+                  background: detailTab === "readme" ? "var(--bg-elevated)" : "transparent",
+                  color: detailTab === "readme" ? "var(--accent-hover)" : "var(--text-secondary)",
+                  border: detailTab === "readme" ? "1px solid var(--border-accent)" : "1px solid transparent",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+              >
+                📖 Documentation
+              </button>
+
+              <button
+                onClick={() => setDetailTab("schemas")}
+                style={{
+                  background: detailTab === "schemas" ? "var(--bg-elevated)" : "transparent",
+                  color: detailTab === "schemas" ? "var(--accent-hover)" : "var(--text-secondary)",
+                  border: detailTab === "schemas" ? "1px solid var(--border-accent)" : "1px solid transparent",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+              >
+                🧩 SSSS Schemas ({detailModalPlugin.categories?.length || 0})
+              </button>
+
+              <button
+                onClick={() => setDetailTab("tasks")}
+                style={{
+                  background: detailTab === "tasks" ? "var(--bg-elevated)" : "transparent",
+                  color: detailTab === "tasks" ? "var(--accent-hover)" : "var(--text-secondary)",
+                  border: detailTab === "tasks" ? "1px solid var(--border-accent)" : "1px solid transparent",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+              >
+                ⏱️ Tasks ({detailModalPlugin.tasks?.length || 0})
+              </button>
+
+              <button
+                onClick={() => setDetailTab("manifest")}
+                style={{
+                  background: detailTab === "manifest" ? "var(--bg-elevated)" : "transparent",
+                  color: detailTab === "manifest" ? "var(--accent-hover)" : "var(--text-secondary)",
+                  border: detailTab === "manifest" ? "1px solid var(--border-accent)" : "1px solid transparent",
+                  borderRadius: "var(--radius-sm)",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+              >
+                📋 Manifest
+              </button>
+            </div>
+
+            {/* Tab Body */}
+            <div style={{ flex: 1, overflowY: "auto", minHeight: "320px" }}>
+              {detailTab === "runner" && (
+                <div>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
+                      Command: <code style={{ color: "var(--accent-hover)", background: "var(--bg-primary)", padding: "2px 6px", borderRadius: "4px" }}>total-recall {detailModalPlugin.cli?.command || detailModalPlugin.id}</code>
+                    </span>
+
+                    <input
+                      type="text"
+                      placeholder="subcommand (e.g. status, audit, sample)"
+                      value={subcommand}
+                      onChange={(e) => setSubcommand(e.target.value)}
+                      style={{
+                        background: "var(--bg-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        padding: "6px 10px",
+                        fontSize: "13px",
+                        width: "160px"
+                      }}
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="extra args (e.g. --json)"
+                      value={customArgs}
+                      onChange={(e) => setCustomArgs(e.target.value)}
+                      style={{
+                        background: "var(--bg-primary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-sm)",
+                        color: "var(--text-primary)",
+                        padding: "6px 10px",
+                        fontSize: "13px",
+                        flex: 1,
+                        minWidth: "140px"
+                      }}
+                    />
+
+                    <button
+                      onClick={handleExecute}
+                      disabled={executing}
+                      style={{
+                        background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                        color: "#ffffff",
+                        border: "none",
+                        borderRadius: "var(--radius-sm)",
+                        padding: "7px 18px",
+                        fontSize: "13px",
+                        fontWeight: "600",
+                        cursor: executing ? "wait" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px"
+                      }}
+                    >
+                      {executing ? "Running..." : "▶ Execute"}
+                    </button>
+                  </div>
+
+                  {/* Terminal Console View */}
+                  <div style={{
+                    background: "#090d16",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "16px 20px",
+                    minHeight: "260px",
+                    maxHeight: "360px",
+                    overflowY: "auto",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    lineHeight: "1.6",
+                    color: "#e2e8f0",
+                    position: "relative"
+                  }}>
+                    {consoleOutput ? (
+                      <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                        {consoleOutput}
+                      </pre>
+                    ) : (
+                      <div style={{ color: "var(--text-tertiary)", fontStyle: "italic", paddingTop: "50px", textAlign: "center" }}>
+                        Select a subcommand and click "Execute" to run the plugin CLI and capture live output.
+                      </div>
+                    )}
+
+                    {consoleOutput && (
+                      <div style={{ position: "absolute", top: "10px", right: "12px", display: "flex", gap: "6px" }}>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(consoleOutput)}
+                          style={{
+                            background: "rgba(255, 255, 255, 0.08)",
+                            border: "none",
+                            color: "var(--text-secondary)",
+                            borderRadius: "4px",
+                            padding: "3px 8px",
+                            fontSize: "11px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Copy
+                        </button>
+                        <button
+                          onClick={() => setConsoleOutput("")}
+                          style={{
+                            background: "rgba(255, 255, 255, 0.08)",
+                            border: "none",
+                            color: "var(--text-secondary)",
+                            borderRadius: "4px",
+                            padding: "3px 8px",
+                            fontSize: "11px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {detailTab === "readme" && (
+                <div style={{
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "20px 24px",
+                  maxHeight: "420px",
+                  overflowY: "auto",
+                  lineHeight: "1.6"
+                }}>
+                  {readmeLoading ? (
+                    <div style={{ color: "var(--text-tertiary)", textAlign: "center", padding: "40px" }}>Loading documentation...</div>
+                  ) : (
+                    <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit", fontSize: "14px", color: "var(--text-primary)" }}>
+                      {readmeText || "No README.md documentation found for this plugin."}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {detailTab === "schemas" && (
+                <div style={{ maxHeight: "420px", overflowY: "auto" }}>
+                  {detailModalPlugin.categories && detailModalPlugin.categories.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {detailModalPlugin.categories.map((cat) => (
+                        <div key={cat.name} style={{
+                          background: "var(--bg-primary)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          padding: "14px 18px"
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                            <span style={{ fontWeight: "700", color: "var(--accent-hover)", fontFamily: "var(--font-mono)" }}>
+                              {cat.name}
+                            </span>
+                            <span style={{ fontSize: "11px", background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: "4px", color: "var(--text-tertiary)" }}>
+                              type: memory
+                            </span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
+                            {cat.description || "Plugin declared SSSS category schema."}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-tertiary)" }}>
+                      This plugin does not declare custom SSSS category schemas.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detailTab === "tasks" && (
+                <div style={{ maxHeight: "420px", overflowY: "auto" }}>
+                  {detailModalPlugin.tasks && detailModalPlugin.tasks.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      {detailModalPlugin.tasks.map((t, idx) => (
+                        <div key={idx} style={{
+                          background: "var(--bg-primary)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          padding: "14px 18px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
+                          <div>
+                            <div style={{ fontWeight: "600", fontSize: "14px", marginBottom: "4px" }}>
+                              {t.intent}
+                            </div>
+                            <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                              cron: {t.schedule}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: "12px", background: "var(--success-muted)", color: "var(--success)", padding: "3px 8px", borderRadius: "6px", fontWeight: "600" }}>
+                            Scheduled
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-tertiary)" }}>
+                      No background daemon tasks registered for this plugin.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detailTab === "manifest" && (
+                <pre style={{
+                  margin: 0,
+                  background: "var(--bg-primary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "16px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12px",
+                  color: "var(--accent-hover)",
+                  maxHeight: "420px",
+                  overflow: "auto"
+                }}>
+                  {JSON.stringify(detailModalPlugin.manifest || detailModalPlugin, null, 2)}
+                </pre>
+              )}
+            </div>
           </div>
         </div>
       )}

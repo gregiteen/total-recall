@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-08T03:34:19.881Z
+generated_at: 2026-09-08T03:40:56.494Z
 generated_from: total-recall
 ---
 
@@ -122,7 +122,7 @@ models/
     total-recall/  (1 items)
 scaffold/
   .agent/
-    plugins/  (0 items)
+    plugins/  (4 items)
     skills/  (2 items)
 scratch/
   dummy-repo/
@@ -393,7 +393,7 @@ templates/
 - `GET /api/notifications/history`
 - `POST /api/notifications/test`
 
-### plugins (6 endpoints)
+### plugins (8 endpoints)
 
 - `GET /api/plugins`
 - `GET /api/plugins/catalog`
@@ -401,6 +401,8 @@ templates/
 - `POST /api/plugins/install`
 - `DELETE /api/plugins/:id`
 - `GET /api/plugins/:id`
+- `POST /api/plugins/:id/run`
+- `GET /api/plugins/:id/readme`
 
 ### proposals (6 endpoints)
 

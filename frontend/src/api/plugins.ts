@@ -132,3 +132,36 @@ export async function ratePlugin(id: string, rating: number, review?: string): P
     return { success: false, error: err.message || "Network error" }
   }
 }
+
+export async function runPluginCommand(
+  id: string,
+  subcommand = "",
+  args: string[] = []
+): Promise<{ success: boolean; output?: string; error?: string }> {
+  try {
+    const res = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subcommand, args })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      return { success: false, error: data.error || data.message || "Failed to execute plugin command" }
+    }
+    return { success: true, output: data.output || "" }
+  } catch (err: any) {
+    return { success: false, error: err.message || "Network error" }
+  }
+}
+
+export async function fetchPluginReadme(id: string): Promise<string> {
+  try {
+    const res = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/readme`)
+    if (!res.ok) return ""
+    const data = await res.json()
+    return data.readme || ""
+  } catch {
+    return ""
+  }
+}
+
