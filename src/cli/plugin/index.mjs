@@ -2,6 +2,7 @@ import { listPlugins } from './list.mjs';
 import { installPlugin } from './install.mjs';
 import { removePlugin } from './remove.mjs';
 import { searchCatalog } from './search.mjs';
+import { createPlugin } from './create.mjs';
 import { getPlugin } from '../../core/plugin-loader.mjs';
 
 function printHelp() {
@@ -15,6 +16,13 @@ Commands:
   search [query]            Search plugin catalog (--json for pipelines)
   catalog                   Browse the full catalog
   list                      List all installed plugins (project & global)
+  create <id>               Scaffold a new plugin manifest and directory
+                              --name <name>         Human-readable plugin name
+                              --description <desc>  Plugin purpose & capability
+                              --category <cat>      Declare an SSSS memory category
+                              --with-cli            Generate CLI command handler
+                              --with-generator      Generate context generator
+                              --global, -g          Create in ~/.agent/plugins/
   install <path|git-url>    Install or link a plugin
                               --link, -l    Symlink local directory instead of copying
                               --global, -g  Install to ~/.agent/plugins/
@@ -23,6 +31,7 @@ Commands:
 
 Examples:
   npx total-recall plugin list
+  npx total-recall plugin create system-monitor --with-cli --category system-metrics
   npx total-recall plugin install ./path/to/my-plugin --link
   npx total-recall plugin install https://github.com/org/scientific-frontiers.git
   npx total-recall plugin info scientific-frontiers
@@ -44,6 +53,11 @@ export async function run(argv = []) {
 
   if (command === 'search' || command === 'catalog' || command === 'find') {
     await searchCatalog(rest);
+    return;
+  }
+
+  if (command === 'create' || command === 'new' || command === 'init') {
+    await createPlugin(rest);
     return;
   }
 

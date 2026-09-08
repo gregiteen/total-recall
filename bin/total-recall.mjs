@@ -219,8 +219,29 @@ async function main() {
         console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
         process.exit(0);
       }
+
+      // Check installed plugins for custom CLI commands declared in manifest
+      const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
+      const plugins = discoverPlugins(process.cwd());
+      for (const p of plugins) {
+        if (p.valid && p.manifest.cli?.command === command) {
+          const handlerRel = p.manifest.cli.handler;
+          if (handlerRel) {
+            const absHandler = path.resolve(p.dir, handlerRel);
+            if (fs.existsSync(absHandler)) {
+              const handler = await import(absHandler);
+              if (handler.run) {
+                await handler.run(process.argv);
+              } else if (handler.default) {
+                await handler.default(process.argv.slice(3));
+              }
+              process.exit(0);
+            }
+          }
+        }
+      }
     } catch (err) {
-      console.error(`Error executing integration command: ${err.message}`);
+      console.error(`Error executing dynamic command: ${err.message}`);
       process.exit(1);
     }
 
