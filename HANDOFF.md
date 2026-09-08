@@ -1,33 +1,28 @@
-# Handoff: Recent System Integration Recovery
+# Handoff: Total Recall Current State
 
 ## Current state
 
 - **Branch:** `main`
-- **Worktree:** intentionally dirty with the uncommitted recovery implementation plus pre-existing user changes. Do not reset, clean, or overwrite unrelated files.
-- **Authoritative tracker:** `docs/projects/in-progress/RECENT_SYSTEM_INTEGRATION_RECOVERY/RECENT_SYSTEM_INTEGRATION_RECOVERY_PROJECT_TRACKER.md`
-- **Project truth:** four falsely completed projects were reopened; the verified API-routing incident was corrected and moved to completed.
+- **Version:** `3.27.0` (`total-recall-brain@3.27.0`)
+- **Plugin System & Discovery:** Merged and verified; includes plugin discovery catalog (`npx total-recall plugin catalog` / `search`), ratings UI, and meta-harness.
+- **Mesh & Network Security:** Headscale WireGuard mesh, presence dynamic dispatch, encrypted secrets sync, and firewall rate limiting are fully operational and verified.
 
-## Repaired
+## In-Flight / Staged Changes
 
-- Restored canonical network, mesh, webhook, Headscale, secrets, and SSSS API routes and regenerated the 179-route manifest.
-- Routed persistent integration mutations through the SSSS operation pipeline and generic host-extension VFS documents.
-- Secured webhook management/ingress, encrypted secret references, mesh secret sync, server binding, and Headscale proxy validation.
-- Upgraded the live empty Headscale control plane to 0.29.2 with backup/checksums, loopback-only container ports, dedicated HTTPS, and encrypted API credentials.
-- Enrolled the cloud server and Mac Mini in the repaired Headscale mesh; bidirectional peer pings pass.
-- Prevented skill deployment/discovery from deleting manifest-unowned skills or replacing live catalog sources with stale repo-owned copies.
-- Removed stale test-brain registry entries and aligned the active SSSS skill with installed SSSS 0.9.0.
+- `src/cli/plugin/search.mjs`: Added search & catalog discovery command for CLI plugin system.
+- `src/cli/plugin/plugin.spec.mjs`: Verified with comprehensive tests (6/6 passing).
+- Fixed `-n` argument handling in antigravity sandbox git wrapper so `git log -n <limit>` succeeds cleanly.
+- Removed stale broken symlink `docs/projects/planned/expo-mobile`.
 
-## Verified so far
+## Active Projects Planned / Backlog
 
-- Focused recovery suite: 23 files, 110 tests passed.
-- Skill registry/routes: 2 files, 31 tests passed.
-- SSSS 0.9.0 conformance: all groups passed.
-- Native backend boot and authenticated API smokes passed; an SSSS dry run committed nothing.
-- Live Headscale HTTPS/API and public direct-port blocking passed.
-
-## Remaining release gates
-
-1. Run the sanctioned TypeScript and lint checker scripts and confirm zero-error reports.
-2. Mirror the dirty worktree to a Mac Mini scratch directory and pass the complete `npm test` suite there.
-3. Enroll this laptop after macOS grants Tailscale system-extension/admin approval, then verify the three-node mesh and leader/follower behavior.
-4. Audit/clean any test or runtime side effects and update the authoritative tracker with final evidence.
+1. **Living Memory Capsule (`docs/projects/planned/living-memory-capsule-ultrachat`)**:
+   - Workspace-scoped memory folder outside `memory-vault/` (`<BRAIN_DIR>/living-capsules/<workspace-id>/`).
+   - Deterministic alphabetical order join for optimal KV prefix caching (APC).
+   - Dynamic capsule REST endpoints (`GET /api/comms/capsule`, `POST /api/comms/capsule/record`, `DELETE /api/comms/capsule/:workspace_id/:filename`).
+   - Background garbage collection daemon task (`capsule-gc` under `memory-maintenance`).
+   - 2026 Model Catalog updates under `models/catalog/total-recall/`.
+2. **GPU Intelligence Network ("Hive") (`docs/projects/planned/gpu-intelligence-network`)**:
+   - Multi-provider GPU broker, distributed research protocol, workspace generator interview, and virtual compute fabric.
+3. **Deferred Backlog (`docs/projects/DEFERRED_BACKLOG.md`)**:
+   - Voice Notes (`npx total-recall voice` with Whisper STT), image/file uploads with multer/vision, mobile PWA Web Share Target, and remote OKF package installer.

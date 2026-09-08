@@ -80,4 +80,34 @@ describe('plugins router', () => {
     const res = await request(app).get('/api/plugins/nonexistent');
     expect(res.status).toBe(400);
   });
+
+  it('GET /api/plugins/catalog returns curated catalog with status', async () => {
+    const res = await request(app).get('/api/plugins/catalog');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.catalog)).toBe(true);
+    expect(res.body.catalog.some(c => c.id === 'system-monitor')).toBe(true);
+    expect(res.body.catalog.some(c => c.id === 'git-sentinel')).toBe(true);
+  });
+
+  it('POST /api/plugins/:id/rate validates rating range', async () => {
+    const res = await request(app)
+      .post('/api/plugins/system-monitor/rate')
+      .send({ rating: 6 });
+    expect(res.status).toBe(400);
+
+    const validRes = await request(app)
+      .post('/api/plugins/system-monitor/rate')
+      .send({ rating: 4.8, review: 'Great telemetry tool' });
+    expect(validRes.status).toBe(200);
+    expect(validRes.body.success).toBe(true);
+  });
+
+  it('POST /api/plugins/install rejects missing source', async () => {
+    const res = await request(app)
+      .post('/api/plugins/install')
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Missing source path');
+  });
 });

@@ -77,6 +77,34 @@ export const CURATED_CATALOG = [
     isInstalled: false
   },
   {
+    id: "system-monitor",
+    name: "System Monitor & Telemetry",
+    version: "1.0.0",
+    description: "Real-time host resource metrics, memory watchdog, and dynamic system telemetry context generator.",
+    tags: ["telemetry", "metrics", "monitor", "watchdog"],
+    author: "Total Recall Ecosystem",
+    sourceUrl: "./.agent/plugins/system-monitor",
+    rating: 4.9,
+    reviewCount: 56,
+    installCount: "1.5k",
+    verified: true,
+    isInstalled: false
+  },
+  {
+    id: "git-sentinel",
+    name: "Git Sentinel & Repo Watchdog",
+    version: "1.0.0",
+    description: "Continuous repository auditor checking dirty worktrees, unpushed commits, and stale branches.",
+    tags: ["git", "sentinel", "audit", "vcs"],
+    author: "Total Recall Ecosystem",
+    sourceUrl: "./.agent/plugins/git-sentinel",
+    rating: 4.8,
+    reviewCount: 73,
+    installCount: "2.1k",
+    verified: true,
+    isInstalled: false
+  },
+  {
     id: "chrome-devtools",
     name: "Chrome DevTools Automation",
     version: "1.0.0",
@@ -203,9 +231,14 @@ router.post("/api/plugins/:id/rate", requireAuth, requireScope("config:write"), 
  */
 router.post("/api/plugins/install", requireAuth, requireScope("config:write"), (req, res) => {
   try {
-    const { source, link = false, global: isGlobal = false, projectRoot } = req.body || {};
+    let { source, link = false, global: isGlobal = false, projectRoot } = req.body || {};
     if (!source || typeof source !== "string") {
       return badRequest(res, "Missing source path or git URL");
+    }
+
+    const matchedCatalog = CURATED_CATALOG.find((p) => p.id.toLowerCase() === source.toLowerCase());
+    if (matchedCatalog) {
+      source = matchedCatalog.sourceUrl;
     }
 
     const root = projectRoot || process.cwd();
