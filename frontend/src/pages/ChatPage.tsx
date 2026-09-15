@@ -62,14 +62,26 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
   const [nodeSearchQuery, setNodeSearchQuery] = useState('')
   const nodeSelectorRef = useRef<HTMLDivElement>(null)
 
+const DEFAULT_GEMINI_MODELS = [
+  { id: 'gemini-3.8-flash-high', displayName: 'Gemini 3.8 Flash (High)' },
+  { id: 'gemini-3.8-flash-medium', displayName: 'Gemini 3.8 Flash (Medium)' },
+  { id: 'gemini-3.8-flash-low', displayName: 'Gemini 3.8 Flash (Low)' },
+  { id: 'gemini-3.7-flash-high', displayName: 'Gemini 3.7 Flash (High)' },
+  { id: 'gemini-3.7-flash-medium', displayName: 'Gemini 3.7 Flash (Medium)' },
+  { id: 'gemini-3.6-flash-high', displayName: 'Gemini 3.6 Flash (High)' },
+  { id: 'gemini-3.1-pro-high', displayName: 'Gemini 3.1 Pro (High)' },
+  { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash' },
+  { id: 'gemini-3.5-pro', displayName: 'Gemini 3.5 Pro' },
+]
+
   // Model Selector state
   const [availableModels, setAvailableModels] = useState<string[]>([])
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     const saved = localStorage.getItem('selectedModel');
     return (saved && saved !== 'gemini') ? saved : 'antigravity';
   })
-  const [selectedSubModel, setSelectedSubModel] = useState<string>(() => localStorage.getItem('selectedSubModel') || '')
-  const [geminiModels, setGeminiModels] = useState<{ id: string; displayName: string }[]>([])
+  const [selectedSubModel, setSelectedSubModel] = useState<string>(() => localStorage.getItem('selectedSubModel') || 'gemini-3.8-flash-high')
+  const [geminiModels, setGeminiModels] = useState<{ id: string; displayName: string }[]>(DEFAULT_GEMINI_MODELS)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -144,19 +156,28 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
 
     fetchGeminiModels()
       .then(models => {
-        setGeminiModels(models)
-        if (models && models.length > 0) {
-          const savedSub = localStorage.getItem('selectedSubModel');
-          const exists = models.some(m => m.id === savedSub);
-          if (savedSub && exists) {
-            setSelectedSubModel(savedSub);
-          } else {
-            setSelectedSubModel(models[0].id);
-            localStorage.setItem('selectedSubModel', models[0].id);
-          }
+        const list = models && models.length > 0 ? models : DEFAULT_GEMINI_MODELS;
+        setGeminiModels(list);
+        const savedSub = localStorage.getItem('selectedSubModel');
+        const exists = list.some(m => m.id === savedSub);
+        if (savedSub && exists) {
+          setSelectedSubModel(savedSub);
+        } else {
+          setSelectedSubModel(list[0].id);
+          localStorage.setItem('selectedSubModel', list[0].id);
         }
       })
-      .catch(console.error)
+      .catch(() => {
+        setGeminiModels(DEFAULT_GEMINI_MODELS);
+        const savedSub = localStorage.getItem('selectedSubModel');
+        const exists = DEFAULT_GEMINI_MODELS.some(m => m.id === savedSub);
+        if (savedSub && exists) {
+          setSelectedSubModel(savedSub);
+        } else {
+          setSelectedSubModel(DEFAULT_GEMINI_MODELS[0].id);
+          localStorage.setItem('selectedSubModel', DEFAULT_GEMINI_MODELS[0].id);
+        }
+      })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- onBrainChange is stable from parent
   }, [])
 
@@ -380,7 +401,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
         return;
       }
 
-      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel) && selectedSubModel
+      const modelWithSubModel = ['gemini', 'antigravity', 'agy'].includes(selectedModel) && selectedSubModel
         ? `${selectedModel}:${selectedSubModel}`
         : selectedModel
 
@@ -409,7 +430,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
     setLoading(true)
     abortControllerRef.current = new AbortController()
     try {
-      const modelWithSubModel = ['gemini', 'antigravity'].includes(selectedModel) && selectedSubModel
+      const modelWithSubModel = ['gemini', 'antigravity', 'agy'].includes(selectedModel) && selectedSubModel
         ? `${selectedModel}:${selectedSubModel}`
         : selectedModel
 
@@ -599,7 +620,12 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                 }}
                 title="Select CLI agent / provider"
               >
-                <span style={{ textTransform: 'capitalize' }}>{selectedModel || 'Select Model'}</span>
+                <span style={{ textTransform: 'capitalize' }}>
+                  {selectedModel || 'Select Model'}
+                  {['gemini', 'antigravity', 'agy'].includes(selectedModel) && selectedSubModel
+                    ? ` · ${geminiModels.find(m => m.id === selectedSubModel)?.displayName || selectedSubModel}`
+                    : ''}
+                </span>
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
@@ -629,6 +655,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                         <span className="model-selector-item-name" style={{ textTransform: 'capitalize' }}>{modelName}</span>
                         <span className="model-selector-item-desc">
                           {modelName === 'antigravity' && 'Google Antigravity'}
+                          {modelName === 'agy' && 'Google Antigravity'}
                           {modelName === 'grok' && 'xAI Grok Build CLI'}
                           {modelName === 'gemini' && 'Google Gemini CLI'}
                           {modelName === 'claude' && 'Anthropic Claude CLI'}
@@ -641,7 +668,7 @@ export default function ChatPage({ activeBrainId, onBrainChange }: { activeBrain
                 </div>
               )}
             </div>
-            {['gemini', 'antigravity'].includes(selectedModel) && geminiModels.length > 0 && (
+            {['gemini', 'antigravity', 'agy'].includes(selectedModel) && geminiModels.length > 0 && (
               <div className="chat-header-submodel-selector" style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
                 <span className="selector-label" style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 500 }}>Base:</span>
                 <select

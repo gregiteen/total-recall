@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
 import os from 'os';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir, googleApiKey, tavilyApiKey, braveApiKey, exaApiKey, serperApiKey, githubToken, embedModel } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
@@ -57,10 +57,10 @@ export function findBinaryInPath(binaryName) {
 //            fails with HTTP 400 at exit code 0.
 const DEFAULT_AGENTS = [
   { name: 'agy',         binary: 'agy',         flags: '--output-format json -p', priority: 1, enabled: true, exec: 'flag' },
+  { name: 'antigravity', binary: 'agy',         flags: '--output-format json -p', priority: 1, enabled: true, exec: 'flag' },
   { name: 'claude',      binary: 'claude',      flags: '--output-format json --permission-mode bypassPermissions --setting-sources local --tools "" -p', priority: 2, enabled: true, exec: 'flag' },
   { name: 'codex',       binary: 'codex',       flags: '-m gpt-5.5 --sandbox workspace-write --json --skip-git-repo-check', priority: 3, enabled: true, exec: 'subcommand' },
-  { name: 'antigravity', binary: 'antigravity', flags: '--sandbox=false --yolo -o json', priority: 8, enabled: false, exec: 'flag' },
-  { name: 'gemini',      binary: 'gemini',      flags: '--sandbox=false --yolo -o json', priority: 9, enabled: false, exec: 'flag' },
+  { name: 'gemini',      binary: 'agy',         flags: '--output-format json -p', priority: 9, enabled: false, exec: 'flag' },
   { name: 'grok',        binary: 'grok',        flags: '--output-format plain --always-approve --permission-mode bypassPermissions', priority: 10, enabled: false, exec: 'flag' },
 ];
 
@@ -251,7 +251,10 @@ function resolveAgent(config) {
 
   for (const agent of agents.sort((a, b) => a.priority - b.priority)) {
     if (!agent.enabled) continue;
-    const binaryPath = findBinaryInPath(agent.binary);
+    let binaryPath = findBinaryInPath(agent.binary);
+    if (!binaryPath && (agent.name === 'antigravity' || agent.name === 'gemini' || agent.binary === 'antigravity')) {
+      binaryPath = findBinaryInPath('agy');
+    }
     if (binaryPath) {
       return {
         ...agent,
@@ -364,11 +367,24 @@ export async function callLocalRuntime(prompt, system, config) {
           .map(tok => tok.replace(/^(['"])(.*)\1$/, '$2')),
       );
     }
-    if (agent.model) {
-      args.push('-m', agent.model);
+    // If -p or --print is in args, remove it so options like --model can precede it,
+    // and we will push -p immediately before fullPrompt.
+    const hadPrintFlag = args.includes('-p') || args.includes('--print');
+    if (hadPrintFlag) {
+      const pIdx = args.indexOf('-p');
+      if (pIdx !== -1) args.splice(pIdx, 1);
+      const printIdx = args.indexOf('--print');
+      if (printIdx !== -1) args.splice(printIdx, 1);
     }
-    // `exec: flag` agents need an explicit `-p` only if their flags omit it.
-    if (agent.exec !== 'subcommand' && !args.includes('-p') && !args.includes('--print')) {
+    if (agent.model) {
+      if (agent.binary === 'agy' || agent.name === 'agy' || (agent.binaryPath && agent.binaryPath.endsWith('/agy'))) {
+        args.push('--model', agent.model);
+      } else {
+        args.push('-m', agent.model);
+      }
+    }
+    // `exec: flag` agents need an explicit `-p` right before fullPrompt
+    if (agent.exec !== 'subcommand' || hadPrintFlag) {
       args.push('-p');
     }
     args.push(fullPrompt);
@@ -415,13 +431,49 @@ export async function callLocalRuntime(prompt, system, config) {
     };
 
     logger.info('api', 'SPAWN_ENV GOOGLE_API_KEY length: ' + (spawnEnv.GOOGLE_API_KEY ? spawnEnv.GOOGLE_API_KEY.length : 0));
-    const result = spawnSync(agent.binaryPath, args, {
-      encoding: 'utf8',
-      timeout,
-      maxBuffer: 10 * 1024 * 1024,
-      env: spawnEnv,
-      cwd: process.cwd(),
+    const runAsync = () => new Promise((resolve) => {
+      let child;
+      try {
+        child = spawn(agent.binaryPath, args, {
+          env: spawnEnv,
+          cwd: process.cwd(),
+        });
+      } catch (err) {
+        return resolve({ status: 1, stdout: '', stderr: err.message });
+      }
+
+      let stdout = '';
+      let stderr = '';
+      let timer = null;
+      if (timeout) {
+        timer = setTimeout(() => {
+          try { child.kill('SIGTERM'); } catch {}
+        }, timeout);
+      }
+
+      child.on('error', (err) => {
+        if (timer) clearTimeout(timer);
+        resolve({ status: 1, stdout, stderr: err.message });
+      });
+
+      if (child.stdout) {
+        child.stdout.on('data', (d) => {
+          if (stdout.length < 10 * 1024 * 1024) stdout += d.toString();
+        });
+      }
+      if (child.stderr) {
+        child.stderr.on('data', (d) => {
+          if (stderr.length < 10 * 1024 * 1024) stderr += d.toString();
+        });
+      }
+
+      child.on('close', (code) => {
+        if (timer) clearTimeout(timer);
+        resolve({ status: code ?? 0, stdout, stderr });
+      });
     });
+
+    const result = await runAsync();
 
     const softFailure = detectAgentFailure(result.stdout || '');
 
