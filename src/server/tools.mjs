@@ -351,6 +351,179 @@ export async function computerScroll(x, y, direction, amount = 3) {
   }
 }
 
+// ─── Mesh Operations Tools ───────────────────────────────────────────────────
+
+function meshServerPort() {
+  const value = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
+  return Number.isInteger(value) && value > 0 && value <= 65535 ? value : 3000;
+}
+
+export async function meshListNodes() {
+  try {
+    const { listEnrichedMeshNodes } = await import('../core/mesh.mjs');
+    const { resolveNodeAccess } = await import('../core/mesh-access.mjs');
+    const nodes = listEnrichedMeshNodes();
+    const formatted = nodes.map((n) => {
+      const access = resolveNodeAccess(n);
+      return {
+        hostname: n.hostname,
+        ip: n.ip,
+        online: Boolean(n.online),
+        self: Boolean(n.self),
+        os: n.os || 'unknown',
+        role: n.role || (n.self ? 'local' : 'peer'),
+        login: access.complete ? access.target : 'no login recorded',
+        ssh_ready: Boolean(access.complete),
+        channels: n.io?.channels || [],
+      };
+    });
+    return JSON.stringify(formatted, null, 2);
+  } catch (err) {
+    logger.error('tools', 'Error listing mesh nodes', { err: err.message });
+    return `Failed to list mesh nodes: ${err.message}`;
+  }
+}
+
+export async function meshStatus() {
+  try {
+    const { isMeshAvailable, getMeshSelf } = await import('../core/mesh.mjs');
+    const { describeHeadscaleAvailability } = await import('../core/headscale-client.mjs');
+    const { resolveBrainDir } = await import('../cli/agent-dir.mjs');
+    const brainDir = resolveBrainDir();
+    const headscale = await describeHeadscaleAvailability(brainDir);
+    const self = getMeshSelf();
+    return JSON.stringify({
+      mesh_online: isMeshAvailable(),
+      headscale_configured: Boolean(headscale.configured),
+      headscale_url: headscale.url || null,
+      headscale_status: headscale.reason || 'operational',
+      self_node: self ? { hostname: self.hostname, ip: self.ip } : null,
+    }, null, 2);
+  } catch (err) {
+    logger.error('tools', 'Error checking mesh status', { err: err.message });
+    return `Failed to check mesh status: ${err.message}`;
+  }
+}
+
+export async function meshExec(target, command, timeoutMs = 60000) {
+  try {
+    if (!target || !command) {
+      return 'Error: `node` and `command` parameters are required for mesh_exec.';
+    }
+    const { execMeshCommand } = await import('../core/mesh.mjs');
+    const res = await execMeshCommand(target, command, { timeoutMs: Number(timeoutMs) || 60000 });
+    return JSON.stringify({
+      node: res.node,
+      hostname: res.hostname,
+      ip: res.ip,
+      exitCode: res.exitCode,
+      success: res.success,
+      stdout: res.stdout,
+      stderr: res.stderr,
+    }, null, 2);
+  } catch (err) {
+    logger.error('tools', `Error executing command on mesh node "${target}"`, { err: err.message });
+    return `Mesh execution failed on "${target}": ${err.message}`;
+  }
+}
+
+export async function meshSetAccess(node, accessPatch = {}) {
+  try {
+    if (!node) {
+      return 'Error: `node` parameter is required for mesh_set_access.';
+    }
+    const { setMeshNodeAccess } = await import('../core/mesh.mjs');
+    const patch = { source: 'chat-tool' };
+    if (accessPatch.ssh_user !== undefined) patch.ssh_user = String(accessPatch.ssh_user).trim();
+    if (accessPatch.ssh_port !== undefined) patch.ssh_port = Number.parseInt(accessPatch.ssh_port, 10) || 22;
+    if (accessPatch.identity_file !== undefined) patch.identity_file = String(accessPatch.identity_file).trim();
+    if (accessPatch.ssh_host !== undefined) patch.ssh_host = String(accessPatch.ssh_host).trim();
+
+    const res = await setMeshNodeAccess(node, patch);
+    if (!res.written) {
+      return `Failed to set access for "${node}": ${res.reason || 'write rejected'}`;
+    }
+    return JSON.stringify({ success: true, node, updated: patch }, null, 2);
+  } catch (err) {
+    logger.error('tools', `Error setting access for "${node}"`, { err: err.message });
+    return `Failed to update access for "${node}": ${err.message}`;
+  }
+}
+
+export async function meshPing(node) {
+  try {
+    if (!node) {
+      return 'Error: `node` parameter is required for mesh_ping.';
+    }
+    const { findMeshNode } = await import('../core/mesh.mjs');
+    const target = findMeshNode(node);
+    if (!target) {
+      return `Mesh node "${node}" not found in mesh topology.`;
+    }
+    if (target.self) {
+      return JSON.stringify({ node: target.hostname, ip: target.ip, latency_ms: 0, self: true, reachable: true }, null, 2);
+    }
+    if (!target.ip || !target.online) {
+      return JSON.stringify({ node: target.hostname, ip: target.ip, latency_ms: null, reachable: false, error: 'offline' }, null, 2);
+    }
+    const start = Date.now();
+    try {
+      const peerUrl = `http://${target.ip}:${meshServerPort()}/health`;
+      const response = await throttledFetch(peerUrl, {}, 5000);
+      const ms = Date.now() - start;
+      const ok = response.ok || response.status === 200;
+      return JSON.stringify({
+        node: target.hostname,
+        ip: target.ip,
+        latency_ms: ok ? ms : null,
+        status: response.status,
+        reachable: ok,
+      }, null, 2);
+    } catch (fetchErr) {
+      try {
+        const { spawnSync } = await import('node:child_process');
+        const pingResult = spawnSync('ping', ['-c', '1', '-W', '2', target.ip], { encoding: 'utf8', timeout: 3000 });
+        const ms = Date.now() - start;
+        const pingOk = pingResult.status === 0;
+        return JSON.stringify({
+          node: target.hostname,
+          ip: target.ip,
+          latency_ms: pingOk ? ms : null,
+          reachable: pingOk,
+          method: 'icmp',
+        }, null, 2);
+      } catch {
+        return JSON.stringify({
+          node: target.hostname,
+          ip: target.ip,
+          latency_ms: null,
+          reachable: false,
+          error: fetchErr.message,
+        }, null, 2);
+      }
+    }
+  } catch (err) {
+    return `Failed to ping "${node}": ${err.message}`;
+  }
+}
+
+export async function meshMintPreAuthKey(options = {}) {
+  try {
+    const { createHeadscalePreAuthKey } = await import('../core/headscale-client.mjs');
+    const { resolveBrainDir } = await import('../cli/agent-dir.mjs');
+    const brainDir = resolveBrainDir();
+    const result = await createHeadscalePreAuthKey(brainDir, {
+      reusable: Boolean(options.reusable),
+      ephemeral: Boolean(options.ephemeral),
+      expirationMinutes: options.expirationMinutes ? Number(options.expirationMinutes) : 60,
+    });
+    return JSON.stringify(result, null, 2);
+  } catch (err) {
+    logger.error('tools', 'Error minting preauth key', { err: err.message });
+    return `Failed to mint pre-auth key: ${err.message}`;
+  }
+}
+
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
 
 export const AVAILABLE_TOOLS = [
@@ -583,6 +756,92 @@ export const AVAILABLE_TOOLS = [
       },
     },
   },
+  // ── Mesh Operations ───────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'mesh_list_nodes',
+      description: 'List all nodes on the WireGuard mesh network with their hostname, IP address, online status, role, OS, and resolved SSH login target.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mesh_status',
+      description: 'Check mesh control plane (Headscale) availability, enrollment status, active policy, and self node details.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mesh_exec',
+      description: 'Execute a shell command remotely on another mesh node via SSH. Automatically handles PATH and SSH configuration.',
+      parameters: {
+        type: 'object',
+        properties: {
+          node: { type: 'string', description: 'Target node hostname, slug, or mesh IP (e.g. "macmini", "cloud", "100.64.0.2").' },
+          command: { type: 'string', description: 'Shell command to execute on the remote node (e.g. "uptime", "git status", "docker ps").' },
+          timeoutMs: { type: 'integer', description: 'Timeout in milliseconds (default 60000).' },
+        },
+        required: ['node', 'command'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mesh_set_access',
+      description: 'Record or update SSH login credentials (user, port, identity key file, address override) on a mesh node entity in the memory vault.',
+      parameters: {
+        type: 'object',
+        properties: {
+          node: { type: 'string', description: 'Target node hostname, slug, or mesh IP.' },
+          ssh_user: { type: 'string', description: 'Username to log in as (e.g. "greg", "root", "gregoryiteen").' },
+          ssh_port: { type: 'integer', description: 'SSH port (default 22).' },
+          identity_file: { type: 'string', description: 'Path to private SSH key file (e.g. "~/.ssh/id_ed25519").' },
+          ssh_host: { type: 'string', description: 'Custom host or IP override if not using the mesh IP.' },
+        },
+        required: ['node'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mesh_ping',
+      description: 'Ping a mesh node to measure round-trip latency and verify reachability over the WireGuard mesh.',
+      parameters: {
+        type: 'object',
+        properties: {
+          node: { type: 'string', description: 'Target node hostname, slug, or mesh IP.' },
+        },
+        required: ['node'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mesh_mint_preauthkey',
+      description: 'Mint a pre-authentication enrollment key to join a new machine or phone to the mesh network.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reusable: { type: 'boolean', description: 'Whether the key can be used more than once.' },
+          ephemeral: { type: 'boolean', description: 'Whether the enrolled node should be ephemeral (removed when disconnected).' },
+          expirationMinutes: { type: 'integer', description: 'Key lifetime in minutes (default 60).' },
+        },
+      },
+    },
+  },
 ];
 
 // ─── Tool Dispatcher ──────────────────────────────────────────────────────────
@@ -610,6 +869,13 @@ export async function handleToolCall(toolCall) {
       case 'computer_type':         return await computerType(args.text);
       case 'computer_key':          return await computerKey(args.key);
       case 'computer_scroll':       return await computerScroll(args.x, args.y, args.direction, args.amount ?? 3);
+      // Mesh operations
+      case 'mesh_list_nodes':       return await meshListNodes();
+      case 'mesh_status':           return await meshStatus();
+      case 'mesh_exec':             return await meshExec(args.node, args.command, args.timeoutMs);
+      case 'mesh_set_access':       return await meshSetAccess(args.node, args);
+      case 'mesh_ping':             return await meshPing(args.node);
+      case 'mesh_mint_preauthkey':  return await meshMintPreAuthKey(args);
       default:                      return `Unknown tool: ${name}`;
     }
   } catch (err) {

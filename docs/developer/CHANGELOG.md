@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.28.0] — 2026-09-15
+
+### ✨ Features
+- **Mesh operations in Chat**: added native tool calling capabilities for conversational agents (`mesh_list_nodes`, `mesh_status`, `mesh_exec`, `mesh_set_access`, `mesh_ping`, `mesh_mint_preauthkey`). Chat agents can now inspect WireGuard mesh topology, verify peer reachability, update node SSH access records, and dispatch commands remotely across peer nodes.
+- **Mesh CLI parity**: added `total-recall mesh ping` (with ICMP/HTTP RTT latency matrix across all peers), `total-recall mesh leader` (displaying deterministic lowest-IP cluster election state), and `total-recall mesh enroll` (unattended or interactive control-server enrollment).
+- **Dynamic model list & Gemini 3.8**: added CLI discovery for Google Antigravity (`agy models`) with caching and updated base model selector support in Chat UI for Gemini 3.8/3.7/3.6.
+
 ## [3.26.0] — 2026-08-20
 
 ### ✨ Features

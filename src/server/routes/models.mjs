@@ -151,43 +151,48 @@ router.get('/v1/models', requireAuthOrLocal, async (req, res) => {
   }
 });
 
+let cachedAgyModels = null;
+let lastAgyModelsFetch = 0;
+
 /**
  * GET /api/gemini-models
  * Dynamically fetches available Gemini models.
  * Strategy: CLI discovery → Google API → static fallback list.
  */
-router.get('/api/gemini-models', requireAuth, async (req, res) => {
+router.get('/api/gemini-models', requireAuthOrLocal, async (req, res) => {
   try {
-    // 1. Try antigravity CLI
+    // 1. Try Google Antigravity (agy) CLI first (cached 5 minutes)
+    if (cachedAgyModels && Date.now() - lastAgyModelsFetch < 1000 * 60 * 5) {
+      return res.json({ models: cachedAgyModels, source: 'cli' });
+    }
+
     try {
       const { findBinaryInPath } = await import('../../core/runtime.mjs');
-      const antigravityPath = findBinaryInPath('antigravity');
-      if (antigravityPath) {
-        const result = spawnSync(antigravityPath, ['--help'], { encoding: 'utf8', timeout: 3000 });
+      const agyPath = findBinaryInPath('agy');
+      if (agyPath) {
+        const result = spawnSync(agyPath, ['models'], { encoding: 'utf8', timeout: 8000, input: '' });
         if (result.status === 0 && result.stdout) {
-          const output = result.stdout;
+          const lines = result.stdout.split('\n');
           const discovered = [];
-
-          const modelRegex = /gemini-\d+\.\d+(?:-\w+)?/g;
-          const matches = output.match(modelRegex) || [];
-          for (const m of matches) {
-            discovered.push(m);
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('Fetching')) continue;
+            const parts = trimmed.split('\t');
+            if (parts.length >= 2) {
+              discovered.push({ id: parts[0].trim(), displayName: parts[1].trim() });
+            } else if (parts.length === 1 && parts[0].includes('gemini')) {
+              discovered.push({ id: parts[0].trim(), displayName: parts[0].trim() });
+            }
           }
-
-          const versionRegex = /\b(\d+\.\d+-\w+)\b/g;
-          const versionMatches = output.match(versionRegex) || [];
-          for (const vm of versionMatches) {
-            discovered.push(`gemini-${vm}`);
-          }
-
-          const uniqueModels = [...new Set(discovered)];
-          if (uniqueModels.length > 0) {
+          if (discovered.length > 0) {
             const pricingMap = await getPricingMap();
-            const cliModels = uniqueModels.map(modelId => {
-              const parts = modelId.split('-');
-              const displayName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-              return { id: modelId, displayName, pricing: pricingMap[modelId] || pricingMap[`google/${modelId}`] };
-            });
+            const cliModels = discovered.map(m => ({
+              id: m.id,
+              displayName: m.displayName,
+              pricing: pricingMap[m.id] || pricingMap[`google/${m.id}`] || null,
+            }));
+            cachedAgyModels = cliModels;
+            lastAgyModelsFetch = Date.now();
             return res.json({ models: cliModels, source: 'cli' });
           }
         }
@@ -196,7 +201,7 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
       // Fail silently and fall back
     }
 
-    // 2. Try Google API key
+    // 3. Try Google API key
     let apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       try {
@@ -207,10 +212,17 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
     }
 
     const fallbackModels = [
+      { id: 'gemini-3.8-flash-high', displayName: 'Gemini 3.8 Flash (High)', pricing: null },
+      { id: 'gemini-3.8-flash-medium', displayName: 'Gemini 3.8 Flash (Medium)', pricing: null },
+      { id: 'gemini-3.8-flash-low', displayName: 'Gemini 3.8 Flash (Low)', pricing: null },
+      { id: 'gemini-3.7-flash-high', displayName: 'Gemini 3.7 Flash (High)', pricing: null },
+      { id: 'gemini-3.7-flash-medium', displayName: 'Gemini 3.7 Flash (Medium)', pricing: null },
+      { id: 'gemini-3.6-flash-high', displayName: 'Gemini 3.6 Flash (High)', pricing: null },
+      { id: 'gemini-3.1-pro-high', displayName: 'Gemini 3.1 Pro (High)', pricing: null },
       { id: 'gemini-3.5-flash', displayName: 'Gemini 3.5 Flash', pricing: null },
       { id: 'gemini-3.5-pro', displayName: 'Gemini 3.5 Pro', pricing: null },
+      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', pricing: null },
       { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', pricing: null },
-      { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', pricing: null }
     ];
 
     if (!apiKey) return res.json({ models: fallbackModels, source: 'missing_key' });
@@ -251,7 +263,7 @@ router.get('/api/gemini-models', requireAuth, async (req, res) => {
  * GET /api/claude-models
  * Dynamically fetches available Anthropic models using ANTHROPIC_API_KEY.
  */
-router.get('/api/claude-models', requireAuth, async (req, res) => {
+router.get('/api/claude-models', requireAuthOrLocal, async (req, res) => {
   try {
     let apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -301,7 +313,7 @@ router.get('/api/claude-models', requireAuth, async (req, res) => {
  * GET /api/openai-models
  * Dynamically fetches available OpenAI models using OPENAI_API_KEY.
  */
-router.get('/api/openai-models', requireAuth, async (req, res) => {
+router.get('/api/openai-models', requireAuthOrLocal, async (req, res) => {
   try {
     let apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -352,7 +364,7 @@ router.get('/api/openai-models', requireAuth, async (req, res) => {
  * GET /api/openrouter-models
  * Dynamically fetches the list of available OpenRouter models.
  */
-router.get('/api/openrouter-models', requireAuth, async (req, res) => {
+router.get('/api/openrouter-models', requireAuthOrLocal, async (req, res) => {
   try {
     const response = await throttledFetch('https://openrouter.ai/api/v1/models');
     if (response.ok) {

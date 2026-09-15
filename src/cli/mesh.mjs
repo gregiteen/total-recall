@@ -49,6 +49,12 @@ function printHelp() {
     access <node> --user <u> [--port <n>] [--host <h>] [--identity <path>]
                            Record how to reach a node
     access import          Propose access from ~/.ssh/config (--apply to save)
+    ping [node]            Measure round-trip latency to a node (or all nodes) (--json)
+    leader                 Show cluster leader election status and current leader (--json)
+    enroll [options]       Enroll this node on the mesh control server
+                             --status   show current enrollment state
+                             --server   control-server URL
+                             --force    re-enroll even if already connected
     preauthkey             Mint an enrollment key for 'tailscale up --authkey'
                              --reusable   usable by more than one node
                              --ephemeral  node is removed when it goes offline
@@ -440,6 +446,172 @@ export default async function meshCli(argv = []) {
       );
       console.log(key);
       console.error(`(expires ${expiration}${reusable ? ', reusable' : ', single-use'})`);
+      return;
+    }
+
+    if (command === 'leader') {
+      const { getLeaderInfo, isLeader } = await import('../core/leader-election.mjs');
+      const leaderInfo = await getLeaderInfo();
+      const thisIsLeader = await isLeader();
+      if (args.includes('--json')) {
+        console.log(JSON.stringify({ leader: leaderInfo, is_current_node_leader: thisIsLeader }, null, 2));
+        return;
+      }
+      if (!leaderInfo) {
+        console.log('No leader elected (no mesh nodes online).');
+        return;
+      }
+      console.log(`👑 Current Cluster Leader: ${leaderInfo.hostname} (${leaderInfo.ip})`);
+      console.log(`   Strategy: ${leaderInfo.strategy}`);
+      console.log(`   Local node: ${thisIsLeader ? 'LEADER (this node runs cluster workloads)' : 'FOLLOWER'}`);
+      return;
+    }
+
+    if (command === 'ping' || command === 'latency') {
+      const target = args.find((a) => !a.startsWith('-'));
+      const isJson = args.includes('--json');
+      const { getMeshPeers, findMeshNode } = await import('../core/mesh.mjs');
+      const { throttledFetch } = await import('../core/throttled-fetch.mjs');
+
+      const port = Number(process.env.TR_SERVER_PORT || process.env.PORT || 3000);
+
+      if (target) {
+        const node = findMeshNode(target, vaultRoot);
+        if (!node) {
+          fail(`No mesh node matches "${target}".`);
+          return;
+        }
+        if (node.self) {
+          if (isJson) {
+            console.log(JSON.stringify({ node: node.hostname, ip: node.ip, latency_ms: 0, self: true, reachable: true }, null, 2));
+          } else {
+            console.log(`📍 ${node.hostname} (${node.ip}) is this local node (0 ms).`);
+          }
+          return;
+        }
+        if (!node.ip || !node.online) {
+          if (isJson) {
+            console.log(JSON.stringify({ node: node.hostname, ip: node.ip, latency_ms: null, reachable: false, status: 'offline' }, null, 2));
+          } else {
+            console.log(`⚠️  ${node.hostname} (${node.ip || 'no IP'}) is offline.`);
+          }
+          return;
+        }
+
+        const start = Date.now();
+        try {
+          const res = await throttledFetch(`http://${node.ip}:${port}/health`, {}, 5000);
+          const ms = Date.now() - start;
+          const ok = res.ok || res.status === 200;
+          if (isJson) {
+            console.log(JSON.stringify({ node: node.hostname, ip: node.ip, latency_ms: ok ? ms : null, reachable: ok, status: res.status }, null, 2));
+          } else {
+            console.log(`✅ ${node.hostname} (${node.ip}): ${ms} ms (status: ${res.status})`);
+          }
+        } catch (err) {
+          const { spawnSync } = await import('node:child_process');
+          const pingResult = spawnSync('ping', ['-c', '1', '-W', '2', node.ip], { encoding: 'utf8', timeout: 3000 });
+          const ms = Date.now() - start;
+          if (pingResult.status === 0) {
+            if (isJson) {
+              console.log(JSON.stringify({ node: node.hostname, ip: node.ip, latency_ms: ms, reachable: true, method: 'icmp' }, null, 2));
+            } else {
+              console.log(`✅ ${node.hostname} (${node.ip}): ${ms} ms (ICMP)`);
+            }
+          } else {
+            if (isJson) {
+              console.log(JSON.stringify({ node: node.hostname, ip: node.ip, latency_ms: null, reachable: false, error: err.message }, null, 2));
+            } else {
+              console.log(`❌ ${node.hostname} (${node.ip}): unreachable (${err.message})`);
+            }
+          }
+        }
+        return;
+      }
+
+      const peers = getMeshPeers({ includeSelf: true });
+      const results = [];
+      for (const peer of peers) {
+        if (peer.self) {
+          results.push({ hostname: peer.hostname, ip: peer.ip, latency_ms: 0, status: 'self' });
+          continue;
+        }
+        if (!peer.ip || !peer.online) {
+          results.push({ hostname: peer.hostname, ip: peer.ip, latency_ms: null, status: 'offline' });
+          continue;
+        }
+        const start = Date.now();
+        try {
+          const res = await throttledFetch(`http://${peer.ip}:${port}/health`, {}, 4000);
+          const ms = Date.now() - start;
+          const ok = res.ok || res.status === 200;
+          results.push({ hostname: peer.hostname, ip: peer.ip, latency_ms: ok ? ms : null, status: ok ? 'online' : 'error' });
+        } catch {
+          const { spawnSync } = await import('node:child_process');
+          const pingResult = spawnSync('ping', ['-c', '1', '-W', '2', peer.ip], { encoding: 'utf8', timeout: 2000 });
+          const ms = Date.now() - start;
+          results.push({ hostname: peer.hostname, ip: peer.ip, latency_ms: pingResult.status === 0 ? ms : null, status: pingResult.status === 0 ? 'icmp' : 'unreachable' });
+        }
+      }
+
+      if (isJson) {
+        console.log(JSON.stringify(results, null, 2));
+        return;
+      }
+
+      console.log('┌──────────────────────────────────────────┬────────────────┬──────────────┬──────────────┐');
+      console.log('│ Node                                     │ Mesh IP        │ Latency      │ Status       │');
+      console.log('├──────────────────────────────────────────┼────────────────┼──────────────┼──────────────┤');
+      for (const r of results) {
+        const lat = r.latency_ms != null ? `${r.latency_ms} ms` : '—';
+        console.log(`│ ${String(r.hostname || '').padEnd(40)} │ ${String(r.ip || '-').padEnd(14)} │ ${lat.padEnd(12)} │ ${r.status.padEnd(12)} │`);
+      }
+      console.log('└──────────────────────────────────────────┴────────────────┴──────────────┴──────────────┘');
+      return;
+    }
+
+    if (command === 'enroll') {
+      const { getEnrollmentStatus, enrollThisNode } = await import('../core/mesh-enroll.mjs');
+      if (args.includes('--status')) {
+        const status = await getEnrollmentStatus({ brainDir });
+        console.log(JSON.stringify(status, null, 2));
+        return;
+      }
+
+      const readOption = (flag) => {
+        const index = args.indexOf(flag);
+        return index === -1 ? null : args[index + 1] || null;
+      };
+      const server = readOption('--server');
+      const user = readOption('--user');
+      const force = args.includes('--force');
+
+      console.log('Initiating mesh enrollment...');
+      const result = await enrollThisNode({
+        brainDir,
+        loginServer: server,
+        user,
+        force,
+      });
+
+      if (args.includes('--json')) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+
+      if (result.ok) {
+        if (result.reason === 'already-enrolled') {
+          console.log(`✅ Already enrolled on mesh (${result.state}). Use --force to re-enroll.`);
+        } else {
+          console.log(`✅ Successfully enrolled on mesh (${result.state}).`);
+        }
+      } else if (result.interactiveUrl) {
+        console.log(`⚠️  Interactive authorization required.`);
+        console.log(`   Open this URL in your browser to approve:`);
+        console.log(`   ${result.interactiveUrl}`);
+      } else {
+        fail(result.reason || 'Enrollment failed', result.hint);
+      }
       return;
     }
 

@@ -236,8 +236,14 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   // CLI agent availability
   const { findBinaryInPath } = await import('../core/runtime.mjs');
   const cliAgents = [];
-  for (const bin of ['antigravity', 'grok', 'gemini', 'claude', 'codex']) {
-    if (findBinaryInPath(bin)) cliAgents.push(bin);
+  for (const bin of ['agy', 'antigravity', 'claude', 'codex', 'grok', 'gemini']) {
+    if (findBinaryInPath(bin)) {
+      if (bin === 'agy') {
+        if (!cliAgents.includes('antigravity')) cliAgents.push('antigravity');
+      } else if (!cliAgents.includes(bin)) {
+        cliAgents.push(bin);
+      }
+    }
   }
 
   const agentDir = configAgentDir;

@@ -384,11 +384,17 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
       if (targetAgentName.includes(':')) {
         const parts = targetAgentName.split(':');
         targetAgentName = parts[0];
-        subModel = parts[1];
+        subModel = parts.slice(1).join(':');
       } else if (targetAgentName.includes('/')) {
         const parts = targetAgentName.split('/');
         targetAgentName = parts[0];
-        subModel = parts[1];
+        subModel = parts.slice(1).join('/');
+      }
+
+      // If user selected 'antigravity' or 'gemini', check if 'agy' is available
+      if (targetAgentName === 'antigravity' || targetAgentName === 'gemini') {
+        const hasAgy = activeConfig.agents.some(a => a.name === 'agy');
+        if (hasAgy) targetAgentName = 'agy';
       }
 
       const idx = activeConfig.agents.findIndex(a => a.name === targetAgentName);
@@ -396,6 +402,7 @@ apiRouter.post('/v1/chat/completions', requireScope('chat:write'), async (req, r
         // Deep copy the agents list so we don't mutate the cached config
         activeConfig.agents = activeConfig.agents.map(a => ({ ...a }));
         activeConfig.agents[idx].priority = 0;
+        activeConfig.agents[idx].enabled = true;
         if (subModel) {
           activeConfig.agents[idx].model = subModel;
         }
@@ -432,6 +439,14 @@ CODE / MEMORY:
 - 'execute_code': Run Node.js to call APIs, process data, or perform calculations.
 - 'update_design': Write markdown to DESIGN.md when asked to create a UI or document.
 
+MESH NETWORK TOOLS (WireGuard / Headscale mesh management):
+- 'mesh_list_nodes': List all nodes on the mesh network (hostname, IP, online status, role, OS, SSH login account).
+- 'mesh_status': Check mesh control plane (Headscale) availability, network status, and self node info.
+- 'mesh_exec': Execute a shell command remotely on any peer node via SSH (e.g. 'uptime', 'docker ps', 'git status').
+- 'mesh_set_access': Record or update SSH login account (user, port, key, host override) on a node entity.
+- 'mesh_ping': Test reachability and measure round-trip latency to a mesh node.
+- 'mesh_mint_preauthkey': Mint a pre-auth enrollment key to connect a new machine to the mesh.
+
 MANDATORY TOOL USE AND CITATION RULES:
 1. FORCE SEARCH: If the user asks you to "search", "lookup", "find", or asks about current/recent events or anything you do not explicitly have in your memory vault, you MUST output a tool call to 'search_web' immediately. Do not write a conversational introduction first.
 2. CITATION MANDATE: When answering using results from 'search_web' or 'browser_navigate', you MUST explicitly cite your sources by embedding clickable markdown links (e.g., [Source Title](URL)) directly in your response. Never summarize web facts without providing their corresponding URLs.
@@ -447,6 +462,7 @@ Example:
 }
 </tool_call>
 Do not add any other conversational text when outputting the fallback tool call. Output it immediately as your entire response.
+5. MESH OPERATIONS: When asked about nodes on the mesh, running commands across the network, checking mesh connectivity, or configuring node login access, you MUST use the appropriate 'mesh_*' tool.
 
 You have a REAL browser AND full desktop control. Use them. Navigate, click, type, scrape — do not just describe what you would do. For web tasks prefer browser tools. For native apps or desktop workflows use computer_screenshot first to orient yourself.`;
 
