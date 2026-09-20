@@ -2,15 +2,17 @@
 # ============================================================
 # Total Recall — Cloud Agent Auto-Pull & Self-Healing Restart
 #
-# Periodically executed on the Vast.ai VPS server to fetch
-# new commits from GitHub, run local git pull, and hot-reload
-# the server and watchdog daemon.
+# Periodically executed on a host that runs the brain to fetch new commits from
+# GitHub, pull them, and hot-reload the server and watchdog daemon.
 # ============================================================
 
 set -euo pipefail
 
-# Set standard paths to ensure all binaries are found in non-interactive shell/cron
-export PATH="/root/.nvm/versions/node/v24.15.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+# Standard paths so every binary resolves in a non-interactive shell/cron.
+# This used to pin /root/.nvm/versions/node/v24.15.0/bin, which does not exist
+# on the deploy hosts (they run /usr/bin/node) — cron got a PATH missing the
+# interpreter the line was named for.
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 REPO_DIR="/root/total-recall"
 LOG_FILE="/root/.agent/logs/auto-pull.log"
