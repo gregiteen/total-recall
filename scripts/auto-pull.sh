@@ -76,7 +76,14 @@ pkill -9 -f "node.*total-recall.mjs" || true
 
 log "Starting the standalone server..."
 # Spawn server in background. The index.mjs watchdog will auto-start the daemon.
-nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port 3000 --host 127.0.0.1 > /root/.agent/logs/server.log 2>&1 &
+#
+# Port is configurable: on a host that already serves something on 3000 (the
+# DigitalOcean droplet runs ultrachat-frontend-1 there), a hardcoded 3000 made
+# the brain die on EADDRINUSE while its daemon kept running against nothing.
+SERVER_PORT="${TR_PORT:-3000}"
+SERVER_HOST="${TR_HOST:-127.0.0.1}"
+log "Binding $SERVER_HOST:$SERVER_PORT"
+nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port "$SERVER_PORT" --host "$SERVER_HOST" > /root/.agent/logs/server.log 2>&1 &
 
 log "Updating OKF knowledge-catalog repo..."
 if [ -d "$REPO_DIR/knowledge-catalog" ]; then
