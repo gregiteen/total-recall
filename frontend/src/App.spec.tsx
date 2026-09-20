@@ -11,6 +11,10 @@ vi.mock('./api', () => ({
   fetchHealth: vi.fn(),
   getApiBase: vi.fn(),
   setApiBase: vi.fn(),
+  // App calls fetchPlugins() on mount. A mock module that omits it makes
+  // vitest throw "No fetchPlugins export is defined on the ./api mock", which
+  // unmounts the whole tree and left every assertion staring at an empty div.
+  fetchPlugins: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('./utils/onboarding', () => ({

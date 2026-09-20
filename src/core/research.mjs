@@ -92,6 +92,17 @@ export async function handleProactiveResearch(task, context = {}) {
     draftSlug = saveSynthesizedReportToDraft(task.target, finalReport, inboxDir) || draftSlug;
   }
 
+  // Phase 4b: Promote the finished report into the vault. The deliberation phase
+  // resolves its target from the vault, not the inbox, so without this the
+  // five-phase pipeline always stalls at step 2 with "Target node not found".
+  if (draftSlug) {
+    await promoteDraftToVault(
+      task.target,
+      inboxDir,
+      context.vaultDir || path.join(BRAIN_DIR, 'memory-vault'),
+    );
+  }
+
   // Phase 5: Also add topic to the Research Agenda for ongoing tracking
   addToAgenda({
     topic: task.target,
@@ -511,6 +522,66 @@ export function saveSynthesizedReportToDraft(parentTopic, finalReport, inboxDir)
   };
 
   atomicWrite(filePath, safeStringify(bodyLines.join('\n'), frontmatter));
+  return slug;
+}
+
+/**
+ * Promote a synthesized report out of the inbox into the vault.
+ *
+ * Acquisition stages every report as `status: draft` under
+ * `memory-inbox/pending`, but the Phase 2/5 deliberation cycle resolves its
+ * target with `getNodes(vaultDir).find(n => n.slug === nodeSlug)`. A draft that
+ * never leaves the inbox therefore made every deliberation task fail with
+ * "Target node not found for slug: …", so the five-phase pipeline stalled at
+ * step 2 on every topic no matter how good the report was.
+ *
+ * The documented flow gates on confidence: >= 0.7 is a "Direct Vault Write &
+ * Immediate Surface Recompile", below that stays staged for review. Synthesized
+ * reports carry confidence 0.9, so they take the fast path.
+ */
+export const VAULT_PROMOTION_MIN_CONFIDENCE = 0.7;
+
+export async function promoteDraftToVault(parentTopic, inboxDir, vaultDir) {
+  const slug = `research-report-${slugify(parentTopic)}`;
+  const filePath = path.join(inboxDir, `${slug}.md`);
+  if (!fs.existsSync(filePath)) return null;
+
+  let parsed;
+  try {
+    parsed = matter(fs.readFileSync(filePath, 'utf8'));
+  } catch (err) {
+    logger.warn({ subsystem: 'deep-research', message: `Cannot read draft ${slug}: ${err.message}` });
+    return null;
+  }
+
+  const confidence = Number(parsed.data?.confidence);
+  if (!Number.isFinite(confidence) || confidence < VAULT_PROMOTION_MIN_CONFIDENCE) {
+    logger.info({
+      subsystem: 'deep-research',
+      message: `Report ${slug} stays in the inbox (confidence ${parsed.data?.confidence ?? 'unset'} < ${VAULT_PROMOTION_MIN_CONFIDENCE})`,
+    });
+    return null;
+  }
+
+  // The draft already carries the full SSSS frontmatter; promotion only flips it
+  // from staged-for-review to a live vault node.
+  const node = { ...parsed.data, slug, status: 'active', body: parsed.content.trim() };
+
+  try {
+    const { writeNode } = await import('./vault.mjs');
+    await writeNode(node, vaultDir || path.join(BRAIN_DIR, 'memory-vault'));
+  } catch (err) {
+    logger.warn({
+      subsystem: 'deep-research',
+      message: `Vault promotion failed for ${slug}: ${err.message}`,
+    });
+    return null;
+  }
+
+  logger.info({
+    subsystem: 'deep-research',
+    message: `Promoted ${slug} to the vault (confidence ${confidence}) — deliberation can now resolve it`,
+  });
   return slug;
 }
 

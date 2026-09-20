@@ -79,6 +79,13 @@ const CLIENTS = {
     // Cline uses a .clinerules/ directory (primary); plain markdown, no frontmatter.
     target: path.join('.clinerules', 'total-recall.md'),
     render: instructions => instructions,
+    // Cline scans <project>/.clinerules/skills, <project>/.cline/skills,
+    // <project>/.claude/skills and <project>/.agents/skills (plus the global
+    // ~/.cline/skills and ~/.agents/skills). Only .clinerules/.cline/.agents are
+    // scanned by the `next` (SDK) bundle too — .claude/skills is VS Code-bundle
+    // only — so project into .agents/skills, which is also where Cline's own
+    // "New skill..." writes and where the codex/gemini/antigravity presets land.
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') },
   },
   'claude-code': {
     label: 'Claude Code',
@@ -964,7 +971,7 @@ export default async function connect(args) {
         : path.join(cwd, preset.skillsProjection.dir);
       const skillResults = projectSkillsAsCommands(destDir, skills, opts);
       result.skill_commands = skillResults;
-      const fresh = skillResults.filter(r => r.action === 'linked');
+      const fresh = skillResults.filter(r => r.action === 'linked' || r.action === 'copied');
       if (fresh.length > 0) {
         const destLabel = preset.skillsProjection.scope === 'home'
           ? destDir

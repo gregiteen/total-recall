@@ -48,10 +48,30 @@ function canUseMacSandbox(profile) {
 }
 
 /**
+ * Strip quoted argument payloads.
+ *
+ * TR dispatches CLI agents with an argv array (`spawn(binary, args)`), so a
+ * quoted argument is ONE argument and a `|` inside it is inert data — there is no
+ * shell to interpret it. Prompts routinely embed vault fact bodies, and two facts
+ * documenting the legitimate `curl … | bash` install line made every deliberation
+ * run fail with a bogus "Piping download tool to shell blocked" security
+ * exception. Strip quoted payloads before the shell-syntax checks so prompt text
+ * is not mistaken for a pipeline.
+ */
+function stripQuotedArgs(line) {
+  return line.replace(/"(?:\\.|[^"\\])*"/g, '""').replace(/'(?:\\.|[^'\\])*'/g, "''");
+}
+
+/**
  * Command Sanitizer / Whitelist Execution Validator
  * Blocks high-risk actions (destructive deletes, reverse shells, shell pipes)
+ *
+ * @param {string} commandLine
+ * @param {{ argvSpawn?: boolean }} [opts] `argvSpawn: true` means the caller
+ *   passes the command as an argument vector rather than to a shell, so quoted
+ *   content cannot act as shell syntax.
  */
-export function validateCommand(commandLine) {
+export function validateCommand(commandLine, { argvSpawn = false } = {}) {
   if (typeof commandLine !== 'string') return true;
   const trimmed = commandLine.trim();
 
@@ -68,16 +88,20 @@ export function validateCommand(commandLine) {
     }
   }
 
+  // Shell syntax only exists when a shell runs the line. Under an argv spawn the
+  // quoted payload is a single inert argument, so scan the unquoted remainder.
+  const scanned = argvSpawn ? stripQuotedArgs(trimmed) : trimmed;
+
   // Piping download tools directly into shell
   // Split strings to bypass static security grep audit false positives while keeping full safety checks
   const pipeToShellRegex = new RegExp("(?:cu" + "rl|wget|fetch)\\s+.*\\s*\\|\\s*(?:ba" + "sh|sh|zsh)", "i");
-  const isPipeToShell = pipeToShellRegex.test(trimmed);
+  const isPipeToShell = pipeToShellRegex.test(scanned);
   if (isPipeToShell) {
     throw new Error(`Security Exception: Piping download tool to shell blocked: "${commandLine}"`);
   }
 
   // Reverse shells and network exfiltration tools
-  const isReverseShell = /\b(?:nc|netcat)\s+-/i.test(trimmed) || /bash\s+-i/i.test(trimmed) || /sh\s+-i/i.test(trimmed) || /\/dev\/(?:tcp|udp)\//i.test(trimmed);
+  const isReverseShell = /\b(?:nc|netcat)\s+-/i.test(scanned) || /bash\s+-i/i.test(scanned) || /sh\s+-i/i.test(scanned) || /\/dev\/(?:tcp|udp)\//i.test(scanned);
   if (isReverseShell) {
     throw new Error(`Security Exception: Potential reverse shell blocked: "${commandLine}"`);
   }

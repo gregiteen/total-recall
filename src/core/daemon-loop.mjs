@@ -172,24 +172,59 @@ export function releasePidLock() {
 let taskCount = 0;
 let running = true;
 let vaultWatcher = null;
+let shuttingDown = false;
+
+// Upper bound on a graceful stop. A loop iteration can be mid-task, so the
+// signal cannot exit instantly — but it must exit *eventually*.
+const SHUTDOWN_GRACE_MS = 30000;
 
 import { releaseLease } from './leader-election.mjs';
 
-process.on('SIGTERM', async () => {
-  logger.info({ subsystem: 'daemon-loop', message: 'SIGTERM received — shutting down gracefully' });
-  if (vaultWatcher) vaultWatcher.stop();
-  await releaseLease();
-  releasePidLock();
+/**
+ * Graceful stop, with a guaranteed exit.
+ *
+ * Clearing `running` alone never stopped this process. The vault and source
+ * watchers hold the event loop open, so `daemon stop` printed "✅ Daemon
+ * stopped" while the daemon kept running — still executing the OLD module code
+ * and still ingesting sessions. No "Daemon stopped." line ever reached
+ * daemon.log across three separate SIGTERMs. The fallback timer bounds that, so
+ * even a wedged iteration cannot keep the daemon alive indefinitely.
+ */
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ subsystem: 'daemon-loop', message: `${signal} received — shutting down gracefully` });
   running = false;
-});
+  if (vaultWatcher) vaultWatcher.stop();
 
-process.on('SIGINT', async () => {
-  logger.info({ subsystem: 'daemon-loop', message: 'SIGINT received — shutting down gracefully' });
-  if (vaultWatcher) vaultWatcher.stop();
-  await releaseLease();
-  releasePidLock();
-  running = false;
-});
+  const fallback = setTimeout(() => {
+    logger.info({
+      subsystem: 'daemon-loop',
+      message: `Graceful shutdown exceeded ${SHUTDOWN_GRACE_MS}ms — forcing exit`,
+    });
+    process.exit(0);
+  }, SHUTDOWN_GRACE_MS);
+  fallback.unref();
+
+  Promise.resolve()
+    .then(() => releaseLease())
+    .catch((err) => {
+      logger.info({
+        subsystem: 'daemon-loop',
+        message: `Lease release failed during shutdown: ${err.message}`,
+      });
+    })
+    .finally(() => {
+      try {
+        releasePidLock();
+      } catch {
+        // Lock already gone — nothing to release.
+      }
+    });
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 process.on('uncaughtException', (err) => {
   logger.error({ subsystem: 'daemon-loop', message: `Uncaught Exception (suppressed to keep daemon alive): ${err.stack || err.message}` });
@@ -291,7 +326,7 @@ async function main() {
 
   // Deterministic election (lowest mesh IP) — tryAcquire/renew are no-op shims
   // that re-evaluate isLeader(); no node-local lease documents are written.
-  const { tryAcquireLease, isLeader, getLeaderInfo, renewLease } = await import('./leader-election.mjs');
+  const { tryAcquireLease, isLeader, getLeaderInfo, renewLease, leaderPin } = await import('./leader-election.mjs');
 
   const acquired = await tryAcquireLease();
   if (acquired) {
@@ -300,7 +335,22 @@ async function main() {
     const info = await getLeaderInfo();
     const leaderStr = info ? info.hostname : 'unknown';
     logger.info({ subsystem: 'daemon-loop', message: `Starting as FOLLOWER (leader: ${leaderStr})` });
-    
+
+    // Lowest-online-IP says nothing about whether the elected node can run Total
+    // Recall. On this mesh the shared droplet holds 100.64.0.1 and runs no TR at
+    // all, so every real machine idled as a follower for months: the daemon
+    // reported itself healthy while the pipeline stayed silent. A follower with
+    // no pin configured anywhere is almost certainly that mistake, and it is
+    // invisible without this warning — followers skip the task loop entirely.
+    if (!leaderPin()) {
+      logger.warn(
+        'daemon-loop',
+        `No leader pin found — following "${leaderStr}" by lowest-IP order. Followers skip the task loop, ` +
+        `so this node will run no research, dream cycle, or surface recompile. ` +
+        `Pin the brain host with TR_LEADER_IP=<mesh-ip> or {"leaderIp":"<mesh-ip>"} in config/leader.json.`,
+      );
+    }
+
     // Phase 4C: Startup Sync (follower only)
     try {
       const { syncLoop } = await import('./secrets-sync.mjs');
@@ -653,6 +703,9 @@ async function main() {
   }
 
   logger.info({ subsystem: 'daemon-loop', message: 'Daemon stopped.' });
+  // The watchers keep the event loop alive, so returning from main() is not
+  // enough — without this the process lingers and `daemon stop` lies.
+  process.exit(0);
 }
 
 main().catch(async (err) => {

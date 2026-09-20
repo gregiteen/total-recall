@@ -277,6 +277,64 @@ function resolveAgent(config) {
  * @param {object} config - Runtime config from loadRuntimeConfig()
  * @returns {string} The agent's text response
  */
+/**
+ * Merge every secrets layer the runtime can see.
+ *
+ * Precedence, lowest first (each later layer overrides the earlier ones):
+ *   1. <agentRoot>/secrets.enc                                   legacy flat store
+ *   2. <cwd>/.agent/secrets.enc                                  legacy flat store
+ *   3. ~/.agent/skills/total-recall/config/secrets.enc           global brain
+ *   4. <agentRoot>/skills/total-recall/config/secrets.enc        project brain
+ *
+ * Project-over-global matches `resolveBrainDir('auto')`, which every other TR
+ * component already uses: the project store is the more specific answer. The
+ * legacy flat stores are leftovers from older installs — they may still hold
+ * keys nothing else has, but they must never mask a canonical brain store.
+ *
+ * The previous implementation took the first path that held ANY keys and
+ * stopped, in legacy-first order. A stale 12-key <cwd>/.agent/secrets.enc
+ * therefore shadowed the 100-key brain store completely, and its dead
+ * `google_api_key` (AIza…, HTTP 400 from generativelanguage) overrode the
+ * working one — so every spawned agent received a key that cannot call Gemini
+ * while the good key sat unreachable one layer down.
+ *
+ * Exported for tests; callers use the defaults.
+ *
+ * @param {{ cwd?: string, agentRoot?: string, home?: string }} [opts]
+ * @returns {Promise<Record<string, string>>}
+ */
+export async function loadDynamicSecrets(opts = {}) {
+  const cwd = opts.cwd ?? process.cwd();
+  const agentRoot = opts.agentRoot ?? agentDir;
+  const home = opts.home ?? os.homedir();
+
+  const { loadSecretsSync } = await import('./secrets-store.mjs');
+  const layers = [
+    path.join(agentRoot, 'secrets.enc'),
+    path.join(cwd, '.agent', 'secrets.enc'),
+    path.join(home, '.agent', 'skills', 'total-recall', 'config', 'secrets.enc'),
+    path.join(agentRoot, 'skills', 'total-recall', 'config', 'secrets.enc'),
+  ];
+
+  const merged = {};
+  for (const p of layers) {
+    if (!fs.existsSync(p)) continue;
+    try {
+      const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
+      const dir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
+      const loaded = loadSecretsSync(dir);
+      for (const [k, v] of Object.entries(loaded)) {
+        if (k === '__tr_secrets_meta') continue;
+        if (v) merged[k] = v;
+      }
+    } catch {
+      // An unreadable or undecryptable layer must not break dispatch; the
+      // remaining layers still apply.
+    }
+  }
+  return merged;
+}
+
 export async function callLocalRuntime(prompt, system, config) {
   // Pre-flight budget watchdog safety check
   checkBudgetSafety();
@@ -292,29 +350,8 @@ export async function callLocalRuntime(prompt, system, config) {
 
   let lastError;
 
-  // Load dynamic secrets from secrets.enc to ensure changes take effect immediately without server restart
-  let dynamicSecrets = {};
-  try {
-    const pathsToCheck = [
-      path.join(process.cwd(), '.agent', 'secrets.enc'),
-      path.join(agentDir, 'secrets.enc'),
-      path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'secrets.enc'),
-      path.join(agentDir, 'skills', 'total-recall', 'config', 'secrets.enc'),
-    ];
-    for (const p of pathsToCheck) {
-      if (fs.existsSync(p)) {
-        try {
-          const { loadSecretsSync } = await import('./secrets-store.mjs');
-          const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
-          const brainDir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
-          dynamicSecrets = loadSecretsSync(brainDir);
-          if (Object.keys(dynamicSecrets).length > 0) {
-            break;
-          }
-        } catch {}
-      }
-    }
-  } catch {}
+  // Loaded on every dispatch so a store edit takes effect without a restart.
+  const dynamicSecrets = await loadDynamicSecrets();
 
   // Try agents in priority order, never re-trying one that already failed.
   //
@@ -397,8 +434,11 @@ export async function callLocalRuntime(prompt, system, config) {
       promptLength: fullPrompt.length,
     });
 
-    // Pre-flight command execution validation
-    validateCommand(cmd);
+    // Pre-flight command execution validation. The spawn below passes an argv
+    // array (no shell), so a prompt payload is one inert argument — scan only the
+    // unquoted part, or any vault fact quoting a `curl … | bash` install line
+    // trips a false "piping download tool to shell" exception on every dispatch.
+    validateCommand(cmd, { argvSpawn: true });
 
     const xaiKey =
       process.env.XAI_API_KEY ||

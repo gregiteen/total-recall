@@ -302,24 +302,35 @@ export async function maybeEnqueueIntegrationResearch(brainDir, key, meta = {}, 
 /**
  * Retire obsolete key-name scrape queue items (old Automated API Integration Build: KEY topics).
  */
-export function cancelBogusApiIntegrationQueueItems(overrideBrainDir) {
-  return import('./research-queue.mjs').then(({ loadQueue, updateQueueItem }) => {
-    const items = loadQueue(overrideBrainDir);
-    let cancelled = 0;
-    for (const item of items) {
-      if (item.status !== 'pending' && item.status !== 'in_progress') continue;
-      if (!/^Automated API Integration Build:/i.test(String(item.topic || ''))) continue;
-      updateQueueItem(
-        item.id,
-        {
-          status: 'failed',
-          notes: `${item.notes || ''}\n\n[auto-cancelled] Obsolete key-name scrape job; re-add the secret to trigger AI provider inference.`,
-          research_phase: 'cancelled',
-        },
-        overrideBrainDir,
-      );
-      cancelled += 1;
-    }
-    return { cancelled };
-  });
+export async function cancelBogusApiIntegrationQueueItems(overrideBrainDir) {
+  const { loadQueue, updateQueueItem } = await import('./research-queue.mjs');
+  const items = loadQueue(overrideBrainDir);
+  let cancelled = 0;
+  for (const item of items) {
+    if (item.status !== 'pending' && item.status !== 'in_progress') continue;
+    if (!/^Automated API Integration Build:/i.test(String(item.topic || ''))) continue;
+    updateQueueItem(
+      item.id,
+      {
+        status: 'failed',
+        notes: `${item.notes || ''}\n\n[auto-cancelled] Obsolete key-name scrape job; re-add the secret to trigger AI provider inference.`,
+        research_phase: 'cancelled',
+      },
+      overrideBrainDir,
+    );
+    cancelled += 1;
+  }
+
+  // The same fixture pattern also landed in the research AGENDA — a different
+  // file with a different owner. Walking only the queue is why the designated
+  // remediation never removed the 29 agenda topics it was written for.
+  let cancelledAgendaTopics = 0;
+  try {
+    const { cancelBogusAgendaTopics } = await import('./fact-seeker.mjs');
+    ({ cancelled: cancelledAgendaTopics } = cancelBogusAgendaTopics());
+  } catch {
+    // Best-effort: a missing or unreadable agenda must not block the queue half.
+  }
+
+  return { cancelled, cancelledAgendaTopics };
 }

@@ -60,6 +60,15 @@ lint-status.txt
 typescript-fullrepo-errors.txt
 frontend/.eslintcache
 
+# Secrets stores and their backups — never committed. The repo root carries a
+# legacy flat .agent/secrets.enc, and repair scripts leave *.bak-* copies beside
+# it; a blanket `git add -A` would have published one of them.
+.agent/secrets.enc
+.agent/secrets.enc.bak-*
+# Research queue/agenda state at the repo's .agent root — runtime data, the same
+# class as .agent/scheduler/.
+.agent/research-queue.jsonl
+
 # Dev skills (Greg's personal workflow tools — not part of the product)
 .agent/dev-skills/
 

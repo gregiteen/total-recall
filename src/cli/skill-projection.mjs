@@ -90,14 +90,62 @@ function pathExists(filePath) {
 // to heal back onto the canonical source, even without --force.
 const AUTO_GENERATED_MARKER = '**Auto-generated** by `npx total-recall';
 
+// Written into a skill directory that projectSkillsAsCommands had to COPY
+// (no symlink support — Windows without Developer Mode, some network/FAT
+// volumes). A real directory carrying this file is Total Recall's own
+// projection, never a user's skill, so it is refreshed on every run.
+export const PROJECTION_MARKER_FILE = '.total-recall-projection.json';
+
+function isProjectedCopy(entryPath) {
+  try {
+    return fs.statSync(entryPath).isDirectory()
+      && fs.existsSync(path.join(entryPath, PROJECTION_MARKER_FILE));
+  } catch {
+    return false;
+  }
+}
+
 function isStaleGeneratedDir(entryPath) {
   try {
     if (!fs.statSync(entryPath).isDirectory()) return false;
+    if (isProjectedCopy(entryPath)) return true;
     const content = fs.readFileSync(path.join(entryPath, 'SKILL.md'), 'utf8');
     return content.includes(AUTO_GENERATED_MARKER);
   } catch {
     return false;
   }
+}
+
+/**
+ * Put one skill at linkPath so the IDE sees it as /<name>:
+ *   1. a symlink RELATIVE to the destination dir — the projection then survives
+ *      `git clone`, a moved checkout, or a different home directory (an absolute
+ *      link only works on the machine that wrote it);
+ *   2. on Windows a directory junction (no Developer Mode / admin needed; Node
+ *      resolves the target to an absolute path itself);
+ *   3. when the filesystem refuses links at all, a real COPY of the skill
+ *      directory tagged with PROJECTION_MARKER_FILE so later runs refresh it.
+ */
+function placeSkill(skillDir, linkPath) {
+  const source = path.resolve(skillDir);
+  const relativeTarget = path.relative(path.dirname(path.resolve(linkPath)), source) || '.';
+  try {
+    if (process.platform === 'win32') {
+      fs.symlinkSync(source, linkPath, 'junction');
+    } else {
+      fs.symlinkSync(relativeTarget, linkPath);
+    }
+    return 'linked';
+  } catch (err) {
+    const noLinks = ['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'EINVAL', 'ENOSYS'];
+    if (!noLinks.includes(err?.code)) throw err;
+  }
+  fs.cpSync(source, linkPath, { recursive: true, dereference: true });
+  fs.writeFileSync(
+    path.join(linkPath, PROJECTION_MARKER_FILE),
+    JSON.stringify({ source: relativeTarget, projected_at: new Date().toISOString() }, null, 2) + '\n'
+  );
+  return 'copied';
 }
 
 /**
@@ -141,7 +189,8 @@ export function discoverRepoSkills(agentDir) {
 }
 
 /**
- * Symlink each discovered skill dir into one IDE's Agent-Skills directory.
+ * Project each discovered skill dir into one IDE's Agent-Skills directory
+ * (relative symlink, Windows junction, or a marked copy — see placeSkill).
  * Idempotent, self-healing, and strictly additive: a symlink that is broken or
  * stale is refreshed even without --force; a *real* (non-symlink) entry is
  * never clobbered unless --force (so a user's own skill always wins a name
@@ -165,7 +214,10 @@ export function projectSkillsAsCommands(destDir, skills, opts = {}) {
     if (pathExists(linkPath)) {
       const stat = fs.lstatSync(linkPath);
       if (stat.isSymbolicLink()) {
-        const current = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+        // Relative links resolve against the link's own directory; Windows
+        // junctions read back with a \\?\ long-path prefix that must be dropped.
+        const raw = fs.readlinkSync(linkPath).replace(/^\\\\\?\\/, '');
+        const current = path.resolve(path.dirname(linkPath), raw);
         if (current === wantTarget && fs.existsSync(linkPath) && !opts.force) {
           written.push({ name: skill.name, action: 'exists' });
           continue;
@@ -178,8 +230,7 @@ export function projectSkillsAsCommands(destDir, skills, opts = {}) {
         fs.rmSync(linkPath, { recursive: true, force: true });
       }
     }
-    fs.symlinkSync(skill.skillDir, linkPath);
-    written.push({ name: skill.name, action: 'linked' });
+    written.push({ name: skill.name, action: placeSkill(skill.skillDir, linkPath) });
   }
   return written;
 }

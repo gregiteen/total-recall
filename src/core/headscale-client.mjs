@@ -6,7 +6,8 @@
  * hardcoded here — it is resolved from the operator's own secret entry or
  * environment, so this works against any Headscale (or Tailscale SaaS) install.
  */
-import { getSecretsCatalog, getSecret } from './secrets-store.mjs';
+import path from 'node:path';
+import { getSecretsCatalog, getSecret, defaultBrainDir } from './secrets-store.mjs';
 import { throttledFetch } from './throttled-fetch.mjs';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -39,10 +40,32 @@ export function normalizeControlUrl(url) {
 /**
  * Locate the operator's headscale credential without knowing its key name.
  * Any secret whose provider is `headscale` is treated as the control-server token.
+ *
+ * The control server is a machine-level resource, not a per-repo one, so the
+ * credential normally lives in the GLOBAL brain while callers pass whichever
+ * project brain they happen to be running in. Falling back to the global store
+ * is what lets `mesh status`, `mesh nodes` and node enrollment work from inside
+ * any project checkout — without it every project reported "not configured"
+ * while the key sat in ~/.agent the whole time.
  */
+async function locateHeadscaleKey(brainDir) {
+  const target = brainDir || defaultBrainDir();
+
+  const local = await getSecretsCatalog(target);
+  const hit = local.keys.find((k) => k.provider === 'headscale');
+  if (hit) return { meta: hit, storeDir: target };
+
+  const globalDir = defaultBrainDir();
+  if (path.resolve(globalDir) === path.resolve(target)) return null;
+
+  const globalCatalog = await getSecretsCatalog(globalDir);
+  const globalHit = globalCatalog.keys.find((k) => k.provider === 'headscale');
+  return globalHit ? { meta: globalHit, storeDir: globalDir } : null;
+}
+
 export async function findHeadscaleKeyMeta(brainDir) {
-  const catalog = await getSecretsCatalog(brainDir);
-  return catalog.keys.find((k) => k.provider === 'headscale') || null;
+  const found = await locateHeadscaleKey(brainDir);
+  return found ? found.meta : null;
 }
 
 /**
@@ -51,12 +74,13 @@ export async function findHeadscaleKeyMeta(brainDir) {
  * gracefully should use `describeHeadscaleAvailability()` instead.
  */
 export async function resolveHeadscaleConfig(brainDir) {
-  const meta = await findHeadscaleKeyMeta(brainDir);
-  if (!meta) {
+  const found = await locateHeadscaleKey(brainDir);
+  if (!found) {
     throw new Error('Headscale API Key not configured in ApiKeysPage');
   }
+  const { meta, storeDir } = found;
 
-  const got = await getSecret(brainDir, meta.key, {
+  const got = await getSecret(storeDir, meta.key, {
     action: 'use',
     actor: 'headscale-client',
   });

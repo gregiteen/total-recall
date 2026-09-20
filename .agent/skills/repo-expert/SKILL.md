@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-15T06:22:35.491Z
+generated_at: 2026-09-20T20:12:23.649Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (617 files), Markdown (271 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (617 files), Markdown (277 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -124,6 +124,7 @@ scaffold/
   .agent/
     plugins/  (4 items)
     skills/  (2 items)
+  openwiki/  (6 items)
 scratch/
   dummy-repo/
     .agent/  (1 items)
@@ -624,7 +625,7 @@ templates/
 - **env-import** — exports: inferProvider, maskSecret, parseEnvText, isCandidateKey, defaultEnvFilePaths, scanEnvSources, publicScanResult, importEnvSecrets
 - **evolution** — exports: runSsssEvalWorkflow, proposeSchemaUpgrades, applySchemaUpgrade
 - **evolving-context** — exports: compileEvolvingContext
-- **fact-seeker** — exports: getLocalizedDateTime, formatBeautifulDate, loadAgenda, addToAgenda, markTopicResearched, getNextAgendaTopic, inferTopicsFromSession, buildMultiNoteGraph
+- **fact-seeker** — exports: getLocalizedDateTime, formatBeautifulDate, loadAgenda, addToAgenda, cancelBogusAgendaTopics, reclassifyCancelledAgendaTopics, markTopicResearched, getNextAgendaTopic
 - **fast-recall** — exports: fastSearch
 - **friction** — exports: detectFriction
 - **github-sync** — exports: initGitHubSync, runGitHubSync, getGitHubSyncStatus
@@ -632,7 +633,7 @@ templates/
 - **import-rules** — exports: detectRuleFiles, importRuleFiles, detectAndImport
 - **inference-engine** — exports: runInferenceTask, runSynthesisTask
 - **lan-discovery** — exports: parseArpTable, discoverLanHosts, probeLanBrains, discoverLanSnapshot, lanHostnameFromIp, registerLanMeshNodes
-- **leader-election** — exports: getLeaderInfo, isLeader, tryAcquireLease, renewLease, releaseLease
+- **leader-election** — exports: leaderPin, getLeaderInfo, isLeader, tryAcquireLease, renewLease, releaseLease
 - **logger**
 - **memory-layers** — exports: normalizeMemoryLayer, inferMemoryLayer, memoryLayerRoutingWeight, buildMemoryLayerIndex
 - **memory-title** — exports: stripSelfCapturedTitlePrefix, isSelfCapturedEchoTitle, defaultTitleFromBody, normalizeMemoryTitle
@@ -670,9 +671,9 @@ templates/
 - **remote-vault-sync** — exports: importRemoteBundle, runSync
 - **repo-sync** — exports: syncAllRepos, syncSingleRepo
 - **research-queue** — exports: compileResearchProjectSummary, syncResearchProjectNode, loadQueue, saveQueue, listQueue, addToQueue, updateQueueItem, removeFromQueue
-- **research** — exports: handleProactiveResearch, writeOrUpdateConsolidatedDraft, saveSynthesizedReportToDraft, handleQuickResearch
+- **research** — exports: handleProactiveResearch, writeOrUpdateConsolidatedDraft, saveSynthesizedReportToDraft, promoteDraftToVault, handleQuickResearch
 - **rotation-capability** — exports: selfGeneratedSpec, generateSecretValue, getRotationPlan, planAll, summarizePlans
-- **runtime** — exports: findBinaryInPath, loadRuntimeConfig, checkRuntimeHealth, callLocalRuntime, callLocalRuntimeRaw, cleanAndParseJSON
+- **runtime** — exports: findBinaryInPath, loadRuntimeConfig, checkRuntimeHealth, loadDynamicSecrets, callLocalRuntime, callLocalRuntimeRaw, cleanAndParseJSON
 - **sandbox** — exports: validateCommand, runInSandbox, executeWithEscalation
 - **scheduler** — exports: loadPendingTasks, updateTaskStatus, persistTaskToDisk, generateIdleTask, createScheduler
 - **schema**

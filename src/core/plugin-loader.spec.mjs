@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   validatePluginManifest,
@@ -58,10 +60,42 @@ describe('Plugin Loader & Schema Validation', () => {
   });
 
   describe('discoverPlugins & category extraction', () => {
-    const keenHertzRoot = '/Users/greg/Documents/antigravity/keen-hertz';
+    // Self-contained fixture. These tests used to read a developer's private
+    // project (`/Users/greg/Documents/antigravity/keen-hertz`), so they could
+    // only ever pass on one machine — and the plugin they depended on is gone
+    // even there. Build the manifest we assert against instead.
+    let fixtureRoot;
+
+    beforeAll(() => {
+      fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-loader-'));
+      const pluginDir = path.join(fixtureRoot, '.agent', 'plugins', 'scientific-frontiers');
+      fs.mkdirSync(path.join(pluginDir, 'watched'), { recursive: true });
+      fs.writeFileSync(
+        path.join(pluginDir, 'plugin.json'),
+        JSON.stringify({
+          id: 'scientific-frontiers',
+          name: 'Scientific Frontiers Engine',
+          version: '1.0.0',
+          description: 'Fixture plugin used by the plugin-loader tests.',
+          ssss_schemas: {
+            categories: [
+              { name: 'research' },
+              { name: 'benchmarks' },
+              { name: 'user-projects' },
+            ],
+          },
+          // getPluginWatchPaths only returns paths that exist on disk.
+          compile: { watch: ['watched'] },
+        }),
+      );
+    });
+
+    afterAll(() => {
+      fs.rmSync(fixtureRoot, { recursive: true, force: true });
+    });
 
     it('discovers plugins in project root', () => {
-      const plugins = discoverPlugins(keenHertzRoot);
+      const plugins = discoverPlugins(fixtureRoot);
       const sf = plugins.find(p => p.id === 'scientific-frontiers');
       expect(sf).toBeDefined();
       expect(sf.valid).toBe(true);
@@ -69,18 +103,18 @@ describe('Plugin Loader & Schema Validation', () => {
     });
 
     it('retrieves specific plugin with getPlugin', () => {
-      const plugin = getPlugin('scientific-frontiers', keenHertzRoot);
+      const plugin = getPlugin('scientific-frontiers', fixtureRoot);
       expect(plugin).toBeDefined();
       expect(plugin.id).toBe('scientific-frontiers');
     });
 
     it('returns null for nonexistent plugin', () => {
-      const plugin = getPlugin('nonexistent-plugin', keenHertzRoot);
+      const plugin = getPlugin('nonexistent-plugin', fixtureRoot);
       expect(plugin).toBeNull();
     });
 
     it('extracts all SSSS categories declared by active plugins', () => {
-      const categories = getPluginCategories(keenHertzRoot);
+      const categories = getPluginCategories(fixtureRoot);
       const names = categories.map(c => c.name);
       expect(names).toContain('research');
       expect(names).toContain('benchmarks');
@@ -88,7 +122,7 @@ describe('Plugin Loader & Schema Validation', () => {
     });
 
     it('collects watch paths for compiler', () => {
-      const watchPaths = getPluginWatchPaths(keenHertzRoot);
+      const watchPaths = getPluginWatchPaths(fixtureRoot);
       expect(watchPaths.length).toBeGreaterThan(0);
     });
   });

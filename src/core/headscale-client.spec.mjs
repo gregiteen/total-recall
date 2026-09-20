@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./secrets-store.mjs', () => ({
   getSecretsCatalog: vi.fn(),
   getSecret: vi.fn(),
+  defaultBrainDir: vi.fn(() => '/tmp/global-brain'),
 }));
 
 vi.mock('./throttled-fetch.mjs', () => ({
@@ -84,6 +85,35 @@ describe('resolveHeadscaleConfig', () => {
   it('throws a specific error when no credential is configured', async () => {
     vi.mocked(secretsStore.getSecretsCatalog).mockResolvedValue({ keys: [] });
     await expect(resolveHeadscaleConfig(BRAIN)).rejects.toThrow(/not configured/i);
+  });
+
+  it('falls back to the GLOBAL brain when the project brain has no headscale key', async () => {
+    // The control server is a machine-level resource: running `mesh` from inside
+    // a project checkout passes that project's brain, which normally holds no
+    // headscale entry. Before the fallback existed every project reported
+    // "not configured" while the key sat in the global store.
+    vi.mocked(secretsStore.getSecretsCatalog).mockImplementation(async (dir) =>
+      dir === '/tmp/global-brain'
+        ? {
+            keys: [
+              {
+                key: 'HEADSCALE_API_KEY',
+                provider: 'headscale',
+                headscale_url: CONTROL_URL,
+                set: true,
+              },
+            ],
+          }
+        : { keys: [{ key: 'SMTP2GO_API_KEY', provider: 'smtp2go', set: true }] },
+    );
+    const config = await resolveHeadscaleConfig(BRAIN);
+    expect(config).toMatchObject({ url: CONTROL_URL, token: 'hs-token', keyName: 'HEADSCALE_API_KEY' });
+    // The value must be read from the store that actually holds it.
+    expect(vi.mocked(secretsStore.getSecret)).toHaveBeenCalledWith(
+      '/tmp/global-brain',
+      'HEADSCALE_API_KEY',
+      expect.objectContaining({ action: 'use' }),
+    );
   });
 
   it('throws when the credential exists but has no value', async () => {
