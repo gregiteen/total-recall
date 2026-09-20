@@ -96,6 +96,20 @@ export function loadAgenda() {
 function saveAgenda(topics) {
   const agendaFile = getAgendaFile();
   const dir = path.dirname(agendaFile);
+  // Same backstop as the research queue (see research-queue.mjs): a test run must
+  // never rewrite the operator's real agenda. The 29 leaked "Automated API
+  // Integration Build:" fixture topics came from exactly this hole.
+  const isTest = Boolean(process.env.VITEST) || process.env.NODE_ENV === 'test';
+  if (
+    isTest &&
+    !process.env.AGENT_DIR &&
+    !process.env._TR_TEST_AGENT_DIR &&
+    path.resolve(dir) === path.resolve(getBrainDir())
+  ) {
+    throw new Error(
+      'Refusing to write the real research agenda from a test run: set _TR_TEST_AGENT_DIR',
+    );
+  }
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   atomicWrite(agendaFile, topics.map(t => JSON.stringify(t)).join('\n') + '\n');
 }
@@ -135,6 +149,68 @@ export function addToAgenda({ topic, priority = 50, source, rationale = '', tags
   agenda.sort((a, b) => b.priority - a.priority);
   saveAgenda(agenda);
   return existing || agenda.find(t => t.topic.toLowerCase() === topic.toLowerCase());
+}
+
+/**
+ * Status for a topic retired on purpose — distinct from `failed`.
+ *
+ * A cancelled topic was never attempted, so recording it as a failure
+ * misreports pipeline health. See `reclassifyCancelledAgendaTopics()`.
+ */
+export const CANCELLED_STATUS = 'cancelled';
+
+/**
+ * Retire obsolete key-name scrape topics from the AGENDA.
+ *
+ * Companion to `cancelBogusApiIntegrationQueueItems()` in
+ * secret-integration-research.mjs. That one walks the QUEUE, but the June/July
+ * 2026 pollution actually landed in the agenda (29 "Automated API Integration
+ * Build: <KEY>" fixture topics), so the designated remediation never touched it.
+ * The agenda is fact-seeker's file, so the agenda half lives here.
+ *
+ * Also sweeps legacy rows still recorded as `failed` with a `cancelled_reason`
+ * onto CANCELLED_STATUS.
+ */
+export function cancelBogusAgendaTopics() {
+  const agenda = loadAgenda();
+  let cancelled = 0;
+  for (const t of agenda) {
+    if (t.status !== 'pending' && t.status !== 'in_progress') continue;
+    if (!/^Automated API Integration Build:/i.test(String(t.topic || ''))) continue;
+    t.status = CANCELLED_STATUS;
+    t.coverage_score = 0;
+    t.cancelled_reason =
+      'obsolete key-name scrape job; re-add the secret to trigger AI provider inference';
+    cancelled += 1;
+  }
+  if (cancelled > 0) saveAgenda(agenda);
+  return { cancelled, reclassified: reclassifyCancelledAgendaTopics() };
+}
+
+/**
+ * Repair topics that were retired before CANCELLED_STATUS existed.
+ *
+ * A row carrying `status: 'failed'` *together with* a `cancelled_reason` was
+ * cancelled, never attempted — `cancelled_reason` is written only by the
+ * cancellation paths. The 2026-09 agenda cleanup retired 231 such topics
+ * (204 unbounded follow-ups + 27 obsolete fixtures) as `failed`, so anything
+ * tallying `status === 'failed'` reported 231 phantom failures beside 43
+ * genuinely pending topics. Move them onto the dedicated status so failure
+ * counts mean real failures. Idempotent.
+ *
+ * @returns {number} rows reclassified
+ */
+export function reclassifyCancelledAgendaTopics() {
+  const agenda = loadAgenda();
+  let reclassified = 0;
+  for (const t of agenda) {
+    if (t.status === 'failed' && t.cancelled_reason) {
+      t.status = CANCELLED_STATUS;
+      reclassified += 1;
+    }
+  }
+  if (reclassified > 0) saveAgenda(agenda);
+  return reclassified;
 }
 
 /**
@@ -918,9 +994,25 @@ export async function runKnowledgeAcquisitionCycle({
   const coverageScore = Math.min(1.0, (results.length / 5) * confidence);
   markTopicResearched(topicId, { coverageScore, sourcesConsulted: sourcesUsed });
 
-  // Enqueue follow-up research for identified gaps (self-multiplication)
-  const gaps = synthesis.further_research_needed || [];
-  for (const gap of gaps.slice(0, 3)) {
+  // Enqueue follow-up research for identified gaps (self-multiplication).
+  //
+  // Bounded per parent topic. Research runs five phases and the monitoring and
+  // expansion phases repeat, so an uncapped 3 gaps per cycle compounds without
+  // limit — two completed reports generated 116 and 98 follow-ups respectively,
+  // none of which ever ran. The agenda is a backlog, not a fan-out tree.
+  const FOLLOW_UP_CAP_PER_TOPIC = 5;
+  const alreadySpawned = loadAgenda().filter(
+    (t) => t.source === `follow-up:${topic}`,
+  ).length;
+  const remaining = Math.max(0, FOLLOW_UP_CAP_PER_TOPIC - alreadySpawned);
+  const gaps = (synthesis.further_research_needed || []).slice(0, remaining);
+  if (remaining === 0 && (synthesis.further_research_needed || []).length > 0) {
+    logger.info({
+      subsystem: 'fact-seeker',
+      message: `Follow-up cap reached for "${topic}" (${alreadySpawned} already queued); not spawning more.`,
+    });
+  }
+  for (const gap of gaps) {
     addToAgenda({
       topic: gap,
       priority: Math.max(20, topicEntry.priority - 15),

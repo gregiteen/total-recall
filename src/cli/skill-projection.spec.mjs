@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,8 +6,14 @@ import {
   discoverRepoSkills,
   projectSkillsAsCommands,
   detectActiveSkillTargets,
-  projectSkillsForScope
+  projectSkillsForScope,
+  PROJECTION_MARKER_FILE
 } from './skill-projection.mjs';
+
+/** Resolve a link the way the OS does: relative to the link's own directory. */
+function linkTarget(linkPath) {
+  return path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+}
 
 let tmp;
 
@@ -79,7 +85,64 @@ describe('projectSkillsAsCommands', () => {
     fs.symlinkSync('/nonexistent/old/a', path.join(dest, 'a'));
 
     projectSkillsAsCommands(dest, [{ name: 'a', skillDir: a }], {});
-    expect(path.resolve(fs.readlinkSync(path.join(dest, 'a')))).toBe(path.resolve(a));
+    expect(linkTarget(path.join(dest, 'a'))).toBe(path.resolve(a));
+  });
+
+  it('writes links RELATIVE to the destination so a clone or moved checkout still resolves', () => {
+    const src = path.join(tmp, 'repo', '.agent', 'skills');
+    const dest = path.join(tmp, 'repo', '.claude', 'skills');
+    const a = seedSkill(src, 'push');
+
+    projectSkillsAsCommands(dest, [{ name: 'push', skillDir: a }], {});
+    const raw = fs.readlinkSync(path.join(dest, 'push'));
+    if (process.platform !== 'win32') {
+      expect(path.isAbsolute(raw)).toBe(false);
+      expect(raw).toBe(path.join('..', '..', '.agent', 'skills', 'push'));
+    }
+    expect(fs.existsSync(path.join(dest, 'push', 'SKILL.md'))).toBe(true);
+
+    // The whole repo moves (clone on another machine): the link must still work.
+    const moved = path.join(tmp, 'elsewhere');
+    fs.renameSync(path.join(tmp, 'repo'), moved);
+    expect(fs.existsSync(path.join(moved, '.claude', 'skills', 'push', 'SKILL.md'))).toBe(true);
+  });
+
+  it('COPIES the skill when the filesystem refuses symlinks, and refreshes that copy next run', () => {
+    const src = path.join(tmp, 'src');
+    const dest = path.join(tmp, 'dest');
+    const a = seedSkill(src, 'a', 'v1');
+    const eperm = Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+    const spy = vi.spyOn(fs, 'symlinkSync').mockImplementation(() => { throw eperm; });
+    try {
+      const first = projectSkillsAsCommands(dest, [{ name: 'a', skillDir: a }], {});
+      expect(first).toEqual([{ name: 'a', action: 'copied' }]);
+      const copied = path.join(dest, 'a');
+      expect(fs.lstatSync(copied).isSymbolicLink()).toBe(false);
+      expect(fs.readFileSync(path.join(copied, 'SKILL.md'), 'utf8')).toContain('v1');
+      expect(fs.existsSync(path.join(copied, PROJECTION_MARKER_FILE))).toBe(true);
+
+      // Source changes → the projected copy is TR's own output, so it is refreshed
+      // without --force instead of being protected like a user-authored skill.
+      fs.writeFileSync(path.join(a, 'SKILL.md'), '---\nname: a\ndescription: "v2"\n---\n', 'utf8');
+      const second = projectSkillsAsCommands(dest, [{ name: 'a', skillDir: a }], {});
+      expect(second).toEqual([{ name: 'a', action: 'copied' }]);
+      expect(fs.readFileSync(path.join(copied, 'SKILL.md'), 'utf8')).toContain('v2');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('rethrows unexpected symlink failures instead of silently copying', () => {
+    const src = path.join(tmp, 'src');
+    const dest = path.join(tmp, 'dest');
+    const a = seedSkill(src, 'a');
+    const boom = Object.assign(new Error('disk on fire'), { code: 'EIO' });
+    const spy = vi.spyOn(fs, 'symlinkSync').mockImplementation(() => { throw boom; });
+    try {
+      expect(() => projectSkillsAsCommands(dest, [{ name: 'a', skillDir: a }], {})).toThrow('disk on fire');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('never clobbers a real user dir without --force (user skill wins)', () => {
@@ -109,7 +172,7 @@ describe('projectSkillsAsCommands', () => {
     const res = projectSkillsAsCommands(dest, [{ name: 'repo-expert', skillDir: a }], {});
     expect(res).toEqual([{ name: 'repo-expert', action: 'linked' }]);
     expect(fs.lstatSync(staleDir).isSymbolicLink()).toBe(true);
-    expect(path.resolve(fs.readlinkSync(staleDir))).toBe(path.resolve(a));
+    expect(linkTarget(staleDir)).toBe(path.resolve(a));
   });
 
   it('leaves a skill alone when its source already is the destination', () => {

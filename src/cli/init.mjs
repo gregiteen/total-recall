@@ -77,28 +77,52 @@ function copyDirMerge(src, dest, dryRun) {
  * Ship openwiki with the brain (global or project). Prefer packaged templates;
  * fall back to a minimal set of pages so every brain has docs.
  */
-function ensureOpenWiki(brainDir, isProject, dryRun) {
-  const wikiDir = path.join(brainDir, 'openwiki');
-  const templateRoot = path.join(ROOT, 'templates', 'openwiki');
-  if (ensureDir(wikiDir, dryRun)) {
-    logOk(`Created openwiki at ${path.relative(process.cwd(), wikiDir) || wikiDir}`);
+async function ensureOpenWiki(brainDir, isProject, dryRun) {
+  const wikiDirs = [path.join(brainDir, 'openwiki')];
+  if (isProject) {
+    wikiDirs.push(path.join(process.cwd(), 'openwiki'));
   }
-  if (fs.existsSync(templateRoot)) {
-    copyDirMerge(templateRoot, wikiDir, dryRun);
-  } else {
-    // Minimal fallback pages when templates/ not packaged yet
-    const pages = {
-      'README.md': `# OpenWiki\n\nPortable knowledge docs for this Total Recall brain (${isProject ? 'project' : 'global'}).\n\n- Not the SSSS memory vault — use vault nodes for rules/facts.\n- Use these pages for architecture, stack, and how-to knowledge.\n`,
-      'memory.md': `# Memory\n\nHow this brain stores invariants, preferences, and facts.\n\nUse \`npx total-recall remember\` / \`recall\` / \`compile\`.\n`,
-      'ide.md': `# IDE personalization\n\nConnect surfaces with \`npx total-recall connect <ide>\`.\nInjected blocks live inside BEGIN/END INJECTED MEMORY markers only.\n`,
-      'skills.md': `# Skills\n\nUser skills live in \`.agent/skills/<name>/\` (siblings of total-recall).\nTotal Recall tracks and deploys skills; it does not nest product skills inside itself.\n`,
-      'secrets.md': `# Secrets\n\nAPI keys and credentials belong in the encrypted secrets store — never in openwiki or instruction shims.\n`,
-    };
-    for (const [name, body] of Object.entries(pages)) {
-      const dest = path.join(wikiDir, name);
-      if (fs.existsSync(dest)) continue;
-      if (!dryRun) fs.writeFileSync(dest, body);
-      logOk(`Seeded openwiki/${name}`);
+  const templateRoot = fs.existsSync(path.join(ROOT, 'scaffold', 'openwiki'))
+    ? path.join(ROOT, 'scaffold', 'openwiki')
+    : path.join(ROOT, 'templates', 'openwiki');
+
+  for (const wikiDir of wikiDirs) {
+    if (ensureDir(wikiDir, dryRun)) {
+      logOk(`Created openwiki at ${path.relative(process.cwd(), wikiDir) || wikiDir}`);
+    }
+    if (fs.existsSync(templateRoot)) {
+      copyDirMerge(templateRoot, wikiDir, dryRun);
+    } else {
+      // Minimal fallback pages when templates/ not packaged yet
+      const pages = {
+        'README.md': `# OpenWiki\n\nPortable knowledge docs for this Total Recall brain (${isProject ? 'project' : 'global'}).\n\n- Not the SSSS memory vault — use vault nodes for rules/facts.\n- Use these pages for architecture, stack, and how-to knowledge.\n`,
+        'architecture.md': `# Architecture\n\nComponent overview, domain boundaries, and runtime execution flow.\n`,
+        'stack.md': `# Stack\n\nRuntime dependencies, frameworks, and system tools.\n`,
+        'memory.md': `# Memory\n\nHow this brain stores invariants, preferences, and facts.\n\nUse \`npx total-recall remember\` / \`recall\` / \`compile\`.\n`,
+        'ide.md': `# IDE personalization\n\nConnect surfaces with \`npx total-recall connect <ide>\`.\nInjected blocks live inside BEGIN/END INJECTED MEMORY markers only.\n`,
+        'skills.md': `# Skills\n\nUser skills live in \`.agent/skills/<name>/\` (siblings of total-recall).\nTotal Recall tracks and deploys skills; it does not nest product skills inside itself.\n`,
+        'secrets.md': `# Secrets\n\nAPI keys and credentials belong in the encrypted secrets store — never in openwiki or instruction shims.\n`,
+      };
+      for (const [name, body] of Object.entries(pages)) {
+        const dest = path.join(wikiDir, name);
+        if (fs.existsSync(dest)) continue;
+        if (!dryRun) fs.writeFileSync(dest, body);
+        logOk(`Seeded openwiki/${name}`);
+      }
+    }
+  }
+
+  // Auto-ingest into memory graph when project is initialized
+  if (isProject && !dryRun) {
+    try {
+      const { runOpenWikiIngest } = await import('./ingest-openwiki.mjs');
+      const targetWiki = path.join(process.cwd(), 'openwiki');
+      if (fs.existsSync(targetWiki)) {
+        await runOpenWikiIngest([targetWiki], { silent: true });
+        logOk('Ingested openwiki into semantic knowledge graph');
+      }
+    } catch {
+      // Best-effort ingestion
     }
   }
 }
@@ -574,7 +598,7 @@ export default async function init(args) {
   // This is the non-interactive openwiki path. External `openwiki --init` is optional
   // and only offered interactively (that CLI has no --yes flag).
   logStep('3.6/4', 'Ensuring openwiki is present');
-  ensureOpenWiki(brainDir, isProject, opts.dryRun);
+  await ensureOpenWiki(brainDir, isProject, opts.dryRun);
 
   // ── Step 3.7: Project skills as slash commands into the IDEs in use ──
   // Scope matches the brain: `init --project` projects PROJECT skills into the
@@ -600,7 +624,7 @@ export default async function init(args) {
         log(`  No in-use IDE detected for ${skillScope} skills — run \`npx total-recall connect <ide>\` to wire them.`);
       } else {
         for (const t of wired) {
-          const n = t.results.filter(r => ['linked', 'exists', 'source'].includes(r.action)).length;
+          const n = t.results.filter(r => ['linked', 'copied', 'exists', 'source'].includes(r.action)).length;
           logOk(`${t.label}: ${n} skill(s) → ${path.relative(cwd, t.destDir) || t.destDir}/`);
         }
         log(`  Slash commands: ${skills.map(s => '/' + s.name).join(', ')}`);

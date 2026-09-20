@@ -4,8 +4,10 @@ vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { cleanAndParseJSON, loadRuntimeConfig } from './runtime.mjs';
+import { cleanAndParseJSON, loadRuntimeConfig, loadDynamicSecrets } from './runtime.mjs';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 describe('cleanAndParseJSON', () => {
   it('parses standard clean JSON', () => {
@@ -204,5 +206,85 @@ describe('loadRuntimeConfig', () => {
 
     const config = loadRuntimeConfig();
     expect(config.agents[0].name).toBe('claude');
+  });
+});
+
+
+describe('loadDynamicSecrets layering', () => {
+  let root;
+  let home;
+  let agentRoot;
+  let cwd;
+
+  // The global layer always lives under <home>/.agent.
+  const globalBrainStore = () =>
+    path.join(home, '.agent', 'skills', 'total-recall', 'config', 'secrets.enc');
+  const writeStore = (file, obj) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Plain JSON is a supported store format (loadSecretsSync falls back to it),
+    // which keeps these tests independent of the encryption password.
+    fs.writeFileSync(file, JSON.stringify(obj));
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-runtime-'));
+    home = path.join(root, 'home');
+    agentRoot = path.join(root, 'agent');
+    cwd = path.join(root, 'proj');
+    fs.mkdirSync(cwd, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('lets the canonical brain store win over a legacy flat store', async () => {
+    writeStore(globalBrainStore(), { google_api_key: 'WORKING_BRAIN_KEY' });
+    writeStore(path.join(cwd, '.agent', 'secrets.enc'), { google_api_key: 'DEAD_LEGACY_KEY' });
+
+    const secrets = await loadDynamicSecrets({ cwd, agentRoot, home });
+    expect(secrets.google_api_key).toBe('WORKING_BRAIN_KEY');
+  });
+
+  it('never lets a legacy flat store mask the project brain', async () => {
+    writeStore(path.join(agentRoot, 'skills', 'total-recall', 'config', 'secrets.enc'), {
+      google_api_key: 'PROJECT_KEY',
+    });
+    writeStore(path.join(agentRoot, 'secrets.enc'), { google_api_key: 'DEAD_LEGACY_KEY' });
+    writeStore(path.join(cwd, '.agent', 'secrets.enc'), { google_api_key: 'ALSO_DEAD' });
+
+    const secrets = await loadDynamicSecrets({ cwd, agentRoot, home });
+    expect(secrets.google_api_key).toBe('PROJECT_KEY');
+  });
+
+  it('still surfaces keys that exist only in a legacy store', async () => {
+    writeStore(globalBrainStore(), { google_api_key: 'WORKING_BRAIN_KEY' });
+    writeStore(path.join(cwd, '.agent', 'secrets.enc'), { HEADSCALE_PREAUTH_KEY: 'LEGACY_ONLY' });
+
+    const secrets = await loadDynamicSecrets({ cwd, agentRoot, home });
+    expect(secrets.google_api_key).toBe('WORKING_BRAIN_KEY');
+    expect(secrets.HEADSCALE_PREAUTH_KEY).toBe('LEGACY_ONLY');
+  });
+
+  it('lets the project brain override the global brain', async () => {
+    writeStore(globalBrainStore(), { K: 'GLOBAL' });
+    writeStore(path.join(agentRoot, 'skills', 'total-recall', 'config', 'secrets.enc'), { K: 'PROJECT' });
+
+    const secrets = await loadDynamicSecrets({ cwd, agentRoot, home });
+    expect(secrets.K).toBe('PROJECT');
+  });
+
+  it('never exposes the internal metadata key', async () => {
+    writeStore(globalBrainStore(), { A: 'value', __tr_secrets_meta: { version: 2 } });
+
+    const secrets = await loadDynamicSecrets({ cwd, agentRoot, home });
+    expect(secrets.A).toBe('value');
+    expect(secrets.__tr_secrets_meta).toBeUndefined();
+  });
+
+  it('returns an empty object when no layer exists', async () => {
+    const secrets = await loadDynamicSecrets({ cwd, agentRoot, home });
+    expect(secrets).toEqual({});
   });
 });

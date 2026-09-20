@@ -300,6 +300,10 @@
     "path": "/api/mesh/access/proposals"
   },
   {
+    "method": "POST",
+    "path": "/api/mesh/dispatch"
+  },
+  {
     "method": "GET",
     "path": "/api/mesh/election/history"
   },
@@ -350,6 +354,18 @@
   {
     "method": "POST",
     "path": "/api/mesh/preauthkey"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/presence"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/presence/local"
+  },
+  {
+    "method": "POST",
+    "path": "/api/mesh/presence/resolve"
   },
   {
     "method": "POST",
@@ -422,6 +438,38 @@
   {
     "method": "GET",
     "path": "/api/pairing"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/plugins/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:id"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:id/rate"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:id/readme"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:id/run"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/catalog"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/install"
   },
   {
     "method": "GET",

@@ -7,7 +7,15 @@ vi.mock('./logger.mjs', () => ({
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { loadAgenda, addToAgenda, getNextAgendaTopic, markTopicResearched } from './fact-seeker.mjs';
+import {
+  loadAgenda,
+  addToAgenda,
+  getNextAgendaTopic,
+  markTopicResearched,
+  cancelBogusAgendaTopics,
+  reclassifyCancelledAgendaTopics,
+  CANCELLED_STATUS,
+} from './fact-seeker.mjs';
 
 const callLocalRuntimeSpy = vi.fn();
 vi.mock('./runtime.mjs', async (importActual) => {
@@ -60,6 +68,82 @@ describe('Research Agenda', () => {
     // Since we can't override the module constant easily in ESM,
     // test via addToAgenda which creates the file
     expect(Array.isArray([])).toBe(true);
+  });
+});
+
+describe('Research Agenda cancellation', () => {
+  let tempAgentDir;
+  let brainDir;
+  let originalAgentDir;
+  let originalTestAgentDir;
+
+  const agendaFile = () => path.join(brainDir, 'research-agenda.jsonl');
+  const writeAgenda = (rows) =>
+    fs.writeFileSync(agendaFile(), rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const readAgenda = () =>
+    fs
+      .readFileSync(agendaFile(), 'utf8')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l));
+
+  beforeEach(() => {
+    tempAgentDir = tmpDir();
+    brainDir = path.join(tempAgentDir, 'skills', 'total-recall');
+    fs.mkdirSync(brainDir, { recursive: true });
+    originalAgentDir = process.env.AGENT_DIR;
+    originalTestAgentDir = process.env._TR_TEST_AGENT_DIR;
+    process.env.AGENT_DIR = tempAgentDir;
+    process.env._TR_TEST_AGENT_DIR = brainDir;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempAgentDir, { recursive: true, force: true });
+    if (originalAgentDir === undefined) delete process.env.AGENT_DIR;
+    else process.env.AGENT_DIR = originalAgentDir;
+    if (originalTestAgentDir === undefined) delete process.env._TR_TEST_AGENT_DIR;
+    else process.env._TR_TEST_AGENT_DIR = originalTestAgentDir;
+  });
+
+  it('retires bogus fixture topics as cancelled rather than failed', () => {
+    writeAgenda([
+      { id: 'a1', topic: 'Automated API Integration Build: STALE_API_KEY', status: 'pending', priority: 50 },
+      { id: 'a2', topic: 'A real topic', status: 'pending', priority: 40 },
+    ]);
+
+    const result = cancelBogusAgendaTopics();
+    expect(result.cancelled).toBe(1);
+
+    const rows = readAgenda();
+    expect(rows.find((r) => r.id === 'a1').status).toBe(CANCELLED_STATUS);
+    expect(rows.find((r) => r.id === 'a1').cancelled_reason).toBeTruthy();
+    expect(rows.find((r) => r.id === 'a2').status).toBe('pending');
+  });
+
+  it('reclassifies legacy cancelled-as-failed rows and leaves real failures alone', () => {
+    writeAgenda([
+      { id: 'l1', topic: 'retired follow-up', status: 'failed', cancelled_reason: 'unbounded self-generated follow-up (cap 5/topic)' },
+      { id: 'l2', topic: 'genuine failure', status: 'failed' },
+      { id: 'l3', topic: 'still pending', status: 'pending' },
+    ]);
+
+    expect(reclassifyCancelledAgendaTopics()).toBe(1);
+
+    const rows = readAgenda();
+    expect(rows.find((r) => r.id === 'l1').status).toBe(CANCELLED_STATUS);
+    expect(rows.find((r) => r.id === 'l2').status).toBe('failed');
+    expect(rows.find((r) => r.id === 'l3').status).toBe('pending');
+    expect(reclassifyCancelledAgendaTopics()).toBe(0);
+  });
+
+  it('never selects a cancelled topic as the next research task', () => {
+    writeAgenda([
+      { id: 'c1', topic: 'cancelled but high priority', status: CANCELLED_STATUS, priority: 99, cancelled_reason: 'x' },
+      { id: 'c2', topic: 'live topic', status: 'pending', priority: 10 },
+    ]);
+
+    expect(getNextAgendaTopic()?.id).toBe('c2');
   });
 });
 

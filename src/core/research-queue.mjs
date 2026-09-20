@@ -28,6 +28,27 @@ function getQueueFile(overrideBrainDir) {
   return path.join(dir, 'research-queue.jsonl');
 }
 
+/**
+ * Refuse to write the operator's REAL research state from inside a test run.
+ *
+ * The June/July 2026 agenda accumulated 29 "Automated API Integration Build:"
+ * fixture entries plus a queue file the daemon never drained, because a code
+ * path reached the default brain while tests were running. Threading `brainDir`
+ * through every caller is the real fix; this is the backstop, so a future caller
+ * that forgets it fails loudly instead of quietly polluting real data. Tests
+ * point at a temp brain with _TR_TEST_AGENT_DIR (or AGENT_DIR).
+ */
+function assertNotRealBrainInTest(dir, what) {
+  const isTest = Boolean(process.env.VITEST) || process.env.NODE_ENV === 'test';
+  if (!isTest) return;
+  if (process.env._TR_TEST_AGENT_DIR || process.env.AGENT_DIR) return;
+  if (path.resolve(dir) === path.resolve(getBrainDir())) {
+    throw new Error(
+      `Refusing to write the real ${what} from a test run: pass an explicit brainDir or set _TR_TEST_AGENT_DIR`,
+    );
+  }
+}
+
 const STATUS_RANK = { pending: 0, in_progress: 1, done: 2, failed: 3 };
 
 // ─── Summary Compiler ─────────────────────────────────────────────────────────
@@ -278,6 +299,7 @@ export function loadQueue(overrideBrainDir) {
 
 export function saveQueue(items, overrideBrainDir) {
   const queueFile = getQueueFile(overrideBrainDir);
+  assertNotRealBrainInTest(path.dirname(queueFile), 'research queue');
   fs.mkdirSync(path.dirname(queueFile), { recursive: true });
   fs.writeFileSync(queueFile, items.map(i => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }

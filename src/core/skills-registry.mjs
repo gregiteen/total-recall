@@ -488,6 +488,8 @@ const SKILL_SCAN_REL = [
   path.join('.cursor', 'skills'),
   path.join('.codex', 'skills'),
   path.join('.gemini', 'skills'),
+  path.join('.cline', 'skills'),
+  path.join('.clinerules', 'skills'),
 ];
 
 /**
