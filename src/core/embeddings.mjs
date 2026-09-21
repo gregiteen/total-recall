@@ -61,15 +61,25 @@ let currentDbPath = null;
 const dbVssEnabled = new WeakMap();
 
 /**
- * better-sqlite3 on Linux appends ".so" when the path already ends in ".so",
- * producing "vss0.so.so". Strip known extensions before loadExtension.
+ * better-sqlite3 appends the platform suffix, so a path that already ends in
+ * ".so" reports "vss0.so.so: cannot open shared object file". Strip known
+ * extensions before loadExtension.
+ *
+ * When BOTH attempts fail, rethrow the FIRST error: the second is the artifact
+ * of the appended suffix, and logging it hid the real cause on a Linux host —
+ * "vss0.so.so: cannot open shared object file" while the actual reason was a
+ * missing libblas.so.3 that `ldd vss0.so` names immediately.
  */
 function loadExtensionBare(db, absolutePath) {
   const bare = String(absolutePath).replace(/\.(so|dylib|dll)$/i, '');
   try {
     db.loadExtension(bare);
-  } catch {
-    db.loadExtension(absolutePath);
+  } catch (bareErr) {
+    try {
+      db.loadExtension(absolutePath);
+    } catch {
+      throw bareErr;
+    }
   }
 }
 

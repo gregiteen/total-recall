@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-20T20:12:23.649Z
+generated_at: 2026-09-21T05:16:26.145Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (617 files), Markdown (277 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (617 files), Markdown (276 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -38,7 +38,6 @@ generated_from: total-recall
   skills/
     code-mode/  (6 items)
     code-quality/  (9 items)
-    instruction-keeper/  (8 items)
     meta-harness/  (1 items)
     okf/  (5 items)
     project-management/  (6 items)
@@ -53,7 +52,7 @@ generated_from: total-recall
     total-recall-project-management/  (6 items)
 .agents/
   rules/  (3 items)
-  skills/  (14 items)
+  skills/  (13 items)
 bin/  (4 items)
 collab/
   backend/  (3 items)
@@ -722,7 +721,6 @@ templates/
 
 - **code-mode**: "Use this skill when working on the Code Mode Infrastructure, sandbox VFS, or instruction-led architecture. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **code-quality**: "Use this skill before committing, publishing, or deploying Total Recall, and whenever fixing errors from a quality gate. This repo is plain Node ESM — it has NO TypeScript and NO ESLint installed, so do NOT run tsc, eslint, npm run typecheck, or npm run lint (they do not exist here). Its gates are dist freshness, the open-source path invariant, SSSS registry verification, and vitest. Run checks as BACKGROUND jobs via scripts/check.mjs. MANDATORY: You MUST read the full SKILL.md file before executing."
-- **instruction-keeper**: Use this skill when managing the lifecycle and version control of system
 - **meta-harness**: Meta Harness & Agent Management Layer to orchestrate and delegate tasks across all connected IDE harnesses (Antigravity, Claude Code, Codex, Gemini, Ollama) and the computer generally.
 - **okf**: Use this skill to access information about Google's Open Knowledge Format
 - **project-management**: "Use this skill when managing project documentation, GitHub issues, pull requests, and project tracker checklists in ANY repository. Defines the universal 4-file (PRD/ARCHITECTURE/DEVELOPMENT_PLAN/PROJECT_TRACKER) Kanban documentation system shared across all repos. Do NOT use for code implementation. MANDATORY: You MUST read the full SKILL.md file before executing."
