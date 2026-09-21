@@ -14,6 +14,14 @@ set -euo pipefail
 # interpreter the line was named for.
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
+# Host-local environment: TR_SECRETS_PASSWORD (and optionally TR_PORT). Optional
+# — a host that does not run the brain will not have it. Without the password the
+# brain cannot decrypt its own secrets store, so embeddings never build and
+# recall silently degrades to keyword-only.
+if [ -f /root/.agent/tr.env ]; then
+  . /root/.agent/tr.env
+fi
+
 REPO_DIR="/root/total-recall"
 LOG_FILE="/root/.agent/logs/auto-pull.log"
 
