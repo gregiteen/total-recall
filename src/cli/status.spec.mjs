@@ -26,7 +26,7 @@ describe('status command', () => {
     // Default mock behavior for file reading
     readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
       if (p.includes('brain.json')) {
-        return JSON.stringify({ url: 'http://localhost:3000', token: 'test-token' });
+        return JSON.stringify({ url: 'http://localhost:3000', token: 'test-token', layer: 'project', name: 'ssss' });
       }
       if (p.includes('wizard-config.json')) {
         return JSON.stringify({
@@ -50,6 +50,7 @@ describe('status command', () => {
     });
 
     fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url) => {
+      url = String(url);
       if (url.includes('/health')) {
         return {
           ok: true,
@@ -59,6 +60,7 @@ describe('status command', () => {
       if (url.includes('/api/instructions')) {
         return {
           ok: true,
+          headers: { get: () => 'application/json' },
           json: async () => ({ sha256: 'mock-sha', bytes: 100, modified: '2026-05-25T00:00:00Z' })
         };
       }
@@ -87,6 +89,7 @@ describe('status command', () => {
     expect(logs).toContain('Deploy Mode:      quick-tunnel');
     expect(logs).toContain('Dashboard UI:     https://my-tunnel.trycloudflare.com/dashboard');
     expect(logs).toContain('Tunnel Process:   🟢 Active (PID 45678)');
+    expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('brain=project%3Assss'))).toBe(true);
   });
 
   it('supports JSON output formatting', async () => {
@@ -111,5 +114,23 @@ describe('status command', () => {
       tunnel_pid: 45678,
       tunnel_alive: true
     });
+  });
+
+  it('accepts the server markdown instructions response', async () => {
+    vi.spyOn(fs, 'statSync').mockReturnValue({
+      size: 100,
+      mtime: new Date('2026-05-25T00:00:00Z'),
+      mtimeMs: 12345678
+    });
+    fetchSpy.mockImplementation(async (url) => String(url).includes('/health')
+      ? { ok: true, json: async () => ({ status: 'healthy' }) }
+      : { ok: true, headers: { get: () => 'text/markdown' }, text: async () => '# Instructions\n' });
+
+    await statusCmd(['--json']);
+
+    const report = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(report.brain.reachable).toBe(true);
+    expect(report.instructions.remote.bytes).toBe(Buffer.byteLength('# Instructions\n'));
+    expect(report.instructions.remote.sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 });

@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.28.2] — 2026-09-25
+
+### 🐛 Bug Fixes
+- Repository skills now project into Codex's `<repo>/.agents/skills` directory instead of the global `~/.codex/skills` directory. Skills authored in a repository's `skills/` directory are discovered too. Codex uses `/skills` or `$skill-name` to invoke them.
+- `total-recall status` now selects the active project brain and reads the server's Markdown instructions response, so its reachability and sync report reflects the project being inspected.
+- Refreshed compatible transitive dependency locks for `js-yaml` and `qs`, clearing the runtime npm audit advisories.
+
 ## [3.28.1] — 2026-09-20
 
 ### 🐛 Bug Fixes

@@ -2,8 +2,8 @@
  * Scope-aware skill → slash-command projection.
  *
  * A "repo skill" is any <skills-root>/<name>/SKILL.md directory (the Agent
- * Skills standard). Each IDE turns such a directory into a /<name> slash
- * command, but every IDE looks in a *different* place, and the right place
+ * Skills standard). Each IDE discovers skills in a different place, and that
+ * place
  * depends on the *scope* of the skill:
  *
  *   PROJECT skills (authored in <repo>/.agent/skills or <repo>/.agents/skills)
@@ -16,9 +16,9 @@
  *       machine. They are available in every repo.
  *
  * This mirrors the brain model: `init --project` ⇒ project skills; `init`
- * (global) ⇒ global skills. Codex has no project-local skills dir (it only
- * reads ~/.codex/skills globally), so it participates in GLOBAL projection only;
- * pushing project skills to Codex is opt-in via `connect codex`.
+ * (global) ⇒ global skills. Codex discovers project skills in
+ * <repo>/.agents/skills and global skills in ~/.codex/skills. In Codex,
+ * /skills opens the picker and $skill-name explicitly invokes a skill.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -54,9 +54,7 @@ export const IDE_SKILLS = [
     id: 'codex',
     label: 'Codex',
     clients: ['codex'],
-    // Codex only discovers skills globally under ~/.codex/skills. There is no
-    // project-local dir, so project skills are opt-in (namespaced) via connect.
-    project: null,
+    project: { dir: ['.agents', 'skills'], markers: ['.agents', 'AGENTS.md'], env: ['CODEX_HOME'] },
     global:  { dir: ['.codex', 'skills'], markers: ['.codex'] }
   },
   {
@@ -117,7 +115,7 @@ function isStaleGeneratedDir(entryPath) {
 }
 
 /**
- * Put one skill at linkPath so the IDE sees it as /<name>:
+ * Put one skill at linkPath so the IDE can discover it:
  *   1. a symlink RELATIVE to the destination dir — the projection then survives
  *      `git clone`, a moved checkout, or a different home directory (an absolute
  *      link only works on the machine that wrote it);
@@ -149,21 +147,23 @@ function placeSkill(skillDir, linkPath) {
 }
 
 /**
- * Skill source roots, in priority order. The canonical Total Recall location
- * (.agent/skills, singular) wins, but we also scan the Antigravity-native
- * .agents/skills (plural) so a skill authored in either place is discovered.
+ * Skill source roots, in priority order. The Total Recall location
+ * (.agent/skills, singular) wins, followed by repo-authored skills/ and
+ * already-projected .agents/skills. This avoids treating projected links as
+ * the source when the original is available.
  */
 export function skillSourceRoots(agentDir) {
   const roots = [path.join(agentDir, 'skills')];
   const parent = path.dirname(agentDir);
   if (path.basename(agentDir) === '.agent') {
+    roots.push(path.join(parent, 'skills'));
     roots.push(path.join(parent, '.agents', 'skills'));
   }
   return roots;
 }
 
 /**
- * Discover repo skills to expose as slash commands.
+ * Discover repo skills to expose to IDEs.
  * Every <root>/<name>/ directory containing a SKILL.md is a skill. When the
  * same name appears in more than one source root, the canonical root wins.
  */

@@ -600,13 +600,13 @@ export default async function init(args) {
   logStep('3.6/4', 'Ensuring openwiki is present');
   await ensureOpenWiki(brainDir, isProject, opts.dryRun);
 
-  // ── Step 3.7: Project skills as slash commands into the IDEs in use ──
+  // ── Step 3.7: Project skills into the IDEs in use ──
   // Scope matches the brain: `init --project` projects PROJECT skills into the
   // repo's IDE skill dirs for IDEs actually used here (.claude/, .agents/, or
   // the current process); `init` projects GLOBAL skills into installed IDEs'
-  // global skill dirs. Codex (global-only) is opt-in for project skills.
+  // global skill dirs. Codex discovers project skills in .agents/skills.
   const skillScope = isProject ? 'project' : 'global';
-  logStep('3.7/4', `Projecting ${skillScope} skills as slash commands (IDEs in use)`);
+  logStep('3.7/4', `Projecting ${skillScope} skills (IDEs in use)`);
   if (opts.dryRun) {
     const targets = detectActiveSkillTargets({ scope: skillScope, cwd });
     for (const t of targets.filter(t => t.supported)) {
@@ -627,7 +627,7 @@ export default async function init(args) {
           const n = t.results.filter(r => ['linked', 'copied', 'exists', 'source'].includes(r.action)).length;
           logOk(`${t.label}: ${n} skill(s) → ${path.relative(cwd, t.destDir) || t.destDir}/`);
         }
-        log(`  Slash commands: ${skills.map(s => '/' + s.name).join(', ')}`);
+        log(`  Discoverable skills: ${skills.map(s => s.name).join(', ')}`);
         if (available.length > 0) {
           log(`  Also available (opt-in): ${available.map(t => t.clients.join('/')).join(', ')} — \`npx total-recall connect <ide>\``);
         }
