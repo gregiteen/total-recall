@@ -20,13 +20,8 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { loadQueue } from '../core/research-queue.mjs';
 
-import { agentDir, brainDir, totalRecallToken } from '../core/config.mjs';
-
-const AGENT_DIR = agentDir;
-const BRAIN_CONFIG = path.join(brainDir, 'config', 'brain.json');
-const SYNC_STATE = path.join(brainDir, 'config', 'sync-state.json');
-const CLIENTS_REGISTRY = path.join(brainDir, 'config', 'clients.json');
-const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+import { totalRecallToken } from '../core/config.mjs';
+import { resolveBrainDir } from './agent-dir.mjs';
 
 function parseArgs(args) {
   const opts = { json: false, brain: null, token: null, help: false };
@@ -55,21 +50,21 @@ function printHelp() {
 `);
 }
 
-function loadBrainConfig() {
-  if (!fs.existsSync(BRAIN_CONFIG)) return null;
-  try { return JSON.parse(fs.readFileSync(BRAIN_CONFIG, 'utf8')); }
+function loadBrainConfig(brainConfigPath) {
+  if (!fs.existsSync(brainConfigPath)) return null;
+  try { return JSON.parse(fs.readFileSync(brainConfigPath, 'utf8')); }
   catch { return null; }
 }
 
-function loadSyncState() {
-  if (!fs.existsSync(SYNC_STATE)) return {};
-  try { return JSON.parse(fs.readFileSync(SYNC_STATE, 'utf8')); }
+function loadSyncState(syncStatePath) {
+  if (!fs.existsSync(syncStatePath)) return {};
+  try { return JSON.parse(fs.readFileSync(syncStatePath, 'utf8')); }
   catch { return {}; }
 }
 
-function loadClientsRegistry() {
-  if (!fs.existsSync(CLIENTS_REGISTRY)) return {};
-  try { return JSON.parse(fs.readFileSync(CLIENTS_REGISTRY, 'utf8'))?.clients || {}; }
+function loadClientsRegistry(clientsRegistryPath) {
+  if (!fs.existsSync(clientsRegistryPath)) return {};
+  try { return JSON.parse(fs.readFileSync(clientsRegistryPath, 'utf8'))?.clients || {}; }
   catch { return {}; }
 }
 
@@ -90,21 +85,31 @@ function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-async function probeBrain(brainUrl, token) {
+async function probeBrain(brainUrl, token, brainId) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
   const out = { reachable: false, instructions_sha256: null, instructions_bytes: null, error: null };
   try {
-    const res = await fetch(`${brainUrl.replace(/\/$/, '')}/api/instructions`, { headers });
+    const url = new URL(`${brainUrl.replace(/\/$/, '')}/api/instructions`);
+    if (brainId) url.searchParams.set('brain', brainId);
+    const res = await fetch(url, { headers });
     if (!res.ok) {
       out.error = `HTTP ${res.status}`;
       return out;
     }
-    const body = await res.json();
+    const contentType = res.headers?.get?.('content-type') || '';
+    const body = contentType.includes('application/json') ? await res.json() : null;
     out.reachable = true;
-    out.instructions_sha256 = body.sha256 || null;
-    out.instructions_bytes = body.bytes || null;
-    out.modified = body.modified || null;
+    if (body) {
+      out.instructions_sha256 = body.sha256 || (body.content ? sha256(body.content) : null);
+      out.instructions_bytes = body.bytes || (body.content ? Buffer.byteLength(body.content) : null);
+      out.modified = body.modified || null;
+    } else {
+      const content = await res.text();
+      out.instructions_sha256 = sha256(content);
+      out.instructions_bytes = Buffer.byteLength(content);
+      out.modified = res.headers?.get?.('last-modified') || null;
+    }
   } catch (err) {
     out.error = err.message;
   }
@@ -115,9 +120,12 @@ export default async function statusCmd(args) {
   const opts = parseArgs(args);
   if (opts.help) { printHelp(); return; }
 
-  const brainConfig = loadBrainConfig();
-  const syncState = loadSyncState();
-  const clientsRegistry = loadClientsRegistry();
+  const brainDir = resolveBrainDir();
+  const agentDir = path.dirname(path.dirname(brainDir));
+  const instructionsFile = path.join(path.dirname(agentDir), 'INSTRUCTIONS.md');
+  const brainConfig = loadBrainConfig(path.join(brainDir, 'config', 'brain.json'));
+  const syncState = loadSyncState(path.join(brainDir, 'config', 'sync-state.json'));
+  const clientsRegistry = loadClientsRegistry(path.join(brainDir, 'config', 'clients.json'));
   const brainUrl = opts.brain || brainConfig?.url || null;
   const token = opts.token || brainConfig?.token || totalRecallToken || null;
 
@@ -175,11 +183,11 @@ export default async function statusCmd(args) {
   } catch {}
 
   let localInstructions = null;
-  if (fs.existsSync(INSTRUCTIONS_FILE)) {
-    const buf = fs.readFileSync(INSTRUCTIONS_FILE);
-    const stat = fs.statSync(INSTRUCTIONS_FILE);
+  if (fs.existsSync(instructionsFile)) {
+    const buf = fs.readFileSync(instructionsFile);
+    const stat = fs.statSync(instructionsFile);
     localInstructions = {
-      path: INSTRUCTIONS_FILE,
+      path: instructionsFile,
       sha256: sha256(buf),
       bytes: stat.size,
       modified: stat.mtime.toISOString()
@@ -188,14 +196,17 @@ export default async function statusCmd(args) {
 
   let remote = null;
   if (brainUrl) {
-    remote = await probeBrain(brainUrl, token);
+    const brainId = brainConfig?.layer === 'project' && brainConfig?.name
+      ? `project:${brainConfig.name}`
+      : null;
+    remote = await probeBrain(brainUrl, token, brainId);
   }
 
   const inSync = !!(localInstructions && remote?.instructions_sha256 &&
     remote.instructions_sha256 === localInstructions.sha256);
 
   const instructionsMtime = localInstructions
-    ? fs.statSync(INSTRUCTIONS_FILE).mtimeMs
+    ? fs.statSync(instructionsFile).mtimeMs
     : null;
   const clientProjections = projectionsStatus(clientsRegistry, instructionsMtime);
 

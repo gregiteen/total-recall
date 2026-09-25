@@ -100,9 +100,8 @@ const CLIENTS = {
     label: 'Codex',
     mode: 'symlink',
     target: 'AGENTS.md',
-    // Codex only discovers skills globally under $CODEX_HOME/skills (~/.codex/skills).
-    // There is no project-local skills dir, so this projection is global by necessity.
-    skillsProjection: { scope: 'home', dir: path.join('.codex', 'skills') }
+    // Codex discovers repository skills in <project>/.agents/skills.
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   antigravity: {
     label: 'Antigravity',
@@ -961,8 +960,7 @@ export default async function connect(args) {
     }
   }
 
-  // Project repo skills as native slash commands via the Agent Skills standard.
-  // Each <agentDir>/skills/<name>/SKILL.md becomes /<name> in the target IDE.
+  // Project repo skills into the target IDE's Agent Skills directory.
   if (preset.skillsProjection) {
     const skills = discoverRepoSkills(agentDir);
     if (skills.length > 0) {
@@ -977,8 +975,8 @@ export default async function connect(args) {
           ? destDir
           : (path.relative(cwd, destDir) || destDir);
         result.notes.push(
-          `  Repo skills projected as slash commands → ${destLabel}/:\n` +
-          fresh.map(r => `    /${r.name}`).join('\n')
+          `  Repo skills projected → ${destLabel}/:\n` +
+          fresh.map(r => `    ${r.name}`).join('\n')
         );
       }
     }

@@ -155,6 +155,19 @@ describe('connect — Codex projection', () => {
     expect(registry.clients.codex).toBeDefined();
     expect(registry.clients.codex.mode).toBe('symlink');
   });
+
+  it('projects repo skills into .agents/skills, not the global Codex directory', async () => {
+    const source = path.join(tmpAgentDir, 'skills', 'project-only');
+    fs.mkdirSync(source, { recursive: true });
+    fs.writeFileSync(path.join(source, 'SKILL.md'), '---\nname: project-only\ndescription: test\n---\n');
+
+    await runConnect(['codex']);
+
+    const link = path.join(tmpProject, '.agents', 'skills', 'project-only');
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(path.join(link, 'SKILL.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpHome, '.codex', 'skills', 'project-only'))).toBe(false);
+  });
 });
 
 describe('connect — repo skills projected as slash commands', () => {
@@ -268,5 +281,4 @@ describe('connect — Core skills seeding', () => {
     expect(fs.existsSync(path.join(skillPath, "evals", "evals.json"))).toBe(true);
   }, 30000);
 });
-
 

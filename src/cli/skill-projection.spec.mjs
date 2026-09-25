@@ -36,13 +36,14 @@ afterEach(() => {
 });
 
 describe('discoverRepoSkills', () => {
-  it('finds skills in .agent/skills (canonical) and sibling .agents/skills (plural)', () => {
+  it('finds skills in .agent/skills, repo skills/, and sibling .agents/skills', () => {
     const agentDir = path.join(tmp, '.agent');
     seedSkill(path.join(agentDir, 'skills'), 'alpha');
+    seedSkill(path.join(tmp, 'skills'), 'gamma');
     seedSkill(path.join(tmp, '.agents', 'skills'), 'beta');
 
     const names = discoverRepoSkills(agentDir).map(s => s.name).sort();
-    expect(names).toEqual(['alpha', 'beta']);
+    expect(names).toEqual(['alpha', 'beta', 'gamma']);
   });
 
   it('canonical .agent/skills wins a name collision with .agents/skills', () => {
@@ -203,11 +204,13 @@ describe('detectActiveSkillTargets (project scope)', () => {
     expect(t.find(x => x.id === 'agents').active).toBe(true);
   });
 
-  it('Codex is unsupported for project scope (global-only)', () => {
+  it('activates Codex project skills when AGENTS.md is present', () => {
+    fs.writeFileSync(path.join(tmp, 'AGENTS.md'), '# Instructions\n');
     const t = detectActiveSkillTargets({ scope: 'project', cwd: tmp, env: {} });
     const codex = t.find(x => x.id === 'codex');
-    expect(codex.supported).toBe(false);
-    expect(codex.active).toBe(false);
+    expect(codex.supported).toBe(true);
+    expect(codex.active).toBe(true);
+    expect(codex.destDir).toBe(path.join(tmp, '.agents', 'skills'));
   });
 
   it('activates Hermes Agent when .hermes/ marker exists', () => {
@@ -259,5 +262,21 @@ describe('projectSkillsForScope (project scope)', () => {
     seedSkill(path.join(agentDir, 'skills'), 'okf');
     const { wired } = projectSkillsForScope({ scope: 'project', cwd: tmp, agentDir, env: {} });
     expect(wired).toHaveLength(0);
+  });
+
+  it('projects repo skills into Codex project scope without touching global skills', () => {
+    const agentDir = path.join(tmp, '.agent');
+    const local = seedSkill(path.join(agentDir, 'skills'), 'local');
+    const packageSkill = seedSkill(path.join(tmp, 'skills'), 'package-skill');
+    fs.writeFileSync(path.join(tmp, 'AGENTS.md'), '# Instructions\n');
+
+    const { wired } = projectSkillsForScope({ scope: 'project', cwd: tmp, agentDir, env: {} });
+
+    expect(wired.map(w => w.id)).toContain('codex');
+    for (const [name, source] of [['local', local], ['package-skill', packageSkill]]) {
+      const link = path.join(tmp, '.agents', 'skills', name);
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(linkTarget(link)).toBe(source);
+    }
   });
 });
