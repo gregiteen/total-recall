@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import yaml from 'yaml';
 import { BCRYPT_COST } from '../server/auth.mjs';
 import { brainDir } from '../core/config.mjs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 
 /**
  * Read a password without echoing it, and without it ever becoming an argv
@@ -128,7 +129,7 @@ export default async function resetPassword(args) {
   const isDefault = password === 'totalrecall';
   config.dashboard.force_password_reset = isDefault;
 
-  fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+  writeFileSecure(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
 
   // Never echo the password back. The operator just typed it; repeating it to
   // stdout puts it into scrollback, into any log capturing this command, and

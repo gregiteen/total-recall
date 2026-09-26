@@ -19,6 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import bcrypt from 'bcrypt';
 import yaml from 'yaml';
+import { writeFileSecure } from '../core/secure-file.mjs';
 import { BCRYPT_COST } from '../server/auth.mjs';
 
 
@@ -175,7 +176,7 @@ export function startDeployUI(port = 3001) {
               if (opts.cloudRegion) current['cfg-cloud-region'] = opts.cloudRegion;
               if (opts.installGlobal !== undefined) current['installGlobal'] = opts.installGlobal;
               if (opts.projectPaths) current['projectPaths'] = opts.projectPaths;
-              fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+              writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
 
             } catch (e) {
               console.error('Failed to auto-persist install options on disk:', e);
@@ -572,7 +573,7 @@ export function startDeployUI(port = 3001) {
             }
 
             const updated = { ...current, ...data };
-            fs.writeFileSync(configFile, JSON.stringify(updated, null, 2), { encoding: 'utf8', mode: 0o600 });
+            writeFileSecure(configFile, JSON.stringify(updated, null, 2), { encoding: 'utf8', mode: 0o600 });
             syncInstallOptionsFromDisk();
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1114,7 +1115,7 @@ export function startDeployUI(port = 3001) {
             }
             current['cfg-github-token'] = token;
             current['backupRepo'] = backupUrl;
-            fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+            writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
 
             log('✅ Encryption keys and tokens written.');
 
@@ -1735,7 +1736,7 @@ console.log("REMOTE_PASS_OK");
       if (_installOptions.dashboardPassword) {
         current['cfg-dashboard-password'] = _installOptions.dashboardPassword;
       }
-      fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+      writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
     } catch (e) {
       console.error('Failed to auto-persist remote install options on disk:', e);
     }

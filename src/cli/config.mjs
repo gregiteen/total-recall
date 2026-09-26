@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 
 // Pre-defined mapping of known settings
 const KEY_MAP = {
@@ -224,7 +225,7 @@ export default async function configCommand(args) {
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
       }
-      fs.writeFileSync(targetPath, yaml.stringify(targetObj), { encoding: 'utf8', mode: 0o600 });
+      writeFileSecure(targetPath, yaml.stringify(targetObj), { encoding: 'utf8', mode: 0o600 });
 
       console.log(`\n  ✅ Success! Config key "${key}" ${layerLabel} set to: ${JSON.stringify(parsedValue)}`);
       console.log(`  📍 Saved in: ${targetPath}\n`);

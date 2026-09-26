@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { writeFileSecure } from './secure-file.mjs';
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -49,7 +50,7 @@ function loadStore(brainDir) {
 function saveStore(brainDir, store) {
   const filePath = resolveWebAuthnPath(brainDir);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(store, null, 2) + '\n', {
+  writeFileSecure(filePath, JSON.stringify(store, null, 2) + '\n', {
     encoding: 'utf8',
     mode: 0o600,
   });

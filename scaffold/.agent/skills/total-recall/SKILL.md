@@ -16,7 +16,6 @@ repo_scoped: true
 > **Only agent skill in this package.** Implementation helpers live in `modules/` (not skills).
 > Openwiki ships with the brain at `openwiki/`.
 
-
 Welcome to the master control skill for the **Total Recall Autonomous AI OS**. > [!NOTE]
 > **Total Recall Architecture:**
 > The Total Recall memory kernel runs as a standalone REST service. Agents interact with the memory vault, perform semantic searches, and compile rules directly using lightweight, filesystem-native REST API calls via standard shell `curl` commands.
@@ -554,12 +553,6 @@ its *own* next rotation too — otherwise you've built a one-shot capability
 that dead-ends back at a manual dashboard step.
 
 ---
-
-<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-<!-- @route: tfidf, generated_at: 2026-05-21T03:34:14.837Z -->
-
-<!-- END INJECTED MEMORY -->
-
 
 ---
 

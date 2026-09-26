@@ -31,6 +31,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { exec, spawn, spawnSync } from 'node:child_process';
 import { projectSkillsForScope, detectActiveSkillTargets } from './skill-projection.mjs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -408,10 +409,10 @@ export default async function init(args) {
       }
 
       if (!config.dashboard.password_hash) {
-        fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
+        writeFileSecure(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
         passwordMessage = "\n  🔑 Dashboard Access: Unconfigured\n     (You will be prompted to set your password upon first browser access)";
       } else {
-        fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+        writeFileSecure(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
         passwordMessage = '\n  🔑 Dashboard credentials preserved (custom password hash already configured)';
       }
     } catch (err) {
@@ -586,7 +587,7 @@ export default async function init(args) {
       current['cfg-health-url'] = 'http://localhost:3000/health';
     }
 
-    fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+    writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
     logOk('UI deploy configuration persisted to wizard-config.json!');
   }
 
@@ -670,7 +671,7 @@ export default async function init(args) {
     fs.mkdirSync(cfgDir, { recursive: true });
     const brainCfg = { url: opts.brain };
     if (opts.token) brainCfg.token = opts.token;
-    fs.writeFileSync(path.join(cfgDir, 'brain.json'), JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
+    writeFileSecure(path.join(cfgDir, 'brain.json'), JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
     logOk(`Registered brain at ${opts.brain}. Run \`npx total-recall sync\` to pull instructions.`);
   } else {
     // Zero-config bootstrap: auto-generate localhost brain.json and valid Developer PAT out-of-the-box
@@ -696,7 +697,7 @@ export default async function init(args) {
         const keyData = issueKey('Default Local Developer Key', { scopes: ['*'] });
         brainCfg.url = brainCfg.url || 'http://localhost:3000';
         brainCfg.token = brainCfg.token || keyData.token;
-        fs.writeFileSync(brainJsonPath, JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
+        writeFileSecure(brainJsonPath, JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
         logOk(`Bootstrap configuration successfully generated and pre-authorized at ${brainCfg.url}`);
       } catch (err) {
         logWarn(`Could not auto-generate bootstrap developer key: ${err.message}`);
@@ -786,7 +787,7 @@ export default async function init(args) {
           current['cfg-dash-url'] = `${tunnelUrl}/`;
           current['cfg-health-url'] = `${tunnelUrl}/health`;
           
-          fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+          writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
           logOk('Registered Quick Tunnel URL in wizard-config.json!');
           dashboardUrl = `${tunnelUrl}/`;
         } else {

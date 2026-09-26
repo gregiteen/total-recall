@@ -1,7 +1,7 @@
 ---
 name: push
 description: "Use this skill when preparing, testing, version-bumping, and publishing a new release of the Total Recall package to npm and GitHub. Do NOT use for regular local feature commits."
-version: 3.14.1
+version: 3.14.2
 repo_scoped: true
 ---
 
@@ -107,19 +107,19 @@ This skill coordinates the release lifecycle of the `total-recall` package to en
 ## 🎯 Release Workflow Checklist
 
 ### Step 1: Pre-Release Quality Safeguards
-Before any version is bumped or pushed, you must verify the code's integrity. We provide an interactive release verification script for this:
-```bash
-node .agent/skills/push/scripts/release.mjs
-```
-This script automatically executes:
-1. The local Vitest suite (`npm test`)
-2. The code-quality lint checks (the `/code-quality` skill)
-3. The TypeScript compiler check (the `/code-quality` skill)
+Run the full `check.mjs --tier remote` gate on the Mac Mini through the Total
+Recall mesh CLI. This includes the Vitest suite. Never run the full suite or
+quality gates on the laptop, Chromebook, or droplet; a single spec may run on
+any mesh node. Use the `code-quality` and `test` skills for the exact commands
+and preserve the gate's exit code. This repo has no ESLint or TypeScript gate.
 
-Ensure all checks pass cleanly before proceeding!
+Before tagging, boot the server natively on the Mac Mini with an isolated home
+and verify `/health` reports the release version. Then run `npm run check:dist`
+and `npm publish --dry-run` on the publishing host.
 
 ### Step 2: Document Release Changelog
-Update [docs/developer/CHANGELOG.md](file:///Users/greg/Github/total-recall/docs/developer/CHANGELOG.md) to log all notable enhancements, bug fixes, or behavioral changes introduced in this release under a new version heading.
+Update `docs/developer/CHANGELOG.md` to log notable enhancements, bug fixes,
+and behavioral changes under the new version heading.
 
 ### Step 3: Package Version Bumping
 Determine the release scope and run the version command:
@@ -171,4 +171,4 @@ it aborts the publish if that push fails. When no machine has all three:
 Update `HANDOFF.md` and the affected project trackers in the same release.
 
 ## References
-- For npm package composition rules and dry-run guidelines, see [references/npm-publishing.md](file:///Users/greg/Github/total-recall/.agent/skills/push/references/npm-publishing.md).
+- For npm package composition rules and dry-run guidelines, see [references/npm-publishing.md](./references/npm-publishing.md).

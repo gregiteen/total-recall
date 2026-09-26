@@ -13,6 +13,7 @@ import os from 'os';
 import YAML from 'yaml';
 import { encryptSecrets, decryptSecrets, encryptSecretsSync, decryptSecretsSync } from './crypto.mjs';
 import { DEFAULT_KEYCHAIN_SERVICE, readKeychainPassword } from './secrets-keychain.mjs';
+import { writeFileSecure, appendFileSecure } from './secure-file.mjs';
 
 const META_KEY = '__tr_secrets_meta';
 
@@ -170,7 +171,7 @@ export function saveSecretsSync(brainDir, obj) {
   const password = secretsPassword();
   if (!password) throw new Error('TR_SECRETS_PASSWORD or TR_MASTER_PASSWORD is required to write secrets');
   const buf = encryptSecretsSync(obj, password);
-  fs.writeFileSync(filePath, buf, { mode: 0o600 });
+  writeFileSecure(filePath, buf, { mode: 0o600 });
 }
 
 /**
@@ -221,7 +222,7 @@ export async function saveSecrets(brainDir, secrets) {
 
   if (!password) throw new Error('TR_SECRETS_PASSWORD or TR_MASTER_PASSWORD is required to write secrets');
   const buf = await encryptSecrets(secrets, password);
-  fs.writeFileSync(filePath, buf, { mode: 0o600 });
+  writeFileSecure(filePath, buf, { mode: 0o600 });
 }
 
 /**
@@ -314,7 +315,7 @@ function appendAudit(brainDir, event) {
     ...event,
     // never include values
   });
-  fs.appendFileSync(auditPath, line + '\n', { mode: 0o600 });
+  appendFileSecure(auditPath, line + '\n', { mode: 0o600 });
 }
 
 /**
@@ -983,7 +984,7 @@ export function recordUsage(brainDir, event) {
     source: event.source || 'cli',
     key_ref: event.key_ref || null, // secret *name* only, never value
   };
-  fs.appendFileSync(usagePath, JSON.stringify(row) + '\n', { mode: 0o600 });
+  appendFileSecure(usagePath, JSON.stringify(row) + '\n', { mode: 0o600 });
   return row;
 }
 

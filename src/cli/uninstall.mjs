@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import backup from './backup.mjs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  FORBIDDEN FLAGS — These patterns must NEVER be accepted as arguments  ║
@@ -531,7 +532,7 @@ export default async function uninstall(args = []) {
       
       if (Object.keys(secretsObj).length > 0) {
         fs.mkdirSync(agentDir, { recursive: true });
-        fs.writeFileSync(
+        writeFileSecure(
           path.join(agentDir, 'secrets.enc'),
           JSON.stringify(secretsObj, null, 2),
           { encoding: 'utf8', mode: 0o600 }

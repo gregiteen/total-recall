@@ -15,6 +15,7 @@ import yaml from 'yaml';
 import { requireAuth, requireScope, loadSecurityConfig } from '../auth.mjs';
 import { BRAIN_DIR, CONFIG_DIR, AGENT_DIR, serverError, badRequest } from './_shared.mjs';
 import { loadRuntimeConfig } from '../../core/runtime.mjs';
+import { writeFileSecure } from '../../core/secure-file.mjs';
 
 const router = Router();
 
@@ -152,10 +153,10 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
     }
 
     if (security) {
-      fs.writeFileSync(securityPath, yaml.stringify(security), { encoding: 'utf8', mode: 0o600 });
+      writeFileSecure(securityPath, yaml.stringify(security), { encoding: 'utf8', mode: 0o600 });
     }
     if (budget) {
-      fs.writeFileSync(budgetPath, yaml.stringify(budget), { encoding: 'utf8', mode: 0o600 });
+      writeFileSecure(budgetPath, yaml.stringify(budget), { encoding: 'utf8', mode: 0o600 });
     }
     if (brain) {
       let existingBrain = {};
@@ -167,7 +168,7 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
         nextBrain.token = existingBrain.token;
       }
       delete nextBrain.has_token;
-      fs.writeFileSync(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
+      writeFileSecure(brainPath, JSON.stringify(nextBrain, null, 2), { encoding: 'utf8', mode: 0o600 });
     }
     if (secrets) {
       // Only accept real secret values — ignore masked placeholders from GET /api/config-json.
