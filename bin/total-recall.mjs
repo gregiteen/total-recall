@@ -188,7 +188,7 @@ async function main() {
           } else {
             await handler.default(process.argv.slice(3));
           }
-          process.exit(0);
+          return;
         }
       }
 
@@ -208,7 +208,7 @@ async function main() {
           } else {
             await handler.default(process.argv.slice(3));
           }
-          process.exit(0);
+          return;
         }
       }
 
