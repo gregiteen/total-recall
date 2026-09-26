@@ -13,6 +13,7 @@
 
 ## Verification on 2026-09-26 (3.31.2)
 
+- The CAPABILITY_DEPLOYMENT_PLUGINS developer command generator passed the Mac Mini six-check remote gate with zero findings. Commit `5089d8d` is pushed to main. App-runtime command generation and production adapters remain open.
 - A source-exact Mac Mini checkout passed `check.mjs --tier remote` (six checks, full Vitest suite, zero findings), then native server boot reported version 3.31.2 from `/health`.
 - The Mac Mini frontend build was copied to the publishing MacBook. `npm run check:dist`, `npm publish --dry-run`, and a clean install with the corrected root lockfile passed. Both production dependency audits reported zero findings. The npm registry served 3.31.2 with the published tarball checksum.
 
