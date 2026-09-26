@@ -282,3 +282,20 @@ describe('connect — Core skills seeding', () => {
   }, 30000);
 });
 
+
+describe('maskToken', () => {
+  it('never prints a whole token', async () => {
+    const { maskToken } = await import('./connect.mjs');
+    const token = 'tr_abcdefghijklmnopqrstuvwxyz0123456789';
+    const masked = maskToken(token);
+    expect(masked).not.toContain(token);
+    expect(masked.startsWith('tr_abc')).toBe(true);
+    expect(masked).toContain('brain.json');
+  });
+
+  it('hides short or missing tokens entirely', async () => {
+    const { maskToken } = await import('./connect.mjs');
+    expect(maskToken('short')).toBe('<PAT>');
+    expect(maskToken(undefined)).toBe('<PAT>');
+  });
+});
