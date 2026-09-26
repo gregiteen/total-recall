@@ -3,7 +3,7 @@
 ## Current state
 
 - **Branch:** `main`
-- **Package version:** `3.31.2` release candidate. `3.31.0` is published; 3.31.1 was tagged but not published because a newer npm rejected its workspace lockfile. The credential-file permission fix and patched frontend dependency passed the Mac Mini gate and native boot at 3.31.1; 3.31.2 repairs the lockfile and needs its final gate. See `docs/developer/CHANGELOG.md`.
+- **Package version:** `3.31.2`, published to npm on 2026-09-26 (tag `v3.31.2`, commit `9c534e0`). `3.31.1` was tagged but not published because a newer npm rejected its workspace lockfile. The 3.31.2 release repairs that lockfile and ships the credential-file permission fix and patched frontend dependency. See `docs/developer/CHANGELOG.md`.
 - **Source of truth:** SSSS VFS documents for persistent brain state. Plugin installation records and run events use the SSSS operation service.
 - **Active project records:**
   - [PLUGIN_P2P](docs/projects/in-progress/PLUGIN_P2P/PLUGIN_P2P_PROJECT_TRACKER.md): bundled and installed plugins, explicit public sharing through hash-pinned HTTPS links, own-device mesh sharing, task runs, and dashboard management.
@@ -11,10 +11,10 @@
   - [TR_CORE_PLUGIN_SPLIT](docs/projects/planned/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md): planned. Split standard Total Recall features (tts, collab, obsidian, usage, … research, mesh) into white-label plugins, each in its own repo, behind new extension points (routes, tools, UI, hooks, config).
   - [EXTENSION_OVERHAUL](docs/projects/in-progress/EXTENSION_OVERHAUL/EXTENSION_OVERHAUL_PROJECT_TRACKER.md): browser extension API, page recall, and side panel redesign.
 
-## Verification on 2026-09-26 (3.31.1 candidate)
+## Verification on 2026-09-26 (3.31.2)
 
-- A source-exact Mac Mini checkout passed `check.mjs --tier remote` (six checks, full Vitest suite, zero findings), then native server boot reported version 3.31.1 from `/health`.
-- The Mac Mini frontend build was copied to the publishing tree. `npm run check:dist` and `npm publish --dry-run` passed; both production dependency audits reported zero findings.
+- A source-exact Mac Mini checkout passed `check.mjs --tier remote` (six checks, full Vitest suite, zero findings), then native server boot reported version 3.31.2 from `/health`.
+- The Mac Mini frontend build was copied to the publishing MacBook. `npm run check:dist`, `npm publish --dry-run`, and a clean install with the corrected root lockfile passed. Both production dependency audits reported zero findings. The npm registry served 3.31.2 with the published tarball checksum.
 
 ## Verification on 2026-09-26 (3.30.0)
 
