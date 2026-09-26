@@ -226,11 +226,14 @@ export function validatePluginManifest(manifest) {
           errors.push("Each entry in 'commands' must be an object");
           continue;
         }
-        if (!c.name || typeof c.name !== 'string') {
-          errors.push("Each command entry must have a string 'name'");
+        if (typeof c.name !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(c.name)) {
+          errors.push("Each command entry must have a safe lowercase kebab-case 'name'");
         }
         if (!c.handler || !isSafeRelativePath(c.handler)) {
           errors.push(`Command '${c.name || 'unknown'}' has invalid or unsafe 'handler': must be safe relative path`);
+        }
+        if (c.background !== undefined && typeof c.background !== 'boolean') {
+          errors.push(`Command '${c.name || 'unknown'}' background must be boolean`);
         }
       }
     }
