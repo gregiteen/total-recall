@@ -181,6 +181,10 @@ npx total-recall compile
 ```
 Synchronously rebuild the entire memory index (derived embeddings) and regenerate prompt instruction shims (such as `INSTRUCTIONS.md`, `GEMINI.md`, `AGENTS.md`, etc.).
 
+*   **Rules are global + local.** Every project's shims carry the global brain's invariants, preferences and corrections plus the project's own; a project node with the same slug overrides the global one.
+*   `compile --global` (what `remember --global` runs) and `compile --all` also recompile every registered project, so a global rule reaches every repo at once.
+*   A client gets a shim only once it is connected (`total-recall connect claude-code|codex|antigravity|…` in that repo). No `CLAUDE.md` in a repo means Claude Code was never connected there.
+
 ### 5. Ingest OKF Bundle
 ```bash
 npx total-recall ingest okf <path> [options]
@@ -394,11 +398,23 @@ transcript. `set`, `rotate` and `rekey` all accept it.
 ### Master password and `rekey`
 
 The store is AES-256-GCM; the key is scrypt-derived (N=2^16, ~64 MB) from
-`TR_SECRETS_PASSWORD`. On macOS the password belongs in the **Keychain**
-(`security add-generic-password -s total-recall-secrets`), not in a dotfile —
-`rekey` picks the Keychain entry up automatically and rotates every carrier
-(LaunchAgent plist, env file, Keychain) in one transaction, verifying the
-retired password no longer decrypts before it commits.
+the master password, resolved in this order:
+
+1. `TR_SECRETS_PASSWORD` / `TR_MASTER_PASSWORD` in the environment (a
+   LaunchAgent plist injects it for launchd jobs);
+2. macOS: the **Keychain** entry `total-recall-secrets`
+   (`security add-generic-password -s total-recall-secrets`). An ssh or mesh
+   session cannot read a locked login Keychain;
+3. Linux and headless hosts: the env file `~/.agent/tr.env` (or `TR_ENV_FILE`)
+   containing `export TR_SECRETS_PASSWORD='…'`. It is used only when it is a
+   regular file, mode 0600, owned by you, in a directory (keep `~/.agent` 0700)
+   nobody else can write. Do not also export it from `.bashrc` — every process
+   started from the shell would inherit it.
+
+`rekey` rotates every carrier (LaunchAgent plist, `--env-file`, Keychain) in one
+transaction, verifying the retired password no longer decrypts before it
+commits. No carrier on a machine means every command fails with "Secrets file
+is not valid JSON" and `mesh` falls back to local discovery.
 
 > **Processes hold the old password until restarted.** After a rekey, anything
 > still running with the retired value fails with `Failed to decrypt secrets
@@ -584,7 +600,7 @@ npm test                    # vitest run — whole suite
 npx vitest run <path>       # one spec file
 ```
 
-Current baseline: **288 spec files / 1493 tests, ~160 s** on the Mac Mini.
+Current baseline (3.30.1): **349 spec files / 2024 tests, ~160 s** on the Mac Mini.
 
 > **Never run the full suite, a full typecheck, or a production build on the
 > laptop.** These go to the Mac Mini or the droplet — local runs cause slowdowns

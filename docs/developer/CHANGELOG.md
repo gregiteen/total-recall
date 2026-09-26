@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.30.1] — 2026-09-26
+
+### 🐛 Bug Fixes
+- **Headless hosts could not open their own secrets store.** On Linux the master password lived only in a shell profile, so an agent's tool shell, cron or a systemd unit failed with "Secrets file is not valid JSON" and `mesh` fell back to local discovery. After the environment and the macOS Keychain, the store now reads `TR_SECRETS_PASSWORD` from `TR_ENV_FILE` or `~/.agent/tr.env` — the file `auto-pull.sh` sources and `secret rekey --env-file` rotates — only when it is a regular file (not a symlink), mode 0600, owned by the user, in a directory nobody else can write.
+- **`auto-pull.sh` never actually restarted the brain.** Its kill patterns used relative paths that never match the real processes, so the old server kept the port, each new one died on `EADDRINUSE`, and the log still said "hot-reloaded" — a droplet served 3.28.1 for days. It now kills by absolute path, waits for the port, runs `npm ci` when the lockfile changed, rebuilds the dashboard, and reports success only when `/health` shows the checked-out version. When the code is current but the running server is not, it reinstalls and restarts instead of exiting.
+
+### 🔒 Security
+- `connect` no longer prints the full PAT in its `Auth:` line or `--json` output (they end up in scrollback, CI logs and agent transcripts); it shows a prefix and points at `config/brain.json`.
+- The test suite turns off both password fallbacks (`TR_SECRETS_NO_KEYCHAIN=1`, a nonexistent `TR_ENV_FILE`) so no-password specs never read a machine's real password.
+
+### 📚 Skills
+- `security`, `push`, `code-quality` and the shipped `total-recall` skill updated: password resolution order and carrier rules, PAT handling and revocation, the real gate tiers (`test` is `remote`), booting the server beside a running brain, where each release step runs, auto-pull verification, global + local rules, and the current test baseline.
+
 ## [3.30.0] — 2026-09-26
 
 ### ✨ Features

@@ -30,9 +30,15 @@ node .agent/skills/code-quality/scripts/report.mjs
 | id | tier | what it is |
 |:---|:---|:---|
 | `dist-freshness` | fast | `npm run check:dist` — `prepublishOnly` depends on it |
-| `open-source-paths` | fast | grep: hardcoded `/Users/…`, `~/Github/`, or named product repos |
-| `ssss-registry` | full | `npx ssss registry verify` |
-| `test` | full | `npm test` (vitest) |
+| `open-source-paths` | fast | grep: hardcoded `/Users/…`, `~/Github/`, named product repos, and a personal login / machine name / mesh address (TR-OSS-002) |
+| `shipped-package-paths` | fast | the same for files in the npm `files` whitelist (TR-SHIP-004) |
+| `scaffold-brain-state` | fast | `node scripts/check-scaffold-state.mjs` |
+| `ssss-registry` | fast | `npm run check:ssss-registry` |
+| `test` | **remote** | `npm test` (vitest) — only `--tier remote` runs it |
+
+`--tier full` does **not** run the tests: it prints `skipping 1 higher-tier
+check(s): test(remote)`. On the test host run `check.mjs --tier remote`, or
+`npx vitest run > /tmp/t.log 2>&1; echo "exit=$?"` (never through a pipe).
 
 ## Repo invariants
 
@@ -46,10 +52,18 @@ The `open-source-paths` gate enforces this. It ignores `*.spec.mjs`, `*.test.mjs
 `fixtures/`, `templates/`, `scaffold/`, `docs/`, and `scratch/`, where sample
 paths are legitimate test data.
 
-**Before publishing:** never publish blind. Boot the server natively first —
-`node src/server/index.mjs` — and confirm it starts without a SyntaxError, then
-run `check:dist`. Exit code 0 from a piped command is not proof; check the
-process directly.
+**Before publishing:** never publish blind. Boot the server natively first and
+confirm `/health` answers with the new version, then run `check:dist`. On a
+host that already runs a brain, use an isolated home — otherwise the new
+server finds the running brain's PID lock, logs "already running" to its log
+file (not the console) and exits silently after the start banner:
+
+```bash
+H=$(mktemp -d); HOME=$H TR_SECRETS_NO_KEYCHAIN=1 node bin/total-recall.mjs start --port 3977 &
+curl -s 127.0.0.1:3977/health    # "healthy" and the package.json version
+```
+
+Exit code 0 from a piped command is not proof; check the process directly.
 
 **PID locks must verify identity, not just liveness.** `shouldHonorPidLock()` in
 `src/core/pid-lock.mjs` requires the PID to be alive *and* its command line to
@@ -65,7 +79,7 @@ crashpad handler and blocked every start.
   `npx total-recall daemon stop && npx total-recall daemon start`.
 - **`recall` and `compile` hold a vault filesystem watcher open ~60s** after
   results print. Piped output can look empty. Redirect to a file and read it.
-- **`test` is tier `full`** — vitest across this repo is not free on a laptop.
+- **`test` is tier `remote`** — vitest across this repo is not free on a laptop; run it on the test host.
 - One check at a time, machine-wide (`check.mjs` holds a global lock).
 
 ## Reference
