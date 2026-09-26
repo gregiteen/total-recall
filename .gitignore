@@ -131,3 +131,13 @@ server.log
 # scripts/auto-pull.sh), so it is tracked like every other repo-scoped skill.
 # `instruction-keeper/` was an UltraChat stub pointing at an absolute /Users/...
 # path in another product's repo; it has been deleted outright.
+
+# Generated per machine by `total-recall init` / `compile` / `connect` — never committed here
+.gemini/commands/
+.agent/commands/
+openwiki/
+.windsurfrules
+WINDSURF.md
+.cursor/rules/
+.vscode/copilot-instructions.md
+.claude/worktrees/
