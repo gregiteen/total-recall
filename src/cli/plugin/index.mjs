@@ -88,7 +88,7 @@ export async function run(argv = []) {
     return;
   }
 
-  if (command === 'create' || command === 'new' || command === 'init') {
+  if (command === 'create' || command === 'new' || command === 'init' || command === 'scaffold') {
     await createPlugin(rest);
     return;
   }

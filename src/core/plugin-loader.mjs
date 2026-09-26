@@ -52,6 +52,19 @@ export function isCronExpression(expr) {
 }
 
 /**
+ * Validates that a path is relative, normalized, and cannot traverse above its root.
+ * Rejects absolute paths, null bytes, and any use of parent directory traversal ('..').
+ */
+export function isSafeRelativePath(p) {
+  if (typeof p !== 'string' || !p.trim()) return false;
+  if (p.includes('\0')) return false;
+  if (path.isAbsolute(p) || p.startsWith('/') || p.startsWith('\\')) return false;
+  const normalized = path.normalize(p);
+  if (normalized === '..' || normalized.startsWith('..' + path.sep) || normalized.includes(path.sep + '..' + path.sep) || normalized.endsWith(path.sep + '..')) return false;
+  return true;
+}
+
+/**
  * Validates a plugin manifest object against Total Recall plugin standards.
  * @param {object} manifest - Parsed plugin.json object
  * @returns {{ valid: boolean, errors: string[] }}
@@ -127,6 +140,122 @@ export function validatePluginManifest(manifest) {
         }
         if (!manifest.cli?.handler) {
           errors.push(`Task '${t.intent}' requires 'cli.handler' to run its command`);
+        }
+      }
+    }
+  }
+
+  if (manifest.cli?.handler && !isSafeRelativePath(manifest.cli.handler)) {
+    errors.push("cli.handler must be a safe relative path without directory traversal");
+  }
+
+  if (manifest.compile?.generator && !isSafeRelativePath(manifest.compile.generator)) {
+    errors.push("compile.generator must be a safe relative path without directory traversal");
+  }
+
+  if (manifest.deploy !== undefined) {
+    if (typeof manifest.deploy !== 'object' || manifest.deploy === null) {
+      errors.push("'deploy' must be an object");
+    } else {
+      if (manifest.deploy.targets !== undefined) {
+        if (!Array.isArray(manifest.deploy.targets) || manifest.deploy.targets.length === 0) {
+          errors.push("'deploy.targets' must be a non-empty array of target names");
+        } else {
+          for (const t of manifest.deploy.targets) {
+            if (typeof t !== 'string' || !t.trim()) {
+              errors.push(`Invalid deploy target '${t}': must be a non-empty string`);
+            }
+          }
+        }
+      }
+      if (manifest.deploy.required_ssss_version !== undefined) {
+        if (typeof manifest.deploy.required_ssss_version !== 'string' || !manifest.deploy.required_ssss_version.trim()) {
+          errors.push("'deploy.required_ssss_version' must be a non-empty string");
+        }
+      }
+      if (manifest.deploy.access_grants !== undefined) {
+        if (!Array.isArray(manifest.deploy.access_grants)) {
+          errors.push("'deploy.access_grants' must be an array of permission strings");
+        } else {
+          const GRANT_PATTERN = /^[a-z0-9_-]+(:[a-z0-9_*-]+)*$/;
+          for (const g of manifest.deploy.access_grants) {
+            if (typeof g !== 'string' || !GRANT_PATTERN.test(g)) {
+              errors.push(`Invalid access grant '${g}': must follow format domain:action (e.g. ssss:vault:read)`);
+            }
+          }
+        }
+      }
+      if (manifest.deploy.adapter !== undefined) {
+        if (typeof manifest.deploy.adapter !== 'string' || !manifest.deploy.adapter.trim()) {
+          errors.push("'deploy.adapter' must be a non-empty string");
+        }
+      }
+      if (manifest.deploy.resources !== undefined) {
+        if (typeof manifest.deploy.resources !== 'object' || manifest.deploy.resources === null) {
+          errors.push("'deploy.resources' must be an object");
+        }
+      }
+    }
+  }
+
+  if (manifest.skills !== undefined) {
+    if (!Array.isArray(manifest.skills)) {
+      errors.push("'skills' must be an array");
+    } else {
+      for (const s of manifest.skills) {
+        if (!s || typeof s !== 'object') {
+          errors.push("Each entry in 'skills' must be an object");
+          continue;
+        }
+        if (!s.id || typeof s.id !== 'string') {
+          errors.push("Each skill entry must have a string 'id'");
+        }
+        if (!s.path || !isSafeRelativePath(s.path)) {
+          errors.push(`Skill '${s.id || 'unknown'}' has invalid or unsafe 'path': must be safe relative path`);
+        }
+      }
+    }
+  }
+
+  if (manifest.commands !== undefined) {
+    if (!Array.isArray(manifest.commands)) {
+      errors.push("'commands' must be an array");
+    } else {
+      for (const c of manifest.commands) {
+        if (!c || typeof c !== 'object') {
+          errors.push("Each entry in 'commands' must be an object");
+          continue;
+        }
+        if (!c.name || typeof c.name !== 'string') {
+          errors.push("Each command entry must have a string 'name'");
+        }
+        if (!c.handler || !isSafeRelativePath(c.handler)) {
+          errors.push(`Command '${c.name || 'unknown'}' has invalid or unsafe 'handler': must be safe relative path`);
+        }
+      }
+    }
+  }
+
+  if (manifest.ui !== undefined) {
+    if (typeof manifest.ui !== 'object' || manifest.ui === null) {
+      errors.push("'ui' must be an object");
+    } else {
+      if (manifest.ui.design_tokens !== undefined && !isSafeRelativePath(manifest.ui.design_tokens)) {
+        errors.push("'ui.design_tokens' must be a safe relative path");
+      }
+      if (manifest.ui.elements !== undefined && !Array.isArray(manifest.ui.elements)) {
+        errors.push("'ui.elements' must be an array");
+      }
+    }
+  }
+
+  if (manifest.openwiki_hubs !== undefined) {
+    if (!Array.isArray(manifest.openwiki_hubs)) {
+      errors.push("'openwiki_hubs' must be an array");
+    } else {
+      for (const hub of manifest.openwiki_hubs) {
+        if (!hub || !hub.path || !isSafeRelativePath(hub.path)) {
+          errors.push("Each entry in 'openwiki_hubs' must have a safe relative 'path'");
         }
       }
     }

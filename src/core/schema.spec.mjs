@@ -7,6 +7,11 @@ import {
   SchemaProposalSchema,
   MigrationSchema,
   ReleaseSchema,
+  AppCapabilityInstallationSchema,
+  AccessGrantSchema,
+  SkillConfigSchema,
+  SSSS_HOST_EXTENSION_TYPES,
+  SSSS_SCHEMAS,
 } from './schema.mjs';
 
 describe('Schema Validations', () => {
@@ -449,6 +454,137 @@ describe('Schema Validations', () => {
     it('rejects incomplete release', () => {
       const result = ReleaseSchema.safeParse({ type: 'release' });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('AppCapabilityInstallationSchema', () => {
+    it('validates a correct capability installation record', () => {
+      const inst = {
+        type: 'app_capability_installation',
+        title: 'Installed: messaging',
+        description: 'Messaging capability v1.0.0',
+        timestamp: new Date().toISOString(),
+        capability_id: 'messaging',
+        version: '1.0.0',
+        source_sha256: 'a'.repeat(64),
+        adapter: 'ssss-app',
+        status: 'installed',
+        access_grants: ['vault:read', 'sqlite:read'],
+        resources: { database: 'sqlite://./data/crm.db' },
+        files: [
+          { path: 'cli.mjs', sha256: 'b'.repeat(64), size: 1024 }
+        ],
+        plan_hash: 'c'.repeat(64),
+        installed_at: new Date().toISOString()
+      };
+      const result = AppCapabilityInstallationSchema.safeParse(inst);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid capability_id or missing fields', () => {
+      const result = AppCapabilityInstallationSchema.safeParse({
+        type: 'app_capability_installation',
+        capability_id: 'INVALID_CAP!',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('strictly rejects secret credentials in resources', () => {
+      const withSecret = {
+        type: 'app_capability_installation',
+        title: 'Installed: bad-cap',
+        description: 'Bad capability',
+        timestamp: new Date().toISOString(),
+        capability_id: 'bad-cap',
+        version: '1.0.0',
+        source_sha256: 'a'.repeat(64),
+        adapter: 'ssss-app',
+        status: 'installed',
+        resources: {
+          smtp_password: 'supersecretpassword123'
+        },
+        installed_at: new Date().toISOString()
+      };
+      const result = AppCapabilityInstallationSchema.safeParse(withSecret);
+      expect(result.success).toBe(false);
+      expect(result.error.issues[0].message).toContain('Prohibited credential or secret value detected');
+    });
+  });
+
+  describe('AccessGrantSchema', () => {
+    it('validates a correct access grant record', () => {
+      const grant = {
+        type: 'access_grant',
+        title: 'Grant for messaging',
+        description: 'Grants vault and sqlite access',
+        timestamp: new Date().toISOString(),
+        grantee: 'messaging',
+        grantee_type: 'capability',
+        scopes: ['vault:read', 'sqlite:write'],
+        resources: ['crm.db'],
+        status: 'active',
+        granted_at: new Date().toISOString(),
+        granted_by: 'app-admin'
+      };
+      const result = AccessGrantSchema.safeParse(grant);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects incomplete access grant', () => {
+      const result = AccessGrantSchema.safeParse({
+        type: 'access_grant',
+        grantee: 'messaging'
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('SkillConfigSchema', () => {
+    it('validates a correct skill config record', () => {
+      const cfg = {
+        type: 'skill_config',
+        title: 'Skill Config: code-quality',
+        description: 'Repo-layer configuration for code-quality',
+        timestamp: new Date().toISOString(),
+        skill_id: 'code-quality',
+        version: '1.0.0',
+        config: {
+          runner: 'scripts/remote-gates.sh',
+          target_host: 'macmini'
+        },
+        tiers: {
+          typecheck: 'fast',
+          lint: 'fast',
+          test: 'heavy'
+        },
+        gates: [
+          { name: 'tsc', command: 'npx tsc --noEmit', tier: 'typecheck' },
+          { name: 'flake8', command: 'flake8 src', tier: 'lint' }
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const result = SkillConfigSchema.safeParse(cfg);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects invalid skill config', () => {
+      const result = SkillConfigSchema.safeParse({
+        type: 'skill_config',
+        skill_id: 'INVALID_ID!'
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('Host Extension Registry Integration', () => {
+    it('registers app_capability_installation, access_grant, and skill_config in SSSS_HOST_EXTENSION_TYPES and SSSS_SCHEMAS', () => {
+      expect(SSSS_HOST_EXTENSION_TYPES).toContain('app_capability_installation');
+      expect(SSSS_HOST_EXTENSION_TYPES).toContain('access_grant');
+      expect(SSSS_HOST_EXTENSION_TYPES).toContain('skill_config');
+      expect(SSSS_SCHEMAS['app_capability_installation']).toBe(AppCapabilityInstallationSchema);
+      expect(SSSS_SCHEMAS['access_grant']).toBe(AccessGrantSchema);
+      expect(SSSS_SCHEMAS['skill_config']).toBe(SkillConfigSchema);
     });
   });
 });

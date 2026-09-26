@@ -917,4 +917,6 @@ export default async function init(args) {
   } else if (opts.yes) {
     log(`Dashboard (when server running): ${dashboardUrl}`);
   }
+
+  process.exit(0);
 }

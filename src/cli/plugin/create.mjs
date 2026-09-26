@@ -17,6 +17,7 @@ export async function createPlugin(args = []) {
   let name = null;
   let description = null;
   let category = null;
+  let fromSkillPath = null;
   const useCases = [];
 
   const cleanArgs = [];
@@ -45,13 +46,53 @@ export async function createPlugin(args = []) {
       i++;
       continue;
     }
+    if (arg === "--from-skill" && args[i + 1]) {
+      fromSkillPath = args[i + 1];
+      i++;
+      continue;
+    }
     cleanArgs.push(arg);
   }
 
-  const id = cleanArgs[0];
+  let skillSourceDir = null;
+  let skillFrontmatter = {};
+  if (fromSkillPath) {
+    if (!fs.existsSync(fromSkillPath)) {
+      console.error(`❌ Error: --from-skill path does not exist: ${fromSkillPath}`);
+      process.exit(1);
+    }
+    skillSourceDir = fs.statSync(fromSkillPath).isDirectory()
+      ? path.resolve(fromSkillPath)
+      : path.dirname(path.resolve(fromSkillPath));
+
+    const skillMdFile = path.join(skillSourceDir, "SKILL.md");
+    if (fs.existsSync(skillMdFile)) {
+      const content = fs.readFileSync(skillMdFile, "utf8");
+      const match = content.match(/^---\n([\s\S]*?)\n---/);
+      if (match) {
+        for (const line of match[1].split("\n")) {
+          const colon = line.indexOf(":");
+          if (colon !== -1) {
+            const k = line.slice(0, colon).trim();
+            let v = line.slice(colon + 1).trim();
+            if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+              v = v.slice(1, -1);
+            }
+            skillFrontmatter[k] = v;
+          }
+        }
+      }
+    }
+  }
+
+  const id =
+    cleanArgs[0] ||
+    (skillFrontmatter.name ? skillFrontmatter.name.toLowerCase().replace(/[^a-z0-9-]/g, "-") : null) ||
+    (skillSourceDir ? path.basename(skillSourceDir).toLowerCase().replace(/[^a-z0-9-]/g, "-") : null);
+
   if (!id) {
     console.error("❌ Error: Missing plugin id.");
-    console.error("   Usage: total-recall plugin create <id> [--name <name>] [--description <desc>] [--category <cat>] [--use-case <use>] [--with-cli] [--with-generator] [--global]\n");
+    console.error("   Usage: total-recall plugin create <id> [--from-skill <path>] [--capability] [--name <name>] [--description <desc>] [--category <cat>] [--global]\n");
     process.exit(1);
   }
 
@@ -71,8 +112,8 @@ export async function createPlugin(args = []) {
 
   fs.mkdirSync(pluginDir, { recursive: true });
 
-  const pluginName = name || toTitleCase(id);
-  const pluginDesc = description || `${pluginName} extension for Total Recall AI OS`;
+  const pluginName = name || skillFrontmatter.name || toTitleCase(id);
+  const pluginDesc = description || skillFrontmatter.description || `${pluginName} extension for Total Recall AI OS`;
 
   const manifest = {
     $schema: "https://github.com/total-recall/total-recall/blob/main/metadata.plugin.schema.json",
@@ -96,24 +137,98 @@ export async function createPlugin(args = []) {
     };
   }
 
-  if (withCli) {
+  const withSkill = args.includes("--with-skill") || args.includes("--capability") || Boolean(fromSkillPath);
+  const isCapability = args.includes("--capability") || Boolean(fromSkillPath);
+
+  if (withCli || isCapability) {
     manifest.cli = {
       command: id,
       handler: "./cli.mjs",
       subcommands: [
-        { name: "status", description: `Show ${pluginName} status` }
+        { name: "status", description: `Show ${pluginName} status` },
+        { name: "run", description: `Execute ${pluginName} primary task` }
       ]
     };
 
     const cliContent = `#!/usr/bin/env node
+/**
+ * ${pluginName} CLI Handler
+ * Executed via: npx total-recall ${id} <subcommand>
+ */
 export async function run(argv = []) {
-  // argv: ["node", "total-recall", "<command>", "<subcommand>", ...args]
-  const sub = (Array.isArray(argv) ? argv[3] : null) || "status";
-  console.log(\`${pluginName}: \${sub}\`);
+  const args = Array.isArray(argv) ? argv.slice(3) : [];
+  const sub = args[0] || "status";
+  
+  if (sub === "status") {
+    console.log(\`✅ ${pluginName} v1.0.0 is operational.\`);
+    return;
+  }
+  
+  console.log(\`${pluginName}: executed subcommand "\${sub}" with args:\`, args.slice(1));
 }
 export default run;
 `;
     fs.writeFileSync(path.join(pluginDir, "cli.mjs"), cliContent, "utf8");
+  }
+
+  if (isCapability) {
+    manifest.deploy = {
+      targets: ["ssss-app", "nextjs", "react", "flask"],
+      required_ssss_version: ">=0.9.3",
+      access_grants: ["ssss:vault:read", "ssss:vault:write", "ssss:events:append"]
+    };
+  }
+
+  if (fromSkillPath && skillSourceDir) {
+    const skillDir = path.join(pluginDir, "skills", id);
+    fs.mkdirSync(skillDir, { recursive: true });
+    for (const item of fs.readdirSync(skillSourceDir, { withFileTypes: true })) {
+      const srcItem = path.join(skillSourceDir, item.name);
+      const dstItem = path.join(skillDir, item.name);
+      if (item.isDirectory()) {
+        fs.cpSync(srcItem, dstItem, { recursive: true });
+      } else {
+        fs.copyFileSync(srcItem, dstItem);
+      }
+    }
+    manifest.skills = [
+      {
+        id,
+        path: `./skills/${id}/SKILL.md`,
+        description: pluginDesc
+      }
+    ];
+  } else if (withSkill || isCapability) {
+    const skillDir = path.join(pluginDir, "skills", id);
+    fs.mkdirSync(skillDir, { recursive: true });
+    const skillContent = `---
+name: ${id}
+description: "${pluginDesc}"
+version: 1.0.0
+---
+
+# ${pluginName}
+
+${pluginDesc}
+
+## Usage
+
+This skill is provided by the \`${id}\` Total Recall capability plugin.
+
+### Composable CLI
+\`\`\`bash
+npx total-recall ${id} status
+npx total-recall ${id} run
+\`\`\`
+`;
+    fs.writeFileSync(path.join(skillDir, "SKILL.md"), skillContent, "utf8");
+    manifest.skills = [
+      {
+        id,
+        path: `./skills/${id}/SKILL.md`,
+        description: pluginDesc
+      }
+    ];
   }
 
   if (withGenerator) {

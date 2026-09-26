@@ -40,6 +40,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 
 const COMMANDS = {
+  app:      'app/index.mjs',
   init:     'init.mjs',
   setup:    'setup.mjs',
   start:    'start.mjs',
@@ -98,6 +99,8 @@ const COMMANDS = {
   agents:   'agent.mjs',
   plugin:   'plugin/index.mjs',
   plugins:  'plugin/index.mjs',
+  scaffold: 'plugin/scaffold-cmd.mjs',
+  'scaffold-plugin': 'plugin/scaffold-cmd.mjs',
 };
 function printHelp() {
   console.log(`
@@ -177,6 +180,26 @@ async function main() {
       
       if (projectAgentDir) {
         const customCmdPath = path.join(projectAgentDir, 'commands', `${command}.mjs`);
+        if (fs.existsSync(customCmdPath)) {
+          const handler = await import(customCmdPath);
+          if (handler.run) {
+            await handler.run(process.argv);
+          } else {
+            await handler.default(process.argv.slice(3));
+          }
+          process.exit(0);
+        }
+      }
+
+      // Check for custom global-level commands next
+      let globalAgentDir = null;
+      try {
+        const gBrain = resolveBrainLayer('global');
+        globalAgentDir = gBrain.agentDir;
+      } catch (e) { /* ignore */ }
+
+      if (globalAgentDir) {
+        const customCmdPath = path.join(globalAgentDir, 'commands', `${command}.mjs`);
         if (fs.existsSync(customCmdPath)) {
           const handler = await import(customCmdPath);
           if (handler.run) {
