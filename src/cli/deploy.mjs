@@ -43,6 +43,7 @@ import yaml from 'yaml';
 import bcrypt from 'bcrypt';
 import crypto from 'node:crypto';
 import { BCRYPT_COST } from '../server/auth.mjs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -407,7 +408,7 @@ function hardenSecurityConfig(dryRun, dashboardPassword = null) {
     log('  🔑 Dashboard credentials left unconfigured. You will set your admin password on first dashboard access.');
   }
 
-  fs.writeFileSync(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+  writeFileSecure(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
   logOk('Security config hardened: HTTPS required, Express bound to localhost, no public health, no legacy local PAT');
 }
 
@@ -1095,7 +1096,7 @@ export default async function deploy(args) {
           if (wizardOpts.dashboardPassword) {
             current['cfg-dashboard-password'] = wizardOpts.dashboardPassword;
           }
-          fs.writeFileSync(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
+          writeFileSecure(configFile, JSON.stringify(current, null, 2), { encoding: 'utf8', mode: 0o600 });
         } catch (e) {
           console.error('Failed to auto-persist cloud install options on disk:', e);
         }

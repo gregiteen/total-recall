@@ -11,6 +11,7 @@ import { findValidKeyByToken, keyHasAnyScope, recordKeyUsage } from './keys.mjs'
 import { logger } from '../core/logger.mjs';
 
 import { agentDir, brainDir, sessionSecret, nodeEnv } from '../core/config.mjs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 
 const BRAIN_DIR = brainDir;
 const CONFIG_FILE = path.join(BRAIN_DIR, 'config', 'security.yml');
@@ -26,7 +27,7 @@ try {
   JWT_SECRET = crypto.randomBytes(32).toString('hex');
   try {
     fs.mkdirSync(path.dirname(JWT_SECRET_PATH), { recursive: true });
-    fs.writeFileSync(JWT_SECRET_PATH, JWT_SECRET, { mode: 0o600 });
+    writeFileSecure(JWT_SECRET_PATH, JWT_SECRET, { mode: 0o600 });
   } catch { /* non-fatal — will regenerate on next restart */ }
 }
 
@@ -450,7 +451,7 @@ export async function changePasswordHandler(req, res) {
   config.dashboard.password_hash = hash;
   config.dashboard.force_password_reset = false;
 
-  fs.writeFileSync(CONFIG_FILE, yaml.stringify(config));
+  writeFileSecure(CONFIG_FILE, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
 
   // Dynamically update the backup secrets.enc file to preserve the password hash
   try {

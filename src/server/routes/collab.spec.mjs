@@ -42,7 +42,9 @@ describe('collab JWT secret', () => {
   it('reuses the persisted secret and prefers JWT_SECRET from env', () => {
     const file = path.join(tmpBrain, 'secret-reuse');
     const first = collab.resolveJwtSecret({}, file);
+    fs.chmodSync(file, 0o644);
     expect(collab.resolveJwtSecret({}, file)).toBe(first);
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(collab.resolveJwtSecret({ JWT_SECRET: 'from-env' }, file)).toBe('from-env');
   });
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.31.1] — 2026-09-26
+
+### 🔒 Security
+- Credential-bearing files now have mode 0600 re-applied on every write through `core/secure-file.mjs`. Node's `mode` write option affects only newly created files, so existing files could retain permissive modes. This covers dashboard security settings, encrypted secrets, brain and wizard config, WebAuthn data, collaboration user records and JWT signing material, and audit logs. Existing collaboration JWT secret files are tightened when loaded.
+- Updated the frontend React Router dependency to a patched release and repaired its lockfile so clean installs and production dependency audit pass.
+
+### 🧪 Testing
+- Added regression coverage for creating, rewriting, and appending secure files, including an existing file with permissive mode.
+
 ## [3.31.0] — 2026-09-26
 
 ### ✨ Features
@@ -187,7 +196,6 @@
 ### 🧪 Testing & Code Quality
 - Added unit test specs for `backfill.mjs`, `mesh.mjs`, `browser-session.mjs`, `provider-rotation-recipes.mjs`, `tailscale-cli.mjs`, and `embeddings.mjs`.
 - Updated release scripts to enforce project test spec coverage and fast code-quality gates.
-
 ## [3.23.3] — 2026-08-15
 
 ### 🐛 Bug Fixes

@@ -6,6 +6,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { WebSocket } from 'ws';
 import { brainDir as configBrainDir } from '../../core/config.mjs';
+import { chmodSecure, writeFileSecure } from '../../core/secure-file.mjs';
 
 // Setup database paths in brainDir
 const DATA_DIR = path.join(configBrainDir, 'collab');
@@ -22,10 +23,13 @@ export function resolveJwtSecret(env = process.env, secretFile = JWT_SECRET_FILE
   if (env.JWT_SECRET) return env.JWT_SECRET;
   try {
     const existing = fs.readFileSync(secretFile, 'utf8').trim();
-    if (existing.length >= 32) return existing;
+    if (existing.length >= 32) {
+      chmodSecure(secretFile);
+      return existing;
+    }
   } catch { /* not created yet */ }
   const generated = crypto.randomBytes(48).toString('base64url');
-  fs.writeFileSync(secretFile, generated, { encoding: 'utf8', mode: 0o600 });
+  writeFileSecure(secretFile, generated, { encoding: 'utf8' });
   return generated;
 }
 const JWT_SECRET = resolveJwtSecret();
@@ -44,7 +48,7 @@ function readJsonFile(filePath, defaultData = []) {
 }
 
 function writeJsonFile(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  writeFileSecure(filePath, JSON.stringify(data, null, 2), { encoding: 'utf8' });
 }
 
 // ─── Database Helpers ────────────────────────────────────────────────────────

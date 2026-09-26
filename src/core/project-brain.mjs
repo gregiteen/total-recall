@@ -19,6 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
+import { writeFileSecure } from './secure-file.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
@@ -162,7 +163,7 @@ export function writeBrainIdentity(brainDir, { name, role = 'project', tags = []
     updated_at: new Date().toISOString(),
     created_at: current.created_at || new Date().toISOString(),
   };
-  fs.writeFileSync(brainJsonPath, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+  writeFileSecure(brainJsonPath, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
   return next;
 }
 

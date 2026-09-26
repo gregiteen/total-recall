@@ -18,6 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import fs from 'node:fs';
+import { writeFileSecure } from '../core/secure-file.mjs';
 import {
   apiRateLimiter,
   corsOptions,
@@ -1078,7 +1079,7 @@ if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
           wizardCfg['cfg-dash-url'] = `${tunnelUrl}/dashboard`;
           wizardCfg['cfg-health-url'] = `${tunnelUrl}/health`;
 
-          fs.writeFileSync(configFile, JSON.stringify(wizardCfg, null, 2), { encoding: 'utf8', mode: 0o600 });
+          writeFileSecure(configFile, JSON.stringify(wizardCfg, null, 2), { encoding: 'utf8', mode: 0o600 });
           logger.info('server', `Updated wizard-config.json with active Quick Tunnel URL: ${tunnelUrl}`);
         } else {
           logger.warn('server', 'Could not allocate Quick Tunnel URL. Please check logs in brainDir/logs/cloudflared.log');
