@@ -6,6 +6,7 @@
  *   npx total-recall update --apply      # install latest where needed
  *   npx total-recall update --apply --force
  *   npx total-recall update --repo /path/to/app
+ *   npx total-recall update --install-autopull [--port N] [--no-build]
  */
 
 import {
@@ -15,6 +16,7 @@ import {
   PACKAGE_NAME,
 } from '../core/package-auto-update.mjs';
 import { brainDir } from '../core/config.mjs';
+import { installAutoPull } from '../core/autopull-install.mjs';
 
 /** @param {string[]} args */
 export function parseArgs(args) {
@@ -24,6 +26,9 @@ export function parseArgs(args) {
     dryRun: false,
     help: false,
     repos: [],
+    installAutopull: false,
+    port: null,
+    noBuild: false,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -32,6 +37,9 @@ export function parseArgs(args) {
     else if (a === '--force') opts.force = true;
     else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--repo' && args[i + 1]) opts.repos.push(args[++i]);
+    else if (a === '--install-autopull') opts.installAutopull = true;
+    else if (a === '--port' && args[i + 1]) opts.port = Number(args[++i]);
+    else if (a === '--no-build') opts.noBuild = true;
   }
   return opts;
 }
@@ -48,6 +56,15 @@ function printHelp() {
     total-recall update --apply --force Ignore throttle / disabled flag
     total-recall update --repo <path>   Include extra root (repeatable)
 
+  This brain's own checkout (git):
+    total-recall update --install-autopull [--port N] [--no-build] [--dry-run]
+        Every 5 minutes fast-forward this checkout to origin/main, install and
+        rebuild what changed, restart the brain and verify /health reports the
+        new version (scripts/auto-pull.sh). macOS: LaunchAgent
+        com.totalrecall.autopull; Linux: crontab. A dev checkout (other branch,
+        uncommitted or unpushed work) is never touched. --no-build: never build
+        the dashboard on this host (laptops).
+
   Env:
     TR_AUTO_UPDATE_PACKAGE=0   Disable daemon cron auto-update (default: on)
     TR_SYNC_REPOS=/a:/b       Extra project roots
@@ -60,6 +77,18 @@ export default async function update(args = []) {
   const opts = parseArgs(args);
   if (opts.help) {
     printHelp();
+    return;
+  }
+
+  if (opts.installAutopull) {
+    const result = installAutoPull({ port: opts.port || undefined, noBuild: opts.noBuild, dryRun: opts.dryRun });
+    if (opts.dryRun) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    const where = result.plistPath ? `LaunchAgent ${result.plistPath}` : `crontab: ${result.cronLine}`;
+    console.log(`\n  ✅ Auto-pull installed (${where}), checking port ${result.port} every 5 minutes.`);
+    console.log('  Log: ~/.agent/logs/auto-pull.log\n');
     return;
   }
 

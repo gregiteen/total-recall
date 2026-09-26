@@ -280,7 +280,10 @@ app.get('/health', requireAuthOrLocal, async (req, res) => {
   const unembeddedBrains = (embeddingCoverage || []).filter(c => c.nodes > 0 && c.embedded === 0);
 
   // Determine overall status
-  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead' || cliAgents.length === 0
+  // No agent CLIs on PATH is normal for a headless server brain (a droplet has
+  // none), so it is reported in cli_agents but does not make the brain
+  // "degraded" — that status is for things that break memory itself.
+  const hasCriticalIssue = emergencyAlerts.length > 0 || daemonStatus === 'dead'
     || unembeddedBrains.length > 0;
 
   // Check Caddy and Cloudflare status
