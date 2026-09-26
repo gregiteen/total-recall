@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.30.2] — 2026-09-26
+
+### ✨ Features
+- **Every brain host updates itself.** `total-recall update --install-autopull [--port N] [--no-build]` puts `scripts/auto-pull.sh` on a 5-minute timer — a LaunchAgent (`com.totalrecall.autopull`) on macOS, a crontab line on Linux. The script fast-forwards the checkout to `origin/main`, runs `npm ci` when the lockfile changed, rebuilds the dashboard when `frontend/` changed (never on `--no-build` hosts such as laptops), restarts the brain — on macOS by kickstarting every LaunchAgent that runs the checkout, after stopping the daemon the server spawned — and succeeds only when `/health` reports the new version. It never touches a checkout on another branch, with uncommitted tracked changes or with unpushed commits. Until now the daemon's package auto-update reached only npm installs, so brains running from checkouts stayed on whatever version they were started with.
+
+### 🐛 Bug Fixes
+- `/health` no longer reports `degraded` only because no agent CLIs are on `PATH`, which is normal for a headless server brain.
+
 ## [3.30.1] — 2026-09-26
 
 ### 🐛 Bug Fixes
