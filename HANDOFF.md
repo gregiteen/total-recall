@@ -3,13 +3,20 @@
 ## Current state
 
 - **Branch:** `main`
-- **Package version:** `3.28.2`. The project work below is committed after the `v3.28.2` tag; it has not been published as a new npm version.
+- **Package version:** `3.30.0`, published to npm on 2026-09-26 (tag `v3.30.0`). It includes the unpublished 3.28.3, 3.29.0 and 3.29.1 work. See `docs/developer/CHANGELOG.md`.
 - **Source of truth:** SSSS VFS documents for persistent brain state. Plugin installation records and run events use the SSSS operation service.
 - **Active project records:**
   - [PLUGIN_P2P](docs/projects/in-progress/PLUGIN_P2P/PLUGIN_P2P_PROJECT_TRACKER.md): bundled and installed plugins, explicit public sharing through hash-pinned HTTPS links, own-device mesh sharing, task runs, and dashboard management.
-  - [CAPABILITY_DEPLOYMENT_PLUGINS](docs/projects/in-progress/CAPABILITY_DEPLOYMENT_PLUGINS/CAPABILITY_DEPLOYMENT_PLUGINS_PROJECT_TRACKER.md): planned, not started. The `total-recall app` composer for deploying capability plugins into SSSS apps, plus extracting each Festech capability into its own plugin. The app-side reference work is in `gregiteen/festech-modular` (`CAPABILITY_APP_EXTRACTION`).
+  - [CAPABILITY_DEPLOYMENT_PLUGINS](docs/projects/in-progress/CAPABILITY_DEPLOYMENT_PLUGINS/CAPABILITY_DEPLOYMENT_PLUGINS_PROJECT_TRACKER.md): in progress. Phase 2 (manifest contract, source/resolve/plan, `app plan --json`) and part of Phase 2B (plugin scaffolding, `--from-skill`, design tokens) shipped in 3.30.0; shared adapter fixtures and the Phase 3 apply path remain. The `total-recall app` composer for deploying capability plugins into SSSS apps, plus extracting each Festech capability into its own plugin. The app-side reference work is in `gregiteen/festech-modular` (`CAPABILITY_APP_EXTRACTION`).
   - [TR_CORE_PLUGIN_SPLIT](docs/projects/planned/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md): planned. Split standard Total Recall features (tts, collab, obsidian, usage, … research, mesh) into white-label plugins, each in its own repo, behind new extension points (routes, tools, UI, hooks, config).
   - [EXTENSION_OVERHAUL](docs/projects/in-progress/EXTENSION_OVERHAUL/EXTENSION_OVERHAUL_PROJECT_TRACKER.md): browser extension API, page recall, and side panel redesign.
+
+## Verification on 2026-09-26 (3.30.0)
+
+- Merged the MacBook's two unpushed commits (white-label sweep, mesh address fix) onto `main` and resolved conflicts with 3.29.0's mesh changes.
+- On the Mac Mini: `check.mjs --tier full` passed (dist freshness, open-source paths, shipped package paths, scaffold state, SSSS registry), and `npx vitest run` passed all 349 test files (exit 0).
+- Published from the MacBook (it holds the npm login) with the Mac Mini's verified `frontend/dist`. Tests never run on the MacBook.
+- Global rules now compile into every registered project's `INSTRUCTIONS.md`/`CLAUDE.md`/`AGENTS.md` (`compile --global` fans out).
 
 ## Verification on 2026-09-25
 
