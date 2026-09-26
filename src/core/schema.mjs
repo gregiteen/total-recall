@@ -1095,6 +1095,96 @@ export const PluginRecordSchema = z.object({
   task_runs: z.record(z.string()).optional(),
 }).passthrough();
 
+const SECRET_KEY_PATTERN = /^(.*_)?(secret|token|password|api[_-]?key|private[_-]?key|credentials|auth[_-]?header|bearer)$/i;
+
+function hasProhibitedSecretData(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  for (const [key, value] of Object.entries(obj)) {
+    if (SECRET_KEY_PATTERN.test(key) && value) return true;
+    if (typeof value === 'object' && hasProhibitedSecretData(value)) return true;
+  }
+  return false;
+}
+
+/**
+ * App-local capability installation record.
+ * Lives in the application's vault (e.g. `system/capabilities/<id>.md`).
+ * Tracks installed version, source hash, adapter, granted access, generated files, and state.
+ * Strictly prohibits raw credentials and secret values.
+ */
+export const AppCapabilityInstallationSchema = z.object({
+  type: z.literal('app_capability_installation'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  capability_id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
+  version: z.string().min(1),
+  source_sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  adapter: z.string().min(1),
+  status: z.enum(['installing', 'installed', 'failed', 'upgrading', 'upgrade_failed', 'uninstalled', 'repair_needed']),
+  access_grants: z.array(z.string()).default([]),
+  resources: z.record(z.any()).optional().default({}),
+  files: z.array(z.object({
+    path: z.string(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    size: z.number().int().nonnegative().optional()
+  })).default([]),
+  plan_hash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  installed_at: ssssDatetime(),
+  updated_at: ssssDatetime().optional(),
+  error: z.string().nullable().optional()
+}).passthrough().superRefine((data, ctx) => {
+  if (hasProhibitedSecretData(data.resources)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Security error: Prohibited credential or secret value detected in capability resources. Installation records must not store plaintext secrets.'
+    });
+  }
+});
+
+/**
+ * App-local access grant record.
+ * Grants a capability or principal explicit access to specific scopes and resources.
+ */
+export const AccessGrantSchema = z.object({
+  type: z.literal('access_grant'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  grantee: z.string().min(1),
+  grantee_type: z.enum(['capability', 'agent', 'service', 'user']).default('capability'),
+  scopes: z.array(z.string()).min(1),
+  resources: z.array(z.string()).optional().default([]),
+  status: z.enum(['active', 'revoked', 'expired']).default('active'),
+  granted_at: ssssDatetime(),
+  granted_by: z.string().min(1),
+  expires_at: ssssDatetimeNullable().optional()
+}).passthrough();
+
+/**
+ * Canonical repo-layer skill configuration record.
+ * Persisted as an SSSS document in the project vault (e.g. `system/skills/<id>.md`).
+ * Controls gate commands, tier rules, and repo customizations.
+ * Projected into `config.json` for skill scripts to read.
+ */
+export const SkillConfigSchema = z.object({
+  type: z.literal('skill_config'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  skill_id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
+  version: z.string().min(1),
+  config: z.record(z.any()).default({}),
+  tiers: z.record(z.any()).optional().default({}),
+  gates: z.array(z.object({
+    name: z.string(),
+    command: z.string(),
+    tier: z.string().optional()
+  })).optional().default([]),
+  created_at: ssssDatetime(),
+  updated_at: ssssDatetime().optional()
+}).passthrough();
+
 // ─── Schema Registry (§5 of the SSSS spec) ─────────────────────────────────
 
 /** Total Recall host-extension primitives; peer hosts are not required to register them. */
@@ -1105,6 +1195,9 @@ export const SSSS_HOST_EXTENSION_TYPES = [
   'mesh_node',
   'daemon_leader',
   'plugin_record',
+  'app_capability_installation',
+  'access_grant',
+  'skill_config',
 ];
 
 /** Map from SSSS `type` value to its Zod schema. Used by the operation validator. */
@@ -1115,6 +1208,9 @@ export const SSSS_SCHEMAS = {
   mesh_node: MeshNodeSchema,
   daemon_leader: DaemonLeaderSchema,
   plugin_record: PluginRecordSchema,
+  app_capability_installation: AppCapabilityInstallationSchema,
+  access_grant: AccessGrantSchema,
+  skill_config: SkillConfigSchema,
   memory: MemoryNodeSchema,
   conflict: ConflictRecordSchema,
   task: TaskSchema,

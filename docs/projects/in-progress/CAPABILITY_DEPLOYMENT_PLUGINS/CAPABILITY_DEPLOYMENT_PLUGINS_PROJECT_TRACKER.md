@@ -42,22 +42,22 @@ Goal: Start implementation from a coherent plugin release and a functioning SSSS
 
 Goal: Produce a safe, deterministic plan before writing an app.
 
-- [ ] `metadata.plugin.schema.json`: add optional versioned `deploy` contract while preserving current brain-only plugins (M)
-- [ ] `src/core/plugin-loader.mjs`: validate targets, adapter names, required SSSS version, resource/access declarations, and relative artifact paths (M)
-- [ ] `src/cli/plugin/create.mjs`: scaffold a capability plugin with deployment files and a distinct name from the existing context generator (M)
-- [ ] `src/core/app-deploy/source.mjs` + spec: pinned source/hash verification, safe extraction, no symlink/path traversal, no secret/env leakage (M)
-- [ ] `src/core/app-deploy/resolve.mjs` + spec: dependency DAG, version constraints, cycles, registry/file ownership collisions, adapter compatibility (L)
-- [ ] `src/core/app-deploy/plan.mjs` + spec: source diff, SSSS dry-run envelopes, explicit grants/resources, deterministic plan hash, JSON output (L)
-- [ ] `src/cli/app/index.mjs` and `bin/total-recall.mjs`: `app plan --json`; document stable exit codes and result schema (M)
+- [x] `metadata.plugin.schema.json`: add optional versioned `deploy` contract while preserving current brain-only plugins (M)
+- [x] `src/core/plugin-loader.mjs`: validate targets, adapter names, required SSSS version, resource/access declarations, and relative artifact paths (M)
+- [x] `src/cli/plugin/create.mjs`: scaffold a capability plugin with deployment files and a distinct name from the existing context generator (M)
+- [x] `src/core/app-deploy/source.mjs` + spec: pinned source/hash verification, safe extraction, no symlink/path traversal, no secret/env leakage (M)
+- [x] `src/core/app-deploy/resolve.mjs` + spec: dependency DAG, version constraints, cycles, registry/file ownership collisions, adapter compatibility (L)
+- [x] `src/core/app-deploy/plan.mjs` + spec: source diff, SSSS dry-run envelopes, explicit grants/resources, deterministic plan hash, JSON output (L)
+- [x] `src/cli/app/index.mjs` and `bin/total-recall.mjs`: `app plan --json`; document stable exit codes and result schema (M)
 - [ ] Shared adapter contract fixtures: target detection, source generation, kernel bridge, projection rebuild, run/health, cleanup (M)
-- [ ] Negative test: an untrusted or incompatible plugin fails planning without writes, provider calls, or plugin execution (M)
+- [x] Negative test: an untrusted or incompatible plugin fails planning without writes, provider calls, or plugin execution (M)
 
 ## ⏳ Phase 2B: Skills, generated CLIs, and UI elements
 
 Goal: Every plugin ships a repo-adapted skill, a generated CLI, and design-token-driven UI elements.
 
-- [ ] `metadata.plugin.schema.json` + `plugin-loader.mjs`: `skills`, `commands`, `ui` artifact groups (M)
-- [ ] Developer/agent commands use Total Recall's existing composable surface, with no new dispatcher: the plugin `cli` handler (`bin/total-recall.mjs` plugin routing) plus project custom commands (`total-recall command create`, stored in `.agent/commands/<name>.mjs`, dispatched at `bin/total-recall.mjs:179`). Extend `src/cli/command.mjs` so a command spec from the manifest generates those files, with `--json`, exit codes, `--help`, and background long-runners (M)
+- [x] `metadata.plugin.schema.json` + `plugin-loader.mjs`: `skills`, `commands`, `ui` artifact groups (M)
+- [x] Developer/agent commands use Total Recall's existing composable surface, with no new dispatcher: the plugin `cli` handler (`bin/total-recall.mjs` plugin routing) plus project custom commands (`total-recall command create`, stored in `.agent/commands/<name>.mjs`, dispatched at `bin/total-recall.mjs:179`). Extend `src/cli/command.mjs` so a command spec from the manifest generates those files, with `--json`, exit codes, `--help`, and background long-runners (M)
 - [ ] App-runtime CLI (must run with Total Recall absent, like Dabber's `crm.py`): per-adapter generation, Node and Python argparse (M)
 - [ ] Extend `src/core/skills-registry.mjs`, not a new module: `deploySkill` installs the core under `.agent/skills/<id>/core/` and creates the repo layer once (via `detect`, or by adopting the existing repo skill); `hashSkillContent`/`skillStatus` hash and report the core and the repo layer separately; build on the existing `adaptSkillDescription` per-repo adaptation (L)
 - [ ] Plugin `config.schema.json` → generated `total-recall <plugin> config get|set`, collection verbs, `detect [--apply]`, guided `init`, emitted through the same `command` mechanism; all writes validated (L)
@@ -66,9 +66,9 @@ Goal: Every plugin ships a repo-adapted skill, a generated CLI, and design-token
 - [x] White-label sweep (2026-09-25; grep gate TR-OSS-002 / TR-SHIP-004): replace personal example values in `src/server/tools.mjs` tool descriptions (`gregoryiteen`, `macmini`, `100.64.0.2`) and in any plugin template/help/UI default with generic placeholders; add a grep gate (S)
 - [ ] Skill layer contract checks in `skill status` (required config fields, resolvable gate commands, valid tiers); `app verify` calls the same check (M)
 - [ ] Adoption test: adopt the existing code-quality skills of total-recall, festech-modular, moogie_crm, and ssss with zero lost gates; a core upgrade leaves every repo layer byte-identical (M)
-- [ ] `src/core/app-deploy/design-tokens.mjs` + spec: `DESIGN.md` YAML tokens → CSS variables; reject hardcoded brand values in plugin UI (M)
+- [x] `src/core/app-deploy/design-tokens.mjs` + spec: `DESIGN.md` YAML tokens → CSS variables; reject hardcoded brand values in plugin UI (M)
 - [ ] UI element adapters: React/Next and plain web components (for Flask/Jinja hosts like Dabber CRM) (L)
-- [ ] `src/cli/plugin/create.mjs`: `--from-skill <path>` packages an existing skill as a capability plugin (M)
+- [x] `src/cli/plugin/create.mjs`: `--from-skill <path>` packages an existing skill as a capability plugin (M)
 - [ ] **Code-quality plugin repo:** skill template + `detect` + generated `check`/`report` CLI + gate-status panel; install into a TypeScript repo and into Dabber CRM (L)
 - [ ] Retire bundled `plugins/code-quality` (report-only) once the code-quality plugin repo covers it (coordinated with TR_CORE_PLUGIN_SPLIT Phase 0B) (S)
 - [ ] Package the next skills from the audit's skill inventory (test, security, notifications, pwa), each in its own repo (M each)
@@ -77,14 +77,14 @@ Goal: Every plugin ships a repo-adapted skill, a generated CLI, and design-token
 
 Goal: Install a capability into a target app without making Total Recall its runtime/data owner.
 
-- [ ] Define and validate app-local `app_capability_installation` and access-grant SSSS extension types; record status/source pin/grants, no secret values (M)
-- [ ] `src/core/app-deploy/apply.mjs` + spec: staged file writes, preflight, verified SSSS actor, append-only install events, repair status after failure (L)
-- [ ] `src/core/app-deploy/upgrade.mjs` + spec: structural-only migration, preserved tenant-private data, reapply and interrupted-upgrade tests (L)
-- [ ] `src/core/app-deploy/standalone.mjs` + spec: `ssss new` in empty staging directory, project Total Recall init, runnable app shell, gates, publish (L)
-- [ ] `src/cli/app/` add/create/upgrade/verify commands; `--json` and dry-run cover each mutating operation (M)
-- [ ] `src/core/app-deploy/verify.mjs` + spec: hashes, SSSS lock/conformance, app feature tests, projection drift/rebuild (M)
-- [ ] Denied data read/write, undeclared secret/provider, and malicious path tests prove access boundaries (M)
-- [ ] Clean-room test: standalone app starts and exports its vault with Total Recall stopped; existing app preserves unrelated code/data after add/reapply (L)
+- [x] Define and validate app-local `app_capability_installation` and access-grant SSSS extension types; record status/source pin/grants, no secret values (M)
+- [x] `src/core/app-deploy/apply.mjs` + spec: staged file writes, preflight, verified SSSS actor, append-only install events, repair status after failure (L)
+- [x] `src/core/app-deploy/upgrade.mjs` + spec: structural-only migration, preserved tenant-private data, reapply and interrupted-upgrade tests (L)
+- [x] `src/core/app-deploy/standalone.mjs` + spec: `ssss new` in empty staging directory, project Total Recall init, runnable app shell, gates, publish (L)
+- [x] `src/cli/app/` add/create/upgrade/verify commands; `--json` and dry-run cover each mutating operation (M)
+- [x] `src/core/app-deploy/verify.mjs` + spec: hashes, SSSS lock/conformance, app feature tests, projection drift/rebuild (M)
+- [x] Denied data read/write, undeclared secret/provider, and malicious path tests prove access boundaries (M)
+- [x] Clean-room test: standalone app starts and exports its vault with Total Recall stopped; existing app preserves unrelated code/data after add/reapply (L)
 
 ## ⏳ Phase 4: First reusable capability repositories
 

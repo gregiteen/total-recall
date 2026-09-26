@@ -180,6 +180,64 @@
           }
         }
       }
+    },
+    "deploy": {
+      "type": "object",
+      "description": "Capability deployment contract for installing features into target hosts",
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Supported target app environments (e.g. ssss-app, flask, nextjs, react)"
+        },
+        "required_ssss_version": {
+          "type": "string",
+          "description": "Minimum SSSS specification/kernel version required"
+        },
+        "access_grants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Required capability permissions (e.g. ssss:vault:read, ssss:events:append)"
+        },
+        "resources": {
+          "type": "object",
+          "description": "External resource bindings required by the capability"
+        }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "description": "Repo-adapted skills provided by this capability plugin",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "description": "CLI subcommands to auto-register in .agent/commands/",
+      "items": {
+        "type": "object",
+        "required": ["name", "handler"],
+        "properties": {
+          "name": { "type": "string" },
+          "handler": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI elements and design token integration",
+      "properties": {
+        "design_tokens": { "type": "string" },
+        "elements": { "type": "array" }
+      }
     }
   }
 }

@@ -83,6 +83,55 @@ describe('Plugin Loader & Schema Validation', () => {
       expect(res.errors.some(e => e.includes('invalid schedule'))).toBe(true);
       expect(res.errors.some(e => e.includes('Invalid use case'))).toBe(true);
     });
+
+    it('validates deploy contract correctly', () => {
+      const validDeploy = {
+        id: 'cap-plugin',
+        name: 'Capability Plugin',
+        version: '1.0.0',
+        description: 'Valid capability plugin',
+        deploy: {
+          targets: ['ssss-app', 'flask', 'nextjs'],
+          required_ssss_version: '>=0.9.3',
+          access_grants: ['ssss:vault:read', 'ssss:events:append'],
+          resources: { db: 'sqlite' }
+        },
+        skills: [{ id: 'cap-plugin', path: './skills/cap/SKILL.md' }],
+        commands: [{ name: 'cap', handler: './cli.mjs' }]
+      };
+      expect(validatePluginManifest(validDeploy).valid).toBe(true);
+
+      const invalidDeploy = {
+        ...validDeploy,
+        deploy: {
+          targets: [],
+          access_grants: ['invalid grant with spaces!']
+        }
+      };
+      const invRes = validatePluginManifest(invalidDeploy);
+      expect(invRes.valid).toBe(false);
+      expect(invRes.errors.some(e => e.includes("'deploy.targets' must be a non-empty array"))).toBe(true);
+      expect(invRes.errors.some(e => e.includes("Invalid access grant"))).toBe(true);
+    });
+
+    it('rejects path traversal in artifact paths', () => {
+      const traversalManifest = {
+        id: 'traversal-plugin',
+        name: 'Traversal Plugin',
+        version: '1.0.0',
+        description: 'Tests security path boundary',
+        cli: { command: 't', handler: '../../etc/passwd' },
+        skills: [{ id: 's', path: '../secrets/SKILL.md' }],
+        commands: [{ name: 'c', handler: '/absolute/path/cli.mjs' }],
+        ui: { design_tokens: '../../tokens.yaml' }
+      };
+      const res = validatePluginManifest(traversalManifest);
+      expect(res.valid).toBe(false);
+      expect(res.errors.some(e => e.includes('cli.handler must be a safe relative path'))).toBe(true);
+      expect(res.errors.some(e => e.includes('invalid or unsafe \'path\''))).toBe(true);
+      expect(res.errors.some(e => e.includes('invalid or unsafe \'handler\''))).toBe(true);
+      expect(res.errors.some(e => e.includes("'ui.design_tokens' must be a safe relative path"))).toBe(true);
+    });
   });
 
   describe('plugin directories', () => {
