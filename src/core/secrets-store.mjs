@@ -43,7 +43,8 @@ export function resolveUsagePath(brainDir) {
 /**
  * The master password: the environment first, then — on macOS — the Keychain
  * entry `secret rekey` already maintains (service `total-recall-secrets`,
- * overridable with TR_SECRETS_KEYCHAIN_SERVICE).
+ * overridable with TR_SECRETS_KEYCHAIN_SERVICE), then the host env file
+ * (see readTrEnvFilePassword).
  *
  * Only an interactive shell profile used to read the Keychain, so a
  * non-interactive process on the same Mac — a mesh `exec`, a release script —
@@ -52,13 +53,50 @@ export function resolveUsagePath(brainDir) {
  * disables the fallback.
  */
 let keychainPassword;
-export function secretsPassword({ env = process.env, readKeychain = readTrKeychainPassword } = {}) {
+export function secretsPassword({
+  env = process.env,
+  readKeychain = readTrKeychainPassword,
+  readEnvFile = readTrEnvFilePassword,
+} = {}) {
   const fromEnv = env.TR_SECRETS_PASSWORD || env.TR_MASTER_PASSWORD;
   if (fromEnv) return fromEnv;
-  if (env.TR_SECRETS_NO_KEYCHAIN === '1') return null;
-  if (readKeychain !== readTrKeychainPassword) return readKeychain(env) || null;
-  if (keychainPassword === undefined) keychainPassword = readKeychain(env) || null;
-  return keychainPassword;
+  if (env.TR_SECRETS_NO_KEYCHAIN !== '1') {
+    let fromKeychain;
+    if (readKeychain !== readTrKeychainPassword) fromKeychain = readKeychain(env) || null;
+    else {
+      if (keychainPassword === undefined) keychainPassword = readKeychain(env) || null;
+      fromKeychain = keychainPassword;
+    }
+    if (fromKeychain) return fromKeychain;
+  }
+  return readEnvFile(env) || null;
+}
+
+/**
+ * The host's env-file carrier: `TR_ENV_FILE`, else `~/.agent/tr.env` — the file
+ * `auto-pull.sh` sources and `secret rekey --env-file` rotates. Only a shell
+ * that sources it used to see the password, so a non-interactive process on a
+ * Linux host (an agent's tool shell, cron, a systemd unit) could not open the
+ * store its own user owns. The file is honoured only when this user owns it
+ * and no one else can read or write it.
+ */
+export function readTrEnvFilePassword(env = process.env) {
+  const file = env.TR_ENV_FILE || path.join(env.HOME || os.homedir(), '.agent', 'tr.env');
+  try {
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || (stat.mode & 0o077) !== 0) return null;
+    if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) return null;
+    const line = fs
+      .readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .find((entry) => /^\s*(?:export\s+)?TR_SECRETS_PASSWORD\s*=/.test(entry));
+    if (!line) return null;
+    let value = line.slice(line.indexOf('=') + 1).trim();
+    if (value.length >= 2 && /^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
+    return value || null;
+  } catch {
+    return null;
+  }
 }
 
 function readTrKeychainPassword(env) {
