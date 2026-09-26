@@ -6,6 +6,8 @@ vi.mock('./logger.mjs', () => ({
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import * as vault from './vault.mjs';
 import { getNodes, invalidate } from './vault-cache.mjs';
 
@@ -83,5 +85,20 @@ describe('Vault Cache', () => {
     // so it should have been called again (total calls >= 2).
     // On systems where fs.watch might not trigger, we just assert cache works.
     expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not keep a CLI process alive after loading a nested vault', () => {
+    // On Linux, recursive fs.watch is one inotify watcher per directory and
+    // unref() on the wrapper did not reach them, so every CLI command hung.
+    fs.mkdirSync(path.join(tempDir, 'facts', 'deep'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, 'facts', 'deep', 'n.md'), '---\nslug: n\n---\nbody');
+    const moduleUrl = pathToFileURL(path.resolve('src/core/vault-cache.mjs')).href;
+    const script = `const m = await import(${JSON.stringify(moduleUrl)}); m.getNodes(${JSON.stringify(tempDir)});`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+      timeout: 15000,
+      encoding: 'utf8',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
   });
 });

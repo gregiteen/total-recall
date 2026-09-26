@@ -61,6 +61,75 @@ export function invalidate(vaultDir) {
 }
 
 /**
+ * Watches a directory tree without keeping the process alive.
+ *
+ * macOS and Windows implement `fs.watch({ recursive: true })` natively as one
+ * handle, so `unref()` works. On Linux, Node emulates it with one inotify
+ * watcher per subdirectory and `unref()` on the returned object does not reach
+ * them, so every CLI command that touched the vault cache hung after printing
+ * its result. There, each directory gets its own non-recursive, unref'd
+ * watcher instead; directories created later are picked up as they appear.
+ *
+ * @param {string} root - Directory to watch
+ * @param {(eventType: string, filename: string) => void} onChange - Receives paths relative to root
+ * @returns {{ close: () => void }}
+ */
+function watchTree(root, onChange) {
+  if (process.platform === 'darwin' || process.platform === 'win32') {
+    const watcher = fs.watch(root, { recursive: true }, onChange);
+    watcher.unref();
+    return watcher;
+  }
+
+  const watchers = new Map();
+  const watchDir = (dir) => {
+    if (watchers.has(dir)) return;
+    let watcher;
+    try {
+      watcher = fs.watch(dir, (eventType, filename) => {
+        if (!filename) return;
+        const full = path.join(dir, String(filename));
+        if (eventType === 'rename') {
+          try {
+            if (fs.statSync(full).isDirectory()) walk(full);
+          } catch {
+            // Removed; its watcher closes itself on error.
+          }
+        }
+        onChange(eventType, path.relative(root, full));
+      });
+    } catch {
+      return;
+    }
+    watcher.on('error', () => {
+      watcher.close();
+      watchers.delete(dir);
+    });
+    watcher.unref();
+    watchers.set(dir, watcher);
+  };
+  const walk = (dir) => {
+    watchDir(dir);
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const item of entries) {
+      if (item.isDirectory()) walk(path.join(dir, item.name));
+    }
+  };
+  walk(root);
+  return {
+    close() {
+      for (const watcher of watchers.values()) watcher.close();
+      watchers.clear();
+    },
+  };
+}
+
+/**
  * Starts a filesystem watcher on the vault directory to automatically invalidate the cache
  * when external edits occur.
  *
@@ -82,15 +151,12 @@ function startWatcher(vaultDir) {
 
   logger.info('Starting filesystem watcher for vault cache', { vaultDir: resolvedDir });
   try {
-    const watcher = fs.watch(resolvedDir, { recursive: true }, (eventType, filename) => {
+    entry.watcher = watchTree(resolvedDir, (eventType, filename) => {
       if (filename && filename.endsWith('.md')) {
         logger.info(`Vault filesystem change detected (${eventType}: ${filename}), invalidating cache`);
         invalidate(resolvedDir);
       }
     });
-    // Unref the watcher so it does not prevent Node from exiting cleanly
-    watcher.unref();
-    entry.watcher = watcher;
   } catch (err) {
     logger.warn('Failed to start vault fs watcher, cache will rely on explicit invalidations', { error: err.message });
   }
