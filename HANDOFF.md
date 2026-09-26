@@ -8,6 +8,8 @@
 - **Active project records:**
   - [PLUGIN_P2P](docs/projects/in-progress/PLUGIN_P2P/PLUGIN_P2P_PROJECT_TRACKER.md): bundled and installed plugins, explicit public sharing through hash-pinned HTTPS links, own-device mesh sharing, task runs, and dashboard management.
   - [RESEARCH_SYSTEM2](docs/projects/in-progress/RESEARCH_SYSTEM2/RESEARCH_SYSTEM2_PROJECT_TRACKER.md): bounded research phases, provenance, queue gate, and improved synthesis.
+  - [CAPABILITY_DEPLOYMENT_PLUGINS](docs/projects/in-progress/CAPABILITY_DEPLOYMENT_PLUGINS/CAPABILITY_DEPLOYMENT_PLUGINS_PROJECT_TRACKER.md): planned, not started. The `total-recall app` composer for deploying capability plugins into SSSS apps, plus extracting each Festech capability into its own plugin. The app-side reference work is in `gregiteen/festech-modular` (`CAPABILITY_APP_EXTRACTION`).
+  - [TR_CORE_PLUGIN_SPLIT](docs/projects/planned/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md): planned. Split standard Total Recall features (tts, collab, obsidian, usage, … research, mesh) into white-label plugins, each in its own repo, behind new extension points (routes, tools, UI, hooks, config).
   - [EXTENSION_OVERHAUL](docs/projects/in-progress/EXTENSION_OVERHAUL/EXTENSION_OVERHAUL_PROJECT_TRACKER.md): browser extension API, page recall, and side panel redesign.
 
 ## Verification on 2026-09-25
