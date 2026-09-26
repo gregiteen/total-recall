@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
-import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks } from './surface.mjs';
+import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes } from './surface.mjs';
 
 describe('Surface Routing Accuracy', () => {
 
@@ -89,5 +89,39 @@ describe('Surface Routing Accuracy', () => {
       const links = extractWikilinks(body);
       expect(links).toEqual([]);
     });
+  });
+});
+
+describe('mergeGlobalRuleNodes', () => {
+  const rule = (slug, category, body = slug) => ({ slug, category, status: 'active', importance: 5, title: slug, body });
+
+  it('adds global rules to a project that lacks them', () => {
+    const merged = mergeGlobalRuleNodes([rule('own', 'invariants')], [rule('shared', 'anti-patterns')]);
+    expect(merged.map((n) => n.slug)).toEqual(['own', 'shared']);
+    expect(merged[1]._layer).toBe('global');
+  });
+
+  it('lets a project node override a global rule with the same slug', () => {
+    const merged = mergeGlobalRuleNodes([rule('same', 'invariants', 'project wording')], [rule('same', 'invariants', 'global wording')]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].body).toBe('project wording');
+  });
+
+  it('keeps global facts and concepts out of the surfaces', () => {
+    const merged = mergeGlobalRuleNodes([], [rule('a-fact', 'facts'), rule('a-pref', 'preferences')]);
+    expect(merged.map((n) => n.slug)).toEqual(['a-pref']);
+  });
+
+  it('does not mutate the cached global nodes', () => {
+    const globalNode = rule('shared', 'invariants');
+    mergeGlobalRuleNodes([], [globalNode]);
+    expect(globalNode._layer).toBeUndefined();
+  });
+
+  it('renders an inherited global rule in the project rules block', async () => {
+    const merged = mergeGlobalRuleNodes([], [{ ...rule('global-rule', 'anti-patterns'), title: 'Global correction', modality: 'must' }]);
+    const block = await buildRulesBlock(null, merged);
+    expect(block).toContain('1 corrections');
+    expect(block).toContain('Global correction');
   });
 });
