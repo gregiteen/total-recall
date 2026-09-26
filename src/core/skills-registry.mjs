@@ -1079,6 +1079,7 @@ export function collectSkillLocations(brainDir, skillId) {
   }
 
   for (const inst of registry.installs.filter((i) => i.skill_id === skillId)) {
+    if (entry?.layered && !inst.layered) continue; // old discovery rows are not adoption consent
     if (!fs.existsSync(path.join(inst.path, 'SKILL.md'))) continue;
     // skip duplicate of source
     if (locations.some((l) => samePhysicalPath(l.path, inst.path))) continue;
@@ -1174,6 +1175,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
         registry.skills[skillId].updated_at = new Date().toISOString();
       }
       for (const inst of registry.installs.filter((i) => i.skill_id === skillId)) {
+        if (layered && !inst.layered) continue;
         if (fs.existsSync(inst.path)) {
           inst.content_hash = hashSkillContent(inst.path);
           inst.registry_hash = layered ? entry.content_hash : locations[0].hash;
