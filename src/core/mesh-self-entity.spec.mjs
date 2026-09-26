@@ -10,7 +10,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { clearMeshStatusCache, patchOwnMeshNode } from './mesh.mjs';
+import os from 'node:os';
+import path from 'node:path';
+import { clearMeshStatusCache, meshVaultRoot, patchOwnMeshNode } from './mesh.mjs';
 import { listVfsDocumentsUnder } from './vfs-documents.mjs';
 import { processViaPackageKernel } from './ssss-kernel-bridge.mjs';
 
@@ -142,5 +144,60 @@ describe('patchOwnMeshNode access', () => {
       .filter((line) => /^[a-z_]+:/.test(line))
       .map((line) => line.split(':')[0]);
     expect([...new Set(keys)]).toHaveLength(keys.length);
+  });
+
+  // The login account is a property of the host that the control server
+  // cannot supply, and the machine itself is the one authority on it.
+  // Recording it is what lets every other node reach this one without guessing.
+  it('records its own login account when none is set', async () => {
+    vi.mocked(listVfsDocumentsUnder).mockReturnValue([SELF_DOC]);
+
+    await patchOwnMeshNode();
+
+    expect(lastEnvelope().patches.access).toMatchObject({
+      ssh_user: os.userInfo().username,
+      source: 'self',
+    });
+  });
+
+  // How to reach a machine is a fact about the machine, not about whichever
+  // repository the daemon happened to start in.
+  it("writes to the machine's global brain, not the active project brain", async () => {
+    vi.mocked(listVfsDocumentsUnder).mockReturnValue([SELF_DOC]);
+
+    await patchOwnMeshNode();
+
+    const vaultRoot = vi.mocked(processViaPackageKernel).mock.calls.at(-1)[1];
+    expect(vaultRoot).toBe(meshVaultRoot());
+    expect(vaultRoot).not.toBe('/tmp/tr-self-entity-vault');
+  });
+
+  it('carries a record that only exists in the project brain into the global one', async () => {
+    const legacy = { ...SELF_DOC, access: { ssh_user: 'operator', source: 'manual' } };
+    vi.mocked(listVfsDocumentsUnder).mockImplementation((_dir, root) =>
+      root === '/tmp/tr-self-entity-vault' ? [legacy] : [],
+    );
+
+    await patchOwnMeshNode();
+
+    const { type, content } = lastEnvelope();
+    // Created in the global brain (a patch would target a file that is not there).
+    expect(type).toBe('operation');
+    expect(content).toContain('"ssh_user":"operator"');
+  });
+});
+
+describe('meshVaultRoot', () => {
+  const saved = process.env.AGENT_DIR;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.AGENT_DIR;
+    else process.env.AGENT_DIR = saved;
+  });
+
+  it('is the global brain vault, pinned by AGENT_DIR like every other brain lookup', () => {
+    process.env.AGENT_DIR = '/tmp/pinned-agent';
+    expect(meshVaultRoot()).toBe(path.join('/tmp/pinned-agent', 'skills', 'total-recall', 'memory-vault'));
+    delete process.env.AGENT_DIR;
+    expect(meshVaultRoot()).toBe(path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'memory-vault'));
   });
 });

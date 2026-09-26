@@ -6,6 +6,7 @@ import {
   getMeshPeers,
   getMeshHostname,
   listEnrichedMeshNodes,
+  meshVaultRoot,
   listMeshNodeEntities,
   attachSelfInterfaces,
   normalizeHostname,
@@ -26,7 +27,6 @@ import {
 // headscale rejects anything else with a 500; validate up front instead.
 const AUTH_REQUEST_PREFIX = 'hskey-authreq-';
 import { throttledFetch } from '../../core/throttled-fetch.mjs';
-import { defaultVaultRoot } from '../../core/vfs-documents.mjs';
 import {
   listLocalInterfaces,
   summarizeInterfacesForEntity,
@@ -101,7 +101,7 @@ router.get('/api/mesh/leader', requireAuth, requireScope('config:read'), async (
  * Self node includes live interface kinds (wifi/ethernet/vpn_overlay/…).
  */
 router.get('/api/mesh/nodes', requireAuth, requireScope('config:read'), async (req, res) => {
-  const vaultRoot = defaultVaultRoot();
+  const vaultRoot = meshVaultRoot();
   let nodes = listEnrichedMeshNodes(vaultRoot);
   try {
     nodes = attachSelfInterfaces(nodes, summarizeInterfacesForEntity());
@@ -169,7 +169,7 @@ router.post('/api/mesh/access', requireAuth, requireScope('config:write'), async
   }
 
   try {
-    const result = await setMeshNodeAccess(target, patch, { vaultRoot: defaultVaultRoot() });
+    const result = await setMeshNodeAccess(target, patch, { vaultRoot: meshVaultRoot() });
     if (!result.written) {
       const notFound = result.reason === 'node-not-found';
       res.status(notFound ? 404 : 500).json({
@@ -194,7 +194,7 @@ router.post('/api/mesh/access', requireAuth, requireScope('config:write'), async
  */
 router.get('/api/mesh/access/proposals', requireAuth, requireScope('config:read'), async (_req, res) => {
   try {
-    const nodes = listEnrichedMeshNodes(defaultVaultRoot());
+    const nodes = listEnrichedMeshNodes(meshVaultRoot());
     res.json({
       proposals: proposeAccessFromSshConfig(nodes, readSshConfig()),
       missing_access: nodes
@@ -210,7 +210,7 @@ router.get('/api/mesh/access/proposals', requireAuth, requireScope('config:read'
 /** Apply every proposal from this host's ssh config to the node entities. */
 router.post('/api/mesh/access/import', requireAuth, requireScope('config:write'), async (_req, res) => {
   try {
-    const vaultRoot = defaultVaultRoot();
+    const vaultRoot = meshVaultRoot();
     const proposals = proposeAccessFromSshConfig(listEnrichedMeshNodes(vaultRoot), readSshConfig());
     const results = [];
     for (const proposal of proposals) {
@@ -434,7 +434,7 @@ router.delete('/api/mesh/watch', requireAuth, requireScope('config:write'), asyn
 router.get('/api/mesh/io', requireAuth, requireScope('config:read'), async (_req, res) => {
   try {
     const live = detectDeviceIo();
-    const entities = listMeshNodeEntities(defaultVaultRoot());
+    const entities = listMeshNodeEntities(meshVaultRoot());
     const selfHost = normalizeHostname(getMeshHostname());
     const ent = entities.find(
       (e) => normalizeHostname(e.hostname) === selfHost,
@@ -498,7 +498,7 @@ router.post('/api/mesh/lan/register', requireAuth, requireScope('config:write'),
       maxProbes: limit,
     });
     const registration = await registerLanMeshNodes(snapshot.hosts, {
-      vaultRoot: defaultVaultRoot(),
+      vaultRoot: meshVaultRoot(),
       onlyReachable: true,
     });
     res.json({

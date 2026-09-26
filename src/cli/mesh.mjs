@@ -25,7 +25,12 @@ import {
   setHeadscalePolicy,
   buildMeshSshPolicy,
 } from '../core/headscale-client.mjs';
-import { findMeshNode, listEnrichedMeshNodes, setMeshNodeAccess } from '../core/mesh.mjs';
+import {
+  findMeshNode,
+  listEnrichedMeshNodes,
+  meshVaultRoot,
+  setMeshNodeAccess,
+} from '../core/mesh.mjs';
 import {
   buildSshArgs,
   formatAccessTarget,
@@ -49,6 +54,8 @@ function printHelp() {
     access <node> --user <u> [--port <n>] [--host <h>] [--identity <path>]
                            Record how to reach a node
     access import          Propose access from ~/.ssh/config (--apply to save)
+    access sync            Learn login accounts from every peer already reachable
+    access discover [node] Find a working login with this machine's keys and record it
     ping [node]            Measure round-trip latency to a node (or all nodes) (--json)
     leader                 Show cluster leader election status and current leader (--json)
     enroll [options]       Enroll this node on the mesh control server
@@ -76,8 +83,8 @@ function printHelp() {
   Examples:
     npx total-recall mesh nodes
     npx total-recall mesh access import
-    npx total-recall mesh ssh macmini
-    npx total-recall mesh ssh macmini 'uptime'
+    npx total-recall mesh ssh worker-node
+    npx total-recall mesh ssh worker-node 'uptime'
     npx total-recall mesh policy init-ssh
 `);
 }
@@ -86,6 +93,42 @@ function fail(message, hint) {
   console.error(`❌ ${message}`);
   if (hint) console.error(`   ${hint}`);
   process.exitCode = 1;
+}
+
+function describeDiscoveryFailure(result, node) {
+  const name = String(node.hostname).split('.')[0];
+  switch (result.reason) {
+    case 'host-key':
+      return `host key not trusted yet — run 'total-recall mesh ssh ${name}' once to confirm it`;
+    case 'unreachable':
+      return 'not answering on ssh (asleep, offline, or no ssh server)';
+    case 'no-address':
+      return 'no address known';
+    case 'no-candidate-user':
+      return `no account to try — 'total-recall mesh access ${name} --user <login>'`;
+    default:
+      return `none of ${result.attempts} account/key pairs was accepted — authorise this machine's key on ${name}`;
+  }
+}
+
+// Say what actually blocks a node, so an untrusted host key or a machine with
+// no ssh server is not reported the same way as a missing account.
+function explainUnreachable(result) {
+  const name = String(result.hostname).split('.')[0];
+  const text = String(result.error || '');
+  if (!result.sshConfigured) {
+    return `no login recorded — try 'total-recall mesh access sync' or 'total-recall mesh access discover ${name}'`;
+  }
+  if (/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(text)) {
+    return `host key not trusted yet — run 'total-recall mesh ssh ${name}' once to confirm it`;
+  }
+  if (/Permission denied/i.test(text)) {
+    return `${result.sshTarget} refused this machine's key — authorise it on ${name}`;
+  }
+  if (/timed out|No route to host|Connection refused/i.test(text)) {
+    return 'not answering on ssh (asleep, offline, or no ssh server)';
+  }
+  return text.split('\n')[0] || 'probe failed';
 }
 
 // A file-mode control server cannot accept an API-written policy. That is a
@@ -102,18 +145,20 @@ function reportPolicyModeError(err) {
 }
 
 export default async function meshCli(argv = []) {
-  const args = [...argv];
-  if (!args.length || args[0] === '--help' || args[0] === '-h') {
+  if (!argv.length || argv[0] === '--help' || argv[0] === '-h') {
     printHelp();
     return;
   }
 
-  const layer = parseLayerFlag(args);
+  // parseLayerFlag returns { layer, remainingArgs }. Passing the object on
+  // meant `--global`/`--project` were silently ignored and left in the args.
+  const { layer, remainingArgs } = parseLayerFlag(argv);
+  const args = [...remainingArgs];
   const brainDir = resolveBrainDir(layer);
-  // Node entities must be read and written in the brain the caller selected;
-  // falling back to the default root silently splits one machine's facts
-  // across two brains depending on which command touched it last.
-  const vaultRoot = path.join(brainDir, 'memory-vault');
+  // How to reach a machine is a fact about the machine, so node entities live
+  // in its global brain by default (see meshVaultRoot); an explicit layer flag
+  // still selects a brain for anyone who wants per-project records.
+  const vaultRoot = layer === 'auto' ? meshVaultRoot() : path.join(brainDir, 'memory-vault');
   const command = args.shift();
 
   // `--help` after a subcommand must never EXECUTE that subcommand. Only the
@@ -168,8 +213,14 @@ export default async function meshCli(argv = []) {
           try {
             const probeCmd = 'echo "agy=$(which agy 2>/dev/null) claude=$(which claude 2>/dev/null) codex=$(which codex 2>/dev/null) gemini=$(which gemini 2>/dev/null) ollama=$(which ollama 2>/dev/null) docker=$(which docker 2>/dev/null) node=$(which node 2>/dev/null) git=$(which git 2>/dev/null)"';
             const { execMeshCommand } = await import('../core/mesh.mjs');
-            const res = await execMeshCommand(node.hostname, probeCmd, { vaultRoot, timeoutMs: 4000 });
+            // Cloud peers routinely need several seconds; a 4 s budget reported
+            // reachable machines as down.
+            const res = await execMeshCommand(node.hostname, probeCmd, { vaultRoot, timeoutMs: 15000 });
             nodeInfo.reachable = res.success;
+            if (res.success && !node.access?.verified_at) {
+              // A login that just worked is the only kind worth sharing with peers.
+              await setMeshNodeAccess(node.hostname, { verified_at: new Date().toISOString() }, { vaultRoot });
+            }
             if (res.success) {
               const parts = res.stdout.split(/\s+/);
               for (const part of parts) {
@@ -214,6 +265,10 @@ export default async function meshCli(argv = []) {
         console.log(`│ ${pad(r.hostname, 40)} │ ${pad(r.ip, 14)} │ ${pad(roleStr, 16)} │ ${pad(sshStr, 16)} │ ${pad(hStr, 36)} │ ${pad(runStr, 24)} │`);
       }
       console.log('└──────────────────────────────────────────┴────────────────┴──────────────────┴──────────────────┴──────────────────────────────────────┴──────────────────────────┘\n');
+      for (const r of results.filter((x) => !x.self && !x.reachable)) {
+        console.log(`  ${String(r.hostname).split('.')[0].padEnd(20)} ${explainUnreachable(r)}`);
+      }
+      if (results.some((x) => !x.self && !x.reachable)) console.log('');
       return;
     }
 
@@ -322,7 +377,7 @@ export default async function meshCli(argv = []) {
     if (command === 'exec') {
       const target = args.shift();
       if (!target || !args.length) {
-        fail('`exec` requires a node name and a command.', 'Example: total-recall mesh exec macmini uptime');
+        fail('`exec` requires a node name and a command.', 'Example: total-recall mesh exec worker-node uptime');
         return;
       }
       const jsonMode = args.includes('--json');
@@ -350,6 +405,57 @@ export default async function meshCli(argv = []) {
       const target = args.shift();
       if (!target) {
         fail('`access` requires a node name, or `import`.');
+        return;
+      }
+
+      if (target === 'discover') {
+        const { discoverNodeAccess } = await import('../core/mesh-discover.mjs');
+        const wanted = args.find((a) => !a.startsWith('-'));
+        const targets = wanted
+          ? [findMeshNode(wanted, vaultRoot)].filter(Boolean)
+          : listEnrichedMeshNodes(vaultRoot).filter(
+              (n) => !n.self && n.ip && n.online !== false && !n.access?.verified_at,
+            );
+        if (!targets.length) {
+          console.log(wanted ? `No mesh node matches "${wanted}".` : 'Every online node already has a verified login.');
+          if (wanted) process.exitCode = 1;
+          return;
+        }
+        let missing = 0;
+        for (const node of targets) {
+          const result = await discoverNodeAccess(node, { vaultRoot });
+          const name = String(node.hostname).padEnd(38);
+          if (result.found) {
+            const key = result.access.identity_file ? ` (key ${result.access.identity_file})` : '';
+            console.log(`  ✅ ${name} ${result.access.ssh_user}${key}`);
+          } else {
+            missing += 1;
+            console.log(`  ❌ ${name} ${describeDiscoveryFailure(result, node)}`);
+          }
+        }
+        if (missing) process.exitCode = 1;
+        return;
+      }
+
+      if (target === 'sync') {
+        const { syncAccessFromPeers } = await import('../core/mesh-access-sync.mjs');
+        const { peers, learned } = await syncAccessFromPeers({ vaultRoot });
+        for (const peer of peers) {
+          const state = peer.read ? `read ${peer.documents} node record(s)` : `skipped: ${peer.reason}`;
+          console.log(`  ${String(peer.hostname).padEnd(38)} ${state}`);
+        }
+        console.log('');
+        if (!learned.length) {
+          console.log('Nothing new: every login a reachable peer knows is already recorded here.');
+          return;
+        }
+        for (const item of learned) {
+          console.log(
+            `  ${item.written ? '✅' : '⚠️ '} ${String(item.hostname).padEnd(38)} ${item.access.ssh_user}` +
+              `   (from ${String(item.from).split('.')[0]})`,
+          );
+        }
+        if (learned.some((item) => !item.written)) process.exitCode = 1;
         return;
       }
 

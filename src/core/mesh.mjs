@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {
@@ -9,7 +11,7 @@ import {
 import { logger } from './logger.mjs';
 import { STATUS_TIMEOUT_MS, resolveTailscaleBinary } from './tailscale-cli.mjs';
 import { buildSshArgs, resolveNodeAccess } from './mesh-access.mjs';
-import { port as configuredBrainPort } from './config.mjs';
+import { port as configuredBrainPort, detectProjectBrain, globalBrainDir } from './config.mjs';
 
 const CACHE_MS = 2_000;
 
@@ -121,11 +123,61 @@ export function getMeshPeers({ includeSelf = false } = {}) {
   return peers.filter((peer) => peer.hostname && peer.ip);
 }
 
-/** Read vault mesh_node entity documents (install-specific variables). */
-export function listMeshNodeEntities(vaultRoot = defaultVaultRoot()) {
-  return listVfsDocumentsUnder('system/mesh-nodes', vaultRoot).filter(
-    (doc) => doc.type === 'mesh_node',
-  );
+/**
+ * Where mesh node entities live: the machine's global brain.
+ *
+ * How to reach a machine is a fact about the machine, not about whichever
+ * repository a command happened to run in. Resolving it from the active
+ * (usually project) brain meant a login recorded in one repo was invisible from
+ * every other repo on the same machine, so each one rediscovered it from
+ * scratch. `AGENT_DIR` still pins the root, matching `resolveBrainDir`.
+ */
+export function meshVaultRoot() {
+  if (process.env.AGENT_DIR) {
+    return path.join(process.env.AGENT_DIR, 'skills', 'total-recall', 'memory-vault');
+  }
+  return path.join(globalBrainDir, 'memory-vault');
+}
+
+function readMeshNodeDocs(vaultRoot) {
+  return listVfsDocumentsUnder('system/mesh-nodes', vaultRoot)
+    .filter((doc) => doc.type === 'mesh_node')
+    .map((doc) => ({ ...doc, _vault_root: vaultRoot }));
+}
+
+/**
+ * Read vault mesh_node entity documents (install-specific variables).
+ *
+ * Reads the mesh root and, when it differs, the active brain too, so access
+ * recorded before entities moved to the global brain is still honoured. The
+ * mesh root wins per field; the other layer only fills gaps in `access`.
+ */
+export function listMeshNodeEntities(vaultRoot = meshVaultRoot()) {
+  const primary = readMeshNodeDocs(vaultRoot);
+  const project = detectProjectBrain();
+  const legacyRoots = [
+    ...new Set(
+      [defaultVaultRoot(), project && path.join(project.brainDir, 'memory-vault')]
+        .filter(Boolean)
+        .map((root) => path.resolve(root)),
+    ),
+  ].filter((root) => root !== path.resolve(vaultRoot));
+  if (!legacyRoots.length) return primary;
+
+  const merged = [...primary];
+  for (const doc of legacyRoots.flatMap((root) => readMeshNodeDocs(root))) {
+    const match = merged.find(
+      (e) =>
+        meshNodeKey(e.hostname) === meshNodeKey(doc.hostname) ||
+        (e.ip && doc.ip && String(e.ip) === String(doc.ip)),
+    );
+    if (!match) {
+      merged.push(doc);
+    } else if (doc.access && typeof doc.access === 'object') {
+      match.access = { ...doc.access, ...(match.access || {}) };
+    }
+  }
+  return merged;
 }
 
 /**
@@ -214,7 +266,7 @@ function enrichPeerWithEntity(peer, ent, extra = {}) {
 }
 
 /** Live peers + vault entity variables for API/UI. */
-export function listEnrichedMeshNodes(vaultRoot = defaultVaultRoot()) {
+export function listEnrichedMeshNodes(vaultRoot = meshVaultRoot()) {
   const live = getMeshPeers({ includeSelf: true }).map((p) => ({
     ...p,
     transports: p.ip ? ['mesh'] : [],
@@ -251,6 +303,10 @@ export function attachSelfInterfaces(nodes, interfacesSummary = null) {
   });
 }
 
+function isInVault(doc, vaultRoot) {
+  return !doc?._vault_root || path.resolve(doc._vault_root) === path.resolve(vaultRoot);
+}
+
 function findEntityForSelf(self, vaultRoot) {
   const entities = listMeshNodeEntities(vaultRoot);
   const host = meshNodeKey(self.hostname);
@@ -262,7 +318,7 @@ function findEntityForSelf(self, vaultRoot) {
 }
 
 /** Find an enriched node (live + vault) by hostname or address. */
-export function findMeshNode(nameOrAddress, vaultRoot = defaultVaultRoot()) {
+export function findMeshNode(nameOrAddress, vaultRoot = meshVaultRoot()) {
   const wanted = String(nameOrAddress || '').trim();
   if (!wanted) return null;
   const key = meshNodeKey(wanted);
@@ -283,18 +339,21 @@ export function findMeshNode(nameOrAddress, vaultRoot = defaultVaultRoot()) {
  * thing anyone knows about a machine they did not install Total Recall on.
  */
 export async function setMeshNodeAccess(nameOrAddress, accessPatch, options = {}) {
-  const vaultRoot = options.vaultRoot || defaultVaultRoot();
+  const vaultRoot = options.vaultRoot || meshVaultRoot();
   const node = findMeshNode(nameOrAddress, vaultRoot);
   if (!node) return { written: false, reason: 'node-not-found' };
 
   const entities = listMeshNodeEntities(vaultRoot);
-  const existing =
+  const known =
     entities.find((e) => meshNodeKey(e.hostname) === meshNodeKey(node.hostname)) ||
     entities.find((e) => e.ip && node.ip && String(e.ip) === String(node.ip)) ||
     null;
+  // A record read from another brain layer is merged, but the write always
+  // lands in this vault, so only a document that lives here can be patched.
+  const existing = known && isInVault(known, vaultRoot) ? known : null;
 
   // Merge rather than replace: setting only a port must not erase the user.
-  const merged = { ...(existing?.access || {}), ...accessPatch };
+  const merged = { ...(known?.access || {}), ...accessPatch };
   for (const [key, value] of Object.entries(merged)) {
     if (value === null || value === undefined) delete merged[key];
   }
@@ -384,7 +443,7 @@ export async function setMeshNodeAccess(nameOrAddress, accessPatch, options = {}
  * @returns {Promise<{created: string[], skipped_offline: string[], existing: number}>}
  */
 export async function ensureMeshNodeEntities(options = {}) {
-  const vaultRoot = options.vaultRoot || defaultVaultRoot();
+  const vaultRoot = options.vaultRoot || meshVaultRoot();
   const peers = options.peers || getMeshPeers({ includeSelf: true });
   const entities = options.entities || listMeshNodeEntities(vaultRoot);
   const write = options.write || ((host) => setMeshNodeAccess(host, {}, { vaultRoot }));
@@ -424,14 +483,23 @@ export async function ensureMeshNodeEntities(options = {}) {
  * Does not hardcode device names — slug and fields come from Tailscale self.
  * Preserves existing entity variables (role, labels, capabilities, notes, body).
  */
+function localLoginUser() {
+  try {
+    return os.userInfo().username || null;
+  } catch {
+    return process.env.USER || process.env.USERNAME || null;
+  }
+}
+
 export async function patchOwnMeshNode(options = {}) {
   const self = getMeshSelf();
   if (!self?.hostname) {
     return { self: null, written: false, reason: 'mesh-unavailable' };
   }
 
-  const vaultRoot = options.vaultRoot || defaultVaultRoot();
-  const existing = findEntityForSelf(self, vaultRoot);
+  const vaultRoot = options.vaultRoot || meshVaultRoot();
+  const known = findEntityForSelf(self, vaultRoot);
+  const existing = known && isInVault(known, vaultRoot) ? known : null;
   const slug = existing
     ? path.basename(existing.vfs_path, '.md')
     : meshNodeKey(self.hostname);
@@ -486,8 +554,14 @@ export async function patchOwnMeshNode(options = {}) {
     hasClient: true,
     hasDaemon: hasTailscaleDaemon(),
   });
+  // This machine is the one authority on its own login account. Recording it
+  // here is what lets every other node reach it without guessing: the account
+  // is a property of the host that the control server cannot supply. An
+  // account an operator set deliberately (a dedicated ssh user) is kept.
+  const priorAccess = known?.access || {};
   const access = {
-    ...(existing?.access || {}),
+    ...priorAccess,
+    ...(priorAccess.ssh_user ? {} : { ssh_user: localLoginUser(), source: 'self' }),
     tailscale_variant: variant,
     mesh_ssh: meshSshFromVariant(variant),
   };
@@ -585,7 +659,7 @@ export async function patchOwnMeshNode(options = {}) {
  * @returns {Promise<{ node: string, hostname: string, ip: string, exitCode: number, success: boolean, stdout: string, stderr: string }>}
  */
 export async function execMeshCommand(target, command, options = {}) {
-  const { vaultRoot = defaultVaultRoot(), timeoutMs = 60_000, loginShell = true } = options;
+  const { vaultRoot = meshVaultRoot(), timeoutMs = 60_000, loginShell = true } = options;
   const node = findMeshNode(target, vaultRoot);
   if (!node) {
     throw new Error(`No mesh node matches "${target}".`);

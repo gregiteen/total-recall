@@ -1,3 +1,5 @@
+import path from 'node:path';
+import os from 'node:os';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SSH_PORT,
@@ -218,17 +220,32 @@ describe('buildSshArgs', () => {
   // before the right one is ever tried — the failure this whole module traces
   // back to — so a configured key is pinned.
   it('pins a configured identity so the agent cannot preempt it', () => {
-    const resolved = resolveNodeAccess({
-      ip: '100.64.0.2',
-      access: { ssh_user: 'me', identity_file: '~/.ssh/id_ed25519', ssh_port: 2222 },
-    });
+    const resolved = resolveNodeAccess(
+      {
+        ip: '100.64.0.2',
+        access: { ssh_user: 'me', identity_file: '~/.ssh/id_ed25519', ssh_port: 2222 },
+      },
+      { fileExists: () => true },
+    );
     expect(buildSshArgs(resolved, { command: 'hostname' })).toEqual([
       '-p', '2222',
-      '-i', '~/.ssh/id_ed25519',
+      '-i', path.join(os.homedir(), '.ssh', 'id_ed25519'),
       '-o', 'IdentitiesOnly=yes',
       'me@100.64.0.2',
       'hostname',
     ]);
+  });
+
+  // Access records are shared across the mesh, but a key path is only true on
+  // the machine that recorded it. Pinning a path this machine lacks, with
+  // IdentitiesOnly, would stop ssh from trying any key at all.
+  it("ignores a recorded key this machine does not have", () => {
+    const resolved = resolveNodeAccess(
+      { ip: '100.64.0.2', access: { ssh_user: 'me', identity_file: '/elsewhere/id_key' } },
+      { fileExists: () => false },
+    );
+    expect(resolved.identity_file).toBeNull();
+    expect(buildSshArgs(resolved, { command: 'hostname' })).toEqual(['me@100.64.0.2', 'hostname']);
   });
 });
 

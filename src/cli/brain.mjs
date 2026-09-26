@@ -9,7 +9,9 @@ function printHelp() {  console.log(`
   Usage: total-recall brain <command> [options]
 
   Commands:
-    list                       List global and all registered project brains (default)
+    list                       List global and all registered project brains, on/off (default)
+    on <brain>                 Switch a brain on  (name, repo path, brain path, or "global")
+    off <brain>                Switch a brain off — recall stops reading it
     status                     Show active context resolution paths and loaded layers
     register <project-path>    Track any project path (full brain + registry)
     unregister <project-path>  Remove a project directory path from the registry
@@ -22,6 +24,8 @@ function printHelp() {  console.log(`
     npx total-recall brain register /path/to/any-app
     npx total-recall brain ensure ~/code/my-lib
     npx total-recall brain list
+    npx total-recall brain off hermes-agent
+    npx total-recall brain on global
     npx total-recall brain unregister /path/to/project
 
   Skill multi-repo sync: registered projects + TR_SYNC_REPOS + skill track/--repo
@@ -54,10 +58,33 @@ export default async function brain(args) {
     case 'ensure':
       await handleEnsure(args.slice(1), globalBrainDir);
       break;
+    case 'on':
+    case 'off':
+      await handleToggle(subcommand.toLowerCase() === 'on', args.slice(1), globalBrainDir);
+      break;
     default:
       console.error(`  ⚠️  Unknown brain command: "${subcommand}". Run total-recall brain --help for details.`);
       process.exit(1);
   }
+}
+
+async function handleToggle(enabled, targetArgs, globalBrainDir) {
+  const query = targetArgs.find((a) => !a.startsWith('-'));
+  const verb = enabled ? 'on' : 'off';
+  if (!query) {
+    console.error(`  ⚠️  Usage: npx total-recall brain ${verb} <name | repo path | brain path | global>`);
+    process.exit(1);
+  }
+  const { listLocalBrains, findLocalBrain, setBrainEnabled } = await import('../core/brain-registry.mjs');
+  const brains = listLocalBrains({ globalBrainDir, activeProject: getBothBrains().project });
+  const target = findLocalBrain(brains, query);
+  if (!target) {
+    console.error(`  ⚠️  No single brain matches "${query}". Known: ${brains.map((b) => b.name).join(', ')}`);
+    process.exit(1);
+  }
+  setBrainEnabled(target.brainDir, enabled, { globalBrainDir });
+  console.log(`  ✅ ${target.name} is now ${verb.toUpperCase()} (${target.brainDir})`);
+  if (!enabled) console.log('     recall skips it until: npx total-recall brain on ' + target.name);
 }
 
 async function handleEnsure(targetArgs, globalBrainDir) {
@@ -90,6 +117,9 @@ async function handleEnsure(targetArgs, globalBrainDir) {
 async function handleList(registryPath, globalBrainDir) {
   const brains = getBothBrains();
   const activeProjectDir = brains.project ? brains.project.brainDir : null;
+  const { isBrainEnabled, readBrainToggles } = await import('../core/brain-registry.mjs');
+  const toggles = readBrainToggles(globalBrainDir);
+  const state = (dir) => (isBrainEnabled(dir, { toggles }) ? ' [ON]' : ' ⏸ [OFF]');
 
   console.log('\n  🧠 Active Total Recall Brain Registry:\n');
 
@@ -101,7 +131,7 @@ async function handleList(registryPath, globalBrainDir) {
   }
   const isGlobalActive = !activeProjectDir;
   const activeGlobalMarker = isGlobalActive ? ' ⭐️ [ACTIVE]' : '';
-  console.log(`  🌐 Global Brain${activeGlobalMarker}`);
+  console.log(`  🌐 Global Brain${state(globalBrainDir)}${activeGlobalMarker}`);
   console.log(`     ├── Path:  ${globalBrainDir}`);
   console.log(`     └── Nodes: ${globalCount} compiled SSSS memory nodes`);
   console.log('');
@@ -124,7 +154,7 @@ async function handleList(registryPath, globalBrainDir) {
         const projectVault = path.join(project.brainDir, 'memory-vault');
         const nodeCount = exists ? countMdFiles(projectVault) : 0;
 
-        console.log(`     ├── 📄 ${project.name}${marker}${existsLabel}`);
+        console.log(`     ├── 📄 ${project.name}${state(project.brainDir)}${marker}${existsLabel}`);
         console.log(`     │   ├── Root:  ${project.path}`);
         console.log(`     │   ├── Brain: ${project.brainDir}`);
         console.log(`     │   └── Nodes: ${nodeCount} memory nodes`);
