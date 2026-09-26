@@ -4,6 +4,7 @@ import { compileSurface } from '../core/surface.mjs';
 import { detectIndexDrift } from '../core/drift-detector.mjs';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import { logger } from '../core/logger.mjs';
+import { listLocalBrains } from '../core/brain-registry.mjs';
 
 /**
  * SSSS Projection Rebuild Command
@@ -107,12 +108,47 @@ export async function runRebuild(options = {}) {
   }
 }
 
+/**
+ * Recompile every registered project brain's surfaces. Each project's rules
+ * are the global rules plus its own (see mergeGlobalRuleNodes), so a global
+ * change is not done until every project has been rebuilt. Incremental: a
+ * project whose vault and the global rules are unchanged is skipped.
+ */
+export async function compileRegisteredProjects({ brains = listLocalBrains(), compile = compileSurface } = {}) {
+  let failed = 0;
+  for (const brain of brains) {
+    if (brain.kind !== 'project' || !brain.exists) continue;
+    const agentDir = path.dirname(path.dirname(brain.brainDir));
+    try {
+      const stats = await compile({
+        vaultDir: path.join(brain.brainDir, 'memory-vault'),
+        skillsDir: path.join(agentDir, 'skills'),
+        derivedDir: path.join(brain.brainDir, 'memory-derived'),
+        instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+      });
+      console.log(`✅ ${brain.name}: ${stats.skipped ? 'unchanged' : `rules recompiled (${stats.skillsInjected} surfaces)`}`);
+    } catch (err) {
+      failed += 1;
+      console.error(`❌ ${brain.name}: ${err.message}`);
+      logger.error('rebuild', `Project compile failed for ${brain.brainDir}: ${err.message}`);
+    }
+  }
+  return failed;
+}
+
 export default async function cli(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
   const options = {
     check: remainingArgs.includes('--check'),
     layer,
   };
-  const code = await runRebuild(options);
+  let code = await runRebuild(options);
+  // Global rules land in every project's surfaces, so a global compile (what
+  // `remember --global` runs) or an explicit --all rebuilds each project too.
+  if (code === 0 && !options.check && (layer === 'global' || remainingArgs.includes('--all'))) {
+    console.log('--------------------------');
+    console.log('🔁 Recompiling registered project brains...');
+    if (await compileRegisteredProjects()) code = 1;
+  }
   process.exit(code);
 }

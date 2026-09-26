@@ -347,7 +347,10 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
   const isImportant = (n) => n.importance === undefined || n.importance >= 3;
   
   // Determine current project/repo context to prevent cross-repo pollution
-  const currentRepoName = path.basename(process.cwd()).toLowerCase();
+  // The repo being compiled, not the caller's cwd: `compile --global` rebuilds
+  // every registered project from one process.
+  const repoRoot = projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd());
+  const currentRepoName = path.basename(repoRoot).toLowerCase();
   
   const isRelevantToRepo = (n) => {
     // If explicitly marked global or no repo restriction, it applies everywhere
@@ -669,16 +672,47 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
 /**
  * Main surface compilation entry point.
  */
+/**
+ * The rule nodes a project's instruction surfaces are built from: the global
+ * brain's rules plus the project's own. A project node with the same slug
+ * wins, so a repo can override a global rule; everything else in the global
+ * vault stays search-only. Without this every repo carried only its own vault,
+ * and a rule saved with `remember --global` reached no repo at all.
+ */
+export function mergeGlobalRuleNodes(projectNodes, globalNodes) {
+  const own = new Set(projectNodes.map((n) => n.slug));
+  const inherited = globalNodes
+    .filter((n) => RULE_CATEGORIES.has(n.category) && !own.has(n.slug))
+    .map((n) => ({ ...n, _layer: 'global' }));
+  return [...projectNodes, ...inherited];
+}
+
+const RULE_CATEGORIES = new Set(['invariants', 'preferences', 'anti-patterns']);
+
+function globalVaultFor(vaultDir) {
+  const globalVault = path.join(globalBrainDir, 'memory-vault');
+  return path.resolve(globalVault) === path.resolve(vaultDir) ? null : globalVault;
+}
+
 export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force = false }) {
   const nodes = getNodes(vaultDir);
+  const globalVault = globalVaultFor(vaultDir);
+  const ruleNodes = globalVault && fs.existsSync(globalVault)
+    ? mergeGlobalRuleNodes(nodes, getNodes(globalVault))
+    : nodes;
 
   // ── Incremental compilation: vault content hash check ──
+  // The global rules hash lives in its own file: vault-hash.txt is served by
+  // /api/vault/hash and must keep describing this vault alone.
   const hashFile = path.join(derivedDir, 'vault-hash.txt');
   const currentHash = computeVaultHash(vaultDir);
+  const globalHashFile = path.join(derivedDir, 'global-rules-hash.txt');
+  const globalHash = globalVault && fs.existsSync(globalVault) ? computeVaultHash(globalVault) : '';
 
   if (!force && fs.existsSync(hashFile)) {
     const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
-    if (storedHash === currentHash) {
+    const storedGlobal = fs.existsSync(globalHashFile) ? fs.readFileSync(globalHashFile, 'utf8').trim() : '';
+    if (storedHash === currentHash && storedGlobal === globalHash) {
       return {
         nodesProcessed: nodes.length,
         skillsInjected: 0,
@@ -691,7 +725,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   }
 
   // 1. Write pointer and active rules to all instruction shims
-  const skillsInjected = await compilePointers(instructionsFile, skillsDir, nodes, { vaultDir, derivedDir, force });
+  const skillsInjected = await compilePointers(instructionsFile, skillsDir, ruleNodes, { vaultDir, derivedDir, force });
 
   // 2. Build derived indexes (powers semantic search API)
   if (!fs.existsSync(derivedDir)) {
@@ -756,6 +790,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
 
   // 5. Write vault hash + projection manifest
   atomicWrite(hashFile, currentHash);
+  atomicWrite(globalHashFile, globalHash);
   writeProjectionManifest(derivedDir, currentHash);
 
   // 6. Generate live OKF Index and Log
