@@ -369,8 +369,17 @@ function apiDetails(opts) {
     models_url: `${base}/v1/models`,
     ssss_manifest_url: `${base}/api/ssss`,
     discovery_url: `${base}/.well-known/total-recall.json`,
-    authorization_header: opts.token ? `Authorization: Bearer ${opts.token}` : 'Authorization: Bearer <PAT>'
+    // Never the token itself: this goes to stdout and --json, where it lands in
+    // terminal scrollback, CI logs and agent transcripts. Clients read the
+    // token from brain.json (0600).
+    authorization_header: opts.token ? `Authorization: Bearer ${maskToken(opts.token)}` : 'Authorization: Bearer <PAT>'
   };
+}
+
+export function maskToken(token) {
+  const value = String(token || '');
+  if (value.length <= 8) return '<PAT>';
+  return `${value.slice(0, 6)}… (full token in config/brain.json)`;
 }
 
 function detectObsidianVault() {

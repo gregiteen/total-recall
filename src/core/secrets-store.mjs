@@ -77,15 +77,21 @@ export function secretsPassword({
  * `auto-pull.sh` sources and `secret rekey --env-file` rotates. Only a shell
  * that sources it used to see the password, so a non-interactive process on a
  * Linux host (an agent's tool shell, cron, a systemd unit) could not open the
- * store its own user owns. The file is honoured only when this user owns it
- * and no one else can read or write it.
+ * store its own user owns. The file is honoured only when it is a regular file
+ * (not a symlink) that this user owns and no one else can read or write, in a
+ * directory this user owns that no one else can write to.
  */
 export function readTrEnvFilePassword(env = process.env) {
   const file = env.TR_ENV_FILE || path.join(env.HOME || os.homedir(), '.agent', 'tr.env');
   try {
-    const stat = fs.statSync(file);
+    // lstat: a symlink could point the carrier at a file someone else controls.
+    const stat = fs.lstatSync(file);
     if (!stat.isFile() || (stat.mode & 0o077) !== 0) return null;
-    if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) return null;
+    // A directory others can write to lets them replace the file.
+    const dir = fs.statSync(path.dirname(file));
+    if ((dir.mode & 0o022) !== 0) return null;
+    const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if (uid !== null && (stat.uid !== uid || dir.uid !== uid)) return null;
     const line = fs
       .readFileSync(file, 'utf8')
       .split(/\r?\n/)

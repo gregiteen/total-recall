@@ -43,6 +43,80 @@ cd "$REPO_DIR"
 NODE_BIN=$(which node || ls -1 /root/.nvm/versions/node/*/bin/node 2>/dev/null | tail -n 1 || echo "node")
 log "Using Node binary: $NODE_BIN"
 
+SERVER_PORT="${TR_PORT:-3000}"
+SERVER_HOST="${TR_HOST:-127.0.0.1}"
+
+checkout_version() {
+  "$NODE_BIN" -p "require('$REPO_DIR/package.json').version"
+}
+
+# The version the RUNNING server reports, or nothing when it is down. The
+# checkout alone proves nothing: pulled code is not served until a restart.
+running_version() {
+  curl -s -m 5 "http://127.0.0.1:$SERVER_PORT/health" 2>/dev/null \
+    | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).version||"")}catch{}})' \
+    || true
+}
+
+restart_brain() {
+  log "Stopping existing processes..."
+  # Match the processes as they really run (/usr/bin/node <abs path>). The old
+  # patterns ("node src/server/index.mjs") never matched an absolute path, so
+  # the old server kept the port, every new one died on EADDRINUSE, and the log
+  # still said the reload succeeded.
+  for pattern in "$REPO_DIR/bin/total-recall.mjs start" "$REPO_DIR/src/server/index.mjs" "$REPO_DIR/src/core/daemon-loop.mjs"; do
+    pkill -f "$pattern" || true
+  done
+  for _ in $(seq 1 20); do
+    ss -ltn "sport = :$SERVER_PORT" 2>/dev/null | grep -q LISTEN || break
+    sleep 1
+  done
+  for pattern in "$REPO_DIR/bin/total-recall.mjs start" "$REPO_DIR/src/server/index.mjs" "$REPO_DIR/src/core/daemon-loop.mjs"; do
+    pkill -9 -f "$pattern" || true
+  done
+  if ss -ltn "sport = :$SERVER_PORT" 2>/dev/null | grep -q LISTEN; then
+    log "❌ Port $SERVER_PORT is still held by another process; not starting a second server."
+    exit 1
+  fi
+
+  # The index.mjs watchdog starts the daemon. Port is configurable: the droplet
+  # already serves ultrachat-frontend-1 on 3000.
+  log "Starting the standalone server on $SERVER_HOST:$SERVER_PORT..."
+  nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port "$SERVER_PORT" --host "$SERVER_HOST" > /root/.agent/logs/server.log 2>&1 &
+
+  local want got=""
+  want=$(checkout_version)
+  for _ in $(seq 1 60); do
+    got=$(running_version)
+    [ "$got" = "$want" ] && break
+    sleep 2
+  done
+  if [ "$got" != "$want" ]; then
+    log "❌ Restart failed: /health reports '${got:-nothing}', checkout is $want. Last server log:"
+    tail -20 /root/.agent/logs/server.log | tee -a "$LOG_FILE"
+    exit 1
+  fi
+  log "✅ Brain is serving $got on $SERVER_HOST:$SERVER_PORT."
+}
+
+build_frontend() {
+  # Rebuild dashboard SPA (frontend/dist is gitignored — source ships; assets built on host).
+  if [ -d "$REPO_DIR/frontend" ] && [ -f "$REPO_DIR/frontend/package.json" ]; then
+    log "Building frontend (vite)..."
+    (
+      cd "$REPO_DIR/frontend"
+      # Prefer vite-only build to avoid full-project tsc in CI-like auto-pull.
+      if "$NODE_BIN" ./node_modules/vite/bin/vite.js build 2>/dev/null; then
+        log "✅ Frontend vite build complete."
+      elif command -v npx >/dev/null 2>&1 && npx --yes vite build; then
+        log "✅ Frontend vite build complete (npx)."
+      else
+        log "⚠️ Frontend build skipped or failed — serving previous dist if present."
+      fi
+    ) || log "⚠️ Frontend build step errored (continuing restart)."
+  fi
+}
+
 # Fetch remote changes
 log "Fetching latest changes from GitHub..."
 git fetch origin main
@@ -51,7 +125,18 @@ LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
 
 if [ "$LOCAL" = "$REMOTE" ]; then
-  log "✅ Code is up to date (Commit: $LOCAL). No action needed."
+  # Up to date — but only a running server on this version counts. A previous
+  # failed restart would otherwise never be retried.
+  RUNNING=$(running_version)
+  WANT=$(checkout_version)
+  if [ "$RUNNING" = "$WANT" ]; then
+    log "✅ Code is up to date and serving $WANT (Commit: $LOCAL). No action needed."
+    exit 0
+  fi
+  log "⚠️ Code is up to date but the server reports '${RUNNING:-nothing}', not $WANT. Reinstalling dependencies and restarting."
+  npm ci --no-audit --no-fund >> "$LOG_FILE" 2>&1 || { log "❌ npm ci failed; not restarting."; exit 1; }
+  build_frontend
+  restart_brain
   exit 0
 fi
 
@@ -59,45 +144,20 @@ log "🔄 Update detected! Local: $LOCAL, Remote: $REMOTE"
 log "Pulling latest commits from origin/main..."
 git pull origin main
 
-# Rebuild dashboard SPA (frontend/dist is gitignored — source ships; assets built on host).
-if [ -d "$REPO_DIR/frontend" ] && [ -f "$REPO_DIR/frontend/package.json" ]; then
-  log "Building frontend (vite)..."
-  (
-    cd "$REPO_DIR/frontend"
-    # Prefer vite-only build to avoid full-project tsc in CI-like auto-pull.
-    if "$NODE_BIN" ./node_modules/vite/bin/vite.js build 2>/dev/null; then
-      log "✅ Frontend vite build complete."
-    elif command -v npx >/dev/null 2>&1 && npx --yes vite build; then
-      log "✅ Frontend vite build complete (npx)."
-    else
-      log "⚠️ Frontend build skipped or failed — serving previous dist if present."
-    fi
-  ) || log "⚠️ Frontend build step errored (continuing restart)."
+# Dependencies changed with the pull: install them, or the new code starts
+# against the old node_modules.
+if ! git diff --quiet "$LOCAL" HEAD -- package.json package-lock.json; then
+  log "Dependencies changed — running npm ci..."
+  npm ci --no-audit --no-fund >> "$LOG_FILE" 2>&1 || { log "❌ npm ci failed; not restarting."; exit 1; }
 fi
 
-log "Stopping existing processes..."
-# Cleanly kill standalone server and daemon processes
-pkill -9 -f "total-recall.mjs start" || true
-pkill -9 -f "total-recall.mjs daemon" || true
-pkill -9 -f "node src/server/index.mjs" || true
-pkill -9 -f "node.*total-recall.mjs" || true
-
-log "Starting the standalone server..."
-# Spawn server in background. The index.mjs watchdog will auto-start the daemon.
-#
-# Port is configurable: on a host that already serves something on 3000 (the
-# DigitalOcean droplet runs ultrachat-frontend-1 there), a hardcoded 3000 made
-# the brain die on EADDRINUSE while its daemon kept running against nothing.
-SERVER_PORT="${TR_PORT:-3000}"
-SERVER_HOST="${TR_HOST:-127.0.0.1}"
-log "Binding $SERVER_HOST:$SERVER_PORT"
-nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port "$SERVER_PORT" --host "$SERVER_HOST" > /root/.agent/logs/server.log 2>&1 &
+build_frontend
+restart_brain
 
 log "Updating OKF knowledge-catalog repo..."
 if [ -d "$REPO_DIR/knowledge-catalog" ]; then
-  cd "$REPO_DIR/knowledge-catalog"
-  git pull origin main || true
+  (cd "$REPO_DIR/knowledge-catalog" && git pull origin main) || true
   log "✅ OKF repo updated."
 fi
 
-log "🎉 Successfully updated and hot-reloaded the Total Recall Brain in the cloud!"
+log "🎉 Updated and verified: the Total Recall Brain is serving $(checkout_version)."

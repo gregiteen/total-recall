@@ -76,6 +76,27 @@ describe('readTrEnvFilePassword', () => {
     }
   });
 
+  it('ignores a symlink, even to a private file', () => {
+    const { file, cleanup } = withFile('TR_SECRETS_PASSWORD=target\n', 0o600);
+    const link = `${file}.link`;
+    try {
+      fs.symlinkSync(file, link);
+      expect(readTrEnvFilePassword({ TR_ENV_FILE: link })).toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('ignores a file in a directory others can write to', () => {
+    const { file, cleanup } = withFile('TR_SECRETS_PASSWORD=swappable\n', 0o600);
+    try {
+      fs.chmodSync(path.dirname(file), 0o777);
+      expect(readTrEnvFilePassword({ TR_ENV_FILE: file })).toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
   it('returns null for a missing file or one without the key', () => {
     expect(readTrEnvFilePassword({ TR_ENV_FILE: path.join(os.tmpdir(), 'tr-env-does-not-exist') })).toBeNull();
     const { file, cleanup } = withFile('OTHER=1\n', 0o600);
