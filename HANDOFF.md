@@ -3,7 +3,7 @@
 ## Current state
 
 - **Branch:** `main`
-- **Package version:** `3.31.1` release candidate. `3.31.0` is published; the 3.31.1 credential-file permission fix and patched frontend dependency passed the Mac Mini gate and native boot on 2026-09-26. See `docs/developer/CHANGELOG.md`.
+- **Package version:** `3.31.2` release candidate. `3.31.0` is published; 3.31.1 was tagged but not published because a newer npm rejected its workspace lockfile. The credential-file permission fix and patched frontend dependency passed the Mac Mini gate and native boot at 3.31.1; 3.31.2 repairs the lockfile and needs its final gate. See `docs/developer/CHANGELOG.md`.
 - **Source of truth:** SSSS VFS documents for persistent brain state. Plugin installation records and run events use the SSSS operation service.
 - **Active project records:**
   - [PLUGIN_P2P](docs/projects/in-progress/PLUGIN_P2P/PLUGIN_P2P_PROJECT_TRACKER.md): bundled and installed plugins, explicit public sharing through hash-pinned HTTPS links, own-device mesh sharing, task runs, and dashboard management.
