@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.31.2] — 2026-09-26
+
+### 🐛 Bug Fixes
+- Synced the root npm workspace lockfile with the patched frontend dependency. Newer npm versions rejected a clean install of the 3.31.1 source because its root lockfile still required the older router version.
+
 ## [3.31.1] — 2026-09-26
 
 ### 🔒 Security
