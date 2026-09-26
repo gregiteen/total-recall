@@ -106,7 +106,7 @@ export default async function recall(args) {
 
   // Determine which brains to search
   const brains = getBothBrains();
-  const searchTargets = [];
+  let searchTargets = [];
 
   if (layer === 'global' || layer === 'auto') {
     if (brains.global) {
@@ -119,8 +119,23 @@ export default async function recall(args) {
     }
   }
 
+  // Brains switched off with `brain off` are not read. Filtered here, after
+  // layer selection, so an explicit --layer on an off brain says why it came
+  // back empty instead of silently searching nothing.
+  const { isBrainEnabled, readBrainToggles } = await import('../core/brain-registry.mjs');
+  const toggles = readBrainToggles();
+  const skipped = searchTargets.filter((t) => !isBrainEnabled(t.brainDir, { toggles }));
+  if (skipped.length) {
+    searchTargets = searchTargets.filter((t) => !skipped.includes(t));
+    for (const t of skipped) {
+      console.error(`  ⏸  ${t.label} brain is switched off (npx total-recall brain on ${t.label === 'global' ? 'global' : t.brainDir})`);
+    }
+  }
+
   if (searchTargets.length === 0) {
-    console.error('No brain found. Run `npx total-recall init` to create one.');
+    console.error(skipped.length
+      ? 'Every brain in scope is switched off. Run `npx total-recall brain list` to see them.'
+      : 'No brain found. Run `npx total-recall init` to create one.');
     process.exit(1);
   }
 

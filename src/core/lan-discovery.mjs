@@ -210,13 +210,13 @@ export function lanHostnameFromIp(ip) {
  * @param {{ vaultRoot?: string, workspace_id?: string, onlyReachable?: boolean }} [options]
  */
 export async function registerLanMeshNodes(hosts, options = {}) {
-  const { defaultVaultRoot, findVfsDocumentByPath, listVfsDocumentsUnder } = await import('./vfs-documents.mjs');
-  const { meshNodeDocSlug } = await import('./mesh.mjs');
+  const { findVfsDocumentByPath, listVfsDocumentsUnder } = await import('./vfs-documents.mjs');
+  const { meshNodeDocSlug, meshVaultRoot } = await import('./mesh.mjs');
   const { processViaPackageKernel } = await import('./ssss-kernel-bridge.mjs');
   const crypto = await import('node:crypto');
   const path = await import('node:path');
 
-  const vaultRoot = options.vaultRoot || defaultVaultRoot();
+  const vaultRoot = options.vaultRoot || meshVaultRoot();
   const onlyReachable = options.onlyReachable !== false;
   const candidates = (hosts || []).filter((h) => h?.ip && isLanIpv4(h.ip) && (!onlyReachable || h.tr_reachable));
 

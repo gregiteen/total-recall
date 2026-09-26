@@ -1,8 +1,20 @@
 # Changelog
 
-## [3.28.3] — 2026-09-26
+## [3.29.0] — 2026-09-26
+
+### ✨ Features
+- **Brains can be switched on and off.** `total-recall brain off <brain>` / `brain on <brain>` (by name, repo path, brain path, or `global`). `recall` skips a brain that is off and says so on stderr instead of silently returning less; if every brain in scope is off it exits with a pointer to `brain list`. `brain list` shows `[ON]`/`[OFF]` per brain. State lives in `<global brain>/config/brain-toggles.json`, keyed by resolved brain directory so one switch applies from every repository; only "off" entries are stored, so nothing changes for anyone who never uses it. New `src/core/brain-registry.mjs`.
+- **`mesh access sync`** learns login accounts from every peer that is already reachable. A login verified on one machine no longer has to be rediscovered by every other one.
+- **`mesh access discover [node]`** finds a working login using this machine's own keys and records it, verified. It stops early on failures that are not about credentials (untrusted host key, unreachable host), so it does not spray the far end's auth log, and it never auto-accepts a host key.
+- `mesh doctor` explains why each unreachable node is unreachable (no login recorded, untrusted host key, key refused, not answering) and stamps `verified_at` on logins that just worked.
 
 ### 🐛 Bug Fixes
+- **A login recorded in one repository was invisible from every other repository on the same machine.** Mesh node records were read from and written to the active brain, usually a project brain. They now live in the global brain (`meshVaultRoot()`); records already in a project brain are still read and fill gaps, so nothing recorded earlier is lost. The server's mesh routes and LAN discovery use the same root.
+- **A recorded key path from another machine blocked the login everywhere else.** Access records are shared across the mesh but a key path is only true on the machine that wrote it; passed with `IdentitiesOnly`, ssh refused to try any key. A recorded `identity_file` is now used only when the file exists here.
+- Each node now records its own login account on its mesh entity, so peers can reach it without guessing. An account set deliberately by an operator is kept.
+- `mesh --global`/`--project` were silently ignored: `parseLayerFlag`'s result object was used as the layer.
+- `mesh doctor` allowed 4 s per probe; cloud peers routinely need longer and were reported as down. Now 15 s.
+
 - **Every CLI command that read the vault hung forever on Linux.** The vault cache watches its directory with `fs.watch({ recursive: true })` and calls `unref()` so a CLI process can exit. On Linux, Node emulates recursive watching with one inotify watcher per subdirectory, and `unref()` on the returned wrapper does not reach them — a project brain here held 114 live watchers. `recall` printed its results in about a second and then never exited, so every caller with a timeout reported a failure. On Linux each directory now gets its own non-recursive, unref'd watcher, and directories created later are picked up as they appear; macOS and Windows keep the native watcher. `recall` went from never exiting to exiting 0 in ~3 s. A regression test loads a nested vault in a child process and requires it to exit.
 
 ## [3.28.2] — 2026-09-25

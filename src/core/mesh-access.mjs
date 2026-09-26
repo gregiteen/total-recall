@@ -183,7 +183,7 @@ export function meshSshFromVariant(variant) {
  * anywhere, while a LAN address is only correct when both ends happen to sit on
  * the same network.
  */
-export function resolveNodeAccess(node, { fallbackUser = null } = {}) {
+export function resolveNodeAccess(node, { fallbackUser = null, fileExists = fs.existsSync } = {}) {
   const access = node?.access || {};
   const host = access.ssh_host || node?.ip || node?.lan_ip || node?.hostname || null;
   const user = access.ssh_user || fallbackUser || null;
@@ -192,7 +192,7 @@ export function resolveNodeAccess(node, { fallbackUser = null } = {}) {
     user,
     host,
     port: access.ssh_port || DEFAULT_SSH_PORT,
-    identity_file: access.identity_file || null,
+    identity_file: localIdentityFile(access.identity_file, fileExists),
     mesh_ssh: access.mesh_ssh || 'unknown',
     tailscale_variant: access.tailscale_variant || TAILSCALE_VARIANTS.UNKNOWN,
     source: access.source || 'unknown',
@@ -202,6 +202,21 @@ export function resolveNodeAccess(node, { fallbackUser = null } = {}) {
     complete: Boolean(user && host),
     target: user && host ? `${user}@${host}` : null,
   };
+}
+
+/**
+ * A recorded key path, but only when this machine actually has that file.
+ *
+ * Access records are shared across the mesh, while a key path is only true on
+ * the machine that wrote it. Passing another machine's path with
+ * IdentitiesOnly makes ssh refuse to try any key at all, so a record that
+ * works from one node would block the same login from every other one.
+ * Without it, ssh falls back to this machine's own keys and agent.
+ */
+export function localIdentityFile(identityFile, fileExists = fs.existsSync) {
+  if (!identityFile) return null;
+  const expanded = String(identityFile).replace(/^~(?=$|\/)/, os.homedir());
+  return fileExists(expanded) ? expanded : null;
 }
 
 /** Human-readable `user@host[:port]`, or a clear marker of what is missing. */
