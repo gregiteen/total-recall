@@ -77,14 +77,14 @@ Goal: Every plugin ships a repo-adapted skill, a generated CLI, and design-token
 
 Goal: Install a capability into a target app without making Total Recall its runtime/data owner.
 
-- [x] Define and validate app-local `app_capability_installation` and access-grant SSSS extension types; record status/source pin/grants, no secret values (M)
-- [x] `src/core/app-deploy/apply.mjs` + spec: staged file writes, preflight, verified SSSS actor, append-only install events, repair status after failure (L)
-- [x] `src/core/app-deploy/upgrade.mjs` + spec: structural-only migration, preserved tenant-private data, reapply and interrupted-upgrade tests (L)
-- [x] `src/core/app-deploy/standalone.mjs` + spec: `ssss new` in empty staging directory, project Total Recall init, runnable app shell, gates, publish (L)
-- [x] `src/cli/app/` add/create/upgrade/verify commands; `--json` and dry-run cover each mutating operation (M)
-- [x] `src/core/app-deploy/verify.mjs` + spec: hashes, SSSS lock/conformance, app feature tests, projection drift/rebuild (M)
-- [x] Denied data read/write, undeclared secret/provider, and malicious path tests prove access boundaries (M)
-- [x] Clean-room test: standalone app starts and exports its vault with Total Recall stopped; existing app preserves unrelated code/data after add/reapply (L)
+- [ ] Register and validate app-local `app_capability_installation` and access-grant SSSS extension types; record status/source pin/grants, no secret values. The current schemas are local Zod definitions, not an app registry contract (M)
+- [ ] Complete `src/core/app-deploy/apply.mjs`: retain staged source writes, but submit records, grants, and events through the target app's verified SSSS Operation Contract. The current implementation writes those files directly and accepts a caller-supplied actor string (L)
+- [ ] Verify `upgrade.mjs` against structural-only SSSS migrations, preserved tenant-private data, reapply, and interrupted upgrades through the operation path (L)
+- [ ] Replace the `standalone.mjs` prototype with `ssss new` in an empty staging directory, project Total Recall init, a real independent runtime, gates, and atomic publication. It currently creates placeholder `index.mjs`/`check.mjs` files and directories (L)
+- [ ] Verify `src/cli/app/` add/create/upgrade/verify `--json` and dry-run against the completed operation path; current commands wrap the prototype (M)
+- [ ] Extend `verify.mjs` beyond file hashes and local record parsing to SSSS registry lock/conformance, app feature tests, and projection drift/rebuild (M)
+- [ ] Prove denied data read/write, undeclared secret/provider, and malicious path enforcement by the target app's authorizer and adapter (M)
+- [ ] Run a clean-room test: standalone app starts, performs SSSS writes and exports its vault with Total Recall stopped; existing app preserves unrelated code/data after add/reapply (L)
 
 ## ⏳ Phase 4: First reusable capability repositories
 
@@ -154,3 +154,4 @@ The composer may optionally use a private mesh executor, but no paid hosted mult
 - 2026-09-25: User decision: every plugin has its own repository, including skill plugins and the plugins bundled today.
 - 2026-09-25: Reworked Phase 2B to reuse Total Recall's composable CLI instead of new modules: plugin `cli` routing + project custom commands (`total-recall command`, dispatched at `bin/total-recall.mjs:179`) for generated commands, and `skills-registry.mjs` (`deploySkill`, `skillStatus` hash drift, `adaptSkillDescription`) for two-layer skills. Dropped the planned `cli-gen.mjs` and `skill-render.mjs`.
 - 2026-09-26: Released in 3.30.0: capability manifest contract, plugin loader validation, `plugin create --from-skill`, `scaffold`/`scaffold-plugin`, `app` resolve/plan/apply/verify/upgrade/standalone, design tokens, and `command --global`. Mac Mini: full code-quality tier and all 349 vitest files passed. Still open in Phase 2: shared adapter contract fixtures.
+- 2026-09-26: Source audit reopened Phase 3. `apply.mjs` writes installation/grant Markdown and JSONL events with `fs.writeFileSync`/`appendFileSync` instead of the target app's SSSS Operation Contract; `standalone.mjs` does not invoke `ssss new`, and its generated `check.mjs` only checks that a vault directory exists. `verify.mjs` checks hashes and local record syntax but not conformance or projection rebuild. The existing specs prove a prototype, not the Phase 3 acceptance criteria, so the Phase 3 boxes above remain open.
