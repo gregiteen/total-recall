@@ -23,6 +23,15 @@ export default defineConfig({
     // because nobody can tell a real regression from noise.
     fileParallelism: false,
     exclude: ['**/node_modules/**', '**/.agent/**', '**/.agents/**', '**/.claude/**', '**/.cursor/**'],
+    // The secrets store falls back to the host's Keychain entry and
+    // ~/.agent/tr.env when TR_SECRETS_PASSWORD is unset. Specs that clear the
+    // variable to test the no-password path must not find the machine's real
+    // password, so both fallbacks are off for the suite; the specs that cover
+    // them inject their own readers or TR_ENV_FILE.
+    env: {
+      TR_SECRETS_NO_KEYCHAIN: '1',
+      TR_ENV_FILE: '/nonexistent/total-recall-test/tr.env',
+    },
     setupFiles: ['./frontend/src/setupTests.ts'],
     coverage: {
       provider: 'v8',
