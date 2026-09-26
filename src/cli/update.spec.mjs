@@ -9,7 +9,18 @@ describe('update CLI', () => {
       dryRun: false,
       help: false,
       repos: [],
+      installAutopull: false,
+      port: null,
+      noBuild: false,
     });
+  });
+
+  it('parseArgs --install-autopull with port and no-build', () => {
+    const o = parseArgs(['--install-autopull', '--port', '3900', '--no-build', '--dry-run']);
+    expect(o.installAutopull).toBe(true);
+    expect(o.port).toBe(3900);
+    expect(o.noBuild).toBe(true);
+    expect(o.dryRun).toBe(true);
   });
 
   it('parseArgs apply/force/repo/help', () => {
