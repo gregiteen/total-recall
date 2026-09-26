@@ -83,7 +83,7 @@ export function readSshConfig(configPath = path.join(os.homedir(), '.ssh', 'conf
   }
 }
 
-/** Loose host comparison: `mac-mini`, `Mac_Mini` and `macmini` name one machine. */
+/** Loose host comparison: `build-box`, `Build_Box` and `buildbox` name one machine. */
 function hostKey(value) {
   if (value == null) return '';
   return String(value).toLowerCase().replace(/\.$/, '').replace(/[^a-z0-9]/g, '');

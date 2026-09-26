@@ -293,7 +293,7 @@ The Meta-Harness treats external AI CLI tools and local neural models as pluggab
 | `ollama` | Ollama Local LLM | `pipe_stdin` | Zero-token-cost local neural inference |
 
 - **Multi-Harness Council (`total-recall harness council "<task>"`)**: Runs concurrent deliberative queries across all available local harnesses, compiling multiple perspectives into a structured comparative report.
-- **Cross-Node Harness Dispatch (`total-recall harness dispatch <id> --node <node> "<task>"`)**: Dispatches tasks to a specific harness located on another mesh node (e.g. running `ollama` models on a dedicated local machine like `macmini`).
+- **Cross-Node Harness Dispatch (`total-recall harness dispatch <id> --node <node> "<task>"`)**: Dispatches tasks to a specific harness located on another mesh node (e.g. running `ollama` models on a dedicated local machine like `build-box`).
 
 ### 3. Agent Process Management (`src/core/agent-manager.mjs`)
 

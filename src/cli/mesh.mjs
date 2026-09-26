@@ -83,8 +83,8 @@ function printHelp() {
   Examples:
     npx total-recall mesh nodes
     npx total-recall mesh access import
-    npx total-recall mesh ssh worker-node
-    npx total-recall mesh ssh worker-node 'uptime'
+    npx total-recall mesh ssh build-box
+    npx total-recall mesh ssh build-box 'uptime'
     npx total-recall mesh policy init-ssh
 `);
 }
@@ -377,7 +377,7 @@ export default async function meshCli(argv = []) {
     if (command === 'exec') {
       const target = args.shift();
       if (!target || !args.length) {
-        fail('`exec` requires a node name and a command.', 'Example: total-recall mesh exec worker-node uptime');
+        fail('`exec` requires a node name and a command.', 'Example: total-recall mesh exec build-box uptime');
         return;
       }
       const jsonMode = args.includes('--json');

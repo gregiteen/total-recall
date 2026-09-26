@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * One-off migration for RESEARCH_SYSTEM2 (docs/projects/in-progress/RESEARCH_SYSTEM2).
+ * One-off migration for RESEARCH_SYSTEM2 (docs/projects/completed/RESEARCH_SYSTEM2).
  *
  * Retires the state the removed self-spawning research left behind:
  *   1. Queue items parked in the removed `expansion` / `monitoring` phases →
