@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.30.0] — 2026-09-26
+
+### ✨ Features
+- **Capability plugins and the `app` planner (CAPABILITY_DEPLOYMENT_PLUGINS Phase 2/2B).** Plugins declare a pinned capability manifest (`deploy`, `skills`, `commands`, `ui`) in `metadata.plugin.schema.json`, validated by `schema.mjs` and the plugin loader. `plugin create --from-skill <path>` packages an existing skill as a plugin, and `scaffold` / `scaffold-plugin` generate one with a CLI handler and skill definition. `total-recall app` resolves capabilities, plans them as a dependency DAG, then applies, verifies, upgrades or runs them standalone. `DESIGN.md` tokens become CSS variables.
+- **Global custom commands.** `command create|read|update|remove|list --global` manages commands in the global brain, and the CLI runs a global custom command when no project command matches.
+
+### 🐛 Bug Fixes
+- **Global rules reached no repository.** A project's `INSTRUCTIONS.md` / `CLAUDE.md` / `AGENTS.md` were built from its own vault alone, and `compile --global` rebuilt only the global brain, so a rule saved with `remember --global` appeared nowhere. Project surfaces now carry the global invariants, preferences and corrections plus the project's own (a project node with the same slug overrides the global one). `compile --global`, which `remember --global` runs, and `compile --all` recompile every registered project. Repo-scoped rules are matched against the project being compiled, not the caller's working directory.
+- **A reused mesh address inherited another machine's record.** Headscale hands a freed address to the next node that enrolls, and the entity lookup fell back to matching by address, so a new node could show a previous machine's login and `mesh access` could write into its document. The address fallback now skips entities whose hostname names a different live peer.
+
+### 🧹 Chores
+- Shipped tool descriptions, CLI help and docs use generic examples (`build-box`, `admin`, `100.64.0.10`) instead of a personal login, machine name and mesh address. Grep gates TR-OSS-002 and TR-SHIP-004 keep them out.
+- Skill links under `.agents/` and `.claude/` are relative instead of absolute paths to one machine.
+- RESEARCH_SYSTEM2 moved to completed projects.
+
 ## [3.29.1] — 2026-09-26
 
 ### 🐛 Bug Fixes
