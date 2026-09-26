@@ -14,6 +14,7 @@ import {
   unregisterSkill,
   adaptSkillDescription,
   hashSkillContent,
+  hashSkillLayer,
   readSkillMeta,
   syncSkillTwoWay,
   syncAllSkillsTwoWay,
@@ -210,6 +211,63 @@ describe('skills-registry', () => {
     expect(st.registered).toBe(true);
     expect(st.install_count).toBe(1);
     expect(st.any_drift).toBe(true);
+  });
+
+  it('adopts two different repo skills, then upgrades only the plugin-owned core', () => {
+    const catalog = path.join(workspace, 'catalog');
+    const source = writeSkill(catalog, 'quality');
+    fs.mkdirSync(path.join(source, 'core'));
+    fs.writeFileSync(path.join(source, 'core', 'check.mjs'), 'export const version = 1;\n');
+    registerSkill(brain, source);
+
+    const repos = ['node-app', 'python-app'].map((name) => {
+      const repo = path.join(workspace, name);
+      const local = writeSkill(path.join(repo, '.agent', 'skills'), 'quality');
+      fs.writeFileSync(path.join(local, 'config.json'), JSON.stringify({ gates: [name] }));
+      fs.writeFileSync(path.join(local, 'SKILL.md'), `---\nname: quality\nrepo_scoped: true\n---\n${name} gates\n`);
+      deploySkill(brain, 'quality', { repo });
+      return { repo, local, skill: fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8'),
+        config: fs.readFileSync(path.join(local, 'config.json'), 'utf8') };
+    });
+
+    expect(skillStatus(brain, 'quality').any_drift).toBe(false);
+    expect(new Set(repos.map(({ local }) => hashSkillLayer(local, 'repo'))).size).toBe(2);
+    fs.writeFileSync(path.join(source, 'core', 'check.mjs'), 'export const version = 2;\n');
+    registerSkill(brain, source);
+    const before = skillStatus(brain, 'quality');
+    expect(before.any_drift).toBe(true);
+    const sync = syncSkillTwoWay(brain, 'quality', { prefer: 'install' });
+    expect(sync.actions).toHaveLength(2);
+    for (const { local, skill, config } of repos) {
+      expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toBe(skill);
+      expect(fs.readFileSync(path.join(local, 'config.json'), 'utf8')).toBe(config);
+      expect(fs.readFileSync(path.join(local, 'core', 'check.mjs'), 'utf8')).toContain('version = 2');
+    }
+    expect(skillStatus(brain, 'quality').any_drift).toBe(false);
+    expect(loadRegistry(brain).skills.quality.source_path).toBe(path.resolve(source));
+  });
+
+  it('reports repo edits separately and never auto-adopts an unrelated same-name skill', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'layered');
+    fs.mkdirSync(path.join(source, 'core'));
+    fs.writeFileSync(path.join(source, 'core', 'runner.mjs'), 'export default 1;\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'unrelated');
+    const local = writeSkill(path.join(repo, '.agent', 'skills'), 'layered');
+    const original = fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8');
+    const result = syncSkillTwoWay(brain, 'layered');
+    expect(result.actions).toHaveLength(0);
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toBe(original);
+    expect(fs.existsSync(path.join(local, 'core'))).toBe(false);
+    deploySkill(brain, 'layered', { repo });
+    fs.appendFileSync(path.join(local, 'SKILL.md'), '\nRepo-specific instruction.\n');
+    const status = skillStatus(brain, 'layered');
+    expect(status.any_drift).toBe(false);
+    expect(status.installs[0].repo_changed).toBe(true);
+    fs.writeFileSync(path.join(source, 'core', 'runner.mjs'), 'export default 2;\n');
+    deploySkill(brain, 'layered', { repo });
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toContain('Repo-specific instruction.');
+    expect(fs.readFileSync(path.join(local, 'core', 'runner.mjs'), 'utf8')).toContain('default 2');
   });
 
   it('syncLocalSkillsToRegistry registers all SKILL.md folders', () => {
