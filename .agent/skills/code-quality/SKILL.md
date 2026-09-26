@@ -80,6 +80,7 @@ crashpad handler and blocked every start.
 - **`recall` and `compile` hold a vault filesystem watcher open ~60s** after
   results print. Piped output can look empty. Redirect to a file and read it.
 - **`test` is tier `remote`** — the full suite runs only on the Mac Mini, never on a laptop or the droplet (a single spec may run on any mesh node).
+- Reach the Mac Mini through `npx total-recall mesh ssh` using its recorded node access; do not use a hand-written SSH target.
 - One check at a time, machine-wide (`check.mjs` holds a global lock).
 
 ## Reference

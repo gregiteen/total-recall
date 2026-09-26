@@ -157,7 +157,7 @@
       ],
       "parser": "generic",
       "timeoutSeconds": 1800,
-      "remoteHint": "ssh mac-mini 'cd ~/Github/total-recall && export PATH=/opt/homebrew/bin:$PATH && npx vitest run'"
+      "remoteHint": "Use total-recall mesh ssh <test-node> with its recorded access; run the full suite only on the Mac Mini."
     }
   ]
 }
