@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.28.3] — 2026-09-26
+
+### 🐛 Bug Fixes
+- **Every CLI command that read the vault hung forever on Linux.** The vault cache watches its directory with `fs.watch({ recursive: true })` and calls `unref()` so a CLI process can exit. On Linux, Node emulates recursive watching with one inotify watcher per subdirectory, and `unref()` on the returned wrapper does not reach them — a project brain here held 114 live watchers. `recall` printed its results in about a second and then never exited, so every caller with a timeout reported a failure. On Linux each directory now gets its own non-recursive, unref'd watcher, and directories created later are picked up as they appear; macOS and Windows keep the native watcher. `recall` went from never exiting to exiting 0 in ~3 s. A regression test loads a nested vault in a child process and requires it to exit.
+
 ## [3.28.2] — 2026-09-25
 
 ### 🐛 Bug Fixes
