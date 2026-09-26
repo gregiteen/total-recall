@@ -270,6 +270,24 @@ describe('skills-registry', () => {
     expect(fs.readFileSync(path.join(local, 'core', 'runner.mjs'), 'utf8')).toContain('default 2');
   });
 
+  it('does not reinterpret an old install-map row as layered adoption', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'migrating');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'repo-before-layering');
+    deploySkill(brain, 'migrating', { repo });
+    const local = path.join(repo, '.agent', 'skills', 'migrating');
+    fs.appendFileSync(path.join(local, 'SKILL.md'), '\nLocal ownership.\n');
+    fs.mkdirSync(path.join(source, 'core'));
+    fs.writeFileSync(path.join(source, 'core', 'runner.mjs'), 'export default 1;\n');
+    registerSkill(brain, source);
+
+    const result = syncSkillTwoWay(brain, 'migrating', { prefer: 'registry' });
+    expect(result.actions).toHaveLength(0);
+    expect(fs.existsSync(path.join(local, 'core'))).toBe(false);
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toContain('Local ownership.');
+    expect(loadRegistry(brain).installs.find((inst) => inst.repo === repo).layered).not.toBe(true);
+  });
+
   it('syncLocalSkillsToRegistry registers all SKILL.md folders', () => {
     writeSkill(workspace, 'a');
     writeSkill(workspace, 'b');
