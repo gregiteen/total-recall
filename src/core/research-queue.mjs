@@ -5,8 +5,13 @@
  * MCP tools and REST endpoints are thin callers.
  *
  * Storage: .agent/research-queue.jsonl (one JSON object per line)
- * Each item: { id, topic, status, priority, notes, node_slug, research_phase, created_at, updated_at, completed_at, summary }
+ * Each item: { id, topic, status, priority, notes, node_slug, research_phase, created_at, updated_at, completed_at, summary,
+ *              origin, requested_via, project, rationale, session_id, attempts }
  * Status values: 'pending' | 'in_progress' | 'done' | 'failed'
+ * Phases: 'acquisition' → 'deliberation' → 'improvement' → done (scheduler.mjs RESEARCH_PHASES)
+ * Provenance: origin 'user' (a human asked) | 'autonomous' (the project gate approved a
+ *   knowledge gap; see research-gate.mjs) | 'legacy' (queued before provenance existed;
+ *   set only by scripts/migrate-research-system2.mjs — never pinned into instructions).
  */
 
 import fs from 'node:fs';
@@ -339,19 +344,46 @@ export function listQueue({ status, query, limit = 100, offset = 0, brainDir: ov
   return { counts, total: items.length, items: items.slice(off, off + lim) };
 }
 
+export const RESEARCH_ORIGINS = Object.freeze(['user', 'autonomous']);
+export const RESEARCH_VIAS = Object.freeze(['chat', 'extension', 'dashboard', 'cli', 'api', 'share', 'session', 'secret']);
+
+export function normalizeTopic(topic) {
+  return String(topic || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 /**
  * Add a new research topic (status: pending).
  *
- * @param {{ topic: string, priority?: string, notes?: string }} opts
- * @returns {object} The created item
+ * Prefer research-gate.mjs (`requestResearch` / `proposeAutonomousResearch`),
+ * which applies provenance and the autonomous budgets; this is the raw store.
+ *
+ * @param {{ topic: string, priority?: string, notes?: string, origin?: 'user'|'autonomous',
+ *           requested_via?: string, project?: string|null, rationale?: string|null,
+ *           session_id?: string|null, brainDir?: string }} opts
+ * @returns {object} The created item (or the existing one for a duplicate topic)
  */
-export function addToQueue({ topic, priority = 'medium', notes, brainDir: overrideBrainDir } = {}) {
+export function addToQueue({
+  topic, priority = 'medium', notes, brainDir: overrideBrainDir,
+  origin = 'user', requested_via = 'api', project = null, rationale = null, session_id = null,
+} = {}) {
   if (!topic) throw new Error('topic is required');
+  if (!RESEARCH_ORIGINS.includes(origin)) throw new Error(`invalid research origin: ${origin}`);
 
   const items = loadQueue(overrideBrainDir);
-  const normalizedTopic = String(topic).trim().toLowerCase();
-  const existing = items.find(i => i.topic.trim().toLowerCase() === normalizedTopic);
-  if (existing) {
+  const normalizedTopic = normalizeTopic(topic);
+  const existingIdx = items.findIndex(i => normalizeTopic(i.topic) === normalizedTopic);
+  if (existingIdx !== -1) {
+    const existing = items[existingIdx];
+    // A human asking for something the AI queued on its own makes it theirs:
+    // it then runs ahead of autonomous work.
+    if (origin === 'user' && existing.origin !== 'user' && existing.status !== 'done') {
+      items[existingIdx] = {
+        ...existing, origin: 'user', requested_via, priority: priority || existing.priority,
+        updated_at: new Date().toISOString(),
+      };
+      saveQueue(items, overrideBrainDir);
+      return items[existingIdx];
+    }
     return existing;
   }
 
@@ -366,6 +398,12 @@ export function addToQueue({ topic, priority = 'medium', notes, brainDir: overri
     created_at:   new Date().toISOString(),
     updated_at:   new Date().toISOString(),
     completed_at: null,
+    origin,
+    requested_via: requested_via || null,
+    project:      project || null,
+    rationale:    rationale || null,
+    session_id:   session_id || null,
+    attempts:     0,
   };
   item.summary = compileResearchProjectSummary(item, null);
   items.unshift(item);
@@ -400,6 +438,8 @@ export function updateQueueItem(id, patch = {}, overrideBrainDir) {
   if (patch.node_slug !== undefined) item.node_slug = patch.node_slug;
   if (patch.priority  !== undefined) item.priority  = patch.priority;
   if (patch.research_phase !== undefined) item.research_phase = patch.research_phase;
+  if (patch.attempts !== undefined) item.attempts = Number(patch.attempts) || 0;
+  if (patch.completed_at !== undefined) item.completed_at = patch.completed_at;
   
   item.updated_at = new Date().toISOString();
   if ((item.status === 'done' || item.status === 'failed') && !item.completed_at) {

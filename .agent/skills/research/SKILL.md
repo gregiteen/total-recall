@@ -13,9 +13,39 @@ This skill governs the execution, queueing, status management, and dynamic searc
 
 ---
 
+## 🧭 RESEARCH AS SYSTEM 2 (read this first)
+
+Background research is the brain's slow, deliberate thinking. It runs for exactly two reasons:
+
+1. **A human asked.** They can ask in chat (the model's `queue_research` tool), from the browser extension (Research on a page or selection, or the Research tab), from the dashboard, from the CLI (`total-recall research add "<topic>"`, `total-recall share`), or from any API client (`POST /api/research`). No budget applies, and it runs ahead of autonomous work.
+2. **The AI found a knowledge gap while working on a project.** After a session with a known project (the session's `cwd`), `ingestSessionTopics` infers gaps that would measurably improve the agent's work *on that project*. Typical gaps: post-cutoff APIs or libraries the project uses, errors it couldn't explain, places it guessed. `research-gate.mjs` admits them only within budget, and only when existing research doesn't already cover them.
+
+   Default budgets, overridable under `autonomous:` in `config/research.yml`:
+   - 3 pending per project
+   - 6 per day
+   - 2 per session
+   - skip if an existing report already has cosine similarity ≥ 0.72
+
+**Research never spawns research.** Removed on 2026-09-22 (RESEARCH_SYSTEM2):
+- the expansion phase
+- agenda follow-up gaps
+- self-diagnosis topic invention
+- the dream-cycle "Verify still-current" sweep
+- hourly re-monitoring
+- deliberation's self-queued tasks
+
+The pipeline is **acquisition → deliberation → improvement → done**. Failed items retry at most 3 times.
+
+**Where findings go:**
+- **Instructions.** Finished research for the current project, plus research the user asked for in the last 30 days, appears as a **Background Research (System 2)** section in the compiled instructions (`research-surface.mjs`).
+- **Chat.** Chat automatically adds research relevant to the user's message to the system prompt.
+- **Only real research is surfaced.** Reports whose synthesis is empty or a meta-response are skipped.
+
+Every queue item records provenance: `origin` (`user` | `autonomous`), `requested_via`, `project`, `rationale` and `session_id`.
+
 ## 🎯 SYSTEM OVERVIEW & WORKFLOWS
 
-Total Recall features a highly robust, proactive continuous intelligence system that runs as an autonomous, concurrent background daemon. Under the hood, this engine performs deep context collection, crawls live web pages, cross-verifies facts across multiple independent APIs, and compiles structured Markdown memory nodes with valid SSSS v2 metadata.
+Under the hood, the engine performs deep context collection, crawls live web pages, cross-verifies facts across multiple independent APIs, and compiles structured Markdown memory nodes with valid SSSS v2 metadata.
 
 ```mermaid
 flowchart TD
@@ -42,7 +72,7 @@ flowchart TD
     O -->|>= 0.7 Fast Path| P[Direct Vault Write & Immediate Surface Recompile]
     O -->|< 0.7 Inbox Path| Q[Stage as Draft Node in Inbox for Manual Review]
     
-    P --> R[Enqueue Follow-up Research for Identified Gaps]
+    P --> R[Done: surfaced as a System 2 brief — never re-queued]
 ```
 
 ---
@@ -71,7 +101,7 @@ The Total Recall research engine operates in two modes:
 *   **Parallelization**: Launches parallel multi-source crawlers for each query.
 *   **Drafting**: Writes separate draft batch files inside `~/.agent/memory-inbox/pending/`.
 *   **Synthesis**: Synthesizes the aggregated draft batches using the frontier model (falling back to the local LLM if the frontier is unavailable) to produce a comprehensive final report.
-*   **Continuous Tracking**: Automatically registers the primary topic in the **Research Agenda** for ongoing continuous intelligence.
+*   **Synthesis quality gate**: A synthesis that answers about its prompt (refusals, "prompt injection" warnings) or is too thin is discarded. Only the cited sources are kept, so the report is never surfaced as knowledge.
 
 ### 2. Quick Research (`handleQuickResearch` / `runKnowledgeAcquisitionCycle`)
 *   **Speed**: Runs a fast, single-cycle research task driven by the local LLM.
@@ -152,7 +182,7 @@ Once raw data is gathered, it is processed to ensure accuracy:
     *   *Single Source*: Maximum confidence capped at `0.6`.
     *   *3+ Agreeing Sources*: Promoted up to `0.95` confidence.
 4.  **Contradiction Analysis**: If sources disagree, the engine flags the conflict in a `contradictions` array.
-5.  **Self-Multiplication (Gap Tracking)**: Unresolved questions are placed in a `further_research_needed` array. High-priority gaps are automatically added back to the Research Agenda as new pending topics.
+5.  **Gap Tracking**: Unresolved questions are recorded in a `further_research_needed` array inside the report, for a human to act on. They are **never** queued automatically.
 
 ---
 

@@ -119,6 +119,17 @@ const PASSTHROUGH_FIELDS = [
   'project',
 ];
 
+function stripInternalFields(result) {
+  const clean = {};
+  for (const [key, value] of Object.entries(result)) {
+    if (!key.startsWith('_')) clean[key] = value;
+  }
+  if (clean.type !== 'session' && clean.content === undefined && typeof clean.body === 'string') {
+    clean.content = clean.body;
+  }
+  return clean;
+}
+
 router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
     const vaultDirs = resolveAllVaultsFromQuery(req);
@@ -137,7 +148,7 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
         }
       }
     }
-    const { q, category, tag, tags, status, limit = '200', offset = '0' } = req.query;
+    const { q, category, tag, tags, status, sort, limit = '200', offset = '0' } = req.query;
 
     if (q) {
       const query = String(q).toLowerCase();
@@ -161,6 +172,15 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
           return wanted.every((t) => nodeTags.includes(t));
         });
       }
+    }
+
+    // sort=recent (newest created first) / sort=updated (newest update first), so a
+    // paged client sees the latest nodes instead of vault walk order. `recent` keys
+    // on creation because dream consolidation re-stamps `updated` on old nodes.
+    if (sort === 'recent' || sort === 'updated') {
+      const field = sort === 'recent' ? 'created' : 'updated';
+      const ts = (n) => Date.parse(n[field] || n.created || '') || 0;
+      list.sort((a, b) => ts(b) - ts(a));
     }
 
     const total = list.length;
@@ -456,7 +476,9 @@ router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:rea
     }
 
     merged.sort((a, b) => (b.score || 0) - (a.score || 0));
-    const results = merged.slice(0, k);
+    // Never expose absolute vault paths (_filePath, _brainVault, …) over the API;
+    // mirror sanitizeNode's `content` so clients read one field for the text.
+    const results = merged.slice(0, k).map(stripInternalFields);
 
     if (!anyIndex || results.length === 0) {
       return res.status(503).json({

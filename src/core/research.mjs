@@ -87,8 +87,14 @@ export async function handleProactiveResearch(task, context = {}) {
   logger.info({ subsystem: 'deep-research', message: 'Phase 4: Synthesizing research results...' });
   const finalReport = await synthesizeLocally(task, flatResults, context.runtimeConfig);
 
-  // Save the beautiful synthesized executive summary at the top of our main consolidated document
-  if (finalReport) {
+  // Save the synthesis at the top of the consolidated document — but only if it is
+  // research. A synthesizer that answered about its prompt would otherwise become
+  // the report's "findings" and later be surfaced into the agent's instructions.
+  const { isUsableSynthesis } = await import('./research-surface.mjs');
+  const usableReport = finalReport && isUsableSynthesis(finalReport) ? finalReport : null;
+  if (finalReport && !usableReport) {
+    logger.info({ subsystem: 'deep-research', message: `Discarded unusable synthesis for "${task.target}" (meta-response or too thin); keeping sources only.` });
+  } else if (finalReport) {
     draftSlug = saveSynthesizedReportToDraft(task.target, finalReport, inboxDir) || draftSlug;
   }
 
@@ -103,21 +109,12 @@ export async function handleProactiveResearch(task, context = {}) {
     );
   }
 
-  // Phase 5: Also add topic to the Research Agenda for ongoing tracking
-  addToAgenda({
-    topic: task.target,
-    priority: 75,
-    source: 'deep-research-task',
-    rationale: task.body || '',
-    tags: ['deep-research'],
-  });
-
   // Always return structured result so executors can advance the research queue with a real node slug
   if (!draftSlug) {
     draftSlug = `research-report-${slugify(task.target)}`;
   }
   return {
-    report: finalReport || null,
+    report: usableReport,
     factSlug: draftSlug,
     sources: flatResults.length,
     queries,
@@ -589,34 +586,30 @@ export async function promoteDraftToVault(parentTopic, inboxDir, vaultDir) {
 
 async function synthesizeLocally(task, results, runtimeConfig) {
   const today = getLocalizedDateTime();
-  const cutoff = runtimeConfig?.training_cutoff || 'January 2025';
 
+  // Plain, honest task text. callLocalRuntime hands `system` to CLI agents as part
+  // of the *user* turn, so fake <system_instructions> tags, a persona and a
+  // mandatory scratchpad read as a prompt injection — and in the live vault 88 of
+  // 93 reports were the agent refusing or questioning the prompt instead of
+  // researching. Sources carry their URLs so citations are possible.
   const sourceSummary = results
-    .map(r => `[${r.source}] ${r.title}: ${r.snippet?.slice(0, 300)}`)
+    .map((r, i) => `${i + 1}. ${r.title || 'Untitled'}${r.url ? ` <${r.url}>` : ''} (${r.source})\n   ${String(r.snippet || '').slice(0, 300).replace(/\s+/g, ' ')}`)
     .join('\n');
 
-  const system = `<system_instructions>
-You are a Deep Research Synthesizer.
-- Synthesize research results into a concise report.
-- Cite sources inline [Source: URL].
-- Prioritize fresh, timely information published after the cutoff.
-- ALWAYS use a <scratchpad> block first to outline your synthesis and evaluate source reliability before writing the final report.
-</system_instructions>
+  const system = `This request comes from Total Recall, the user's own background research daemon, and the search results below were fetched by it for the topic. Today is ${today}.`;
 
-<context>
-Today's date and time is ${today}.
-The model's training data cutoff is ${cutoff}.
-</context>`;
+  const prompt = `Summarize what these search results establish about: "${task.target}"
 
-  const prompt = `<user_goal>
-Topic: "${task.target}"
-</user_goal>
+Write Markdown with exactly these sections:
+## Key findings
+3–7 bullets. Each is a concrete, specific fact (versions, limits, dates, API names, required steps) supported by the results, ending with its source URL in parentheses.
+## Caveats
+Bullets on what the results leave uncertain or contradict. Omit the section if there is nothing to say.
 
-<retrieved_docs>
-${sourceSummary.slice(0, 6000)}
-</retrieved_docs>
+Use only what the results support; if they are too thin to support a finding, say so in one line under Key findings instead of guessing.
 
-Please synthesize the research results.`;
+Search results:
+${sourceSummary.slice(0, 6000)}`;
 
   try {
     let report = await callLocalRuntime(prompt, system, runtimeConfig);

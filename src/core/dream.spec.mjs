@@ -60,9 +60,8 @@ describe('Phase 4 proposal wiring', () => {
   const src = () => fs.readFileSync(path.join(process.cwd(), 'src/core/dream.mjs'), 'utf8');
 
   it('keeps the stale-knowledge ticket generator disabled', () => {
-    // Staleness is handled by refreshStaleKnowledge() feeding the research
-    // queue. The old generator wrote one .md per stale node per cycle — 16,401
-    // unread tickets at its peak. Nothing should turn it back on.
+    // The old generator wrote one .md per stale node per cycle — 16,401 unread
+    // tickets at its peak. Nothing should turn it back on.
     expect(src()).toMatch(/const ENABLE_STALE_KNOWLEDGE_REFRESH = false;/);
     expect(src()).toMatch(/ENABLE_STALE_KNOWLEDGE_REFRESH\s*\?\s*await generateStaleKnowledgeRefreshProposals/);
   });
@@ -73,8 +72,9 @@ describe('Phase 4 proposal wiring', () => {
     expect(src()).toMatch(/await applyAcceptedProposals\(vaultDir/);
   });
 
-  it('hands staleness to the research queue', () => {
-    expect(src()).toMatch(/await refreshStaleKnowledge\(vaultDir\)/);
+  it('never queues research on its own (research is human- or project-driven)', () => {
+    // A per-cycle "Verify still-current" sweep fed the runaway research queue.
+    expect(src()).not.toMatch(/refreshStaleKnowledge|addToQueue|addToAgenda/);
   });
 
   it('gives the gate live vault state so it can verify, not just read its own prose', () => {

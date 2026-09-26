@@ -46,6 +46,17 @@ describe('ResearchAgendaTab', () => {
     expect(screen.getByPlaceholderText('e.g. Bun vs Node.js HTTP clustering performance benchmarks')).toBeInTheDocument();
   });
 
+  it('labels who wanted each research item', () => {
+    const now = new Date().toISOString();
+    const items = [
+      { id: 'u', topic: 'Asked', status: 'pending' as const, priority: 'high' as const, notes: null, created_at: now, updated_at: now, origin: 'user' as const, requested_via: 'chat' },
+      { id: 'a', topic: 'Auto', status: 'pending' as const, priority: 'medium' as const, notes: null, created_at: now, updated_at: now, origin: 'autonomous' as const, project: 'total-recall', rationale: 'agent guessed' },
+    ];
+    render(<ResearchAgendaTab {...defaultProps} researchItems={items} />);
+    expect(screen.getByText('You asked · chat')).toBeInTheDocument();
+    expect(screen.getByText('Background research for total-recall')).toHaveAttribute('title', 'agent guessed');
+  });
+
   it('renders research items', () => {
     const items = [
       {

@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest } from './plugin-loader.mjs';
+import { pathToFileURL } from 'node:url';
+import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest, resolveProjectRoot } from './plugin-loader.mjs';
 
 export { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest };
 
@@ -10,16 +11,7 @@ export { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, v
  * Supports plugin-directed compilation via custom generators or standard SSSS category aggregation.
  */
 export async function assemblePluginContexts({ projectRoot = process.cwd(), vaultDir, nodes = [], derivedDir } = {}) {
-  let resolvedProjectRoot = projectRoot;
-  if (vaultDir && (!resolvedProjectRoot || resolvedProjectRoot === process.cwd())) {
-    try {
-      const parent = path.resolve(vaultDir, '..', '..', '..');
-      if (fs.existsSync(path.join(parent, '.agent'))) {
-        resolvedProjectRoot = parent;
-      }
-    } catch {}
-  }
-
+  const resolvedProjectRoot = resolveProjectRoot(projectRoot, vaultDir);
   const plugins = discoverPlugins(resolvedProjectRoot);
   if (plugins.length === 0) return '';
 
@@ -32,14 +24,17 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
     // 1. Check if plugin directs compilation via a custom generator
     if (manifest.compile?.generator) {
       const generatorRel = manifest.compile.generator;
-      const generatorPath = path.isAbsolute(generatorRel)
+      let generatorPath = path.isAbsolute(generatorRel)
         ? generatorRel
         : path.resolve(dir, generatorRel);
 
       if (!fs.existsSync(generatorPath)) generatorPath = path.resolve(resolvedProjectRoot, generatorRel);
       if (fs.existsSync(generatorPath)) {
         try {
-          const mod = await import(generatorPath);
+          // Keyed by mtime so an edited generator is picked up without a restart.
+          const url = pathToFileURL(generatorPath);
+          url.searchParams.set('mtime', String(fs.statSync(generatorPath).mtimeMs));
+          const mod = await import(url.href);
           const fn = mod.generateContext || mod.default;
           if (typeof fn === 'function') {
             const generated = await fn({

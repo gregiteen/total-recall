@@ -102,6 +102,7 @@ export function createSessionEntry({
   content,
   role = 'assistant',
   source = 'unknown',
+  cwd = null,
 }) {
   return {
     id: id || crypto.randomBytes(4).toString('hex'),
@@ -111,6 +112,9 @@ export function createSessionEntry({
     content: content || '',
     role,
     source,
+    // Working directory of the agent, when the tool records it. It is how a
+    // session is attributed to a project for project-scoped research.
+    ...(cwd ? { cwd } : {}),
   };
 }
 
@@ -229,6 +233,7 @@ export function parseClaudeCode(filePath) {
         content: content.slice(0, 5000), // cap individual entries
         role,
         source: 'claude-code',
+        cwd: typeof parsed.cwd === 'string' ? parsed.cwd : null,
       }),
     );
   }
@@ -282,6 +287,7 @@ export function parseCodex(filePath) {
         content: content.slice(0, 5000),
         role,
         source: 'codex',
+        cwd: typeof (parsed.cwd || parsed.payload?.cwd) === 'string' ? (parsed.cwd || parsed.payload.cwd) : null,
       }),
     );
     prevId = id;

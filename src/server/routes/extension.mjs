@@ -34,14 +34,15 @@ router.get('/api/extension/download', requireAuth, requireScope('config:read'), 
     res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.zip"');
 
     // Use zip if available, fall back to tar
-    const zip = spawn('zip', ['-r', '-', '.'], { cwd: extDir, stdio: ['ignore', 'pipe', 'ignore'] });
+    // Unit specs live beside the extension sources but are not part of the product.
+    const zip = spawn('zip', ['-r', '-', '.', '-x', '*.spec.mjs'], { cwd: extDir, stdio: ['ignore', 'pipe', 'ignore'] });
     zip.stdout.pipe(res);
     zip.on('error', () => {
       // zip not available — try tar
       if (!res.headersSent) {
         res.setHeader('Content-Type', 'application/gzip');
         res.setHeader('Content-Disposition', 'attachment; filename="total-recall-extension.tar.gz"');
-        const tar = spawn('tar', ['czf', '-', '-C', path.dirname(extDir), 'extension'], { stdio: ['ignore', 'pipe', 'ignore'] });
+        const tar = spawn('tar', ['czf', '-', '--exclude=*.spec.mjs', '-C', path.dirname(extDir), 'extension'], { stdio: ['ignore', 'pipe', 'ignore'] });
         tar.stdout.pipe(res);
         tar.on('error', err => { if (!res.headersSent) serverError(res, err); });
         tar.on('close', () => { if (!res.writableEnded) res.end(); });

@@ -1,1106 +1,952 @@
-// Total Recall — Side Panel Logic
+// Total Recall — side panel
 
 (function () {
   'use strict';
 
-  // ---- DOM refs ----
-  const dot = document.getElementById('connection-dot');
-  const activeBrainBadge = document.getElementById('active-brain-badge');
-  const searchInput = document.getElementById('search-input');
-  const memoriesList = document.getElementById('memories-list');
-  const btnRemember = document.getElementById('btn-remember');
-  const btnResearch = document.getElementById('btn-research');
-  const btnNote = document.getElementById('btn-note');
-  const noteArea = document.getElementById('note-area');
-  const noteInput = document.getElementById('note-input');
-  const btnSaveNote = document.getElementById('btn-save-note');
-  const btnCancelNote = document.getElementById('btn-cancel-note');
-  const researchList = document.getElementById('research-list');
-  const btnRefreshResearch = document.getElementById('btn-refresh-research');
+  const Brain = self.BrainClient;
+  const UI = self.TRUi;
+  const $ = (id) => document.getElementById(id);
 
-  // Chat tab DOM refs
-  const chatMessages = document.getElementById('chat-messages');
-  const chatInput = document.getElementById('chat-input');
-  const btnSendChat = document.getElementById('btn-send-chat');
-  const chatGroundingToggle = document.getElementById('chat-grounding-toggle');
-  const btnSuggestSummarize = document.getElementById('btn-suggest-summarize');
-  const btnSuggestRelated = document.getElementById('btn-suggest-related');
+  const TABS = ['recall', 'chat', 'research'];
+  const CHAT_HISTORY_LIMIT = 40;
+  const CHAT_CONTEXT_TURNS = 12;
+  const PAGE_TEXT_FOR_CHAT = 6000;
 
-  // Settings tab DOM refs
-  const settingsBrainSelector = document.getElementById('settings-brain-selector');
-  const settingsTrackingToggle = document.getElementById('settings-tracking-toggle');
-  const btnBlockDomain = document.getElementById('btn-block-domain');
-  const btnRecompileBrain = document.getElementById('btn-recompile-brain');
+  const state = {
+    tab: 'recall',
+    page: null,            // chrome.tabs.Tab for the active tab
+    activeBrainId: 'global',
+    brains: [],
+    connection: 'checking',
+    chat: [],
+    chatBusy: false,
+    research: { items: [], counts: {} },
+    settings: { pageRecall: false, showPill: true, blocklist: [] },
+    health: null,
+  };
 
-  // State variables
-  let chatHistory = [];
-  let activeBrainId = 'global';
+  // ---------------------------------------------------------------------------
+  // Small utilities
+  // ---------------------------------------------------------------------------
 
-  // ---- Tab Switching ----
-  const tabButtons = document.querySelectorAll('.tab-btn');
-  const tabPanels = document.querySelectorAll('.tab-panel');
+  function svg(name, cls = 'icon sm') {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    el.setAttribute('class', cls);
+    el.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#i-${name}`);
+    el.appendChild(use);
+    return el;
+  }
 
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetTab = btn.getAttribute('data-tab');
-      
-      // Update active states in buttons
-      tabButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
 
-      // Update active panel
-      tabPanels.forEach(panel => {
-        if (panel.id === `tab-${targetTab}`) {
-          panel.classList.add('active');
-        } else {
-          panel.classList.remove('active');
-        }
-      });
+  function setBusy(button, busy) {
+    button.disabled = busy;
+    button.classList.toggle('is-busy', busy);
+  }
 
-      // On-demand panel loading triggers
-      if (targetTab === 'memories') {
-        if (!searchInput.value.trim()) {
-          loadRecentCaptures();
-        }
-      } else if (targetTab === 'research') {
-        fetchResearch();
-      } else if (targetTab === 'settings') {
-        fetchBrains();
-      }
-    });
-  });
+  let toastTimer = null;
+  function toast(message, isError = false) {
+    const t = $('toast');
+    t.textContent = message;
+    t.classList.toggle('error', isError);
+    t.hidden = false;
+    t.style.animation = 'none';
+    void t.offsetWidth;
+    t.style.animation = '';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, isError ? 4200 : 2600);
+  }
 
-  // ---- Connection check ----
-  async function checkConnection() {
+  function describeError(err) {
+    return (err && err.message) || 'Something went wrong.';
+  }
+
+  function isAuthOrOffline(err) {
+    return err && ['offline', 'unauthorized', 'unconfigured', 'timeout'].includes(err.code);
+  }
+
+  async function openMemory(slug) {
+    const url = await Brain.dashboardUrl(`/memory?slug=${encodeURIComponent(slug)}`);
+    chrome.tabs.create({ url });
+  }
+
+  function skeleton(container, rows = 3) {
+    container.replaceChildren(...Array.from({ length: rows }, () => el('div', 'skeleton skeleton-row')));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Connection
+  // ---------------------------------------------------------------------------
+
+  const GATE_COPY = {
+    offline: ['Brain unreachable', 'Total Recall isn’t answering at the configured address. Make sure it’s running, or change the address in connection settings.'],
+    timeout: ['Brain unreachable', 'The brain took too long to answer. It may be busy; retry in a moment.'],
+    unconfigured: ['Connect your brain', 'Add an access token so the extension can read and write your memories.'],
+    unauthorized: ['Access token rejected', 'The brain didn’t accept the saved token. It may have been revoked or expired; paste a new one in connection settings.'],
+  };
+
+  function setStatusDot(kind, title) {
+    const dot = $('status-dot');
+    dot.className = `status-dot ${kind}`;
+    $('brain-chip').title = title || 'Active brain — change in settings';
+  }
+
+  function showGate(err) {
+    const [title, message] = GATE_COPY[err.code] || GATE_COPY.offline;
+    $('gate-title').textContent = title;
+    $('gate-message').textContent = message;
+    $('gate').hidden = false;
+    $('app').classList.add('is-gated');
+    setStatusDot('down', `${title}. ${err.message || ''}`.trim());
+  }
+
+  function hideGate() {
+    $('gate').hidden = true;
+    $('app').classList.remove('is-gated');
+  }
+
+  async function checkConnection({ quiet = false } = {}) {
+    if (!quiet) setStatusDot('checking');
     try {
-      await self.BrainClient.healthCheck();
-      dot.className = 'dot connected';
-    } catch {
-      dot.className = 'dot disconnected';
+      // /health is public; an authenticated read proves the token works too.
+      const [health] = await Promise.all([Brain.health(), Brain.request('/api/memory?limit=1')]);
+      state.health = health;
+      const wasGated = state.connection !== 'ok';
+      state.connection = 'ok';
+      hideGate();
+      setStatusDot(health && health.daemon && health.daemon !== 'running' ? 'warn' : 'ok',
+        `Connected · brain v${(health && health.version) || '?'}${health && health.daemon !== 'running' ? ' · daemon stopped' : ''}`);
+      renderSheetFooter();
+      return wasGated;
+    } catch (err) {
+      if (isAuthOrOffline(err)) {
+        state.connection = err.code;
+        showGate(err);
+      } else {
+        // Reachable but something narrower failed (e.g. scope); keep the UI usable.
+        state.connection = 'ok';
+        hideGate();
+        setStatusDot('warn', err.message);
+      }
+      return false;
     }
   }
 
-  // ---- Debounced search ----
+  // ---------------------------------------------------------------------------
+  // Tabs
+  // ---------------------------------------------------------------------------
+
+  function switchTab(name, { focus = false } = {}) {
+    if (!TABS.includes(name)) return;
+    state.tab = name;
+    TABS.forEach((t, i) => {
+      const btn = $(`tab-btn-${t}`);
+      const active = t === name;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', String(active));
+      btn.tabIndex = active ? 0 : -1;
+      const pane = $(`tab-${t}`);
+      pane.hidden = !active;
+      pane.classList.toggle('is-active', active);
+      if (active) document.querySelector('.tab-indicator').style.transform = `translateX(${i * 100}%)`;
+    });
+    if (focus) $(`tab-btn-${name}`).focus();
+    if (name === 'research') loadResearch();
+    if (name === 'chat') {
+      scrollChatToEnd();
+      setTimeout(() => $('chat-input').focus(), 50);
+    }
+    chrome.storage.session.set({ lastTab: name }).catch(() => {});
+  }
+
+  document.querySelectorAll('.tab').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('keydown', (e) => {
+      const i = TABS.indexOf(btn.dataset.tab);
+      if (e.key === 'ArrowRight') switchTab(TABS[(i + 1) % TABS.length], { focus: true });
+      if (e.key === 'ArrowLeft') switchTab(TABS[(i + TABS.length - 1) % TABS.length], { focus: true });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Recall: current page
+  // ---------------------------------------------------------------------------
+
+  let pageToken = 0;
+
+  async function refreshPage() {
+    const token = ++pageToken;
+    let tab = null;
+    try {
+      [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    } catch { /* ignore */ }
+    if (token !== pageToken) return;
+    state.page = tab || null;
+    renderPageCard();
+    if (state.connection !== 'ok') return;
+    loadPageSavedState(token);
+    loadRelated(token);
+  }
+
+  function renderPageCard() {
+    const tab = state.page;
+    const capturable = tab && UI.isCapturableUrl(tab.url);
+    $('page-title').textContent = (tab && tab.title) || (tab ? tab.url : 'No active tab');
+    $('page-host').textContent = capturable ? UI.hostnameOf(tab.url) : (tab && tab.url ? tab.url.split(':')[0] + ' page' : '');
+    $('page-saved').hidden = true;
+    $('btn-remember').disabled = !capturable;
+    $('btn-research-page').disabled = !capturable;
+    $('page-disabled').hidden = !!capturable;
+
+    const fav = $('page-favicon');
+    fav.replaceChildren(svg('globe'));
+    if (tab && tab.favIconUrl && /^(https?:|data:image\/)/.test(tab.favIconUrl)) {
+      const img = new Image();
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.onload = () => fav.replaceChildren(img);
+      img.src = tab.favIconUrl;
+    }
+
+    renderBlockButton();
+  }
+
+  async function loadPageSavedState(token) {
+    const tab = state.page;
+    if (!tab || !UI.isCapturableUrl(tab.url)) return;
+    try {
+      const matches = await Brain.findByUrl(tab.url);
+      if (token !== pageToken) return;
+      const newest = matches
+        .map((n) => Date.parse(n.created) || 0)
+        .sort((a, b) => b - a)[0];
+      if (matches.length) {
+        $('page-saved-label').textContent = newest ? `Saved ${UI.timeAgo(newest)}` : 'Saved';
+        $('page-saved').hidden = false;
+      }
+    } catch { /* non-critical */ }
+  }
+
+  async function loadRelated(token) {
+    const tab = state.page;
+    const section = $('related-section');
+    if (!tab || !UI.isCapturableUrl(tab.url) || !tab.title) {
+      section.hidden = true;
+      return;
+    }
+    try {
+      const results = await Brain.search(tab.title, { topK: 10 });
+      if (token !== pageToken) return;
+      const related = UI.filterRelated(results, { excludeUrl: tab.url, limit: 4 });
+      section.hidden = related.length === 0;
+      renderRows($('related-list'), related, { showSimilarity: true });
+    } catch {
+      if (token === pageToken) section.hidden = true;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Recall: rows, search, recent
+  // ---------------------------------------------------------------------------
+
+  function toRow(node) {
+    return {
+      slug: node.slug,
+      title: node.title || node.slug,
+      excerpt: node.excerpt !== undefined ? node.excerpt : UI.clip(UI.stripMarkdown(node.content || node.body || ''), 200),
+      category: node.category,
+      created: node.created,
+      similarity: node.similarity,
+    };
+  }
+
+  function renderRows(container, items, { showSimilarity = false, empty } = {}) {
+    if (!items.length) {
+      container.replaceChildren(empty ? el('div', 'empty', empty) : document.createDocumentFragment());
+      return;
+    }
+    container.replaceChildren(...items.map((item) => {
+      const row = el('button', 'row');
+      row.type = 'button';
+      row.title = 'Open in dashboard';
+      row.append(el('span', 'row-title', item.title));
+      if (item.excerpt) row.append(el('span', 'row-excerpt', item.excerpt));
+      const meta = el('span', 'row-meta');
+      if (item.category) meta.append(el('span', 'cat', String(item.category).replace(/[-_]/g, ' ')));
+      const time = item.created ? UI.timeAgo(item.created) : '';
+      if (time) { meta.append(el('span', 'sep')); meta.append(el('span', '', time)); }
+      if (showSimilarity && typeof item.similarity === 'number') {
+        meta.append(el('span', 'sep'));
+        meta.append(el('span', '', `${Math.round(item.similarity * 100)}% similar`));
+      }
+      row.append(meta);
+      row.addEventListener('click', () => openMemory(item.slug));
+      return row;
+    }));
+  }
+
+  async function loadRecent() {
+    const list = $('recent-list');
+    if (!list.childElementCount) skeleton(list, 3);
+    try {
+      const nodes = await Brain.listRecent(6);
+      renderRows(list, nodes.map(toRow), { empty: 'Nothing here yet. Remember a page or save a note and it shows up here.' });
+    } catch (err) {
+      if (isAuthOrOffline(err)) return checkConnection();
+      list.replaceChildren(el('div', 'error-note', `Couldn’t load recent memories: ${describeError(err)}`));
+    }
+  }
+
   let searchTimer = null;
+  let searchToken = 0;
 
-  function debounceSearch(query) {
+  function onSearchInput() {
+    const query = $('search-input').value.trim();
     clearTimeout(searchTimer);
-    if (!query.trim()) {
-      loadRecentCaptures();
+    if (!query) {
+      searchToken++;
+      $('search-results').hidden = true;
+      $('browse').hidden = false;
       return;
     }
-    searchTimer = setTimeout(() => {
-      performSearch(query.trim());
-    }, 300);
+    $('search-results').hidden = false;
+    $('browse').hidden = true;
+    $('search-heading').textContent = 'Searching…';
+    skeleton($('search-list'), 3);
+    searchTimer = setTimeout(() => runSearch(query), 250);
   }
 
-  async function performSearch(query) {
-    memoriesList.innerHTML = '<div class="memories-empty">Searching…</div>';
+  async function runSearch(query) {
+    const token = ++searchToken;
     try {
-      const response = await new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage({ type: 'QUERY_BRAIN', query, topK: 10, brainId: activeBrainId }, (res) => {
-          if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-          resolve(res);
-        });
-      });
-      renderMemories(response.memories || [], false);
+      const results = await Brain.search(query, { topK: 12 });
+      if (token !== searchToken) return;
+      const rows = results.filter((r) => r.type !== 'session' && r.slug).map(toRow);
+      $('search-heading').textContent = rows.length ? `${rows.length} result${rows.length === 1 ? '' : 's'}` : 'Results';
+      renderRows($('search-list'), rows, { showSimilarity: true, empty: `No memories match “${query}”.` });
     } catch (err) {
-      memoriesList.innerHTML = `<div class="memories-empty">Error: ${err.message}</div>`;
-    }
-  }
-
-  // ---- Recent Captures ----
-  async function loadRecentCaptures() {
-    memoriesList.innerHTML = '<div class="memories-empty">Loading recent captures…</div>';
-    try {
-      let url = '/api/memory';
-      if (activeBrainId && activeBrainId !== 'global') {
-        url = `/api/brains/${activeBrainId}/nodes`;
-      }
-      const response = await self.BrainClient.brainFetch(url);
-      const nodes = Array.isArray(response) ? response : (response.nodes || []);
-      
-      // Sort by creation or update timestamp descending
-      const sorted = nodes.sort((a, b) => new Date(b.created || b.created_at || 0) - new Date(a.created || a.created_at || 0));
-      const recent = sorted.slice(0, 5);
-
-      if (!recent.length) {
-        memoriesList.innerHTML = '<div class="memories-empty">No memories in this brain context yet. Capture pages to see them here!</div>';
-        return;
-      }
-      renderMemories(recent, true);
-    } catch (err) {
-      memoriesList.innerHTML = `<div class="memories-empty">Could not load recent captures: ${err.message}</div>`;
+      if (token !== searchToken) return;
+      $('search-heading').textContent = 'Results';
+      $('search-list').replaceChildren(el('div', 'error-note', describeError(err)));
     }
   }
 
-  // ---- Render memories ----
-  function renderMemories(memories, isRecent = false) {
-    if (!memories.length) {
-      memoriesList.innerHTML = '<div class="memories-empty">No memories found</div>';
-      return;
-    }
-    const headerHtml = isRecent ? '<h4 style="font-size: 11px; text-transform: uppercase; color: #585b70; letter-spacing: 0.5px; margin: 4px 0 10px 0;">Recent Captures</h4>' : '';
-    
-    memoriesList.innerHTML = headerHtml + memories.map((m) => {
-      const title = m.title || m.slug || 'Untitled';
-      const excerpt = m.content || m.excerpt || m.body || '';
-      const category = m.category || 'memory';
-      const time = m.created || m.created_at ? formatTime(m.created || m.created_at) : '';
-      return `
-        <div class="memory-card" data-slug="${m.slug}">
-          <div class="card-header">
-            <span class="card-title">${escapeHtml(title)}</span>
-            <span class="card-badge">${escapeHtml(category)}</span>
-          </div>
-          <div class="card-excerpt">${escapeHtml(excerpt)}</div>
-          ${time ? `<div class="card-time">${time}</div>` : ''}
-        </div>
-      `;
-    }).join('');
-
-    // Bind cards to open remote memory explorer
-    document.querySelectorAll('.memory-card').forEach(card => {
-      card.addEventListener('click', async () => {
-        const slug = card.getAttribute('data-slug');
-        const config = await self.BrainClient.getConfig();
-        chrome.tabs.create({ url: `${config.brainUrl}/memory?slug=${slug}` });
-      });
-    });
-  }
-
-  // ---- Quick actions ----
-  async function getCurrentTab() {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab;
-  }
-
-  btnRemember.addEventListener('click', async () => {
-    if (btnRemember.disabled) return;
-    const originalText = btnRemember.innerHTML;
-    btnRemember.innerHTML = '⏳ Remembering...';
-    btnRemember.disabled = true;
-    btnRemember.classList.add('loading');
-    try {
-      const tab = await getCurrentTab();
-      if (!tab || !tab.url) {
-        throw new Error('No active webpage found to capture. Make sure you are on a webpage tab.');
-      }
-      if (tab.url.startsWith('chrome://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
-        throw new Error('Cannot capture system pages.');
-      }
-      await sendShare({
-        url: tab.url,
-        title: tab.title || 'Untitled Page',
-        action: 'remember',
-        source: 'chrome-extension-sidepanel'
-      });
-      showToast('Page remembered!');
-      loadRecentCaptures();
-    } catch (err) {
-      showToast('Error: ' + err.message, true);
-    } finally {
-      btnRemember.innerHTML = originalText;
-      btnRemember.disabled = false;
-      btnRemember.classList.remove('loading');
-    }
+  $('search-input').addEventListener('input', onSearchInput);
+  $('search-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { $('search-input').value = ''; onSearchInput(); }
   });
+  $('btn-refresh-recent').addEventListener('click', loadRecent);
 
-  btnResearch.addEventListener('click', async () => {
-    if (btnResearch.disabled) return;
-    const originalText = btnResearch.innerHTML;
-    btnResearch.innerHTML = '⏳ Researching...';
-    btnResearch.disabled = true;
-    btnResearch.classList.add('loading');
-    try {
-      const tab = await getCurrentTab();
-      if (!tab || !tab.url) {
-        throw new Error('No active webpage found to capture. Make sure you are on a webpage tab.');
-      }
-      if (tab.url.startsWith('chrome://') || tab.url.startsWith('about:') || tab.url.startsWith('chrome-extension://')) {
-        throw new Error('Cannot capture system pages.');
-      }
-      await sendShare({
-        url: tab.url,
-        title: tab.title || 'Untitled Page',
-        action: 'research',
-        source: 'chrome-extension-sidepanel'
-      });
-      showToast('Research queued!');
-    } catch (err) {
-      showToast('Error: ' + err.message, true);
-    } finally {
-      btnResearch.innerHTML = originalText;
-      btnResearch.disabled = false;
-      btnResearch.classList.remove('loading');
-    }
-  });
+  // ---------------------------------------------------------------------------
+  // Capture
+  // ---------------------------------------------------------------------------
 
-  // ---- Quick Note ----
-  btnNote.addEventListener('click', () => {
-    noteArea.classList.toggle('hidden');
-    if (!noteArea.classList.contains('hidden')) {
-      noteInput.focus();
-    }
-  });
-
-  btnCancelNote.addEventListener('click', () => {
-    noteArea.classList.add('hidden');
-    noteInput.value = '';
-  });
-
-  btnSaveNote.addEventListener('click', async () => {
-    const text = noteInput.value.trim();
-    if (!text || btnSaveNote.disabled) return;
-    const originalText = btnSaveNote.innerHTML;
-    btnSaveNote.innerHTML = '⏳ Saving...';
-    btnSaveNote.disabled = true;
-    btnSaveNote.classList.add('loading');
-    try {
-      let tab = null;
-      try {
-        tab = await getCurrentTab();
-      } catch {
-        // ignore
-      }
-      const hasValidUrl = tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome-extension://');
-      await sendShare({
-        url: hasValidUrl ? tab.url : undefined,
-        title: hasValidUrl ? `Note: ${text.slice(0, 50)}` : undefined,
-        excerpt: text,
-        action: 'remember',
-        category: 'facts',
-        source: 'chrome-extension-sidepanel'
-      });
-      noteInput.value = '';
-      noteArea.classList.add('hidden');
-      showToast('Note saved!');
-      loadRecentCaptures();
-    } catch (err) {
-      showToast('Error: ' + err.message, true);
-    } finally {
-      btnSaveNote.innerHTML = originalText;
-      btnSaveNote.disabled = false;
-      btnSaveNote.classList.remove('loading');
-    }
-  });
-
-  // ---- Share helper ----
-  function sendShare(data) {
+  function sendCapture(options) {
     return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: 'SHARE', data }, (res) => {
+      chrome.runtime.sendMessage({ type: 'CAPTURE', tabId: state.page && state.page.id, options }, (res) => {
         if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-        if (res && res.success) return resolve(res);
-        reject(new Error(res?.error || 'Unknown error'));
+        if (res && res.success) return resolve(res.result);
+        const err = new Error((res && res.error) || 'Capture failed');
+        err.code = res && res.code;
+        reject(err);
       });
     });
   }
 
-  // ==================== INTERACTIVE AI CHAT ====================
-
-  function addChatBubble(sender, text, isSystem = false) {
-    const bubble = document.createElement('div');
-    if (isSystem) {
-      bubble.className = 'chat-bubble system';
-    } else {
-      bubble.className = `chat-bubble ${sender === 'user' ? 'user' : 'assistant'}`;
-    }
-    bubble.textContent = text;
-    chatMessages.appendChild(bubble);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-  }
-
-  async function getActivePageContext() {
-    try {
-      const tab = await getCurrentTab();
-      if (!tab || !tab.id) return null;
-
-      // Ask the content script on the tab to give us the selection + main inner text
-      const pageInfo = await new Promise((resolve) => {
-        chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_TEXT' }, (response) => {
-          if (chrome.runtime.lastError || !response) {
-            resolve({ url: tab.url, title: tab.title, selection: '', pageText: '' });
-          } else {
-            resolve(response);
-          }
-        });
-      });
-      return pageInfo;
-    } catch {
-      return null;
-    }
-  }
-
-  async function sendChatMessage(rawText) {
-    const text = rawText.trim();
-    if (!text || btnSendChat.disabled) return;
-
-    addChatBubble('user', text);
-    chatInput.value = '';
-    
-    // Disable inputs during processing
-    btnSendChat.disabled = true;
-    chatInput.disabled = true;
-    
-    // Append user message to history
-    chatHistory.push({ role: 'user', content: text });
-
-    // Show a small thinking loader
-    const thinkingBubble = document.createElement('div');
-    thinkingBubble.className = 'chat-bubble assistant thinking';
-    thinkingBubble.textContent = '⏳ Thinking...';
-    chatMessages.appendChild(thinkingBubble);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    try {
-      let finalMessages = [...chatHistory];
-      const isGroundingEnabled = chatGroundingToggle.checked;
-
-      if (isGroundingEnabled) {
-        const context = await getActivePageContext();
-        if (context) {
-          const selectionPart = context.selection ? `\n[User Selected text:\n"${context.selection}"]` : '';
-          const bodyTextPart = context.pageText ? `\n[Webpage Inner Text:\n${context.pageText.slice(0, 4000)}]` : ''; // Limit to 4k chars context
-          
-          const systemContextMessage = {
-            role: 'system',
-            content: `You are a sovereign web assistant for Total Recall. The user is actively viewing a web page:
-URL: ${context.url}
-Title: ${context.title}${selectionPart}${bodyTextPart}
-Provide helpful analysis grounded on both the user's brain memory and this page content.`
-          };
-          // Prepend system instruction for the completions endpoint
-          finalMessages.unshift(systemContextMessage);
-        }
-      }
-
-      const completions = await self.BrainClient.chat(finalMessages, {
-        brainId: activeBrainId,
-        model: 'gemini'
-      });
-
-      // Remove thinking loader
-      thinkingBubble.remove();
-
-      const reply = completions.choices?.[0]?.message?.content || '(empty response)';
-      addChatBubble('assistant', reply);
-      
-      // Append assistant answer to local history
-      chatHistory.push({ role: 'assistant', content: reply });
-    } catch (err) {
-      thinkingBubble.remove();
-      addChatBubble('system', `Error: ${err.message}`, true);
-    } finally {
-      btnSendChat.disabled = false;
-      chatInput.disabled = false;
-      chatInput.focus();
-    }
-  }
-
-  btnSendChat.addEventListener('click', () => sendChatMessage(chatInput.value));
-
-  chatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage(chatInput.value);
-    }
-  });
-
-  // Suggestion click listeners
-  btnSuggestSummarize.addEventListener('click', () => {
-    chatGroundingToggle.checked = true;
-    sendChatMessage('Please summarize the current webpage and highlight the key takeaways.');
-  });
-
-  btnSuggestRelated.addEventListener('click', () => {
-    chatGroundingToggle.checked = true;
-    sendChatMessage('Are there any related memories, rules, or invariants in my brain for this webpage context?');
-  });
-
-
-  // ==================== BACKGROUND RESEARCH ====================
-
-  async function fetchResearch() {
-    try {
-      const data = await self.BrainClient.brainFetch('/api/research');
-      const projects = data.projects || data.items || data.results || [];
-      if (!projects.length) {
-        researchList.innerHTML = '<div class="research-empty">No research projects found</div>';
-        return;
-      }
-      
-      // Filter out completed ones, show in_progress and pending at the top
-      const sorted = projects.sort((a, b) => {
-        if (a.status === 'in_progress' && b.status !== 'in_progress') return -1;
-        if (a.status !== 'in_progress' && b.status === 'in_progress') return 1;
-        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-      });
-
-      researchList.innerHTML = sorted.map((p) => {
-        const isRunning = p.status === 'in_progress' || p.status === 'pending';
-        const cancelBtnHtml = isRunning 
-          ? `<button class="steer-btn btn-cancel-res" data-id="${p.id}" title="Cancel Research">✕</button>` 
-          : '';
-        const spinHtml = isRunning ? '<div class="spinner"></div>' : '📌';
-        return `
-          <div class="research-item">
-            ${spinHtml}
-            <span class="topic" title="${escapeHtml(p.topic || p.title || 'Untitled')}">${escapeHtml(p.topic || p.title || 'Untitled')}</span>
-            <span class="status-badge" style="background: ${getStatusBg(p.status)}; color: ${getStatusColor(p.status)};">${escapeHtml(p.status || 'unknown')}</span>
-            ${cancelBtnHtml}
-          </div>
-        `;
-      }).join('');
-
-      // Bind Cancel research triggers
-      document.querySelectorAll('.btn-cancel-res').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const id = btn.getAttribute('data-id');
-          if (btn.disabled) return;
-          btn.disabled = true;
-          try {
-            await self.BrainClient.brainFetch(`/api/research/${id}`, { method: 'DELETE' });
-            showToast('Research cancelled.');
-            fetchResearch();
-          } catch (err) {
-            showToast('Failed to cancel: ' + err.message, true);
-            btn.disabled = false;
-          }
-        });
-      });
-    } catch {
-      researchList.innerHTML = '<div class="research-empty">Could not load research feed</div>';
-    }
-  }
-
-  btnRefreshResearch.addEventListener('click', fetchResearch);
-
-  function getStatusBg(status) {
-    switch (status) {
-      case 'in_progress': return 'rgba(137, 180, 250, 0.15)';
-      case 'done': return 'rgba(166, 227, 161, 0.15)';
-      case 'failed': return 'rgba(243, 139, 168, 0.15)';
-      default: return 'rgba(108, 112, 134, 0.15)';
-    }
-  }
-
-  function getStatusColor(status) {
-    switch (status) {
-      case 'in_progress': return '#89b4fa';
-      case 'done': return '#a6e3a1';
-      case 'failed': return '#f38ba8';
-      default: return '#bac2de';
-    }
-  }
-
-
-  // ==================== SETTINGS & ACTIONS ====================
-
-  async function fetchBrains() {
-    try {
-      const data = await self.BrainClient.brainFetch('/api/brains');
-      const brains = data.brains || [];
-      
-      settingsBrainSelector.innerHTML = '<option value="global">Global Brain Layer</option>' + 
-        brains.filter(b => b.id !== 'global').map(b => `
-          <option value="${b.id}">${escapeHtml(b.name || b.id)} (Project)</option>
-        `).join('');
-
-      // Restore active dropdown selection
-      settingsBrainSelector.value = activeBrainId;
-    } catch {
-      // Fallback if brains call fails
-      settingsBrainSelector.innerHTML = '<option value="global">Global Brain Layer</option>';
-    }
-  }
-
-  settingsBrainSelector.addEventListener('change', async (e) => {
-    const val = e.target.value;
-    activeBrainId = val;
-    await chrome.storage.sync.set({ activeBrainId: val });
-    
-    // Update badge in header
-    activeBrainBadge.textContent = val === 'global' ? 'Global' : 'Project';
-    activeBrainBadge.style.color = val === 'global' ? '#cba6f7' : '#89b4fa';
-    
-    showToast(`Active brain switched to ${val === 'global' ? 'Global' : 'Project'}`);
-    
-    // Clear chat history on brain layer swap to prevent context leakage
-    chatHistory = [];
-    chatMessages.innerHTML = `
-      <div class="chat-bubble assistant">
-        Switched active brain context to: <b>${val === 'global' ? 'Global' : 'Project'}</b>. Conversation history has been reset.
-      </div>
-    `;
-    
-    // Refresh memory feed
-    if (!searchInput.value.trim()) {
-      loadRecentCaptures();
-    } else {
-      performSearch(searchInput.value);
-    }
-  });
-
-  async function loadSettingsState() {
-    const state = await chrome.storage.sync.get({
-      activeBrainId: 'global',
-      passiveTracking: false
-    });
-    
-    activeBrainId = state.activeBrainId;
-    activeBrainBadge.textContent = activeBrainId === 'global' ? 'Global' : 'Project';
-    activeBrainBadge.style.color = activeBrainId === 'global' ? '#cba6f7' : '#89b4fa';
-    
-    settingsTrackingToggle.checked = state.passiveTracking;
-  }
-
-  settingsTrackingToggle.addEventListener('change', async () => {
-    const passiveTracking = settingsTrackingToggle.checked;
-    await chrome.storage.sync.set({ passiveTracking });
-    showToast(`Passive tracking ${passiveTracking ? 'enabled' : 'disabled'}`);
-  });
-
-  // Block Current Domain
-  btnBlockDomain.addEventListener('click', async () => {
-    try {
-      const tab = await getCurrentTab();
-      if (!tab || !tab.url) return;
-      const urlObj = new URL(tab.url);
-      const host = urlObj.hostname;
-
-      if (!host) {
-        showToast('Cannot block empty domain', true);
-        return;
-      }
-
-      const { blocklist } = await chrome.storage.sync.get({ blocklist: [] });
-      if (blocklist.includes(host)) {
-        showToast(`${host} is already blocked`);
-        return;
-      }
-
-      blocklist.push(host);
-      await chrome.storage.sync.set({ blocklist });
-      showToast(`Blocked domain: ${host}`);
-    } catch (err) {
-      showToast('Block error: ' + err.message, true);
-    }
-  });
-
-  // Recompile Brain index shims
-  btnRecompileBrain.addEventListener('click', async () => {
-    if (btnRecompileBrain.disabled) return;
-    const originalText = btnRecompileBrain.innerHTML;
-    btnRecompileBrain.innerHTML = '⏳ Compiling...';
-    btnRecompileBrain.disabled = true;
-    btnRecompileBrain.classList.add('loading');
-    try {
-      await self.BrainClient.brainFetch('/api/vault/compile', { method: 'POST' });
-      showToast('Brain indexes recompiled!');
-    } catch (err) {
-      showToast('Compilation error: ' + err.message, true);
-    } finally {
-      btnRecompileBrain.innerHTML = originalText;
-      btnRecompileBrain.disabled = false;
-      btnRecompileBrain.classList.remove('loading');
-    }
-  });
-
-
-  // ---- Ingestion Invariant Sync ----
-  // Autonomously capture correction in permanent memory
-  async function recordRememberInvariants() {
-    try {
-      // Perform automated memory check locally using REST API to prevent duplicate records
-      const response = await self.BrainClient.search("do not call it copilot", 1);
-      const match = response.results && response.results[0];
-      if (match && match.slug === 'never-use-copilot') return;
-
-      // Upsert memory node autonomously using SSSS REST schema endpoints
-      await self.BrainClient.share({
-        slug: 'never-use-copilot',
-        category: 'invariants',
-        title: "Never refer to the chat interface or AI companion as 'Co-Pilot'. Always refer to it simply as 'Chat'.",
-        status: 'active',
-        importance: 5,
-        modality: 'must_not',
-        priority: 'absolute',
-        action: 'remember',
-        source: 'chrome-extension-sidepanel'
-      });
-    } catch {
-      // Suppress silently if remote brain is offline during first-time handshake
-    }
-  }
-
-
-  // ---- Toast ----
-  function showToast(message, isError = false) {
-    let toast = document.querySelector('.toast');
-    if (!toast) {
-      toast = document.createElement('div');
-      toast.className = 'toast';
-      document.body.appendChild(toast);
-    }
-    toast.textContent = message;
-    toast.classList.toggle('error', isError);
-    // Force reflow to restart animation
-    toast.classList.remove('show');
-    void toast.offsetWidth;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2500);
-  }
-
-  // ---- Helpers ----
-  function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  function formatTime(dateStr) {
-    try {
-      const d = new Date(dateStr);
-      const now = new Date();
-      const diff = now - d;
-      if (diff < 60000) return 'just now';
-      if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-      if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-      return d.toLocaleDateString();
-    } catch {
-      return '';
-    }
-  }
-
-  // ==================== COLLABORATION MODULE ====================
-  const collabAuthView = document.getElementById('collab-auth-view');
-  const collabMainView = document.getElementById('collab-main-view');
-  const collabUsernameInput = document.getElementById('collab-username');
-  const collabPasswordInput = document.getElementById('collab-password');
-  const btnCollabLogin = document.getElementById('btn-collab-login');
-  const btnCollabRegister = document.getElementById('btn-collab-register');
-
-  const collabUserDisplay = document.getElementById('collab-user-display');
-  const btnCollabLogout = document.getElementById('btn-collab-logout');
-  const collabGroupSelect = document.getElementById('collab-group-select');
-
-  const btnCollabShowJoin = document.getElementById('btn-collab-show-join');
-  const btnCollabShowCreate = document.getElementById('btn-collab-show-create');
-  const collabJoinGroupRow = document.getElementById('collab-join-group-row');
-  const collabJoinCode = document.getElementById('collab-join-code');
-  const btnCollabSubmitJoin = document.getElementById('btn-collab-submit-join');
-
-  const collabCreateGroupRow = document.getElementById('collab-create-group-row');
-  const collabCreateName = document.getElementById('collab-create-name');
-  const btnCollabSubmitCreate = document.getElementById('btn-collab-submit-create');
-
-  const collabAnnotationsList = document.getElementById('collab-annotations-list');
-  const collabNoteInput = document.getElementById('collab-note-input');
-  const btnCollabSaveNote = document.getElementById('btn-collab-save-note');
-
-  const collabPresenceCount = document.getElementById('collab-presence-count');
-  const collabChatMessages = document.getElementById('collab-chat-messages');
-  const collabChatInput = document.getElementById('collab-chat-input');
-  const btnCollabSendChat = document.getElementById('btn-collab-send-chat');
-
-  let collabToken = '';
-  let collabUsername = '';
-  let collabActiveUrl = '';
-  let collabSocket = null;
-  let collabGroups = [];
-  let collabSelectedGroup = null;
-
-  async function initCollab() {
-    const data = await chrome.storage.local.get(['collabToken', 'collabUsername']);
-    if (data.collabToken && data.collabUsername) {
-      collabToken = data.collabToken;
-      collabUsername = data.collabUsername;
-      showCollabMain();
-    } else {
-      showCollabAuth();
-    }
-  }
-
-  function showCollabAuth() {
-    collabAuthView.classList.remove('hidden');
-    collabMainView.classList.add('hidden');
-    closeCollabSocket();
-  }
-
-  async function showCollabMain() {
-    collabAuthView.classList.add('hidden');
-    collabMainView.classList.remove('hidden');
-    collabUserDisplay.textContent = collabUsername;
-    await fetchCollabGroups();
-    updateCollabActiveUrl();
-  }
-
-  async function fetchCollabGroups() {
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/groups`, {
-        headers: { 'Authorization': `Bearer ${collabToken}` }
-      });
-      if (res.ok) {
-        collabGroups = await res.json();
-        renderCollabGroupsDropdown();
-      } else if (res.status === 401) {
-        logoutCollab();
-      }
-    } catch (err) {
-      console.error('Failed to fetch collab groups:', err);
-    }
-  }
-
-  function renderCollabGroupsDropdown() {
-    collabGroupSelect.innerHTML = collabGroups.map(g => 
-      `<option value="${g.code}">${escapeHtml(g.name)} (${g.code})</option>`
-    ).join('');
-    if (collabGroups.length > 0) {
-      const activeCode = collabGroupSelect.value;
-      collabSelectedGroup = collabGroups.find(g => g.code === activeCode) || collabGroups[0];
-    } else {
-      collabSelectedGroup = null;
-    }
-  }
-
-  async function updateCollabActiveUrl() {
-    try {
-      const tab = await getCurrentTab();
-      if (tab && tab.url && !tab.url.startsWith('chrome://') && !tab.url.startsWith('about:') && !tab.url.startsWith('chrome-extension://')) {
-        const cleanUrl = tab.url.split('#')[0];
-        if (cleanUrl !== collabActiveUrl) {
-          collabActiveUrl = cleanUrl;
-          if (collabToken) {
-            await fetchCollabAnnotations();
-            connectCollabSocket();
-          }
-        }
-      } else {
-        collabActiveUrl = '';
-        collabAnnotationsList.innerHTML = '<div class="memories-empty">No active web tab</div>';
-        closeCollabSocket();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function fetchCollabAnnotations() {
-    if (!collabActiveUrl || !collabToken) return;
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/annotations?url=${encodeURIComponent(collabActiveUrl)}`, {
-        headers: { 'Authorization': `Bearer ${collabToken}` }
-      });
-      if (res.ok) {
-        const annotations = await res.json();
-        renderCollabAnnotations(annotations);
-      }
-    } catch (err) {
-      console.error('Failed to fetch annotations:', err);
-    }
-  }
-
-  function renderCollabAnnotations(list) {
-    if (!list.length) {
-      collabAnnotationsList.innerHTML = '<div class="memories-empty">No notes on this page</div>';
+  async function afterCapture(action) {
+    if (action === 'research') {
+      loadResearch();
       return;
     }
-    collabAnnotationsList.innerHTML = list.map(a => `
-      <div class="collab-annotation-item">
-        <div class="author">👤 ${escapeHtml(a.author)}</div>
-        ${a.excerpt ? `<div class="excerpt">${escapeHtml(a.excerpt)}</div>` : ''}
-        <div class="text">${escapeHtml(a.text)}</div>
-        <div class="time">${formatTime(a.created_at)}</div>
-      </div>
-    `).join('');
+    const tab = state.page;
+    if (tab && UI.isCapturableUrl(tab.url)) {
+      $('page-saved-label').textContent = 'Saved just now';
+      $('page-saved').hidden = false;
+    }
+    loadRecent();
   }
 
-  function connectCollabSocket() {
-    if (!collabToken || !collabActiveUrl) return;
-    closeCollabSocket();
+  $('btn-remember').addEventListener('click', async () => {
+    const btn = $('btn-remember');
+    setBusy(btn, true);
+    try {
+      await sendCapture({ action: 'remember' });
+      toast('Saved to your brain');
+      afterCapture('remember');
+    } catch (err) {
+      toast(describeError(err), true);
+    } finally {
+      setBusy(btn, false);
+    }
+  });
 
-    self.BrainClient.getConfig().then(config => {
-      const serverUrl = new URL(config.brainUrl);
-      const wsProto = serverUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${wsProto}//${serverUrl.host}/collab-ws?token=${collabToken}`;
-      
-      const ws = new WebSocket(wsUrl);
-      collabSocket = ws;
+  $('btn-research-page').addEventListener('click', async () => {
+    const btn = $('btn-research-page');
+    setBusy(btn, true);
+    try {
+      await sendCapture({ action: 'research' });
+      toast('Research queued');
+      afterCapture('research');
+    } catch (err) {
+      toast(describeError(err), true);
+    } finally {
+      setBusy(btn, false);
+    }
+  });
 
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'SUBSCRIBE', url: collabActiveUrl }));
-        collabPresenceCount.textContent = 'Connected';
-      };
+  function toggleNote(open) {
+    const area = $('note-area');
+    area.hidden = !open;
+    $('btn-note').setAttribute('aria-expanded', String(open));
+    if (open) $('note-input').focus();
+  }
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'CHAT_MESSAGE') {
-            appendCollabChatBubble(data.username, data.text, data.created_at);
-          } else if (data.type === 'USER_JOINED') {
-            appendCollabChatBubble('System', `${data.username} joined this page`, new Date().toISOString(), true);
-          } else if (data.type === 'USER_LEFT') {
-            appendCollabChatBubble('System', `${data.username} left`, new Date().toISOString(), true);
-          } else if (data.type === 'ANNOTATION_ADDED') {
-            fetchCollabAnnotations();
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      };
+  $('btn-note').addEventListener('click', () => toggleNote($('note-area').hidden));
+  $('btn-cancel-note').addEventListener('click', () => { $('note-input').value = ''; toggleNote(false); });
 
-      ws.onclose = () => {
-        collabPresenceCount.textContent = 'Disconnected';
-      };
+  async function saveNote() {
+    const note = $('note-input').value.trim();
+    const btn = $('btn-save-note');
+    if (!note || btn.disabled) return;
+    setBusy(btn, true);
+    try {
+      const tab = state.page;
+      if (tab && UI.isCapturableUrl(tab.url)) {
+        await sendCapture({ action: 'remember', note, selection: '' });
+      } else {
+        await Brain.share({ excerpt: note, title: UI.clip(note.split('\n')[0], 80), action: 'remember', source: 'chrome-extension', tags: ['note'] });
+      }
+      $('note-input').value = '';
+      toggleNote(false);
+      toast('Note saved');
+      afterCapture('remember');
+    } catch (err) {
+      toast(describeError(err), true);
+    } finally {
+      setBusy(btn, false);
+    }
+  }
 
-      ws.onerror = () => {
-        collabPresenceCount.textContent = 'Error';
-      };
+  $('btn-save-note').addEventListener('click', saveNote);
+  $('note-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveNote(); }
+    if (e.key === 'Escape') toggleNote(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Chat
+  // ---------------------------------------------------------------------------
+
+  const chatKey = () => `chat:${state.activeBrainId}`;
+
+  async function loadChat() {
+    try {
+      const data = await chrome.storage.session.get(chatKey());
+      state.chat = data[chatKey()] || [];
+    } catch {
+      state.chat = [];
+    }
+    renderChat();
+  }
+
+  function persistChat() {
+    chrome.storage.session.set({ [chatKey()]: state.chat.slice(-CHAT_HISTORY_LIMIT) }).catch(() => {});
+  }
+
+  function scrollChatToEnd() {
+    const s = $('chat-scroll');
+    requestAnimationFrame(() => { s.scrollTop = s.scrollHeight; });
+  }
+
+  function renderMessage(m) {
+    const wrap = el('div', `msg ${m.role === 'user' ? 'user' : m.error ? 'assistant error' : 'assistant'}`);
+    const bubble = el('div', 'bubble');
+    if (m.role === 'user') {
+      bubble.textContent = m.content;
+      wrap.append(bubble);
+      if (m.context && m.context.title) {
+        const ctx = el('span', 'msg-context');
+        ctx.append(svg('globe'), el('span', '', UI.clip(m.context.title, 60)));
+        wrap.append(ctx);
+      }
+    } else if (m.error) {
+      bubble.textContent = m.content;
+      wrap.append(bubble);
+    } else {
+      // renderMarkdown escapes all input before adding its whitelisted tags.
+      bubble.innerHTML = UI.renderMarkdown(m.content);
+      wrap.append(bubble);
+      if (m.model) wrap.append(el('span', 'msg-meta', m.model));
+    }
+    return wrap;
+  }
+
+  function renderChat() {
+    const list = $('chat-messages');
+    list.replaceChildren(...state.chat.map(renderMessage));
+    if (state.chatBusy) {
+      const typing = el('div', 'msg assistant');
+      const dots = el('div', 'typing');
+      dots.append(el('span'), el('span'), el('span'));
+      typing.append(dots);
+      list.append(typing);
+    }
+    $('chat-empty').hidden = state.chat.length > 0 || state.chatBusy;
+    $('btn-clear-chat').hidden = state.chat.length === 0;
+    updateSendState();
+    scrollChatToEnd();
+  }
+
+  function updateSendState() {
+    $('btn-send-chat').disabled = state.chatBusy || !$('chat-input').value.trim();
+    const capturable = state.page && UI.isCapturableUrl(state.page.url);
+    $('chat-grounding').disabled = !capturable;
+  }
+
+  function getPageContext(tabId) {
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTEXT' }, (res) => {
+        if (chrome.runtime.lastError) return resolve(null);
+        resolve(res || null);
+      });
     });
   }
 
-  function closeCollabSocket() {
-    if (collabSocket) {
-      try {
-        collabSocket.close();
-      } catch {}
-      collabSocket = null;
+  async function sendChat(text, { grounded = $('chat-grounding').checked, extraContext = '' } = {}) {
+    const content = text.trim();
+    if (!content || state.chatBusy) return;
+    const tab = state.page;
+    const useGrounding = grounded && tab && UI.isCapturableUrl(tab.url);
+
+    state.chat.push({ role: 'user', content, context: useGrounding ? { title: tab.title, url: tab.url } : null });
+    state.chatBusy = true;
+    $('chat-input').value = '';
+    autosize();
+    renderChat();
+    persistChat();
+
+    try {
+      const messages = [];
+      if (useGrounding || extraContext) {
+        const ctx = useGrounding ? await getPageContext(tab.id) : null;
+        const lines = ['The user is asking from the Total Recall browser extension. Ground your answer in their memories first.'];
+        if (useGrounding) {
+          lines.push(`They are viewing: ${(ctx && ctx.title) || tab.title}\nURL: ${tab.url}`);
+          if (ctx && ctx.description) lines.push(`Description: ${ctx.description}`);
+          if (ctx && ctx.selection) lines.push(`Selected text:\n"""${UI.clip(ctx.selection, 2000)}"""`);
+          if (ctx && ctx.text) lines.push(`Page text (truncated):\n"""${UI.clip(ctx.text, PAGE_TEXT_FOR_CHAT)}"""`);
+        }
+        if (extraContext) lines.push(extraContext);
+        messages.push({ role: 'system', content: lines.join('\n\n') });
+      }
+      for (const m of state.chat.slice(-CHAT_CONTEXT_TURNS)) {
+        if (!m.error) messages.push({ role: m.role, content: m.content });
+      }
+      const reply = await Brain.chat(messages);
+      state.chat.push({ role: 'assistant', content: reply.content || '(The brain returned an empty answer.)', model: reply.model });
+    } catch (err) {
+      state.chat.push({ role: 'assistant', error: true, content: describeError(err) });
+      if (isAuthOrOffline(err)) checkConnection();
+    } finally {
+      state.chatBusy = false;
+      renderChat();
+      persistChat();
     }
   }
 
-  function appendCollabChatBubble(sender, text, timestamp, isSystem = false) {
-    const bubble = document.createElement('div');
-    if (isSystem) {
-      bubble.className = 'chat-bubble system';
-      bubble.textContent = text;
-    } else {
-      const isMe = sender.toLowerCase() === collabUsername.toLowerCase();
-      bubble.className = `chat-bubble ${isMe ? 'user' : 'assistant'}`;
-      bubble.innerHTML = `<span style="font-size: 10px; opacity: 0.8; font-weight: bold; display: block; margin-bottom: 2px;">${escapeHtml(sender)}</span>${escapeHtml(text)}`;
-    }
-    collabChatMessages.appendChild(bubble);
-    collabChatMessages.scrollTop = collabChatMessages.scrollHeight;
+  function autosize() {
+    const ta = $('chat-input');
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
 
-  async function registerCollab(username, password) {
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        collabToken = data.token;
-        collabUsername = data.username;
-        await chrome.storage.local.set({ collabToken: data.token, collabUsername: data.username });
-        showToast('Registered successfully!');
-        showCollabMain();
-      } else {
-        showToast('Registration failed: ' + (data.error || 'Unknown error'), true);
-      }
-    } catch (err) {
-      showToast('Registration error: ' + err.message, true);
-    }
-  }
-
-  async function loginCollab(username, password) {
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        collabToken = data.token;
-        collabUsername = data.username;
-        await chrome.storage.local.set({ collabToken: data.token, collabUsername: data.username });
-        showToast('Logged in successfully!');
-        showCollabMain();
-      } else {
-        showToast('Login failed: ' + (data.error || 'Unknown error'), true);
-      }
-    } catch (err) {
-      showToast('Login error: ' + err.message, true);
-    }
-  }
-
-  async function logoutCollab() {
-    collabToken = '';
-    collabUsername = '';
-    await chrome.storage.local.remove(['collabToken', 'collabUsername']);
-    showCollabAuth();
-    showToast('Logged out');
-  }
-
-  // --- Buttons / Forms bindings ---
-  btnCollabLogin.addEventListener('click', () => {
-    const u = collabUsernameInput.value.trim();
-    const p = collabPasswordInput.value.trim();
-    if (u && p) loginCollab(u, p);
-  });
-
-  btnCollabRegister.addEventListener('click', () => {
-    const u = collabUsernameInput.value.trim();
-    const p = collabPasswordInput.value.trim();
-    if (u && p) registerCollab(u, p);
-  });
-
-  btnCollabLogout.addEventListener('click', logoutCollab);
-
-  btnCollabShowJoin.addEventListener('click', () => {
-    collabJoinGroupRow.classList.toggle('hidden');
-    collabCreateGroupRow.classList.add('hidden');
-  });
-
-  btnCollabShowCreate.addEventListener('click', () => {
-    collabCreateGroupRow.classList.toggle('hidden');
-    collabJoinGroupRow.classList.add('hidden');
-  });
-
-  btnCollabSubmitJoin.addEventListener('click', async () => {
-    const code = collabJoinCode.value.trim();
-    if (!code) return;
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/groups/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${collabToken}`
-        },
-        body: JSON.stringify({ code })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast('Joined group!');
-        collabJoinCode.value = '';
-        collabJoinGroupRow.classList.add('hidden');
-        await fetchCollabGroups();
-      } else {
-        showToast('Join error: ' + data.error, true);
-      }
-    } catch (err) {
-      showToast('Failed to join: ' + err.message, true);
-    }
-  });
-
-  btnCollabSubmitCreate.addEventListener('click', async () => {
-    const name = collabCreateName.value.trim();
-    if (!name) return;
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/groups`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${collabToken}`
-        },
-        body: JSON.stringify({ name })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast('Group created!');
-        collabCreateName.value = '';
-        collabCreateGroupRow.classList.add('hidden');
-        await fetchCollabGroups();
-      } else {
-        showToast('Create error: ' + data.error, true);
-      }
-    } catch (err) {
-      showToast('Failed to create group: ' + err.message, true);
-    }
-  });
-
-  collabGroupSelect.addEventListener('change', () => {
-    const activeCode = collabGroupSelect.value;
-    collabSelectedGroup = collabGroups.find(g => g.code === activeCode) || null;
-    fetchCollabAnnotations();
-  });
-
-  btnCollabSaveNote.addEventListener('click', async () => {
-    const text = collabNoteInput.value.trim();
-    if (!text || !collabActiveUrl || !collabSelectedGroup) return;
-    try {
-      const config = await self.BrainClient.getConfig();
-      const res = await fetch(`${config.brainUrl}/api/collab/annotations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${collabToken}`
-        },
-        body: JSON.stringify({
-          url: collabActiveUrl,
-          groupCode: collabSelectedGroup.code,
-          text
-        })
-      });
-      if (res.ok) {
-        showToast('Note pinned!');
-        collabNoteInput.value = '';
-        fetchCollabAnnotations();
-      } else {
-        const errData = await res.json();
-        showToast('Pin note error: ' + errData.error, true);
-      }
-    } catch (err) {
-      showToast('Failed to pin note: ' + err.message, true);
-    }
-  });
-
-  btnCollabSendChat.addEventListener('click', () => {
-    const text = collabChatInput.value.trim();
-    if (text && collabSocket && collabSocket.readyState === WebSocket.OPEN) {
-      collabSocket.send(JSON.stringify({ type: 'CHAT_MESSAGE', text }));
-      collabChatInput.value = '';
-    }
-  });
-
-  collabChatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  $('chat-input').addEventListener('input', () => { autosize(); updateSendState(); });
+  $('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
-      btnCollabSendChat.click();
+      sendChat($('chat-input').value);
+    }
+  });
+  $('btn-send-chat').addEventListener('click', () => sendChat($('chat-input').value));
+  $('btn-clear-chat').addEventListener('click', () => {
+    state.chat = [];
+    persistChat();
+    renderChat();
+    $('chat-input').focus();
+  });
+  document.querySelectorAll('.suggestion').forEach((btn) => {
+    btn.addEventListener('click', () => sendChat(btn.dataset.prompt, { grounded: true }));
+  });
+
+  async function consumePendingAsk() {
+    let pending;
+    try {
+      ({ pendingAsk: pending } = await chrome.storage.session.get('pendingAsk'));
+    } catch { return; }
+    if (!pending || Date.now() - pending.at > 60000) return;
+    await chrome.storage.session.remove('pendingAsk');
+    switchTab('chat');
+    const quote = UI.clip(pending.text, 600);
+    sendChat(`What do I know about this?\n\n“${quote}”`, {
+      grounded: false,
+      extraContext: pending.title ? `The selection comes from “${pending.title}” (${pending.url}).` : '',
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Research
+  // ---------------------------------------------------------------------------
+
+  let researchPoll = null;
+
+  function researchRow(item, active) {
+    const row = el('div', 'research-row');
+    const status = el('div', 'r-status');
+    const meta = UI.researchStatus(item.status);
+    status.append(item.status === 'in_progress' ? el('div', 'spin') : el('div', `dot ${meta.tone}`));
+    status.title = meta.label;
+    const main = el('div', 'r-main');
+    main.append(el('div', 'r-topic', item.topic || item.title || 'Untitled'));
+    const when = UI.timeAgo(item.updated_at || item.created_at);
+    // Who wanted this: the user, or the AI's background (System 2) research for a project.
+    const why = item.origin === 'autonomous'
+      ? (item.project ? `Auto · ${item.project}` : 'Auto')
+      : item.origin === 'user' ? 'You asked' : '';
+    main.append(el('div', 'r-meta', [meta.label, why, when].filter(Boolean).join(' · ')));
+    if (item.origin === 'autonomous' && item.rationale) main.title = item.rationale;
+    row.append(status, main);
+    if (active) {
+      const cancel = el('button', 'icon-btn small');
+      cancel.type = 'button';
+      cancel.setAttribute('aria-label', `Cancel research: ${item.topic}`);
+      cancel.title = 'Cancel';
+      cancel.append(svg('close'));
+      cancel.addEventListener('click', async () => {
+        cancel.disabled = true;
+        try {
+          await Brain.cancelResearch(item.id);
+          toast('Research cancelled');
+          loadResearch();
+        } catch (err) {
+          cancel.disabled = false;
+          toast(describeError(err), true);
+        }
+      });
+      row.append(cancel);
+    }
+    return row;
+  }
+
+  function renderResearch() {
+    const { items, counts } = state.research;
+    const running = items.filter((i) => i.status === 'in_progress');
+    const queued = items.filter((i) => i.status === 'pending');
+    const active = [...running, ...queued];
+    const finished = items.filter((i) => i.status === 'done' || i.status === 'failed').slice(0, 12);
+    const QUEUED_SHOWN = 8;
+
+    const countsEl = $('research-counts');
+    countsEl.replaceChildren();
+    const chips = [['in_progress', 'accent'], ['pending', ''], ['done', 'success'], ['failed', 'error']];
+    for (const [key, tone] of chips) {
+      if (!counts[key]) continue;
+      countsEl.append(el('span', `chip ${tone}`, `${counts[key]} ${UI.researchStatus(key).label.toLowerCase()}`));
+    }
+
+    const activeRows = [...running, ...queued.slice(0, QUEUED_SHOWN)].map((i) => researchRow(i, true));
+    if (queued.length > QUEUED_SHOWN) {
+      activeRows.push(el('div', 'more-note', `+ ${queued.length - QUEUED_SHOWN} more queued`));
+    }
+    renderListOrEmpty($('research-active'), activeRows, 'Nothing running. Queue a topic above, or use Research on any page.');
+    renderListOrEmpty($('research-done'), finished.map((i) => researchRow(i, false)), 'Finished research lands in your brain as a report.');
+
+    // The list is capped; the server's counts are the real totals.
+    const activeTotal = (counts.pending || 0) + (counts.in_progress || 0) || active.length;
+    const badge = $('research-active-count');
+    badge.hidden = activeTotal === 0;
+    badge.textContent = activeTotal > 99 ? '99+' : String(activeTotal);
+
+    clearInterval(researchPoll);
+    if (active.length) researchPoll = setInterval(loadResearch, 15000);
+  }
+
+  function renderListOrEmpty(container, rows, emptyText) {
+    container.replaceChildren(...(rows.length ? rows : [el('div', 'empty', emptyText)]));
+  }
+
+  async function loadResearch() {
+    if (state.connection !== 'ok') return;
+    if (!state.research.items.length && state.tab === 'research') skeleton($('research-active'), 2);
+    try {
+      state.research = await Brain.listResearch();
+      renderResearch();
+    } catch (err) {
+      if (isAuthOrOffline(err)) return checkConnection();
+      $('research-active').replaceChildren(el('div', 'error-note', `Couldn’t load research: ${describeError(err)}`));
+    }
+  }
+
+  $('research-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = $('research-input');
+    const topic = input.value.trim();
+    if (!topic) return input.focus();
+    const btn = $('btn-queue-research');
+    setBusy(btn, true);
+    try {
+      await Brain.queueResearch(topic);
+      input.value = '';
+      toast('Research queued');
+      loadResearch();
+    } catch (err) {
+      toast(describeError(err), true);
+    } finally {
+      setBusy(btn, false);
+    }
+  });
+  $('btn-refresh-research').addEventListener('click', loadResearch);
+
+  // ---------------------------------------------------------------------------
+  // Settings sheet
+  // ---------------------------------------------------------------------------
+
+  function openSheet(open) {
+    const sheet = $('sheet');
+    sheet.classList.toggle('is-open', open);
+    sheet.toggleAttribute('inert', !open);
+    sheet.setAttribute('aria-hidden', String(!open));
+    $('scrim').hidden = !open;
+    if (open) {
+      loadBrains();
+      renderShortcut();
+      setTimeout(() => $('btn-close-settings').focus(), 60);
+    } else {
+      $('btn-open-settings').focus();
+    }
+  }
+
+  $('btn-open-settings').addEventListener('click', () => openSheet(true));
+  $('brain-chip').addEventListener('click', () => openSheet(true));
+  $('btn-close-settings').addEventListener('click', () => openSheet(false));
+  $('scrim').addEventListener('click', () => openSheet(false));
+
+  function brainLabel(id) {
+    if (!id || id === 'global') return 'Global';
+    const brain = state.brains.find((b) => b.id === id);
+    return (brain && brain.name) || id.replace(/^(project|tenant):/, '');
+  }
+
+  function renderBrainChip() {
+    $('brain-chip-label').textContent = brainLabel(state.activeBrainId);
+  }
+
+  async function loadBrains() {
+    const select = $('brain-select');
+    try {
+      const data = await Brain.listBrains();
+      state.brains = (data && data.brains) || [];
+    } catch { /* keep whatever we had */ }
+    const options = state.brains.length ? state.brains : [{ id: 'global', name: 'Global Brain', node_count: null }];
+    select.replaceChildren(...options.map((b) => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      const count = typeof b.node_count === 'number' ? ` · ${b.node_count.toLocaleString()} memories` : '';
+      opt.textContent = `${b.id === 'global' ? 'Global brain' : b.name}${count}`;
+      return opt;
+    }));
+    if (!options.some((b) => b.id === state.activeBrainId)) {
+      const opt = document.createElement('option');
+      opt.value = state.activeBrainId;
+      opt.textContent = brainLabel(state.activeBrainId);
+      select.append(opt);
+    }
+    select.value = state.activeBrainId;
+    renderBrainChip();
+  }
+
+  $('brain-select').addEventListener('change', async (e) => {
+    state.activeBrainId = e.target.value || 'global';
+    await chrome.storage.sync.set({ activeBrainId: state.activeBrainId });
+    renderBrainChip();
+    toast(`Using ${brainLabel(state.activeBrainId)} brain`);
+    loadChat();
+    loadRecent();
+    refreshPage();
+    if ($('search-input').value.trim()) onSearchInput();
+  });
+
+  function renderSettingsToggles() {
+    $('toggle-page-recall').checked = !!state.settings.pageRecall;
+    $('toggle-pill').checked = !!state.settings.showPill;
+    $('toggle-pill').disabled = !state.settings.pageRecall;
+    document.querySelector('.setting-row.sub').classList.toggle('is-disabled', !state.settings.pageRecall);
+  }
+
+  $('toggle-page-recall').addEventListener('change', async (e) => {
+    state.settings.pageRecall = e.target.checked;
+    await chrome.storage.sync.set({ pageRecall: state.settings.pageRecall });
+    renderSettingsToggles();
+    toast(state.settings.pageRecall ? 'Related memories on — takes effect on the next page load' : 'Related memories off');
+  });
+  $('toggle-pill').addEventListener('change', async (e) => {
+    state.settings.showPill = e.target.checked;
+    await chrome.storage.sync.set({ showPill: state.settings.showPill });
+  });
+
+  function currentHost() {
+    const tab = state.page;
+    return tab && UI.isCapturableUrl(tab.url) ? new URL(tab.url).hostname.replace(/^www\./, '') : '';
+  }
+
+  function renderBlockButton() {
+    const host = currentHost();
+    const btn = $('btn-block-site');
+    btn.disabled = !host;
+    const blocked = host && UI.isBlocked(state.page.url, state.settings.blocklist);
+    btn.classList.toggle('danger', !blocked);
+    btn.replaceChildren(document.createTextNode(blocked ? 'Allow ' : 'Never check '), el('span', '', host || 'this site'));
+    if (blocked) btn.append(document.createTextNode(' again'));
+  }
+
+  $('btn-block-site').addEventListener('click', async () => {
+    const host = currentHost();
+    if (!host) return;
+    const list = Array.isArray(state.settings.blocklist) ? state.settings.blocklist.slice() : [];
+    const blocked = UI.isBlocked(state.page.url, list);
+    const next = blocked
+      ? list.filter((entry) => !UI.isBlocked(state.page.url, [entry]))
+      : [...list, host];
+    state.settings.blocklist = next;
+    await chrome.storage.sync.set({ blocklist: next });
+    renderBlockButton();
+    toast(blocked ? `${host} will be checked again` : `${host} won’t be checked for related memories`);
+  });
+
+  $('btn-recompile').addEventListener('click', async () => {
+    const btn = $('btn-recompile');
+    setBusy(btn, true);
+    try {
+      await Brain.compile();
+      toast('Search index rebuilt');
+    } catch (err) {
+      toast(describeError(err), true);
+    } finally {
+      setBusy(btn, false);
     }
   });
 
-  // Listen for tab active changes
-  chrome.tabs.onActivated.addListener(() => {
-    updateCollabActiveUrl();
+  async function renderShortcut() {
+    try {
+      const commands = await chrome.commands.getAll();
+      const open = commands.find((c) => c.name === '_execute_action');
+      const remember = commands.find((c) => c.name === 'remember-page');
+      const parts = [open && open.shortcut, remember && remember.shortcut].filter(Boolean);
+      $('shortcut-summary').textContent = parts.length ? parts.join(' · ') : 'Not set';
+    } catch { /* ignore */ }
+  }
+
+  function renderSheetFooter() {
+    const foot = $('sheet-foot');
+    const ext = `Extension v${chrome.runtime.getManifest().version}`;
+    const brain = state.health && state.health.version ? `Brain v${state.health.version}` : '';
+    foot.replaceChildren(el('span', '', ext), el('span', '', brain));
+  }
+
+  $('link-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  $('link-shortcuts').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
+  $('link-dashboard').addEventListener('click', async () => chrome.tabs.create({ url: await Brain.dashboardUrl('/') }));
+
+  // ---------------------------------------------------------------------------
+  // Gate buttons
+  // ---------------------------------------------------------------------------
+
+  $('gate-settings').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  $('gate-retry').addEventListener('click', async () => {
+    const btn = $('gate-retry');
+    setBusy(btn, true);
+    const recovered = await checkConnection();
+    setBusy(btn, false);
+    if (recovered) loadAll();
   });
 
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.url) {
-      updateCollabActiveUrl();
+  // ---------------------------------------------------------------------------
+  // Global events
+  // ---------------------------------------------------------------------------
+
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+    if (e.key === 'Escape' && $('sheet').classList.contains('is-open')) return openSheet(false);
+    if (e.key === '/' && !typing && state.tab === 'recall') {
+      e.preventDefault();
+      $('search-input').focus();
     }
   });
 
-  // ---- Event listeners ----
-  searchInput.addEventListener('input', (e) => debounceSearch(e.target.value));
+  let pageTimer = null;
+  function schedulePageRefresh() {
+    clearTimeout(pageTimer);
+    pageTimer = setTimeout(() => { refreshPage(); updateSendState(); }, 150);
+  }
 
-  // ---- Init ----
-  checkConnection();
-  loadSettingsState().then(() => {
-    loadRecentCaptures();
-    recordRememberInvariants();
-    initCollab();
+  chrome.tabs.onActivated.addListener(schedulePageRefresh);
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (!state.page || tabId !== state.page.id) return;
+    if (changeInfo.url || changeInfo.title || changeInfo.status === 'complete' || changeInfo.favIconUrl) schedulePageRefresh();
   });
-  
-  // Set intervals
-  setInterval(checkConnection, 15000);
-  setInterval(() => {
-    // Refresh active research periodically if currently viewing Research tab
-    const activeTab = document.querySelector('.tab-btn.active');
-    if (activeTab && activeTab.getAttribute('data-tab') === 'research') {
-      fetchResearch();
+  chrome.windows?.onFocusChanged?.addListener(schedulePageRefresh);
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.type === 'CAPTURED') afterCapture(msg.action);
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'session' && changes.pendingAsk && changes.pendingAsk.newValue) consumePendingAsk();
+    if (area === 'sync') {
+      if (changes.blocklist) { state.settings.blocklist = changes.blocklist.newValue || []; renderBlockButton(); }
+      if (changes.pageRecall) { state.settings.pageRecall = !!changes.pageRecall.newValue; renderSettingsToggles(); }
     }
-  }, 30000);
+    if (area === 'local' && (changes.brainUrl || changes.pat)) {
+      checkConnection().then((recovered) => { if (recovered) loadAll(); });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+
+  function loadAll() {
+    refreshPage();
+    loadRecent();
+    loadResearch();
+    loadBrains();
+  }
+
+  async function init() {
+    const [sync, session] = await Promise.all([
+      chrome.storage.sync.get({ activeBrainId: 'global', pageRecall: false, showPill: true, blocklist: [] }),
+      chrome.storage.session.get('lastTab').catch(() => ({})),
+    ]);
+    state.activeBrainId = sync.activeBrainId || 'global';
+    state.settings = { pageRecall: sync.pageRecall, showPill: sync.showPill, blocklist: sync.blocklist || [] };
+    renderBrainChip();
+    renderSettingsToggles();
+    renderSheetFooter();
+    switchTab(TABS.includes(session.lastTab) ? session.lastTab : 'recall');
+    await loadChat();
+    await refreshPage();
+
+    await checkConnection();
+    if (state.connection === 'ok') loadAll();
+    consumePendingAsk();
+    setInterval(() => checkConnection({ quiet: true }).then((recovered) => { if (recovered) loadAll(); }), 30000);
+  }
+
+  init();
 })();
-
-

@@ -369,6 +369,14 @@ async function runResearchLegacy(task, ctx) {
     String(task.slug || '').includes('fact-seeker') ||
     String(task.slug || '').includes('knowledge-acquisition')
   ) {
+    // Research needs a topic somebody chose. A task without one used to pull
+    // "the next agenda topic" — which is how self-spawned tangents got
+    // researched — so it is now a no-op (RESEARCH_SYSTEM2).
+    const topic = String(task.target || '').trim();
+    if (!topic || topic === 'global') {
+      return { success: true, output: 'No research topic on this task — nothing to research.', executor: 'research' };
+    }
+
     // Prefer deep multi-source research when this came from the research queue
     const deep =
       String(task.slug || '').startsWith('research-acquisition-') ||
@@ -492,51 +500,6 @@ async function runResearchLegacy(task, ctx) {
     return {
       success: true,
       output: result?.output || 'Improvement complete',
-      factSlug: result?.factSlug || task._node_slug,
-      executor: 'research',
-    };
-  }
-
-  if (String(task.slug || '').startsWith('research-monitoring-')) {
-    const missing = requireNode('Monitoring');
-    if (missing) return missing;
-    const { runResearchMonitoringCycle } = await import('./fact-seeker.mjs');
-    const result = await runResearchMonitoringCycle({
-      vaultDir: VAULT_DIR,
-      nodeSlug: task._node_slug,
-      topic: task.title || task.target || 'Unknown Topic',
-      runtimeConfig,
-      skillsDir: SKILLS_DIR,
-      derivedDir: DERIVED_DIR,
-      instructionsFile: INSTRUCTIONS_FILE,
-    });
-    if (result?.success === false) {
-      return { success: false, error: result.error || 'Monitoring failed', executor: 'research' };
-    }
-    return {
-      success: true,
-      output: result?.output || 'Monitoring complete',
-      factSlug: result?.factSlug || task._node_slug,
-      executor: 'research',
-    };
-  }
-
-  if (String(task.slug || '').startsWith('research-expansion-')) {
-    const missing = requireNode('Expansion');
-    if (missing) return missing;
-    const { runResearchExpansionCycle } = await import('./fact-seeker.mjs');
-    const result = await runResearchExpansionCycle({
-      vaultDir: VAULT_DIR,
-      nodeSlug: task._node_slug,
-      topic: task.title || task.target || 'Unknown Topic',
-      runtimeConfig,
-    });
-    if (result?.success === false) {
-      return { success: false, error: result.error || 'Expansion failed', executor: 'research' };
-    }
-    return {
-      success: true,
-      output: result?.output || 'Expansion complete',
       factSlug: result?.factSlug || task._node_slug,
       executor: 'research',
     };

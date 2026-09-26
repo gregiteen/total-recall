@@ -1,4 +1,5 @@
-import { discoverPlugins } from '../../core/plugin-loader.mjs';
+import { listInstalledPlugins } from '../../core/plugin-store.mjs';
+import { projectPluginsDir, globalPluginsDir } from '../../core/plugin-loader.mjs';
 
 function stripAnsi(str) {
   return String(str || '').replace(/\x1b\[[0-9;]*m/g, '');
@@ -10,10 +11,14 @@ function padAnsi(str, targetLen) {
   return String(str || '') + ' '.repeat(paddingNeeded);
 }
 
+function clip(str, len) {
+  const s = String(str || '');
+  return s.length > len ? s.slice(0, len - 1) + '…' : s;
+}
+
 export async function listPlugins(args = []) {
   const isJson = args.includes('--json');
-  const projectRoot = process.cwd();
-  const plugins = discoverPlugins(projectRoot);
+  const plugins = listInstalledPlugins(process.cwd());
 
   if (isJson) {
     console.log(JSON.stringify(plugins, null, 2));
@@ -23,60 +28,55 @@ export async function listPlugins(args = []) {
   console.log(`\n🔌 Total Recall — Installed Plugins\n`);
 
   if (plugins.length === 0) {
-    console.log('  No plugins installed in this project or globally (~/.agent/plugins/).');
-    console.log('  Install one with: npx total-recall plugin install <path|git-url>\n');
+    console.log(`  No plugins installed in ${projectPluginsDir(process.cwd())}`);
+    console.log(`  or globally in ${globalPluginsDir()}.`);
+    console.log('  See what you can install: npx total-recall plugin available\n');
     return;
   }
 
-  const colId = 20;
-  const colName = 28;
-  const colVer = 10;
-  const colStatus = 12;
-  const colCats = 24;
+  const cols = [
+    ['Plugin ID', 22],
+    ['Version', 9],
+    ['Scope', 8],
+    ['Source', 22],
+    ['Shared', 7],
+    ['Status', 10]
+  ];
+  const line = (l, m, r) => l + cols.map(([, w]) => '─'.repeat(w + 2)).join(m) + r;
+  const row = (cells) => '│ ' + cells.map((c, i) => padAnsi(c, cols[i][1])).join(' │ ') + ' │';
 
-  const topBorder = `┌${'─'.repeat(colId + 2)}┬${'─'.repeat(colName + 2)}┬${'─'.repeat(colVer + 2)}┬${'─'.repeat(colStatus + 2)}┬${'─'.repeat(colCats + 2)}┐`;
-  const midBorder = `├${'─'.repeat(colId + 2)}┼${'─'.repeat(colName + 2)}┼${'─'.repeat(colVer + 2)}┼${'─'.repeat(colStatus + 2)}┼${'─'.repeat(colCats + 2)}┤`;
-  const botBorder = `└${'─'.repeat(colId + 2)}┴${'─'.repeat(colName + 2)}┴${'─'.repeat(colVer + 2)}┴${'─'.repeat(colStatus + 2)}┴${'─'.repeat(colCats + 2)}┘`;
-
-  console.log(topBorder);
-  console.log(
-    `│ ${padAnsi('Plugin ID', colId)} │ ` +
-    `${padAnsi('Name', colName)} │ ` +
-    `${padAnsi('Version', colVer)} │ ` +
-    `${padAnsi('Status', colStatus)} │ ` +
-    `${padAnsi('SSSS Categories', colCats)} │`
-  );
-  console.log(midBorder);
+  console.log(line('┌', '┬', '┐'));
+  console.log(row(cols.map(([h]) => h)));
+  console.log(line('├', '┼', '┤'));
 
   for (const p of plugins) {
-    const id = p.id;
-    const name = (p.manifest.name || id).slice(0, colName);
-    const ver = p.manifest.version ? `v${p.manifest.version}` : '—';
-    const status = p.valid ? '\x1b[32mActive ✅\x1b[0m' : '\x1b[31mInvalid ❌\x1b[0m';
-    const cats = (p.manifest.ssss_schemas?.categories || []).map(c => c.name).join(', ') || '—';
-    const catStr = cats.length > colCats ? cats.slice(0, colCats - 3) + '...' : cats;
-
-    console.log(
-      `│ \x1b[1m${padAnsi(id, colId)}\x1b[0m │ ` +
-      `${padAnsi(name, colName)} │ ` +
-      `${padAnsi(ver, colVer)} │ ` +
-      `${padAnsi(status, colStatus)} │ ` +
-      `${padAnsi(catStr, colCats)} │`
-    );
+    const source = p.source.kind === 'peer' ? `peer ${p.source.peer_hostname}` : p.source.kind;
+    const status = !p.valid
+      ? '\x1b[31minvalid\x1b[0m'
+      : p.modified_since_install ? '\x1b[33mmodified\x1b[0m' : '\x1b[32mok\x1b[0m';
+    console.log(row([
+      `\x1b[1m${clip(p.id, 22)}\x1b[0m`,
+      `v${p.version}`,
+      p.scope,
+      clip(source, 22),
+      p.shared ? 'yes' : 'no',
+      status
+    ]));
   }
 
-  console.log(botBorder);
+  console.log(line('└', '┴', '┘'));
 
-  // Show detailed validation errors if any
   const invalid = plugins.filter(p => !p.valid);
   if (invalid.length > 0) {
-    console.log(`\n⚠️  Configuration Warnings:`);
+    console.log(`\n⚠️  Manifest problems:`);
     for (const inv of invalid) {
-      console.log(`  Plugin '${inv.id}':`);
-      for (const err of inv.errors) {
-        console.log(`    - ${err}`);
-      }
+      console.log(`  ${inv.id}:`);
+      for (const err of inv.errors) console.log(`    - ${err}`);
     }
+  }
+  const modified = plugins.filter(p => p.modified_since_install);
+  if (modified.length > 0) {
+    console.log(`\nℹ️  Changed on disk since install (content hash differs): ${modified.map(p => p.id).join(', ')}`);
   }
 
   console.log();

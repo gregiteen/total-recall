@@ -235,7 +235,7 @@ async function main() {
               } else if (handler.default) {
                 await handler.default(process.argv.slice(3));
               }
-              process.exit(0);
+              process.exit(process.exitCode ?? 0);
             }
           }
         }

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "system-monitor",
+  "name": "System Monitor",
+  "version": "1.1.0",
+  "description": "Host load and memory in the compiled agent context, plus a telemetry sample recorded every 15 minutes.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": ["operations", "self-hosting"],
+  "cli": {
+    "command": "system-monitor",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      { "name": "status", "description": "Human-readable host resource summary" },
+      { "name": "sample", "description": "One JSON telemetry sample" }
+    ]
+  },
+  "compile": {
+    "generator": "./generator.mjs",
+    "auto": true
+  },
+  "tasks": [
+    {
+      "intent": "Record a host telemetry sample (kept in the plugin.task_run event log)",
+      "schedule": "*/15 * * * *",
+      "command": "sample"
+    }
+  ]
+}

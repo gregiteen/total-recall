@@ -1043,6 +1043,8 @@ export const MeshNodeSchema = z.object({
   /** Snapshot of host NICs (kinds are classified heuristically). */
   interfaces: z.array(NetworkInterfaceEntrySchema).optional(),
   lan_ip: z.string().nullable().optional(),
+  /** Port of this node's brain HTTP service, for mesh service discovery. */
+  brain_port: z.number().int().positive().max(65535).nullable().optional(),
   /**
    * Device I/O profile — entity variables for agent UI generation
    * (touchscreen, mic, speaker, screen, keyboard, …).
@@ -1064,6 +1066,35 @@ export const DaemonLeaderSchema = z.object({
   lease_ttl_seconds: z.number().int().positive().default(60),
 }).passthrough();
 
+/**
+ * Install record for one plugin. Lives beside the plugin, in the vault of the
+ * brain that owns its plugins directory: `system/plugins/<id>.md`.
+ * Every field is a fact this node observed — there is deliberately no rating,
+ * review, or popularity data anywhere in the plugin model.
+ */
+export const PluginRecordSchema = z.object({
+  type: z.literal('plugin_record'),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  timestamp: ssssDatetime(),
+  plugin_id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
+  version: z.string().min(1),
+  scope: z.enum(['project', 'global']),
+  /** Legacy private mesh sharing. Public sharing requires a separate opt-in. */
+  shared: z.boolean().default(false),
+  public_shared: z.boolean().default(false),
+  source: z.object({
+    kind: z.enum(['bundled', 'public', 'peer', 'git', 'local', 'link']),
+    ref: z.string().min(1),
+    peer_hostname: z.string().nullable().optional(),
+  }).passthrough(),
+  /** Content hash at install time (see plugin-bundle.mjs). */
+  sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable().optional(),
+  installed_at: ssssDatetime(),
+  /** Last minute-slot (YYYY-MM-DDTHH:MM) each scheduled task command ran in. */
+  task_runs: z.record(z.string()).optional(),
+}).passthrough();
+
 // ─── Schema Registry (§5 of the SSSS spec) ─────────────────────────────────
 
 /** Total Recall host-extension primitives; peer hosts are not required to register them. */
@@ -1073,6 +1104,7 @@ export const SSSS_HOST_EXTENSION_TYPES = [
   'notification_rule',
   'mesh_node',
   'daemon_leader',
+  'plugin_record',
 ];
 
 /** Map from SSSS `type` value to its Zod schema. Used by the operation validator. */
@@ -1082,6 +1114,7 @@ export const SSSS_SCHEMAS = {
   notification_rule: NotificationRuleSchema,
   mesh_node: MeshNodeSchema,
   daemon_leader: DaemonLeaderSchema,
+  plugin_record: PluginRecordSchema,
   memory: MemoryNodeSchema,
   conflict: ConflictRecordSchema,
   task: TaskSchema,

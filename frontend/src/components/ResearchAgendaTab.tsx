@@ -13,6 +13,11 @@ export interface ResearchItem {
   research_phase?: string
   created_at: string
   updated_at: string
+  /** 'user' = a human asked; 'autonomous' = background research for a project; 'legacy' = predates provenance. */
+  origin?: 'user' | 'autonomous' | 'legacy'
+  requested_via?: string | null
+  project?: string | null
+  rationale?: string | null
 }
 
 interface ResearchAgendaTabProps {
@@ -239,6 +244,16 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.topic}</div>
+                        {(item.origin === 'autonomous' || item.origin === 'user') && (
+                          <div
+                            style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}
+                            title={item.origin === 'autonomous' ? item.rationale || undefined : undefined}
+                          >
+                            {item.origin === 'autonomous'
+                              ? `Background research${item.project ? ` for ${item.project}` : ''}`
+                              : `You asked${item.requested_via ? ` · ${item.requested_via}` : ''}`}
+                          </div>
+                        )}
                         {item.notes && (
                           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
                             {item.notes}
@@ -312,25 +327,15 @@ export default function ResearchAgendaTab(props: ResearchAgendaTabProps) {
                                     icon: '✨',
                                     desc: 'Markdown polish & premium layout restructuring'
                                   },
-                                  {
-                                    title: 'Source Monitoring',
-                                    phase: 'monitoring',
-                                    icon: '📡',
-                                    desc: 'Ongoing newsletter, RSS & release tracking'
-                                  },
-                                  {
-                                    title: 'Tangent Spawning',
-                                    phase: 'expansion',
-                                    icon: '🚀',
-                                    desc: 'Autonomously brainstorming & enqueuing tangents'
-                                  }
                                 ].map((step, idx) => {
-                                  const phases = ['acquisition', 'deliberation', 'improvement', 'monitoring', 'expansion']
+                                  // Research ends after improvement: it never re-monitors or
+                                  // spawns tangents (RESEARCH_SYSTEM2).
+                                  const phases = ['acquisition', 'deliberation', 'improvement']
                                   const activePhase = item.research_phase || 'acquisition'
                                   const activeIndex = phases.indexOf(activePhase)
 
                                   let state: 'completed' | 'active' | 'waiting' | 'failed' | 'upcoming' = 'upcoming'
-                                  if (idx < activeIndex) {
+                                  if (item.status === 'done' || idx < activeIndex) {
                                     state = 'completed'
                                   } else if (idx === activeIndex) {
                                     if (item.status === 'in_progress') state = 'active'

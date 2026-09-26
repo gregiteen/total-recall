@@ -79,6 +79,8 @@ router.post('/api/share', requireAuth, requireScope('memory:write'), async (req,
         topic,
         priority: 'medium',
         notes: excerpt || '',
+        origin: 'user',
+        requested_via: String(source || '').includes('extension') ? 'extension' : 'share',
       });
 
       return res.status(201).json({

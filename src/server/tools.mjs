@@ -524,9 +524,35 @@ export async function meshMintPreAuthKey(options = {}) {
   }
 }
 
+/**
+ * The user asked, in chat, for background research. Recorded as a user request
+ * (runs ahead of autonomous research, no budget applies).
+ */
+export async function queueResearch(topic, notes) {
+  const { requestResearch } = await import('../core/research-gate.mjs');
+  const item = requestResearch({ topic, notes, via: 'chat' });
+  const state = item.status === 'done' ? 'already researched' : item.status === 'pending' ? 'queued' : item.status;
+  return JSON.stringify({ id: item.id, topic: item.topic, status: state, note: 'Runs in the background; findings will appear in memory and future context.' });
+}
+
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
 
 export const AVAILABLE_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'queue_research',
+      description: 'Queue deep background research on a topic. Use ONLY when the user explicitly asks you to research something in depth or to look into it later. Returns immediately; the findings land in memory and show up in future context. For an answer right now, use search_web instead.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: { type: 'string', description: 'Specific, searchable topic, e.g. "Stripe Node SDK v17 webhook signature verification".' },
+          notes: { type: 'string', description: 'Optional: what the user wants to learn and why.' },
+        },
+        required: ['topic'],
+      },
+    },
+  },
   {
     type: 'function',
     function: {
@@ -851,6 +877,7 @@ export async function handleToolCall(toolCall) {
   try {
     const args = JSON.parse(argsString);
     switch (name) {
+      case 'queue_research':    return await queueResearch(args.topic, args.notes);
       case 'search_web':        return await executeWebSearch(args.query);
       case 'browser_navigate':  return await browserNavigate(args.url);
       case 'browser_click':     return await browserClick(args.selector);

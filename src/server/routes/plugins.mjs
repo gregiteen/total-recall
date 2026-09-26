@@ -1,225 +1,70 @@
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { spawnSync } from "node:child_process";
 import { requireAuth, requireScope } from "../auth.mjs";
-import { discoverPlugins, getPluginById, validatePluginManifest } from "../../core/plugin-loader.mjs";
+import { getPluginById } from "../../core/plugin-loader.mjs";
+import {
+  listInstalledPlugins,
+  listAvailableBundled,
+  describePlugin,
+  installPlugin,
+  uninstallPlugin,
+  setPluginShared
+} from "../../core/plugin-store.mjs";
+import { listPeerPlugins } from "../../core/plugin-peers.mjs";
+import { runPluginCommand } from "../../core/plugin-runner.mjs";
 import { serverError, badRequest } from "./_shared.mjs";
 
 const router = Router();
 
-function getRatingsFilePath(projectRoot) {
-  const root = projectRoot || process.cwd();
-  return path.join(root, ".agent", "config", "plugin-ratings.json");
-}
-
-function loadRatings(projectRoot) {
-  const filePath = getRatingsFilePath(projectRoot);
-  if (!fs.existsSync(filePath)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function saveRatings(projectRoot, ratings) {
-  const filePath = getRatingsFilePath(projectRoot);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(filePath, JSON.stringify(ratings, null, 2), "utf8");
-}
-
-export const CURATED_CATALOG = [
-  {
-    id: "scientific-frontiers",
-    name: "Scientific Frontiers Engine",
-    version: "1.0.0",
-    description: "Continuous scientific capability intelligence, curiosity-driven research graph weaver, and benchmark ledger.",
-    tags: ["science", "benchmarks", "curiosity", "graph"],
-    author: "Total Recall Ecosystem",
-    sourceUrl: "https://github.com/gregiteen/scientific-frontiers-engine.git",
-    rating: 4.9,
-    reviewCount: 142,
-    installCount: "3.2k",
-    verified: true,
-    isInstalled: false
-  },
-  {
-    id: "meta-harness",
-    name: "Meta Harness & Agent Orchestrator",
-    version: "1.0.0",
-    description: "Orchestrates and delegates tasks across connected AI harnesses (Antigravity, Claude Code, Codex, Ollama).",
-    tags: ["agents", "multi-harness", "mesh", "delegation"],
-    author: "Total Recall Ecosystem",
-    sourceUrl: "./.agent/plugins/meta-harness",
-    rating: 4.8,
-    reviewCount: 98,
-    installCount: "2.4k",
-    verified: true,
-    isInstalled: false
-  },
-  {
-    id: "code-quality",
-    name: "Code Quality & SSSS Conformance",
-    version: "1.2.0",
-    description: "Local-first code quality gates, SSSS schema verification, and invariant enforcement.",
-    tags: ["quality", "conformance", "gates", "testing"],
-    author: "Total Recall Ecosystem",
-    sourceUrl: "./.agent/plugins/code-quality",
-    rating: 5.0,
-    reviewCount: 310,
-    installCount: "8.2k",
-    verified: true,
-    isInstalled: false
-  },
-  {
-    id: "system-monitor",
-    name: "System Monitor & Telemetry",
-    version: "1.0.0",
-    description: "Real-time host resource metrics, memory watchdog, and dynamic system telemetry context generator.",
-    tags: ["telemetry", "metrics", "monitor", "watchdog"],
-    author: "Total Recall Ecosystem",
-    sourceUrl: "./.agent/plugins/system-monitor",
-    rating: 4.9,
-    reviewCount: 56,
-    installCount: "1.5k",
-    verified: true,
-    isInstalled: false
-  },
-  {
-    id: "git-sentinel",
-    name: "Git Sentinel & Repo Watchdog",
-    version: "1.0.0",
-    description: "Continuous repository auditor checking dirty worktrees, unpushed commits, and stale branches.",
-    tags: ["git", "sentinel", "audit", "vcs"],
-    author: "Total Recall Ecosystem",
-    sourceUrl: "./.agent/plugins/git-sentinel",
-    rating: 4.8,
-    reviewCount: 73,
-    installCount: "2.1k",
-    verified: true,
-    isInstalled: false
-  },
-  {
-    id: "chrome-devtools",
-    name: "Chrome DevTools Automation",
-    version: "1.0.0",
-    description: "Browser performance auditing, Core Web Vitals profiling, and accessibility testing tools.",
-    tags: ["browser", "devtools", "testing", "mcp"],
-    author: "Modern Web Guidance",
-    sourceUrl: "https://github.com/total-recall-plugins/chrome-devtools.git",
-    rating: 4.7,
-    reviewCount: 84,
-    installCount: "1.8k",
-    verified: true,
-    isInstalled: false
-  }
-];
+// Plugins always resolve against the server's own project. Routes used to take
+// a caller-supplied `root`, which let a request point discovery — and the
+// runner — at any directory on disk.
+const projectRoot = () => process.cwd();
 
 /**
  * GET /api/plugins
- * Returns list of installed plugins with their manifests, validation status, ratings, and capabilities.
+ * Installed plugins (project + global): manifest facts, provenance, content
+ * hash, sharing state and scheduled-task history. Nothing else.
  */
-router.get("/api/plugins", requireAuth, requireScope("config:read"), (req, res) => {
+router.get("/api/plugins", requireAuth, requireScope("config:read"), (_req, res) => {
   try {
-    const projectRoot = req.query?.root || process.cwd();
-    const plugins = discoverPlugins(projectRoot);
-    const userRatings = loadRatings(projectRoot);
-
-    res.json({
-      success: true,
-      count: plugins.length,
-      plugins: plugins.map((p) => {
-        const userReview = userRatings[p.id] || null;
-        const catalogMatch = CURATED_CATALOG.find((c) => c.id === p.id);
-        const baseRating = catalogMatch?.rating || 4.8;
-        const reviewCount = catalogMatch?.reviewCount || 12;
-
-        return {
-          id: p.id,
-          name: p.manifest?.name || p.id,
-          version: p.manifest?.version || "0.0.0",
-          description: p.manifest?.description || "",
-          valid: p.valid,
-          errors: p.errors,
-          dir: p.dir,
-          rating: baseRating,
-          reviewCount: userReview ? reviewCount + 1 : reviewCount,
-          installCount: catalogMatch?.installCount || "1.0k",
-          userRating: userReview?.rating || null,
-          userReview: userReview?.review || null,
-          categories: p.manifest?.ssss_schemas?.categories || [],
-          tasks: p.manifest?.tasks || [],
-          openwiki_hubs: p.manifest?.openwiki_hubs || [],
-          tools: p.manifest?.tools || [],
-          cli: p.manifest?.cli || null
-        };
-      })
-    });
+    const plugins = listInstalledPlugins(projectRoot());
+    res.json({ success: true, count: plugins.length, plugins });
   } catch (err) {
     serverError(res, err);
   }
 });
 
 /**
- * GET /api/plugins/catalog
- * Returns curated discoverable plugins with ratings.
+ * GET /api/plugins/available
+ * Plugins bundled with this Total Recall package, installable on any node.
  */
-router.get("/api/plugins/catalog", requireAuth, requireScope("config:read"), (req, res) => {
+router.get("/api/plugins/available", requireAuth, requireScope("config:read"), (_req, res) => {
   try {
-    const projectRoot = req.query?.root || process.cwd();
-    const installed = new Set(discoverPlugins(projectRoot).map((p) => p.id));
-    const userRatings = loadRatings(projectRoot);
-
-    const catalogWithStatus = CURATED_CATALOG.map((item) => ({
-      ...item,
-      isInstalled: installed.has(item.id),
-      userRating: userRatings[item.id]?.rating || null
-    }));
-    res.json({
-      success: true,
-      catalog: catalogWithStatus
-    });
+    res.json({ success: true, plugins: listAvailableBundled(projectRoot()) });
   } catch (err) {
     serverError(res, err);
   }
 });
 
 /**
- * POST /api/plugins/:id/rate
- * Submit or update a rating and review for an installed plugin.
+ * GET /api/plugins/peers
+ * Plugins shared by each mesh peer, queried live. Per-peer status is reported
+ * exactly as observed (ok, offline, unreachable, not_configured, unsupported, error).
  */
-router.post("/api/plugins/:id/rate", requireAuth, requireScope("config:write"), (req, res) => {
+router.get("/api/plugins/peers", requireAuth, requireScope("config:read"), async (_req, res) => {
   try {
-    const id = req.params.id;
-    const { rating, review = "" } = req.body || {};
-    const numRating = Number(rating);
-
-    if (isNaN(numRating) || numRating < 1 || numRating > 5) {
-      return badRequest(res, "Rating must be a number between 1 and 5");
+    const result = await listPeerPlugins();
+    const installed = new Map(listInstalledPlugins(projectRoot()).map((p) => [p.id, p]));
+    for (const peer of result.peers) {
+      for (const p of peer.plugins) {
+        const local = installed.get(p.id);
+        p.installed = !!local;
+        p.same_as_installed = !!local && local.sha256 === p.sha256;
+      }
     }
-
-    const projectRoot = req.body?.projectRoot || process.cwd();
-    const ratings = loadRatings(projectRoot);
-
-    ratings[id] = {
-      rating: Math.round(numRating * 10) / 10,
-      review: typeof review === "string" ? review.trim() : "",
-      updatedAt: new Date().toISOString()
-    };
-
-    saveRatings(projectRoot, ratings);
-
-    res.json({
-      success: true,
-      message: "Rating saved for " + id,
-      pluginId: id,
-      userRating: ratings[id]
-    });
+    res.json({ success: true, ...result });
   } catch (err) {
     serverError(res, err);
   }
@@ -227,288 +72,108 @@ router.post("/api/plugins/:id/rate", requireAuth, requireScope("config:write"), 
 
 /**
  * POST /api/plugins/install
- * Installs or links a plugin from a local directory or git repository.
+ * body: { source: "<bundled id>" | "<share link>" | "peer:<host>/<id>" | "<git url>" | "<path>", link?, global? }
  */
-router.post("/api/plugins/install", requireAuth, requireScope("config:write"), (req, res) => {
+router.post("/api/plugins/install", requireAuth, requireScope("config:write"), async (req, res) => {
   try {
-    let { source, link = false, global: isGlobal = false, projectRoot } = req.body || {};
+    const { source, link = false, global: isGlobal = false } = req.body || {};
     if (!source || typeof source !== "string") {
-      return badRequest(res, "Missing source path or git URL");
+      return badRequest(res, "Missing plugin source (bundled id, share link, peer:<host>/<id>, git URL, or path)");
     }
-
-    const matchedCatalog = CURATED_CATALOG.find((p) => p.id.toLowerCase() === source.toLowerCase());
-    if (matchedCatalog) {
-      source = matchedCatalog.sourceUrl;
-    }
-
-    const root = projectRoot || process.cwd();
-    const pluginsBaseDir = isGlobal
-      ? path.join(os.homedir(), ".agent", "plugins")
-      : path.join(root, ".agent", "plugins");
-
-    if (!fs.existsSync(pluginsBaseDir)) {
-      fs.mkdirSync(pluginsBaseDir, { recursive: true });
-    }
-
-    const isGitUrl = source.startsWith("http://") ||
-                     source.startsWith("https://") ||
-                     source.startsWith("git@") ||
-                     source.endsWith(".git");
-
-    if (isGitUrl) {
-      const tempDir = path.join(os.tmpdir(), "tr-plugin-" + Date.now());
-      const cloneRes = spawnSync("git", ["clone", "--depth", "1", source, tempDir], {
-        encoding: "utf8"
-      });
-
-      if (cloneRes.status !== 0) {
-        return badRequest(res, "Failed to clone repository: " + (cloneRes.stderr || "git clone failed"));
-      }
-
-      const manifestPath = path.join(tempDir, "plugin.json");
-      if (!fs.existsSync(manifestPath)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        return badRequest(res, "Cloned repository does not contain a plugin.json manifest");
-      }
-
-      let manifest;
-      try {
-        manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-      } catch (err) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        return badRequest(res, "Invalid plugin.json JSON: " + err.message);
-      }
-
-      const validation = validatePluginManifest(manifest);
-      if (!validation.valid) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        return badRequest(res, "Invalid plugin manifest: " + validation.errors.join(", "));
-      }
-
-      const destDir = path.join(pluginsBaseDir, manifest.id);
-      if (fs.existsSync(destDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        return badRequest(res, "Plugin " + manifest.id + " is already installed at " + destDir);
-      }
-
-      fs.cpSync(tempDir, destDir, { recursive: true });
-      fs.rmSync(tempDir, { recursive: true, force: true });
-
-      return res.json({
-        success: true,
-        message: "Successfully installed plugin " + manifest.name,
-        plugin: { id: manifest.id, name: manifest.name, version: manifest.version, dir: destDir }
-      });
-    }
-
-    // Local directory install / link
-    const absSource = path.isAbsolute(source) ? source : path.resolve(root, source);
-    if (!fs.existsSync(absSource)) {
-      return badRequest(res, "Source directory not found: " + absSource);
-    }
-
-    const manifestPath = path.join(absSource, "plugin.json");
-    if (!fs.existsSync(manifestPath)) {
-      return badRequest(res, "Directory " + absSource + " does not contain a plugin.json manifest");
-    }
-
-    let manifest;
-    try {
-      manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    } catch (err) {
-      return badRequest(res, "Invalid plugin.json JSON: " + err.message);
-    }
-
-    const validation = validatePluginManifest(manifest);
-    if (!validation.valid) {
-      return badRequest(res, "Invalid plugin manifest: " + validation.errors.join(", "));
-    }
-
-    const destDir = path.join(pluginsBaseDir, manifest.id);
-    if (fs.existsSync(destDir)) {
-      return badRequest(res, "Plugin " + manifest.id + " is already installed");
-    }
-
-    if (link) {
-      fs.symlinkSync(absSource, destDir, "junction");
-    } else {
-      fs.cpSync(absSource, destDir, { recursive: true });
-    }
-
-    return res.json({
+    const result = await installPlugin(source, { projectRoot: projectRoot(), link: !!link, global: !!isGlobal });
+    res.json({
       success: true,
-      message: "Successfully " + (link ? "linked" : "installed") + " plugin " + manifest.name,
-      plugin: { id: manifest.id, name: manifest.name, version: manifest.version, dir: destDir }
+      message: `Installed ${result.plugin.name} ${result.plugin.version} (${result.source.kind})`,
+      ...result
     });
   } catch (err) {
-    serverError(res, err);
+    badRequest(res, err.message);
   }
 });
 
 /**
- * DELETE /api/plugins/:id
- * Removes or unlinks an installed plugin.
+ * POST /api/plugins/:id/share  body: { shared: boolean }
+ * Offer (or stop offering) an installed plugin by direct link and mesh.
  */
-router.delete("/api/plugins/:id", requireAuth, requireScope("config:write"), (req, res) => {
+router.post("/api/plugins/:id/share", requireAuth, requireScope("config:write"), async (req, res) => {
   try {
-    const id = req.params.id;
-    const isGlobal = req.query?.global === "true";
-    const projectRoot = req.query?.root || process.cwd();
-
-    const searchDirs = isGlobal
-      ? [path.join(os.homedir(), ".agent", "plugins")]
-      : [
-          path.join(projectRoot, ".agent", "plugins"),
-          path.join(os.homedir(), ".agent", "plugins")
-        ];
-
-    let targetPath = null;
-    for (const dir of searchDirs) {
-      const candidate = path.join(dir, id);
-      if (fs.existsSync(candidate)) {
-        targetPath = candidate;
-        break;
-      }
-    }
-
-    if (!targetPath) {
-      return badRequest(res, "Plugin " + id + " not found");
-    }
-
-    const stat = fs.lstatSync(targetPath);
-    if (stat.isSymbolicLink()) {
-      fs.unlinkSync(targetPath);
-    } else {
-      fs.rmSync(targetPath, { recursive: true, force: true });
-    }
-
-    res.json({
-      success: true,
-      message: "Plugin " + id + " uninstalled successfully",
-      id
-    });
+    const shared = req.body?.shared;
+    if (typeof shared !== "boolean") return badRequest(res, "Body must include shared: true|false");
+    const plugin = await setPluginShared(req.params.id, shared, { projectRoot: projectRoot() });
+    res.json({ success: true, plugin });
   } catch (err) {
-    serverError(res, err);
+    badRequest(res, err.message);
+  }
+});
+
+/**
+ * DELETE /api/plugins/:id[?global=true]
+ */
+router.delete("/api/plugins/:id", requireAuth, requireScope("config:write"), async (req, res) => {
+  try {
+    const result = await uninstallPlugin(req.params.id, {
+      projectRoot: projectRoot(),
+      global: req.query?.global === "true" ? true : undefined
+    });
+    res.json({ success: true, message: `Plugin ${result.id} removed`, ...result });
+  } catch (err) {
+    badRequest(res, err.message);
   }
 });
 
 /**
  * GET /api/plugins/:id
- * Retrieve details of a specific plugin.
  */
 router.get("/api/plugins/:id", requireAuth, requireScope("config:read"), (req, res) => {
   try {
-    const projectRoot = req.query?.root || process.cwd();
-    const plugin = getPluginById(req.params.id, projectRoot);
-    if (!plugin) {
-      return badRequest(res, "Plugin " + req.params.id + " not found");
-    }
-    const userRatings = loadRatings(projectRoot);
-    res.json({
-      success: true,
-      plugin: {
-        id: plugin.id,
-        name: plugin.manifest?.name || plugin.id,
-        version: plugin.manifest?.version || "0.0.0",
-        description: plugin.manifest?.description || "",
-        valid: plugin.valid,
-        errors: plugin.errors,
-        dir: plugin.dir,
-        manifest: plugin.manifest,
-        userRating: userRatings[plugin.id]?.rating || null,
-        userReview: userRatings[plugin.id]?.review || null
-      }
-    });
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
+    res.json({ success: true, plugin: { ...describePlugin(plugin), manifest: plugin.manifest } });
   } catch (err) {
     serverError(res, err);
   }
 });
 
 /**
- * POST /api/plugins/:id/run
- * Executes a plugin CLI handler and returns captured stdout/stderr.
+ * POST /api/plugins/:id/run  body: { subcommand?, args? }
+ * Runs the plugin's CLI handler in a child process. Executing plugin code is a
+ * write-level action.
  */
-router.post("/api/plugins/:id/run", requireAuth, requireScope("config:read"), async (req, res) => {
+router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), async (req, res) => {
   try {
-    const { id } = req.params;
     const { subcommand = "", args = [] } = req.body || {};
-    const projectRoot = req.body?.projectRoot || process.cwd();
-    const plugin = getPluginById(id, projectRoot);
-
-    if (!plugin) {
-      return badRequest(res, "Plugin " + id + " not found");
+    if (typeof subcommand !== "string" || !Array.isArray(args) || args.some((a) => typeof a !== "string")) {
+      return badRequest(res, "subcommand must be a string and args an array of strings");
     }
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
+    if (!plugin.valid) return badRequest(res, `Plugin ${plugin.id} has an invalid manifest: ${plugin.errors.join("; ")}`);
+    if (!plugin.manifest?.cli?.handler) return badRequest(res, `Plugin ${plugin.id} does not declare a CLI handler`);
 
-    if (!plugin.manifest?.cli?.handler) {
-      return badRequest(res, "Plugin " + id + " does not declare a CLI handler");
-    }
-
-    const absHandler = path.resolve(plugin.dir, plugin.manifest.cli.handler);
-    if (!fs.existsSync(absHandler)) {
-      return badRequest(res, "Plugin CLI handler file not found: " + absHandler);
-    }
-
-    const logs = [];
-    const origLog = console.log;
-    const origError = console.error;
-    console.log = (...a) => logs.push(a.map(x => typeof x === "object" ? JSON.stringify(x, null, 2) : String(x)).join(" "));
-    console.error = (...a) => logs.push("[error] " + a.map(x => typeof x === "object" ? JSON.stringify(x, null, 2) : String(x)).join(" "));
-
-    try {
-      const handlerMod = await import(absHandler + "?t=" + Date.now());
-      const argv = ["node", "total-recall", id, ...(subcommand ? [subcommand] : []), ...(Array.isArray(args) ? args : [])];
-      if (handlerMod.run) {
-        await handlerMod.run(argv);
-      } else if (handlerMod.default) {
-        await handlerMod.default(argv.slice(3));
-      }
-    } finally {
-      console.log = origLog;
-      console.error = origError;
-    }
-
-    res.json({
-      success: true,
-      pluginId: id,
-      output: logs.join("\n")
-    });
+    const result = await runPluginCommand(plugin, { subcommand, args, cwd: projectRoot() });
+    res.json({ success: result.ok, pluginId: plugin.id, ...result });
   } catch (err) {
-    serverError(res, err);
+    badRequest(res, err.message);
   }
 });
 
 /**
  * GET /api/plugins/:id/readme
- * Returns the README markdown content for the plugin.
  */
 router.get("/api/plugins/:id/readme", requireAuth, requireScope("config:read"), (req, res) => {
   try {
-    const { id } = req.params;
-    const projectRoot = req.query?.root || process.cwd();
-    const plugin = getPluginById(id, projectRoot);
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
 
-    if (!plugin) {
-      return badRequest(res, "Plugin " + id + " not found");
-    }
-
-    const candidates = [
-      path.join(plugin.dir, "README.md"),
-      path.join(plugin.dir, "readme.md")
-    ];
-
-    let content = "# " + (plugin.manifest?.name || id) + "\n\n" + (plugin.manifest?.description || "");
-    for (const cand of candidates) {
-      if (fs.existsSync(cand)) {
-        content = fs.readFileSync(cand, "utf8");
+    let readme = `# ${plugin.manifest?.name || plugin.id}\n\n${plugin.manifest?.description || ""}`;
+    for (const name of ["README.md", "readme.md"]) {
+      const candidate = path.join(plugin.dir, name);
+      if (fs.existsSync(candidate)) {
+        readme = fs.readFileSync(candidate, "utf8");
         break;
       }
     }
-
-    res.json({
-      success: true,
-      pluginId: id,
-      readme: content
-    });
+    res.json({ success: true, pluginId: plugin.id, readme });
   } catch (err) {
     serverError(res, err);
   }

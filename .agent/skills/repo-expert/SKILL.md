@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-21T05:16:26.145Z
+generated_at: 2026-09-26T02:46:08.202Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (617 files), Markdown (276 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (642 files), Markdown (293 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -27,19 +27,14 @@ generated_from: total-recall
 
 ```
 .agent/
-  config/  (1 items)
   logs/  (1 items)
-  plugins/
-    code-quality/  (3 items)
-    git-sentinel/  (3 items)
-    meta-harness/  (3 items)
-    system-monitor/  (4 items)
   scratch/  (1 items)
   skills/
     code-mode/  (6 items)
     code-quality/  (9 items)
     meta-harness/  (1 items)
     okf/  (5 items)
+    plugins/  (1 items)
     project-management/  (6 items)
     push/  (7 items)
     repo-expert/  (7 items)
@@ -48,11 +43,11 @@ generated_from: total-recall
     skill/  (8 items)
     ssss/  (7 items)
     test/  (7 items)
-    total-recall/  (17 items)
+    total-recall/  (18 items)
     total-recall-project-management/  (6 items)
 .agents/
   rules/  (3 items)
-  skills/  (13 items)
+  skills/  (14 items)
 bin/  (4 items)
 collab/
   backend/  (3 items)
@@ -69,16 +64,15 @@ docs/
   projects/
     archived/  (8 items)
     completed/  (48 items)
-    in-progress/  (0 items)
+    in-progress/  (3 items)
     planned/  (2 items)
   reference/  (6 items)
   security/  (2 items)
   setup/  (1 items)
 extension/
-  icons/  (4 items)
-  lib/  (2 items)
+  icons/  (5 items)
+  lib/  (4 items)
   options/  (3 items)
-  popup/  (3 items)
   sidepanel/  (3 items)
 fixtures/
   invalid/  (5 items)
@@ -119,22 +113,25 @@ knowledge-catalog/
 models/
   catalog/
     total-recall/  (1 items)
+plugins/
+  code-quality/  (3 items)
+  git-sentinel/  (3 items)
+  system-monitor/  (4 items)
 scaffold/
   .agent/
-    plugins/  (4 items)
-    skills/  (2 items)
+    skills/  (3 items)
   openwiki/  (6 items)
 scratch/
   dummy-repo/
     .agent/  (1 items)
-scripts/  (14 items)
+scripts/  (15 items)
 src/
   cli/
     ingest/  (4 items)
     plugin/  (13 items)
-  core/  (251 items)
+  core/  (269 items)
   server/
-    routes/  (94 items)
+    routes/  (96 items)
 templates/
   default-config/  (4 items)
   obsidian-queries/  (4 items)
@@ -196,7 +193,7 @@ templates/
 
 ## API Routes
 
-46 route modules in `src/server/routes/`:
+47 route modules in `src/server/routes/`:
 
 ### auth (6 endpoints)
 
@@ -393,12 +390,19 @@ templates/
 - `GET /api/notifications/history`
 - `POST /api/notifications/test`
 
-### plugins (8 endpoints)
+### plugins-mesh (3 endpoints)
+
+- `GET /api/mesh/plugins`
+- `GET /api/mesh/plugins/:id/bundle`
+- `GET /api/public/plugins/:id/bundle`
+
+### plugins (10 endpoints)
 
 - `GET /api/plugins`
-- `GET /api/plugins/catalog`
-- `POST /api/plugins/:id/rate`
+- `GET /api/plugins/available`
+- `GET /api/plugins/peers`
 - `POST /api/plugins/install`
+- `POST /api/plugins/:id/share`
 - `DELETE /api/plugins/:id`
 - `GET /api/plugins/:id`
 - `POST /api/plugins/:id/run`
@@ -597,7 +601,7 @@ templates/
 
 ## Core Modules
 
-117 modules in `src/core/`:
+126 modules in `src/core/`:
 
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, spawnAgent, killAgent, getAgentLogs
 - **append-log** — exports: compactAppendLogs
@@ -656,9 +660,16 @@ templates/
 - **pairing** — exports: buildPairingInfo
 - **parallel-context** — exports: streamParallelContext, checkFlashHealth
 - **pid-lock** — exports: entryPathHint, readProcessCommand, shouldHonorPidLock
+- **plugin-bundle** — exports: listPluginFiles, hashPluginDir, packPlugin, decodeBundle, writeEntriesAtomic, copyPluginAtomic
 - **plugin-context** — exports: assemblePluginContexts, startPluginDirectedWatcher
-- **plugin-loader** — exports: validatePluginManifest, discoverPlugins, getPlugin, getPluginCategories, getPluginWatchPaths
-- **post-mortem** — exports: readSessionTranscript, runPostMortem, runComplianceAudit
+- **plugin-loader** — exports: projectPluginsDir, globalPluginsDir, bundledPluginsDir, vaultForPluginsDir, resolveProjectRoot, isCronExpression, validatePluginManifest, readPluginsDir
+- **plugin-peers** — exports: meshPeerUrl, listPeerPlugins, parsePeerSource, fetchPeerBundle
+- **plugin-public** — exports: parsePublicPluginSource, publicPluginShareUrl, fetchPublicBundle
+- **plugin-runner-child**
+- **plugin-runner** — exports: runPluginCommand
+- **plugin-store** — exports: recordPath, readPluginRecord, ensurePluginRecord, patchPluginRecord, describePlugin, listInstalledPlugins, listAvailableBundled, isGitSource
+- **plugin-tasks** — exports: parseCron, cronMatches, minuteSlot, latestDueSlot, runDuePluginTasks, startPluginTaskScheduler, stopPluginTaskScheduler
+- **post-mortem** — exports: readSessionTranscript, deriveSessionProject, runPostMortem, runComplianceAudit
 - **project-brain** — exports: resolveProjectBrainPaths, ensureOpenWiki, ensureCoreSkillPackage, writeBrainIdentity, ensureFullProjectBrain, registerProjectBrain, ensureAndRegisterProjectBrain, inspectProjectBrain
 - **proposal-applier** — exports: findDissimilarPair, appendProposalAudit, listProposals, getProposal, setProposalStatus, revertProposal, hasHandler, applyProposal
 - **protect-instructions** — exports: protectIDEInstructions
@@ -669,7 +680,9 @@ templates/
 - **registration-watch** — exports: resolveLogSource, latestAuthId, getWatchStatus, clearWatchResult, stopWatch, startWatch
 - **remote-vault-sync** — exports: importRemoteBundle, runSync
 - **repo-sync** — exports: syncAllRepos, syncSingleRepo
-- **research-queue** — exports: compileResearchProjectSummary, syncResearchProjectNode, loadQueue, saveQueue, listQueue, addToQueue, updateQueueItem, removeFromQueue
+- **research-gate** — exports: resolveAutonomousConfig, loadAutonomousConfig, requestResearch, defaultCoverageCheck, proposeAutonomousResearch
+- **research-queue** — exports: compileResearchProjectSummary, syncResearchProjectNode, loadQueue, saveQueue, listQueue, normalizeTopic, addToQueue, updateQueueItem
+- **research-surface** — exports: extractSynthesis, isUsableSynthesis, extractFindings, selectResearchBriefs, formatResearchBriefs, findRelevantResearch, formatChatResearch
 - **research** — exports: handleProactiveResearch, writeOrUpdateConsolidatedDraft, saveSynthesizedReportToDraft, promoteDraftToVault, handleQuickResearch
 - **rotation-capability** — exports: selfGeneratedSpec, generateSecretValue, getRotationPlan, planAll, summarizePlans
 - **runtime** — exports: findBinaryInPath, loadRuntimeConfig, checkRuntimeHealth, loadDynamicSecrets, callLocalRuntime, callLocalRuntimeRaw, cleanAndParseJSON
@@ -696,7 +709,7 @@ templates/
 - **ssss-kernel-bridge** — exports: getKernelMode, inventorySummary, mapTrPrincipal, createTotalRecallRegistrySet, getTotalRecallEngine, isLowRiskEnvelope, isCoreRouteEnvelope, isProtocolPath
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
-- **surface** — exports: extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, compileSurface, routeNodesToSkills, injectSkills, compileTier1
+- **surface** — exports: extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, compileSurface, routeNodesToSkills, injectSkills
 - **tailscale-cli** — exports: resolveTailscaleBinary, hasTailscaleDaemon
 - **task-envelope** — exports: normalizePriority, buildTaskEnvelope, normalizeTask, persistEnvelope, addTask, listTasks, getTask, cancelTask
 - **task-executors** — exports: resolveExecutor, dispatchTask, listExecutorIds
@@ -723,6 +736,7 @@ templates/
 - **code-quality**: "Use this skill before committing, publishing, or deploying Total Recall, and whenever fixing errors from a quality gate. This repo is plain Node ESM — it has NO TypeScript and NO ESLint installed, so do NOT run tsc, eslint, npm run typecheck, or npm run lint (they do not exist here). Its gates are dist freshness, the open-source path invariant, SSSS registry verification, and vitest. Run checks as BACKGROUND jobs via scripts/check.mjs. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **meta-harness**: Meta Harness & Agent Management Layer to orchestrate and delegate tasks across all connected IDE harnesses (Antigravity, Claude Code, Codex, Gemini, Ollama) and the computer generally.
 - **okf**: Use this skill to access information about Google's Open Knowledge Format
+- **plugins**: Create, validate, install, run, and share Total Recall plugins. Use when a user wants a plugin that adds a useful command, scheduled task, agent context, or SSSS memory category.
 - **project-management**: "Use this skill when managing project documentation, GitHub issues, pull requests, and project tracker checklists in ANY repository. Defines the universal 4-file (PRD/ARCHITECTURE/DEVELOPMENT_PLAN/PROJECT_TRACKER) Kanban documentation system shared across all repos. Do NOT use for code implementation. MANDATORY: You MUST read the full SKILL.md file before executing."
 - **push**: "Use this skill when preparing, testing, version-bumping, and publishing a new release of the Total Recall package to npm and GitHub. Do NOT use for regular local feature commits."
 - **repo-expert**: Use this skill when you need to understand codebase architecture, file

@@ -1,12 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
+import { uninstallPlugin, setPluginShared } from '../../core/plugin-store.mjs';
+import { publicPluginShareUrl } from '../../core/plugin-public.mjs';
 
 export async function removePlugin(args = []) {
   const isGlobal = args.includes('--global') || args.includes('-g');
-  const cleanArgs = args.filter(a => a !== '--global' && a !== '-g');
-
-  const id = cleanArgs[0];
+  const id = args.find(a => !a.startsWith('-'));
 
   if (!id) {
     console.error('❌ Error: Missing plugin ID to remove.');
@@ -14,38 +11,34 @@ export async function removePlugin(args = []) {
     process.exit(1);
   }
 
-  const searchDirs = isGlobal
-    ? [path.join(os.homedir(), '.agent', 'plugins')]
-    : [
-        path.join(process.cwd(), '.agent', 'plugins'),
-        path.join(os.homedir(), '.agent', 'plugins')
-      ];
-
-  let targetPath = null;
-  for (const dir of searchDirs) {
-    const candidate = path.join(dir, id);
-    if (fs.existsSync(candidate)) {
-      targetPath = candidate;
-      break;
-    }
-  }
-
-  if (!targetPath) {
-    console.error(`❌ Plugin '${id}' was not found in installed plugin directories.`);
+  try {
+    const result = await uninstallPlugin(id, { projectRoot: process.cwd(), global: isGlobal ? true : undefined });
+    console.log(`\n✅ Removed plugin '${id}' (${result.scope}) from ${result.dir}\n`);
+  } catch (err) {
+    console.error(`❌ ${err.message}`);
     process.exit(1);
   }
+}
 
+export async function sharePlugin(args = [], shared = true) {
+  const id = args.find(a => !a.startsWith('-'));
+  if (!id) {
+    console.error(`❌ Error: Missing plugin ID. Usage: total-recall plugin ${shared ? 'share' : 'unshare'} <id>`);
+    process.exit(1);
+  }
   try {
-    const stat = fs.lstatSync(targetPath);
-    if (stat.isSymbolicLink()) {
-      fs.unlinkSync(targetPath);
-      console.log(`\n✅ Unlinked plugin '${id}' from ${targetPath}\n`);
+    const plugin = await setPluginShared(id, shared, { projectRoot: process.cwd() });
+    if (shared) {
+      console.log(`\n✅ '${id}' is now shared (sha256 ${plugin.sha256?.slice(0, 16)}…).`);
+      const url = publicPluginShareUrl(id, plugin.sha256);
+      if (url) console.log(`   Send this link to another Total Recall user: ${url}`);
+      else console.log('   Set TR_PUBLIC_BASE_URL to your public HTTPS origin to print a share link.');
+      console.log('   Mesh peers can also install it with: npx total-recall plugin install peer:<this-node>/' + id + '\n');
     } else {
-      fs.rmSync(targetPath, { recursive: true, force: true });
-      console.log(`\n✅ Removed plugin '${id}' from ${targetPath}\n`);
+      console.log(`\n✅ '${id}' is no longer shared.\n`);
     }
   } catch (err) {
-    console.error(`❌ Failed to remove plugin '${id}': ${err.message}`);
+    console.error(`❌ ${err.message}`);
     process.exit(1);
   }
 }

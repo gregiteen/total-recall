@@ -236,27 +236,35 @@ Total Recall features a native terminal-based chat REPL (`npx total-recall chat`
 
 ---
 
-## 🧩 Plugin System & Extension Architecture
+## 🧩 Plugin System — Peer-to-Peer Customization
 
-Total Recall features a decentralized, filesystem-native plugin system that allows modular capability suites, background scholarly daemons, and custom SSSS graph schemas to extend the memory kernel without modifying core packages.
+Plugins shape one Total Recall install for a particular use (software development, research, operations, …). They can be shared **directly with another user through a hash-pinned HTTPS link**, with private mesh sharing retained for one user's own nodes. There is no central catalog, and nothing about a plugin is shown that the node cannot verify: no ratings, reviews, install counts or "verified" badges.
 
-### 1. Plugin Manifest Specification (`plugin.json`)
-Every plugin is a self-contained directory under `.agent/plugins/<id>/` (or global `~/.agent/plugins/<id>/`) containing a validated `plugin.json` conforming to `metadata.plugin.schema.json`:
-- **Metadata**: Unique lowercase kebab-case `id`, semantic `version`, `name`, and `description`.
-- **Custom SSSS Categories**: Declares domain-specific memory node categories (`ssss_schemas.categories`) with schemas and templates automatically registered during vault builds.
-- **Surface Compilation Hook**: Defines a custom context generator script (`compile.generator`) and watch triggers that assemble prioritized evolving context surfaces (up to 500k tokens).
-- **Background Tasks & Daemons**: Registers recurring cron envelopes (`tasks`) and execution entrypoints (`entrypoint`) automatically picked up by the daemon loop.
-- **Pure Unix CLI Commands**: Exposes first-class CLI commands (`cli.command` and `cli.handler`) seamlessly routed under `total-recall <command>`.
+### 1. Manifest (`plugin.json`, schema: `metadata.plugin.schema.json`)
+- **Metadata**: kebab-case `id`, semver `version`, `name`, `description`, optional `author`, `license`, `homepage`.
+- **`use_cases`**: kebab-case tags saying what the plugin is for; list/search/UI filter on them.
+- **`ssss_schemas.categories`**: memory categories the plugin adds.
+- **`compile.generator` / `compile.watch`**: a module whose `generateContext()` output is added to compiled instruction surfaces.
+- **`cli`**: a command routed as `total-recall <command>`.
+- **`tasks`**: `{ intent, schedule (5-field cron), command }` — the plugin's own CLI subcommand, run on schedule by the daemon in a child process. Every run is a `plugin.task_run` event.
+- **`openwiki_hubs`**: markdown hubs ingested into OpenWiki.
 
-### 2. Plugin Discovery & Lifecycle (`src/core/plugin-loader.mjs`)
-- **Layered Discovery**: Scans project-level (`.agent/plugins/`) and global-level (`~/.agent/plugins/`) directories. Project plugins take precedence over global plugins with identical IDs.
-- **Strict Schema Validation**: Validates all manifests against the plugin schema prior to runtime execution, flagging errors without breaking host brain stability.
-- **Symlink & Development Linking**: Developers can link in-progress plugins using `total-recall plugin install <path> --link` (or via the web UI) to enable real-time edits without reinstallation.
+### 2. Where plugins live
+- Project: `<project>/.agent/skills/total-recall/plugins/<id>/`; machine-wide: `~/.agent/skills/total-recall/plugins/<id>/`. Project shadows global by id. Installed plugins are per-brain state (`src/core/brain-state.json`) and never ship in the scaffold.
+- Bundled: `plugins/<id>/` in the package, installable on any node by id.
 
-### 3. Web Dashboard & Rating System (`frontend/src/pages/PluginsPage.tsx`)
-- **Plugin Management UI**: Dedicated `/plugins` dashboard view for browsing installed extensions, inspecting raw manifests, exploring documentation, and one-click uninstallation.
-- **Curated Discovery Catalog**: Browsable catalog of ecosystem plugins (Scientific Frontiers Engine, Meta-Harness, Code Quality & SSSS Conformance, Chrome DevTools) with single-click installation.
-- **Interactive 5-Star Rating System**: Persistent local ratings and reviews (`.agent/config/plugin-ratings.json`), verified badges, and sorting by rating, reviews, or alphabetical order.
+### 3. Install sources (`src/core/plugin-store.mjs`)
+`<bundled id>` · direct HTTPS share link · `peer:<host>/<id>` · git URL · local path (`--link` for development). Copies are written to a dot-prefixed staging directory and renamed into place. Each install writes a `plugin_record` (`system/plugins/<id>.md`: scope, source, sha256, shared, public_shared, task_runs) through the Core Contract plus a `plugin.installed` event.
+
+### 4. Peer-to-peer sharing
+- `total-recall plugin share <id>` marks a plugin shared in its record.
+- Public sharing requires a fresh `public_shared: true` opt-in. Legacy mesh-only `shared: true` records do not become public. `TR_PUBLIC_BASE_URL` supplies the externally reachable HTTPS origin; the sender gives the recipient a direct URL with `#sha256=<hash>`. The installer pins DNS to a public address and verifies the bundle hash before writing files. `GET /api/public/plugins/:id/bundle` exposes only opted-in bundles and has no listing route.
+- Peers query `GET /api/mesh/plugins` and fetch `GET /api/mesh/plugins/:id/bundle` (`src/server/routes/plugins-mesh.mjs`), guarded by `requireMeshSyncAuth` (mesh/loopback source + `TR_MESH_SYNC_TOKEN`). Read-only; only shared plugins are visible.
+- Bundles are JSON (`tr-plugin-bundle/1`) with a SHA-256 over a canonical file list (`src/core/plugin-bundle.mjs`). The installer verifies the bytes against both the bundle header and the hash the peer advertised; a mismatch installs nothing. Paths are checked for traversal; size/file-count capped.
+- `GET /api/plugins/peers` / `total-recall plugin peers` report each peer as observed: `ok`, `offline`, `unreachable`, `not_configured`, `unsupported` (older version), or `error`.
+
+### 5. Execution
+Plugin code never runs inside the brain server: the dashboard runner (`POST /api/plugins/:id/run`, `config:write`) and scheduled tasks use `src/core/plugin-runner.mjs` — a child `node` process with a timeout, an output cap, and `TR_PACKAGE_ROOT` / `TR_PLUGIN_DIR` in its environment.
 
 ---
 

@@ -1,517 +1,292 @@
-// Total Recall — Content Script
-// Injected into every page. Queries the brain for related memories and shows
-// a floating pill in the bottom-right corner when matches are found.
-// Clicking the pill opens an interactive overlay listing the related memories
-// and exposing quick actions (Remember page, Research page).
-// Uses Shadow DOM to isolate styles from the host page.
+// Total Recall — content script
+//
+// 1. Answers GET_PAGE_CONTEXT so the side panel and capture flows get the page's
+//    readable text, description and current selection.
+// 2. Page recall (opt-in): asks the service worker for memories genuinely
+//    related to this page and, when there are any, shows a small pill that opens
+//    a card listing them.
+// 3. Shows a brief toast when a capture is triggered from a shortcut or menu.
+//
+// All UI lives in a closed shadow root and is built with textContent only —
+// memory text is user-captured web content and must never reach innerHTML.
 
 (function () {
   'use strict';
 
-  // ---- Capture page context ----
-  const pageContext = {
-    url: location.href,
-    title: document.title,
-    description: document.querySelector('meta[name="description"]')?.content || ''
+  if (window.__totalRecallContentScript) return;
+  window.__totalRecallContentScript = true;
+
+  const TEXT_LIMIT = 12000;
+
+  // ---- Page context -------------------------------------------------------
+
+  function metaContent(selector) {
+    const el = document.querySelector(selector);
+    return (el && el.getAttribute('content') || '').trim();
+  }
+
+  function readableRoot() {
+    const candidates = ['article', 'main', '[role="main"]', '#content', '.post', '.article'];
+    for (const sel of candidates) {
+      const el = document.querySelector(sel);
+      if (el && el.innerText && el.innerText.trim().length > 400) return el;
+    }
+    return document.body;
+  }
+
+  function pageContext() {
+    const root = readableRoot();
+    return {
+      url: location.href,
+      title: document.title || metaContent('meta[property="og:title"]'),
+      description: metaContent('meta[name="description"]') || metaContent('meta[property="og:description"]'),
+      selection: String(window.getSelection ? window.getSelection() : '').trim(),
+      text: root ? root.innerText.slice(0, TEXT_LIMIT) : '',
+    };
+  }
+
+  // ---- Shadow UI ----------------------------------------------------------
+
+  const TOKENS = `
+    --bg: #0c1220; --bg-2: #121a2b; --bg-3: #172033; --hover: #1c2740;
+    --accent: #3b82f6; --accent-hover: #60a5fa; --accent-muted: rgba(59,130,246,.14);
+    --text: #f1f5f9; --text-2: #94a3b8; --text-3: #64748b;
+    --border: rgba(148,163,184,.14); --border-accent: rgba(59,130,246,.35);
+    --success: #34d399; --error: #f87171;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+
+  const STYLE = `
+    :host { all: initial; position: fixed; right: 20px; bottom: 20px; z-index: 2147483646; ${TOKENS} font-family: var(--font); }
+    *, *::before, *::after { box-sizing: border-box; }
+    /* Fonts are set here, not on :host: the page-level host reset (all: initial
+       !important) outranks :host rules and would leave the page's serif font. */
+    .stack { display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+      font-family: var(--font); font-size: 13px; line-height: 1.4; color: var(--text); -webkit-font-smoothing: antialiased; }
+    button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+    svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+    .pill { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 12px;
+      background: rgba(12,18,32,.92); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
+      font-size: 13px; font-weight: 600; letter-spacing: -.005em; backdrop-filter: blur(16px) saturate(1.4);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35); animation: rise .28s cubic-bezier(.23,1,.32,1) both;
+      transition: border-color .14s, transform .14s; }
+    .pill:hover, .pill[aria-expanded="true"] { border-color: var(--border-accent); transform: translateY(-1px); }
+    .pill .mark { color: var(--accent-hover); }
+    .pill .count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+      background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; }
+    .pill .dismiss { width: 22px; height: 22px; border-radius: 999px; display: grid; place-items: center; color: var(--text-3); }
+    .pill .dismiss:hover { background: var(--hover); color: var(--text); }
+    .pill .dismiss svg { width: 12px; height: 12px; }
+
+    .card { width: 340px; max-height: min(460px, 70vh); display: flex; flex-direction: column; overflow: hidden;
+      background: rgba(12,18,32,.96); color: var(--text); border: 1px solid var(--border); border-radius: 18px;
+      backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 24px 64px rgba(0,0,0,.45), 0 0 40px rgba(59,130,246,.12);
+      animation: rise .22s cubic-bezier(.23,1,.32,1) both; }
+    .card[hidden] { display: none; }
+    .head { display: flex; align-items: center; gap: 8px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
+    .head h2 { margin: 0; flex: 1; font-size: 13px; font-weight: 600; }
+    .head .sub { font-size: 11px; color: var(--text-3); font-weight: 500; }
+    .icon-btn { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--text-2); }
+    .icon-btn:hover { background: var(--hover); color: var(--text); }
+    .list { overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .item { display: block; width: 100%; text-align: left; padding: 10px 10px 11px; border-radius: 12px; border: 1px solid transparent; }
+    .item:hover { background: var(--bg-2); border-color: var(--border); }
+    .item .title { font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .item .excerpt { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .item .meta { margin-top: 6px; display: flex; gap: 8px; font-size: 11px; color: var(--text-3); }
+    .item .cat { text-transform: capitalize; color: var(--accent-hover); }
+    .foot { display: flex; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+    .btn { flex: 1; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      font-size: 12px; font-weight: 600; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); }
+    .btn:hover { border-color: var(--border-accent); background: var(--hover); }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn.primary:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: .55; cursor: default; }
+    .btn svg { width: 14px; height: 14px; }
+
+    .toast { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 600;
+      background: rgba(12,18,32,.96); color: var(--text); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      animation: rise .22s cubic-bezier(.23,1,.32,1) both; }
+    .toast .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--success); box-shadow: 0 0 10px var(--success); }
+    .toast.error .dot { background: var(--error); box-shadow: 0 0 10px var(--error); }
+    .toast.leaving { opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; }
+
+    @keyframes rise { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  `;
+
+  const ICONS = {
+    mark: '<path d="M6 20V11a6 6 0 0 1 12 0v9"/><path d="M9.5 20v-8.5a2.5 2.5 0 0 1 5 0V20"/><path d="M4 20h16"/>',
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    pin: '<path d="M12 17v5"/><path d="M9 10.76V6h6v4.76l1.8 2.4A1 1 0 0 1 16 15H8a1 1 0 0 1-.8-1.6z"/><path d="M8 3h8"/>',
+    panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
   };
 
-  // ---- Skip non-content pages ----
-  if (pageContext.url.startsWith('chrome://') ||
-      pageContext.url.startsWith('chrome-extension://') ||
-      pageContext.url.startsWith('about:')) {
-    return;
+  function icon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    // Static, extension-authored markup only.
+    svg.innerHTML = ICONS[name];
+    return svg;
   }
 
-  let pillHost = null;
-  let currentMemories = [];
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
 
-  // ---- Create floating pill and interactive overlay with Shadow DOM ----
-  function createPill(count) {
-    if (pillHost) pillHost.remove();
+  let host = null;
+  let shadow = null;
+  let stack = null;
 
-    pillHost = document.createElement('div');
-    pillHost.id = 'total-recall-pill-host';
-
-    const shadow = pillHost.attachShadow({ mode: 'closed' });
-
+  function ensureHost() {
+    if (host && document.documentElement.contains(host)) return;
+    host = document.createElement('total-recall-overlay');
+    host.id = 'total-recall-overlay';
+    shadow = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = `
-      :host {
-        all: initial;
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 2147483647;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      }
-
-      .container {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-      }
-
-      .pill {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 16px;
-        background: #11111b;
-        color: #cdd6f4;
-        border: 1px solid #313244;
-        border-radius: 999px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        user-select: none;
-        opacity: 0;
-        transform: translateY(10px);
-        animation: pill-enter 0.3s ease forwards;
-      }
-
-      .pill:hover {
-        border-color: #89b4fa;
-        transform: translateY(-2px);
-        box-shadow: 0 6px 24px rgba(137, 180, 250, 0.2);
-        background: #1e1e2e;
-      }
-
-      .pill.active {
-        border-color: #89b4fa;
-        background: #1e1e2e;
-      }
-
-      .pill .brain-icon {
-        font-size: 15px;
-        line-height: 1;
-      }
-
-      .pill .count {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 18px;
-        height: 18px;
-        padding: 0 5px;
-        background: #89b4fa;
-        color: #11111b;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 700;
-      }
-
-      /* Interactive Overlay Card */
-      .card {
-        display: none;
-        flex-direction: column;
-        width: 320px;
-        max-height: 420px;
-        background: rgba(17, 17, 27, 0.95);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid #313244;
-        border-radius: 16px;
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-        position: absolute;
-        bottom: 50px;
-        right: 0;
-        z-index: 2147483647;
-        overflow: hidden;
-        transform: scale(0.95) translateY(10px);
-        opacity: 0;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        pointer-events: none;
-      }
-
-      .card.visible {
-        display: flex;
-        transform: scale(1) translateY(0);
-        opacity: 1;
-        pointer-events: auto;
-      }
-
-      .card-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 14px 16px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      }
-
-      .card-header h3 {
-        margin: 0;
-        font-size: 14px;
-        font-weight: 700;
-        color: #cdd6f4;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .card-header .close-btn {
-        background: none;
-        border: none;
-        color: #a6adc8;
-        font-size: 18px;
-        cursor: pointer;
-        padding: 0;
-        line-height: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        transition: background 0.2s;
-      }
-
-      .card-header .close-btn:hover {
-        color: #f38ba8;
-        background: rgba(255, 255, 255, 0.05);
-      }
-
-      .memory-list {
-        flex: 1;
-        overflow-y: auto;
-        padding: 12px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .memory-item {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.04);
-        border-radius: 10px;
-        padding: 12px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-
-      .memory-item:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: #89b4fa;
-      }
-
-      .memory-title {
-        font-size: 12px;
-        font-weight: 600;
-        color: #89b4fa;
-        margin-bottom: 4px;
-        line-height: 1.4;
-      }
-
-      .memory-excerpt {
-        font-size: 11px;
-        color: #bac2de;
-        line-height: 1.45;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        word-break: break-word;
-      }
-      
-      .memory-excerpt.expanded {
-        display: block;
-        -webkit-line-clamp: unset;
-      }
-
-      .memory-meta {
-        display: flex;
-        justify-content: space-between;
-        font-size: 9px;
-        color: #6c7086;
-        margin-top: 8px;
-        border-top: 1px solid rgba(255, 255, 255, 0.03);
-        padding-top: 6px;
-      }
-
-      .card-actions {
-        display: flex;
-        gap: 8px;
-        padding: 12px 16px;
-        border-top: 1px solid rgba(255, 255, 255, 0.05);
-        background: rgba(0, 0, 0, 0.2);
-      }
-
-      .action-btn {
-        flex: 1;
-        padding: 8px 12px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.04);
-        color: #cdd6f4;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        transition: all 0.2s ease;
-      }
-
-      .action-btn:hover {
-        background: #89b4fa;
-        color: #11111b;
-        border-color: #89b4fa;
-      }
-
-      .action-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        background: rgba(255, 255, 255, 0.02) !important;
-        color: #6c7086 !important;
-        border-color: transparent !important;
-      }
-
-      .toast {
-        position: absolute;
-        bottom: 60px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #2ec471;
-        color: #11111b;
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 700;
-        z-index: 2147483647;
-        opacity: 0;
-        box-shadow: 0 4px 12px rgba(46, 196, 113, 0.3);
-        transition: opacity 0.3s ease, transform 0.3s ease;
-        pointer-events: none;
-      }
-
-      .toast.visible {
-        opacity: 1;
-        transform: translateX(-50%) translateY(-5px);
-      }
-
-      @keyframes pill-enter {
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-    `;
-
-    const container = document.createElement('div');
-    container.className = 'container';
-
-    // The Floating Pill
-    const pill = document.createElement('div');
-    pill.className = 'pill';
-    pill.innerHTML = `
-      <span class="brain-icon">🧠</span>
-      <span>Related Memories</span>
-      <span class="count">${count}</span>
-    `;
-
-    // The Overlay Card
-    const card = document.createElement('div');
-    card.className = 'card';
-    
-    // Header
-    const cardHeader = document.createElement('div');
-    cardHeader.className = 'card-header';
-    cardHeader.innerHTML = `
-      <h3>🧠 Related Memories</h3>
-      <button class="close-btn" title="Close Panel">×</button>
-    `;
-    card.appendChild(cardHeader);
-
-    // List of Memories
-    const memoryList = document.createElement('div');
-    memoryList.className = 'memory-list';
-    
-    currentMemories.forEach(mem => {
-      const item = document.createElement('div');
-      item.className = 'memory-item';
-      
-      const relevancePercent = mem.confidence ? Math.round(mem.confidence * 100) : null;
-      const relevanceStr = relevancePercent ? `${relevancePercent}% match` : 'Related';
-
-      item.innerHTML = `
-        <div class="memory-title">${mem.title}</div>
-        <div class="memory-excerpt">${mem.content}</div>
-        <div class="memory-meta">
-          <span style="text-transform: capitalize; font-weight: 600;">${mem.category}</span>
-          <span>${relevanceStr}</span>
-        </div>
-      `;
-
-      // Click to toggle full content expansion
-      item.addEventListener('click', () => {
-        const excerpt = item.querySelector('.memory-excerpt');
-        excerpt.classList.toggle('expanded');
-      });
-
-      memoryList.appendChild(item);
-    });
-    card.appendChild(memoryList);
-
-    // Quick Actions
-    const cardActions = document.createElement('div');
-    cardActions.className = 'card-actions';
-
-    const rememberBtn = document.createElement('button');
-    rememberBtn.className = 'action-btn';
-    rememberBtn.innerHTML = '📌 Remember Page';
-
-    const researchBtn = document.createElement('button');
-    researchBtn.className = 'action-btn';
-    researchBtn.innerHTML = '🔬 Research Page';
-
-    cardActions.appendChild(rememberBtn);
-    cardActions.appendChild(researchBtn);
-    card.appendChild(cardActions);
-
-    // Tiny Toast message indicator
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    container.appendChild(toast);
-
-    // Action button listeners
-    const triggerAction = async (action, btn) => {
-      btn.disabled = true;
-      const originalText = btn.innerHTML;
-      btn.innerHTML = '⏳ Processing...';
-      
-      chrome.runtime.sendMessage({
-        type: 'SHARE',
-        data: {
-          url: pageContext.url,
-          title: pageContext.title,
-          action: action,
-          source: 'chrome-extension-overlay'
-        }
-      }, (res) => {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-        if (res && res.success) {
-          toast.textContent = action === 'remember' ? '📌 Remembered page!' : '🔬 Research queued!';
-          toast.classList.add('visible');
-          setTimeout(() => toast.classList.remove('visible'), 2500);
-        } else {
-          let errText = '❌ Action failed';
-          if (res && res.error) {
-            if (res.error.includes('Authentication failed')) {
-              errText = '❌ Auth Error - Check PAT';
-            } else {
-              errText = `❌ ${res.error}`;
-            }
-          }
-          toast.textContent = errText;
-          toast.style.background = '#e74c3c';
-          toast.style.boxShadow = '0 4px 12px rgba(231, 76, 60, 0.3)';
-          toast.classList.add('visible');
-          setTimeout(() => {
-            toast.classList.remove('visible');
-            toast.style.background = '#2ec471';
-            toast.style.boxShadow = '0 4px 12px rgba(46, 196, 113, 0.3)';
-          }, 2500);
-        }
-      });
-    };
-
-    rememberBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      triggerAction('remember', rememberBtn);
-    });
-
-    researchBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      triggerAction('research', researchBtn);
-    });
-
-    // Toggle overlay visibility on pill click
-    const toggleOverlay = (e) => {
-      e.stopPropagation();
-      const isVisible = card.classList.contains('visible');
-      if (isVisible) {
-        card.classList.remove('visible');
-        pill.classList.remove('active');
-      } else {
-        card.classList.add('visible');
-        pill.classList.add('active');
-      }
-    };
-
-    pill.addEventListener('click', toggleOverlay);
-    cardHeader.querySelector('.close-btn').addEventListener('click', toggleOverlay);
-
-    // Prevent clicks inside card from closing it
-    card.addEventListener('click', (e) => e.stopPropagation());
-
-    // Close overlay if clicking outside the host
-    document.addEventListener('click', () => {
-      card.classList.remove('visible');
-      pill.classList.remove('active');
-    });
-
-    container.appendChild(card);
-    container.appendChild(pill);
-
-    shadow.appendChild(style);
-    shadow.appendChild(container);
-    document.body.appendChild(pillHost);
+    style.textContent = STYLE;
+    stack = el('div', 'stack');
+    shadow.append(style, stack);
+    document.documentElement.appendChild(host);
   }
 
-  function isBlocked(blocklist) {
-    if (!Array.isArray(blocklist) || blocklist.length === 0) return false;
-    let host = '';
-    try {
-      host = new URL(pageContext.url).hostname.toLowerCase();
-    } catch {
-      return false;
+  // ---- Toast --------------------------------------------------------------
+
+  function showToast(text, tone) {
+    ensureHost();
+    const toast = el('div', `toast${tone === 'error' ? ' error' : ''}`);
+    toast.setAttribute('role', 'status');
+    toast.append(el('span', 'dot'), el('span', '', text));
+    stack.prepend(toast);
+    setTimeout(() => {
+      toast.classList.add('leaving');
+      setTimeout(() => toast.remove(), 220);
+    }, 2400);
+  }
+
+  // ---- Related memories ---------------------------------------------------
+
+  function renderRelated(memories) {
+    ensureHost();
+    const card = el('section', 'card');
+    card.hidden = true;
+    card.setAttribute('aria-label', 'Related memories');
+
+    const head = el('header', 'head');
+    const titleWrap = el('div');
+    titleWrap.style.flex = '1';
+    const h2 = el('h2', '', 'You already know this');
+    const sub = el('div', 'sub', `${memories.length} related ${memories.length === 1 ? 'memory' : 'memories'} in your brain`);
+    titleWrap.append(h2, sub);
+    const closeBtn = el('button', 'icon-btn');
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.append(icon('close'));
+    head.append(titleWrap, closeBtn);
+
+    const list = el('div', 'list');
+    for (const m of memories) {
+      const item = el('button', 'item');
+      item.title = 'Open in Total Recall';
+      item.append(el('div', 'title', m.title));
+      if (m.excerpt) item.append(el('div', 'excerpt', m.excerpt));
+      const meta = el('div', 'meta');
+      meta.append(el('span', 'cat', m.category));
+      if (typeof m.similarity === 'number') meta.append(el('span', '', `${Math.round(m.similarity * 100)}% similar`));
+      item.append(meta);
+      item.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'OPEN_MEMORY', slug: m.slug }));
+      list.append(item);
     }
-    return blocklist.some((entry) => {
-      const pattern = String(entry || '').trim().toLowerCase();
-      return pattern && (host === pattern || host.endsWith(`.${pattern}`) || pageContext.url.toLowerCase().includes(pattern));
+
+    const foot = el('footer', 'foot');
+    const remember = el('button', 'btn primary');
+    remember.append(icon('pin'), el('span', '', 'Remember page'));
+    const open = el('button', 'btn');
+    open.append(icon('panel'), el('span', '', 'Open panel'));
+    foot.append(remember, open);
+    card.append(head, list, foot);
+
+    const pill = el('button', 'pill');
+    pill.setAttribute('aria-expanded', 'false');
+    pill.setAttribute('aria-label', `${memories.length} related memories`);
+    const mark = icon('mark');
+    mark.classList.add('mark');
+    const dismiss = el('span', 'dismiss');
+    dismiss.setAttribute('role', 'button');
+    dismiss.setAttribute('aria-label', 'Hide for this page');
+    dismiss.append(icon('close'));
+    pill.append(mark, el('span', '', 'Related'), el('span', 'count', String(memories.length)), dismiss);
+
+    const toggle = (open) => {
+      card.hidden = !open;
+      pill.setAttribute('aria-expanded', String(open));
+    };
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.composedPath().includes(dismiss)) {
+        card.remove();
+        pill.remove();
+        return;
+      }
+      toggle(card.hidden);
     });
+    closeBtn.addEventListener('click', () => toggle(false));
+    card.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => toggle(false));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggle(false); });
+
+    remember.addEventListener('click', () => {
+      remember.disabled = true;
+      chrome.runtime.sendMessage({ type: 'CAPTURE', options: { action: 'remember' } }, (res) => {
+        remember.disabled = false;
+        if (chrome.runtime.lastError) return;
+        showToast(res && res.success ? 'Saved to your brain' : (res && res.error) || 'Capture failed', res && res.success ? 'success' : 'error');
+      });
+    });
+    open.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'OPEN_SIDE_PANEL' }));
+
+    stack.append(card, pill);
   }
 
-  // ---- Query brain after delay ----
-  async function queryBrain() {
-    const { passiveTracking = false, blocklist = [] } = await chrome.storage.sync.get(['passiveTracking', 'blocklist']);
-    if (!passiveTracking || isBlocked(blocklist)) return;
-
-    const query = pageContext.title || pageContext.url;
-    if (!query) return;
-
+  async function runPageRecall() {
+    let settings;
+    try {
+      settings = await chrome.storage.sync.get({ pageRecall: false, showPill: true });
+    } catch {
+      return; // extension context invalidated (reloaded)
+    }
+    if (!settings.pageRecall) return;
+    const ctx = pageContext();
     chrome.runtime.sendMessage(
-      { type: 'QUERY_BRAIN', query, topK: 5 },
+      { type: 'QUERY_RELATED', page: { url: ctx.url, title: ctx.title, description: ctx.description } },
       (response) => {
         if (chrome.runtime.lastError) return;
-        const memories = response?.memories || [];
-        if (memories.length > 0) {
-          currentMemories = memories;
-          createPill(memories.length);
-        }
-      }
+        const memories = (response && response.memories) || [];
+        if (memories.length && settings.showPill) renderRelated(memories);
+      },
     );
   }
 
-  // Wait 2 seconds after page load to avoid interfering with page rendering
-  setTimeout(queryBrain, 2000);
+  // ---- Messages -----------------------------------------------------------
 
-  // ---- Listen for page context requests ----
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.type === 'GET_PAGE_TEXT') {
-      const selection = window.getSelection().toString().trim();
-      const pageText = document.body.innerText.slice(0, 10000); // limit to 10k chars to avoid token blowout
-      sendResponse({
-        url: location.href,
-        title: document.title,
-        selection,
-        pageText
-      });
+    if (!msg) return false;
+    if (msg.type === 'GET_PAGE_CONTEXT') {
+      sendResponse(pageContext());
+      return false;
     }
-    return true;
+    if (msg.type === 'TR_TOAST') {
+      showToast(String(msg.text || ''), msg.tone);
+      return false;
+    }
+    return false;
   });
+
+  // Let the page settle before querying; recall is never urgent.
+  if (document.readyState === 'complete') setTimeout(runPageRecall, 1500);
+  else window.addEventListener('load', () => setTimeout(runPageRecall, 1500), { once: true });
 })();

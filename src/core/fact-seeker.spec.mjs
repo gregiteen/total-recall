@@ -375,17 +375,11 @@ describe('multi-note wiki-graph architecture', () => {
       expect(ruleNodes[0].priority).toBe('absolute');
       expect(ruleNodes[0].category).toBe('patterns');
       
-      // Verify autonomous task persisted to disk
+      // Research never spawns research: even if the model proposes follow-up
+      // tasks, deliberation queues nothing (RESEARCH_SYSTEM2).
       const queueDir = path.join(tempAgentDir, 'skills', 'total-recall', 'scheduler', 'queue');
-      expect(fs.existsSync(queueDir)).toBe(true);
       const { loadPendingTasks } = await import('./scheduler.mjs');
-      const pendingTasks = loadPendingTasks(queueDir);
-      expect(pendingTasks).toHaveLength(1);
-      const taskContent = pendingTasks[0];
-      expect(taskContent.priority).toBe(85);
-      expect(taskContent.category).toBe('proactive-research');
-      expect(taskContent.reason).toBe('Examine cryogenics for quantum processors.');
-      expect(taskContent.body.trim()).toBe('Research dilution refrigerators and helium cooling.');
+      expect(fs.existsSync(queueDir) ? loadPendingTasks(queueDir) : []).toHaveLength(0);
       
     } finally {
       fs.rmSync(tempVaultDir, { recursive: true, force: true });
@@ -399,89 +393,18 @@ describe('multi-note wiki-graph architecture', () => {
     }
   });
 
-  it('expansion cycle brainstorms tangents, adds to research queue, and schedules tasks', async () => {
-    const { runResearchExpansionCycle } = await import('./fact-seeker.mjs');
-    const { loadNodes } = await import('./vault.mjs');
-    
-    const tempVaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-vault-expand-'));
-    const tempAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-agent-expand-'));
-    
-    const originalAgentDir = process.env.AGENT_DIR;
-    process.env.AGENT_DIR = tempAgentDir;
-    process.env._TR_TEST_AGENT_DIR = path.join(tempAgentDir, 'skills', 'total-recall');
-    
-    try {
-      const targetSlug = 'fact-master-expand-test';
-      const targetNode = {
-        type: 'memory',
-        slug: targetSlug,
-        category: 'facts',
-        title: 'Initial AI Safety Research',
-        status: 'active',
-        confidence: 0.9,
-        created: new Date().toISOString(),
-        updated: new Date().toISOString(),
-        body: 'Initial safety guidelines.',
-        related: [],
-        tags: []
-      };
-      
-      const { writeNode } = await import('./vault.mjs');
-      await writeNode(targetNode, tempVaultDir);
-      
-      const mockExpandResponse = {
-        tangents: [
-          {
-            topic: 'AI Alignment RLHF',
-            priority: 'high',
-            rationale: 'RLHF is the current standard for alignment.'
-          }
-        ]
-      };
-      
-      callLocalRuntimeSpy.mockResolvedValue(JSON.stringify(mockExpandResponse));
-      
-      const res = await runResearchExpansionCycle({
-        vaultDir: tempVaultDir,
-        nodeSlug: targetSlug,
-        topic: 'AI Safety',
-        runtimeConfig: {}
-      });
-      
-      expect(res.success).toBe(true);
-      
-      // Verify target node body updated
-      const updatedNodes = loadNodes(tempVaultDir);
-      const updatedTarget = updatedNodes.find(n => n.slug === targetSlug);
-      expect(updatedTarget.body).toContain('AI Alignment RLHF');
-      expect(updatedTarget.tags).toContain('expanded');
-      
-      // Verify autonomous task persisted to disk
-      const queueDir = path.join(tempAgentDir, 'skills', 'total-recall', 'scheduler', 'queue');
-      expect(fs.existsSync(queueDir)).toBe(true);
-      const { loadPendingTasks } = await import('./scheduler.mjs');
-      const pendingTasks = loadPendingTasks(queueDir);
-      expect(pendingTasks).toHaveLength(1);
-      const taskContent = pendingTasks[0];
-      expect(taskContent.priority).toBe(65); // high -> 65
-      expect(taskContent.category).toBe('proactive-research');
-      expect(taskContent.body).toContain('AI Alignment RLHF');
-      
-      // Verify added to research queue
-      const { loadQueue } = await import('./research-queue.mjs');
-      const queue = loadQueue();
-      expect(queue.some(item => item.topic === 'AI Alignment RLHF')).toBe(true);
-      
-    } finally {
-      fs.rmSync(tempVaultDir, { recursive: true, force: true });
-      fs.rmSync(tempAgentDir, { recursive: true, force: true });
-      delete process.env._TR_TEST_AGENT_DIR;
-      if (originalAgentDir) {
-        process.env.AGENT_DIR = originalAgentDir;
-      } else {
-        delete process.env.AGENT_DIR;
-      }
-    }
+  it('has no expansion or monitoring engine: research ends when it is answered', async () => {
+    const mod = await import('./fact-seeker.mjs');
+    expect(mod.runResearchExpansionCycle).toBeUndefined();
+    expect(mod.runResearchMonitoringCycle).toBeUndefined();
+  });
+
+  it('knowledge acquisition without an explicit topic does nothing (no agenda pull, no self-diagnosis)', async () => {
+    const { runKnowledgeAcquisitionCycle } = await import('./fact-seeker.mjs');
+    callLocalRuntimeSpy.mockClear();
+    const res = await runKnowledgeAcquisitionCycle({ vaultDir: os.tmpdir(), inboxDir: os.tmpdir(), runtimeConfig: {} });
+    expect(res).toEqual({ topic: null, skipped: 'no-topic' });
+    expect(callLocalRuntimeSpy).not.toHaveBeenCalled();
   });
 
   it('normalizePublishedDate correctly parses standard, relative, and partial dates', async () => {

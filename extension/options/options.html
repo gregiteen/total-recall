@@ -2,72 +2,120 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Total Recall — Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Total Recall — Extension settings</title>
+  <link rel="stylesheet" href="../lib/tokens.css">
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
-  <div class="options-page">
-    <header class="options-header">
-      <h1>🧠 Total Recall — Settings</h1>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.5 3.2 8.2 7.5 9.5 4.3-1.3 7.5-5 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7 14h10"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></symbol>
+  </svg>
+
+  <div class="page">
+    <header class="hero">
+      <img src="../icons/icon-128.png" alt="" width="44" height="44" class="hero-mark">
+      <div>
+        <h1>Total Recall for Chrome</h1>
+        <p>Capture what you read, recall what you know, and chat with your brain beside any tab.</p>
+      </div>
     </header>
 
-    <section class="section">
-      <h2>Connection</h2>
-
-      <div class="field-group">
-        <label for="brain-url">Brain URL</label>
-        <input type="text" id="brain-url" placeholder="http://127.0.0.1:3000" />
+    <section class="card" aria-labelledby="h-connection">
+      <div class="card-head">
+        <span class="card-icon"><svg class="icon"><use href="#i-plug"/></svg></span>
+        <div>
+          <h2 id="h-connection">Connection</h2>
+          <p>Where your brain runs and the token the extension uses to reach it.</p>
+        </div>
+        <span class="chip" id="connection-chip">Not tested</span>
       </div>
 
-      <div class="field-group">
-        <label for="pat-token">PAT Token</label>
-        <input type="password" id="pat-token" placeholder="Enter your personal access token" />
+      <div class="field">
+        <label for="brain-url">Brain address</label>
+        <input class="input" id="brain-url" type="url" placeholder="http://127.0.0.1:3000" spellcheck="false" autocomplete="off">
+        <p class="help">Usually <code>http://127.0.0.1:3000</code>. For a brain on another machine, Chrome asks once for permission to reach it.</p>
       </div>
 
-      <div class="connection-row">
-        <button id="btn-test" class="btn secondary">Test Connection</button>
-        <div id="connection-status" class="connection-status"></div>
+      <div class="field">
+        <label for="pat-token">Access token</label>
+        <div class="input-row">
+          <input class="input mono" id="pat-token" type="password" placeholder="tr_…" spellcheck="false" autocomplete="off">
+          <button class="icon-btn" id="btn-reveal" type="button" aria-label="Show token" aria-pressed="false" title="Show token"><svg class="icon"><use href="#i-eye"/></svg></button>
+        </div>
+        <p class="help">Create one in the dashboard under <a href="#" id="link-integrations">Integrations<svg class="icon sm"><use href="#i-external"/></svg></a>. It stays on this device and is never synced.</p>
+      </div>
+
+      <div class="result" id="connection-result" hidden></div>
+
+      <div class="actions">
+        <button class="btn" id="btn-test" type="button">Test connection</button>
+        <button class="btn primary" id="btn-save-connection" type="button">Save connection</button>
       </div>
     </section>
 
-    <section class="section">
-      <h2>Privacy</h2>
-
-      <div class="field-group">
-        <label for="blocklist">Domain Blocklist <span class="hint">(one per line)</span></label>
-        <textarea id="blocklist" rows="5" placeholder="example.com&#10;private.internal.io"></textarea>
-      </div>
-
-      <div class="field-group">
-        <label>Capture Granularity</label>
-        <div class="radio-group">
-          <label class="radio-label">
-            <input type="radio" name="granularity" value="off" />
-            <span class="radio-text">Off</span>
-            <span class="radio-desc">No passive tracking</span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="granularity" value="minimal" />
-            <span class="radio-text">Minimal</span>
-            <span class="radio-desc">URL and title only</span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="granularity" value="full" />
-            <span class="radio-text">Full</span>
-            <span class="radio-desc">URL, title, and page metadata</span>
-          </label>
+    <section class="card" aria-labelledby="h-privacy">
+      <div class="card-head">
+        <span class="card-icon"><svg class="icon"><use href="#i-shield"/></svg></span>
+        <div>
+          <h2 id="h-privacy">Page recall &amp; privacy</h2>
+          <p>Nothing leaves this browser unless you capture it — or you turn on related memories below.</p>
         </div>
       </div>
+
+      <div class="setting">
+        <div>
+          <div class="setting-title">Related memories on pages</div>
+          <p class="help">When a page loads, send its title to your brain and badge the toolbar icon if you already know something related. Off by default.</p>
+        </div>
+        <label class="switch"><input type="checkbox" id="opt-page-recall"><span class="track"></span></label>
+      </div>
+      <div class="setting sub" id="pill-setting">
+        <div>
+          <div class="setting-title">Floating card on the page</div>
+          <p class="help">Also show a small “Related” pill in the corner of the page.</p>
+        </div>
+        <label class="switch"><input type="checkbox" id="opt-show-pill"><span class="track"></span></label>
+      </div>
+
+      <div class="field">
+        <label for="blocklist">Never check these sites <span class="muted">— one domain per line, subdomains included</span></label>
+        <textarea class="textarea mono" id="blocklist" rows="5" placeholder="mail.google.com&#10;bank.example.com"></textarea>
+      </div>
+
+      <div class="actions">
+        <span class="saved" id="privacy-saved" hidden>Saved</span>
+        <button class="btn primary" id="btn-save-privacy" type="button">Save privacy settings</button>
+      </div>
     </section>
 
-    <div class="actions">
-      <button id="btn-save" class="btn primary">Save Settings</button>
-      <span id="save-status" class="save-status"></span>
-    </div>
+    <section class="card" aria-labelledby="h-shortcuts">
+      <div class="card-head">
+        <span class="card-icon"><svg class="icon"><use href="#i-keyboard"/></svg></span>
+        <div>
+          <h2 id="h-shortcuts">Shortcuts</h2>
+          <p>Capture without reaching for the mouse.</p>
+        </div>
+      </div>
+      <dl class="shortcuts" id="shortcut-list"></dl>
+      <div class="tips">
+        <div><span class="kbd">tr</span> then <span class="kbd">Space</span> in the address bar searches your brain.</div>
+        <div>Right-click a selection to remember it, research it, or ask your brain about it.</div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn-shortcuts" type="button">Change shortcuts<svg class="icon sm"><use href="#i-external"/></svg></button>
+      </div>
+    </section>
+
+    <footer class="foot" id="foot"></footer>
   </div>
 
-  <script src="../lib/preconfigured.js"></script>
   <script src="../lib/brain-client.js"></script>
+  <script src="../lib/ui-helpers.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

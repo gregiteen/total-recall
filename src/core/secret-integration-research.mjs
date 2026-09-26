@@ -289,14 +289,18 @@ export async function maybeEnqueueIntegrationResearch(brainDir, key, meta = {}, 
     };
   }
 
-  const { addToQueue } = await import('./research-queue.mjs');
-  const item = addToQueue({
-    topic: inference.topic,
-    priority: inference.priority || 'low',
-    notes: inference.notes || `AI-inferred product research for secret \`${key}\`.`,
-    brainDir,
-  });
-  return { enqueued: true, item, inference };
+  // Nobody asked for this, so it goes through the autonomous gate and counts
+  // against the same daily budget as project gap research.
+  const { proposeAutonomousResearch } = await import('./research-gate.mjs');
+  const notes = inference.notes || `AI-inferred product research for secret \`${key}\`.`;
+  const { queued, skipped } = await proposeAutonomousResearch(
+    [{ topic: inference.topic, rationale: notes, priority: inference.priority || 'low' }],
+    { project: null, via: 'secret', brainDir, coverageCheck: opts.coverageCheck },
+  );
+  if (!queued.length) {
+    return { enqueued: false, skipped: skipped[0]?.reason || 'gate declined', inference };
+  }
+  return { enqueued: true, item: queued[0], inference };
 }
 
 /**

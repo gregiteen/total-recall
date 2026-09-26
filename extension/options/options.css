@@ -1,218 +1,64 @@
-/* Total Recall — Options Page Styles (Catppuccin Mocha) */
+/* Total Recall — extension options. Tokens come from ../lib/tokens.css. */
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+body { font-size: 14px; min-height: 100vh; }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #11111b;
-  color: #cdd6f4;
-  min-height: 100vh;
-}
+.page { max-width: 680px; margin: 0 auto; padding: 48px 24px 64px; display: flex; flex-direction: column; gap: 18px; }
 
-.options-page {
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 32px 24px;
-}
+.hero { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; }
+.hero-mark { border-radius: 12px; filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.25)); }
+.hero h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.025em; }
+.hero p { color: var(--text-secondary); font-size: 13.5px; margin-top: 2px; }
 
-/* ---- Header ---- */
-.options-header {
-  margin-bottom: 32px;
+.card {
+  display: flex; flex-direction: column; gap: 18px; padding: 22px;
+  background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px) saturate(1.3); box-shadow: var(--shadow-md);
 }
+.card-head { display: flex; align-items: flex-start; gap: 12px; }
+.card-head > div { flex: 1; }
+.card-head h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.015em; }
+.card-head p { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+.card-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--accent-hover); background: var(--accent-muted); border: 1px solid var(--border-accent); }
 
-.options-header h1 {
-  font-size: 20px;
-  font-weight: 700;
-}
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.muted { font-weight: 400; color: var(--text-tertiary); }
+.input, .textarea { font-size: 13.5px; padding: 9px 12px; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+.input-row { display: flex; gap: 6px; }
+.input-row .icon-btn { width: 38px; height: auto; border: 1px solid var(--border); }
+.input-row .icon-btn[aria-pressed="true"] { color: var(--accent-hover); border-color: var(--border-accent); }
+.help { font-size: 12px; color: var(--text-tertiary); line-height: 1.55; }
+.help code { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; }
+.help a { display: inline-flex; align-items: center; gap: 3px; }
 
-/* ---- Sections ---- */
-.section {
-  margin-bottom: 28px;
-  padding: 20px;
-  background: #181825;
-  border-radius: 14px;
-  border: 1px solid #313244;
-}
+.actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.btn { height: 34px; padding: 0 14px; font-size: 13px; }
+.saved { font-size: 12px; font-weight: 600; color: var(--success); animation: rise 0.2s ease both; }
 
-.section h2 {
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: #89b4fa;
-  margin-bottom: 16px;
+.result {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; padding: 12px 14px; border-radius: var(--radius-md);
+  font-size: 12.5px; background: var(--bg-secondary); border: 1px solid var(--border); animation: rise 0.2s ease both;
 }
+.result[hidden] { display: none; }
+.result.ok { border-color: rgba(52, 211, 153, 0.25); background: var(--success-muted); }
+.result.fail { border-color: rgba(248, 113, 113, 0.25); background: var(--error-muted); grid-template-columns: 1fr; color: var(--error); }
+.result dt { color: var(--text-tertiary); }
+.result dd { color: var(--text-primary); font-weight: 500; }
 
-/* ---- Fields ---- */
-.field-group {
-  margin-bottom: 16px;
-}
+.setting { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.setting.sub { margin-top: -6px; padding-left: 14px; border-left: 2px solid var(--border); }
+.setting.sub.is-disabled { opacity: 0.5; }
+.setting-title { font-size: 13.5px; font-weight: 600; margin-bottom: 2px; }
 
-.field-group:last-child {
-  margin-bottom: 0;
-}
+.shortcuts { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.shortcuts > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; background: var(--bg-tertiary); }
+.shortcuts > div + div { border-top: 1px solid var(--border); }
+.shortcuts dt { font-size: 13px; }
+.shortcuts dd { display: flex; gap: 4px; }
+.shortcuts .unset { font-size: 12px; color: var(--text-tertiary); }
+.kbd { min-width: 22px; height: 22px; font-size: 11.5px; }
+.tips { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--text-secondary); }
+.tips > div { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 
-.field-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: #a6adc8;
-  margin-bottom: 6px;
-}
-
-.field-group .hint {
-  font-weight: 400;
-  color: #585b70;
-  font-size: 11px;
-}
-
-.field-group input[type="text"],
-.field-group input[type="password"],
-.field-group textarea {
-  width: 100%;
-  padding: 10px 14px;
-  background: #1e1e2e;
-  border: 1px solid #313244;
-  border-radius: 10px;
-  color: #cdd6f4;
-  font-size: 14px;
-  outline: none;
-  font-family: inherit;
-  transition: border-color 0.2s ease;
-}
-
-.field-group input:focus,
-.field-group textarea:focus {
-  border-color: #89b4fa;
-}
-
-.field-group textarea {
-  resize: vertical;
-  min-height: 80px;
-  font-family: 'SF Mono', Menlo, Monaco, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-/* ---- Connection test ---- */
-.connection-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.connection-status {
-  font-size: 13px;
-  font-weight: 600;
-  transition: color 0.3s ease;
-}
-
-.connection-status.ok {
-  color: #a6e3a1;
-}
-
-.connection-status.fail {
-  color: #f38ba8;
-}
-
-/* ---- Radio group ---- */
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: #1e1e2e;
-  border: 1px solid #313244;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-
-.radio-label:hover {
-  border-color: #45475a;
-}
-
-.radio-label input[type="radio"] {
-  accent-color: #89b4fa;
-  width: 16px;
-  height: 16px;
-}
-
-.radio-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: #cdd6f4;
-  min-width: 60px;
-}
-
-.radio-desc {
-  font-size: 12px;
-  color: #585b70;
-}
-
-/* ---- Buttons ---- */
-.btn {
-  padding: 10px 20px;
-  font-size: 13px;
-  font-weight: 600;
-  border: 1px solid #313244;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
-}
-
-.btn:active {
-  transform: scale(0.97);
-}
-
-.btn.primary {
-  background: #89b4fa;
-  color: #11111b;
-  border-color: #89b4fa;
-}
-
-.btn.primary:hover {
-  background: #74c7ec;
-  border-color: #74c7ec;
-}
-
-.btn.secondary {
-  background: #1e1e2e;
-  color: #cdd6f4;
-}
-
-.btn.secondary:hover {
-  background: #313244;
-  border-color: #89b4fa;
-}
-
-/* ---- Actions footer ---- */
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.save-status {
-  font-size: 13px;
-  font-weight: 600;
-  transition: opacity 0.3s ease;
-}
-
-.save-status.saved {
-  color: #a6e3a1;
-}
-
-.save-status.error {
-  color: #f38ba8;
-}
+.foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-tertiary); padding: 4px 4px 0; }

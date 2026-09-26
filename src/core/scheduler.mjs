@@ -189,24 +189,40 @@ export function persistTaskToDisk(task, queueDir) {
   return filepath;
 }
 
+// ─── Research Pipeline ──────────────────────────────────────────────────────────
+
+/** A failed research item is retried at most this many times, then stays failed. */
+export const MAX_RESEARCH_ATTEMPTS = 3;
+
+/**
+ * The research pipeline. It ends at improvement: there is deliberately no
+ * monitoring or expansion phase, because research must never spawn research.
+ */
+export const RESEARCH_PHASES = Object.freeze({
+  acquisition: {
+    step: 1, label: 'Acquisition', category: 'proactive-research',
+    body: (i) => `Run knowledge acquisition cycle for queued topic: ${i.topic}.\nNotes: ${i.notes || 'None'}`,
+  },
+  deliberation: {
+    step: 2, label: 'Deliberation', category: 'system2-deliberation',
+    body: (i) => `Run deep System 2 cognitive deliberation for topic: ${i.topic}.\nTarget node: ${i.node_slug || 'pending'}`,
+  },
+  improvement: {
+    step: 3, label: 'Improvement', category: 'memory-maintenance',
+    body: (i) => `Run document improvement and formatting refinement for topic: ${i.topic}.\nTarget node: ${i.node_slug || 'pending'}`,
+  },
+});
+const RESEARCH_PHASE_COUNT = Object.keys(RESEARCH_PHASES).length;
+
 // ─── Idle Task Generation ───────────────────────────────────────────────────────
 
 let _idleCycleCounter = 0;
 
 /**
  * Generate an idle improvement task when the explicit queue is empty.
- * Weighted toward proactive research — 3 of every 9 ticks do real web search.
- *
- * Cycle (9 ticks):
- *   0: proactive-research   — web search + synthesize from agenda
- *   1: inference            — draw System 2 conclusions from vault clusters
- *   2: proactive-research   — web search (second topic)
- *   3: staleness-check      — flag outdated facts
- *   4: proactive-research   — web search (third topic)
- *   5: inference            — draw more conclusions
- *   6: post-mortem          — re-analyze most recent session
- *   7: clarity-review       — improve a vault node
- *   8: cutoff-audit         — check for training-drift
+ * Purely local maintenance, round-robin: inference, post-mortem, clarity
+ * review, memory compaction. Idle ticks never research on their own; research
+ * only runs for topics a human asked for or the project gate approved.
  */
 export function generateIdleTask({ vaultDir, sessionsDir }) {
   // Only allow purely local task generation strategies.
@@ -227,23 +243,6 @@ export function generateIdleTask({ vaultDir, sessionsDir }) {
     // Local fallback only — never query the internet or make automated web searches
     return makeFallbackTask('memory-maintenance', 'Wait for active conversation task');
   }
-}
-
-/**
- * Generate a proactive research task — pulls the next topic from the agenda
- * and queues a full web search + synthesis cycle.
- */
-function generateProactiveResearchTask() {
-  return {
-    type: 'task',
-    slug: `proactive-research-${Date.now().toString(36)}`,
-    priority: 55,
-    category: 'proactive-research',
-    status: 'pending',
-    created_by: 'scheduler-idle',
-    reason: 'Idle task: pull next topic from research agenda and execute web search + synthesis.',
-    body: 'Run one knowledge acquisition cycle: pull highest-priority pending topic from agenda, gather from web/wikipedia/arXiv/npm/github, synthesize with LLM, write cited fact node to vault.',
-  };
 }
 
 /**
@@ -282,54 +281,6 @@ function generateMemoryCompactionTask(vaultDir) {
     created_by: 'scheduler-idle',
     reason: `Idle task: scan vault for fragmented nodes to merge into comprehensive master documents.`,
     body: `Scan for highly overlapping or fragmented memory nodes and fuse them into comprehensive master nodes, archiving the fragments.`,
-  };
-}
-
-/**
- * Pick the oldest fact node and create a staleness check task.
- */
-function generateStalenessCheckTask(vaultDir) {
-  const nodes = getNodes(vaultDir)
-    .filter((n) => n.status === 'active' && n.category === 'facts')
-    .sort((a, b) => {
-      const aDate = new Date(a.last_accessed || a.updated || 0).getTime();
-      const bDate = new Date(b.last_accessed || b.updated || 0).getTime();
-      return aDate - bDate; // oldest first
-    });
-
-  if (nodes.length === 0) {
-    // No facts? Pick any old node
-    const allNodes = getNodes(vaultDir).filter((n) => n.status === 'active');
-    if (allNodes.length === 0) {
-      return makeFallbackTask('research-acquisition', 'No facts to verify');
-    }
-    const oldest = allNodes.sort((a, b) => {
-      return new Date(a.updated || 0).getTime() - new Date(b.updated || 0).getTime();
-    })[0];
-    return {
-      type: 'task',
-      slug: `staleness-check-${oldest.slug}-${Date.now().toString(36)}`,
-      priority: 25,
-      category: 'research-acquisition',
-      target: oldest.slug,
-      status: 'pending',
-      created_by: 'scheduler-idle',
-      reason: `Idle task: verify if "${oldest.title}" is still current.`,
-      body: `## Objective\nEvaluate whether memory node "${oldest.slug}" is still accurate given its age and domain.`,
-    };
-  }
-
-  const target = nodes[0];
-  return {
-    type: 'task',
-    slug: `staleness-check-${target.slug}-${Date.now().toString(36)}`,
-    priority: 25,
-    category: 'research-acquisition',
-    target: target.slug,
-    status: 'pending',
-    created_by: 'scheduler-idle',
-    reason: `Idle task: verify if fact "${target.title}" is still current.`,
-    body: `## Objective\nThis fact was last accessed on ${target.last_accessed || 'unknown'}.\nDetermine if it is: STILL_VALID, POSSIBLY_STALE, or LIKELY_OUTDATED.\nIf stale, suggest a verification search query.`,
   };
 }
 
@@ -499,107 +450,70 @@ export function createScheduler({ queueDir, vaultDir, sessionsDir }) {
     });
   }
 
-  // Load pending research queue tasks
+  // Load pending research queue tasks.
+  //
+  // Research ends when it is answered: acquisition → deliberation → improvement →
+  // done. Nothing here re-opens finished work. (A `done` item used to be reset to
+  // a monitoring pass every hour, forever, and the expansion phase spawned three
+  // new topics per finished one — see docs/projects/.../RESEARCH_SYSTEM2_AUDIT.md.)
+  // Failed items retry after a cooldown, at most MAX_RESEARCH_ATTEMPTS times.
   try {
     const COOLDOWN_MS = process.env.RESEARCH_COOLDOWN_MS
       ? parseInt(process.env.RESEARCH_COOLDOWN_MS, 10)
       : 60 * 60 * 1000; // 1 hour default
 
-    const allItems = loadQueue();
     let resetCount = 0;
-
-    for (const item of allItems) {
-      if (item.status === 'done' || item.status === 'failed') {
-        const completedTime = new Date(item.completed_at || item.updated_at || 0).getTime();
-        if (Date.now() - completedTime < COOLDOWN_MS) continue;
-
-        // Empty "done" (no node, no conclusions) is NOT real research — re-acquire
-        const emptyDone =
-          item.status === 'done' &&
-          !item.node_slug &&
-          !(item.summary?.conclusions?.length > 0);
-
-        // Successful done with real content: re-queue only for monitoring refresh, keep node
-        // Failed or empty: force acquisition from scratch
-        try {
-          if (emptyDone || item.status === 'failed' || !item.node_slug) {
-            updateQueueItem(item.id, {
-              status: 'pending',
-              research_phase: 'acquisition',
-              notes: emptyDone
-                ? 'Auto-reset empty done project → re-run acquisition (previous run produced no memory node)'
-                : item.notes || null,
-            });
-          } else {
-            // Has a real node — optional re-monitor after cooldown (don't wipe conclusions)
-            updateQueueItem(item.id, {
-              status: 'pending',
-              research_phase: 'monitoring',
-            });
-          }
-          resetCount++;
-        } catch (updateErr) {
-          logger.error({
-            subsystem: 'scheduler',
-            message: `Failed to reset research queue item ${item.id} to pending: ${updateErr.message}`,
-          });
-        }
+    for (const item of loadQueue()) {
+      if (item.status !== 'failed') continue;
+      if ((item.attempts || 0) >= MAX_RESEARCH_ATTEMPTS) continue;
+      const failedAt = new Date(item.updated_at || item.created_at || 0).getTime();
+      if (Date.now() - failedAt < COOLDOWN_MS) continue;
+      try {
+        updateQueueItem(item.id, {
+          status: 'pending',
+          research_phase: item.node_slug ? (item.research_phase || 'acquisition') : 'acquisition',
+          attempts: (item.attempts || 0) + 1,
+        });
+        resetCount++;
+      } catch (updateErr) {
+        logger.error({
+          subsystem: 'scheduler',
+          message: `Failed to retry research queue item ${item.id}: ${updateErr.message}`,
+        });
       }
     }
-
     if (resetCount > 0) {
       logger.info({
         subsystem: 'scheduler',
-        message: `Auto-reset ${resetCount} research items after cooldown (empty→acquisition, failed→acquisition, done+node→monitoring).`,
+        message: `Retrying ${resetCount} failed research items (max ${MAX_RESEARCH_ATTEMPTS} attempts each).`,
       });
     }
 
+    // User requests run before autonomous background research; oldest first within each.
     const researchItems = loadQueue()
-      .filter((i) => i.status === 'pending')
-      .sort((a, b) => new Date(a.updated_at || a.created_at || 0).getTime() - new Date(b.updated_at || b.created_at || 0).getTime());
+      .filter((i) => i.status === 'pending' && RESEARCH_PHASES[i.research_phase || 'acquisition'])
+      .sort((a, b) => {
+        const ua = a.origin === 'autonomous' ? 1 : 0;
+        const ub = b.origin === 'autonomous' ? 1 : 0;
+        if (ua !== ub) return ua - ub;
+        return new Date(a.updated_at || a.created_at || 0).getTime() - new Date(b.updated_at || b.created_at || 0).getTime();
+      });
 
     for (let idx = 0; idx < researchItems.length; idx++) {
       const item = researchItems[idx];
-      const dynamicPriority = 85 + (researchItems.length - idx);
       const phase = item.research_phase || 'acquisition';
-
-      let category = 'proactive-research';
-      let slug = `research-acquisition-${item.id}`;
-      let reason = `Queued research project (Phase 1/5: Acquisition): ${item.topic}`;
-      let body = `Run knowledge acquisition cycle for queued topic: ${item.topic}.\nNotes: ${item.notes || 'None'}`;
-
-      if (phase === 'deliberation') {
-        category = 'system2-deliberation';
-        slug = `research-deliberation-${item.id}`;
-        reason = `Queued research project (Phase 2/5: Deliberation): ${item.topic}`;
-        body = `Run deep System 2 cognitive deliberation for topic: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
-      } else if (phase === 'improvement') {
-        category = 'memory-maintenance';
-        slug = `research-improvement-${item.id}`;
-        reason = `Queued research project (Phase 3/5: Improvement): ${item.topic}`;
-        body = `Run document improvement and formatting refinement for topic: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
-      } else if (phase === 'monitoring') {
-        category = 'proactive-research';
-        slug = `research-monitoring-${item.id}`;
-        reason = `Queued research project (Phase 4/5: Monitoring): ${item.topic}`;
-        body = `Identify reliable sources of ongoing information, news, feeds or release notes for: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
-      } else if (phase === 'expansion') {
-        category = 'exploration';
-        slug = `research-expansion-${item.id}`;
-        reason = `Queued research project (Phase 5/5: Expansion): ${item.topic}`;
-        body = `Discover adjacent research domains, brainstorm tangents, and auto-spawn follow-up tasks for: ${item.topic}.\nTarget node: ${item.node_slug || 'pending'}`;
-      }
+      const spec = RESEARCH_PHASES[phase];
 
       queue.enqueue({
         type: 'task',
-        slug,
-        priority: dynamicPriority,
-        category,
+        slug: `research-${phase}-${item.id}`,
+        priority: 85 + (researchItems.length - idx),
+        category: spec.category,
         target: item.topic,
         status: 'pending',
         created_by: 'research-queue',
-        reason,
-        body,
+        reason: `Queued research project (Phase ${spec.step}/${RESEARCH_PHASE_COUNT}: ${spec.label}): ${item.topic}`,
+        body: spec.body(item),
         _research_id: item.id,
         _research_phase: phase,
         _node_slug: item.node_slug,

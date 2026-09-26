@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { validatePluginManifest } from "../../core/plugin-loader.mjs";
+import { validatePluginManifest, projectPluginsDir, globalPluginsDir } from "../../core/plugin-loader.mjs";
 
 function toTitleCase(kebab) {
   return kebab
@@ -18,6 +17,7 @@ export async function createPlugin(args = []) {
   let name = null;
   let description = null;
   let category = null;
+  const useCases = [];
 
   const cleanArgs = [];
   for (let i = 0; i < args.length; i++) {
@@ -35,6 +35,11 @@ export async function createPlugin(args = []) {
       i++;
       continue;
     }
+    if (arg === "--use-case" && args[i + 1]) {
+      useCases.push(args[i + 1]);
+      i++;
+      continue;
+    }
     if (arg === "--category" && args[i + 1]) {
       category = args[i + 1];
       i++;
@@ -46,7 +51,7 @@ export async function createPlugin(args = []) {
   const id = cleanArgs[0];
   if (!id) {
     console.error("❌ Error: Missing plugin id.");
-    console.error("   Usage: total-recall plugin create <id> [--name <name>] [--description <desc>] [--category <cat>] [--with-cli] [--with-generator] [--global]\n");
+    console.error("   Usage: total-recall plugin create <id> [--name <name>] [--description <desc>] [--category <cat>] [--use-case <use>] [--with-cli] [--with-generator] [--global]\n");
     process.exit(1);
   }
 
@@ -56,9 +61,7 @@ export async function createPlugin(args = []) {
     process.exit(1);
   }
 
-  const pluginsBaseDir = isGlobal
-    ? path.join(os.homedir(), ".agent", "plugins")
-    : path.join(process.cwd(), ".agent", "plugins");
+  const pluginsBaseDir = isGlobal ? globalPluginsDir() : projectPluginsDir(process.cwd());
 
   const pluginDir = path.join(pluginsBaseDir, id);
   if (fs.existsSync(pluginDir)) {
@@ -77,9 +80,9 @@ export async function createPlugin(args = []) {
     name: pluginName,
     version: "1.0.0",
     description: pluginDesc,
-    author: "Total Recall Ecosystem",
     license: "MIT"
   };
+  if (useCases.length > 0) manifest.use_cases = useCases;
 
   if (category) {
     manifest.ssss_schemas = {
@@ -104,10 +107,9 @@ export async function createPlugin(args = []) {
 
     const cliContent = `#!/usr/bin/env node
 export async function run(argv = []) {
-  const args = Array.isArray(argv) ? argv.slice(2) : [];
-  const sub = args[0] || "status";
-  console.log(\`⚡ \${sub.toUpperCase()} from plugin: ${id}\`);
-  console.log("Plugin is active and responding to CLI dispatch.");
+  // argv: ["node", "total-recall", "<command>", "<subcommand>", ...args]
+  const sub = (Array.isArray(argv) ? argv[3] : null) || "status";
+  console.log(\`${pluginName}: \${sub}\`);
 }
 export default run;
 `;
@@ -124,20 +126,17 @@ export default run;
  * Context generator for ${pluginName}.
  * Invoked during evolving context compilation.
  */
-export async function generateContext({ projectRoot, nodes = [] }) {
-  return \`#### ${pluginName} Context\n- Status: Operational\n- Active nodes: \${nodes.length}\n\`;
+export async function generateContext({ nodes = [], manifest = {} }) {
+  const categories = (manifest.ssss_schemas?.categories || []).map((c) => c.name);
+  const mine = nodes.filter((n) => categories.includes(n.category) && n.status === 'active');
+  if (mine.length === 0) return '';
+  return \`#### ${pluginName}\n\` + mine.map((n) => \`- \${n.title || n.slug}\`).join('\\n') + '\\n';
 }
 export default generateContext;
 `;
     fs.writeFileSync(path.join(pluginDir, "generator.mjs"), generatorContent, "utf8");
   }
 
-  manifest.tasks = [
-    {
-      intent: `Periodic health verification for ${id}`,
-      schedule: "0 * * * *"
-    }
-  ];
 
   const validation = validatePluginManifest(manifest);
   if (!validation.valid) {
@@ -157,17 +156,22 @@ export default generateContext;
     "",
     `> ${pluginDesc}`,
     "",
-    "## Installation",
+    "## Sharing",
+    "",
+    "Offer it to your other Total Recall nodes over the mesh:",
     "",
     "```bash",
-    `npx total-recall plugin install ./.agent/plugins/${id} --link`,
+    `npx total-recall plugin share ${id}`,
     "```",
+    "",
+    "Peers install it with `npx total-recall plugin install peer:<this-node>/" + id + "`.",
     "",
     "## Features",
     "",
     `- **Identifier**: \`${id}\``,
     "- **Version**: 1.0.0"
   ];
+  if (useCases.length) lines.push(`- **Use cases**: ${useCases.join(", ")}`);
   if (category) lines.push(`- **SSSS Category**: \`${category}\``);
   if (withCli) lines.push(`- **CLI Command**: \`npx total-recall ${id}\``);
   lines.push("");

@@ -9,6 +9,7 @@ import {
 import { logger } from './logger.mjs';
 import { STATUS_TIMEOUT_MS, resolveTailscaleBinary } from './tailscale-cli.mjs';
 import { buildSshArgs, resolveNodeAccess } from './mesh-access.mjs';
+import { port as configuredBrainPort } from './config.mjs';
 
 const CACHE_MS = 2_000;
 
@@ -185,6 +186,7 @@ function enrichPeerWithEntity(peer, ent, extra = {}) {
     hostname: peer.hostname,
     ip: peer.ip || ent?.ip || null,
     lan_ip: peer.lan_ip || ent?.lan_ip || null,
+    brain_port: ent?.brain_port || null,
     online: !!peer.online,
     self: !!peer.self,
     os: peer.os || ent?.os || null,
@@ -498,6 +500,7 @@ export async function patchOwnMeshNode(options = {}) {
     os: self.os,
     interfaces: interfacesSummary,
     lan_ip: lanIp,
+    brain_port: options.brainPort || configuredBrainPort,
     transports: [...new Set(['mesh', ...(lanIp ? ['lan'] : [])])],
     io: ioProfile,
     capabilities,
@@ -679,4 +682,3 @@ export function resolveMeshControlUrl(options = {}) {
 
   return { url: null, source: 'none', is_fallback: false };
 }
-
