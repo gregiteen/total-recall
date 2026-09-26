@@ -58,6 +58,7 @@ const COMMANDS = {
   status:   'status.mjs',
   remember: 'remember.mjs',
   forget:   'forget.mjs',
+  edit:     'edit.mjs',
   recall:   'recall.mjs',
   search:   'recall.mjs',
   research: 'research.mjs',
@@ -111,7 +112,7 @@ function printHelp() {
   Core (default product path):
     init [--project]    Bootstrap global or project brain + openwiki
     connect <client>    Wire IDE / Obsidian / http-api host
-    remember / forget   Write-path memory (SSSS vault)
+    remember / forget / edit   Write-path memory (SSSS vault)
     recall              Read-path hybrid search
     compile             Rebuild instruction surfaces
     dream               Memory consolidation cycle

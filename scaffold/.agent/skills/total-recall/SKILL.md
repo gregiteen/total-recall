@@ -71,7 +71,9 @@ Use the **MESH / CONTROL SERVER** section. Node details are entity fields on
 SSSS `mesh_node` documents — never hardcoded hostnames.
 
 ### 5d. When running tests, typechecks, or builds
-See **TESTS**. Heavy runs go to the Mac Mini or the droplet, never the laptop.
+See **TESTS**. The full suite and the quality gates run only on the Mac Mini —
+never on a laptop or the cloud droplet. A single spec file may run on any mesh node. Builds and installs are fine on any machine; build large apps
+on the Mac Mini.
 
 ### 6. When troubleshooting connections, port blocks, or sync errors
 *   **Trigger**: If the REST server is unreachable, ports are blocked, or the upstream sync tool encounters errors.
@@ -602,9 +604,11 @@ npx vitest run <path>       # one spec file
 
 Current baseline (3.30.1): **349 spec files / 2024 tests, ~160 s** on the Mac Mini.
 
-> **Never run the full suite, a full typecheck, or a production build on the
-> laptop.** These go to the Mac Mini or the droplet — local runs cause slowdowns
-> and OOM kills. Sync and run remotely:
+> **The full suite and the quality gates run only on the Mac Mini** — never on a
+> laptop or the cloud droplet; they cause slowdowns and OOM kills. A single spec
+> file may run on any mesh node. Builds
+> and installs are fine anywhere; build large apps on the Mac Mini. Sync and run
+> remotely:
 >
 > ```bash
 > REMOTE=build-host; REMOTE_DIR=code/total-recall   # your own host and path
