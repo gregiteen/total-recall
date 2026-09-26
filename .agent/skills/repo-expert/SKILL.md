@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-26T05:51:09.183Z
+generated_at: 2026-09-26T20:36:20.475Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (642 files), Markdown (298 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (676 files), Markdown (298 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -47,7 +47,7 @@ generated_from: total-recall
     total-recall-project-management/  (6 items)
 .agents/
   rules/  (3 items)
-  skills/  (14 items)
+  skills/  (15 items)
 bin/  (4 items)
 collab/
   backend/  (3 items)
@@ -127,9 +127,11 @@ scratch/
 scripts/  (15 items)
 src/
   cli/
+    app/  (2 items)
     ingest/  (4 items)
-    plugin/  (13 items)
-  core/  (269 items)
+    plugin/  (14 items)
+  core/
+    app-deploy/  (18 items)
   server/
     routes/  (96 items)
 templates/
@@ -145,7 +147,7 @@ templates/
 
 ## CLI Commands
 
-55 commands in `src/cli/`:
+56 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
@@ -164,6 +166,7 @@ templates/
 | deploy | deploy.mjs | total-recall deploy |
 | doctor | doctor.mjs | total-recall doctor |
 | dream | dream.mjs | total-recall dream |
+| edit | edit.mjs | Parse edit arguments into { slug, body, changes, noCompile } |
 | export | export.mjs |  |
 | forget | forget.mjs |  |
 | friction | friction.mjs | CLI command to run Friction Detection on logs |
@@ -188,8 +191,7 @@ templates/
 | relay | relay.mjs | total-recall relay |
 | remember | remember.mjs | Parse a human-friendly duration string and return a Date in  |
 | repo-expert-generate | repo-expert-generate.mjs | repo-expert-generate.mjs — Auto-generate repo-expert SKILL.m |
-| research | research.mjs | src/cli/research.mjs |
-| ... | +15 more | |
+| ... | +16 more | |
 
 ## API Routes
 
@@ -601,12 +603,14 @@ templates/
 
 ## Core Modules
 
-126 modules in `src/core/`:
+131 modules in `src/core/`:
 
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, spawnAgent, killAgent, getAgentLogs
 - **append-log** — exports: compactAppendLogs
+- **autopull-install** — exports: packageRoot, buildLaunchAgentPlist, buildCronLine, mergeCrontab, detectLaunchAgentPort, installAutoPull
 - **blackboard** — exports: loadBlackboard, saveBlackboard, updateBlackboardState, clearBlackboard
 - **bound-hosts** — exports: registerBoundHost, unregisterBoundHost, getBoundHosts, resetBoundHosts, isLoopbackHost, isReachableFromOtherDevices
+- **brain-registry** — exports: globalBrainDirFor, readBrainToggles, isBrainEnabled, setBrainEnabled, listLocalBrains, findLocalBrain
 - **brain-state** — exports: isBrainState, rsyncExcludes, findBrainState
 - **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
 - **cache-prune** — exports: sessionIngestedGuard, isProtected, pruneCaches, formatBytes, maybePruneCaches
@@ -640,9 +644,11 @@ templates/
 - **logger**
 - **memory-layers** — exports: normalizeMemoryLayer, inferMemoryLayer, memoryLayerRoutingWeight, buildMemoryLayerIndex
 - **memory-title** — exports: stripSelfCapturedTitlePrefix, isSelfCapturedEchoTitle, defaultTitleFromBody, normalizeMemoryTitle
+- **mesh-access-sync** — exports: remoteNodeDocsCommand, parseRemoteNodeDocs, planAccessFromPeerDocs, syncAccessFromPeers
 - **mesh-access** — exports: parseSshConfig, readSshConfig, sshConfigMatchScore, findSshConfigEntryForNode, accessFromSshConfigEntry, classifyTailscaleVariant, meshSshFromVariant, resolveNodeAccess
 - **mesh-activity** — exports: getLocalIdleSeconds, detectActiveSurface, getLocalPresence, resolveActiveDevice
 - **mesh-auth** — exports: normalizeRemoteAddress, isMeshOrLoopbackAddress, getMeshSyncToken, getMeshSyncAuthorization, requireMeshSyncAuth
+- **mesh-discover** — exports: candidateUsers, localPrivateKeys, classifyProbeFailure, probeLogin, discoverNodeAccess
 - **mesh-enroll** — exports: resetAutoEnrollThrottle, supportsTailscaleSsh, readTailscaleStatus, readTailscalePrefs, resolveLoginServer, getEnrollmentStatus, autoEnrollEnabled, buildUpArgs
 - **mesh-late-bind** — exports: startMeshBindWatch
 - **mesh** — exports: normalizeHostname, meshNodeDocSlug, meshNodeKey, clearMeshStatusCache, isMeshAvailable, getMeshSelf, getMeshIp, getMeshHostname
@@ -662,7 +668,7 @@ templates/
 - **pid-lock** — exports: entryPathHint, readProcessCommand, shouldHonorPidLock
 - **plugin-bundle** — exports: listPluginFiles, hashPluginDir, packPlugin, decodeBundle, writeEntriesAtomic, copyPluginAtomic
 - **plugin-context** — exports: assemblePluginContexts, startPluginDirectedWatcher
-- **plugin-loader** — exports: projectPluginsDir, globalPluginsDir, bundledPluginsDir, vaultForPluginsDir, resolveProjectRoot, isCronExpression, validatePluginManifest, readPluginsDir
+- **plugin-loader** — exports: projectPluginsDir, globalPluginsDir, bundledPluginsDir, vaultForPluginsDir, resolveProjectRoot, isCronExpression, isSafeRelativePath, validatePluginManifest
 - **plugin-peers** — exports: meshPeerUrl, listPeerPlugins, parsePeerSource, fetchPeerBundle
 - **plugin-public** — exports: parsePublicPluginSource, publicPluginShareUrl, fetchPublicBundle
 - **plugin-runner-child**
@@ -697,11 +703,12 @@ templates/
 - **secrets-rekey** — exports: readMasterPasswordFromCarrierText, updateMasterPasswordCarrierText, readMasterPasswordFromCarrier, generateSecretsMasterPassword, rekeySecretsTransaction
 - **secrets-remote-deploy** — exports: resolveRemoteTargetsPath, loadRemoteTargets, saveRemoteTargets, addRemoteTarget, removeRemoteTarget, deployEnvToRemote, deployKeyToRemotes
 - **secrets-rotate** — exports: buildBrowserRotatePrompt, enqueueRotationDueTasks, rotateSecretAndExport, runSecretsRotationCheck, runSecretsExportAll, getBrowserRotateAssist, rotateViaBrowser, rotateAuto
-- **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets
+- **secrets-store** — exports: resolveSecretsPath, resolveAuditPath, resolveUsagePath, secretsPassword, readTrEnvFilePassword, isPlainJsonStore, loadSecretsSync, saveSecretsSync
 - **secrets-sync** — exports: getSecretsChecksum, pullSecretsFromLeader, fetchLeaderChecksum, syncLoop
+- **secure-file** — exports: chmodSecure, writeFileSecure, appendFileSecure
 - **server-restart** — exports: detectSupervisor, requestSelfRestart, packageVersionOnDisk
 - **session-watcher** — exports: createSessionEntry, parseClaudeCode, parseCodex, parseGeminiCli, parseAntigravity, parseCursor, parseVSCode, contentFingerprint
-- **skills-registry** — exports: resolveRegistryDir, resolveRegistryPath, emptyRegistry, loadRegistry, saveRegistry, hashSkillContent, readSkillMeta, registerSkill
+- **skills-registry** — exports: resolveRegistryDir, resolveRegistryPath, emptyRegistry, loadRegistry, saveRegistry, hashSkillContent, hashSkillLayer, readSkillMeta
 - **snapshot** — exports: getSnapshotsDir, createSnapshot, listSnapshots, rollbackVault
 - **source-adapters** — exports: loadResearchConfig, isDailyCapReached, getSearchUsageStats, braveSearch, serperSearch, tavilySearch, exaSearch, webSearch
 - **source-watcher** — exports: startSourceWatcher
@@ -709,7 +716,7 @@ templates/
 - **ssss-kernel-bridge** — exports: getKernelMode, inventorySummary, mapTrPrincipal, createTotalRecallRegistrySet, getTotalRecallEngine, isLowRiskEnvelope, isCoreRouteEnvelope, isProtocolPath
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
-- **surface** — exports: extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, compileSurface, routeNodesToSkills, injectSkills
+- **surface** — exports: extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, mergeGlobalRuleNodes, compileSurface, routeNodesToSkills
 - **tailscale-cli** — exports: resolveTailscaleBinary, hasTailscaleDaemon
 - **task-envelope** — exports: normalizePriority, buildTaskEnvelope, normalizeTask, persistEnvelope, addTask, listTasks, getTask, cancelTask
 - **task-executors** — exports: resolveExecutor, dispatchTask, listExecutorIds
