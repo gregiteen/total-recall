@@ -184,19 +184,38 @@ export function listMeshNodeEntities(vaultRoot = meshVaultRoot()) {
  * Merge live control-plane peers with vault mesh_node entity variables.
  * Live online/ip always win; role/labels/capabilities/notes come from the entity.
  */
-export function mergeLivePeersWithEntities(peers, entities = []) {
-  const byHost = new Map();
-  const byIp = new Map();
-  for (const ent of entities) {
-    const host = meshNodeKey(ent.hostname);
-    if (host) byHost.set(host, ent);
-    if (ent.ip) byIp.set(String(ent.ip), ent);
+/**
+ * The entity describing a peer: by hostname first, then by mesh address.
+ *
+ * The address fallback exists for a machine whose hostname changed. It must
+ * not claim an entity whose hostname is a DIFFERENT machine: Headscale hands a
+ * freed address to the next node that enrolls, so a stale entity at that
+ * address belongs to whoever held it before. Matching it attached a new
+ * Chromebook to an old MacBook's record, login included.
+ */
+export function entityForPeer(peer, entities = [], otherHosts = new Set()) {
+  const host = meshNodeKey(peer?.hostname);
+  if (host) {
+    const byName = entities.find((e) => meshNodeKey(e.hostname) === host);
+    if (byName) return byName;
   }
+  if (!peer?.ip) return null;
+  return (
+    entities.find((e) => {
+      if (!e.ip || String(e.ip) !== String(peer.ip)) return false;
+      const entHost = meshNodeKey(e.hostname);
+      return !entHost || !otherHosts.has(entHost);
+    }) || null
+  );
+}
+
+export function mergeLivePeersWithEntities(peers, entities = []) {
+  const liveHosts = new Set(peers.map((p) => meshNodeKey(p.hostname)).filter(Boolean));
 
   const merged = peers.map((peer) => {
     const host = meshNodeKey(peer.hostname);
-    const ent = (host && byHost.get(host)) || (peer.ip && byIp.get(String(peer.ip))) || null;
-    return enrichPeerWithEntity(peer, ent);
+    const others = new Set([...liveHosts].filter((h) => h !== host));
+    return enrichPeerWithEntity(peer, entityForPeer(peer, entities, others));
   });
 
   const seen = new Set(
@@ -310,11 +329,12 @@ function isInVault(doc, vaultRoot) {
 function findEntityForSelf(self, vaultRoot) {
   const entities = listMeshNodeEntities(vaultRoot);
   const host = meshNodeKey(self.hostname);
-  return (
-    entities.find((e) => meshNodeKey(e.hostname) === host) ||
-    entities.find((e) => e.ip && self.ip && String(e.ip) === String(self.ip)) ||
-    null
+  const otherHosts = new Set(
+    getMeshPeers({ includeSelf: true })
+      .map((p) => meshNodeKey(p.hostname))
+      .filter((h) => h && h !== host),
   );
+  return entityForPeer(self, entities, otherHosts);
 }
 
 /** Find an enriched node (live + vault) by hostname or address. */
@@ -344,10 +364,13 @@ export async function setMeshNodeAccess(nameOrAddress, accessPatch, options = {}
   if (!node) return { written: false, reason: 'node-not-found' };
 
   const entities = listMeshNodeEntities(vaultRoot);
-  const known =
-    entities.find((e) => meshNodeKey(e.hostname) === meshNodeKey(node.hostname)) ||
-    entities.find((e) => e.ip && node.ip && String(e.ip) === String(node.ip)) ||
-    null;
+  const otherHosts = new Set(
+    listEnrichedMeshNodes(vaultRoot)
+      .filter((n) => !n.vault_only)
+      .map((n) => meshNodeKey(n.hostname))
+      .filter((h) => h && h !== meshNodeKey(node.hostname)),
+  );
+  const known = entityForPeer(node, entities, otherHosts);
   // A record read from another brain layer is merged, but the write always
   // lands in this vault, so only a document that lives here can be patched.
   const existing = known && isInVault(known, vaultRoot) ? known : null;
