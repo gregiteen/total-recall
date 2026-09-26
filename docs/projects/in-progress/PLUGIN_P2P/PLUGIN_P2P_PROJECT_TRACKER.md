@@ -78,3 +78,7 @@
 - [x] Server boot: `com.totalrecall.brain` restarted on new code, `/health` 200; daemon restarted via `total-recall daemon stop/start`
 - [x] Full suite (Mac mini): 1842 passed / 12 failed on first run; all 12 traced to the test copy (unanchored rsync exclude dropped `scaffold/.agent/skills/total-recall/`; `_TR_TEST_AGENT_DIR` hid tts config) and pass on corrected rerun (56/56 + tts 5/5)
 - [ ] Browser screenshot of Plugins page (needs a signed-in session)
+
+## Verification Log
+
+- 2026-09-25: Isolated Mac Mini source snapshot — `npm --prefix frontend run build` passed (`tsc -b`, Vite); `npm test` passed 336 files / 1,908 tests. Local fast code-quality gate passed all five checks after copying the generated dashboard bundle. Live cross-user and two-node install checks remain open above.

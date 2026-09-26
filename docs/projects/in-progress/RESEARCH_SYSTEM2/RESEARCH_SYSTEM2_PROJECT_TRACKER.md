@@ -76,3 +76,7 @@ Legend: `[ ]` todo · `[/]` in progress · `[x]` done · (S/M/L) complexity
 ## Follow-ups (not done here)
 - Rebuild `frontend/dist` (gitignored; heavy build, not run on the laptop). The dashboard's 3-phase stepper and provenance label ship with the next build.
 - 88 of 93 existing reports hold no usable synthesis. They're kept (their cited sources are still searchable) but never surfaced. Re-running research on the topics that matter uses the fixed prompt.
+
+## Verification Log
+
+- 2026-09-25: Isolated Mac Mini source snapshot — `npm test` passed 336 files / 1,908 tests, including the System 2 specs. Local fast code-quality gate passed all five checks.

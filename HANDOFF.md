@@ -3,26 +3,26 @@
 ## Current state
 
 - **Branch:** `main`
-- **Version:** `3.27.0` (`total-recall-brain@3.27.0`)
-- **Plugin System & Discovery:** Merged and verified; includes plugin discovery catalog (`npx total-recall plugin catalog` / `search`), ratings UI, and meta-harness.
-- **Mesh & Network Security:** Headscale WireGuard mesh, presence dynamic dispatch, encrypted secrets sync, and firewall rate limiting are fully operational and verified.
+- **Package version:** `3.28.2`. The project work below is committed after the `v3.28.2` tag; it has not been published as a new npm version.
+- **Source of truth:** SSSS VFS documents for persistent brain state. Plugin installation records and run events use the SSSS operation service.
+- **Active project records:**
+  - [PLUGIN_P2P](docs/projects/in-progress/PLUGIN_P2P/PLUGIN_P2P_PROJECT_TRACKER.md): bundled and installed plugins, explicit public sharing through hash-pinned HTTPS links, own-device mesh sharing, task runs, and dashboard management.
+  - [RESEARCH_SYSTEM2](docs/projects/in-progress/RESEARCH_SYSTEM2/RESEARCH_SYSTEM2_PROJECT_TRACKER.md): bounded research phases, provenance, queue gate, and improved synthesis.
+  - [EXTENSION_OVERHAUL](docs/projects/in-progress/EXTENSION_OVERHAUL/EXTENSION_OVERHAUL_PROJECT_TRACKER.md): browser extension API, page recall, and side panel redesign.
 
-## In-Flight / Staged Changes
+## Verification on 2026-09-25
 
-- `src/cli/plugin/search.mjs`: Added search & catalog discovery command for CLI plugin system.
-- `src/cli/plugin/plugin.spec.mjs`: Verified with comprehensive tests (6/6 passing).
-- Fixed `-n` argument handling in antigravity sandbox git wrapper so `git log -n <limit>` succeeds cleanly.
-- Removed stale broken symlink `docs/projects/planned/expo-mobile`.
+- A source-exact isolated copy on the Mac Mini passed `npm --prefix frontend run build` (`tsc -b` and Vite build).
+- The same copy passed `npm test`: 336 test files and 1,908 tests.
+- The local fast code-quality gate passed: dashboard bundle freshness, open-source paths, shipped package paths, scaffold brain state, and SSSS registry.
+- `git diff --check` passed; the added text scan found no obvious credential tokens.
+- The existing `v3.28.2` commit was integrated before the project-work commit. Its only differences from the tested source copy were the package version, lockfile, and changelog.
 
-## Active Projects Planned / Backlog
+## Remaining live checks
 
-1. **Living Memory Capsule (`docs/projects/planned/living-memory-capsule-ultrachat`)**:
-   - Workspace-scoped memory folder outside `memory-vault/` (`<BRAIN_DIR>/living-capsules/<workspace-id>/`).
-   - Deterministic alphabetical order join for optimal KV prefix caching (APC).
-   - Dynamic capsule REST endpoints (`GET /api/comms/capsule`, `POST /api/comms/capsule/record`, `DELETE /api/comms/capsule/:workspace_id/:filename`).
-   - Background garbage collection daemon task (`capsule-gc` under `memory-maintenance`).
-   - 2026 Model Catalog updates under `models/catalog/total-recall/`.
-2. **GPU Intelligence Network ("Hive") (`docs/projects/planned/gpu-intelligence-network`)**:
-   - Multi-provider GPU broker, distributed research protocol, workspace generator interview, and virtual compute fabric.
-3. **Deferred Backlog (`docs/projects/DEFERRED_BACKLOG.md`)**:
-   - Voice Notes (`npx total-recall voice` with Whisper STT), image/file uploads with multer/vision, mobile PWA Web Share Target, and remote OKF package installer.
+- Install a public share link between independent Total Recall users. The HTTPS route and hash validation are tested, but the live exchange is still pending.
+- Upgrade the second mesh node and verify a two-node plugin install. One node was still on 3.28.0 when last checked.
+- Capture the signed-in Plugins page and reload the unpacked v0.2.0 extension in Chrome.
+- Resolve the stale Headscale `laptop` entry identified by the PLUGIN_P2P tracker.
+
+Keep these items in their project trackers until they are verified. Do not mark the projects complete from code or unit-test results alone.

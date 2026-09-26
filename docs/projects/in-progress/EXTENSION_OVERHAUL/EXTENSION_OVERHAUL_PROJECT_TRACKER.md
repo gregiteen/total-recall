@@ -53,3 +53,7 @@ Legend: `[ ]` todo · `[/]` in progress · `[x]` done · (S/M/L) complexity
 - [x] Full vitest suite green (Mac mini): 334 files / 1,895 tests
 - [x] PRD success criteria S1–S9 checked
 - [ ] You reload the unpacked extension in Chrome (chrome://extensions → Total Recall → reload) to pick up v0.2.0
+
+## Verification Log
+
+- 2026-09-25: Isolated Mac Mini source snapshot — `npm --prefix frontend run build` passed (`tsc -b`, Vite); `npm test` passed 336 files / 1,908 tests. Local fast code-quality gate passed all five checks. The user-side extension reload remains open above.
