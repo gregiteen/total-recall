@@ -79,7 +79,7 @@ crashpad handler and blocked every start.
   `npx total-recall daemon stop && npx total-recall daemon start`.
 - **`recall` and `compile` hold a vault filesystem watcher open ~60s** after
   results print. Piped output can look empty. Redirect to a file and read it.
-- **`test` is tier `remote`** — vitest across this repo is not free on a laptop; run it on the test host.
+- **`test` is tier `remote`** — the full suite runs only on the Mac Mini, never on a laptop or the droplet (a single spec may run on any mesh node).
 - One check at a time, machine-wide (`check.mjs` holds a global lock).
 
 ## Reference

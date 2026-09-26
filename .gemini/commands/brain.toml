@@ -1,0 +1,7 @@
+description = "Show Total Recall brain status and health"
+prompt = """
+Show the health, loaded model status, and statistics of the local Total Recall Total Recall System brain.
+
+Instructions:
+Query the health of the local brain by sending a GET request to `http://localhost:3000/health` with Authorization: Bearer <YOUR_PAT_TOKEN>.
+"""

@@ -1,0 +1,9 @@
+description = "Compile or inspect the Total Recall SSSS memory vault"
+prompt = """
+Compile, rebuild, or inspect the Structured Semantic Syntax System (SSSS) memory vault.
+
+Instructions:
+1. If the argument is "compile", send a POST request to `http://localhost:3000/api/vault/compile` with Authorization: Bearer <YOUR_PAT_TOKEN> or run `npx total-recall compile`.
+2. If the argument is "nodes", send a GET request to `http://localhost:3000/api/memory` with Authorization: Bearer <YOUR_PAT_TOKEN>.
+3. Summarize the changes and verify rule propagation across the workspace.
+"""

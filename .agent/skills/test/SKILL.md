@@ -17,7 +17,7 @@ repo_scoped: true
 
 ### Running Tests
 
-> **IMPORTANT**: NEVER run heavy test suites locally on the laptop. These must run on the Mac Mini or production server to prevent system slowdowns and OOM crashes.
+> **IMPORTANT**: The full suite runs ONLY on the Mac Mini — never on a laptop or the cloud droplet. A single spec file may run on any mesh node.
 
 ```bash
 # Run specific test file

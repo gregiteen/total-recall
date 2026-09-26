@@ -146,7 +146,7 @@ function printGeneralHelp() {
     npx total-recall help architecture
 
   \x1b[1mCore Memory Operations:\x1b[0m
-    \x1b[33mremember\x1b[0m, \x1b[33mrecall\x1b[0m, \x1b[33mforget\x1b[0m, \x1b[33mbrain\x1b[0m, \x1b[33mmap\x1b[0m
+    \x1b[33mremember\x1b[0m, \x1b[33mrecall\x1b[0m, \x1b[33mforget\x1b[0m, \x1b[33medit\x1b[0m, \x1b[33mbrain\x1b[0m, \x1b[33mmap\x1b[0m
 
   \x1b[1mCompilation & System Rules:\x1b[0m
     \x1b[33mcompile\x1b[0m, \x1b[33mrebuild\x1b[0m, \x1b[33mconnect\x1b[0m, \x1b[33mskill\x1b[0m, \x1b[33mimport-rules\x1b[0m

@@ -1,0 +1,9 @@
+description = "Ask Total Recall brain a question or run a specialized agent task"
+prompt = """
+Send a direct conversational query or task instruction to the Total Recall local brain.
+Query: {{args}}
+
+Instructions:
+1. Query the memory vault for relevant context by sending a POST request to `http://localhost:3000/api/memory/search/semantic` with the body `{"query": "{{args}}", "top_k": 5}` and Authorization: Bearer <YOUR_PAT_TOKEN>.
+2. Address the user's inquiry thoroughly, referencing active memory nodes where applicable.
+"""

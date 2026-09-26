@@ -34,7 +34,7 @@ Install from that checkout — idempotent, safe to re-run:
 
 ```bash
 node bin/total-recall.mjs update --install-autopull              # port from the brain's LaunchAgent, else TR_PORT, else 3000
-node bin/total-recall.mjs update --install-autopull --no-build   # laptops: never build the dashboard there
+node bin/total-recall.mjs update --install-autopull --no-build   # skip the dashboard rebuild on this host
 node bin/total-recall.mjs update --install-autopull --port 3900  # a host with something else on 3000
 node bin/total-recall.mjs update --install-autopull --dry-run    # show the plan
 ```
@@ -159,11 +159,11 @@ This script automatically:
 It runs `git push origin main --tags`, so it also pushes every local tag, and
 it aborts the publish if that push fails. When no machine has all three:
 
-1. Run the gates and the full suite on the test host (never the laptop).
+1. Run the gates and the full suite on the Mac Mini (never a laptop or the droplet).
 2. Bump, tag and `git push origin main v<version>` from the machine that has
    GitHub access.
 3. On the machine logged in to npm (`npm whoami`), fast-forward to the tag,
-   copy the test host's verified `frontend/dist` (building is a heavy run),
+   build `frontend/dist` there or copy the test host's verified build,
    then `npm run check:dist`, `npm publish --dry-run`, `npm publish`.
 4. Confirm on the registry, not from npm's output — it can lag minutes:
    `curl -s https://registry.npmjs.org/total-recall-brain | jq '."dist-tags"'`.
