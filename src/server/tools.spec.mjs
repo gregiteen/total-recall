@@ -1,5 +1,27 @@
 import { describe, it, expect, vi } from 'vitest';
+
+const gate = vi.hoisted(() => ({ requestResearch: vi.fn() }));
+vi.mock('../core/research-gate.mjs', () => gate);
+
 import { handleToolCall, AVAILABLE_TOOLS } from './tools.mjs';
+
+describe('queue_research tool (human asks for research in conversation)', () => {
+  it('is offered to the model, limited to explicit user requests', () => {
+    const tool = AVAILABLE_TOOLS.find(t => t.function.name === 'queue_research');
+    expect(tool).toBeDefined();
+    expect(tool.function.parameters.required).toEqual(['topic']);
+    expect(tool.function.description).toMatch(/ONLY when the user explicitly asks/);
+  });
+
+  it('queues through the gate as a user request from chat', async () => {
+    gate.requestResearch.mockReturnValue({ id: 'r1', topic: 'Stripe webhooks', status: 'pending' });
+    const out = JSON.parse(await handleToolCall({
+      function: { name: 'queue_research', arguments: JSON.stringify({ topic: 'Stripe webhooks', notes: 'for billing' }) },
+    }));
+    expect(gate.requestResearch).toHaveBeenCalledWith({ topic: 'Stripe webhooks', notes: 'for billing', via: 'chat' });
+    expect(out).toMatchObject({ id: 'r1', status: 'queued' });
+  });
+});
 
 describe('Tools API', () => {
   it('should export AVAILABLE_TOOLS containing search_web', () => {

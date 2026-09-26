@@ -1,10 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/total-recall/total-recall/blob/main/metadata.plugin.schema.json",
+  "$id": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "title": "Total Recall Plugin Manifest Schema",
-  "description": "Schema for plugin.json manifests in the Total Recall AI OS",
+  "description": "Schema for plugin.json manifests. Plugins customize Total Recall for a particular use and are shared peer to peer over the mesh. Only fields listed here are acted on by Total Recall.",
   "type": "object",
-  "required": ["id", "name", "version", "description"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "description"
+  ],
   "additionalProperties": true,
   "properties": {
     "$schema": {
@@ -36,24 +41,29 @@
       "type": "string",
       "default": "MIT"
     },
-    "entrypoint": {
-      "type": "string",
-      "description": "Path to background daemon or runtime binary"
-    },
     "cli": {
       "type": "object",
       "properties": {
-        "command": { "type": "string" },
-        "handler": { "type": "string" },
-        "binary": { "type": "string" },
+        "command": {
+          "type": "string"
+        },
+        "handler": {
+          "type": "string"
+        },
         "subcommands": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "description": { "type": "string" }
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
             }
           }
         }
@@ -62,10 +72,22 @@
     "compile": {
       "type": "object",
       "properties": {
-        "generator": { "type": "string", "description": "Custom JS module implementing generateContext()" },
-        "watch": { "type": "array", "items": { "type": "string" } },
-        "output": { "type": "string" },
-        "auto": { "type": "boolean" }
+        "generator": {
+          "type": "string",
+          "description": "Custom JS module implementing generateContext()"
+        },
+        "watch": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "output": {
+          "type": "string"
+        },
+        "auto": {
+          "type": "boolean"
+        }
       }
     },
     "ssss_schemas": {
@@ -75,12 +97,23 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "description": { "type": "string" },
-              "node_type": { "type": "string", "default": "memory" },
-              "template": { "type": "string" }
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "node_type": {
+                "type": "string",
+                "default": "memory"
+              },
+              "template": {
+                "type": "string"
+              }
             }
           }
         }
@@ -88,34 +121,64 @@
     },
     "tasks": {
       "type": "array",
+      "description": "Plugin CLI subcommands run on a schedule by the daemon, out of process. Each run is recorded as a plugin.task_run event.",
       "items": {
         "type": "object",
-        "required": ["intent", "schedule"],
+        "required": [
+          "intent",
+          "schedule",
+          "command"
+        ],
+        "additionalProperties": false,
         "properties": {
-          "intent": { "type": "string" },
-          "schedule": { "type": "string" },
-          "capability": { "type": "string" }
+          "intent": {
+            "type": "string",
+            "description": "What the task does, for humans"
+          },
+          "schedule": {
+            "type": "string",
+            "description": "5-field cron expression, local time"
+          },
+          "command": {
+            "type": "string",
+            "description": "Subcommand passed to the plugin CLI handler (requires cli.handler)"
+          }
         }
       }
     },
-    "hooks": {
-      "type": "object",
-      "additionalProperties": { "type": "string" }
+    "author": {
+      "type": "string",
+      "description": "Who wrote the plugin"
     },
-    "ui": {
-      "type": "object",
-      "properties": {
-        "route": { "type": "string" },
-        "label": { "type": "string" },
-        "icon": { "type": "string" },
-        "openwiki_hub": { "type": "string" }
-      }
+    "homepage": {
+      "type": "string",
+      "description": "Where the plugin source lives, if published"
     },
-    "notifications": {
-      "type": "object",
-      "properties": {
-        "channels": { "type": "array", "items": { "type": "string" } },
-        "min_tier": { "type": "string" }
+    "use_cases": {
+      "type": "array",
+      "description": "What the plugin is for, as kebab-case tags (e.g. software-development, research, operations). Used to filter plugin lists.",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{1,47}$"
+      },
+      "uniqueItems": true
+    },
+    "openwiki_hubs": {
+      "type": "array",
+      "description": "Markdown hubs ingested into OpenWiki by `total-recall ingest-openwiki`",
+      "items": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
       }
     }
   }

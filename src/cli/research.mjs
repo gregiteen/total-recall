@@ -51,11 +51,9 @@ function getStatusBadge(status) {
 
 function getPhaseLabel(phase) {
   switch (phase) {
-    case 'acquisition': return 'Acquisition (1/5)';
-    case 'deliberation': return 'Deliberation (2/5)';
-    case 'improvement': return 'Refinement & Clarity (3/5)';
-    case 'monitoring': return 'Sources & Feeds (4/5)';
-    case 'expansion': return 'Tangent Expansion (5/5)';
+    case 'acquisition': return 'Acquisition (1/3)';
+    case 'deliberation': return 'Deliberation (2/3)';
+    case 'improvement': return 'Refinement & Clarity (3/3)';
     default: return phase || 'unknown';
   }
 }
@@ -174,7 +172,7 @@ function handleAdd(args, resolvedBrainDir) {
   }
 
   try {
-    const item = addToQueue({ topic, priority, notes, brainDir: resolvedBrainDir });
+    const item = addToQueue({ topic, priority, notes, brainDir: resolvedBrainDir, origin: 'user', requested_via: 'cli' });
     console.log();
     console.log(`  ${green('✅ Successfully enqueued research project:')}`);
     console.log(`  ${bold('Topic:')}    "${item.topic}"`);

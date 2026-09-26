@@ -352,6 +352,14 @@
     "path": "/api/mesh/nodes"
   },
   {
+    "method": "GET",
+    "path": "/api/mesh/plugins"
+  },
+  {
+    "method": "GET",
+    "path": "/api/mesh/plugins/:id/bundle"
+  },
+  {
     "method": "POST",
     "path": "/api/mesh/preauthkey"
   },
@@ -452,10 +460,6 @@
     "path": "/api/plugins/:id"
   },
   {
-    "method": "POST",
-    "path": "/api/plugins/:id/rate"
-  },
-  {
     "method": "GET",
     "path": "/api/plugins/:id/readme"
   },
@@ -464,12 +468,20 @@
     "path": "/api/plugins/:id/run"
   },
   {
+    "method": "POST",
+    "path": "/api/plugins/:id/share"
+  },
+  {
     "method": "GET",
-    "path": "/api/plugins/catalog"
+    "path": "/api/plugins/available"
   },
   {
     "method": "POST",
     "path": "/api/plugins/install"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/peers"
   },
   {
     "method": "GET",
@@ -494,6 +506,10 @@
   {
     "method": "GET",
     "path": "/api/proposals/stale"
+  },
+  {
+    "method": "GET",
+    "path": "/api/public/plugins/:id/bundle"
   },
   {
     "method": "GET",

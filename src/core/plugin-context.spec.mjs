@@ -12,7 +12,7 @@ describe('Plugin Evolving Context Injections', () => {
 
   beforeAll(() => {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-context-'));
-    const pluginDir = path.join(fixtureRoot, '.agent', 'plugins', 'scientific-frontiers');
+    const pluginDir = path.join(fixtureRoot, '.agent', 'skills', 'total-recall', 'plugins', 'scientific-frontiers');
     fs.mkdirSync(pluginDir, { recursive: true });
     fs.writeFileSync(
       path.join(pluginDir, 'plugin.json'),

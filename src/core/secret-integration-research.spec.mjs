@@ -17,6 +17,8 @@ vi.mock('./research-queue.mjs', () => ({
   addToQueue: vi.fn((item) => ({ id: 'q1', ...item, status: 'pending' })),
   loadQueue: vi.fn(() => []),
   updateQueueItem: vi.fn(),
+  normalizeTopic: (t) => String(t || '').trim().toLowerCase(),
+  RESEARCH_VIAS: ['chat', 'extension', 'dashboard', 'cli', 'api', 'share', 'session', 'secret'],
 }));
 
 const SRC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
@@ -84,6 +86,20 @@ describe('secret-integration-research (AI-only)', () => {
 
     expect(result.enqueued).toBe(false);
     expect(result.skipped).toMatch(/Password|webmail/i);
+  });
+
+  it('queues through the autonomous gate, labelled as secret-triggered and budgeted', async () => {
+    const { addToQueue } = await import('./research-queue.mjs');
+    const callRuntime = vi.fn(async () => JSON.stringify({
+      researchable: true, kind: 'api_key', topic: 'Weird Vendor API', notes: 'n', priority: 'medium', confidence: 0.9,
+    }));
+    const result = await maybeEnqueueIntegrationResearch('/tmp/brain', 'WEIRD_KEY', {}, {
+      callRuntime, codeContext: '(none)', coverageCheck: async () => 0,
+    });
+    expect(result.enqueued).toBe(true);
+    expect(addToQueue).toHaveBeenCalledWith(expect.objectContaining({
+      topic: 'Weird Vendor API', origin: 'autonomous', requested_via: 'secret', project: null,
+    }));
   });
 
   it('infers from injected callRuntime without hardcoded provider lists', async () => {

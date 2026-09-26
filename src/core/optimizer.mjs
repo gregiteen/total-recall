@@ -311,47 +311,10 @@ export function findStaleNodes(vaultDir, { days = 30, minImportance = 4 } = {}) 
 }
 
 /**
- * Hand stale high-importance memories to the research daemon, which can actually
- * re-verify them and commit the result — instead of filing a ticket asking
- * someone else to.
- *
- * Rate-limited per cycle: re-researching hundreds of nodes at once would swamp
- * the daemon and burn provider budget. Most-stale-first means the backlog drains
- * in a sensible order across cycles. `addToQueue` dedupes by topic, so a node
- * already queued is never enqueued twice.
- *
- * @returns {{ enqueued: string[], stale: number }}
- */
-export async function refreshStaleKnowledge(vaultDir, { limit = 3, days = 30, minImportance = 4 } = {}) {
-  const { addToQueue } = await import('./research-queue.mjs');
-  const stale = findStaleNodes(vaultDir, { days, minImportance });
-  const enqueued = [];
-
-  for (const node of stale.slice(0, limit)) {
-    const ageDays = Math.floor((Date.now() - new Date(node.last_accessed).getTime()) / 86400000);
-    try {
-      addToQueue({
-        topic: `Verify still-current: ${node.title}`,
-        priority: node.importance >= 5 ? 'high' : 'medium',
-        notes: `Memory node "${node.slug}" (importance ${node.importance}) has not been accessed in ${ageDays} days. Re-verify its claim against current sources and update or archive it.`,
-      });
-      enqueued.push(node.slug);
-    } catch (err) {
-      logger.warn('optimizer', `Could not enqueue staleness research for ${node.slug}: ${err.message}`);
-    }
-  }
-
-  if (stale.length > enqueued.length) {
-    logger.info('optimizer', `${stale.length - enqueued.length} stale nodes deferred to a later cycle (limit ${limit}).`);
-  }
-  return { enqueued, stale: stale.length };
-}
-
-/**
- * @deprecated Superseded by {@link refreshStaleKnowledge}, which queues real work
- * instead of writing tickets nothing reads. Retained because the dream cycle's
- * master switch still references it and because removing it would silently change
- * behavior for anyone who flips that switch back on.
+ * @deprecated Wrote tickets nothing reads. Retained because the dream cycle's
+ * master switch (ENABLE_STALE_KNOWLEDGE_REFRESH, off) still references it.
+ * Stale nodes are surfaced to a human via findStaleNodes instead; nothing
+ * re-researches them automatically (RESEARCH_SYSTEM2).
  */
 export async function generateStaleKnowledgeRefreshProposals(vaultDir) {
   return findStaleNodes(vaultDir, { days: 30, minImportance: 4 }).map(node => createProposal(

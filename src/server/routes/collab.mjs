@@ -7,13 +7,28 @@ import jwt from 'jsonwebtoken';
 import { WebSocket } from 'ws';
 import { brainDir as configBrainDir } from '../../core/config.mjs';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'total-recall-collab-secret-key-1234';
-
 // Setup database paths in brainDir
 const DATA_DIR = path.join(configBrainDir, 'collab');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
+
+// Signing secret: JWT_SECRET from the environment, otherwise a random secret
+// generated once and persisted beside the collab store. There is deliberately no
+// hardcoded fallback — a secret that ships in public source lets anyone forge a
+// token for any username.
+const JWT_SECRET_FILE = path.join(DATA_DIR, '.jwt-secret');
+export function resolveJwtSecret(env = process.env, secretFile = JWT_SECRET_FILE) {
+  if (env.JWT_SECRET) return env.JWT_SECRET;
+  try {
+    const existing = fs.readFileSync(secretFile, 'utf8').trim();
+    if (existing.length >= 32) return existing;
+  } catch { /* not created yet */ }
+  const generated = crypto.randomBytes(48).toString('base64url');
+  fs.writeFileSync(secretFile, generated, { encoding: 'utf8', mode: 0o600 });
+  return generated;
+}
+const JWT_SECRET = resolveJwtSecret();
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const GROUPS_FILE = path.join(DATA_DIR, 'groups.json');
@@ -203,7 +218,7 @@ collabRouter.post('/api/collab/annotations', requireCollabAuth, (req, res) => {
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
     const note = addAnnotation(url, groupCode, req.user.username, text, excerpt);
-    broadcastToUrl(url, { type: 'ANNOTATION_ADDED', annotation: note });
+    broadcastToUrl(url, { type: 'ANNOTATION_ADDED', annotation: note }, { audienceGroups: [groupCode] });
     res.json(note);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -240,7 +255,7 @@ export function handleCollabUpgrade(request, socket, head, wss) {
               type: 'USER_JOINED',
               username: clientInfo.username,
               url: cleanUrl
-            }, ws);
+            }, { excludeWs: ws, audienceGroups: groupCodesOf(clientInfo.username) });
           }
 
           if (data.type === 'CHAT_MESSAGE') {
@@ -250,7 +265,7 @@ export function handleCollabUpgrade(request, socket, head, wss) {
               username: clientInfo.username,
               text: data.text,
               created_at: new Date().toISOString()
-            });
+            }, { audienceGroups: groupCodesOf(clientInfo.username) });
           }
         } catch (err) {
           ws.send(JSON.stringify({ type: 'ERROR', error: 'Invalid frame' }));
@@ -263,7 +278,7 @@ export function handleCollabUpgrade(request, socket, head, wss) {
           broadcastToUrl(clientInfo.currentUrl, {
             type: 'USER_LEFT',
             username: clientInfo.username
-          });
+          }, { excludeWs: ws, audienceGroups: groupCodesOf(clientInfo.username) });
         }
         clients.delete(ws);
       });
@@ -274,13 +289,25 @@ export function handleCollabUpgrade(request, socket, head, wss) {
   }
 }
 
-function broadcastToUrl(url, messageObj, excludeWs = null) {
+function groupCodesOf(username) {
+  return getUserGroups(username).map(g => g.code);
+}
+
+/**
+ * Send to sockets viewing `url` that share at least one of `audienceGroups`.
+ * Presence and chat are group-private: two unrelated groups reading the same
+ * page must never see each other's messages. An empty audience reaches no one.
+ */
+export function broadcastToUrl(url, messageObj, { excludeWs = null, audienceGroups = [] } = {}, registry = clients) {
   const cleanUrl = url.split('#')[0];
   const payload = JSON.stringify(messageObj);
+  const audience = new Set(audienceGroups);
+  if (audience.size === 0) return;
+  const groups = loadGroups();
 
-  for (const [ws, info] of clients.entries()) {
-    if (ws !== excludeWs && info.currentUrl === cleanUrl && ws.readyState === WebSocket.OPEN) {
-      ws.send(payload);
-    }
+  for (const [ws, info] of registry.entries()) {
+    if (ws === excludeWs || info.currentUrl !== cleanUrl || ws.readyState !== WebSocket.OPEN) continue;
+    const shares = groups.some(g => audience.has(g.code) && g.members.includes(info.username));
+    if (shares) ws.send(payload);
   }
 }

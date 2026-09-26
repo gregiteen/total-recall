@@ -247,17 +247,17 @@ import {
   generateStaleKnowledgeRefreshProposals,
   evaluateProposalGate,
   dedupeProposals,
-  refreshStaleKnowledge
 } from './optimizer.mjs';
 import { applyAcceptedProposals } from './proposal-applier.mjs';
 
 const DREAM_PROMOTION_THRESHOLD = 0.7;
 
 // Master switch for the stale-knowledge-refresh *ticket generator* (see PHASE 4).
-// Disabled 2026-08-01 and superseded: staleness is now handled by
-// refreshStaleKnowledge(), which enqueues research the daemon can actually
-// perform instead of filing one .md per stale node every cycle (16,401 unread
-// tickets at its peak). There is no reason to turn this back on.
+// Disabled 2026-08-01: it filed one .md per stale node every cycle (16,401
+// unread tickets at its peak). Its successor, which queued "Verify
+// still-current" research every cycle, was removed too (RESEARCH_SYSTEM2):
+// research runs only when a human asks or a project needs it. Stale nodes are
+// listed for a human by `total-recall proposals stale` / GET /api/proposals/stale.
 const ENABLE_STALE_KNOWLEDGE_REFRESH = false;
 
 /**
@@ -561,18 +561,6 @@ export async function runDreamCycle({
     }
   } catch (err) {
     logger.error('dream', `Optimizer failed: ${err.message}`);
-  }
-
-  // Staleness is handled here rather than as proposals: the research daemon can
-  // actually re-verify a stale node and commit the result, whereas a proposal
-  // could only ask someone to. Rate-limited so the backlog drains over cycles.
-  try {
-    const { enqueued, stale } = await refreshStaleKnowledge(vaultDir);
-    if (stale > 0) {
-      logger.info('dream', `Staleness sweep: ${stale} stale nodes, ${enqueued.length} queued for research this cycle.`);
-    }
-  } catch (err) {
-    logger.error('dream', `Staleness sweep failed: ${err.message}`);
   }
 
   // Write daily note summary (native SSSS node; Obsidian Daily Notes reads it directly)

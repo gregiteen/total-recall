@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 import crypto from 'crypto';
+import os from 'os';
 import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { updateNodeInPlace } from './validated-write.mjs';
@@ -96,6 +97,28 @@ export function readSessionTranscript(sessionPath) {
   const transcript = entries.join('\n\n');
   // Truncate to avoid overwhelming the model
   return transcript.slice(0, MAX_TRANSCRIPT_CHARS);
+}
+
+/**
+ * Which project a session was working on: the basename of the first recorded
+ * working directory (Claude Code / Codex store it per entry). Null when the tool
+ * doesn't record one — such sessions trigger no autonomous research.
+ */
+export function deriveSessionProject(sessionPath) {
+  if (!fs.existsSync(sessionPath)) return null;
+  const lines = fs.readFileSync(sessionPath, 'utf8').split('\n');
+  for (const line of lines) {
+    if (!line.includes('"cwd"')) continue;
+    try {
+      const { cwd } = JSON.parse(line);
+      if (typeof cwd === 'string' && cwd.trim()) {
+        const name = path.basename(cwd.replace(/[\\/]+$/, ''));
+        // A home directory or filesystem root is not a project.
+        if (name && cwd !== os.homedir() && name !== path.basename(os.homedir())) return name;
+      }
+    } catch { /* skip malformed */ }
+  }
+  return null;
 }
 
 // ─── Post-Mortem Execution ──────────────────────────────────────────────────────
@@ -199,19 +222,27 @@ export async function runPostMortem(sessionPath, { vaultDir, inboxDir, runtimeCo
     message: `Session ${sessionSlug}: ${patterns.length} patterns, ${facts.length} facts, ${skillGaps.length} gaps, ${violations.length} violations`,
   });
 
-  // Feed session transcript to the research agenda for topic inference
+  // System 2: while working on a project, find knowledge gaps that would make
+  // the AI better at that project and research them in the background, within
+  // the autonomous budget. Sessions with no project attribution queue nothing.
   try {
-    const { ingestSessionTopics } = await import('./fact-seeker.mjs');
-    const addedTopics = await ingestSessionTopics(transcript, runtimeConfig);
-    if (addedTopics.length > 0) {
-      logger.info({
-        subsystem: 'post-mortem',
-        message: `Research agenda: +${addedTopics.length} topics from session "${sessionSlug}"`,
+    const project = deriveSessionProject(sessionPath);
+    if (project) {
+      const { ingestSessionTopics } = await import('./fact-seeker.mjs');
+      const queued = await ingestSessionTopics(transcript, runtimeConfig, {
+        project,
+        sessionId: path.basename(sessionPath, path.extname(sessionPath)),
       });
+      if (queued.length > 0) {
+        logger.info({
+          subsystem: 'post-mortem',
+          message: `Background research for ${project}: +${queued.length} from session "${sessionSlug}"`,
+        });
+      }
     }
   } catch (err) {
-    // Non-fatal — topic inference failure shouldn't block post-mortem results
-    logger.info({ subsystem: 'post-mortem', message: `Topic inference skipped: ${err.message}` });
+    // Non-fatal — gap inference failure shouldn't block post-mortem results
+    logger.info({ subsystem: 'post-mortem', message: `Research gap inference skipped: ${err.message}` });
   }
 
   return { patterns, facts, skill_gaps: skillGaps, violations };

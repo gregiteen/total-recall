@@ -7,8 +7,6 @@ import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { writeNode, atomicWrite, safeStringify } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
-import { addToQueue } from './research-queue.mjs';
-import { persistTaskToDisk } from './scheduler.mjs';
 import {
   loadResearchConfig,
   checkSourceAvailability,
@@ -271,48 +269,51 @@ function registerSource(sourceResult, factSlug) {
 
 // ─── Topic Inference ─────────────────────────────────────────────────────────────
 
-function TOPIC_INFERENCE_SYSTEM(runtimeConfig) {
+function TOPIC_INFERENCE_SYSTEM(runtimeConfig, project) {
   const today = getLocalizedDateTime();
   const cutoff = runtimeConfig?.training_cutoff || 'January 2025';
-  return `You are a Research Agenda Analyst. Today's date and time is ${today}. The model's training data cutoff is ${cutoff} — anything after that date may be outdated or unknown. Given a conversation transcript, identify topics that would benefit from real-world verification, especially anything that may have changed since the training cutoff.
+  return `You are the background (System 2) research planner for an AI coding agent. Today's date and time is ${today}. The agent's training data ends around ${cutoff}.
+
+You are given a transcript of the agent working on the project "${project}". Identify KNOWLEDGE GAPS: specific facts the agent lacked that would measurably improve its work on THIS project if researched in the background. Good gaps:
+- APIs, SDKs, libraries, services or versions the project actually uses whose behaviour may have changed after ${cutoff}.
+- Errors or behaviours the agent could not explain or resolve.
+- Places where the agent guessed, hedged, or contradicted itself about an external tool.
+
+Not gaps: general curiosity, topics merely mentioned, things the transcript already answers, and anything unrelated to "${project}". Returning an empty list is normal and correct when there is no real gap.
 
 Output valid JSON:
 {
-  "topics": [
+  "gaps": [
     {
-      "topic": "string (specific, searchable — e.g. 'Ollama REST API endpoints 2025' not just 'AI')",
-      "priority": 1-100,
-      "rationale": "why this needs research",
-      "tags": ["tag1", "tag2"],
-      "suggested_sources": ["brave-search", "arxiv", "npm", "github", "wikipedia"]
+      "topic": "string (specific and searchable, e.g. 'Stripe Node SDK v17 webhook signature verification')",
+      "rationale": "string (the moment in the transcript that exposed the gap, and how the answer helps this project)",
+      "priority": 1-100
     }
   ]
 }
 
 Rules:
-- Maximum 5 topics per session.
-- Topics must be SPECIFIC and SEARCHABLE — not vague categories.
-- Include version numbers, tool names, library names when relevant.
-- Prioritize topics post-${cutoff} or where the agent showed uncertainty.
+- At most 3 gaps.
 - Output ONLY valid JSON.`;
 }
 
 /**
- * Infer research topics from a session transcript via the local LLM.
+ * Infer project knowledge gaps from a session transcript via the local LLM.
  */
-export async function inferTopicsFromSession(transcript, runtimeConfig) {
+export async function inferTopicsFromSession(transcript, runtimeConfig, { project = 'this project' } = {}) {
   if (!transcript || transcript.length < 100) return [];
 
-  const prompt = `Analyze this conversation and identify the most important research topics:\n\n${transcript.slice(0, 8000)}`;
+  const prompt = `Transcript of the agent working on "${project}":\n\n${transcript.slice(0, 8000)}`;
 
   try {
-    const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM(runtimeConfig), runtimeConfig);
+    const raw = await callLocalRuntime(prompt, TOPIC_INFERENCE_SYSTEM(runtimeConfig, project), runtimeConfig);
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return [];
     const result = cleanAndParseJSON(match[0]);
-    return Array.isArray(result.topics) ? result.topics : [];
+    const gaps = Array.isArray(result.gaps) ? result.gaps : (Array.isArray(result.topics) ? result.topics : []);
+    return gaps.filter((g) => g && typeof g.topic === 'string' && g.topic.trim()).slice(0, 3);
   } catch (err) {
-    logger.info({ subsystem: 'fact-seeker', message: `Topic inference failed: ${err.message}` });
+    logger.info({ subsystem: 'fact-seeker', message: `Gap inference failed: ${err.message}` });
     return [];
   }
 }
@@ -762,7 +763,10 @@ async function writeAndSurfaceImmediately(topic, synthesis, sourceResults, {
   try {
     const { compileSurface } = await import('./surface.mjs');
     await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
-    logger.info({ subsystem: 'fact-seeker', message: `[FAST-PATH] Surface recompiled — "${topic}" now live in INSTRUCTIONS.md` });
+    // Research reaches the instructions through the Background Research section
+    // once its queue item is done (research-surface.mjs); this recompile only
+    // refreshes indexes and any rules the synthesis produced.
+    logger.info({ subsystem: 'fact-seeker', message: `[FAST-PATH] Surface recompiled after writing "${topic}"` });
   } catch (err) {
     logger.info({ subsystem: 'fact-seeker', message: `[FAST-PATH] Surface recompile failed (non-fatal): ${err.message}` });
   }
@@ -872,17 +876,10 @@ export async function runSelfDiagnosis({ vaultDir, runtimeConfig }) {
     if (!match) throw new Error('No JSON in diagnosis response');
     const diagnosis = cleanAndParseJSON(match[0]);
 
-    // Auto-enqueue high-priority recommended topics
+    // Report only. Recommendations are not queued: research runs only when a
+    // human asks or the project gate approves a gap (RESEARCH_SYSTEM2).
     const recommended = Array.isArray(diagnosis.recommended_immediate_research)
       ? diagnosis.recommended_immediate_research : [];
-    for (const rec of recommended.filter(r => r.priority >= 70)) {
-      addToAgenda({
-        topic: rec.topic,
-        priority: rec.priority,
-        source: 'self-diagnosis',
-        rationale: rec.reason,
-      });
-    }
 
     // Log source warnings
     for (const warning of availability.warnings) {
@@ -932,23 +929,13 @@ export async function runKnowledgeAcquisitionCycle({
 }) {
   const researchConfig = loadResearchConfig();
 
-  // Determine topic
-  let topicEntry;
-  if (forceTopic) {
-    topicEntry = addToAgenda({ topic: forceTopic, priority: 90, source: 'direct-instruction', directInstruction: true });
-  } else {
-    topicEntry = getNextAgendaTopic();
+  // Research needs a topic somebody chose. There is no "next agenda topic"
+  // fallback and no self-diagnosis topic invention: those let research feed on
+  // itself (RESEARCH_SYSTEM2). The agenda is only a coverage ledger now.
+  if (!forceTopic || !String(forceTopic).trim()) {
+    return { topic: null, skipped: 'no-topic' };
   }
-
-  if (!topicEntry) {
-    // No agenda items — run self-diagnosis to generate new ones
-    logger.info({ subsystem: 'fact-seeker', message: 'Agenda empty — running self-diagnosis to generate topics' });
-    await runSelfDiagnosis({ vaultDir, runtimeConfig });
-    topicEntry = getNextAgendaTopic();
-    if (!topicEntry) {
-      return { topic: null, skipped: 'empty-agenda-after-diagnosis' };
-    }
-  }
+  const topicEntry = addToAgenda({ topic: forceTopic, priority: 90, source: 'direct-instruction', directInstruction: true });
 
   const { topic, id: topicId } = topicEntry;
   logger.info({ subsystem: 'fact-seeker', message: `Researching: "${topic}" (priority: ${topicEntry.priority})` });
@@ -994,32 +981,8 @@ export async function runKnowledgeAcquisitionCycle({
   const coverageScore = Math.min(1.0, (results.length / 5) * confidence);
   markTopicResearched(topicId, { coverageScore, sourcesConsulted: sourcesUsed });
 
-  // Enqueue follow-up research for identified gaps (self-multiplication).
-  //
-  // Bounded per parent topic. Research runs five phases and the monitoring and
-  // expansion phases repeat, so an uncapped 3 gaps per cycle compounds without
-  // limit — two completed reports generated 116 and 98 follow-ups respectively,
-  // none of which ever ran. The agenda is a backlog, not a fan-out tree.
-  const FOLLOW_UP_CAP_PER_TOPIC = 5;
-  const alreadySpawned = loadAgenda().filter(
-    (t) => t.source === `follow-up:${topic}`,
-  ).length;
-  const remaining = Math.max(0, FOLLOW_UP_CAP_PER_TOPIC - alreadySpawned);
-  const gaps = (synthesis.further_research_needed || []).slice(0, remaining);
-  if (remaining === 0 && (synthesis.further_research_needed || []).length > 0) {
-    logger.info({
-      subsystem: 'fact-seeker',
-      message: `Follow-up cap reached for "${topic}" (${alreadySpawned} already queued); not spawning more.`,
-    });
-  }
-  for (const gap of gaps) {
-    addToAgenda({
-      topic: gap,
-      priority: Math.max(20, topicEntry.priority - 15),
-      source: `follow-up:${topic}`,
-      rationale: `Gap identified while researching "${topic}"`,
-    });
-  }
+  // Gaps the synthesis names stay in the report (further_research_needed) for a
+  // human to act on; they are never queued automatically.
 
   logger.info({
     subsystem: 'fact-seeker',
@@ -1030,32 +993,20 @@ export async function runKnowledgeAcquisitionCycle({
 }
 
 /**
- * Ingest a session and add inferred topics to the research agenda.
- * Called by the daemon after each session post-mortem.
+ * Background research for a project session (System 2): infer knowledge gaps
+ * from the transcript and hand them to the research gate, which applies the
+ * autonomous budgets and skips anything existing research already covers.
+ *
+ * @returns {Promise<string[]>} topics actually queued
  */
-export async function ingestSessionTopics(sessionTranscript, runtimeConfig) {
-  const topics = await inferTopicsFromSession(sessionTranscript, runtimeConfig);
-  const added = [];
+export async function ingestSessionTopics(sessionTranscript, runtimeConfig, { project, sessionId = null, gate } = {}) {
+  if (!project) return [];
+  const gaps = await inferTopicsFromSession(sessionTranscript, runtimeConfig, { project });
+  if (gaps.length === 0) return [];
 
-  for (const t of topics) {
-    const entry = addToAgenda({
-      topic: t.topic,
-      priority: t.priority || 50,
-      source: 'session-inference',
-      rationale: t.rationale || '',
-      tags: t.tags || [],
-    });
-    added.push(entry.topic);
-  }
-
-  if (added.length > 0) {
-    logger.info({
-      subsystem: 'fact-seeker',
-      message: `Added ${added.length} topics from session: ${added.join(', ')}`,
-    });
-  }
-
-  return added;
+  const propose = gate || (await import('./research-gate.mjs')).proposeAutonomousResearch;
+  const { queued } = await propose(gaps, { project, sessionId, via: 'session' });
+  return queued.map((item) => item.topic);
 }
 
 // ─── Specialized Cognitive Research Phase Engines ────────────────────────────────
@@ -1178,14 +1129,6 @@ Output valid JSON:
       "predicate": "use",
       "object": "string (what the rule applies to)"
     }
-  ],
-  "autonomous_tasks": [
-    {
-      "priority": 50,
-      "category": "proactive-research",
-      "reason": "string (why this task is needed)",
-      "body": "string (detailed markdown instructions for the task)"
-    }
   ]
 }
 
@@ -1195,10 +1138,6 @@ Rules for synthesized_instructions:
 - Sentiment_polarity MUST be one of: "directive_must", "directive_must_not", "descriptive", "preference".
 - Subject and predicate MUST be alphanumeric (letters, numbers, hyphens, underscores, dots, spaces only). E.g., subject="agent", predicate="use".
 - Keep rules highly actionable.
-
-Rules for autonomous_tasks:
-- Category MUST be one of: "memory-maintenance", "system2-deliberation", "skill-engineering", "proactive-research", "self-evaluation", "exploration".
-- Priority MUST be an integer between 1 and 100.
 
 Output ONLY valid JSON.`;
   
@@ -1388,37 +1327,12 @@ Output ONLY valid JSON.`;
       }
     }
 
-    // Process autonomous tasks
-    if (result.autonomous_tasks && result.autonomous_tasks.length > 0) {
-      const queueDir = path.join(localBrainDir, 'scheduler', 'queue');
-      const { persistTaskToDisk } = await import('./scheduler.mjs');
-      for (const t of result.autonomous_tasks) {
-        const taskSlug = `delib-task-${crypto.createHash('md5').update(t.task || t.topic || t.description || '').digest('hex').slice(0, 8)}`;
-        const taskNode = {
-          type: 'task',
-          slug: taskSlug,
-          priority: t.priority || 50,
-          category: t.category || 'proactive-research',
-          status: 'pending',
-          created_by: 'fact-seeker-deliberation',
-          reason: t.reason || `Autonomously generated from deliberation on "${topic}"`,
-          body: t.body || `Follow up on research for "${topic}"`,
-          progress: 0,
-          estimated_calls: 5,
-          deadline: new Date(Date.now() + 86400000).toISOString().split('T')[0]
-        };
-        
-        persistTaskToDisk(taskNode, queueDir);
-        logger.info({
-          subsystem: 'fact-seeker',
-          message: `Scheduled autonomous deliberation task: ${taskSlug} (${t.category})`
-        });
-      }
-    }
-    
+    // Deliberation refines this report only. It does not queue follow-up work:
+    // research never spawns research (RESEARCH_SYSTEM2).
+
     return {
       success: true,
-      output: `Deliberated on "${topic}". Generated ${result.insights?.length || 0} insights, ${result.connections?.length || 0} connections, ${result.synthesized_instructions?.length || 0} instructions, ${result.autonomous_tasks?.length || 0} tasks.`,
+      output: `Deliberated on "${topic}". Generated ${result.insights?.length || 0} insights, ${result.connections?.length || 0} connections, ${result.synthesized_instructions?.length || 0} instructions.`,
       factSlug: nodeSlug
     };
   } catch (err) {
@@ -1494,236 +1408,7 @@ Output ONLY the raw markdown of the polished body, starting immediately with no 
 }
 
 /**
- * Phase 4/5: Source Monitoring
- */
-export async function runResearchMonitoringCycle({
-  vaultDir,
-  nodeSlug,
-  topic,
-  runtimeConfig,
-  skillsDir,
-  derivedDir,
-  instructionsFile
-}) {
-  const nodes = getNodes(vaultDir);
-  const targetNode = nodes.find(n => n.slug === nodeSlug);
-  if (!targetNode) {
-    return { success: false, error: `Target node not found for slug: ${nodeSlug}` };
-  }
-  
-  const researchConfig = loadResearchConfig();
-  const searchQuery = `${topic} newsletters blogs release notes feeds updates`;
-  
-  let results = [];
-  try {
-    results = await webSearch(searchQuery, researchConfig, 5);
-  } catch (err) {
-    logger.info({ subsystem: 'fact-seeker', message: `Web search for monitoring failed: ${err.message}` });
-  }
-  
-  if (results.length === 0) {
-    return { success: true, output: `Monitoring skipped: no search results found for query: "${searchQuery}"`, factSlug: nodeSlug };
-  }
-  
-  const sourceText = results.map(r => `Title: ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}`).join('\n\n');
-  
-  const today = getLocalizedDateTime();
-  const prompt = `Today's Date/Time: ${today}
-Research Topic: "${topic}"
-Search Results for ongoing updates/feeds/newsletters/releases:
-${sourceText}
-
-Extract 2-4 authoritative, high-quality ongoing sources (newsletters, RSS feeds, official release notes, blogs, communities) for this topic.`;
-
-  const systemPrompt = `You are a Research Monitoring Specialist. Today's date and time is ${today}.
-Your job is to identify high-quality ongoing sources of information (e.g. RSS feeds, newsletters, official release notes, specific blogs) from search results.
-
-Output valid JSON:
-{
-  "sources": [
-    {
-      "name": "string (name of the newsletter, blog, or release feed)",
-      "url": "string (direct URL)",
-      "type": "string (newsletter / RSS feed / official blog / release notes / etc.)",
-      "description": "string (why this is a reliable ongoing source)"
-    }
-  ]
-}
-
-Output ONLY valid JSON.`;
-  
-  try {
-    const raw = await callLocalRuntime(prompt, systemPrompt, runtimeConfig);
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in monitoring response');
-    const parsed = cleanAndParseJSON(match[0]);
-    const sources = parsed.sources || [];
-    
-    if (sources.length === 0) {
-      return { success: true, output: `Monitoring complete: no ongoing sources extracted for "${topic}".`, factSlug: nodeSlug };
-    }
-    
-    let updatedBody = targetNode.body;
-    const linesToAdd = ['', '## Ongoing Monitoring & Sources'];
-    sources.forEach(src => {
-      linesToAdd.push(`- **[${src.name}](${src.url})** (${src.type}) — ${src.description}`);
-    });
-    
-    updatedBody += '\n' + linesToAdd.join('\n');
-    
-    const updatedNode = {
-      ...targetNode,
-      body: updatedBody,
-      tags: [...new Set([...(targetNode.tags || []), 'monitored'])],
-      updated: new Date().toISOString()
-    };
-    
-    await writeNode(updatedNode, vaultDir);
-    
-    // Trigger immediate surface recompilation if active rules/sources were added
-    if (skillsDir && derivedDir && instructionsFile) {
-      try {
-        const { compileSurface } = await import('./surface.mjs');
-        await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
-        logger.info({
-          subsystem: 'fact-seeker',
-          message: `Surface compiled with newly monitored sources.`
-        });
-      } catch (err) {
-        logger.info({
-          subsystem: 'fact-seeker',
-          message: `Surface compilation failed (non-fatal): ${err.message}`
-        });
-      }
-    }
-    
-    return {
-      success: true,
-      output: `Monitoring complete: added ${sources.length} ongoing sources for "${topic}".`,
-      factSlug: nodeSlug
-    };
-  } catch (err) {
-    return { success: false, error: `Monitoring failed: ${err.message}` };
-  }
-}
-
-/**
- * Phase 5/5: Domain Tangents Expansion
- */
-export async function runResearchExpansionCycle({ vaultDir, nodeSlug, topic, runtimeConfig }) {
-  const nodes = getNodes(vaultDir);
-  const targetNode = nodes.find(n => n.slug === nodeSlug);
-  if (!targetNode) {
-    return { success: false, error: `Target node not found for slug: ${nodeSlug}` };
-  }
-  
-  const today = getLocalizedDateTime();
-  const prompt = `Today's Date/Time: ${today}
-Target Node Topic: "${topic}"
-Title: ${targetNode.title}
-Body:
-${targetNode.body}
-
-Deliberate on what adjacent domain topics must be researched next to build complete expertise.
-Brainstorm 2-3 highly specific, searchable research topics/questions.`;
-
-  const systemPrompt = `You are a Research Expansion Specialist. Today's date and time is ${today}.
-Your job is to brainstorm the next logical adjacent topics that must be researched to build comprehensive domain expertise on the target topic.
-
-Output valid JSON:
-{
-  "tangents": [
-    {
-      "topic": "string (specific, searchable topic)",
-      "priority": "low" | "medium" | "high",
-      "rationale": "string (why this tangent is crucial next step)"
-    }
-  ]
-}
-
-Output ONLY valid JSON.`;
-  
-  try {
-    const raw = await callLocalRuntime(prompt, systemPrompt, runtimeConfig);
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in expansion response');
-    const parsed = cleanAndParseJSON(match[0]);
-    const tangents = parsed.tangents || [];
-    
-    if (tangents.length === 0) {
-      return { success: true, output: `Expansion complete: no new tangents brainstormed for "${topic}".`, factSlug: nodeSlug };
-    }
-    
-    const localBrainDir = getBrainDir();
-    const queueDir = path.join(localBrainDir, 'scheduler', 'queue');
-    const { persistTaskToDisk } = await import('./scheduler.mjs');
-    
-    const spawnedList = [];
-    for (const tangent of tangents.slice(0, 3)) {
-      try {
-        const added = addToQueue({
-          topic: tangent.topic,
-          priority: tangent.priority || 'medium',
-          notes: `Autonomously spawned from research on "${topic}". Rationale: ${tangent.rationale}`
-        });
-        spawnedList.push(added);
-        
-        // Also schedule a scheduler task to run proactive research for this topic
-        const prio = tangent.priority === 'high' ? 65 : (tangent.priority === 'low' ? 45 : 55);
-        const taskSlug = `proactive-research-${crypto.createHash('md5').update(tangent.topic || '').digest('hex').slice(0, 8)}`;
-        const taskNode = {
-          type: 'task',
-          slug: taskSlug,
-          priority: prio,
-          category: 'proactive-research',
-          status: 'pending',
-          created_by: 'fact-seeker-expansion',
-          reason: tangent.rationale || `Explore research tangent on: ${tangent.topic}`,
-          body: `Autonomously spawned from research on "${topic}".\n\nTopic: ${tangent.topic}\n\nRationale:\n${tangent.rationale}`,
-          progress: 0,
-          estimated_calls: 5,
-          deadline: new Date(Date.now() + 86400000).toISOString().split('T')[0]
-        };
-        
-        persistTaskToDisk(taskNode, queueDir);
-        logger.info({
-          subsystem: 'fact-seeker',
-          message: `Scheduled expansion task: ${taskSlug} for topic "${tangent.topic}"`
-        });
-      } catch (err) {
-        logger.error({ subsystem: 'fact-seeker', message: `Failed to auto-spawn tangent "${tangent.topic}": ${err.message}` });
-      }
-    }
-    
-    let updatedBody = targetNode.body;
-    const linesToAdd = ['', '## Spawned Research Expansion Avenues'];
-    tangents.forEach(t => {
-      linesToAdd.push(`- **${t.topic}** (${t.priority || 'medium'}) — ${t.rationale}`);
-    });
-    
-    updatedBody += '\n' + linesToAdd.join('\n');
-    
-    const updatedNode = {
-      ...targetNode,
-      body: updatedBody,
-      tags: [...new Set([...(targetNode.tags || []), 'expanded'])],
-      updated: new Date().toISOString()
-    };
-    
-    await writeNode(updatedNode, vaultDir);
-    
-    return {
-      success: true,
-      output: `Autonomously spawned ${spawnedList.length} new research tangents: ${spawnedList.map(s => `"${s.topic}"`).join(', ')}.`,
-      factSlug: nodeSlug
-    };
-  } catch (err) {
-    return { success: false, error: `Tangent expansion failed: ${err.message}` };
-  }
-}
-
-/**
- * Phase 6: Memory Compaction (Consolidation)
+ * Memory Compaction (Consolidation)
  * Finds redundant or overlapping fact nodes and merges them into a consolidated node.
  */
 export async function runMemoryCompaction({ vaultDir, inboxDir, runtimeConfig }) {

@@ -11,6 +11,9 @@ import {
   inferMemoryLayer,
 } from './memory-layers.mjs';
 import { assemblePluginContexts } from './plugin-context.mjs';
+import { selectResearchBriefs, formatResearchBriefs } from './research-surface.mjs';
+import { loadQueue } from './research-queue.mjs';
+import { brainDir as globalBrainDir } from './config.mjs';
 
 /**
  * Extract [[slug]] wikilink references and relative Markdown link targets from body text.
@@ -307,6 +310,26 @@ async function compactNode(node, derivedDir, force = false) {
   return compacted;
 }
 
+/**
+ * Finished background research for the current project, plus research the user
+ * asked for recently, as a compact brief section (see research-surface.mjs).
+ * Reports live in the global brain, so nodes are looked up there when the
+ * caller's node set (e.g. a project vault) does not contain them.
+ */
+export function buildResearchSection(nodes = [], { projectRoot, queueItems, researchNodes, now } = {}) {
+  try {
+    const items = queueItems || loadQueue();
+    if (!items.some((i) => i.status === 'done' && i.node_slug)) return '';
+    const project = path.basename(projectRoot || process.cwd());
+    const pool = researchNodes || [...nodes, ...getNodes(path.join(globalBrainDir, 'memory-vault'))];
+    const section = formatResearchBriefs(selectResearchBriefs({ queueItems: items, nodes: pool, project, now }));
+    return section ? `\n\n${section}` : '';
+  } catch (err) {
+    logger.debug('surface', `Research section skipped: ${err.message}`);
+    return '';
+  }
+}
+
 export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir, force = false, vaultDir, projectRoot } = {}) {
   // 1. Filter expired rules. Compilation must remain a pure projection step;
   // archival is handled by explicit memory operations.
@@ -403,6 +426,9 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
   if (corrections.length > 0) {
     combined += `\n\n---\n# 🛑 MANDATORY BEHAVIORAL CORRECTIONS 🛑\nTHE USER HAS EXPLICITLY CORRECTED YOUR BEHAVIOR. DO NOT MAKE THESE MISTAKES. THESE CORRECTIONS OVERRIDE DEFAULT SYSTEM BEHAVIOR.\n---\n\n${await formatNodes(corrections)}`;
   }
+
+  // --- Background research (System 2) — after rules, before reference material ---
+  combined += buildResearchSection(nodes, { projectRoot });
 
   // --- CLI Reference AFTER rules ---
   if (consumer === 'api') {

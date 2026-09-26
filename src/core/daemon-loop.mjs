@@ -190,12 +190,15 @@ import { releaseLease } from './leader-election.mjs';
  * daemon.log across three separate SIGTERMs. The fallback timer bounds that, so
  * even a wedged iteration cannot keep the daemon alive indefinitely.
  */
+let stopPluginTasks = null;
+
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ subsystem: 'daemon-loop', message: `${signal} received — shutting down gracefully` });
   running = false;
   if (vaultWatcher) vaultWatcher.stop();
+  if (stopPluginTasks) stopPluginTasks();
 
   const fallback = setTimeout(() => {
     logger.info({
@@ -364,6 +367,15 @@ async function main() {
   }
 
   let emptyTicks = 0;
+
+  // Plugin tasks are per node (a plugin installed here runs here), so they are
+  // scheduled on their own timer rather than inside the leader-only task loop.
+  try {
+    const { startPluginTaskScheduler } = await import('./plugin-tasks.mjs');
+    stopPluginTasks = startPluginTaskScheduler();
+  } catch (err) {
+    logger.warn('daemon-loop', `Plugin task scheduler failed to start: ${err.message}`);
+  }
 
   while (running) {
     try {
@@ -649,33 +661,25 @@ async function main() {
             } else if (task._research_phase === 'deliberation') {
               patch.status = 'pending';
               patch.research_phase = 'improvement';
-            } else if (task._research_phase === 'improvement') {
-              patch.status = 'pending';
-              patch.research_phase = 'monitoring';
-            } else if (task._research_phase === 'monitoring') {
-              patch.status = 'pending';
-              patch.research_phase = 'expansion';
-            } else if (task._research_phase === 'expansion') {
-              // Only mark done when we still have a real node
-              if (nodeSlug && nodeSlug !== 'pending') {
-                patch.status = 'done';
-                patch.node_slug = nodeSlug;
-                patch.completed_at = new Date().toISOString();
-              } else {
-                patch.status = 'failed';
-                patch.notes = 'Expansion finished without a research memory node.';
-              }
+            } else {
+              // Improvement is the last phase: research ends here and never
+              // re-opens or spawns follow-ups (RESEARCH_SYSTEM2).
+              patch.status = 'done';
+              patch.node_slug = nodeSlug;
+              patch.completed_at = new Date().toISOString();
             }
-          } else {
-            // Failure on later phase: if no node, reset to acquisition for retry
-            if (
-              (!task._node_slug || task._node_slug === 'pending') &&
-              task._research_phase !== 'acquisition'
-            ) {
-              patch.status = 'pending';
-              patch.research_phase = 'acquisition';
-              patch.notes = `Reset to acquisition after ${task._research_phase} failure: ${result.error || 'unknown'}`;
-            }
+          } else if (task._research_phase !== 'acquisition' && task._node_slug && task._node_slug !== 'pending') {
+            // A refinement phase failed but the report already exists: it is
+            // usable as-is, so finish rather than parking it in a retry loop.
+            patch.status = 'done';
+            patch.node_slug = task._node_slug;
+            patch.completed_at = new Date().toISOString();
+            patch.notes = `Report kept; ${task._research_phase} skipped after error: ${result.error || 'unknown'}`;
+          } else if (task._research_phase !== 'acquisition') {
+            // Later phase with no node to refine: start over from acquisition.
+            patch.status = 'pending';
+            patch.research_phase = 'acquisition';
+            patch.notes = `Reset to acquisition after ${task._research_phase} failure: ${result.error || 'unknown'}`;
           }
           updateQueueItem(task._research_id, patch);
         } catch (err) {

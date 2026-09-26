@@ -14,6 +14,7 @@ import {
   updateTaskStatus,
   generateIdleTask,
   createScheduler,
+  MAX_RESEARCH_ATTEMPTS,
 } from './scheduler.mjs';
 import { saveQueue, loadQueue } from './research-queue.mjs';
 
@@ -334,7 +335,7 @@ describe('createScheduler - Continuous Research Mode', () => {
     fs.rmSync(tempAgentDir, { recursive: true, force: true });
   });
 
-  it('resets completed/failed research queue items whose cooldown has elapsed', () => {
+  it('retries failed research after the cooldown but never re-opens finished research', () => {
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
 
@@ -376,11 +377,13 @@ describe('createScheduler - Continuous Research Mode', () => {
     const topicB = updatedItems.find(i => i.id === '2');
     const topicC = updatedItems.find(i => i.id === '3');
 
-    // Topic A and B should be pending and completed_at should be null
-    expect(topicA.status).toBe('pending');
-    expect(topicA.completed_at).toBeNull();
+    // Finished research is never re-opened (it used to be reset to a monitoring
+    // pass every hour, forever). Only the failed item retries after the cooldown.
+    expect(topicA.status).toBe('done');
+    expect(topicA.completed_at).toBeTruthy();
     expect(topicB.status).toBe('pending');
     expect(topicB.completed_at).toBeNull();
+    expect(topicB.attempts).toBe(1);
 
     // Topic C should remain done
     expect(topicC.status).toBe('done');
@@ -395,7 +398,7 @@ describe('createScheduler - Continuous Research Mode', () => {
       {
         id: '1',
         topic: 'Topic A',
-        status: 'done',
+        status: 'failed',
         priority: 'medium',
         completed_at: new Date(now - 15000).toISOString(),
         updated_at: new Date(now - 15000).toISOString()
@@ -403,7 +406,7 @@ describe('createScheduler - Continuous Research Mode', () => {
       {
         id: '2',
         topic: 'Topic B',
-        status: 'done',
+        status: 'failed',
         priority: 'medium',
         completed_at: new Date(now - 5000).toISOString(),
         updated_at: new Date(now - 5000).toISOString()
@@ -420,7 +423,7 @@ describe('createScheduler - Continuous Research Mode', () => {
       const topicB = updatedItems.find(i => i.id === '2');
 
       expect(topicA.status).toBe('pending');
-      expect(topicB.status).toBe('done');
+      expect(topicB.status).toBe('failed');
     } finally {
       delete process.env.RESEARCH_COOLDOWN_MS;
     }
@@ -506,6 +509,17 @@ describe('createScheduler - Continuous Research Mode', () => {
         priority: 'medium',
         research_phase: 'expansion',
         created_at: new Date().toISOString()
+      },
+      {
+        id: 'finished',
+        topic: 'Topic Finished',
+        status: 'done',
+        node_slug: 'report-x',
+        priority: 'medium',
+        research_phase: 'improvement',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        updated_at: new Date(Date.now() - 86400000).toISOString(),
+        completed_at: new Date(Date.now() - 86400000).toISOString(),
       }
     ];
 
@@ -523,13 +537,34 @@ describe('createScheduler - Continuous Research Mode', () => {
     expect(improveTask).toBeTruthy();
     expect(improveTask.category).toBe('memory-maintenance');
 
-    const monitorTask = allTasks.find(t => t.slug === 'research-monitoring-monitor');
-    expect(monitorTask).toBeTruthy();
-    expect(monitorTask.category).toBe('proactive-research');
+    // The removed monitoring/expansion phases are never scheduled, and finished
+    // research is never re-opened (RESEARCH_SYSTEM2).
+    expect(allTasks.some(t => /research-(monitoring|expansion)-/.test(t.slug))).toBe(false);
+    expect(allTasks.some(t => t._research_id === 'finished')).toBe(false);
+    expect(loadQueue().find(i => i.id === 'finished').status).toBe('done');
+  });
 
-    const expandTask = allTasks.find(t => t.slug === 'research-expansion-expand');
-    expect(expandTask).toBeTruthy();
-    expect(expandTask.category).toBe('exploration');
+  it('retries a failed item at most MAX_RESEARCH_ATTEMPTS times', () => {
+    const old = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+    saveQueue([
+      { id: 'retry', topic: 'Retry me', status: 'failed', attempts: 1, research_phase: 'acquisition', created_at: old, updated_at: old },
+      { id: 'spent', topic: 'Spent', status: 'failed', attempts: MAX_RESEARCH_ATTEMPTS, research_phase: 'acquisition', created_at: old, updated_at: old },
+    ]);
+    createScheduler({ queueDir, vaultDir, sessionsDir });
+    const q = loadQueue();
+    expect(q.find(i => i.id === 'retry')).toMatchObject({ status: 'pending', attempts: 2 });
+    expect(q.find(i => i.id === 'spent').status).toBe('failed');
+  });
+
+  it('runs user-requested research before autonomous research', () => {
+    const t = (m) => new Date(Date.now() - m * 60000).toISOString();
+    saveQueue([
+      { id: 'auto-old', topic: 'Auto old', status: 'pending', origin: 'autonomous', research_phase: 'acquisition', created_at: t(60), updated_at: t(60) },
+      { id: 'user-new', topic: 'User new', status: 'pending', origin: 'user', research_phase: 'acquisition', created_at: t(1), updated_at: t(1) },
+    ]);
+    const sched = createScheduler({ queueDir, vaultDir, sessionsDir });
+    expect(sched.next().task._research_id).toBe('user-new');
+    expect(sched.next().task._research_id).toBe('auto-old');
   });
 });
 

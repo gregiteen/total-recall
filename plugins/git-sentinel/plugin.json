@@ -1,0 +1,18 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "git-sentinel",
+  "name": "Git Sentinel",
+  "version": "1.1.0",
+  "description": "Reports the state of the current git repository: branch, dirty files, unpushed commits and stashes.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": ["software-development"],
+  "cli": {
+    "command": "git-sentinel",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      { "name": "audit", "description": "Summarise branch, worktree, upstream and stash state (--json for machine output)" },
+      { "name": "diff", "description": "Show a diffstat of unstaged changes" }
+    ]
+  }
+}

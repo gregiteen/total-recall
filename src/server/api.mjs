@@ -436,6 +436,7 @@ COMPUTER USE TOOLS (desktop/X11 — use to control apps or the full desktop):
 - 'computer_scroll': Scroll up or down at screen coordinates.
 
 CODE / MEMORY:
+- 'queue_research': Queue deep BACKGROUND research when the user asks you to research a topic in depth or later. Findings arrive in memory, not in this reply. Never use it on your own initiative; use 'search_web' for answers now.
 - 'execute_code': Run Node.js to call APIs, process data, or perform calculations.
 - 'update_design': Write markdown to DESIGN.md when asked to create a UI or document.
 
@@ -643,6 +644,26 @@ ${interviewTask}`;
       } catch (err) {
         logger.error('api', `Failed to load grounding nodes: ${err.message}`);
       }
+    }
+
+    // System 2 grounding: background research relevant to what the user just
+    // asked. One embedding lookup, no LLM call; failure never blocks the reply.
+    try {
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      const lastText = typeof lastUser?.content === 'string' ? lastUser.content : '';
+      if (lastText) {
+        const { findRelevantResearch, formatChatResearch } = await import('../core/research-surface.mjs');
+        const found = await findRelevantResearch(lastText, {
+          vaultDir: VAULT_DIR,
+          derivedDir: path.join(path.dirname(VAULT_DIR), 'memory-derived'),
+        });
+        if (found.length) {
+          baseSystemPrompt += formatChatResearch(found);
+          logger.info('api', `Research grounding: ${found.map((f) => f.slug).join(', ')}`);
+        }
+      }
+    } catch (err) {
+      logger.warn('api', `Research grounding skipped: ${err.message}`);
     }
 
     let currentMessages = [...messages];

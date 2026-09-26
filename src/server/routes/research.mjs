@@ -30,9 +30,12 @@ researchRouter.get('/api/research', requireAuth, requireScope('memory:read'), (r
 
 researchRouter.post('/api/research', requireAuth, requireScope('memory:write'), (req, res) => {
   try {
-    const { topic, priority, notes } = req.body || {};
+    const { topic, priority, notes, via } = req.body || {};
     if (!topic) return badRequest(res, 'topic is required');
-    res.status(201).json(addToQueue({ topic, priority, notes }));
+    // Every REST request is a human asking (dashboard, extension, API client).
+    // `via` only labels where from; autonomous research never enters here.
+    const requested_via = ['dashboard', 'extension', 'chat', 'api'].includes(via) ? via : 'api';
+    res.status(201).json(addToQueue({ topic, priority, notes, origin: 'user', requested_via }));
   } catch (err) { serverError(res, err); }
 });
 

@@ -27,6 +27,7 @@ describe('mergeLivePeersWithEntities', () => {
         labels: ['ci'],
         capabilities: ['gpu'],
         notes: 'primary builder',
+        brain_port: 3900,
         title: 'Builder A',
         vfs_path: 'system/mesh-nodes/node-a-mesh.md',
       },
@@ -39,6 +40,7 @@ describe('mergeLivePeersWithEntities', () => {
     expect(a.labels).toEqual(['ci']);
     expect(a.capabilities).toEqual(['gpu']);
     expect(a.notes).toBe('primary builder');
+    expect(a.brain_port).toBe(3900);
     expect(a.title).toBe('Builder A');
     expect(a.has_entity).toBe(true);
     expect(a.entity_path).toBe('system/mesh-nodes/node-a-mesh.md');

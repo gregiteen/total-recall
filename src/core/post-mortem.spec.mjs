@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
-import { readSessionTranscript } from './post-mortem.mjs';
+import { readSessionTranscript, deriveSessionProject } from './post-mortem.mjs';
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pm-'));
@@ -89,5 +89,24 @@ describe('readSessionTranscript', () => {
     expect(transcript).toContain('Valid');
     const entryCount = (transcript.match(/\[/g) || []).length;
     expect(entryCount).toBe(1);
+  });
+});
+
+describe('deriveSessionProject', () => {
+  const write = (lines) => {
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pm-proj-')), 'abc.jsonl');
+    fs.writeFileSync(f, lines.map((l) => JSON.stringify(l)).join('\n'));
+    return f;
+  };
+
+  it('attributes a session to the first recorded working directory', () => {
+    const f = write([{ role: 'user', content: 'hi' }, { role: 'user', content: 'x', cwd: '/Users/a/Github/total-recall/' }]);
+    expect(deriveSessionProject(f)).toBe('total-recall');
+  });
+
+  it('returns null when no project is recorded, or the cwd is the home directory', () => {
+    expect(deriveSessionProject(write([{ role: 'user', content: 'hi' }]))).toBeNull();
+    expect(deriveSessionProject(write([{ role: 'user', content: 'hi', cwd: os.homedir() }]))).toBeNull();
+    expect(deriveSessionProject('/nonexistent/file.jsonl')).toBeNull();
   });
 });

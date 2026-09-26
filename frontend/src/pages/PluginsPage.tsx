@@ -1,164 +1,212 @@
-import { useState, useEffect, useMemo, useCallback } from "react"
-import { 
-  fetchPlugins, 
-  fetchPluginCatalog, 
-  installPlugin, 
-  removePlugin, 
-  ratePlugin,
+import { useState, useEffect, useMemo, useCallback, type CSSProperties, type ReactNode } from "react"
+import { useSearchParams } from "react-router-dom"
+import {
+  fetchPlugins,
+  fetchBundledPlugins,
+  fetchPeerPlugins,
+  installPlugin,
+  removePlugin,
+  setPluginShared,
   runPluginCommand,
   fetchPluginReadme,
-  type PluginInfo, 
-  type CatalogPlugin 
+  type PluginInfo,
+  type BundledPlugin,
+  type PeersResponse,
+  type PeerNode
 } from "../api"
-import { useSearchParams } from "react-router-dom"
+import { renderMarkdown } from "../components/MarkdownUtils"
 
 interface PluginsPageProps {
   activeBrainId?: string | null
 }
 
-function StarRatingDisplay({ rating, reviewCount, installCount }: { rating: number; reviewCount?: number; installCount?: string }) {
-  const stars = [1, 2, 3, 4, 5]
+type Tab = "installed" | "bundled" | "mesh"
+type DetailTab = "run" | "readme" | "details"
+type Alert = { type: "success" | "error"; message: string } | null
+
+const PEER_STATUS_LABEL: Record<PeerNode["status"], string> = {
+  ok: "online",
+  offline: "offline",
+  unreachable: "unreachable",
+  not_configured: "mesh sync not configured",
+  unsupported: "no plugin sharing (older version)",
+  error: "error"
+}
+
+const mono: CSSProperties = { fontFamily: "var(--font-mono)", fontSize: "12px" }
+const muted: CSSProperties = { color: "var(--text-secondary)", fontSize: "13px", lineHeight: 1.5 }
+
+function shortHash(sha: string | null | undefined) {
+  return sha ? `${sha.slice(0, 12)}…` : "—"
+}
+
+function formatBytes(n: number | null | undefined) {
+  if (n === null || n === undefined) return "—"
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function sourceLabel(p: PluginInfo) {
+  switch (p.source.kind) {
+    case "peer": return `from ${p.source.peer_hostname || "a peer"}`
+    case "bundled": return "bundled"
+    case "git": return "git"
+    case "public": return "direct link"
+    case "link": return "linked folder"
+    default: return "local folder"
+  }
+}
+
+function UseCaseChips({ useCases }: { useCases: string[] }) {
+  if (!useCases.length) return null
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
-      <div style={{ display: "flex", color: "#fbbf24" }}>
-        {stars.map((s) => (
-          <span key={s} style={{ opacity: s <= Math.round(rating) ? 1 : 0.35 }}>
-            ★
-          </span>
-        ))}
-      </div>
-      <span style={{ fontWeight: "700", color: "var(--text-primary)" }}>{rating.toFixed(1)}</span>
-      {reviewCount !== undefined && (
-        <span style={{ color: "var(--text-tertiary)" }}>({reviewCount})</span>
-      )}
-      {installCount && (
-        <>
-          <span style={{ color: "var(--text-tertiary)" }}>•</span>
-          <span style={{ color: "var(--text-secondary)" }}>{installCount} installs</span>
-        </>
-      )}
+    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+      {useCases.map((u) => (
+        <span key={u} className="badge" style={{ fontSize: "11px" }}>{u}</span>
+      ))}
     </div>
   )
 }
 
-function InteractiveRater({ 
-  pluginId, 
-  currentRating, 
-  onRated 
-}: { 
-  pluginId: string; 
-  currentRating?: number | null; 
-  onRated: (score: number) => void 
-}) {
-  const [hoverRating, setHoverRating] = useState<number | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-
-  const handleRate = async (score: number) => {
-    setSubmitting(true)
-    const res = await ratePlugin(pluginId, score)
-    setSubmitting(false)
-    if (res.success) {
-      onRated(score)
-    }
-  }
-
-  const activeScore = hoverRating !== null ? hoverRating : (currentRating || 0)
-
+function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
-      <span style={{ color: "var(--text-tertiary)", fontSize: "11px" }}>Rate:</span>
-      <div style={{ display: "flex", gap: "2px", cursor: submitting ? "wait" : "pointer" }}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <span
-            key={star}
-            onMouseEnter={() => setHoverRating(star)}
-            onMouseLeave={() => setHoverRating(null)}
-            onClick={() => handleRate(star)}
-            style={{
-              fontSize: "14px",
-              color: star <= activeScore ? "#fbbf24" : "var(--text-tertiary)",
-              transition: "transform 0.1s ease",
-              transform: hoverRating === star ? "scale(1.2)" : "scale(1)"
-            }}
-            title={`Rate ${star} star${star > 1 ? "s" : ""}`}
-          >
-            ★
-          </span>
-        ))}
-      </div>
-      {currentRating && (
-        <span style={{ color: "var(--success)", fontSize: "11px", fontWeight: "600" }}>
-          (You rated {currentRating}★)
-        </span>
-      )}
+    <div style={{ display: "flex", gap: "12px", fontSize: "13px", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ width: "132px", flexShrink: 0, color: "var(--text-tertiary)" }}>{label}</span>
+      <span style={{ color: "var(--text-primary)", minWidth: 0, overflowWrap: "anywhere" }}>{children}</span>
+    </div>
+  )
+}
+
+function Empty({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="card" style={{ textAlign: "center", padding: "40px 24px" }}>
+      <div style={{ fontWeight: 600, marginBottom: "6px" }}>{title}</div>
+      {children && <div style={muted}>{children}</div>}
     </div>
   )
 }
 
 export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [plugins, setPlugins] = useState<PluginInfo[]>([])
-  const [catalog, setCatalog] = useState<CatalogPlugin[]>([])
+  const [tab, setTab] = useState<Tab>("installed")
+  const [installed, setInstalled] = useState<PluginInfo[]>([])
+  const [bundled, setBundled] = useState<BundledPlugin[]>([])
+  const [peers, setPeers] = useState<PeersResponse | null>(null)
+  const [peersLoading, setPeersLoading] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<"installed" | "catalog">("installed")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<"rating" | "reviews" | "name">("rating")
-  const [installModalOpen, setInstallModalOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [useCase, setUseCase] = useState("")
+  const [busy, setBusy] = useState<string | null>(null)
+  const [alert, setAlert] = useState<Alert>(null)
 
-  // Plugin Detail & Runner Modal State
-  const [detailModalPlugin, setDetailModalPlugin] = useState<PluginInfo | null>(null)
-  const [detailTab, setDetailTab] = useState<"runner" | "readme" | "schemas" | "tasks" | "manifest">("runner")
-  const [subcommand, setSubcommand] = useState("")
-  const [customArgs, setCustomArgs] = useState("")
-  const [executing, setExecuting] = useState(false)
-  const [consoleOutput, setConsoleOutput] = useState("")
-  const [readmeText, setReadmeText] = useState("")
-  const [readmeLoading, setReadmeLoading] = useState(false)
-
-  // Install Form State
+  const [installOpen, setInstallOpen] = useState(false)
   const [installSource, setInstallSource] = useState("")
   const [installLink, setInstallLink] = useState(false)
   const [installGlobal, setInstallGlobal] = useState(false)
-  const [installing, setInstalling] = useState(false)
-  const [alert, setAlert] = useState<{ type: "success" | "error"; message: string } | null>(null)
 
-  const loadData = useCallback(async () => {
+  const [detail, setDetail] = useState<PluginInfo | null>(null)
+  const [detailTab, setDetailTab] = useState<DetailTab>("run")
+  const [subcommand, setSubcommand] = useState("")
+  const [args, setArgs] = useState("")
+  const [output, setOutput] = useState<{ text: string; ok: boolean } | null>(null)
+  const [readme, setReadme] = useState("")
+
+  const loadLocal = useCallback(async () => {
     setLoading(true)
     try {
-      const [installedList, catalogList] = await Promise.all([
-        fetchPlugins(),
-        fetchPluginCatalog()
-      ])
-      setPlugins(installedList)
-      setCatalog(catalogList)
+      const [i, b] = await Promise.all([fetchPlugins(), fetchBundledPlugins()])
+      setInstalled(i)
+      setBundled(b)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData, activeBrainId])
-
-  const openDetail = async (p: PluginInfo, tab: "runner" | "readme" | "schemas" | "tasks" | "manifest" = "runner") => {
-    setDetailModalPlugin(p)
-    const subcommands = (p.manifest as any)?.cli?.subcommands as Array<{ name: string; description: string }> | undefined
-    const defaultSub = subcommands?.[0]?.name || (p.cli?.command === "git-sentinel" ? "audit" : "status")
-    setSubcommand(defaultSub)
-    setCustomArgs("")
-    setConsoleOutput("")
-    setDetailTab(tab)
-    setReadmeLoading(true)
+  const loadPeers = useCallback(async () => {
+    setPeersLoading(true)
     try {
-      const rm = await fetchPluginReadme(p.id)
-      setReadmeText(rm)
+      setPeers(await fetchPeerPlugins())
     } finally {
-      setReadmeLoading(false)
+      setPeersLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadLocal()
+  }, [loadLocal, activeBrainId])
+
+  useEffect(() => {
+    if (tab === "mesh" && peers === null && !peersLoading) loadPeers()
+  }, [tab, peers, peersLoading, loadPeers])
+
+  const allUseCases = useMemo(() => {
+    const set = new Set<string>()
+    for (const p of installed) p.use_cases.forEach((u) => set.add(u))
+    for (const p of bundled) p.use_cases.forEach((u) => set.add(u))
+    for (const n of peers?.peers || []) n.plugins.forEach((p) => p.use_cases.forEach((u) => set.add(u)))
+    return Array.from(set).sort()
+  }, [installed, bundled, peers])
+
+  const matches = useCallback((p: { id: string; name: string; description: string; use_cases: string[] }) => {
+    if (useCase && !p.use_cases.includes(useCase)) return false
+    const q = query.trim().toLowerCase()
+    if (!q) return true
+    return [p.id, p.name, p.description, ...p.use_cases].some((v) => v.toLowerCase().includes(q))
+  }, [query, useCase])
+
+  const doInstall = async (source: string, opts: { link?: boolean; global?: boolean } = {}) => {
+    setBusy(source)
+    setAlert(null)
+    const res = await installPlugin({ source, ...opts })
+    setBusy(null)
+    if (res.success) {
+      setAlert({ type: "success", message: res.message || `Installed ${source}` })
+      await loadLocal()
+      if (peers) loadPeers()
+      return true
+    }
+    setAlert({ type: "error", message: res.error || `Could not install ${source}` })
+    return false
+  }
+
+  const doRemove = async (p: PluginInfo) => {
+    if (!window.confirm(`Remove "${p.name}" (${p.scope})?`)) return
+    setBusy(p.id)
+    const res = await removePlugin(p.id, p.scope === "global")
+    setBusy(null)
+    setAlert(res.success ? { type: "success", message: `Removed ${p.name}` } : { type: "error", message: res.error || "Remove failed" })
+    if (res.success) {
+      if (detail?.id === p.id) closeDetail()
+      loadLocal()
     }
   }
 
+  const doShare = async (p: PluginInfo, shared: boolean) => {
+    setBusy(p.id)
+    const res = await setPluginShared(p.id, shared)
+    setBusy(null)
+    if (!res.success) {
+      setAlert({ type: "error", message: res.error || "Could not change sharing" })
+      return
+    }
+    if (res.plugin && detail?.id === p.id) setDetail(res.plugin)
+    setAlert({ type: "success", message: shared ? `${p.name} is shared. Its public link is in the details.` : `${p.name} is no longer shared` })
+    loadLocal()
+  }
+
+  const openDetail = async (p: PluginInfo) => {
+    setDetail(p)
+    setDetailTab(p.cli ? "run" : "details")
+    setSubcommand(p.cli?.subcommands?.[0]?.name || "")
+    setArgs("")
+    setOutput(null)
+    setReadme("")
+    setReadme(await fetchPluginReadme(p.id))
+  }
+
   const closeDetail = () => {
-    setDetailModalPlugin(null)
+    setDetail(null)
     if (searchParams.has("id")) {
       const next = new URLSearchParams(searchParams)
       next.delete("id")
@@ -166,1163 +214,351 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
     }
   }
 
-  const handleExecute = async () => {
-    if (!detailModalPlugin) return
-    setExecuting(true)
-    const args = customArgs.trim() ? customArgs.trim().split(/\s+/) : []
-    const res = await runPluginCommand(detailModalPlugin.id, subcommand, args)
-    setExecuting(false)
-    if (res.success) {
-      setConsoleOutput(res.output || "(Command completed with no output)")
-    } else {
-      setConsoleOutput(`❌ Error: ${res.error || "Failed to execute command"}`)
-    }
-  }
-
   useEffect(() => {
-    const idParam = searchParams.get("id")
-    if (idParam && plugins.length > 0) {
-      const match = plugins.find(p => p.id === idParam)
-      if (match && (!detailModalPlugin || detailModalPlugin.id !== idParam)) {
-        openDetail(match, "runner")
-      }
-    }
-  }, [searchParams, plugins])
+    const id = searchParams.get("id")
+    if (!id || detail?.id === id) return
+    const match = installed.find((p) => p.id === id)
+    if (match) openDetail(match)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, installed])
 
-  const handleInstallSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    if (!installSource.trim()) return
+  // Keep an open detail panel in sync after share/remove/reload.
+  useEffect(() => {
+    if (!detail) return
+    const fresh = installed.find((p) => p.id === detail.id)
+    if (fresh && fresh !== detail) setDetail(fresh)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [installed])
 
-    setInstalling(true)
-    setAlert(null)
-
-    const res = await installPlugin({
-      source: installSource.trim(),
-      link: installLink,
-      global: installGlobal
-    })
-
-    setInstalling(false)
-
-    if (res.success) {
-      setAlert({ type: "success", message: res.message || "Plugin installed successfully" })
-      setInstallSource("")
-      setInstallModalOpen(false)
-      loadData()
-    } else {
-      setAlert({ type: "error", message: res.error || "Failed to install plugin" })
-    }
+  const runCommand = async () => {
+    if (!detail) return
+    setBusy(`run:${detail.id}`)
+    const res = await runPluginCommand(detail.id, subcommand, args.trim() ? args.trim().split(/\s+/) : [])
+    setBusy(null)
+    if (res.error) setOutput({ text: res.error, ok: false })
+    else setOutput({ text: (res.output || "").trim() || "(no output)", ok: res.success })
   }
 
-  const handleCatalogInstall = async (item: CatalogPlugin) => {
-    setInstalling(true)
-    setAlert(null)
-    const res = await installPlugin({
-      source: item.sourceUrl,
-      link: item.sourceUrl.startsWith("./") || item.sourceUrl.startsWith("local:"),
-      global: false
-    })
-    setInstalling(false)
+  const filteredInstalled = installed.filter(matches)
+  const filteredBundled = bundled.filter(matches)
 
-    if (res.success) {
-      setAlert({ type: "success", message: `Installed ${item.name} successfully` })
-      loadData()
-    } else {
-      setAlert({ type: "error", message: res.error || `Failed to install ${item.name}` })
-    }
-  }
-
-  const handleUninstall = async (plugin: PluginInfo) => {
-    if (!window.confirm(`Are you sure you want to uninstall "${plugin.name}"?`)) return
-
-    const res = await removePlugin(plugin.id)
-    if (res.success) {
-      setAlert({ type: "success", message: `Uninstalled ${plugin.name}` })
-      loadData()
-    } else {
-      setAlert({ type: "error", message: res.error || "Failed to uninstall plugin" })
-    }
-  }
-
-  const handlePluginRated = (id: string, score: number) => {
-    setPlugins(prev => prev.map(p => p.id === id ? { ...p, userRating: score } : p))
-    setAlert({ type: "success", message: "Thank you! Your rating has been recorded." })
-  }
-
-  const filteredInstalled = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim()
-    let list = plugins.filter(p => 
-      p.name.toLowerCase().includes(q) ||
-      p.id.toLowerCase().includes(q) ||
-      p.description.toLowerCase().includes(q) ||
-      (p.cli?.command && p.cli.command.toLowerCase().includes(q))
-    )
-
-    if (sortBy === "rating") {
-      list.sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    } else if (sortBy === "reviews") {
-      list.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0))
-    } else {
-      list.sort((a, b) => a.name.localeCompare(b.name))
-    }
-    return list
-  }, [plugins, searchQuery, sortBy])
-
-  const filteredCatalog = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim()
-    let list = catalog.filter(c => 
-      c.name.toLowerCase().includes(q) ||
-      c.id.toLowerCase().includes(q) ||
-      c.description.toLowerCase().includes(q) ||
-      c.tags.some(t => t.toLowerCase().includes(q))
-    )
-
-    if (sortBy === "rating") {
-      list.sort((a, b) => (b.rating || 0) - (a.rating || 0))
-    } else if (sortBy === "reviews") {
-      list.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0))
-    } else {
-      list.sort((a, b) => a.name.localeCompare(b.name))
-    }
-    return list
-  }, [catalog, searchQuery, sortBy])
+  const tabButton = (id: Tab, label: string, count?: number) => (
+    <button
+      key={id}
+      role="tab"
+      aria-selected={tab === id}
+      className={`btn btn-sm ${tab === id ? "btn-primary" : "btn-ghost"}`}
+      onClick={() => setTab(id)}
+    >
+      {label}
+      {count !== undefined && <span style={{ opacity: 0.75, fontWeight: 500 }}>{count}</span>}
+    </button>
+  )
 
   return (
-    <div style={{ padding: "32px 40px", maxWidth: "1280px", margin: "0 auto", color: "var(--text-primary)" }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
+    <div className="page" style={{ maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+      <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
-            <h1 style={{ fontSize: "28px", fontWeight: "700", margin: 0, letterSpacing: "-0.02em" }}>
-              Plugins & Extensions
-            </h1>
-            <span style={{ 
-              background: "var(--accent-muted)", 
-              color: "var(--accent-hover)", 
-              fontSize: "12px", 
-              fontWeight: "600", 
-              padding: "3px 10px", 
-              borderRadius: "20px",
-              border: "1px solid var(--border-accent)" 
-            }}>
-              {plugins.length} Installed
-            </span>
-          </div>
-          <p style={{ margin: 0, color: "var(--text-secondary)", fontSize: "14px", lineHeight: "1.5" }}>
-            Modular autonomous engines, scholarly daemons, and custom SSSS graph schemas extending your Total Recall brain.
+          <h1>Plugins</h1>
+          <p>
+            Plugins shape Total Recall for a particular use — memory categories, agent context, commands and scheduled jobs.
+            Share them directly with other users through a hash-pinned HTTPS link. Your mesh peers can use the same shared plugins.
           </p>
         </div>
-
-        <button
-          onClick={() => { setInstallModalOpen(true); setAlert(null); }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-            color: "#ffffff",
-            border: "none",
-            borderRadius: "var(--radius-md)",
-            padding: "10px 18px",
-            fontSize: "14px",
-            fontWeight: "600",
-            cursor: "pointer",
-            boxShadow: "0 4px 14px var(--accent-glow)",
-            transition: "all 0.15s ease"
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.filter = "brightness(1.1)")}
-          onMouseOut={(e) => (e.currentTarget.style.filter = "brightness(1.0)")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Install Plugin
+        <button className="btn btn-primary" onClick={() => { setInstallOpen(true); setAlert(null) }}>
+          Install from source…
         </button>
       </div>
 
-      {/* Alert Banner */}
       {alert && (
-        <div style={{
-          padding: "12px 18px",
-          borderRadius: "var(--radius-md)",
-          marginBottom: "24px",
-          fontSize: "14px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          background: alert.type === "success" ? "var(--success-muted)" : "var(--error-muted)",
-          border: `1px solid ${alert.type === "success" ? "var(--success)" : "var(--error)"}`,
-          color: alert.type === "success" ? "var(--success)" : "var(--error)"
-        }}>
+        <div className={`alert ${alert.type === "success" ? "alert-success" : "alert-error"}`} role="status"
+          style={{ display: "flex", justifyContent: "space-between", gap: "12px", marginBottom: "20px" }}>
           <span>{alert.message}</span>
-          <button 
-            onClick={() => setAlert(null)}
-            style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: "16px" }}
-          >
-            ×
-          </button>
+          <button onClick={() => setAlert(null)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer" }}>×</button>
         </div>
       )}
 
-      {/* Tabs, Search & Sort Bar */}
-      <div style={{ 
-        display: "flex", 
-        justifyContent: "space-between", 
-        alignItems: "center", 
-        borderBottom: "1px solid var(--border)", 
-        paddingBottom: "16px",
-        marginBottom: "24px",
-        gap: "16px",
-        flexWrap: "wrap"
-      }}>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            onClick={() => setActiveTab("installed")}
-            style={{
-              background: activeTab === "installed" ? "var(--bg-elevated)" : "transparent",
-              color: activeTab === "installed" ? "var(--text-primary)" : "var(--text-secondary)",
-              border: activeTab === "installed" ? "1px solid var(--border-accent)" : "1px solid transparent",
-              borderRadius: "var(--radius-sm)",
-              padding: "8px 16px",
-              fontSize: "14px",
-              fontWeight: "600",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
-            }}
-          >
-            <span>Installed</span>
-            <span style={{ 
-              background: "var(--bg-tertiary)", 
-              padding: "2px 7px", 
-              borderRadius: "10px", 
-              fontSize: "12px",
-              color: "var(--text-tertiary)"
-            }}>
-              {plugins.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("catalog")}
-            style={{
-              background: activeTab === "catalog" ? "var(--bg-elevated)" : "transparent",
-              color: activeTab === "catalog" ? "var(--text-primary)" : "var(--text-secondary)",
-              border: activeTab === "catalog" ? "1px solid var(--border-accent)" : "1px solid transparent",
-              borderRadius: "var(--radius-sm)",
-              padding: "8px 16px",
-              fontSize: "14px",
-              fontWeight: "600",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
-            }}
-          >
-            <span>Discover Catalog</span>
-            <span style={{ 
-              background: "var(--accent-muted)", 
-              color: "var(--accent-hover)", 
-              padding: "2px 7px", 
-              borderRadius: "10px", 
-              fontSize: "12px" 
-            }}>
-              {catalog.length}
-            </span>
-          </button>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
+        <div role="tablist" style={{ display: "flex", gap: "8px" }}>
+          {tabButton("installed", "Installed", installed.length)}
+          {tabButton("bundled", "Bundled", bundled.length)}
+          {tabButton("mesh", "On the mesh")}
         </div>
-
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-secondary)" }}>
-            <span>Sort:</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              style={{
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--text-primary)",
-                padding: "6px 10px",
-                fontSize: "13px",
-                outline: "none",
-                cursor: "pointer"
-              }}
-            >
-              <option value="rating">Highest Rated</option>
-              <option value="reviews">Most Reviews</option>
-              <option value="name">Alphabetical</option>
-            </select>
-          </div>
-
-          <div style={{ position: "relative", minWidth: "260px" }}>
-            <input
-              type="text"
-              placeholder={activeTab === "installed" ? "Filter installed..." : "Search catalog..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: "100%",
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-md)",
-                padding: "8px 14px 8px 36px",
-                color: "var(--text-primary)",
-                fontSize: "13px",
-                outline: "none"
-              }}
-            />
-            <svg 
-              width="15" 
-              height="15" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="var(--text-tertiary)" 
-              strokeWidth="2" 
-              style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <input className="input" placeholder="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search plugins" style={{ width: "220px" }} />
+          <select className="select" value={useCase} onChange={(e) => setUseCase(e.target.value)} aria-label="Filter by use case" style={{ paddingRight: "32px" }}>
+            <option value="">All use cases</option>
+            {allUseCases.map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
         </div>
       </div>
 
-      {/* Tab Content */}
-      {loading ? (
-        <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-tertiary)" }}>
-          Loading plugins...
-        </div>
-      ) : activeTab === "installed" ? (
+      {tab === "installed" && (
+        loading ? <div style={muted}>Loading…</div> :
         filteredInstalled.length === 0 ? (
-          <div style={{
-            padding: "60px 20px",
-            textAlign: "center",
-            background: "var(--bg-secondary)",
-            borderRadius: "var(--radius-lg)",
-            border: "1px dashed var(--border)"
-          }}>
-            <div style={{ fontSize: "36px", marginBottom: "12px" }}>🧩</div>
-            <h3 style={{ margin: "0 0 8px 0", fontSize: "18px" }}>No Plugins Found</h3>
-            <p style={{ margin: "0 0 20px 0", color: "var(--text-secondary)", fontSize: "14px" }}>
-              {searchQuery ? "No installed plugins match your search filter." : "You do not have any plugins installed in this brain."}
-            </p>
-            <button
-              onClick={() => setActiveTab("catalog")}
-              style={{
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--border-accent)",
-                color: "var(--accent-hover)",
-                padding: "8px 18px",
-                borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
-                fontWeight: "600",
-                fontSize: "14px"
-              }}
-            >
-              Browse Discovery Catalog
-            </button>
-          </div>
+          <Empty title={installed.length ? "No installed plugins match" : "No plugins installed"}>
+            {!installed.length && <>Start with a <button className="btn btn-ghost btn-sm" onClick={() => setTab("bundled")}>bundled plugin</button> or see what your peers share.</>}
+          </Empty>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "20px" }}>
+          <div className="card-grid">
             {filteredInstalled.map((p) => (
-              <div 
-                key={p.id}
-                style={{
-                  background: "var(--bg-secondary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-lg)",
-                  padding: "24px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  transition: "all 0.2s ease"
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <div style={{
-                        width: "38px",
-                        height: "38px",
-                        borderRadius: "8px",
-                        background: "var(--accent-muted)",
-                        color: "var(--accent-hover)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "20px"
-                      }}>
-                        🧩
-                      </div>
-                      <div>
-                        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>{p.name}</h3>
-                        <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                          {p.id}
-                        </span>
-                      </div>
-                    </div>
-
-                    <span style={{
-                      fontSize: "12px",
-                      fontWeight: "600",
-                      padding: "2px 8px",
-                      borderRadius: "6px",
-                      background: p.valid ? "var(--success-muted)" : "var(--error-muted)",
-                      color: p.valid ? "var(--success)" : "var(--error)",
-                      border: `1px solid ${p.valid ? "rgba(52, 211, 153, 0.2)" : "rgba(248, 113, 113, 0.2)"}`
-                    }}>
-                      v{p.version}
-                    </span>
-                  </div>
-
-                  {/* Rating & Installs */}
-                  <div style={{ marginBottom: "12px" }}>
-                    <StarRatingDisplay 
-                      rating={p.rating || 4.9} 
-                      reviewCount={p.reviewCount || 1} 
-                      installCount={p.installCount || "1k"} 
-                    />
-                  </div>
-
-                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5", margin: "0 0 16px 0" }}>
-                    {p.description}
-                  </p>
-
-                  {/* Badges / Features */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "16px" }}>
-                    {p.cli?.command && (
-                      <span style={{
-                        background: "var(--bg-elevated)",
-                        border: "1px solid var(--border)",
-                        color: "var(--text-primary)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "11px",
-                        padding: "3px 8px",
-                        borderRadius: "4px"
-                      }}>
-                        cli: total-recall {p.cli.command}
-                      </span>
-                    )}
-                    {p.categories?.length > 0 && (
-                      <span style={{
-                        background: "var(--accent-muted)",
-                        color: "var(--accent-hover)",
-                        fontSize: "11px",
-                        padding: "3px 8px",
-                        borderRadius: "4px"
-                      }}>
-                        {p.categories.length} SSSS schemas
-                      </span>
-                    )}
-                    {p.tasks?.length > 0 && (
-                      <span style={{
-                        background: "var(--bg-elevated)",
-                        color: "var(--text-secondary)",
-                        fontSize: "11px",
-                        padding: "3px 8px",
-                        borderRadius: "4px"
-                      }}>
-                        {p.tasks.length} tasks
-                      </span>
-                    )}
-                  </div>
+              <div key={`${p.scope}:${p.id}`} className="card" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+                  <button onClick={() => openDetail(p)} style={{ background: "none", border: "none", padding: 0, color: "var(--text-primary)", fontWeight: 600, fontSize: "15px", cursor: "pointer", textAlign: "left" }}>
+                    {p.name}
+                  </button>
+                  <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span>
                 </div>
-
-                <div>
-                  {/* User Rating Widget */}
-                  <div style={{ 
-                    background: "var(--bg-primary)", 
-                    borderRadius: "var(--radius-sm)", 
-                    padding: "8px 12px", 
-                    marginBottom: "14px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center"
-                  }}>
-                    <InteractiveRater 
-                      pluginId={p.id} 
-                      currentRating={p.userRating} 
-                      onRated={(score) => handlePluginRated(p.id, score)} 
-                    />
-                  </div>
-
-                  <div style={{ 
-                    display: "flex", 
-                    justifyContent: "space-between", 
-                    alignItems: "center", 
-                    borderTop: "1px solid var(--border)", 
-                    paddingTop: "14px" 
-                  }}>
-                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      {p.cli?.command && (
-                        <button
-                          onClick={() => openDetail(p, "runner")}
-                          style={{
-                            background: "var(--accent-muted)",
-                            border: "1px solid var(--border-accent)",
-                            color: "var(--accent-hover)",
-                            borderRadius: "var(--radius-sm)",
-                            padding: "5px 12px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "5px"
-                          }}
-                        >
-                          ▶ Run
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openDetail(p, "readme")}
-                        style={{
-                          background: "none",
-                          border: "1px solid var(--border)",
-                          color: "var(--text-secondary)",
-                          borderRadius: "var(--radius-sm)",
-                          padding: "5px 10px",
-                          fontSize: "12px",
-                          cursor: "pointer"
-                        }}
-                      >
-                        Inspect
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => handleUninstall(p)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--error)",
-                        fontSize: "12px",
-                        cursor: "pointer",
-                        padding: "5px 8px",
-                        borderRadius: "var(--radius-sm)"
-                      }}
-                    >
-                      Uninstall
-                    </button>
-                  </div>
+                <div style={muted}>{p.description}</div>
+                <UseCaseChips useCases={p.use_cases} />
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  <span className="badge">{p.scope}</span>
+                  <span className="badge">{sourceLabel(p)}</span>
+                  {p.shared && <span className="badge badge-accent">shared</span>}
+                  {!p.valid && <span className="badge badge-error">invalid manifest</span>}
+                  {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
+                </div>
+                <div style={{ ...mono, color: "var(--text-tertiary)" }} title={p.sha256 || undefined}>sha256 {shortHash(p.sha256)}</div>
+                <div style={{ display: "flex", gap: "8px", marginTop: "auto", flexWrap: "wrap" }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => openDetail(p)}>Open</button>
+                  <button className="btn btn-ghost btn-sm" disabled={busy === p.id || (!p.valid && !p.shared)} onClick={() => doShare(p, !p.shared)}>
+                    {p.shared ? "Stop sharing" : "Share"}
+                  </button>
+                  <button className="btn btn-ghost btn-sm" disabled={busy === p.id} onClick={() => doRemove(p)}>Remove</button>
                 </div>
               </div>
             ))}
           </div>
         )
-      ) : (
-        /* Catalog View */
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "20px" }}>
-          {filteredCatalog.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                background: "var(--bg-secondary)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-lg)",
-                padding: "24px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between"
-              }}
-            >
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                  <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>{item.name}</h3>
-                      {item.verified && (
-                        <span title="Verified Plugin" style={{ color: "var(--accent)", fontSize: "14px" }}>
-                          ✓
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                      {item.id} • by {item.author}
-                    </span>
+      )}
+
+      {tab === "bundled" && (
+        loading ? <div style={muted}>Loading…</div> :
+        filteredBundled.length === 0 ? <Empty title="No bundled plugins match" /> : (
+          <>
+            <p style={{ ...muted, marginBottom: "16px" }}>Shipped with this version of Total Recall, so they install on any node.</p>
+            <div className="card-grid">
+              {filteredBundled.map((p) => (
+                <div key={p.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+                    <span style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</span>
+                    <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span>
                   </div>
-                  <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>
-                    v{item.version}
-                  </span>
+                  <div style={muted}>{p.description}</div>
+                  <UseCaseChips useCases={p.use_cases} />
+                  <div style={{ ...muted, fontSize: "12px" }}>
+                    {[
+                      p.cli && `command: total-recall ${p.cli.command}`,
+                      p.tasks.length > 0 && `${p.tasks.length} scheduled task${p.tasks.length > 1 ? "s" : ""}`,
+                      p.categories.length > 0 && `${p.categories.length} memory categor${p.categories.length > 1 ? "ies" : "y"}`
+                    ].filter(Boolean).join(" · ")}
+                  </div>
+                  <div style={{ marginTop: "auto" }}>
+                    {p.installed
+                      ? <span className="badge badge-success">installed</span>
+                      : <button className="btn btn-primary btn-sm" disabled={busy === p.id} onClick={() => doInstall(p.id)}>
+                          {busy === p.id ? "Installing…" : "Install"}
+                        </button>}
+                  </div>
                 </div>
+              ))}
+            </div>
+          </>
+        )
+      )}
 
-                {/* Rating display */}
-                <div style={{ marginBottom: "12px" }}>
-                  <StarRatingDisplay 
-                    rating={item.rating} 
-                    reviewCount={item.reviewCount} 
-                    installCount={item.installCount} 
-                  />
-                </div>
+      {tab === "mesh" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <p style={{ ...muted, margin: 0 }}>Asked live from each node. Only plugins their owner chose to share appear here; content is hash-checked on install.</p>
+            <button className="btn btn-ghost btn-sm" onClick={loadPeers} disabled={peersLoading}>{peersLoading ? "Asking peers…" : "Refresh"}</button>
+          </div>
 
-                <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5", margin: "0 0 16px 0" }}>
-                  {item.description}
-                </p>
+          {peersLoading && !peers ? <div style={muted}>Asking peers…</div> :
+            peers === null ? <Empty title="Could not ask the mesh">The brain server did not answer the peer query.</Empty> :
+            !peers.mesh.available ? (
+              <Empty title="This node is not on a mesh">Enroll it with <code style={mono}>npx total-recall mesh enroll</code> to share plugins between your nodes.</Empty>
+            ) : peers.peers.length === 0 ? <Empty title="No other nodes on the mesh" /> : (
+              <>
+                {!peers.mesh.configured && (
+                  <div className="alert alert-warning">This node has no <code style={mono}>TR_MESH_SYNC_TOKEN</code>, so it cannot query peers. Set the same token on each node.</div>
+                )}
+                {peers.peers.map((node) => {
+                  const shown = node.plugins.filter(matches)
+                  return (
+                    <div key={node.hostname} className="card">
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", marginBottom: node.plugins.length ? "12px" : 0, flexWrap: "wrap" }}>
+                        <div>
+                          <span style={{ fontWeight: 600 }}>{node.hostname}</span>{" "}
+                          <span style={{ ...mono, color: "var(--text-tertiary)" }}>{node.ip}</span>
+                        </div>
+                        <span className={`badge ${node.status === "ok" ? "badge-online" : node.status === "offline" ? "badge-offline" : "badge-warning"}`}>
+                          {PEER_STATUS_LABEL[node.status]}{node.status === "ok" ? ` · ${node.plugins.length} shared` : ""}
+                        </span>
+                      </div>
+                      {node.error && node.status !== "ok" && <div style={{ ...muted, fontSize: "12px" }}>{node.error}</div>}
+                      {node.status === "ok" && node.plugins.length === 0 && <div style={muted}>Shares no plugins.</div>}
+                      {node.status === "ok" && node.plugins.length > 0 && shown.length === 0 && <div style={muted}>No shared plugins match the filter.</div>}
+                      {shown.map((p) => {
+                        const source = `peer:${node.hostname}/${p.id}`
+                        return (
+                          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", gap: "16px", padding: "12px 0", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
+                            <div style={{ minWidth: 0, flex: "1 1 320px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                              <div><span style={{ fontWeight: 600 }}>{p.name}</span> <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span></div>
+                              <div style={muted}>{p.description}</div>
+                              <UseCaseChips useCases={p.use_cases} />
+                              <div style={{ ...mono, color: "var(--text-tertiary)" }} title={p.sha256}>
+                                sha256 {shortHash(p.sha256)} · {p.file_count} files · {formatBytes(p.size_bytes)}
+                              </div>
+                            </div>
+                            <div style={{ alignSelf: "center" }}>
+                              {p.installed
+                                ? <span className={`badge ${p.same_as_installed ? "badge-success" : "badge-warning"}`}>
+                                    {p.same_as_installed ? "installed (same content)" : "installed (different content)"}
+                                  </span>
+                                : <button className="btn btn-primary btn-sm" disabled={busy === source} onClick={() => doInstall(source)}>
+                                    {busy === source ? "Installing…" : "Install"}
+                                  </button>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </>
+            )}
+        </div>
+      )}
 
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "20px" }}>
-                  {item.tags.map((tag) => (
-                    <span key={tag} style={{
-                      background: "var(--bg-elevated)",
-                      color: "var(--text-tertiary)",
-                      fontSize: "11px",
-                      padding: "2px 8px",
-                      borderRadius: "4px"
-                    }}>
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
+      {installOpen && (
+        <div role="dialog" aria-modal="true" aria-label="Install plugin from source" onClick={() => setInstallOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "16px" }}>
+          <form className="card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: "520px", display: "flex", flexDirection: "column", gap: "14px" }}
+            onSubmit={async (e) => {
+              e.preventDefault()
+              if (!installSource.trim()) return
+              if (await doInstall(installSource.trim(), { link: installLink, global: installGlobal })) {
+                setInstallOpen(false)
+                setInstallSource("")
+              }
+            }}>
+            <div style={{ fontWeight: 600, fontSize: "16px" }}>Install from source</div>
+            <div style={muted}>
+              A bundled plugin id, <code style={mono}>peer:&lt;host&gt;/&lt;id&gt;</code>, a git URL, or a folder on this machine containing <code style={mono}>plugin.json</code>.
+            </div>
+            <input className="input" autoFocus value={installSource} onChange={(e) => setInstallSource(e.target.value)}
+              placeholder="https://github.com/you/my-plugin.git" aria-label="Plugin source" />
+            <label style={{ ...muted, display: "flex", gap: "8px", alignItems: "center" }}>
+              <input type="checkbox" checked={installLink} onChange={(e) => setInstallLink(e.target.checked)} />
+              Link a local folder instead of copying it (for plugin development)
+            </label>
+            <label style={{ ...muted, display: "flex", gap: "8px", alignItems: "center" }}>
+              <input type="checkbox" checked={installGlobal} onChange={(e) => setInstallGlobal(e.target.checked)} />
+              Install for every project on this machine
+            </label>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setInstallOpen(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={!installSource.trim() || busy !== null}>
+                {busy ? "Installing…" : "Install"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {detail && (
+        <div role="dialog" aria-modal="true" aria-label={detail.name} onClick={closeDetail}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", justifyContent: "flex-end", zIndex: 1000 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: "640px", height: "100%", overflowY: "auto", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border)", padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+              <div>
+                <div style={{ fontSize: "18px", fontWeight: 700 }}>{detail.name}</div>
+                <div style={{ ...mono, color: "var(--text-tertiary)" }}>{detail.id} · v{detail.version}</div>
               </div>
+              <button className="btn btn-ghost btn-sm" onClick={closeDetail} aria-label="Close">Close</button>
+            </div>
+            <div style={muted}>{detail.description}</div>
+            {!detail.valid && (
+              <div className="alert alert-error">
+                {detail.errors.map((e) => <div key={e}>{e}</div>)}
+              </div>
+            )}
+            <div role="tablist" style={{ display: "flex", gap: "8px" }}>
+              {detail.cli && <button role="tab" aria-selected={detailTab === "run"} className={`btn btn-sm ${detailTab === "run" ? "btn-primary" : "btn-ghost"}`} onClick={() => setDetailTab("run")}>Run</button>}
+              <button role="tab" aria-selected={detailTab === "details"} className={`btn btn-sm ${detailTab === "details" ? "btn-primary" : "btn-ghost"}`} onClick={() => setDetailTab("details")}>Details</button>
+              <button role="tab" aria-selected={detailTab === "readme"} className={`btn btn-sm ${detailTab === "readme" ? "btn-primary" : "btn-ghost"}`} onClick={() => setDetailTab("readme")}>README</button>
+            </div>
 
-              <div style={{ borderTop: "1px solid var(--border)", paddingTop: "16px", display: "flex", justifyContent: "flex-end" }}>
-                {item.isInstalled ? (
-                  <span style={{
-                    color: "var(--success)",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px"
-                  }}>
-                    ✓ Installed
-                  </span>
-                ) : (
-                  <button
-                    disabled={installing}
-                    onClick={() => handleCatalogInstall(item)}
-                    style={{
-                      background: "var(--accent)",
-                      color: "#ffffff",
-                      border: "none",
-                      borderRadius: "var(--radius-sm)",
-                      padding: "7px 16px",
-                      fontSize: "13px",
-                      fontWeight: "600",
-                      cursor: installing ? "not-allowed" : "pointer"
-                    }}
-                  >
-                    {installing ? "Installing..." : "Install"}
+            {detailTab === "run" && detail.cli && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <select className="select" value={subcommand} onChange={(e) => setSubcommand(e.target.value)} aria-label="Subcommand" style={{ paddingRight: "32px" }}>
+                    {(detail.cli.subcommands.length ? detail.cli.subcommands : [{ name: "" }]).map((s) => (
+                      <option key={s.name} value={s.name}>{s.name || "(default)"}</option>
+                    ))}
+                  </select>
+                  <input className="input" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="extra arguments" aria-label="Arguments" style={{ flex: 1, minWidth: "160px" }} />
+                  <button className="btn btn-primary" onClick={runCommand} disabled={busy === `run:${detail.id}` || !detail.valid}>
+                    {busy === `run:${detail.id}` ? "Running…" : "Run"}
                   </button>
+                </div>
+                <div style={{ ...muted, fontSize: "12px" }}>
+                  {detail.cli.subcommands.find((s) => s.name === subcommand)?.description}
+                  {" "}Same as <code style={mono}>npx total-recall {detail.cli.command} {subcommand} {args}</code>. Runs in a separate process.
+                </div>
+                {output && (
+                  <pre style={{ ...mono, margin: 0, padding: "14px", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", border: `1px solid ${output.ok ? "var(--border)" : "var(--error)"}`, whiteSpace: "pre-wrap", maxHeight: "420px", overflow: "auto" }}>
+                    {output.text}
+                  </pre>
                 )}
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
 
-      {/* Install Plugin Modal */}
-      {installModalOpen && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0, 0, 0, 0.75)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          backdropFilter: "blur(4px)"
-        }}>
-          <div style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid var(--border-accent)",
-            borderRadius: "var(--radius-xl)",
-            padding: "32px",
-            width: "100%",
-            maxWidth: "520px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.6)"
-          }}>
-            <h2 style={{ margin: "0 0 8px 0", fontSize: "20px", fontWeight: "700" }}>Install Plugin</h2>
-            <p style={{ margin: "0 0 24px 0", color: "var(--text-secondary)", fontSize: "14px" }}>
-              Install a plugin from a local directory path or Git repository URL.
-            </p>
-
-            <form onSubmit={handleInstallSubmit}>
-              <div style={{ marginBottom: "18px" }}>
-                <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "6px", color: "var(--text-secondary)" }}>
-                  Source (Local Directory or Git URL)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. ./.agent/plugins/my-plugin or https://github.com/..."
-                  value={installSource}
-                  onChange={(e) => setInstallSource(e.target.value)}
-                  style={{
-                    width: "100%",
-                    background: "var(--bg-primary)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-md)",
-                    padding: "10px 14px",
-                    color: "var(--text-primary)",
-                    fontSize: "14px",
-                    outline: "none"
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "14px" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={installLink}
-                    onChange={(e) => setInstallLink(e.target.checked)}
-                  />
-                  <span>Link as Symlink (development mode — live edits sync without reinstalling)</span>
-                </label>
-              </div>
-
-              <div style={{ marginBottom: "24px" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={installGlobal}
-                    onChange={(e) => setInstallGlobal(e.target.checked)}
-                  />
-                  <span>Install Globally (~/.agent/plugins across all projects)</span>
-                </label>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
-                <button
-                  type="button"
-                  onClick={() => setInstallModalOpen(false)}
-                  style={{
-                    background: "transparent",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-secondary)",
-                    padding: "8px 16px",
-                    borderRadius: "var(--radius-md)",
-                    fontSize: "14px",
-                    cursor: "pointer"
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={installing || !installSource.trim()}
-                  style={{
-                    background: "var(--accent)",
-                    border: "none",
-                    color: "#ffffff",
-                    padding: "8px 20px",
-                    borderRadius: "var(--radius-md)",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    cursor: installing ? "not-allowed" : "pointer"
-                  }}
-                >
-                  {installing ? "Installing..." : "Install Plugin"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Plugin Detail & Interactive Runner Modal */}
-      {detailModalPlugin && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0, 0, 0, 0.75)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          backdropFilter: "blur(6px)",
-          padding: "20px"
-        }}>
-          <div style={{
-            background: "var(--bg-secondary)",
-            border: "1px solid var(--border-accent)",
-            borderRadius: "var(--radius-xl)",
-            padding: "24px 28px",
-            width: "100%",
-            maxWidth: "760px",
-            maxHeight: "88vh",
-            display: "flex",
-            flexDirection: "column",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.5)"
-          }}>
-            {/* Modal Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{
-                  width: "42px",
-                  height: "42px",
-                  borderRadius: "10px",
-                  background: "var(--accent-muted)",
-                  color: "var(--accent-hover)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "22px"
-                }}>
-                  🧩
-                </div>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>{detailModalPlugin.name}</h2>
-                    <span style={{
-                      fontSize: "11px",
-                      fontWeight: "600",
-                      padding: "2px 7px",
-                      borderRadius: "6px",
-                      background: detailModalPlugin.valid ? "var(--success-muted)" : "var(--error-muted)",
-                      color: detailModalPlugin.valid ? "var(--success)" : "var(--error)",
-                      border: `1px solid ${detailModalPlugin.valid ? "rgba(52, 211, 153, 0.2)" : "rgba(248, 113, 113, 0.2)"}`
-                    }}>
-                      v{detailModalPlugin.version}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                    id: {detailModalPlugin.id}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={closeDetail}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-secondary)",
-                  fontSize: "24px",
-                  cursor: "pointer",
-                  lineHeight: 1
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Sub-Navigation Tabs */}
-            <div style={{
-              display: "flex",
-              gap: "6px",
-              borderBottom: "1px solid var(--border)",
-              paddingBottom: "12px",
-              marginBottom: "18px",
-              overflowX: "auto"
-            }}>
-              <button
-                onClick={() => setDetailTab("runner")}
-                style={{
-                  background: detailTab === "runner" ? "var(--bg-elevated)" : "transparent",
-                  color: detailTab === "runner" ? "var(--accent-hover)" : "var(--text-secondary)",
-                  border: detailTab === "runner" ? "1px solid var(--border-accent)" : "1px solid transparent",
-                  borderRadius: "var(--radius-sm)",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
-                }}
-              >
-                <span>⚡ Interactive Runner</span>
-              </button>
-
-              <button
-                onClick={() => setDetailTab("readme")}
-                style={{
-                  background: detailTab === "readme" ? "var(--bg-elevated)" : "transparent",
-                  color: detailTab === "readme" ? "var(--accent-hover)" : "var(--text-secondary)",
-                  border: detailTab === "readme" ? "1px solid var(--border-accent)" : "1px solid transparent",
-                  borderRadius: "var(--radius-sm)",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer"
-                }}
-              >
-                📖 Documentation
-              </button>
-
-              <button
-                onClick={() => setDetailTab("schemas")}
-                style={{
-                  background: detailTab === "schemas" ? "var(--bg-elevated)" : "transparent",
-                  color: detailTab === "schemas" ? "var(--accent-hover)" : "var(--text-secondary)",
-                  border: detailTab === "schemas" ? "1px solid var(--border-accent)" : "1px solid transparent",
-                  borderRadius: "var(--radius-sm)",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer"
-                }}
-              >
-                🧩 SSSS Schemas ({detailModalPlugin.categories?.length || 0})
-              </button>
-
-              <button
-                onClick={() => setDetailTab("tasks")}
-                style={{
-                  background: detailTab === "tasks" ? "var(--bg-elevated)" : "transparent",
-                  color: detailTab === "tasks" ? "var(--accent-hover)" : "var(--text-secondary)",
-                  border: detailTab === "tasks" ? "1px solid var(--border-accent)" : "1px solid transparent",
-                  borderRadius: "var(--radius-sm)",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer"
-                }}
-              >
-                ⏱️ Tasks ({detailModalPlugin.tasks?.length || 0})
-              </button>
-
-              <button
-                onClick={() => setDetailTab("manifest")}
-                style={{
-                  background: detailTab === "manifest" ? "var(--bg-elevated)" : "transparent",
-                  color: detailTab === "manifest" ? "var(--accent-hover)" : "var(--text-secondary)",
-                  border: detailTab === "manifest" ? "1px solid var(--border-accent)" : "1px solid transparent",
-                  borderRadius: "var(--radius-sm)",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer"
-                }}
-              >
-                📋 Manifest
-              </button>
-            </div>
-
-            {/* Tab Body */}
-            <div style={{ flex: 1, overflowY: "auto", minHeight: "320px" }}>
-              {detailTab === "runner" && (
-                <div>
-                  <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
-                      Command: <code style={{ color: "var(--accent-hover)", background: "var(--bg-primary)", padding: "2px 6px", borderRadius: "4px" }}>total-recall {detailModalPlugin.cli?.command || detailModalPlugin.id}</code>
-                    </span>
-
-                    <input
-                      type="text"
-                      placeholder="subcommand (e.g. status, audit, sample)"
-                      value={subcommand}
-                      onChange={(e) => setSubcommand(e.target.value)}
-                      style={{
-                        background: "var(--bg-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--text-primary)",
-                        padding: "6px 10px",
-                        fontSize: "13px",
-                        width: "160px"
-                      }}
-                    />
-
-                    <input
-                      type="text"
-                      placeholder="extra args (e.g. --json)"
-                      value={customArgs}
-                      onChange={(e) => setCustomArgs(e.target.value)}
-                      style={{
-                        background: "var(--bg-primary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-sm)",
-                        color: "var(--text-primary)",
-                        padding: "6px 10px",
-                        fontSize: "13px",
-                        flex: 1,
-                        minWidth: "140px"
-                      }}
-                    />
-
-                    <button
-                      onClick={handleExecute}
-                      disabled={executing}
-                      style={{
-                        background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                        color: "#ffffff",
-                        border: "none",
-                        borderRadius: "var(--radius-sm)",
-                        padding: "7px 18px",
-                        fontSize: "13px",
-                        fontWeight: "600",
-                        cursor: executing ? "wait" : "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px"
-                      }}
-                    >
-                      {executing ? "Running..." : "▶ Execute"}
-                    </button>
-                  </div>
-
-                  {/* Terminal Console View */}
-                  <div style={{
-                    background: "#090d16",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-md)",
-                    padding: "16px 20px",
-                    minHeight: "260px",
-                    maxHeight: "360px",
-                    overflowY: "auto",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "12px",
-                    lineHeight: "1.6",
-                    color: "#e2e8f0",
-                    position: "relative"
-                  }}>
-                    {consoleOutput ? (
-                      <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                        {consoleOutput}
-                      </pre>
-                    ) : (
-                      <div style={{ color: "var(--text-tertiary)", fontStyle: "italic", paddingTop: "50px", textAlign: "center" }}>
-                        Select a subcommand and click "Execute" to run the plugin CLI and capture live output.
-                      </div>
-                    )}
-
-                    {consoleOutput && (
-                      <div style={{ position: "absolute", top: "10px", right: "12px", display: "flex", gap: "6px" }}>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(consoleOutput)}
-                          style={{
-                            background: "rgba(255, 255, 255, 0.08)",
-                            border: "none",
-                            color: "var(--text-secondary)",
-                            borderRadius: "4px",
-                            padding: "3px 8px",
-                            fontSize: "11px",
-                            cursor: "pointer"
-                          }}
-                        >
-                          Copy
-                        </button>
-                        <button
-                          onClick={() => setConsoleOutput("")}
-                          style={{
-                            background: "rgba(255, 255, 255, 0.08)",
-                            border: "none",
-                            color: "var(--text-secondary)",
-                            borderRadius: "4px",
-                            padding: "3px 8px",
-                            fontSize: "11px",
-                            cursor: "pointer"
-                          }}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {detailTab === "readme" && (
-                <div style={{
-                  background: "var(--bg-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "20px 24px",
-                  maxHeight: "420px",
-                  overflowY: "auto",
-                  lineHeight: "1.6"
-                }}>
-                  {readmeLoading ? (
-                    <div style={{ color: "var(--text-tertiary)", textAlign: "center", padding: "40px" }}>Loading documentation...</div>
-                  ) : (
-                    <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit", fontSize: "14px", color: "var(--text-primary)" }}>
-                      {readmeText || "No README.md documentation found for this plugin."}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              {detailTab === "schemas" && (
-                <div style={{ maxHeight: "420px", overflowY: "auto" }}>
-                  {detailModalPlugin.categories && detailModalPlugin.categories.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                      {detailModalPlugin.categories.map((cat) => (
-                        <div key={cat.name} style={{
-                          background: "var(--bg-primary)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "var(--radius-md)",
-                          padding: "14px 18px"
-                        }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                            <span style={{ fontWeight: "700", color: "var(--accent-hover)", fontFamily: "var(--font-mono)" }}>
-                              {cat.name}
-                            </span>
-                            <span style={{ fontSize: "11px", background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: "4px", color: "var(--text-tertiary)" }}>
-                              type: memory
-                            </span>
-                          </div>
-                          <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
-                            {cat.description || "Plugin declared SSSS category schema."}
-                          </p>
+            {detailTab === "details" && (
+              <div>
+                <Fact label="Scope">{detail.scope}{detail.linked ? " (linked folder)" : ""}</Fact>
+                <Fact label="Source">{sourceLabel(detail)} — <span style={mono}>{detail.source.ref}</span></Fact>
+                <Fact label="Installed">{detail.installed_at ? new Date(detail.installed_at).toLocaleString() : "no install record"}</Fact>
+                <Fact label="Content sha256"><span style={mono}>{detail.sha256 || "—"}</span></Fact>
+                {detail.modified_since_install && <Fact label="At install"><span style={mono}>{detail.installed_sha256}</span></Fact>}
+                <Fact label="Files">{detail.file_count ?? "—"} · {formatBytes(detail.size_bytes)}</Fact>
+                <Fact label="Shared">{detail.shared ? "yes" : "no"}</Fact>
+                {detail.shared && <Fact label="Public link">{detail.share_url ? <input className="input" aria-label="Public plugin share link" readOnly value={detail.share_url} onFocus={(e) => e.currentTarget.select()} /> : "Set TR_PUBLIC_BASE_URL to your public HTTPS origin to create a link."}</Fact>}
+                <Fact label="Use cases">{detail.use_cases.join(", ") || "—"}</Fact>
+                {detail.author && <Fact label="Author">{detail.author}</Fact>}
+                {detail.license && <Fact label="License">{detail.license}</Fact>}
+                <Fact label="Location"><span style={mono}>{detail.dir}</span></Fact>
+                <Fact label="Agent context">{detail.has_generator ? "adds a block to compiled instructions" : "—"}</Fact>
+                <Fact label="Memory categories">
+                  {detail.categories.length ? detail.categories.map((c) => c.name).join(", ") : "—"}
+                </Fact>
+                <Fact label="Scheduled tasks">
+                  {detail.tasks.length === 0 ? "—" : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {detail.tasks.map((t) => (
+                        <div key={t.command}>
+                          <span style={mono}>{t.schedule}</span> {t.command} — {t.intent}
+                          <div style={{ color: "var(--text-tertiary)", fontSize: "12px" }}>last run: {t.last_run || "not yet"}</div>
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-tertiary)" }}>
-                      This plugin does not declare custom SSSS category schemas.
-                    </div>
                   )}
+                </Fact>
+                <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+                  <button className="btn btn-ghost btn-sm" disabled={busy === detail.id || (!detail.valid && !detail.shared)} onClick={() => doShare(detail, !detail.shared)}>
+                    {detail.shared ? "Stop sharing" : "Share"}
+                  </button>
+                  <button className="btn btn-ghost btn-sm" disabled={busy === detail.id} onClick={() => doRemove(detail)}>Remove</button>
                 </div>
-              )}
+              </div>
+            )}
 
-              {detailTab === "tasks" && (
-                <div style={{ maxHeight: "420px", overflowY: "auto" }}>
-                  {detailModalPlugin.tasks && detailModalPlugin.tasks.length > 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                      {detailModalPlugin.tasks.map((t, idx) => (
-                        <div key={idx} style={{
-                          background: "var(--bg-primary)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "var(--radius-md)",
-                          padding: "14px 18px",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center"
-                        }}>
-                          <div>
-                            <div style={{ fontWeight: "600", fontSize: "14px", marginBottom: "4px" }}>
-                              {t.intent}
-                            </div>
-                            <span style={{ fontSize: "12px", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                              cron: {t.schedule}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: "12px", background: "var(--success-muted)", color: "var(--success)", padding: "3px 8px", borderRadius: "6px", fontWeight: "600" }}>
-                            Scheduled
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-tertiary)" }}>
-                      No background daemon tasks registered for this plugin.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {detailTab === "manifest" && (
-                <pre style={{
-                  margin: 0,
-                  background: "var(--bg-primary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-md)",
-                  padding: "16px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "12px",
-                  color: "var(--accent-hover)",
-                  maxHeight: "420px",
-                  overflow: "auto"
-                }}>
-                  {JSON.stringify(detailModalPlugin.manifest || detailModalPlugin, null, 2)}
-                </pre>
-              )}
-            </div>
+            {detailTab === "readme" && (
+              <div style={{ fontSize: "14px", lineHeight: 1.6 }}>{readme ? renderMarkdown(readme) : <span style={muted}>Loading…</span>}</div>
+            )}
           </div>
         </div>
       )}

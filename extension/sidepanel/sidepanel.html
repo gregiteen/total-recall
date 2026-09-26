@@ -2,208 +2,242 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Total Recall</title>
+  <link rel="stylesheet" href="../lib/tokens.css">
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <div class="panel">
-    <!-- Header -->
-    <header class="panel-header">
-      <h1>🧠 Total Recall</h1>
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span id="active-brain-badge" class="badge">Global</span>
-        <div id="connection-dot" class="dot"></div>
+  <!-- Icon sprite (lucide-style, 24px grid) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76V6h6v4.76l1.8 2.4A1 1 0 0 1 16 15H8a1 1 0 0 1-.8-1.6z"/><path d="M8 3h8"/></symbol>
+    <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6.5L4.6 18.2A1.8 1.8 0 0 0 6.1 21h11.8a1.8 1.8 0 0 0 1.5-2.8L14 9.5V3"/><path d="M7.5 15h9"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.4 3.6a2 2 0 1 1 2.8 2.8L7 18.6 3 20l1.4-4z"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h13"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M9 7V4h6v3"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m6.3 6.3 2.1 2.1M15.6 15.6l2.1 2.1M6.3 17.7l2.1-2.1M15.6 8.4l2.1-2.1"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></symbol>
+    <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M7 14h10"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24"><path d="M6 20V11a6 6 0 0 1 12 0v9"/><path d="M9.5 20v-8.5a2.5 2.5 0 0 1 5 0V20"/><path d="M4 20h16"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  </svg>
+
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <img src="../icons/mark.svg" alt="" class="brand-mark" width="22" height="22">
+        <span class="brand-name">Total Recall</span>
       </div>
+      <button class="brain-chip" id="brain-chip" type="button" title="Active brain — change in settings">
+        <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+        <span id="brain-chip-label">Global</span>
+      </button>
+      <button class="icon-btn" id="btn-open-settings" type="button" aria-label="Settings" title="Settings">
+        <svg class="icon"><use href="#i-settings"/></svg>
+      </button>
     </header>
 
-    <!-- Tab Navigation Bar -->
-    <nav class="tab-bar">
-      <button class="tab-btn active" data-tab="memories">🧠 Memories</button>
-      <button class="tab-btn" data-tab="chat">💬 Chat</button>
-      <button class="tab-btn" data-tab="research">🔬 Research</button>
-      <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
-      <button class="tab-btn" data-tab="collab">👥 Collab</button>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab is-active" role="tab" id="tab-btn-recall" aria-controls="tab-recall" aria-selected="true" data-tab="recall">
+        <svg class="icon sm"><use href="#i-brain"/></svg>Recall
+      </button>
+      <button class="tab" role="tab" id="tab-btn-chat" aria-controls="tab-chat" aria-selected="false" data-tab="chat" tabindex="-1">
+        <svg class="icon sm"><use href="#i-chat"/></svg>Chat
+      </button>
+      <button class="tab" role="tab" id="tab-btn-research" aria-controls="tab-research" aria-selected="false" data-tab="research" tabindex="-1">
+        <svg class="icon sm"><use href="#i-flask"/></svg>Research
+        <span class="tab-count" id="research-active-count" hidden></span>
+      </button>
+      <span class="tab-indicator" aria-hidden="true"></span>
     </nav>
 
-    <!-- Tab Panels Container -->
-    <div class="tab-content-container">
-      
-      <!-- Panel 1: Memories -->
-      <section id="tab-memories" class="tab-panel active">
-        <div class="search-box">
-          <input type="text" id="search-input" placeholder="Search your brain..." />
-        </div>
-        <div id="memories-list" class="memories-list"></div>
-        <div class="quick-actions">
-          <button id="btn-remember" class="action-btn">📌 Remember Page</button>
-          <button id="btn-research" class="action-btn">🔬 Research Page</button>
-          <button id="btn-note" class="action-btn">📝 Quick Note</button>
-        </div>
-        <div id="note-area" class="note-area hidden">
-          <textarea id="note-input" placeholder="Type your note..."></textarea>
-          <div class="note-actions">
-            <button id="btn-save-note" class="action-btn accent">Save Note</button>
-            <button id="btn-cancel-note" class="action-btn">Cancel</button>
-          </div>
-        </div>
-      </section>
+    <!-- Connection gate: replaces all panes while the brain is unreachable/unauthorized -->
+    <section class="gate" id="gate" hidden>
+      <div class="gate-icon"><svg class="icon lg"><use href="#i-plug"/></svg></div>
+      <h2 id="gate-title">Connect your brain</h2>
+      <p id="gate-message">Total Recall runs on your machine. Point the extension at it and add an access token.</p>
+      <div class="gate-actions">
+        <button class="btn primary" id="gate-settings" type="button">Open connection settings</button>
+        <button class="btn ghost" id="gate-retry" type="button"><svg class="icon sm"><use href="#i-refresh"/></svg>Retry</button>
+      </div>
+      <p class="gate-hint">Create a token in the dashboard under <strong>Integrations</strong>.</p>
+    </section>
 
-      <!-- Panel 2: Chat -->
-      <section id="tab-chat" class="tab-panel">
-        <div id="chat-messages" class="chat-messages">
-          <div class="chat-bubble assistant">
-            Hello! Ask me anything about your memories or the current page!
-          </div>
-        </div>
-        
-        <!-- Suggestions row -->
-        <div class="chat-suggestions">
-          <button class="suggestion-btn" id="btn-suggest-summarize">💡 Summarize Page</button>
-          <button class="suggestion-btn" id="btn-suggest-related">🔍 Find Related Notes</button>
-        </div>
-
-        <!-- Web grounding control -->
-        <div class="chat-grounding-row">
-          <label class="grounding-checkbox-label">
-            <input type="checkbox" id="chat-grounding-toggle" checked />
-            🔌 Feed current webpage context
-          </label>
-        </div>
-
-        <!-- Input row -->
-        <div class="chat-input-bar">
-          <textarea id="chat-input" placeholder="Ask your brain... (Shift+Enter for newline)"></textarea>
-          <button id="btn-send-chat" class="chat-send-btn">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-              <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
-            </svg>
-          </button>
-        </div>
-      </section>
-
-      <!-- Panel 3: Research -->
-      <section id="tab-research" class="tab-panel">
-        <div class="research-feed">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h3>Active Background Research</h3>
-            <button id="btn-refresh-research" class="refresh-btn">🔄 Refresh</button>
-          </div>
-          <div id="research-list"></div>
-        </div>
-      </section>
-
-      <!-- Panel 4: Settings -->
-      <section id="tab-settings" class="tab-panel">
-        <div class="settings-panel">
-          <h3>Sovereign Configuration</h3>
-          
-          <div class="settings-group">
-            <label for="settings-brain-selector">Active Brain Layer</label>
-            <select id="settings-brain-selector" class="settings-select">
-              <option value="global">Global Brain</option>
-            </select>
-            <span class="settings-help">Project brain layers override global rules dynamically</span>
-          </div>
-
-          <div class="settings-group">
-            <label>Passive Tracking</label>
-            <div style="display: flex; justify-content: space-between; align-items: center; background: #1e1e2e; padding: 10px 12px; border-radius: 10px; border: 1px solid #313244;">
-              <span style="font-size: 13px; color: #a6adc8;">Capture page logs in background</span>
-              <label class="switch">
-                <input type="checkbox" id="settings-tracking-toggle" />
-                <span class="slider"></span>
-              </label>
+    <main class="panes" id="panes">
+      <!-- ============ RECALL ============ -->
+      <section class="pane is-active" id="tab-recall" role="tabpanel" aria-labelledby="tab-btn-recall">
+        <article class="page-card" id="page-card">
+          <div class="page-row">
+            <div class="favicon" id="page-favicon"><svg class="icon sm"><use href="#i-globe"/></svg></div>
+            <div class="page-meta">
+              <div class="page-title" id="page-title">—</div>
+              <div class="page-host">
+                <span id="page-host"></span>
+                <span class="chip success" id="page-saved" hidden><svg class="icon sm"><use href="#i-check"/></svg><span id="page-saved-label">Saved</span></span>
+              </div>
             </div>
           </div>
+          <div class="page-actions">
+            <button class="btn primary" id="btn-remember" type="button"><svg class="icon sm"><use href="#i-pin"/></svg>Remember</button>
+            <button class="btn" id="btn-research-page" type="button"><svg class="icon sm"><use href="#i-flask"/></svg>Research</button>
+            <button class="btn icon-only" id="btn-note" type="button" aria-label="Add a note" aria-expanded="false" title="Add a note"><svg class="icon sm"><use href="#i-note"/></svg></button>
+          </div>
+          <div class="note-area" id="note-area" hidden>
+            <textarea class="textarea" id="note-input" rows="3" placeholder="Why does this matter? Saved with the page — or on its own if this isn't a web page."></textarea>
+            <div class="note-actions">
+              <span class="hint"><span class="kbd">⌘</span><span class="kbd">↵</span> to save</span>
+              <button class="btn ghost" id="btn-cancel-note" type="button">Cancel</button>
+              <button class="btn primary" id="btn-save-note" type="button">Save note</button>
+            </div>
+          </div>
+          <p class="page-disabled" id="page-disabled" hidden>This page can't be captured. Notes still work.</p>
+        </article>
 
-          <div class="settings-group">
-            <label>Current Domain Actions</label>
-            <button id="btn-block-domain" class="action-btn error" style="width: 100%; margin-bottom: 8px;">🚫 Block Current Domain</button>
-            <span class="settings-help">Prevents passive capturing on this domain</span>
+        <label class="search" for="search-input">
+          <svg class="icon sm"><use href="#i-search"/></svg>
+          <input type="search" id="search-input" placeholder="Search your brain" autocomplete="off" spellcheck="false">
+          <span class="kbd" aria-hidden="true">/</span>
+        </label>
+
+        <div id="search-results" class="section" hidden>
+          <div class="section-head"><h3 id="search-heading">Results</h3></div>
+          <div class="list" id="search-list"></div>
+        </div>
+
+        <div id="browse" class="browse">
+          <div class="section" id="related-section" hidden>
+            <div class="section-head">
+              <h3>Related to this page</h3>
+            </div>
+            <div class="list" id="related-list"></div>
           </div>
 
-          <div class="settings-group" style="margin-top: auto; padding-top: 16px; border-top: 1px solid #313244;">
-            <button id="btn-recompile-brain" class="action-btn accent" style="width: 100%;">⚡ Recompile Brain Indexes</button>
-            <span class="settings-help" style="text-align: center; display: block; margin-top: 4px;">Forcibly rebuilds vector embeddings and rules shims</span>
+          <div class="section">
+            <div class="section-head">
+              <h3>Recent</h3>
+              <button class="icon-btn small" id="btn-refresh-recent" type="button" aria-label="Refresh recent" title="Refresh"><svg class="icon sm"><use href="#i-refresh"/></svg></button>
+            </div>
+            <div class="list" id="recent-list"></div>
           </div>
         </div>
       </section>
 
-      <!-- Panel 5: Collaboration -->
-      <section id="tab-collab" class="tab-panel">
-        <!-- Auth View -->
-        <div id="collab-auth-view" class="collab-section">
-          <h3>👥 Join Collab Network</h3>
-          <p class="collab-subtext">Register or log in to sync annotations and chat on websites live.</p>
-          <div class="collab-form">
-            <input type="text" id="collab-username" placeholder="Username" />
-            <input type="password" id="collab-password" placeholder="Password" />
-            <div style="display: flex; gap: 8px; margin-top: 8px;">
-              <button id="btn-collab-login" class="action-btn accent" style="flex: 1;">Login</button>
-              <button id="btn-collab-register" class="action-btn" style="flex: 1;">Register</button>
+      <!-- ============ CHAT ============ -->
+      <section class="pane" id="tab-chat" role="tabpanel" aria-labelledby="tab-btn-chat" hidden>
+        <div class="chat-scroll" id="chat-scroll">
+          <div class="chat-empty" id="chat-empty">
+            <div class="chat-empty-mark"><svg class="icon lg"><use href="#i-sparkle"/></svg></div>
+            <h2>Ask your brain</h2>
+            <p>Answers draw on your memories and, when enabled, the page you're on.</p>
+            <div class="suggestions">
+              <button class="suggestion" type="button" data-prompt="Summarize this page and pull out the key takeaways.">Summarize this page</button>
+              <button class="suggestion" type="button" data-prompt="What do I already know that relates to this page? Point out anything that conflicts with it.">What do I already know about this?</button>
+              <button class="suggestion" type="button" data-prompt="Which rules or decisions in my brain apply to what this page describes?">Which of my rules apply here?</button>
             </div>
           </div>
+          <div class="messages" id="chat-messages" aria-live="polite"></div>
         </div>
-
-        <!-- Main Collaboration View -->
-        <div id="collab-main-view" class="collab-section hidden" style="display: flex; flex-direction: column; height: 100%;">
-          <div class="collab-user-bar">
-            <span>👤 <strong id="collab-user-display"></strong></span>
-            <button id="btn-collab-logout" class="collab-logout-btn">Logout</button>
+        <div class="composer">
+          <div class="composer-box">
+            <textarea id="chat-input" rows="1" placeholder="Ask anything…" aria-label="Message"></textarea>
+            <button class="send" id="btn-send-chat" type="button" aria-label="Send" disabled><svg class="icon sm"><use href="#i-send"/></svg></button>
           </div>
-
-          <div class="collab-control-group">
-            <label for="collab-group-select">Workspace Group</label>
-            <select id="collab-group-select" class="settings-select"></select>
-          </div>
-
-          <div class="collab-action-grid" style="display: flex; gap: 8px; margin-bottom: 8px; margin-top: 4px;">
-            <button id="btn-collab-show-join" class="action-btn" style="padding: 6px; font-size: 11px;">Join Group</button>
-            <button id="btn-collab-show-create" class="action-btn" style="padding: 6px; font-size: 11px;">Create Group</button>
-          </div>
-
-          <div id="collab-join-group-row" class="collab-action-row hidden" style="display: flex; gap: 6px; margin-bottom: 8px;">
-            <input type="text" id="collab-join-code" placeholder="Invite Code" style="flex: 1; padding: 6px; font-size: 12px; background: #1e1e2e; border: 1px solid #313244; color: #cdd6f4; border-radius: 6px;" />
-            <button id="btn-collab-submit-join" class="action-btn accent" style="flex-shrink: 0; padding: 6px 12px; font-size: 11px; height: 28px;">Join</button>
-          </div>
-
-          <div id="collab-create-group-row" class="collab-action-row hidden" style="display: flex; gap: 6px; margin-bottom: 8px;">
-            <input type="text" id="collab-create-name" placeholder="Group Name" style="flex: 1; padding: 6px; font-size: 12px; background: #1e1e2e; border: 1px solid #313244; color: #cdd6f4; border-radius: 6px;" />
-            <button id="btn-collab-submit-create" class="action-btn accent" style="flex-shrink: 0; padding: 6px 12px; font-size: 11px; height: 28px;">Create</button>
-          </div>
-
-          <!-- Pinned Annotations -->
-          <div class="collab-panel-header">
-            <h4>📌 Notes on Page</h4>
-          </div>
-          <div id="collab-annotations-list" class="collab-list"></div>
-
-          <!-- Add Annotation Form -->
-          <div class="collab-annotation-form">
-            <textarea id="collab-note-input" placeholder="Pin a note to this page..."></textarea>
-            <button id="btn-collab-save-note" class="action-btn accent" style="width: 100%; margin-top: 4px; padding: 6px; font-size: 12px;">Pin Note</button>
-          </div>
-
-          <!-- Real-time Site Chat -->
-          <div class="collab-panel-header" style="margin-top: 8px;">
-            <h4>💬 Site Chat Room</h4>
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span class="pulse" style="width: 6px; height: 6px; background: #a6e3a1; box-shadow: 0 0 4px #a6e3a1; border-radius: 50%;"></span>
-              <span id="collab-presence-count" style="font-size: 10px; color: #a6e3a1;">1 online</span>
-            </div>
-          </div>
-          <div id="collab-chat-messages" class="chat-messages collab-chat-box"></div>
-          <div class="chat-input-bar collab-input-bar">
-            <textarea id="collab-chat-input" placeholder="Send a message to team..."></textarea>
-            <button id="btn-collab-send-chat" class="chat-send-btn">Send</button>
+          <div class="composer-foot">
+            <label class="context-toggle" title="Include the current page's text with your question">
+              <input type="checkbox" id="chat-grounding" checked>
+              <svg class="icon sm"><use href="#i-globe"/></svg>
+              <span>Use this page</span>
+            </label>
+            <button class="btn ghost small" id="btn-clear-chat" type="button" hidden><svg class="icon sm"><use href="#i-trash"/></svg>Clear</button>
           </div>
         </div>
       </section>
 
-    </div>
+      <!-- ============ RESEARCH ============ -->
+      <section class="pane" id="tab-research" role="tabpanel" aria-labelledby="tab-btn-research" hidden>
+        <form class="research-form" id="research-form">
+          <input class="input" id="research-input" type="text" placeholder="Research a topic in the background…" autocomplete="off">
+          <button class="btn primary" type="submit" id="btn-queue-research">Queue</button>
+        </form>
+        <div class="research-counts" id="research-counts"></div>
+        <div class="section" id="research-active-section">
+          <div class="section-head"><h3>In progress</h3>
+            <button class="icon-btn small" id="btn-refresh-research" type="button" aria-label="Refresh research" title="Refresh"><svg class="icon sm"><use href="#i-refresh"/></svg></button>
+          </div>
+          <div class="list" id="research-active"></div>
+        </div>
+        <div class="section">
+          <div class="section-head"><h3>Finished</h3></div>
+          <div class="list" id="research-done"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============ SETTINGS SHEET ============ -->
+    <div class="scrim" id="scrim" hidden></div>
+    <aside class="sheet" id="sheet" aria-label="Settings" aria-hidden="true" inert>
+      <header class="sheet-head">
+        <h2>Settings</h2>
+        <button class="icon-btn" id="btn-close-settings" type="button" aria-label="Close settings"><svg class="icon"><use href="#i-close"/></svg></button>
+      </header>
+      <div class="sheet-body">
+        <div class="field">
+          <label class="field-label" for="brain-select"><svg class="icon sm"><use href="#i-layers"/></svg>Active brain</label>
+          <select class="select" id="brain-select"><option value="global">Global brain</option></select>
+          <p class="field-help">Search, capture and chat all use this brain.</p>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">Related memories on pages</div>
+            <p class="field-help">Check each page you visit against your brain and badge the toolbar icon when you already know something about it. Page titles are sent to your brain only.</p>
+          </div>
+          <label class="switch"><input type="checkbox" id="toggle-page-recall"><span class="track"></span></label>
+        </div>
+        <div class="setting-row sub">
+          <div>
+            <div class="setting-title">Floating card on the page</div>
+            <p class="field-help">Also show a small “Related” pill in the corner.</p>
+          </div>
+          <label class="switch"><input type="checkbox" id="toggle-pill"><span class="track"></span></label>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><svg class="icon sm"><use href="#i-ban"/></svg>This site</div>
+          <button class="btn block" id="btn-block-site" type="button">Never check this site</button>
+        </div>
+
+        <div class="field">
+          <div class="field-label"><svg class="icon sm"><use href="#i-bolt"/></svg>Maintenance</div>
+          <button class="btn block" id="btn-recompile" type="button">Rebuild search index</button>
+          <p class="field-help">Re-embeds new memories so search and recall find them. Runs on the brain; takes a minute.</p>
+        </div>
+
+        <nav class="link-list">
+          <button type="button" class="link-row" id="link-options"><svg class="icon sm"><use href="#i-plug"/></svg>Connection &amp; privacy<svg class="icon sm trail"><use href="#i-external"/></svg></button>
+          <button type="button" class="link-row" id="link-shortcuts"><svg class="icon sm"><use href="#i-keyboard"/></svg>Keyboard shortcuts<span class="trail-text" id="shortcut-summary"></span></button>
+          <button type="button" class="link-row" id="link-dashboard"><svg class="icon sm"><use href="#i-brain"/></svg>Open dashboard<svg class="icon sm trail"><use href="#i-external"/></svg></button>
+        </nav>
+      </div>
+      <footer class="sheet-foot" id="sheet-foot"></footer>
+    </aside>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   </div>
-  <script src="../lib/preconfigured.js"></script>
+
   <script src="../lib/brain-client.js"></script>
+  <script src="../lib/ui-helpers.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

@@ -223,7 +223,7 @@ export default async function init(args) {
 
   const dirs = [
     path.join(agentDir, 'skills'),
-    path.join(agentDir, 'plugins'),
+    path.join(agentDir, 'skills', 'total-recall', 'plugins'),
   ];
 
   let created = 0;

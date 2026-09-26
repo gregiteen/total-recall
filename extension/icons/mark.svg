@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- Transparent vault arch mark — dark UI friendly -->
+  <path d="M 120 300 L 120 180 A 80 80 0 0 1 280 180 L 280 300 Z" fill="#93c5fd"/>
+  <path d="M 280 300 L 280 180 A 80 80 0 0 0 200 100 L 350 250 L 350 300 Z" fill="#1e40af" opacity="0.55"/>
+  <path d="M 150 300 L 150 180 A 50 50 0 0 1 250 180 L 250 300 Z" fill="#0b1220"/>
+</svg>

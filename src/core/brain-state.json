@@ -29,6 +29,7 @@
     "backups",
     "browser-profile",
     "skills-registry",
+    "plugins",
     ".snapshots",
     ".git",
     "node_modules"

@@ -1,54 +1,57 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import pluginsRouter from './plugins.mjs';
+
+const scopes = vi.hoisted(() => []);
 
 vi.mock('../auth.mjs', () => ({
   requireAuth: (req, res, next) => next(),
-  requireScope: () => (req, res, next) => next(),
+  requireScope: (...s) => {
+    scopes.push(s);
+    return (req, res, next) => { req.requiredScopes = s; next(); };
+  },
 }));
 
+const plugin = {
+  id: 'git-sentinel',
+  dir: '/test/plugins/git-sentinel',
+  valid: true,
+  errors: [],
+  manifest: { id: 'git-sentinel', name: 'Git Sentinel', version: '1.1.0', description: 'Repo state', cli: { command: 'git-sentinel', handler: './cli.mjs' } }
+};
+
 vi.mock('../../core/plugin-loader.mjs', () => ({
-  discoverPlugins: vi.fn().mockReturnValue([
-    {
-      id: 'scientific-frontiers',
-      dir: '/test/plugins/scientific-frontiers',
-      manifestPath: '/test/plugins/scientific-frontiers/plugin.json',
-      valid: true,
-      errors: [],
-      manifest: {
-        name: 'Scientific Frontiers Engine',
-        version: '1.0.0',
-        description: 'Decentralized frontier science capability ledger',
-        ssss_schemas: {
-          categories: [{ name: 'frontier-capabilities' }]
-        },
-        tasks: [
-          { intent: 'Ingest research', schedule: '0 * * * *' }
-        ],
-        openwiki_hubs: [
-          { title: 'Frontier Intelligence Hub', path: 'openwiki/scientific-frontiers.md' }
-        ]
-      }
-    }
-  ]),
-  getPluginById: vi.fn((id) => {
-    if (id === 'scientific-frontiers') {
-      return {
-        id: 'scientific-frontiers',
-        dir: '/test/plugins/scientific-frontiers',
-        valid: true,
-        errors: [],
-        manifest: {
-          name: 'Scientific Frontiers Engine',
-          version: '1.0.0',
-          description: 'Decentralized frontier science capability ledger'
-        }
-      };
-    }
-    return null;
-  })
+  getPluginById: vi.fn((id) => (id === 'git-sentinel' ? plugin : id === 'no-cli' ? { ...plugin, id: 'no-cli', manifest: { name: 'No CLI' } } : null)),
 }));
+
+const store = vi.hoisted(() => ({
+  listInstalledPlugins: vi.fn(() => [{ id: 'git-sentinel', name: 'Git Sentinel', sha256: 'a'.repeat(64), shared: false }]),
+  listAvailableBundled: vi.fn(() => [{ id: 'system-monitor', name: 'System Monitor', installed: false }]),
+  describePlugin: vi.fn((p) => ({ id: p.id, name: p.manifest.name })),
+  installPlugin: vi.fn(async (source) => {
+    if (source === 'bad') throw new Error('No bundled plugin, peer source, git URL or directory matches');
+    return { plugin: { id: 'system-monitor', name: 'System Monitor', version: '1.1.0' }, source: { kind: 'bundled', ref: source }, sha256: 'b'.repeat(64) };
+  }),
+  uninstallPlugin: vi.fn(async (id) => ({ id, dir: '/x', scope: 'project' })),
+  setPluginShared: vi.fn(async (id, shared) => ({ id, shared })),
+}));
+vi.mock('../../core/plugin-store.mjs', () => store);
+
+vi.mock('../../core/plugin-peers.mjs', () => ({
+  listPeerPlugins: vi.fn(async () => ({
+    mesh: { available: true, configured: true },
+    peers: [{ hostname: 'mac-mini', status: 'ok', plugins: [{ id: 'git-sentinel', sha256: 'a'.repeat(64) }, { id: 'other', sha256: 'c'.repeat(64) }] }]
+  })),
+}));
+
+const runner = vi.hoisted(() => ({
+  runPluginCommand: vi.fn(async () => ({ ok: true, exitCode: 0, output: 'hello', timedOut: false, truncated: false, durationMs: 5 })),
+}));
+vi.mock('../../core/plugin-runner.mjs', () => runner);
+
+import pluginsRouter from './plugins.mjs';
+
+const FORBIDDEN = /rating|review|installCount|install_count|download|verified/i;
 
 describe('plugins router', () => {
   let app;
@@ -60,69 +63,75 @@ describe('plugins router', () => {
     app.use(pluginsRouter);
   });
 
-  it('GET /api/plugins returns discovered plugins list', async () => {
+  it('GET /api/plugins lists installed plugins with no fabricated fields', async () => {
     const res = await request(app).get('/api/plugins');
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
     expect(res.body.count).toBe(1);
-    expect(res.body.plugins[0].id).toBe('scientific-frontiers');
-    expect(res.body.plugins[0].valid).toBe(true);
+    expect(JSON.stringify(res.body)).not.toMatch(FORBIDDEN);
   });
 
-  it('GET /api/plugins/:id returns a specific plugin', async () => {
-    const res = await request(app).get('/api/plugins/scientific-frontiers');
+  it('ignores caller-supplied roots', async () => {
+    await request(app).get('/api/plugins?root=/etc');
+    expect(store.listInstalledPlugins).toHaveBeenCalledWith(process.cwd());
+  });
+
+  it('GET /api/plugins/available lists bundled plugins', async () => {
+    const res = await request(app).get('/api/plugins/available');
+    expect(res.body.plugins[0].id).toBe('system-monitor');
+  });
+
+  it('GET /api/plugins/peers marks what is already installed and whether it is the same content', async () => {
+    const res = await request(app).get('/api/plugins/peers');
+    const [peer] = res.body.peers;
+    expect(peer.plugins[0]).toMatchObject({ id: 'git-sentinel', installed: true, same_as_installed: true });
+    expect(peer.plugins[1]).toMatchObject({ id: 'other', installed: false, same_as_installed: false });
+  });
+
+  it('there is no catalog or rating endpoint', async () => {
+    expect((await request(app).get('/api/plugins/catalog')).status).toBe(404);
+    expect((await request(app).post('/api/plugins/git-sentinel/rate').send({ rating: 5 })).status).toBe(404);
+  });
+
+  it('POST /api/plugins/install requires a source and reports store errors', async () => {
+    expect((await request(app).post('/api/plugins/install').send({})).status).toBe(400);
+    const bad = await request(app).post('/api/plugins/install').send({ source: 'bad' });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toContain('No bundled plugin');
+    const ok = await request(app).post('/api/plugins/install').send({ source: 'system-monitor', global: true });
+    expect(ok.status).toBe(200);
+    expect(store.installPlugin).toHaveBeenCalledWith('system-monitor', { projectRoot: process.cwd(), link: false, global: true });
+  });
+
+  it('POST /api/plugins/:id/share requires a boolean', async () => {
+    expect((await request(app).post('/api/plugins/git-sentinel/share').send({ shared: 'yes' })).status).toBe(400);
+    const res = await request(app).post('/api/plugins/git-sentinel/share').send({ shared: true });
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.plugin.id).toBe('scientific-frontiers');
+    expect(store.setPluginShared).toHaveBeenCalledWith('git-sentinel', true, { projectRoot: process.cwd() });
   });
 
-  it('GET /api/plugins/:id returns 400 for unknown plugin', async () => {
-    const res = await request(app).get('/api/plugins/nonexistent');
-    expect(res.status).toBe(400);
-  });
-
-  it('GET /api/plugins/catalog returns curated catalog with status', async () => {
-    const res = await request(app).get('/api/plugins/catalog');
+  it('DELETE /api/plugins/:id removes via the store', async () => {
+    const res = await request(app).delete('/api/plugins/git-sentinel?global=true');
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(Array.isArray(res.body.catalog)).toBe(true);
-    expect(res.body.catalog.some(c => c.id === 'system-monitor')).toBe(true);
-    expect(res.body.catalog.some(c => c.id === 'git-sentinel')).toBe(true);
+    expect(store.uninstallPlugin).toHaveBeenCalledWith('git-sentinel', { projectRoot: process.cwd(), global: true });
   });
 
-  it('POST /api/plugins/:id/rate validates rating range', async () => {
-    const res = await request(app)
-      .post('/api/plugins/system-monitor/rate')
-      .send({ rating: 6 });
-    expect(res.status).toBe(400);
-
-    const validRes = await request(app)
-      .post('/api/plugins/system-monitor/rate')
-      .send({ rating: 4.8, review: 'Great telemetry tool' });
-    expect(validRes.status).toBe(200);
-    expect(validRes.body.success).toBe(true);
+  it('GET /api/plugins/:id returns 404 for an unknown plugin', async () => {
+    expect((await request(app).get('/api/plugins/nonexistent')).status).toBe(404);
+    expect((await request(app).get('/api/plugins/git-sentinel')).body.plugin.manifest.name).toBe('Git Sentinel');
   });
 
-  it('POST /api/plugins/install rejects missing source', async () => {
-    const res = await request(app)
-      .post('/api/plugins/install')
-      .send({});
-    expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Missing source path');
-  });
-
-  it('GET /api/plugins/:id/readme returns markdown content', async () => {
-    const res = await request(app).get('/api/plugins/scientific-frontiers/readme');
+  it('POST /api/plugins/:id/run executes out of process and needs config:write', async () => {
+    const res = await request(app).post('/api/plugins/git-sentinel/run').send({ subcommand: 'audit', args: ['--json'] });
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.readme).toContain('Scientific Frontiers');
+    expect(res.body.output).toBe('hello');
+    expect(runner.runPluginCommand).toHaveBeenCalledWith(plugin, { subcommand: 'audit', args: ['--json'], cwd: process.cwd() });
+    expect(scopes).toContainEqual(['config:write']);
   });
 
-  it('POST /api/plugins/:id/run returns 400 when plugin has no cli handler', async () => {
-    const res = await request(app)
-      .post('/api/plugins/scientific-frontiers/run')
-      .send({ subcommand: 'status' });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toContain('does not declare a CLI handler');
+  it('POST /api/plugins/:id/run validates input and handler presence', async () => {
+    expect((await request(app).post('/api/plugins/git-sentinel/run').send({ args: [1] })).status).toBe(400);
+    const noCli = await request(app).post('/api/plugins/no-cli/run').send({});
+    expect(noCli.status).toBe(400);
+    expect(noCli.body.error).toContain('does not declare a CLI handler');
   });
 });

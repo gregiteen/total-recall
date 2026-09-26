@@ -112,6 +112,8 @@ export default async function share(args) {
       topic,
       priority: 'medium',
       notes: text || '',
+      origin: 'user',
+      requested_via: 'cli',
     });
     console.log(`  ✅ Queued research: "${topic}" (id: ${item.id})`);
     return;

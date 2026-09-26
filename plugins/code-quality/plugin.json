@@ -1,0 +1,17 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "code-quality",
+  "name": "Code Quality Report",
+  "version": "1.1.0",
+  "description": "Shows the latest code-quality gate report for a repository that has the code-quality skill installed.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": ["software-development"],
+  "cli": {
+    "command": "code-quality",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      { "name": "report", "description": "Print the latest gate report from .agent/skills/code-quality" }
+    ]
+  }
+}

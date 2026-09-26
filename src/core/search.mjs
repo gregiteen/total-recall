@@ -155,12 +155,17 @@ export async function semanticSearch(query, {
 
   // 2. Perform Semantic Search Channel (if embedding & index available)
   let semanticRanked = [];
+  // Raw cosine similarity per slug. RRF scores below are rank-based, so the top
+  // hit scores ~0.49 however unrelated it is; callers that must decide whether a
+  // hit is actually relevant (e.g. the browser extension's page recall) need this.
+  const similarityBySlug = new Map();
   if (queryEmbedding && vaultEntries.length > 0) {
     const store = new VectorStore();
     store.load(vaultIndex);
     const matches = store.search(queryEmbedding, filteredNodes.length, filteredSlugs, cosineSimilarity);
     
     semanticRanked = matches.map(({ slug, similarity }) => {
+      similarityBySlug.set(slug, similarity);
       const node = filteredNodes.find(n => n.slug === slug);
       const temporal = computeTemporalBoost(node);
       return { slug, score: similarity * temporal };
@@ -231,7 +236,13 @@ export async function semanticSearch(query, {
   // Slice top results
   for (const { node, score } of blendedRanked.slice(0, k)) {
     if (node) {
-      results.push({ ...node, type: 'vault', score });
+      const similarity = similarityBySlug.get(node.slug);
+      results.push({
+        ...node,
+        type: 'vault',
+        score,
+        ...(similarity !== undefined && { similarity: Math.round(similarity * 1000) / 1000 }),
+      });
     }
   }
 

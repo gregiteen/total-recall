@@ -125,6 +125,7 @@ import { rulesRouter }    from './routes/rules.mjs';
 import notificationsRouter from './routes/notifications.mjs';
 import meshPresenceRouter from './routes/mesh-presence.mjs';
 import pluginsRouter      from './routes/plugins.mjs';
+import pluginsMeshRouter  from './routes/plugins-mesh.mjs';
 // ollamaUrl removed — CLI agents replace Ollama
 import {
   AGENT_DIR,
@@ -243,6 +244,7 @@ router.use(rulesRouter);
 router.use(notificationsRouter);
 router.use(meshPresenceRouter);
 router.use(pluginsRouter);
+router.use(pluginsMeshRouter);
 
 export { router as restRouter };
 export default router;
