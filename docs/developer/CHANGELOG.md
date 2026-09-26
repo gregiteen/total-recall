@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.31.0] — 2026-09-26
+
+### ✨ Features
+- **`total-recall edit <slug>` changes a memory node in place.** Until now the only way to correct a rule was `forget` plus a new `remember`, which gave it a new slug and lost its history. `edit` takes new content (or `-` for stdin) and `--title`, `--importance`, `--priority`, `--modality`, `--tags`, `--status`, `--global`/`--project`; it keeps the slug and `created` date, stamps `updated`, keeps `immutable` in step with `priority`, writes through the validated SSSS path and recompiles that layer's surfaces (`--global` fans out to every registered repo).
+
+### 📝 Docs
+- Skills: the full suite and quality gates run only on the Mac Mini (a single spec may run on any mesh node); builds and installs are fine on any machine, and large app builds are best on the Mac Mini.
+
 ## [3.30.2] — 2026-09-26
 
 ### ✨ Features
