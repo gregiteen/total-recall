@@ -190,7 +190,7 @@ describe('connect — repo skills projected as slash commands', () => {
 
     const link = path.join(tmpProject, '.claude', 'skills', 'push');
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
-    expect(path.resolve(fs.readlinkSync(link))).toBe(path.resolve(pushDir));
+    expect(path.resolve(path.dirname(link), fs.readlinkSync(link))).toBe(path.resolve(pushDir));
     expect(fs.existsSync(path.join(link, 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(tmpProject, '.claude', 'skills', 'repo-expert'))).toBe(true);
   });
@@ -212,7 +212,7 @@ describe('connect — repo skills projected as slash commands', () => {
     await runConnect(['claude-code']); // no --force
     const link = path.join(destDir, 'push');
     expect(fs.existsSync(link)).toBe(true); // resolves now
-    expect(path.resolve(fs.readlinkSync(link))).toBe(path.resolve(dir));
+    expect(path.resolve(path.dirname(link), fs.readlinkSync(link))).toBe(path.resolve(dir));
   });
 });
 
