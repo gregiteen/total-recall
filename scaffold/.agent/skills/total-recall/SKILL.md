@@ -28,7 +28,7 @@ You MUST actively reference and apply this skill under the following specific ru
 
 ### 1. When the user establishes a rule, preference, or correction
 *   **Trigger**: Whenever the user corrects your behavior, shares a coding style, defines an architectural pattern, or establishes a preference you must remember.
-*   **Action**: Autonomously create a new SSSS v2 memory node under `.agent/memory-vault/` and compile the vault.
+*   **Action**: Save the new rule with `npx total-recall remember` in the appropriate category and scope. The CLI validates the node and compiles the vault.
 
 ### 2. When referencing invariants, preferences, and corrections (Intrinsically Known Rules)
 *   **⚠️ MANDATORY**: The compiled instruction files (like `INSTRUCTIONS.md`, `GEMINI.md`, `AGENTS.md`, etc.) contain the **entirety** of active invariants, preferences, and behavior corrections (rules/directives).
@@ -36,7 +36,7 @@ You MUST actively reference and apply this skill under the following specific ru
 
 ### 3. When searching for complex domain knowledge or general facts
 *   **Trigger**: When you need to retrieve deep factual information (e.g. from the `facts/` category) or conceptual domain structures (e.g. from `concepts/`) that are not present in your active instruction files.
-*   **Action**: Use the semantic/lexical hybrid search engine (via the local `recall` command, or `/api/memory/search/semantic` endpoint) along with regular text search (e.g., grep):
+*   **Action**: Use `npx total-recall recall "<query>"` to search memory. Do not read or grep memory-vault files directly.
      *   **Hybrid Search**: Blends cosine-similarity vector search and lexical density TF-IDF keyword matching using Reciprocal Rank Fusion (RRF). This blends intent-based semantic matching with exact keyword accuracy.
      *   **Hierarchical Parent-Child Search**: Memory node bodies are chunked and indexed as children. The vector store searches both the parent node and child chunks, returning matches based on maximum similarity.
      *   **Regular Text Search**: Use grep to locate exact configurations, literal keys, or symbols.
@@ -58,7 +58,7 @@ You MUST actively reference and apply this skill under the following specific ru
 
 ### 5. When you modify, add, or delete files in the memory vault
 *   **Trigger**: Immediately after performing any memory node writes.
-*   **Action**: Rebuild the instruction shims. If using CLI commands (`npx total-recall remember` / `forget`), recompilation runs automatically in the background (asynchronously via detached subprocesses) to minimize latency. If editing vault files directly, trigger manual compilation by sending a POST request to `/api/vault/compile` or running `npx total-recall compile`.
+*   **Action**: The `remember` and `forget` CLI commands compile the instruction shims automatically. Use `npx total-recall compile` only when a manual rebuild is needed; never edit vault files directly.
 
 ### 5b. When handling ANY credential, API key, or password
 Never invent a new place to keep it. It goes in the encrypted secrets store —
