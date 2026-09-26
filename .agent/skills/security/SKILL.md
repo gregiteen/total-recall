@@ -23,7 +23,7 @@ Rank findings by that reality, not by CVSS instinct.
 
 | Asset | Location | Why it matters |
 | --- | --- | --- |
-| `secrets.enc` | `.agent/secrets.enc` | AES-256-GCM. Every provider key the operator owns. |
+| `secrets.enc` | `<brain>/config/secrets.enc` (a bare `.agent` dir uses `.agent/secrets.enc`) | AES-256-GCM. Every provider key the operator owns. |
 | Browser profile | `<brainDir>/browser-profile/` | **Live, logged-in provider sessions.** Bypasses the API keys entirely — a stolen profile is a stolen Stripe/GitHub/cloud console. |
 | Memory vault | `<brainDir>/memory-vault/` | Plaintext markdown. Business context, infrastructure, personal history. |
 
@@ -34,9 +34,25 @@ people forget. It is not a cache. Treat it as credential material.
 
 ## Secrets
 
-- Encrypted at rest in `.agent/secrets.enc` (AES-256-GCM). Unlocked by
-  `TR_SECRETS_PASSWORD`, sourced from the OS keychain — launchd jobs need it
-  injected explicitly or the daemon silently runs without secrets.
+- Encrypted at rest in `<brain>/config/secrets.enc` (AES-256-GCM), unlocked by
+  the master password. `secretsPassword()` resolves it in this order:
+  1. `TR_SECRETS_PASSWORD` / `TR_MASTER_PASSWORD` in the environment (a
+     LaunchAgent plist injects it for launchd jobs);
+  2. macOS only: the Keychain entry `total-recall-secrets` that `secret rekey`
+     maintains (`TR_SECRETS_NO_KEYCHAIN=1` turns this off). An ssh/mesh session
+     cannot read a locked login Keychain;
+  3. the host env file `TR_ENV_FILE`, default `~/.agent/tr.env` — the file
+     `auto-pull.sh` sources and `secret rekey --env-file` rotates. Honoured only
+     if it is a regular file (not a symlink), mode 0600, owned by this user, in a
+     directory this user owns that nobody else can write. Keep `~/.agent` at 0700.
+  Without any of them every command fails with "Secrets file is not valid JSON"
+  and mesh falls back to local discovery.
+- **Do not export the password from a shell profile.** Every process started
+  from that shell inherits it. The env-file fallback makes the export
+  unnecessary; remove any `. ~/.agent/tr.env` line from `.bashrc`/`.profile`.
+- The vitest suite sets `TR_SECRETS_NO_KEYCHAIN=1` and a nonexistent
+  `TR_ENV_FILE` (vitest.config.ts), so no-password specs never read a
+  machine's real password. Keep it that way.
 - **Never** hardcode keys in `.env` or source. Resolve through the secrets
   store (`getSecret` / `loadSecrets`).
 - **Never** print a secret value. Not to a log, not to stdout, not into an
@@ -106,7 +122,14 @@ Every key resolves to exactly one rotation class:
 
 ## REST API
 
-- Auth is **PAT-based**, generated via `npx total-recall config --generate-pat`.
+- Auth is **PAT-based**: `total-recall generate-pat --name <n> [--scope …] [--expires 30d]`
+  or `total-recall key create|list|revoke <id>|rotate <id>`. Only the SHA-256
+  hash is stored (`<global brain>/config/keys.jsonl`); clients keep the token
+  in `config/brain.json` (0600).
+- **A PAT is never printed.** `connect` shows a prefix only (`maskToken`).
+  A token that reached a transcript or log is burned: find it by hashing the
+  token and matching `token_hash` in keys.jsonl on every host, `key revoke` it,
+  and write the replacement straight into brain.json without printing it.
 - Every route requires auth plus an explicit scope: `config:read` for reads,
   `config:write` for anything mutating.
 
@@ -238,7 +261,12 @@ grep -rn "router.use(requireAuth)" src/server/routes/
 5. No secret values in logs, errors, tests, or fixtures.
 6. Unverified rotation recipes still have no `create()`.
 7. Full test suite green (run it on the mesh test host, not the production box).
-8. Server boots natively before tagging a release.
+8. Server boots natively before tagging a release — on the test host, with an
+   isolated home so the host's running brain does not win the PID lock (the
+   new server otherwise logs "already running" to its log file and exits
+   silently after the banner):
+   `H=$(mktemp -d); HOME=$H TR_SECRETS_NO_KEYCHAIN=1 node bin/total-recall.mjs start --port 3977`
+   then `curl -s 127.0.0.1:3977/health` must report the new version.
 
 ---
 
@@ -246,7 +274,7 @@ grep -rn "router.use(requireAuth)" src/server/routes/
 
 | Gap | Risk | Note |
 | --- | --- | --- |
-| `.agent/skills/` is gitignored | This skill is **not versioned or distributed** — it exists only on the machine that wrote it | Only `scaffold/` ships in the npm `files` whitelist |
+| Repo skills are not in the npm package | `.agent/skills/` is tracked in git (fixed; it used to be ignored) but only `scaffold/` ships in the `files` whitelist | Installs get the scaffold copies; this repo's skills reach other machines through git |
 | Vault stored in plaintext | Disk-level compromise reads everything | Encryption at rest is `secrets.enc` only |
 | Mesh discovery trusts first responder | Vault text to a hostile peer | Set an explicit endpoint to bypass discovery |
 | No egress allowlist on embeddings | Misconfigured host silently exfiltrates | Prefer local/mesh |

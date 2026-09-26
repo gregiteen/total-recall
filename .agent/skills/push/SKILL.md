@@ -36,11 +36,26 @@ install -m 755 scripts/auto-pull.sh /root/auto-pull.sh
 crontab -l | grep -q auto-pull || (crontab -l; echo "*/5 * * * * /root/auto-pull.sh") | crontab -
 ```
 
-**Always verify it actually ran** — silence is not success:
+The script kills the old server and daemon by their absolute paths, waits for
+the port, runs `npm ci` when the lockfile changed, rebuilds the dashboard,
+starts the server, and **only logs success once `/health` reports the
+checked-out version**. When the code is current but the running server is
+not (a previous restart failed), it reinstalls and restarts instead of exiting.
+Until 3.30.1 the kill patterns never matched (`node src/server/index.mjs` vs
+the real `/usr/bin/node /root/total-recall/src/server/index.mjs`), so the
+droplet served 3.28.1 for days while the log said "hot-reloaded".
+
+A host that already serves something on 3000 sets the port in the cron line
+(`*/5 * * * * TR_PORT=3900 /root/auto-pull.sh`). After changing
+`scripts/auto-pull.sh`, reinstall it: the cron runs the installed copy.
+
+**Always verify it actually ran** — silence is not success, and a pulled
+checkout is not a running server:
 
 ```bash
 tail -5 /root/.agent/logs/auto-pull.log   # no such file = it has never run
 crontab -l | grep -i auto-pull || echo "no auto-pull cron — the host is not pulling"
+curl -s 127.0.0.1:${TR_PORT:-3000}/health | grep -o '"version":"[^"]*"'   # must match package.json
 ```
 
 ### Host prerequisites (Linux)
@@ -111,7 +126,7 @@ Execute the automated local publish script to securely handle the NPM token swap
 node .agent/skills/push/scripts/publish.mjs
 ```
 This script automatically:
-1. Loads your unencrypted `npm_token` from the workspace-local `.agent/secrets.enc` (falling back to your global `~/.agent/skills/total-recall/config/secrets.enc` if not present in the workspace).
+1. Loads `npm_token` from the encrypted secrets store — the workspace `.agent`, then the global brain — which needs the master password (see the security skill for how it is resolved).
 2. Backs up your active `~/.npmrc` profile.
 3. Automatically configures and authenticates your active terminal session with the loaded token.
 4. Executes `git push origin main --tags` to push version tags/commits to the remote repository.
@@ -122,6 +137,24 @@ This script automatically:
 > All GitHub Actions workflows for NPM publication have been completely removed from the repository. Publishing is executed strictly, securely, and locally from your terminal using the publish script.
 
 ---
+
+### Where each step runs
+
+`publish.mjs` needs three things on ONE machine: GitHub push access, the
+`npm_token` in a secrets store it can unlock, and a fresh `frontend/dist`.
+It runs `git push origin main --tags`, so it also pushes every local tag, and
+it aborts the publish if that push fails. When no machine has all three:
+
+1. Run the gates and the full suite on the test host (never the laptop).
+2. Bump, tag and `git push origin main v<version>` from the machine that has
+   GitHub access.
+3. On the machine logged in to npm (`npm whoami`), fast-forward to the tag,
+   copy the test host's verified `frontend/dist` (building is a heavy run),
+   then `npm run check:dist`, `npm publish --dry-run`, `npm publish`.
+4. Confirm on the registry, not from npm's output — it can lag minutes:
+   `curl -s https://registry.npmjs.org/total-recall-brain | jq '."dist-tags"'`.
+
+Update `HANDOFF.md` and the affected project trackers in the same release.
 
 ## References
 - For npm package composition rules and dry-run guidelines, see [references/npm-publishing.md](file:///Users/greg/Github/total-recall/.agent/skills/push/references/npm-publishing.md).
