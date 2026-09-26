@@ -96,6 +96,41 @@ export function hashSkillContent(skillDir) {
   return crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
 }
 
+/** Hash a skill layer without treating repo-owned edits as core drift. */
+export function hashSkillLayer(skillDir, layer) {
+  const base = layer === 'core' ? path.join(skillDir, 'core') : skillDir;
+  if (!fs.existsSync(base)) return null;
+  if (fs.lstatSync(base).isSymbolicLink()) throw new Error(`Skill layer cannot be a symlink: ${base}`);
+  const hash = crypto.createHash('sha256');
+  let count = 0;
+  const visit = (dir, relative = '') => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.DS_Store') continue;
+      if (layer === 'repo' && !relative && entry.name === 'core') continue;
+      const next = relative ? `${relative}/${entry.name}` : entry.name;
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(file, next);
+      else if (entry.isFile()) {
+        hash.update(next).update('\0').update(fs.readFileSync(file)).update('\0');
+        count++;
+      } else if (entry.isSymbolicLink()) {
+        if (layer === 'core') throw new Error(`Skill core cannot contain a symlink: ${next}`);
+        hash.update(next).update('\0').update(fs.readlinkSync(file)).update('\0');
+        count++;
+      }
+    }
+  };
+  visit(base);
+  return count ? hash.digest('hex').slice(0, 16) : null;
+}
+
+function isLayeredSkill(skillDir) {
+  const core = path.join(skillDir, 'core');
+  if (!fs.existsSync(core)) return false;
+  if (fs.lstatSync(core).isSymbolicLink()) throw new Error(`Skill core cannot be a symlink: ${core}`);
+  return fs.lstatSync(core).isDirectory();
+}
+
 /**
  * Read skill metadata from a local skill directory.
  */
@@ -110,6 +145,8 @@ export function readSkillMeta(skillDir) {
     data.name ||
     data.slug ||
     path.basename(path.resolve(skillDir));
+  const coreHash = isLayeredSkill(skillDir) ? hashSkillLayer(skillDir, 'core') : null;
+  if (isLayeredSkill(skillDir) && !coreHash) throw new Error(`Skill core is empty: ${skillDir}`);
   return {
     id: String(id).replace(/[^a-zA-Z0-9._-]/g, '-').toLowerCase(),
     title: data.title || data.name || id,
@@ -118,6 +155,7 @@ export function readSkillMeta(skillDir) {
     tags: Array.isArray(data.tags) ? data.tags : [],
     repo_scoped: Boolean(data.repo_scoped),
     content_hash: hashSkillContent(skillDir),
+    core_hash: coreHash,
     source_path: path.resolve(skillDir),
   };
 }
@@ -154,6 +192,8 @@ export function registerSkill(brainDir, skillPath, opts = {}) {
     source_type: opts.source_type || prev.source_type || 'local',
     source_path: abs,
     content_hash: meta.content_hash,
+    core_hash: meta.core_hash,
+    layered: Boolean(meta.core_hash),
     registered_at: prev.registered_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -326,6 +366,7 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
   const resolved = resolveSkillSource(brainDir, skillIdOrPath, opts.agentSkillsDir);
   const destDir = path.join(destSkills, resolved.id);
   const sourceMeta = readSkillMeta(resolved.sourcePath);
+  const layered = Boolean(sourceMeta.core_hash);
   const sourceRepo = repoForSkillPath(brainDir, resolved.sourcePath);
 
   if (
@@ -341,7 +382,7 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
   if (
     sourceRepo &&
     canonicalPath(sourceRepo) !== canonicalPath(repoRoot) &&
-    !opts.allowRepoScopedCrossRepo
+    !opts.allowRepoScopedCrossRepo && !layered
   ) {
     throw new Error(
       `Refusing to deploy repo-owned catalog skill "${resolved.id}" from ${sourceRepo} into ${repoRoot}. ` +
@@ -354,10 +395,19 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
     // an explicit CLI signal for callers that require replacement semantics.
   }
 
-  const replacement = replaceSkillDir(resolved.sourcePath, destDir);
+  const existed = fs.existsSync(path.join(destDir, 'SKILL.md'));
+  if (layered && fs.existsSync(destDir) && fs.lstatSync(destDir).isSymbolicLink()) {
+    throw new Error(`Refusing layered deploy into symlink: ${destDir}`);
+  }
+  const replacement = layered && existed
+    ? replaceSkillDir(path.join(resolved.sourcePath, 'core'), path.join(destDir, 'core'), {
+        requiredFile: null,
+        preserveExisting: false,
+      })
+    : replaceSkillDir(resolved.sourcePath, destDir);
 
   let adaptResult = { adapted: false };
-  if (opts.adapt) {
+  if (opts.adapt && (!layered || !existed)) {
     const openwikiDir =
       opts.openwikiDir ||
       path.join(repoRoot, '.agent', 'skills', 'total-recall', 'openwiki') ||
@@ -388,6 +438,11 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
     version: entry?.version || readSkillMeta(destDir).version,
     content_hash: contentHash,
     registry_hash: entry?.content_hash || null,
+    ...(layered ? {
+      layered: true,
+      core_hash: hashSkillLayer(destDir, 'core'),
+      repo_hash: hashSkillLayer(destDir, 'repo'),
+    } : {}),
     adapted: Boolean(adaptResult.adapted),
     installed_at: new Date().toISOString(),
   };
@@ -424,7 +479,12 @@ export function skillStatus(brainDir, skillId) {
   const installDetails = installs.map((inst) => {
     const exists = fs.existsSync(path.join(inst.path, 'SKILL.md'));
     const liveHash = exists ? hashSkillContent(inst.path) : null;
-    const drift =
+    const layered = Boolean(entry?.layered || inst.layered);
+    const liveCoreHash = layered && exists ? hashSkillLayer(inst.path, 'core') : null;
+    const liveRepoHash = layered && exists ? hashSkillLayer(inst.path, 'repo') : null;
+    const drift = layered
+      ? liveCoreHash !== (entry?.core_hash || inst.core_hash)
+      :
       exists && entry?.content_hash
         ? liveHash !== entry.content_hash
         : exists && inst.registry_hash
@@ -434,6 +494,11 @@ export function skillStatus(brainDir, skillId) {
       ...inst,
       exists,
       live_hash: liveHash,
+      ...(layered ? {
+        core_hash: liveCoreHash,
+        repo_hash: liveRepoHash,
+        repo_changed: liveRepoHash !== inst.repo_hash,
+      } : {}),
       drift,
     };
   });
@@ -550,6 +615,9 @@ export function isRepoScopedSkill(brainDir, skillId) {
   const registry = loadRegistry(brainDir);
   const entry = registry.skills?.[skillId];
   if (entry?.repo_scoped) return true;
+  // A layered catalog explicitly owns only core/. Repo-layer SKILL.md files
+  // may be repo_scoped and are never candidates for cross-repo propagation.
+  if (entry?.layered) return false;
   const candidates = [
     entry?.source_path,
     ...registry.installs.filter((install) => install.skill_id === skillId).map((install) => install.path),
@@ -858,7 +926,7 @@ export function discoverAllSkills(
             source: hit.path,
             source_type: 'discovered',
           });
-        } else if (readSkillMeta(hit.path).repo_scoped && !before.repo_scoped) {
+        } else if (!before.layered && readSkillMeta(hit.path).repo_scoped && !before.repo_scoped) {
           const scopedRegistry = loadRegistry(brainDir);
           scopedRegistry.skills[hit.id].repo_scoped = true;
           scopedRegistry.skills[hit.id].updated_at = new Date().toISOString();
@@ -871,6 +939,7 @@ export function discoverAllSkills(
       }
 
       const registry = loadRegistry(brainDir);
+      if (registry.skills[hit.id]?.layered) continue; // layered installs require explicit deploy/adoption
       const exists = registry.installs.some(
         (i) => i.skill_id === hit.id && path.resolve(i.repo || '') === path.resolve(repo),
       );
@@ -920,7 +989,7 @@ export function skillMtime(skillDir) {
 export function replaceSkillDir(
   src,
   dest,
-  { dryRun = false, preserveExisting = true, fsImpl = fs, copyFn = copySkillDir } = {},
+  { dryRun = false, preserveExisting = true, requiredFile = 'SKILL.md', fsImpl = fs, copyFn = copySkillDir } = {},
 ) {
   if (dryRun) return { dryRun: true, src, dest };
   if (!fsImpl.existsSync(src)) throw new Error(`Source missing: ${src}`);
@@ -954,8 +1023,8 @@ export function replaceSkillDir(
       copyFn(dest, stage);
     }
     copyFn(src, stage);
-    if (!fsImpl.existsSync(path.join(stage, 'SKILL.md'))) {
-      throw new Error(`Staged skill is missing SKILL.md: ${stage}`);
+    if (requiredFile && !fsImpl.existsSync(path.join(stage, requiredFile))) {
+      throw new Error(`Staged skill is missing ${requiredFile}: ${stage}`);
     }
 
     if (fsImpl.existsSync(dest)) {
@@ -1004,7 +1073,7 @@ export function collectSkillLocations(brainDir, skillId) {
       role: 'source',
       path: entry.source_path,
       repo: path.resolve(entry.source_path, '..', '..', '..'),
-      hash: hashSkillContent(entry.source_path),
+      hash: entry.layered ? hashSkillLayer(entry.source_path, 'core') : hashSkillContent(entry.source_path),
       mtime: skillMtime(entry.source_path),
     });
   }
@@ -1017,13 +1086,13 @@ export function collectSkillLocations(brainDir, skillId) {
       role: 'install',
       path: inst.path,
       repo: inst.repo,
-      hash: hashSkillContent(inst.path),
+      hash: entry?.layered ? hashSkillLayer(inst.path, 'core') : hashSkillContent(inst.path),
       mtime: skillMtime(inst.path),
     });
   }
 
   // Also scan known repos for this skill id not yet mapped
-  for (const repo of loadKnownRepoRoots(brainDir)) {
+  for (const repo of entry?.layered ? [] : loadKnownRepoRoots(brainDir)) {
     for (const hit of discoverSkillsInRepo(repo)) {
       if (hit.id !== skillId) continue;
       if (locations.some((l) => samePhysicalPath(l.path, hit.path))) continue;
@@ -1031,7 +1100,7 @@ export function collectSkillLocations(brainDir, skillId) {
         role: 'discovered',
         path: hit.path,
         repo: hit.repo,
-        hash: hashSkillContent(hit.path),
+        hash: entry?.layered ? hashSkillLayer(hit.path, 'core') : hashSkillContent(hit.path),
         mtime: skillMtime(hit.path),
       });
     }
@@ -1091,19 +1160,28 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
     return { skillId, skipped: true, reason: 'repo_scoped', locations: locations.length };
   }
 
+  const layered = Boolean(entry?.layered);
+  const source = layered ? locations.find((loc) => loc.role === 'source') : null;
+  if (layered && !source) return { skillId, error: 'layered skill has no catalog source' };
   const hashes = new Set(locations.map((l) => l.hash).filter(Boolean));
-  if (hashes.size <= 1 && locations.length >= 1) {
+  if (hashes.size <= 1 && locations.every((loc) => loc.hash)) {
     // already in sync — still refresh install map hashes
     if (!dryRun && entry) {
       const registry = loadRegistry(brainDir);
       if (registry.skills[skillId]) {
-        registry.skills[skillId].content_hash = locations[0].hash;
+        if (layered) registry.skills[skillId].core_hash = source.hash;
+        else registry.skills[skillId].content_hash = locations[0].hash;
         registry.skills[skillId].updated_at = new Date().toISOString();
       }
       for (const inst of registry.installs.filter((i) => i.skill_id === skillId)) {
         if (fs.existsSync(inst.path)) {
           inst.content_hash = hashSkillContent(inst.path);
-          inst.registry_hash = locations[0].hash;
+          inst.registry_hash = layered ? entry.content_hash : locations[0].hash;
+          if (layered) {
+            inst.layered = true;
+            inst.core_hash = hashSkillLayer(inst.path, 'core');
+            inst.repo_hash = hashSkillLayer(inst.path, 'repo');
+          }
         }
       }
       saveRegistry(brainDir, registry);
@@ -1117,7 +1195,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
     };
   }
 
-  const winner = pickSyncWinner(locations, prefer);
+  const winner = source || pickSyncWinner(locations, prefer);
   if (!winner) {
     return { skillId, error: 'no winner', locations };
   }
@@ -1133,13 +1211,22 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
       role: loc.role,
     });
     if (!dryRun) {
-      replaceSkillDir(winner.path, loc.path);
+      if (layered) {
+        replaceSkillDir(path.join(winner.path, 'core'), path.join(loc.path, 'core'), {
+          requiredFile: null,
+          preserveExisting: false,
+        });
+      } else {
+        replaceSkillDir(winner.path, loc.path);
+      }
     }
   }
 
   // Catalog + install map
   if (!dryRun) {
-    if (promoteWinner) {
+    if (layered) {
+      // The repo layer is never promoted into the plugin-owned catalog source.
+    } else if (promoteWinner) {
       try {
         registerSkill(brainDir, winner.path, {
           source: winner.path,
@@ -1163,6 +1250,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
 
     if (registry.skills[skillId]) {
       registry.skills[skillId].content_hash = catalogHash;
+      if (layered) registry.skills[skillId].core_hash = source.hash;
       registry.skills[skillId].updated_at = new Date().toISOString();
     }
 
@@ -1182,6 +1270,11 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
         version: registry.skills[skillId]?.version || '0.0.0',
         content_hash: hashSkillContent(loc.path),
         registry_hash: catalogHash,
+        ...(layered ? {
+          layered: true,
+          core_hash: hashSkillLayer(loc.path, 'core'),
+          repo_hash: hashSkillLayer(loc.path, 'repo'),
+        } : {}),
         adapted: false,
         installed_at: new Date().toISOString(),
         synced_at: new Date().toISOString(),

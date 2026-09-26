@@ -486,6 +486,9 @@ Provide a high-level explanation of the skill's capabilities and context.
       console.log(`\n  ✅ Deployed: ${result.skillId}`);
       console.log(`     → ${result.destDir}`);
       console.log(`     hash=${result.install.content_hash} adapted=${result.adapt.adapted}`);
+      if (result.install.layered) {
+        console.log(`     core=${result.install.core_hash} repo=${result.install.repo_hash}`);
+      }
       console.log(`     Install map updated in ${resolveRegistryPath(brainDir)}\n`);
     } catch (err) {
       console.error(`❌ Deploy failed: ${err.message}`);
@@ -523,6 +526,9 @@ Provide a high-level explanation of the skill's capabilities and context.
         console.log(
           `    • ${inst.path}\n      exists=${inst.exists} live=${inst.live_hash || '-'} drift=${inst.drift}`,
         );
+        if (inst.layered) {
+          console.log(`      core=${inst.core_hash || '-'} repo=${inst.repo_hash || '-'} repo_changed=${inst.repo_changed}`);
+        }
       }
       console.log('');
     } catch (err) {
