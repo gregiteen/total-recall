@@ -107,6 +107,8 @@ App data access is explicit at two points: installation approval of requested sc
 
 Each adapter supplies: (a) target detection/compatibility, (b) deterministic source generation, (c) a bridge to the SSSS Operation Contract with verified identity, (d) projection build/rebuild, (e) package/build/run/health commands, and (f) shared conformance and feature fixtures. The SSSS specification, registry, bundle, and envelope shapes stay language-neutral. The current reference kernel is JavaScript; a Python app can use a separately deployed Node kernel bridge or a native adapter only after it passes the same fixtures. The Node dependency must be disclosed when the bridge is used.
 
+The executable shared boundary is `src/core/app-deploy/adapter-contract.mjs`: an adapter exposes `detect`, `generate`, `executeSsss`, `rebuildProjection`, `start`, and `cleanup`. `runAdapterContractFixtures` creates an isolated app, uses a canonical SSSS package operation, and checks principal rejection, idempotent replay, path containment, deterministic output, projection rebuild without changing the vault, health, and tenant-safe cleanup. The reference implementation in `adapter-contract.spec.mjs` tests the fixture runner; each production adapter must run it before its support-matrix entry is marked verified.
+
 | Proof | Language/runtime | Projection | Purpose |
 | --- | --- | --- | --- |
 | MVP | Node/TypeScript | SQLite | First standalone and existing-app full path. |
