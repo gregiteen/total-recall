@@ -28,6 +28,5 @@
 - Install a public share link between independent Total Recall users. The HTTPS route and hash validation are tested, but the live exchange is still pending.
 - Upgrade the second mesh node and verify a two-node plugin install. One node was still on 3.28.0 when last checked.
 - Capture the signed-in Plugins page and reload the unpacked v0.2.0 extension in Chrome.
-- Resolve the stale Headscale `laptop` entry identified by the PLUGIN_P2P tracker.
 
 Keep these items in their project trackers until they are verified. Do not mark the projects complete from code or unit-test results alone.

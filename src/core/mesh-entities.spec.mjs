@@ -84,6 +84,28 @@ describe('mergeLivePeersWithEntities', () => {
     expect(merged[0].role).toBe('edge');
     expect(merged[0].has_entity).toBe(true);
   });
+
+  it('does not give a reused mesh address the previous holder\'s entity', () => {
+    // Headscale reassigns a freed address: node-new now holds 100.64.0.4, and a
+    // stale entity still records node-old (live elsewhere) at that address.
+    const live = [
+      { hostname: 'node-old.mesh', ip: '100.64.0.6', online: true, self: true, os: null },
+      { hostname: 'node-new.mesh', ip: '100.64.0.4', online: true, self: false, os: null },
+    ];
+    const entities = [
+      {
+        type: 'mesh_node',
+        hostname: 'node-old.mesh',
+        ip: '100.64.0.4',
+        access: { ssh_user: 'old-login' },
+        vfs_path: 'system/mesh-nodes/node-old.md',
+      },
+    ];
+    const merged = mergeLivePeersWithEntities(live, entities);
+    const fresh = merged.find((n) => n.hostname === 'node-new.mesh');
+    expect(fresh.has_entity).toBe(false);
+    expect(fresh.access).toBeNull();
+  });
 });
 
 describe('normalizeHostname (entity keys)', () => {

@@ -59,7 +59,7 @@
 - [x] Add a shipped plugin authoring skill with the actual manifest, capabilities, validation, and sharing workflow
 - [ ] Live public-host share and install between independent Total Recall users
 - [x] Mesh peer URLs now read `brain_port` from each SSSS mesh-node entity; the node records its configured port during its periodic self update
-- [ ] Found live: "laptop" (100.64.0.3) is a stale Headscale entry, last seen 63d ago; this machine is gregs-macbook-pro (100.64.0.6) (S)
+- [x] Found live: "laptop" (100.64.0.3) is a stale Headscale entry, last seen 63d ago; this machine is gregs-macbook-pro (100.64.0.6) (S) — deleted 2026-09-25; the Chromebook joined as `chromebook` (100.64.0.4)
 
 ## Phase 5 — Tasks
 - [x] `plugin-tasks.mjs` + spec (M)
