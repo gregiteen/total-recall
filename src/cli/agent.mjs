@@ -18,7 +18,7 @@ Commands:
   kill <id|pid>             Terminate an active agent process
 
 Options:
-  --node <name>             Target a remote mesh node (macmini, cloud, etc.)
+  --node <name>             Target a remote mesh node (build-box, cloud, etc.)
   --json                    Output machine-readable JSON for Unix pipelines
   --detach                  Spawn process detached in background (default: true)
   --name <label>            Assign a human-readable name to the agent session

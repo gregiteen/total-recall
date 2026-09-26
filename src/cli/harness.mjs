@@ -25,7 +25,7 @@ Available Harness IDs:
 Examples:
   npx total-recall harness list
   npx total-recall harness dispatch claude "Review and run code quality checks on src/core/"
-  npx total-recall harness dispatch ollama --node macmini "What is test-time compute scaling?"
+  npx total-recall harness dispatch ollama --node build-box "What is test-time compute scaling?"
   npx total-recall harness council "Propose architecture for decentralized research mesh"
 `);
 }

@@ -79,7 +79,7 @@ Goal: Move the most coupled features without destabilizing the daemon.
 
 Goal: Same features, smaller core, proven stable.
 
-- [ ] White-label grep gate for the core and every plugin repo; fix `src/server/tools.mjs:816,833` examples (S)
+- [/] White-label grep gate for the core and every plugin repo; fix `src/server/tools.mjs:816,833` examples (S) — core gate (TR-OSS-002, TR-SHIP-004) and examples done 2026-09-25; plugin repos pending
 - [ ] Upgrade test from the last release: moved features keep working, vault untouched (M)
 - [ ] Core package-size report before/after (S)
 - [ ] Full suite on the Mac Mini (M)

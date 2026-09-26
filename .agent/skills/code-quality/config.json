@@ -63,6 +63,11 @@
           "pattern": "(festech\\.live|ultrachat|portfolio-site|moogie_crm|documenso)",
           "code": "TR-OSS-001",
           "message": "Names a third-party product repo. TR is open-source: host apps are equal implementations, never special-cased."
+        },
+        {
+          "pattern": "(gregoryiteen|\\bmacmini\\b|\\b100\\.64\\.0\\.[2-9]\\b)",
+          "code": "TR-OSS-002",
+          "message": "Names a specific person's login, machine, or mesh address. Use a generic example (admin, build-box, 100.64.0.10) or resolve it with `mesh access <node>`."
         }
       ]
     },
@@ -113,6 +118,11 @@
           "pattern": "(festech\\.live|ultrachat|portfolio-site|moogie_crm|documenso)",
           "code": "TR-SHIP-003",
           "message": "Shipped package names a third-party product repo."
+        },
+        {
+          "pattern": "(gregoryiteen|\\bmacmini\\b)",
+          "code": "TR-SHIP-004",
+          "message": "Shipped package names a specific person's login or machine. Use a generic example (admin, build-box)."
         }
       ]
     },

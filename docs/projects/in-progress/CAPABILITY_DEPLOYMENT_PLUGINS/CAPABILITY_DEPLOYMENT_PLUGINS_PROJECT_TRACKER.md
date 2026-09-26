@@ -63,7 +63,7 @@ Goal: Every plugin ships a repo-adapted skill, a generated CLI, and design-token
 - [ ] Plugin `config.schema.json` → generated `total-recall <plugin> config get|set`, collection verbs, `detect [--apply]`, guided `init`, emitted through the same `command` mechanism; all writes validated (L)
 - [ ] `skill_config` SSSS host extension type; repo-layer config written through the operation service; `config.json` regenerated as a projection (M)
 - [ ] `src/cli/skill.mjs` `push`/`sync`/`pull`: sync only the core layer and never overwrite a repo layer; test with two repos whose code-quality gates differ (M)
-- [ ] White-label sweep: replace personal example values in `src/server/tools.mjs` tool descriptions (`gregoryiteen`, `macmini`, `100.64.0.2`) and in any plugin template/help/UI default with generic placeholders; add a grep gate (S)
+- [x] White-label sweep (2026-09-25; grep gate TR-OSS-002 / TR-SHIP-004): replace personal example values in `src/server/tools.mjs` tool descriptions (`gregoryiteen`, `macmini`, `100.64.0.2`) and in any plugin template/help/UI default with generic placeholders; add a grep gate (S)
 - [ ] Skill layer contract checks in `skill status` (required config fields, resolvable gate commands, valid tiers); `app verify` calls the same check (M)
 - [ ] Adoption test: adopt the existing code-quality skills of total-recall, festech-modular, moogie_crm, and ssss with zero lost gates; a core upgrade leaves every repo layer byte-identical (M)
 - [ ] `src/core/app-deploy/design-tokens.mjs` + spec: `DESIGN.md` YAML tokens → CSS variables; reject hardcoded brand values in plugin UI (M)

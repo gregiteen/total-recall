@@ -813,7 +813,7 @@ export const AVAILABLE_TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          node: { type: 'string', description: 'Target node hostname, slug, or mesh IP (e.g. "macmini", "cloud", "100.64.0.2").' },
+          node: { type: 'string', description: 'Target node hostname, slug, or mesh IP (e.g. "build-box", "cloud", "100.64.0.10").' },
           command: { type: 'string', description: 'Shell command to execute on the remote node (e.g. "uptime", "git status", "docker ps").' },
           timeoutMs: { type: 'integer', description: 'Timeout in milliseconds (default 60000).' },
         },
@@ -830,7 +830,7 @@ export const AVAILABLE_TOOLS = [
         type: 'object',
         properties: {
           node: { type: 'string', description: 'Target node hostname, slug, or mesh IP.' },
-          ssh_user: { type: 'string', description: 'Username to log in as (e.g. "greg", "root", "gregoryiteen").' },
+          ssh_user: { type: 'string', description: 'Username to log in as (e.g. "admin", "root", "deploy").' },
           ssh_port: { type: 'integer', description: 'SSH port (default 22).' },
           identity_file: { type: 'string', description: 'Path to private SSH key file (e.g. "~/.ssh/id_ed25519").' },
           ssh_host: { type: 'string', description: 'Custom host or IP override if not using the mesh IP.' },

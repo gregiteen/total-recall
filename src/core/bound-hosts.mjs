@@ -9,7 +9,7 @@
  * The Mac Mini is the worked example. Its brain started 2026-08-13 while
  * Tailscale was still starting, so `getMeshIp()` returned null and the bind
  * fell back to loopback only. A week later Tailscale answers perfectly, so the
- * card derived `listen_hosts = [127.0.0.1, 100.64.0.2]`, recommended the mesh
+ * card derived `listen_hosts = [127.0.0.1, 100.64.0.10]`, recommended the mesh
  * URL, and drew a QR for an address nothing has ever listened on -- while
  * reporting no warning, because every check downstream was reading the guess.
  *

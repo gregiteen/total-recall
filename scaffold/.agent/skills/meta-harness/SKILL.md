@@ -43,8 +43,8 @@ npx total-recall harness dispatch codex "Generate unit tests for src/core/contex
 npx total-recall harness dispatch ollama "Summarize the core invariants of SSSS"
 
 # Cross-mesh remote dispatches
-npx total-recall harness dispatch ollama --node macmini "What is test-time compute scaling?"
-npx total-recall harness dispatch claude --node macmini "Run git status and lint tests"
+npx total-recall harness dispatch ollama --node build-box "What is test-time compute scaling?"
+npx total-recall harness dispatch claude --node build-box "Run git status and lint tests"
 ```
 
 ### 3. Multi-Harness Council
@@ -65,7 +65,7 @@ Manage background subagent tasks across the local machine and remote mesh nodes:
 npx total-recall agent spawn claude "Refactor error handling in src/cli/harness.mjs" --name "Refactor Worker"
 
 # Remote background agent on a mesh node
-npx total-recall agent spawn agy --node macmini "Crawl recent preprints on quantum shuttling" --name "Quantum Scout"
+npx total-recall agent spawn agy --node build-box "Crawl recent preprints on quantum shuttling" --name "Quantum Scout"
 ```
 
 ### 2. Inspect Running Agents
@@ -100,7 +100,7 @@ npx total-recall mesh doctor --json
 ### 2. Non-Interactive Remote Command Execution (`mesh exec`)
 Execute commands on remote nodes with automatic `$PATH` sanitization and structured outputs:
 ```bash
-npx total-recall mesh exec macmini uname -m
+npx total-recall mesh exec build-box uname -m
 npx total-recall mesh exec cloud docker ps
 ```
 

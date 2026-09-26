@@ -33,3 +33,7 @@
 - [ ] **Automatic Conflict Resolution Policies**: Introduce semantic similarity thresholds to automatically merge or link imported OKF concepts with existing SSSS memory nodes.
 - [ ] **Bidirectional Git Sync**: Continuous background git sync for remote OKF bundles to automatically pull updates and push local modifications back to the remote repository.
 
+
+## RESEARCH_SYSTEM2 (completed 2026-09-25)
+
+- [ ] Re-run research on the topics that matter: 88 of 93 pre-fix reports hold no usable synthesis. They stay searchable by source but are never surfaced.

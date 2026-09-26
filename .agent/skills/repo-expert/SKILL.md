@@ -5,7 +5,7 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-26T02:46:08.202Z
+generated_at: 2026-09-26T03:55:39.687Z
 generated_from: total-recall
 ---
 
@@ -17,7 +17,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (642 files), Markdown (293 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (642 files), Markdown (298 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -63,9 +63,9 @@ docs/
   infra/  (3 items)
   projects/
     archived/  (8 items)
-    completed/  (48 items)
+    completed/  (49 items)
     in-progress/  (3 items)
-    planned/  (2 items)
+    planned/  (1 items)
   reference/  (6 items)
   security/  (2 items)
   setup/  (1 items)
