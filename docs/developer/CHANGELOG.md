@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.29.1] — 2026-09-26
+
+### 🐛 Bug Fixes
+- **A process on a Mac without the password in its environment could not open its own user's secrets store.** The master password was read only from `TR_SECRETS_PASSWORD`/`TR_MASTER_PASSWORD`, which on macOS an interactive shell profile usually fills from the Keychain. When the environment has no password, the store now falls back to the Keychain entry `secret rekey` already maintains (service `total-recall-secrets`, overridable with `TR_SECRETS_KEYCHAIN_SERVICE`), resolved once per process and never logged. `TR_SECRETS_NO_KEYCHAIN=1` turns the fallback off. An ssh session cannot read a locked login Keychain, so this does not reach mesh `exec`.
+
 ## [3.29.0] — 2026-09-26
 
 ### ✨ Features

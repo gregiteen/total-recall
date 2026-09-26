@@ -12,6 +12,7 @@ import crypto from 'crypto';
 import os from 'os';
 import YAML from 'yaml';
 import { encryptSecrets, decryptSecrets, encryptSecretsSync, decryptSecretsSync } from './crypto.mjs';
+import { DEFAULT_KEYCHAIN_SERVICE, readKeychainPassword } from './secrets-keychain.mjs';
 
 const META_KEY = '__tr_secrets_meta';
 
@@ -39,8 +40,37 @@ export function resolveUsagePath(brainDir) {
   return path.join(brainDir, 'logs', 'usage.jsonl');
 }
 
-function secretsPassword() {
-  return process.env.TR_SECRETS_PASSWORD || process.env.TR_MASTER_PASSWORD || null;
+/**
+ * The master password: the environment first, then — on macOS — the Keychain
+ * entry `secret rekey` already maintains (service `total-recall-secrets`,
+ * overridable with TR_SECRETS_KEYCHAIN_SERVICE).
+ *
+ * Only an interactive shell profile used to read the Keychain, so a
+ * non-interactive process on the same Mac — a mesh `exec`, a release script —
+ * could not open a store its own user owns. Resolved once per process; the
+ * value is returned to the caller and never logged. TR_SECRETS_NO_KEYCHAIN=1
+ * disables the fallback.
+ */
+let keychainPassword;
+export function secretsPassword({ env = process.env, readKeychain = readTrKeychainPassword } = {}) {
+  const fromEnv = env.TR_SECRETS_PASSWORD || env.TR_MASTER_PASSWORD;
+  if (fromEnv) return fromEnv;
+  if (env.TR_SECRETS_NO_KEYCHAIN === '1') return null;
+  if (readKeychain !== readTrKeychainPassword) return readKeychain(env) || null;
+  if (keychainPassword === undefined) keychainPassword = readKeychain(env) || null;
+  return keychainPassword;
+}
+
+function readTrKeychainPassword(env) {
+  if (process.platform !== 'darwin') return null;
+  try {
+    return readKeychainPassword({
+      service: env.TR_SECRETS_KEYCHAIN_SERVICE || DEFAULT_KEYCHAIN_SERVICE,
+      account: env.USER || os.userInfo().username,
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
