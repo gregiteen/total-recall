@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveBrainLayer } from '../core/config.mjs';
 import { isSafeRelativePath, validatePluginManifest } from '../core/plugin-loader.mjs';
 
@@ -98,6 +98,53 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
   return commandPath;
 }
 
+/**
+ * Generate `total-recall <name> config|<collection>|detect|init` for a layered
+ * skill deployed in the repo that owns `commandsDir` (<repo>/.agent/commands).
+ * The wrapper holds no config logic: it delegates to the running Total Recall
+ * CLI, so the layer contract in the skill core stays the only source of truth.
+ */
+export function generateSkillConfigCommand(skillId, name, commandsDir) {
+  safeCommandName(name);
+  safeCommandName(skillId);
+  const repoRoot = path.resolve(commandsDir, '..', '..');
+  const schemaPath = path.join(repoRoot, '.agent', 'skills', skillId, 'core', 'config.schema.json');
+  if (!fs.existsSync(schemaPath) || !fs.statSync(schemaPath).isFile()) {
+    throw new Error(`Skill '${skillId}' in ${repoRoot} has no core/config.schema.json; deploy the layered skill first`);
+  }
+  fs.mkdirSync(commandsDir, { recursive: true });
+  const commandPath = path.join(commandsDir, `${name}.mjs`);
+  if (fs.existsSync(commandPath)) throw new Error(`Command '${name}' already exists`);
+  const fallbackModule = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), 'skill-config.mjs')).href;
+  const content = `// Generated repo-layer config command for skill ${skillId}; the contract is .agent/skills/${skillId}/core/config.schema.json.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const skillId = ${JSON.stringify(skillId)};
+const name = ${JSON.stringify(name)};
+const fallbackModule = ${JSON.stringify(fallbackModule)};
+
+// Prefer the Total Recall install that is running this command, so upgrades apply.
+function configModule() {
+  try {
+    const bin = fs.realpathSync(process.argv[1]);
+    const candidate = path.join(path.dirname(path.dirname(bin)), 'src', 'cli', 'skill-config.mjs');
+    if (path.basename(bin) === 'total-recall.mjs' && fs.existsSync(candidate)) return pathToFileURL(candidate).href;
+  } catch { /* fall back to the generating install */ }
+  return fallbackModule;
+}
+
+export async function run(argv = process.argv) {
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const { runSkillConfig } = await import(configModule());
+  return runSkillConfig(skillId, argv.slice(3), { repoRoot, prefix: 'total-recall ' + name });
+}
+`;
+  fs.writeFileSync(commandPath, content, { encoding: 'utf8', flag: 'wx', mode: 0o644 });
+  return commandPath;
+}
+
 function printHelp() {
   console.log(`
   total-recall command — Manage custom composable CLI commands
@@ -105,6 +152,9 @@ function printHelp() {
   Usage:
     total-recall command create <name> "<code>" [--global]   Create a custom CLI command
     total-recall command create <name> --from-plugin <dir>   Generate from a plugin manifest
+    total-recall command create <name> --config-for-skill <id>
+                                                             Generate repo-layer config verbs for a
+                                                             layered skill deployed in this repo
     total-recall command read <name> [--global]              Read the code of a custom CLI command
     total-recall command update <name> "<code>" [--global]   Update an existing custom CLI command
     total-recall command remove <name> [--global]            Remove a custom CLI command
@@ -172,6 +222,19 @@ export default async function commandCmd(rawArgs = []) {
   const commandsDir = resolveTargetDir(isGlobal);
 
   if (action === 'create') {
+    const forSkill = cleanArgs.indexOf('--config-for-skill');
+    if (forSkill !== -1) {
+      try {
+        if (isGlobal) throw new Error('Repo-layer config commands belong to one repository; omit --global');
+        if (!cleanArgs[forSkill + 1]) throw new Error('Missing skill id after --config-for-skill');
+        const commandPath = generateSkillConfigCommand(cleanArgs[forSkill + 1], name, commandsDir);
+        console.log(`✔ Generated npx total-recall ${name} config|detect|init; saved to: ${commandPath}`);
+      } catch (error) {
+        console.error(`Error: ${error.message}`);
+        process.exitCode = 1;
+      }
+      return;
+    }
     const fromPlugin = cleanArgs.indexOf('--from-plugin');
     if (fromPlugin !== -1) {
       try {

@@ -68,6 +68,8 @@ function printHelp() {
     registry              List catalog entries in skills-registry/index.yaml
     deploy <id>           Copy skill into a repo (.agent/skills/<id>/) and record install map
     status [id]           Registry + install map + drift (omit id = summary)
+    config <id> …         Repo-layer config from core/config.schema.json (get|set|unset|
+                          validate|schema, <collection> list|add|remove, detect, init)
     sync-registry         Register all local brain skills into the catalog
     unregister <id>       Remove catalog entry (does not delete repo copies)
     track <path>          Track any repo (full project brain + registry) for skill sync
@@ -131,6 +133,24 @@ function parseFlagValue(args, flag) {
 
 export default async function skillCli(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
+  if (remainingArgs[0] === 'config') {
+    // Repo-layer config is per repository; it needs no brain resolution.
+    const repoAt = remainingArgs.indexOf('--repo');
+    const repoRoot = repoAt === -1 ? process.cwd() : remainingArgs[repoAt + 1];
+    const rest = repoAt === -1 ? remainingArgs : remainingArgs.filter((_, i) => i !== repoAt && i !== repoAt + 1);
+    const skillId = rest[1];
+    if (!skillId || !repoRoot) {
+      console.error('❌ Usage: total-recall skill config <id> <config|detect|init|collection> … [--repo <path>] [--json]');
+      process.exitCode = 2;
+      return;
+    }
+    const { runSkillConfig } = await import('./skill-config.mjs');
+    const verbArgs = rest.slice(2);
+    // `skill config <id> get x` reads as the config verb; `skill config <id> detect` stays a verb.
+    const normalized = ['get', 'set', 'unset', 'validate', 'schema'].includes(verbArgs[0]) ? ['config', ...verbArgs] : verbArgs;
+    await runSkillConfig(skillId, normalized, { repoRoot });
+    return;
+  }
   if (remainingArgs.length === 0 || remainingArgs.includes('--help') || remainingArgs.includes('-h')) {
     printHelp();
     return;
