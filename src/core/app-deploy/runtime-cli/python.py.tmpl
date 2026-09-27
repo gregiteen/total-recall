@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+# __HEADER__
+#
+# Exit codes: 0 ok · 1 the app answered with an error · 2 usage · 3 the app is unreachable.
+# Standard library only.
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+SPEC = json.loads(__SPEC__)
+
+EXIT_OK, EXIT_HTTP, EXIT_USAGE, EXIT_UNREACHABLE = 0, 1, 2, 3
+
+
+def flag_of(name: str) -> str:
+    return "--" + name.replace("_", "-")
+
+
+def integer(raw: str) -> int:
+    if not re.fullmatch(r"[-+]?\d+", raw.strip()):
+        raise argparse.ArgumentTypeError(f"must be an integer, got '{raw}'")
+    return int(raw)
+
+
+def number(raw: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be a number, got '{raw}'") from None
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"must be a number, got '{raw}'")
+    return value
+
+
+TYPES = {"string": str, "integer": integer, "number": number}
+
+
+def add_global_options(parser: argparse.ArgumentParser, top: bool) -> None:
+    # Accepted before or after the command. On a subcommand they only apply
+    # when given, so they never overwrite the top-level value.
+    extra = {} if top else {"default": argparse.SUPPRESS}
+    parser.add_argument("--json", action="store_true", help="Print a JSON envelope: { ok, status, data | error }", **extra)
+    parser.add_argument(
+        "--base-url",
+        help=f"App API base URL (default: ${SPEC['api']['base_url_env']} or {SPEC['api']['default_base_url']})",
+        **extra,
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog=SPEC["name"], description=SPEC.get("description"))
+    add_global_options(parser, top=True)
+    commands = parser.add_subparsers(dest="command", metavar="<command>")
+    for command in SPEC["commands"]:
+        sub = commands.add_parser(command["name"], help=command.get("description"), description=command.get("description"))
+        add_global_options(sub, top=False)
+        for arg in command["args"]:
+            options = {"help": arg.get("description")}
+            if arg["type"] == "boolean":
+                options.update(action="store_const", const=True, default=arg.get("default"))
+            else:
+                options["type"] = TYPES[arg["type"]]
+                if "choices" in arg:
+                    options["choices"] = arg["choices"]
+            if arg.get("positional"):
+                sub.add_argument(arg["name"], **options)
+            else:
+                if arg["type"] != "boolean":
+                    options.update(required=bool(arg.get("required")), default=arg.get("default"), metavar=f"<{arg['type']}>")
+                sub.add_argument(flag_of(arg["name"]), dest=arg["name"], **options)
+    return parser
+
+
+def query_value(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def error_text(data, status: int, reason: str) -> str:
+    if isinstance(data, dict):
+        detail = data.get("error", data.get("message"))
+        if detail is not None:
+            return detail if isinstance(detail, str) else json.dumps(detail)
+    if isinstance(data, str) and data.strip():
+        return data.strip()[:500]
+    return reason or f"HTTP {status}"
+
+
+def fail(as_json: bool, status, error: str) -> None:
+    if as_json:
+        print(json.dumps({"ok": False, "status": status, "error": error}))
+    else:
+        print(f"{SPEC['name']}: {error}" + (f" (HTTP {status})" if status else ""), file=sys.stderr)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.command:
+        parser.print_help()
+        return EXIT_USAGE
+
+    command = next(c for c in SPEC["commands"] if c["name"] == args.command)
+    values = {a["name"]: getattr(args, a["name"]) for a in command["args"] if getattr(args, a["name"], None) is not None}
+
+    base_url = args.base_url or os.environ.get(SPEC["api"]["base_url_env"]) or SPEC["api"]["default_base_url"]
+    base = urllib.parse.urlsplit(base_url)
+    if base.scheme not in ("http", "https") or not base.netloc:
+        print(f"{SPEC['name']}: base URL must be http(s): '{base_url}'", file=sys.stderr)
+        return EXIT_USAGE
+
+    used = set()
+
+    def fill(match: re.Match) -> str:
+        used.add(match.group(1))
+        return urllib.parse.quote(str(values[match.group(1)]), safe="")
+
+    url = base_url.rstrip("/") + re.sub(r"\{([a-z][a-z0-9_]*)\}", fill, command["path"])
+    rest = {key: value for key, value in values.items() if key not in used}
+    headers = {"Accept": "application/json", "User-Agent": f"{SPEC['name']}-cli"}
+    body = None
+    if command["method"] in ("GET", "DELETE"):
+        if rest:
+            url += ("&" if "?" in url else "?") + urllib.parse.urlencode([(k, query_value(v)) for k, v in rest.items()])
+    elif rest:
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(rest).encode("utf-8")
+    token = os.environ.get(SPEC["auth"]["token_env"]) if SPEC.get("auth") else None
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = urllib.request.Request(url, data=body, headers=headers, method=command["method"])
+    origin = f"{base.scheme}://{base.netloc}"
+    try:
+        with urllib.request.urlopen(request, timeout=SPEC["api"]["timeout_seconds"]) as response:
+            status, reason, ok = response.status, response.reason, True
+            text = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as err:
+        status, reason, ok = err.code, err.reason, False
+        text = err.read().decode("utf-8", "replace")
+    except TimeoutError:
+        fail(args.json, None, f"cannot reach {origin}: no answer within {SPEC['api']['timeout_seconds']}s")
+        return EXIT_UNREACHABLE
+    except (urllib.error.URLError, OSError) as err:
+        fail(args.json, None, f"cannot reach {origin}: {getattr(err, 'reason', err)}")
+        return EXIT_UNREACHABLE
+
+    try:
+        data = json.loads(text) if text else None
+    except ValueError:
+        data = text
+
+    if not ok:
+        fail(args.json, status, error_text(data, status, reason))
+        return EXIT_HTTP
+    if args.json:
+        print(json.dumps({"ok": True, "status": status, "data": data}))
+    elif isinstance(data, str):
+        print(data)
+    elif data is not None:
+        print(json.dumps(data, indent=2))
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    sys.exit(main())

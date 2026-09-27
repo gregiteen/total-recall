@@ -1,0 +1,211 @@
+#!/usr/bin/env node
+// __HEADER__
+//
+// Exit codes: 0 ok · 1 the app answered with an error · 2 usage · 3 the app is unreachable.
+
+const SPEC = __SPEC__;
+
+const EXIT = { OK: 0, HTTP: 1, USAGE: 2, UNREACHABLE: 3 };
+const flagOf = (name) => `--${name.replace(/_/g, '-')}`;
+
+class UsageError extends Error {}
+
+function usage(command) {
+  if (!command) {
+    const lines = [`Usage: ${SPEC.name} <command> [options]`, ''];
+    if (SPEC.description) lines.push(SPEC.description, '');
+    lines.push('Commands:');
+    for (const c of SPEC.commands) lines.push(`  ${c.name.padEnd(20)} ${c.description || ''}`);
+    lines.push(
+      '',
+      'Global options:',
+      '  --json               Print a JSON envelope: { ok, status, data | error }',
+      `  --base-url <url>     App API base URL (default: $${SPEC.api.base_url_env} or ${SPEC.api.default_base_url})`,
+      '  -h, --help           Show help; with a command, that command\'s options',
+    );
+    return lines.join('\n');
+  }
+  const positionals = command.args.filter((a) => a.positional).map((a) => `<${a.name}>`);
+  const lines = [`Usage: ${SPEC.name} ${[command.name, ...positionals].join(' ')} [options]`, ''];
+  if (command.description) lines.push(command.description, '');
+  for (const a of command.args) {
+    const label = a.positional ? `<${a.name}>` : a.type === 'boolean' ? flagOf(a.name) : `${flagOf(a.name)} <${a.type}>`;
+    const notes = [
+      a.required && !a.positional ? 'required' : '',
+      a.choices ? `one of: ${a.choices.join(', ')}` : '',
+      a.default !== undefined ? `default: ${a.default}` : '',
+    ].filter(Boolean).join('; ');
+    lines.push(`  ${label.padEnd(26)} ${a.description || ''}${notes ? ` (${notes})` : ''}`);
+  }
+  return lines.join('\n');
+}
+
+function coerce(arg, raw) {
+  let value = raw;
+  if (arg.type === 'integer') {
+    if (!/^[-+]?\d+$/.test(raw.trim())) throw new UsageError(`${arg.name} must be an integer, got '${raw}'`);
+    value = Number(raw);
+  } else if (arg.type === 'number') {
+    value = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(value)) throw new UsageError(`${arg.name} must be a number, got '${raw}'`);
+  }
+  if (arg.choices && !arg.choices.includes(value)) {
+    throw new UsageError(`${arg.name} must be one of: ${arg.choices.join(', ')}`);
+  }
+  return value;
+}
+
+function parse(argv) {
+  const global = { json: false, baseUrl: null, help: false };
+  const rest = [];
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (token === '--json') global.json = true;
+    else if (token === '-h' || token === '--help') global.help = true;
+    else if (token.startsWith('--base-url=')) global.baseUrl = token.slice('--base-url='.length);
+    else if (token === '--base-url') {
+      if (argv[i + 1] === undefined) throw new UsageError('--base-url needs a value');
+      global.baseUrl = argv[++i];
+    } else rest.push(token);
+  }
+
+  const [name, ...tokens] = rest;
+  if (!name) return { global, command: null, values: {} };
+  const command = SPEC.commands.find((c) => c.name === name);
+  if (!command) throw new UsageError(`unknown command '${name}'`);
+  if (global.help) return { global, command, values: {} };
+
+  const values = {};
+  const positionals = command.args.filter((a) => a.positional);
+  let next = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.startsWith('--')) {
+      const eq = token.indexOf('=');
+      const flag = eq === -1 ? token : token.slice(0, eq);
+      const inline = eq === -1 ? undefined : token.slice(eq + 1);
+      const arg = command.args.find((a) => !a.positional && flagOf(a.name) === flag);
+      if (!arg) throw new UsageError(`unknown option ${flag} for '${name}'`);
+      if (arg.type === 'boolean') {
+        if (inline !== undefined) throw new UsageError(`${flag} takes no value`);
+        values[arg.name] = true;
+        continue;
+      }
+      const raw = inline !== undefined ? inline : tokens[++i];
+      if (raw === undefined) throw new UsageError(`${flag} needs a value`);
+      values[arg.name] = coerce(arg, raw);
+    } else {
+      const arg = positionals[next++];
+      if (!arg) throw new UsageError(`unexpected argument '${token}'`);
+      values[arg.name] = coerce(arg, token);
+    }
+  }
+  for (const arg of command.args) {
+    if (values[arg.name] === undefined && arg.default !== undefined) values[arg.name] = arg.default;
+    if (values[arg.name] === undefined && (arg.required || arg.positional)) {
+      throw new UsageError(`missing ${arg.positional ? `<${arg.name}>` : flagOf(arg.name)}`);
+    }
+  }
+  return { global, command, values };
+}
+
+function buildRequest(command, values, baseUrl) {
+  let base;
+  try {
+    base = new URL(baseUrl);
+  } catch {
+    throw new UsageError(`invalid base URL '${baseUrl}'`);
+  }
+  if (base.protocol !== 'http:' && base.protocol !== 'https:') throw new UsageError(`base URL must be http(s): '${baseUrl}'`);
+
+  const used = new Set();
+  const pathname = command.path.replace(/\{([a-z][a-z0-9_]*)\}/g, (_, key) => {
+    used.add(key);
+    return encodeURIComponent(String(values[key]));
+  });
+  const url = new URL(base.href.replace(/\/+$/, '') + pathname);
+  const rest = Object.entries(values).filter(([key]) => !used.has(key));
+  const init = { method: command.method, headers: { accept: 'application/json', 'user-agent': `${SPEC.name}-cli` } };
+  if (command.method === 'GET' || command.method === 'DELETE') {
+    for (const [key, value] of rest) url.searchParams.append(key, String(value));
+  } else if (rest.length) {
+    init.headers['content-type'] = 'application/json';
+    init.body = JSON.stringify(Object.fromEntries(rest));
+  }
+  const token = SPEC.auth ? process.env[SPEC.auth.token_env] : undefined;
+  if (token) init.headers.authorization = `Bearer ${token}`;
+  return { url, init };
+}
+
+function errorText(data, response) {
+  if (data && typeof data === 'object') {
+    const detail = data.error ?? data.message;
+    if (detail !== undefined) return typeof detail === 'string' ? detail : JSON.stringify(detail);
+  }
+  if (typeof data === 'string' && data.trim()) return data.trim().slice(0, 500);
+  return response.statusText || `HTTP ${response.status}`;
+}
+
+function fail(json, status, error) {
+  if (json) console.log(JSON.stringify({ ok: false, status, error }));
+  else console.error(`${SPEC.name}: ${error}${status ? ` (HTTP ${status})` : ''}`);
+}
+
+async function main() {
+  let parsed;
+  try {
+    parsed = parse(process.argv.slice(2));
+  } catch (err) {
+    if (!(err instanceof UsageError)) throw err;
+    console.error(`${SPEC.name}: ${err.message}\nRun '${SPEC.name} --help' for usage.`);
+    return EXIT.USAGE;
+  }
+  const { global, command, values } = parsed;
+  if (!command) {
+    console.log(usage());
+    return global.help ? EXIT.OK : EXIT.USAGE;
+  }
+  if (global.help) {
+    console.log(usage(command));
+    return EXIT.OK;
+  }
+
+  const baseUrl = global.baseUrl || process.env[SPEC.api.base_url_env] || SPEC.api.default_base_url;
+  let request;
+  try {
+    request = buildRequest(command, values, baseUrl);
+  } catch (err) {
+    if (!(err instanceof UsageError)) throw err;
+    console.error(`${SPEC.name}: ${err.message}`);
+    return EXIT.USAGE;
+  }
+
+  let response;
+  try {
+    response = await fetch(request.url, { ...request.init, signal: AbortSignal.timeout(SPEC.api.timeout_seconds * 1000) });
+  } catch (err) {
+    const reason = err?.name === 'TimeoutError' ? `no answer within ${SPEC.api.timeout_seconds}s` : (err?.cause?.code || err?.message || String(err));
+    fail(global.json, null, `cannot reach ${request.url.origin}: ${reason}`);
+    return EXIT.UNREACHABLE;
+  }
+
+  const text = await response.text();
+  let data = text;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch { /* not JSON: keep the text */ }
+
+  if (!response.ok) {
+    fail(global.json, response.status, errorText(data, response));
+    return EXIT.HTTP;
+  }
+  if (global.json) console.log(JSON.stringify({ ok: true, status: response.status, data }));
+  else if (typeof data === 'string') console.log(data);
+  else if (data !== null) console.log(JSON.stringify(data, null, 2));
+  return EXIT.OK;
+}
+
+main().then(
+  (code) => { process.exitCode = code; },
+  (err) => { console.error(err?.stack || String(err)); process.exitCode = 1; },
+);

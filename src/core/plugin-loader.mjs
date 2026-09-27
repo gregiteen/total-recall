@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { validateAppCliSpec } from './app-deploy/runtime-cli.mjs';
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -250,6 +251,10 @@ export function validatePluginManifest(manifest) {
         errors.push("'ui.elements' must be an array");
       }
     }
+  }
+
+  if (manifest.app_cli !== undefined) {
+    errors.push(...validateAppCliSpec(manifest.app_cli));
   }
 
   if (manifest.openwiki_hubs !== undefined) {

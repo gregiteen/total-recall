@@ -8,6 +8,7 @@
  *   app create <dir> --plugin <source> [--adapter <id>] [--name <name>] [--force] [--json]
  *   app upgrade <id> --to <source> [--target <dir>] [--adapter <id>] [--dry-run] [--json]
  *   app verify [--target <dir>] [--json]
+ *   app cli <source> [--lang node|python | --adapter <id>] [--out <file>] [--force] [--json]
  */
 
 import path from 'node:path';
@@ -26,6 +27,9 @@ import {
   AppCreateError
 } from '../../core/app-deploy/standalone.mjs';
 import { verifyApplication } from '../../core/app-deploy/verify.mjs';
+import { resolveCapabilitySource } from '../../core/app-deploy/source.mjs';
+import { generateAppCli, languageForAdapter, APP_CLI_LANGUAGES } from '../../core/app-deploy/runtime-cli.mjs';
+import fs from 'node:fs';
 import {
   IncompatibleAdapterError,
   IncompatibleSsssVersionError,
@@ -72,6 +76,14 @@ Commands:
   verify                    Verify deployed capabilities, file digests, and SSSS conformance
                             --target <dir>     Target application directory (default: cwd)
                             --json             Output verification report as JSON
+
+  cli <source>              Generate the app's own runtime CLI from the plugin's app_cli spec.
+                            The file needs no Total Recall install at run time.
+                            --lang <lang>      node (ESM script) or python (argparse module)
+                            --adapter <id>     Pick the language from the adapter (flask: python; else node)
+                            --out <file>       Write the file (mode 755) instead of printing it
+                            --force            Replace an existing --out file
+                            --json             Output { language, path, sha256, out } as JSON
 
 Exit Codes:
   0   Success
@@ -418,7 +430,82 @@ export async function run(argv = []) {
     process.exit(0);
   }
 
-  // 5. APP VERIFY
+  // 5. APP CLI
+  else if (sub === 'cli') {
+    let source = null;
+    let language = null;
+    let adapter = null;
+    let out = null;
+    let force = false;
+    let isJson = false;
+    for (let i = 0; i < rest.length; i++) {
+      const arg = rest[i];
+      if (arg === '--json') isJson = true;
+      else if (arg === '--force') force = true;
+      else if (arg === '--lang' && rest[i + 1]) language = rest[++i];
+      else if (arg === '--adapter' && rest[i + 1]) adapter = rest[++i];
+      else if (arg === '--out' && rest[i + 1]) out = rest[++i];
+      else if (!arg.startsWith('--') && !source) source = arg;
+      else {
+        console.error(`\n❌ Unknown or incomplete option: ${arg}\n`);
+        process.exit(1);
+      }
+    }
+    const report = (message, code) => {
+      if (isJson) console.error(JSON.stringify({ error: message }));
+      else console.error(`\n❌ ${message}\n`);
+      process.exit(code);
+    };
+    if (!source) report('Missing capability source. Usage: total-recall app cli <source> --lang node|python [--out <file>]', 1);
+    if (language && adapter) report('Pass --lang or --adapter, not both', 1);
+    if (!language && !adapter) report(`Pass --lang (${APP_CLI_LANGUAGES.join('|')}) or --adapter <id>`, 1);
+    if (adapter) {
+      try {
+        language = languageForAdapter(adapter);
+      } catch (err) {
+        report(err.message, 3);
+      }
+    }
+
+    let generated;
+    let resolved;
+    try {
+      resolved = await resolveCapabilitySource(source);
+      if (!resolved.manifest.app_cli) throw new Error(`Plugin '${resolved.id}' declares no app_cli`);
+      generated = generateAppCli(resolved.manifest.app_cli, { language, source: { id: resolved.id, version: resolved.version } });
+    } catch (err) {
+      if (err?.message?.startsWith('process.exit(')) throw err;
+      report(err.message, 1);
+    } finally {
+      resolved?.cleanup?.();
+    }
+
+    let written = null;
+    if (out) {
+      written = path.resolve(out);
+      if (fs.existsSync(written) && !force) report(`${written} exists; pass --force to replace it`, 1);
+      try {
+        fs.mkdirSync(path.dirname(written), { recursive: true });
+        const tmp = `${written}.${process.pid}.tmp`;
+        fs.writeFileSync(tmp, generated.content, { mode: generated.mode });
+        fs.chmodSync(tmp, generated.mode);
+        fs.renameSync(tmp, written);
+      } catch (err) {
+        report(`Could not write ${written}: ${err.message}`, 1);
+      }
+    }
+
+    if (isJson) {
+      console.log(JSON.stringify({ language: generated.language, path: generated.path, sha256: generated.sha256, out: written }));
+    } else if (written) {
+      console.log(`✔ Wrote ${generated.language} app CLI '${generated.spec.name}' to ${written} (suggested path: ${generated.path})`);
+    } else {
+      process.stdout.write(generated.content);
+    }
+    process.exit(0);
+  }
+
+  // 6. APP VERIFY
   else if (sub === 'verify') {
     let target = process.cwd();
     let isJson = false;
