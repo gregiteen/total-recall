@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   parseDesignTokens,
   generateCssVariables,
+  collectCssVariables,
   resolveTokenReferences,
-  validatePluginUiAgainstTokens
+  validatePluginUiAgainstTokens,
+  DesignTokenError
 } from './design-tokens.mjs';
 
 describe('Design Tokens Engine (app-deploy/design-tokens.mjs)', () => {
@@ -85,5 +87,86 @@ Documentation content.
     expect(result.valid).toBe(false);
     expect(result.violations.length).toBeGreaterThan(0);
     expect(result.violations[0]).toContain('Hardcoded color value detected');
+  });
+
+  it('emits spec typography styles, components, and CRLF frontmatter', () => {
+    const md = [
+      '---',
+      'colors:',
+      '  ink: "#111111"',
+      'typography:',
+      '  body-md:',
+      '    fontFamily: Public Sans',
+      '    fontSize: 16px',
+      '    fontWeight: 400',
+      '    lineHeight: 1.5',
+      'components:',
+      '  button-primary:',
+      '    backgroundColor: "{colors.ink}"',
+      '    typography: "{typography.body-md}"',
+      '---',
+      'Body'
+    ].join('\r\n');
+    const { css, variables } = parseDesignTokens(md);
+    expect(css).toContain('--typography-body-md-font-family: Public Sans;');
+    expect(css).toContain('--typography-body-md-font-weight: 400;');
+    expect(css).toContain('--typography-body-md-line-height: 1.5;');
+    expect(css).toContain('--component-button-primary-background-color: #111111;');
+    // A composite reference is not a CSS value, so it produces no variable.
+    expect(variables).not.toContain('component-button-primary-typography');
+  });
+
+  it.each([
+    ['a value that closes the declaration', { colors: { a: 'red; } body { color: red' } }, /not allowed in a CSS value/],
+    ['a value that closes a style element', { colors: { a: '</style><script>' } }, /not allowed in a CSS value/],
+    ['an unresolved reference', { colors: { a: '{colors.missing}' } }, /unresolved reference/],
+    ['a circular reference', { colors: { a: '{colors.b}', b: '{colors.a}' } }, /unresolved reference/],
+    ['an unsafe token name', { colors: { 'a b': '#fff' } }, /token names may use/],
+    ['a name collision', { colors: { textPrimary: '#fff', 'text-primary': '#000' } }, /already produced/],
+  ])('rejects %s', (_label, tokens, message) => {
+    expect(() => collectCssVariables(tokens)).toThrow(DesignTokenError);
+    expect(() => generateCssVariables(tokens)).toThrow(message);
+  });
+
+  it("parses Dabber CRM's DESIGN.md shape (fontFamily role map, references, numbers)", () => {
+    const md = `---
+version: 1.0.0
+colors:
+  primary: "#5D2A7A"
+  textSecondary: "rgba(255, 255, 255, 0.9)"
+typography:
+  fontFamily:
+    heading: "'Montserrat', sans-serif"
+  h1:
+    fontFamily: "{typography.fontFamily.heading}"
+    fontSize: "clamp(2.2rem, 5vw, 4rem)"
+    fontWeight: 700
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    padding: "12px 24px"
+---
+`;
+    const { css } = parseDesignTokens(md);
+    expect(css).toContain('--color-text-secondary: rgba(255, 255, 255, 0.9);');
+    expect(css).toContain("--font-family-heading: 'Montserrat', sans-serif;");
+    expect(css).toContain("--typography-h1-font-family: 'Montserrat', sans-serif;");
+    expect(css).toContain('--typography-h1-font-size: clamp(2.2rem, 5vw, 4rem);');
+    expect(css).toContain('--typography-h1-font-weight: 700;');
+    expect(css).toContain('--component-button-primary-padding: 12px 24px;');
+  });
+
+  it('flags hardcoded var() fallbacks and undeclared tokens, and ignores private properties', () => {
+    const ui = [
+      '.a { color: var(--color-text, #111); }',
+      '.b { padding: var(--spacing-lg); margin: var(--_gap); }',
+      '.c { border: 1px solid var(--color-line); }'
+    ].join('\n');
+    const result = validatePluginUiAgainstTokens(ui, { allowedTokens: ['color-text', 'color-line'] });
+    expect(result.valid).toBe(false);
+    expect(result.violations).toHaveLength(2);
+    expect(result.violations[0]).toMatch(/Line 1: Hardcoded color/);
+    expect(result.violations[1]).toMatch(/Line 2: var\(--spacing-lg\) is not a declared design token/);
+    expect(result.usedTokens.sort()).toEqual(['color-line', 'color-text', 'spacing-lg']);
   });
 });

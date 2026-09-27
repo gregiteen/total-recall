@@ -295,10 +295,43 @@
     },
     "ui": {
       "type": "object",
-      "description": "UI elements and design token integration",
+      "description": "UI elements: self-contained custom elements styled only by design-token CSS variables. `total-recall app ui` generates a web-component build (Flask/Jinja, any HTML host) or React/Next wrappers, plus tokens.css from the app's DESIGN.md.",
+      "additionalProperties": false,
       "properties": {
-        "design_tokens": { "type": "string" },
-        "elements": { "type": "array" }
+        "design_tokens": { "type": "string", "pattern": "\\.md$", "description": "Plugin-relative default DESIGN.md, used when the app supplies none." },
+        "elements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind", "tag", "module"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+              "kind": { "enum": ["panel", "form", "list", "detail", "settings", "widget"] },
+              "tag": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)+$", "description": "Custom element name the module defines, exactly once." },
+              "module": { "type": "string", "pattern": "\\.m?js$", "description": "Plugin-relative ES module with no imports." },
+              "slot": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+              "description": { "type": "string" },
+              "props": {
+                "type": "object",
+                "description": "Properties the host sets on the element (camelCase; the React wrapper sets them as DOM properties).",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["type"],
+                  "properties": {
+                    "type": { "enum": ["string", "number", "boolean", "object", "array"] },
+                    "description": { "type": "string" },
+                    "required": { "type": "boolean" }
+                  }
+                }
+              },
+              "events": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" } },
+              "tokens": { "type": "array", "uniqueItems": true, "description": "CSS variables (without --) the element needs; the app's DESIGN.md must define them.", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,127}$" } },
+              "optional_tokens": { "type": "array", "uniqueItems": true, "description": "CSS variables the element uses with a var() fallback to another token.", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,127}$" } }
+            }
+          }
+        }
       }
     }
   }

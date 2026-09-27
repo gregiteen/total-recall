@@ -9,6 +9,7 @@
  *   app upgrade <id> --to <source> [--target <dir>] [--adapter <id>] [--dry-run] [--json]
  *   app verify [--target <dir>] [--json]
  *   app cli <source> [--lang node|python | --adapter <id>] [--out <file>] [--force] [--json]
+ *   app ui <source> [--ui web-components|react | --adapter <id>] [--tokens <DESIGN.md>] [--typescript] [--out <dir>] [--force] [--json]
  */
 
 import path from 'node:path';
@@ -29,6 +30,7 @@ import {
 import { verifyApplication } from '../../core/app-deploy/verify.mjs';
 import { resolveCapabilitySource } from '../../core/app-deploy/source.mjs';
 import { generateAppCli, languageForAdapter, APP_CLI_LANGUAGES } from '../../core/app-deploy/runtime-cli.mjs';
+import { generateUiElements, writeUiElements, uiTargetForAdapter, UI_TARGETS } from '../../core/app-deploy/ui-elements.mjs';
 import fs from 'node:fs';
 import {
   IncompatibleAdapterError,
@@ -84,6 +86,15 @@ Commands:
                             --out <file>       Write the file (mode 755) instead of printing it
                             --force            Replace an existing --out file
                             --json             Output { language, path, sha256, out } as JSON
+
+  ui <source>               Generate the plugin's UI elements for the app, styled by its DESIGN.md.
+                            --ui <target>      web-components (Flask/Jinja, any HTML) or react (React/Next)
+                            --adapter <id>     Pick the target from the adapter (flask, ssss-app: web-components)
+                            --tokens <file>    The app's DESIGN.md (default: the plugin's own default tokens)
+                            --typescript       React wrappers as .tsx
+                            --out <dir>        Write <dir>/<plugin-id>/ (replaced whole) instead of listing files
+                            --force            Replace a previously generated <dir>/<plugin-id>/
+                            --json             Output { target, files, elements, tokens, warnings, out } as JSON
 
 Exit Codes:
   0   Success
@@ -505,7 +516,89 @@ export async function run(argv = []) {
     process.exit(0);
   }
 
-  // 6. APP VERIFY
+  // 6. APP UI
+  else if (sub === 'ui') {
+    let source = null;
+    let target = null;
+    let adapter = null;
+    let tokens = null;
+    let out = null;
+    let typescript = false;
+    let force = false;
+    let isJson = false;
+    for (let i = 0; i < rest.length; i++) {
+      const arg = rest[i];
+      if (arg === '--json') isJson = true;
+      else if (arg === '--force') force = true;
+      else if (arg === '--typescript') typescript = true;
+      else if (arg === '--ui' && rest[i + 1]) target = rest[++i];
+      else if (arg === '--adapter' && rest[i + 1]) adapter = rest[++i];
+      else if (arg === '--tokens' && rest[i + 1]) tokens = rest[++i];
+      else if (arg === '--out' && rest[i + 1]) out = rest[++i];
+      else if (!arg.startsWith('--') && !source) source = arg;
+      else {
+        console.error(`\n❌ Unknown or incomplete option: ${arg}\n`);
+        process.exit(1);
+      }
+    }
+    const report = (message, code) => {
+      if (isJson) console.error(JSON.stringify({ error: message }));
+      else console.error(`\n❌ ${message}\n`);
+      process.exit(code);
+    };
+    if (!source) report('Missing capability source. Usage: total-recall app ui <source> --ui web-components|react [--tokens DESIGN.md] [--out <dir>]', 1);
+    if (target && adapter) report('Pass --ui or --adapter, not both', 1);
+    if (!target && !adapter) report(`Pass --ui (${UI_TARGETS.join('|')}) or --adapter <id>`, 1);
+    if (adapter) {
+      try {
+        target = uiTargetForAdapter(adapter);
+      } catch (err) {
+        report(err.message, 3);
+      }
+    }
+    if (!UI_TARGETS.includes(target)) report(`Unknown --ui '${target}' (known: ${UI_TARGETS.join(', ')})`, 1);
+    if (typescript && target !== 'react') report('--typescript applies to --ui react only', 1);
+    if (tokens && !fs.existsSync(tokens)) report(`Design tokens file not found: ${tokens}`, 1);
+
+    let generated;
+    let resolved;
+    let written = null;
+    try {
+      resolved = await resolveCapabilitySource(source);
+      generated = generateUiElements(resolved.manifest, { pluginDir: resolved.stagedDir, target, tokens, typescript });
+      if (out) written = writeUiElements(generated, out, { force });
+    } catch (err) {
+      if (err?.message?.startsWith('process.exit(')) throw err;
+      report(err.message, 1);
+    } finally {
+      resolved?.cleanup?.();
+    }
+
+    if (isJson) {
+      console.log(JSON.stringify({
+        target: generated.target,
+        plugin: generated.pluginId,
+        files: generated.files.map(({ path: p, sha256 }) => ({ path: p, sha256 })),
+        elements: generated.elements,
+        tokens: generated.tokens,
+        warnings: generated.warnings,
+        out: written
+      }));
+    } else {
+      console.log(written
+        ? `✔ Wrote ${generated.files.length} ${generated.target} file(s) for '${generated.pluginId}' to ${written}`
+        : `${generated.target} files for '${generated.pluginId}' (pass --out <dir> to write them):`);
+      for (const f of generated.files) console.log(`  ${f.path}  ${f.sha256.slice(0, 12)}`);
+      console.log(generated.tokens.source
+        ? `  tokens: ${generated.tokens.source === 'app' ? "the app's DESIGN.md" : "the plugin's default DESIGN.md"}`
+        : '  tokens: none — pass --tokens <DESIGN.md> to check required tokens and emit tokens.css');
+      for (const w of generated.warnings) console.log(`  ⚠ ${w}`);
+      console.log(`\nUse it:\n${generated.usage.replace(/^/gm, '  ')}`);
+    }
+    process.exit(0);
+  }
+
+  // 7. APP VERIFY
   else if (sub === 'verify') {
     let target = process.cwd();
     let isJson = false;

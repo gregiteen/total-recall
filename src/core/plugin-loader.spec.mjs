@@ -130,7 +130,7 @@ describe('Plugin Loader & Schema Validation', () => {
       expect(res.errors.some(e => e.includes('cli.handler must be a safe relative path'))).toBe(true);
       expect(res.errors.some(e => e.includes('invalid or unsafe \'path\''))).toBe(true);
       expect(res.errors.some(e => e.includes('invalid or unsafe \'handler\''))).toBe(true);
-      expect(res.errors.some(e => e.includes("'ui.design_tokens' must be a safe relative path"))).toBe(true);
+      expect(res.errors.some(e => e.includes('ui.design_tokens must be a normalized relative path'))).toBe(true);
     });
   });
 
