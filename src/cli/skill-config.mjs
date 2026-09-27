@@ -15,6 +15,9 @@ import {
   loadConfigSchema,
   validateSkillConfig,
   readSkillConfig,
+  readSkillConfigState,
+  projectSkillConfig,
+  recordPath,
   writeSkillConfig,
   getConfigValue,
   setConfigValue,
@@ -35,7 +38,9 @@ function usage(prefix, collections) {
     ${prefix} config get [path]               Print the repo config or one value
     ${prefix} config set <path> <value>       Set a value (JSON or plain string), validated
     ${prefix} config unset <path>             Remove a value, validated
-    ${prefix} config validate                 Check config.json against the core contract
+    ${prefix} config validate                 Check the record against the contract and config.json for drift
+    ${prefix} config rebuild                  Regenerate config.json from the SSSS record
+    ${prefix} config import                   Record an existing config.json (adoption)
     ${prefix} config schema                   Print core/config.schema.json
 ${nouns ? `${nouns}\n` : ''}    ${prefix} detect [--apply] [--force]       Propose a config from the repo (core/detect.mjs)
     ${prefix} init [--yes] [--force]           Create config.json from defaults, detection and prompts
@@ -96,13 +101,27 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
     }
 
     if (verb === 'config') {
-      const current = readSkillConfig(skillDir);
+      const state = readSkillConfigState(skillDir);
+      const current = state.config;
       if (action === 'schema') return out({ schema: contract.schema }, JSON.stringify(contract.schema, null, 2));
       if (action === 'validate') {
-        if (current === null) throw new SkillConfigError('No config.json yet; run init or detect --apply', { exitCode: 1 });
+        if (current === null) throw new SkillConfigError('No config yet; run init or detect --apply', { exitCode: 1 });
         const result = validateSkillConfig(contract, current);
-        if (!result.valid) throw new SkillConfigError(`config.json is invalid:\n  ${result.errors.join('\n  ')}`, { issues: result.errors });
-        return out({ valid: true }, 'config.json satisfies core/config.schema.json');
+        if (!result.valid) throw new SkillConfigError(`${state.source === 'record' ? recordPath(skillId) : 'config.json'} is invalid:\n  ${result.errors.join('\n  ')}`, { issues: result.errors });
+        if (state.source !== 'record') throw new SkillConfigError(`config.json is valid but not recorded in SSSS; run '${prefix} config import'`, { exitCode: 1 });
+        if (!state.inSync) throw new SkillConfigError(`config.json has drifted from ${recordPath(skillId)}; run '${prefix} config rebuild'`, { exitCode: 1 });
+        return out({ valid: true, in_sync: true }, `${recordPath(skillId)} satisfies core/config.schema.json and config.json matches it`);
+      }
+      if (action === 'rebuild') {
+        if (state.source !== 'record') throw new SkillConfigError(`No ${recordPath(skillId)} record to rebuild from`, { exitCode: 1 });
+        projectSkillConfig(skillDir, state.record.config);
+        return out({ config: state.record.config }, '✔ Rebuilt config.json from the SSSS record');
+      }
+      if (action === 'import') {
+        if (state.source === 'record') return out({ config: current, imported: false }, `Already recorded at ${recordPath(skillId)}`);
+        if (state.projection === null) throw new SkillConfigError('No config.json to import', { exitCode: 1 });
+        const written = await writeSkillConfig(skillDir, contract, state.projection);
+        return out({ config: written, imported: true }, `✔ Recorded config.json at ${recordPath(skillId)}`);
       }
       if (action === 'get') {
         const value = rest[0] ? getConfigValue(current ?? {}, rest[0]) : current;
@@ -113,7 +132,7 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
         if (!rest[0] || (action === 'set' && rest.length < 2)) throw new SkillConfigError(`Usage: ${prefix} config ${action} <path>${action === 'set' ? ' <value>' : ''}`);
         if (current === null) throw new SkillConfigError('No config.json yet; run init or detect --apply first', { exitCode: 1 });
         const value = action === 'set' ? parseCliValue(rest.slice(1).join(' ')) : undefined;
-        const written = writeSkillConfig(skillDir, contract, setConfigValue(current, rest[0], value));
+        const written = await writeSkillConfig(skillDir, contract, setConfigValue(current, rest[0], value));
         return out({ config: written }, `✔ ${action === 'set' ? 'Set' : 'Removed'} ${rest[0]}`);
       }
       throw new SkillConfigError(`Unknown config action '${action ?? ''}'\n${usage(prefix, collections)}`);
@@ -129,12 +148,12 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
       if (current === null) throw new SkillConfigError('No config.json yet; run init or detect --apply first', { exitCode: 1 });
       if (action === 'add') {
         const item = parseCollectionItem(rest);
-        const written = writeSkillConfig(skillDir, contract, addCollectionItem(current, collection, item));
+        const written = await writeSkillConfig(skillDir, contract, addCollectionItem(current, collection, item));
         return out({ config: written }, `✔ Added ${verb} '${item[collection.key]}'`);
       }
       if (action === 'remove') {
         if (!rest[0]) throw new SkillConfigError(`Usage: ${prefix} ${verb} remove <${collection.key}>`);
-        const written = writeSkillConfig(skillDir, contract, removeCollectionItem(current, collection, rest[0]));
+        const written = await writeSkillConfig(skillDir, contract, removeCollectionItem(current, collection, rest[0]));
         return out({ config: written }, `✔ Removed ${verb} '${rest[0]}'`);
       }
       throw new SkillConfigError(`Usage: ${prefix} ${verb} list|add|remove`);
@@ -148,15 +167,15 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
           `${JSON.stringify(proposal, null, 2)}\n${checked.valid ? 'Valid. Re-run with --apply to write config.json.' : `Invalid:\n  ${checked.errors.join('\n  ')}`}`);
       }
       if (readSkillConfig(skillDir) !== null && !flags.has('--force')) {
-        throw new SkillConfigError('config.json already exists; use --force to replace it with the detected config', { exitCode: 1 });
+        throw new SkillConfigError('A config already exists; use --force to replace it with the detected config', { exitCode: 1 });
       }
-      const written = writeSkillConfig(skillDir, contract, proposal);
-      return out({ config: written }, '✔ Wrote detected config.json');
+      const written = await writeSkillConfig(skillDir, contract, proposal);
+      return out({ config: written }, '✔ Recorded the detected config and wrote config.json');
     }
 
     if (verb === 'init') {
       if (readSkillConfig(skillDir) !== null && !flags.has('--force')) {
-        throw new SkillConfigError(`config.json already exists; change it with '${prefix} config set' or pass --force`, { exitCode: 1 });
+        throw new SkillConfigError(`A config already exists; change it with '${prefix} config set' or pass --force`, { exitCode: 1 });
       }
       let config = topLevelDefaults(contract.schema);
       if (fs.existsSync(path.join(skillDir, 'core', 'detect.mjs'))) config = { ...config, ...(await detectSkillConfig(skillDir, repoRoot)) };
@@ -167,7 +186,7 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
         }
         config = await promptMissing(contract.schema, config, missing);
       }
-      const written = writeSkillConfig(skillDir, contract, config);
+      const written = await writeSkillConfig(skillDir, contract, config);
       return out({ config: written }, `✔ Initialized ${path.relative(process.cwd(), path.join(skillDir, 'config.json')) || 'config.json'}`);
     }
 

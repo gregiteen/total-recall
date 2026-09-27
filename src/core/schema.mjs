@@ -1162,25 +1162,22 @@ export const AccessGrantSchema = z.object({
 }).passthrough();
 
 /**
- * Canonical repo-layer skill configuration record.
- * Persisted as an SSSS document in the project vault (e.g. `system/skills/<id>.md`).
- * Controls gate commands, tier rules, and repo customizations.
- * Projected into `config.json` for skill scripts to read.
+ * Canonical repo-layer configuration for a layered skill, stored in the repo's
+ * project vault at `system/skills/<skill_id>.md` and written only through the
+ * operation service (`src/core/skill-config.mjs`). The shape of `config` is the
+ * skill core's contract (`core/config.schema.json`), not this host type, so no
+ * skill-specific fields belong here. `config.json` beside the skill is a
+ * projection of `config`, rebuilt after every write.
  */
 export const SkillConfigSchema = z.object({
   type: z.literal('skill_config'),
   title: z.string().min(1),
   description: z.string().min(1),
   timestamp: ssssDatetime(),
-  skill_id: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
-  version: z.string().min(1),
-  config: z.record(z.any()).default({}),
-  tiers: z.record(z.any()).optional().default({}),
-  gates: z.array(z.object({
-    name: z.string(),
-    command: z.string(),
-    tier: z.string().optional()
-  })).optional().default([]),
+  skill_id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  config: z.record(z.string(), z.any()),
+  /** SHA-256 of the core/config.schema.json the config was validated against. */
+  schema_sha256: z.string().regex(/^[0-9a-f]{64}$/),
   created_at: ssssDatetime(),
   updated_at: ssssDatetime().optional()
 }).passthrough();

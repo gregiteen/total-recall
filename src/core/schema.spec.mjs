@@ -540,40 +540,27 @@ describe('Schema Validations', () => {
   });
 
   describe('SkillConfigSchema', () => {
-    it('validates a correct skill config record', () => {
-      const cfg = {
-        type: 'skill_config',
-        title: 'Skill Config: code-quality',
-        description: 'Repo-layer configuration for code-quality',
-        timestamp: new Date().toISOString(),
-        skill_id: 'code-quality',
-        version: '1.0.0',
-        config: {
-          runner: 'scripts/remote-gates.sh',
-          target_host: 'macmini'
-        },
-        tiers: {
-          typecheck: 'fast',
-          lint: 'fast',
-          test: 'heavy'
-        },
-        gates: [
-          { name: 'tsc', command: 'npx tsc --noEmit', tier: 'typecheck' },
-          { name: 'flake8', command: 'flake8 src', tier: 'lint' }
-        ],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      const result = SkillConfigSchema.safeParse(cfg);
-      expect(result.success).toBe(true);
+    const base = () => ({
+      type: 'skill_config',
+      title: 'Skill config: quality',
+      description: 'Repo-layer configuration for the quality skill.',
+      timestamp: new Date().toISOString(),
+      skill_id: 'quality',
+      config: { language: 'node', gates: [{ name: 'test', command: 'npm test', tier: 'full' }] },
+      schema_sha256: 'a'.repeat(64),
+      created_at: new Date().toISOString(),
     });
 
-    it('rejects invalid skill config', () => {
-      const result = SkillConfigSchema.safeParse({
-        type: 'skill_config',
-        skill_id: 'INVALID_ID!'
-      });
-      expect(result.success).toBe(false);
+    it('accepts any contract-defined config shape', () => {
+      expect(SkillConfigSchema.safeParse(base()).success).toBe(true);
+      expect(SkillConfigSchema.safeParse({ ...base(), config: { anything: { nested: true } } }).success).toBe(true);
+    });
+
+    it('rejects invalid ids, a missing contract hash, and non-object config', () => {
+      expect(SkillConfigSchema.safeParse({ ...base(), skill_id: 'INVALID_ID!' }).success).toBe(false);
+      const { schema_sha256, ...noHash } = base();
+      expect(SkillConfigSchema.safeParse(noHash).success).toBe(false);
+      expect(SkillConfigSchema.safeParse({ ...base(), config: ['x'] }).success).toBe(false);
     });
   });
 
