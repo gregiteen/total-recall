@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import matter from 'gray-matter';
 import {
   loadConfigSchema,
   setConfigValue,
@@ -60,6 +61,7 @@ describe('layered skill repo-layer config', () => {
   let repo;
   let skillDir;
   let configFile;
+  let recordFile;
 
   beforeEach(() => {
     repo = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-skill-config-'));
@@ -69,6 +71,10 @@ describe('layered skill repo-layer config', () => {
     fs.writeFileSync(path.join(skillDir, 'core', 'config.schema.json'), JSON.stringify(SCHEMA));
     fs.writeFileSync(path.join(skillDir, 'core', 'detect.mjs'), DETECT);
     configFile = path.join(skillDir, 'config.json');
+    const brain = path.join(repo, '.agent', 'skills', 'total-recall');
+    fs.mkdirSync(brain, { recursive: true });
+    fs.writeFileSync(path.join(brain, 'SKILL.md'), '# Test brain\n');
+    recordFile = path.join(brain, 'memory-vault', 'system', 'skills', 'quality.md');
   });
 
   afterEach(() => {
@@ -164,9 +170,6 @@ describe('layered skill repo-layer config', () => {
   });
 
   it('generates a per-skill command in the repo and dispatches it through the CLI', () => {
-    const brain = path.join(repo, '.agent', 'skills', 'total-recall');
-    fs.mkdirSync(brain, { recursive: true });
-    fs.writeFileSync(path.join(brain, 'SKILL.md'), '# Test brain\n');
     const created = cli(repo, 'command', 'create', 'quality', '--config-for-skill', 'quality');
     expect(created.status).toBe(0);
     expect(fs.existsSync(path.join(repo, '.agent', 'commands', 'quality.mjs'))).toBe(true);
@@ -186,13 +189,65 @@ describe('layered skill repo-layer config', () => {
     expect(fs.existsSync(path.join(repo, '.agent', 'commands', 'other.mjs'))).toBe(false);
   });
 
-  it('keeps helper semantics narrow', () => {
+  it('commits a skill_config record through the operation service and projects config.json from it', () => {
+    expect(cli(repo, 'skill', 'config', 'quality', 'init', '--yes').status).toBe(0);
+    const record = matter(fs.readFileSync(recordFile, 'utf8')).data;
+    expect(record.type).toBe('skill_config');
+    expect(record.skill_id).toBe('quality');
+    expect(record.schema_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(record.config).toEqual(JSON.parse(fs.readFileSync(configFile, 'utf8')));
+    const events = path.join(repo, '.agent', 'skills', 'total-recall', 'memory-vault', '.events');
+    expect(fs.existsSync(events)).toBe(true);
+
+    expect(cli(repo, 'skill', 'config', 'quality', 'set', 'default_tier', 'full').status).toBe(0);
+    const updated = matter(fs.readFileSync(recordFile, 'utf8')).data;
+    expect(updated.config.default_tier).toBe('full');
+    expect(updated.updated_at).toBeTruthy();
+    expect(new Date(updated.created_at).toISOString()).toBe(new Date(record.created_at).toISOString());
+    expect(cli(repo, 'skill', 'config', 'quality', 'validate', '--json').json).toMatchObject({ ok: true, in_sync: true });
+  });
+
+  it('reports a hand-edited config.json as drift and rebuilds it from the record', () => {
+    expect(cli(repo, 'skill', 'config', 'quality', 'init', '--yes').status).toBe(0);
+    const canonical = fs.readFileSync(configFile, 'utf8');
+    fs.writeFileSync(configFile, JSON.stringify({ language: 'python', gates: [] }));
+    const drift = cli(repo, 'skill', 'config', 'quality', 'validate', '--json');
+    expect(drift.status).toBe(1);
+    expect(drift.json.error).toMatch(/drifted/);
+    // Reads come from the record, not the hand-edited projection.
+    expect(cli(repo, 'skill', 'config', 'quality', 'get', 'language', '--json').json.value).toBe('node');
+    expect(cli(repo, 'skill', 'config', 'quality', 'rebuild').status).toBe(0);
+    expect(fs.readFileSync(configFile, 'utf8')).toBe(canonical);
+  });
+
+  it('adopts an existing config.json with import', () => {
+    const existing = { language: 'python', default_tier: 'full', gates: [{ name: 'lint', command: 'flake8', tier: 'fast' }] };
+    fs.writeFileSync(configFile, JSON.stringify(existing));
+    const before = cli(repo, 'skill', 'config', 'quality', 'validate', '--json');
+    expect(before.status).toBe(1);
+    expect(before.json.error).toMatch(/config import/);
+    expect(cli(repo, 'skill', 'config', 'quality', 'import', '--json').json).toMatchObject({ ok: true, imported: true });
+    expect(matter(fs.readFileSync(recordFile, 'utf8')).data.config).toEqual(existing);
+    expect(cli(repo, 'skill', 'config', 'quality', 'import', '--json').json.imported).toBe(false);
+    expect(cli(repo, 'skill', 'config', 'quality', 'validate').status).toBe(0);
+  });
+
+  it('refuses to write without the repo\'s own project brain', () => {
+    fs.rmSync(path.join(repo, '.agent', 'skills', 'total-recall'), { recursive: true });
+    const init = cli(repo, 'skill', 'config', 'quality', 'init', '--yes', '--json');
+    expect(init.status).toBe(1);
+    expect(init.json.error).toMatch(/init --project/);
+    expect(fs.existsSync(configFile)).toBe(false);
+  });
+
+  it('keeps helper semantics narrow', async () => {
     const contract = loadConfigSchema(skillDir);
     expect(listCollections(contract.schema)).toEqual({ gate: { property: 'gates', key: 'name' } });
     expect(parseCollectionItem(['name=a', 'nested.depth=2'])).toEqual({ name: 'a', nested: { depth: 2 } });
     expect(() => setConfigValue({ a: 'x' }, 'a.b', 1)).toThrow(/non-object/);
     expect(() => setConfigValue({}, 'constructor.prototype', 1)).toThrow(/Invalid config path/);
-    expect(() => writeSkillConfig(skillDir, contract, { language: 'node' })).toThrow(/gates/);
+    await expect(writeSkillConfig(skillDir, contract, { language: 'node' })).rejects.toThrow(/gates/);
+    expect(fs.existsSync(recordFile)).toBe(false);
     expect(fs.existsSync(configFile)).toBe(false);
   });
 });

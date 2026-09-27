@@ -3,18 +3,24 @@
  *
  * A layered skill's plugin-owned core ships the layer contract as
  * `core/config.schema.json` (JSON Schema, root type object) and may ship
- * `core/detect.mjs`. The repo-owned `config.json` next to `core/` is only ever
- * written here, after the whole document validates against that schema, so
- * every CLI customization path produces a config the core scripts can read.
+ * `core/detect.mjs`. The canonical repo config is a `skill_config` SSSS
+ * document in the repo's project vault (`system/skills/<id>.md`), written
+ * through the operation service after the whole config validates against the
+ * contract. `config.json` next to `core/` is a projection of that record for
+ * the core scripts to read; it is rebuilt after every write.
  *
  * Collections: an array property annotated with `"x-collection": "<noun>"`
  * gets `<noun> list|add|remove` verbs; items are keyed by `"x-key"` (default
  * `name`).
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { writeVfsDocument } from './ssss-operation-service.mjs';
+import { findVfsDocumentByPath } from './vfs-documents.mjs';
 
 const SKILL_ID = /^[a-z][a-z0-9-]{0,63}$/;
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
@@ -50,14 +56,15 @@ export function loadConfigSchema(skillDir) {
   if (!regularFile(schemaPath)) {
     throw new SkillConfigError(`Skill has no config contract (expected core/config.schema.json)`, { exitCode: 1 });
   }
+  const raw = fs.readFileSync(schemaPath);
   let schema;
-  try { schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8')); }
+  try { schema = JSON.parse(raw.toString('utf8')); }
   catch (error) { throw new SkillConfigError(`core/config.schema.json is not valid JSON: ${error.message}`, { exitCode: 1 }); }
   if (schema?.type !== 'object') throw new SkillConfigError('core/config.schema.json must describe an object', { exitCode: 1 });
   let validator;
   try { validator = z.fromJSONSchema(schema); }
   catch (error) { throw new SkillConfigError(`core/config.schema.json is not a supported JSON Schema: ${error.message}`, { exitCode: 1 }); }
-  return { schema, validator, schemaPath };
+  return { schema, validator, schemaPath, sha256: crypto.createHash('sha256').update(raw).digest('hex') };
 }
 
 function formatIssues(issues) {
@@ -75,7 +82,21 @@ export function configPath(skillDir) {
   return path.join(skillDir, 'config.json');
 }
 
-export function readSkillConfig(skillDir) {
+export function recordPath(skillId) {
+  return `system/skills/${skillId}.md`;
+}
+
+/** The repo's own project vault. Never walks up into a parent project's brain. */
+export function projectVaultFor(skillDir) {
+  const repoRoot = path.resolve(skillDir, '..', '..', '..');
+  const brain = path.join(repoRoot, '.agent', 'skills', 'total-recall');
+  if (!regularFile(path.join(brain, 'SKILL.md'))) {
+    throw new SkillConfigError(`No project brain in ${repoRoot}; run 'total-recall init --project' there first`, { exitCode: 1 });
+  }
+  return path.join(brain, 'memory-vault');
+}
+
+function readProjection(skillDir) {
   const file = configPath(skillDir);
   if (!fs.existsSync(file)) return null;
   if (!regularFile(file)) throw new SkillConfigError(`Refusing non-regular config file: ${file}`, { exitCode: 1 });
@@ -83,18 +104,66 @@ export function readSkillConfig(skillDir) {
   catch (error) { throw new SkillConfigError(`config.json is not valid JSON: ${error.message}`, { exitCode: 1 }); }
 }
 
-/** The single write path for repo-layer config: validate, then replace atomically. */
-export function writeSkillConfig(skillDir, contract, value) {
+/**
+ * Current repo config. `source` is 'record' (canonical), 'projection' (a
+ * config.json with no record yet, e.g. a repo skill awaiting import), or null.
+ */
+export function readSkillConfigState(skillDir) {
+  const skillId = path.basename(skillDir);
+  const record = findVfsDocumentByPath(recordPath(skillId), projectVaultFor(skillDir));
+  const projection = readProjection(skillDir);
+  if (record) {
+    if (record.type !== 'skill_config' || !record.config || typeof record.config !== 'object') {
+      throw new SkillConfigError(`${recordPath(skillId)} is not a skill_config record`, { exitCode: 1 });
+    }
+    return { config: record.config, source: 'record', record, projection, inSync: isDeepStrictEqual(projection, record.config) };
+  }
+  return { config: projection, source: projection === null ? null : 'projection', record: null, projection, inSync: projection === null };
+}
+
+export function readSkillConfig(skillDir) {
+  return readSkillConfigState(skillDir).config;
+}
+
+/** Rebuild config.json from the canonical record (atomic replace). */
+export function projectSkillConfig(skillDir, config) {
+  const file = configPath(skillDir);
+  if (fs.existsSync(file) && !regularFile(file)) throw new SkillConfigError(`Refusing non-regular config file: ${file}`, { exitCode: 1 });
+  const temp = path.join(skillDir, `.config.json.${process.pid}.${Date.now()}.tmp`);
+  fs.writeFileSync(temp, `${JSON.stringify(config, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o644 });
+  try { fs.renameSync(temp, file); }
+  catch (error) { fs.rmSync(temp, { force: true }); throw error; }
+}
+
+/**
+ * The single write path for repo-layer config: validate against the core
+ * contract, commit the skill_config record through the SSSS operation service,
+ * then rebuild the config.json projection.
+ */
+export async function writeSkillConfig(skillDir, contract, value) {
   const checked = validateSkillConfig(contract, value);
   if (!checked.valid) {
     throw new SkillConfigError(`Config does not satisfy core/config.schema.json:\n  ${checked.errors.join('\n  ')}`, { issues: checked.errors });
   }
   const file = configPath(skillDir);
   if (fs.existsSync(file) && !regularFile(file)) throw new SkillConfigError(`Refusing non-regular config file: ${file}`, { exitCode: 1 });
-  const temp = path.join(skillDir, `.config.json.${process.pid}.${Date.now()}.tmp`);
-  fs.writeFileSync(temp, `${JSON.stringify(checked.value, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o644 });
-  try { fs.renameSync(temp, file); }
-  catch (error) { fs.rmSync(temp, { force: true }); throw error; }
+  const skillId = path.basename(skillDir);
+  const vaultRoot = projectVaultFor(skillDir);
+  const existing = findVfsDocumentByPath(recordPath(skillId), vaultRoot);
+  const now = new Date().toISOString();
+  const createdAt = existing?.created_at ? new Date(existing.created_at).toISOString() : now;
+  await writeVfsDocument(recordPath(skillId), {
+    type: 'skill_config',
+    title: `Skill config: ${skillId}`,
+    description: `Repo-layer configuration for the ${skillId} skill.`,
+    timestamp: now,
+    skill_id: skillId,
+    config: checked.value,
+    schema_sha256: contract.sha256,
+    created_at: createdAt,
+    ...(existing ? { updated_at: now } : {}),
+  }, '', { actorRole: 'system', intent: `Update repo config for skill ${skillId}`, vaultRoot });
+  projectSkillConfig(skillDir, checked.value);
   return checked.value;
 }
 
