@@ -232,6 +232,67 @@
         }
       }
     },
+    "app_cli": {
+      "type": "object",
+      "description": "The app's own runtime CLI, generated per language by `total-recall app cli` (Node ESM or Python argparse). Runs without Total Recall and calls the app's HTTP API.",
+      "required": ["name", "api", "commands"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+        "description": { "type": "string" },
+        "api": {
+          "type": "object",
+          "required": ["base_url_env", "default_base_url"],
+          "additionalProperties": false,
+          "properties": {
+            "base_url_env": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$", "description": "Environment variable that overrides the base URL" },
+            "default_base_url": { "type": "string", "description": "http(s) loopback URL of the app API (127.0.0.1, localhost or [::1])" },
+            "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 600, "default": 30 }
+          }
+        },
+        "auth": {
+          "type": "object",
+          "required": ["type", "token_env"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "bearer" },
+            "token_env": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$", "description": "Environment variable holding the token; never stored in the generated file" }
+          }
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "method", "path"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$" },
+              "description": { "type": "string" },
+              "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"] },
+              "path": { "type": "string", "pattern": "^/[A-Za-z0-9_\\-./{}]*$", "description": "Path under the base URL; {name} placeholders are filled from required args, the rest go to the query (GET/DELETE) or JSON body" },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "type"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$", "not": { "enum": ["json", "base_url", "help", "command"] } },
+                    "type": { "enum": ["string", "integer", "number", "boolean"] },
+                    "description": { "type": "string" },
+                    "required": { "type": "boolean" },
+                    "positional": { "type": "boolean" },
+                    "choices": { "type": "array", "minItems": 1 },
+                    "default": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "ui": {
       "type": "object",
       "description": "UI elements and design token integration",
