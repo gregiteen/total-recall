@@ -275,3 +275,95 @@ export async function detectSkillConfig(skillDir, repoRoot) {
 export function missingRequired(schema, config) {
   return (schema.required || []).filter((key) => config?.[key] === undefined);
 }
+
+/** Values at schema locations annotated `"x-command": true`, with their config paths. */
+export function collectCommandValues(schema, value, at = []) {
+  if (!schema || value === undefined || value === null) return [];
+  if (schema['x-command'] === true && typeof value === 'string') return [{ path: at.join('.'), command: value }];
+  const found = [];
+  if (schema.type === 'array' && Array.isArray(value) && schema.items) {
+    value.forEach((item, i) => found.push(...collectCommandValues(schema.items, item, [...at, String(i)])));
+  }
+  if (schema.properties && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, child] of Object.entries(schema.properties)) {
+      found.push(...collectCommandValues(child, value[key], [...at, key]));
+    }
+  }
+  return found;
+}
+
+function onPath(binary) {
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, binary);
+    try {
+      if (fs.statSync(candidate).isFile()) { fs.accessSync(candidate, fs.constants.X_OK); return true; }
+    } catch { /* keep looking */ }
+  }
+  return false;
+}
+
+/** Whether a gate command's program exists; does not run it. */
+export function resolveCommand(command, repoRoot) {
+  const tokens = String(command).trim().split(/\s+/).filter(Boolean);
+  while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens.shift();
+  const program = tokens[0];
+  if (!program) return { ok: false, reason: 'empty command' };
+  if (path.isAbsolute(program)) {
+    return fs.existsSync(program) ? { ok: true } : { ok: false, reason: `${program} does not exist` };
+  }
+  if (program.includes('/')) {
+    const file = path.resolve(repoRoot, program);
+    const inside = !path.relative(repoRoot, file).startsWith('..');
+    return inside && fs.existsSync(file) ? { ok: true } : { ok: false, reason: `${program} does not exist in the repo` };
+  }
+  if (['npm', 'pnpm', 'yarn', 'bun'].includes(program) && tokens[1] === 'run' && tokens[2]) {
+    let scripts = {};
+    try { scripts = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).scripts || {}; } catch { /* no package.json */ }
+    return Object.hasOwn(scripts, tokens[2]) ? { ok: true } : { ok: false, reason: `package.json has no '${tokens[2]}' script` };
+  }
+  return onPath(program) ? { ok: true } : { ok: false, reason: `'${program}' is not on PATH` };
+}
+
+/**
+ * Check a deployed layered skill's repo layer against its core contract.
+ * Shared by `skill status`, `skill config <id> check`, and `app verify`.
+ * Each check is { id, level: 'error'|'warn', ok, message }; `ok` is false when
+ * any error-level check fails.
+ */
+export function checkSkillLayerContract(skillDir) {
+  const skillId = path.basename(skillDir);
+  const repoRoot = path.resolve(skillDir, '..', '..', '..');
+  const checks = [];
+  const add = (id, ok, message, level = 'error') => checks.push({ id, level, ok, message });
+  const result = () => ({ skill_id: skillId, path: skillDir, ok: checks.every((c) => c.ok || c.level !== 'error'), checks });
+
+  let contract;
+  try { contract = loadConfigSchema(skillDir); add('contract', true, 'core/config.schema.json loads'); }
+  catch (error) { add('contract', false, error.message); return result(); }
+
+  let state;
+  try { state = readSkillConfigState(skillDir); }
+  catch (error) { add('record', false, error.message); return result(); }
+  if (state.source === null) { add('record', false, `Not configured; run 'total-recall skill config ${skillId} init'`); return result(); }
+  if (state.source === 'projection') {
+    add('record', false, `config.json is not recorded in SSSS; run 'total-recall skill config ${skillId} import'`);
+  } else {
+    add('record', true, `Recorded at ${recordPath(skillId)}`);
+  }
+
+  const checked = validateSkillConfig(contract, state.config);
+  add('config', checked.valid, checked.valid ? 'Config satisfies the contract' : `Config violates the contract: ${checked.errors.join('; ')}`);
+  if (state.source === 'record') {
+    const current = state.record.schema_sha256 === contract.sha256;
+    add('contract-version', current, current ? 'Validated against the current core contract'
+      : 'The core contract changed since this config was recorded; re-save it to re-validate', 'warn');
+    add('projection', state.inSync, state.inSync ? 'config.json matches the record'
+      : `config.json has drifted from the record; run 'total-recall skill config ${skillId} rebuild'`);
+  }
+  for (const { path: at, command } of collectCommandValues(contract.schema, state.config)) {
+    const resolved = resolveCommand(command, repoRoot);
+    add(`command:${at}`, resolved.ok, resolved.ok ? `${at}: '${command}' resolves` : `${at}: ${resolved.reason}`);
+  }
+  return result();
+}
