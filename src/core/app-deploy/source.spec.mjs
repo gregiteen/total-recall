@@ -10,6 +10,7 @@ import {
   extractEntriesSafely
 } from './source.mjs';
 import { packPlugin } from '../plugin-bundle.mjs';
+import { listBundledPlugins } from '../plugin-loader.mjs';
 
 describe('Capability Source Resolver (app-deploy/source.mjs)', () => {
   let tmpRoot;
@@ -139,9 +140,11 @@ describe('Capability Source Resolver (app-deploy/source.mjs)', () => {
     });
 
     it('resolves bundled plugins by ID', async () => {
-      const resolved = await resolveCapabilitySource('code-quality');
+      const bundledId = listBundledPlugins()[0]?.id;
+      expect(bundledId).toBeTruthy();
+      const resolved = await resolveCapabilitySource(bundledId);
       try {
-        expect(resolved.id).toBe('code-quality');
+        expect(resolved.id).toBe(bundledId);
         expect(resolved.sourceType).toBe('bundled');
         expect(resolved.sha256).toMatch(/^[a-f0-9]{64}$/);
         expect(fs.existsSync(path.join(resolved.stagedDir, 'plugin.json'))).toBe(true);

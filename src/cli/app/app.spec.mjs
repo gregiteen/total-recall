@@ -9,9 +9,30 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
   let errSpy;
   let exitSpy;
   let tmpTarget;
+  let fixtureRoot;
+  let capability;
+
+  // A local capability plugin with a README and a CLI handler, so the plan sees
+  // a protected-file conflict when the target already has a README.md.
+  function writeCapabilityFixture(dir) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({
+      id: 'report-fixture',
+      name: 'Report Fixture',
+      version: '1.0.0',
+      description: 'Prints a report',
+      use_cases: ['software-development'],
+      cli: { command: 'report-fixture', handler: './cli.mjs', subcommands: [{ name: 'report', description: 'Print it' }] }
+    }));
+    fs.writeFileSync(path.join(dir, 'cli.mjs'), 'export async function run() { console.log("report"); }\n');
+    fs.writeFileSync(path.join(dir, 'README.md'), '# Report Fixture\n');
+    return dir;
+  }
 
   beforeEach(() => {
     tmpTarget = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-app-cli-'));
+    fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-app-fixture-'));
+    capability = writeCapabilityFixture(path.join(fixtureRoot, 'report-fixture'));
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
@@ -26,6 +47,7 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
     if (fs.existsSync(tmpTarget)) {
       fs.rmSync(tmpTarget, { recursive: true, force: true });
     }
+    fs.rmSync(fixtureRoot, { recursive: true, force: true });
   });
 
   it('prints help message when called without args or with --help', async () => {
@@ -39,18 +61,18 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
   });
 
   it('computes plan and exits with 0 for valid capability in clean target', async () => {
-    await expect(run(['app', 'plan', 'code-quality', '--target', tmpTarget, '--json'])).rejects.toThrow('process.exit(0)');
+    await expect(run(['app', 'plan', capability, '--target', tmpTarget, '--json'])).rejects.toThrow('process.exit(0)');
     const output = logSpy.mock.calls[0][0];
     const parsed = JSON.parse(output);
     expect(parsed.valid).toBe(true);
     expect(parsed.plan_hash).toBeDefined();
-    expect(parsed.capabilities[0].id).toBe('code-quality');
+    expect(parsed.capabilities[0].id).toBe('report-fixture');
   });
 
   it('exits with code 2 when protected file conflict is detected', async () => {
     // Put a conflicting README.md in target
     fs.writeFileSync(path.join(tmpTarget, 'README.md'), 'Conflicting content');
-    await expect(run(['app', 'plan', 'code-quality', '--target', tmpTarget, '--json'])).rejects.toThrow('process.exit(2)');
+    await expect(run(['app', 'plan', capability, '--target', tmpTarget, '--json'])).rejects.toThrow('process.exit(2)');
     const output = logSpy.mock.calls[0][0];
     const parsed = JSON.parse(output);
     expect(parsed.valid).toBe(false);
@@ -74,7 +96,7 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
 
   it('executes app add with --dry-run without mutating target', async () => {
     await expect(
-      run(['app', 'add', 'code-quality', '--target', tmpTarget, '--dry-run', '--json'])
+      run(['app', 'add', capability, '--target', tmpTarget, '--dry-run', '--json'])
     ).rejects.toThrow('process.exit(0)');
     const output = logSpy.mock.calls[0][0];
     const parsed = JSON.parse(output);
@@ -86,12 +108,12 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
   it('executes app add, writes files, and can be verified with app verify', async () => {
     // 1. Add capability to target app
     await expect(
-      run(['app', 'add', 'code-quality', '--target', tmpTarget, '--json'])
+      run(['app', 'add', capability, '--target', tmpTarget, '--json'])
     ).rejects.toThrow('process.exit(0)');
     const addOutput = logSpy.mock.calls[0][0];
     const addResult = JSON.parse(addOutput);
     expect(addResult.success).toBe(true);
-    expect(addResult.capabilities).toContain('code-quality');
+    expect(addResult.capabilities).toContain('report-fixture');
 
     // 2. Verify target app with app verify (expect exit 0)
     logSpy.mockClear();
@@ -101,7 +123,7 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
     const verifyOutput = logSpy.mock.calls[0][0];
     const verifyReport = JSON.parse(verifyOutput);
     expect(verifyReport.valid).toBe(true);
-    expect(verifyReport.capabilities[0].id).toBe('code-quality');
+    expect(verifyReport.capabilities[0].id).toBe('report-fixture');
 
     // 3. Tamper with a file and expect app verify to exit 2 (drift detected)
     logSpy.mockClear();
@@ -117,7 +139,7 @@ describe('App Capability Deployment CLI (cli/app/index.mjs)', () => {
   it('creates a new standalone app via app create', async () => {
     const newAppDir = path.join(tmpTarget, 'standalone-child');
     await expect(
-      run(['app', 'create', newAppDir, '--plugin', 'code-quality', '--json'])
+      run(['app', 'create', newAppDir, '--plugin', capability, '--json'])
     ).rejects.toThrow('process.exit(0)');
     const output = logSpy.mock.calls[0][0];
     const parsed = JSON.parse(output);
