@@ -276,10 +276,16 @@ export function missingRequired(schema, config) {
   return (schema.required || []).filter((key) => config?.[key] === undefined);
 }
 
-/** Values at schema locations annotated `"x-command": true`, with their config paths. */
+/**
+ * Values at schema locations annotated `"x-command": true`, with their config
+ * paths. A command is a shell-style string or an argv array of strings.
+ */
 export function collectCommandValues(schema, value, at = []) {
   if (!schema || value === undefined || value === null) return [];
-  if (schema['x-command'] === true && typeof value === 'string') return [{ path: at.join('.'), command: value }];
+  if (schema['x-command'] === true && (typeof value === 'string'
+      || (Array.isArray(value) && value.length && value.every((part) => typeof part === 'string')))) {
+    return [{ path: at.join('.'), command: value }];
+  }
   const found = [];
   if (schema.type === 'array' && Array.isArray(value) && schema.items) {
     value.forEach((item, i) => found.push(...collectCommandValues(schema.items, item, [...at, String(i)])));
@@ -305,7 +311,7 @@ function onPath(binary) {
 
 /** Whether a gate command's program exists; does not run it. */
 export function resolveCommand(command, repoRoot) {
-  const tokens = String(command).trim().split(/\s+/).filter(Boolean);
+  const tokens = Array.isArray(command) ? [...command] : String(command).trim().split(/\s+/).filter(Boolean);
   while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens.shift();
   const program = tokens[0];
   if (!program) return { ok: false, reason: 'empty command' };
@@ -363,7 +369,8 @@ export function checkSkillLayerContract(skillDir) {
   }
   for (const { path: at, command } of collectCommandValues(contract.schema, state.config)) {
     const resolved = resolveCommand(command, repoRoot);
-    add(`command:${at}`, resolved.ok, resolved.ok ? `${at}: '${command}' resolves` : `${at}: ${resolved.reason}`);
+    const shown = Array.isArray(command) ? command.join(' ') : command;
+    add(`command:${at}`, resolved.ok, resolved.ok ? `${at}: '${shown}' resolves` : `${at}: ${resolved.reason}`);
   }
   return result();
 }

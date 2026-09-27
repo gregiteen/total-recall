@@ -1,7 +1,7 @@
 {
   "version": 3,
   "toolchain": "javascript",
-  "repoDescription": "Total Recall brain \u2014 Node ESM, no TypeScript, no ESLint. Quality here means: dist stays in sync with src, the open-source path invariant holds, and the SSSS reference kernel still passes its own suites.",
+  "repoDescription": "Total Recall brain — Node ESM, no TypeScript, no ESLint. Quality here means: dist stays in sync with src, the open-source path invariant holds, and the SSSS reference kernel still passes its own suites.",
   "globalLock": true,
   "memory": {
     "maxOldSpaceMb": 4096
@@ -18,7 +18,7 @@
     {
       "id": "dist-freshness",
       "tier": "fast",
-      "description": "Published dist must not lag src \u2014 prepublishOnly depends on this.",
+      "description": "Published dist must not lag src — prepublishOnly depends on this.",
       "cmd": [
         "npm",
         "run",
@@ -76,15 +76,6 @@
       "tier": "fast",
       "kind": "grep-forbid",
       "description": "INVARIANT: everything listed in package.json:files goes out in the npm tarball, so the whole shipped surface is subject to the open-source path rule -- not just core JS. open-source-paths scans only .mjs/.js/.cjs and ignores docs/ and scaffold/, which is how a synced skills-registry shipped 562 lines of /Users/<name>/... naming 16 third-party repos, ARCHITECTURE.md shipped file:///Users/... links, and two brand comments named a third-party product repo.",
-      "paths": [
-        "^scaffold/",
-        "^docs/(ARCHITECTURE|IDE_INTEGRATION)\\.md$",
-        "^README\\.md$",
-        "^frontend/src/",
-        "^templates/",
-        "^extension/",
-        "^bin/"
-      ],
       "extensions": [
         ".mjs",
         ".js",
@@ -98,6 +89,15 @@
         ".yml",
         ".html"
       ],
+      "paths": [
+        "^scaffold/",
+        "^docs/(ARCHITECTURE|IDE_INTEGRATION)\\.md$",
+        "^README\\.md$",
+        "^frontend/src/",
+        "^templates/",
+        "^extension/",
+        "^bin/"
+      ],
       "ignorePaths": [
         "^node_modules/",
         "\\.spec\\.(ts|tsx|mjs)$",
@@ -107,7 +107,7 @@
         {
           "pattern": "/Users/[a-zA-Z0-9._-]+/",
           "code": "TR-SHIP-001",
-          "message": "Shipped package contains an absolute home path. Use a generic placeholder (<home>) \u2014 this goes out in the npm tarball."
+          "message": "Shipped package contains an absolute home path. Use a generic placeholder (<home>) — this goes out in the npm tarball."
         },
         {
           "pattern": "~/(Github|github)/",
@@ -150,7 +150,7 @@
     {
       "id": "test",
       "tier": "remote",
-      "description": "Full vitest suite \u2014 REMOTE ONLY. Running it locally violates the never-run-heavy-node-processes-on-the-laptop invariant; the v2 daemon incident pinned this 8GB machine at load 644. Run on the Mac Mini.",
+      "description": "Full vitest suite — REMOTE ONLY. Running it locally violates the never-run-heavy-node-processes-on-the-laptop invariant; the v2 daemon incident pinned this 8GB machine at load 644. Run on the Mac Mini.",
       "cmd": [
         "npm",
         "test"

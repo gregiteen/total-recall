@@ -11,6 +11,7 @@ import {
   parseCollectionItem,
   writeSkillConfig,
   resolveCommand,
+  collectCommandValues,
   checkSkillLayerContract,
 } from './skill-config.mjs';
 import { emptyRegistry, saveRegistry, skillStatus } from './skills-registry.mjs';
@@ -311,6 +312,11 @@ describe('layered skill repo-layer config', () => {
     expect(resolveCommand(process.execPath, repo).ok).toBe(true);
     expect(resolveCommand('../outside.sh', repo).ok).toBe(false);
     expect(resolveCommand('   ', repo).ok).toBe(false);
+    expect(resolveCommand(['node', '--version'], repo).ok).toBe(true);
+    expect(resolveCommand(['CI=1', 'tr-no-such-binary-xyz'], repo).ok).toBe(false);
+    const argvSchema = { type: 'object', properties: { cmd: { type: 'array', 'x-command': true, items: { type: 'string' } } } };
+    expect(collectCommandValues(argvSchema, { cmd: ['npm', 'test'] })).toEqual([{ path: 'cmd', command: ['npm', 'test'] }]);
+    expect(collectCommandValues(argvSchema, { cmd: [] })).toEqual([]);
   });
 
   it('keeps helper semantics narrow', async () => {
