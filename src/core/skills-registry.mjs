@@ -469,6 +469,42 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
   };
 }
 
+function installDetail(entry, inst) {
+  const exists = fs.existsSync(path.join(inst.path, 'SKILL.md'));
+  // Only explicitly deployed/adopted installs are layered. Old install-map rows
+  // under a now-layered catalog entry are legacy copies: not adoption consent,
+  // and their content hash says nothing about the plugin-owned core.
+  const layered = Boolean(inst.layered);
+  const legacyUnderLayered = Boolean(entry?.layered) && !layered;
+  const liveHash = exists ? hashSkillContent(inst.path) : null;
+  const liveCoreHash = layered && exists ? hashSkillLayer(inst.path, 'core') : null;
+  const liveRepoHash = layered && exists ? hashSkillLayer(inst.path, 'repo') : null;
+  const drift = layered
+    ? liveCoreHash !== (entry?.core_hash || inst.core_hash)
+    : legacyUnderLayered
+      ? false
+      : exists && entry?.content_hash
+        ? liveHash !== entry.content_hash
+        : exists && inst.registry_hash
+          ? liveHash !== inst.registry_hash
+          : false;
+  return {
+    ...inst,
+    exists,
+    live_hash: liveHash,
+    ...(layered ? {
+      core_hash: liveCoreHash,
+      repo_hash: liveRepoHash,
+      repo_changed: liveRepoHash !== inst.repo_hash,
+    } : {}),
+    ...(legacyUnderLayered ? { adopted: false } : {}),
+    drift,
+    // Repo-layer contract checks apply to any layered install whose core ships a config contract.
+    ...(layered && exists && fs.existsSync(path.join(inst.path, 'core', 'config.schema.json'))
+      ? { contract: checkSkillLayerContract(inst.path) } : {}),
+  };
+}
+
 /**
  * Status of a skill: registry entry + installs + drift.
  */
@@ -478,33 +514,13 @@ export function skillStatus(brainDir, skillId) {
   const installs = registry.installs.filter((i) => i.skill_id === skillId);
 
   const installDetails = installs.map((inst) => {
-    const exists = fs.existsSync(path.join(inst.path, 'SKILL.md'));
-    const liveHash = exists ? hashSkillContent(inst.path) : null;
-    const layered = Boolean(entry?.layered || inst.layered);
-    const liveCoreHash = layered && exists ? hashSkillLayer(inst.path, 'core') : null;
-    const liveRepoHash = layered && exists ? hashSkillLayer(inst.path, 'repo') : null;
-    const drift = layered
-      ? liveCoreHash !== (entry?.core_hash || inst.core_hash)
-      :
-      exists && entry?.content_hash
-        ? liveHash !== entry.content_hash
-        : exists && inst.registry_hash
-          ? liveHash !== inst.registry_hash
-          : false;
-    return {
-      ...inst,
-      exists,
-      live_hash: liveHash,
-      ...(layered ? {
-        core_hash: liveCoreHash,
-        repo_hash: liveRepoHash,
-        repo_changed: liveRepoHash !== inst.repo_hash,
-      } : {}),
-      drift,
-      // Repo-layer contract checks apply to any install whose core ships a config contract.
-      ...(exists && fs.existsSync(path.join(inst.path, 'core', 'config.schema.json'))
-        ? { contract: checkSkillLayerContract(inst.path) } : {}),
-    };
+    try {
+      return installDetail(entry, inst);
+    } catch (err) {
+      // One unreadable install (a symlinked layer, a moved repo) must not hide
+      // the status of every other install.
+      return { ...inst, exists: fs.existsSync(inst.path), error: err.message, drift: false };
+    }
   });
 
   // Local brain skills dir presence

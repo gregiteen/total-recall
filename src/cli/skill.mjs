@@ -544,7 +544,9 @@ Provide a high-level explanation of the skill's capabilities and context.
       console.log(`  Installs: ${st.install_count}  drift=${st.any_drift ? 'YES' : 'no'}${st.any_contract_failure ? '  contract=FAILED' : ''}`);
       for (const inst of st.installs) {
         console.log(
-          `    • ${inst.path}\n      exists=${inst.exists} live=${inst.live_hash || '-'} drift=${inst.drift}`,
+          `    • ${inst.path}\n      exists=${inst.exists} live=${inst.live_hash || '-'} drift=${inst.drift}` +
+          (inst.adopted === false ? '  (legacy copy, not adopted: deploy to adopt)' : '') +
+          (inst.error ? `\n      error=${inst.error}` : ''),
         );
         if (inst.layered) {
           console.log(`      core=${inst.core_hash || '-'} repo=${inst.repo_hash || '-'} repo_changed=${inst.repo_changed}`);

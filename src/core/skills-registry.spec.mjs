@@ -10,6 +10,7 @@ import {
   skillStatus,
   listInstalls,
   loadRegistry,
+  saveRegistry,
   syncLocalSkillsToRegistry,
   unregisterSkill,
   adaptSkillDescription,
@@ -268,6 +269,32 @@ describe('skills-registry', () => {
     deploySkill(brain, 'layered', { repo });
     expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toContain('Repo-specific instruction.');
     expect(fs.readFileSync(path.join(local, 'core', 'runner.mjs'), 'utf8')).toContain('default 2');
+  });
+
+  it('reports legacy rows under a layered catalog without hashing or crashing on them', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'gated');
+    fs.mkdirSync(path.join(source, 'core'));
+    fs.writeFileSync(path.join(source, 'core', 'runner.mjs'), 'export default 1;\n');
+    registerSkill(brain, source);
+    const adoptedRepo = path.join(workspace, 'adopted');
+    deploySkill(brain, 'gated', { repo: adoptedRepo });
+    // A pre-existing symlinked copy discovered before the catalog became layered.
+    const real = writeSkill(path.join(workspace, 'real'), 'gated');
+    const linkParent = path.join(workspace, 'legacy', '.claude', 'skills');
+    fs.mkdirSync(linkParent, { recursive: true });
+    fs.symlinkSync(real, path.join(linkParent, 'gated'));
+    const registry = loadRegistry(brain);
+    registry.installs.push({ skill_id: 'gated', path: path.join(linkParent, 'gated'), repo: path.join(workspace, 'legacy') });
+    registry.installs.push({ skill_id: 'gated', path: path.join(workspace, 'moved', '.agent', 'skills', 'gated'), layered: true });
+    saveRegistry(brain, registry);
+
+    const status = skillStatus(brain, 'gated');
+    const byRepo = (fragment) => status.installs.find((i) => i.path.includes(fragment));
+    expect(byRepo('adopted')).toMatchObject({ layered: true, drift: false });
+    expect(byRepo('legacy')).toMatchObject({ adopted: false, drift: false });
+    expect(byRepo('legacy').core_hash).toBeUndefined();
+    expect(byRepo('moved')).toMatchObject({ exists: false, drift: true });
+    expect(status.any_drift).toBe(true);
   });
 
   it('does not reinterpret an old install-map row as layered adoption', () => {
