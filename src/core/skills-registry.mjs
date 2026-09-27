@@ -12,6 +12,7 @@ import os from 'os';
 import YAML from 'yaml';
 import matter from 'gray-matter';
 import { ensureFullProjectBrain } from './project-brain.mjs';
+import { checkSkillLayerContract } from './skill-config.mjs';
 
 export const REGISTRY_VERSION = 1;
 
@@ -500,6 +501,9 @@ export function skillStatus(brainDir, skillId) {
         repo_changed: liveRepoHash !== inst.repo_hash,
       } : {}),
       drift,
+      // Repo-layer contract checks apply to any install whose core ships a config contract.
+      ...(exists && fs.existsSync(path.join(inst.path, 'core', 'config.schema.json'))
+        ? { contract: checkSkillLayerContract(inst.path) } : {}),
     };
   });
 
@@ -517,6 +521,7 @@ export function skillStatus(brainDir, skillId) {
     installs: installDetails,
     install_count: installDetails.length,
     any_drift: installDetails.some((i) => i.drift),
+    any_contract_failure: installDetails.some((i) => i.contract && !i.contract.ok),
   };
 }
 

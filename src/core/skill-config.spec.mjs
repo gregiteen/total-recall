@@ -10,7 +10,11 @@ import {
   listCollections,
   parseCollectionItem,
   writeSkillConfig,
+  resolveCommand,
+  checkSkillLayerContract,
 } from './skill-config.mjs';
+import { emptyRegistry, saveRegistry, skillStatus } from './skills-registry.mjs';
+import { verifyApplication } from './app-deploy/verify.mjs';
 
 const CLI = path.resolve('bin/total-recall.mjs');
 
@@ -31,7 +35,7 @@ const SCHEMA = {
         required: ['name', 'command', 'tier'],
         properties: {
           name: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' },
-          command: { type: 'string', minLength: 1 },
+          command: { type: 'string', minLength: 1, 'x-command': true },
           tier: { type: 'string', enum: ['fast', 'full'] },
         },
       },
@@ -238,6 +242,75 @@ describe('layered skill repo-layer config', () => {
     expect(init.status).toBe(1);
     expect(init.json.error).toMatch(/init --project/);
     expect(fs.existsSync(configFile)).toBe(false);
+  });
+
+  it('passes contract checks for a recorded, valid, in-sync config with resolvable gates', () => {
+    expect(cli(repo, 'skill', 'config', 'quality', 'init', '--yes').status).toBe(0);
+    expect(cli(repo, 'skill', 'config', 'quality', 'set', 'gates', JSON.stringify([{ name: 'probe', command: 'node --version', tier: 'fast' }])).status).toBe(0);
+    const check = cli(repo, 'skill', 'config', 'quality', 'check', '--json');
+    expect(check.status).toBe(0);
+    expect(check.json.ok).toBe(true);
+    expect(check.json.checks.map((c) => c.id)).toEqual(['contract', 'record', 'config', 'contract-version', 'projection', 'command:gates.0.command']);
+  });
+
+  it('fails contract checks for unresolvable gates and drift, and warns on a changed core contract', () => {
+    fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ scripts: { lint: 'true' } }));
+    expect(cli(repo, 'skill', 'config', 'quality', 'init', '--yes').status).toBe(0);
+    const gates = [
+      { name: 'ok-script', command: 'npm run lint', tier: 'fast' },
+      { name: 'no-script', command: 'npm run nope', tier: 'fast' },
+      { name: 'no-binary', command: 'CI=1 tr-no-such-binary-xyz --check', tier: 'fast' },
+      { name: 'no-file', command: './scripts/missing.sh', tier: 'full' },
+    ];
+    expect(cli(repo, 'skill', 'config', 'quality', 'set', 'gates', JSON.stringify(gates)).status).toBe(0);
+    fs.writeFileSync(configFile, '{}');
+    const schemaFile = path.join(skillDir, 'core', 'config.schema.json');
+    fs.writeFileSync(schemaFile, `${fs.readFileSync(schemaFile, 'utf8')}\n`);
+
+    const report = checkSkillLayerContract(skillDir);
+    expect(report.ok).toBe(false);
+    const failed = Object.fromEntries(report.checks.filter((c) => !c.ok).map((c) => [c.id, c]));
+    expect(Object.keys(failed).sort()).toEqual([
+      'command:gates.1.command', 'command:gates.2.command', 'command:gates.3.command', 'contract-version', 'projection',
+    ]);
+    expect(failed['contract-version'].level).toBe('warn');
+    expect(failed['command:gates.1.command'].message).toMatch(/no 'nope' script/);
+    expect(failed['command:gates.2.command'].message).toMatch(/tr-no-such-binary-xyz/);
+    expect(cli(repo, 'skill', 'config', 'quality', 'check').status).toBe(1);
+  });
+
+  it('reports unconfigured and unrecorded repo layers as contract failures', () => {
+    expect(checkSkillLayerContract(skillDir).checks.at(-1)).toMatchObject({ id: 'record', ok: false });
+    fs.writeFileSync(configFile, JSON.stringify({ language: 'node', gates: [] }));
+    const report = checkSkillLayerContract(skillDir);
+    expect(report.ok).toBe(false);
+    expect(report.checks.find((c) => c.id === 'record').message).toMatch(/import/);
+  });
+
+  it('surfaces the same contract check in skillStatus and app verify', async () => {
+    const brainDir = path.join(repo, 'brain');
+    saveRegistry(brainDir, { ...emptyRegistry(), installs: [{ skill_id: 'quality', path: skillDir, layered: true }] });
+    let status = skillStatus(brainDir, 'quality');
+    expect(status.any_contract_failure).toBe(true);
+    expect(status.installs[0].contract.ok).toBe(false);
+
+    expect(cli(repo, 'skill', 'config', 'quality', 'init', '--yes').status).toBe(0);
+    expect(cli(repo, 'skill', 'config', 'quality', 'set', 'gates', '[]').status).toBe(0);
+    status = skillStatus(brainDir, 'quality');
+    expect(status.any_contract_failure).toBe(false);
+
+    fs.writeFileSync(configFile, '{}');
+    const verified = await verifyApplication(repo, { checkFiles: false });
+    expect(verified.valid).toBe(false);
+    expect(verified.skills.map((r) => r.skill_id)).toEqual(['quality']);
+    expect(verified.errors.join('\n')).toMatch(/Skill 'quality' contract: config\.json has drifted/);
+  });
+
+  it('resolves gate programs without running them', () => {
+    expect(resolveCommand('node -e "process.exit(1)"', repo).ok).toBe(true);
+    expect(resolveCommand(process.execPath, repo).ok).toBe(true);
+    expect(resolveCommand('../outside.sh', repo).ok).toBe(false);
+    expect(resolveCommand('   ', repo).ok).toBe(false);
   });
 
   it('keeps helper semantics narrow', async () => {

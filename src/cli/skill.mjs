@@ -68,7 +68,7 @@ function printHelp() {
     registry              List catalog entries in skills-registry/index.yaml
     deploy <id>           Copy skill into a repo (.agent/skills/<id>/) and record install map
     status [id]           Registry + install map + drift (omit id = summary)
-    config <id> …         Repo-layer config from core/config.schema.json (get|set|unset|rebuild|import|
+    config <id> …         Repo-layer config from core/config.schema.json (get|set|unset|rebuild|import|check|
                           validate|schema, <collection> list|add|remove, detect, init)
     sync-registry         Register all local brain skills into the catalog
     unregister <id>       Remove catalog entry (does not delete repo copies)
@@ -147,7 +147,7 @@ export default async function skillCli(args) {
     const { runSkillConfig } = await import('./skill-config.mjs');
     const verbArgs = rest.slice(2);
     // `skill config <id> get x` reads as the config verb; `skill config <id> detect` stays a verb.
-    const normalized = ['get', 'set', 'unset', 'validate', 'schema', 'rebuild', 'import'].includes(verbArgs[0]) ? ['config', ...verbArgs] : verbArgs;
+    const normalized = ['get', 'set', 'unset', 'validate', 'schema', 'rebuild', 'import', 'check'].includes(verbArgs[0]) ? ['config', ...verbArgs] : verbArgs;
     await runSkillConfig(skillId, normalized, { repoRoot });
     return;
   }
@@ -541,7 +541,7 @@ Provide a high-level explanation of the skill's capabilities and context.
         console.log(`  Version: ${st.entry.version}  hash=${st.entry.content_hash}`);
         console.log(`  Source: ${st.entry.source_path || st.entry.source}`);
       }
-      console.log(`  Installs: ${st.install_count}  drift=${st.any_drift ? 'YES' : 'no'}`);
+      console.log(`  Installs: ${st.install_count}  drift=${st.any_drift ? 'YES' : 'no'}${st.any_contract_failure ? '  contract=FAILED' : ''}`);
       for (const inst of st.installs) {
         console.log(
           `    • ${inst.path}\n      exists=${inst.exists} live=${inst.live_hash || '-'} drift=${inst.drift}`,
@@ -549,8 +549,15 @@ Provide a high-level explanation of the skill's capabilities and context.
         if (inst.layered) {
           console.log(`      core=${inst.core_hash || '-'} repo=${inst.repo_hash || '-'} repo_changed=${inst.repo_changed}`);
         }
+        if (inst.contract) {
+          console.log(`      contract=${inst.contract.ok ? 'ok' : 'FAILED'}`);
+          for (const c of inst.contract.checks.filter((check) => !check.ok)) {
+            console.log(`        ${c.level === 'warn' ? '⚠' : '✖'} ${c.message}`);
+          }
+        }
       }
       console.log('');
+      if (st.any_contract_failure) process.exitCode = 1;
     } catch (err) {
       console.error(`❌ ${err.message}`);
       process.exit(1);

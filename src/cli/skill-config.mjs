@@ -28,6 +28,7 @@ import {
   removeCollectionItem,
   detectSkillConfig,
   missingRequired,
+  checkSkillLayerContract,
 } from '../core/skill-config.mjs';
 
 function usage(prefix, collections) {
@@ -41,6 +42,7 @@ function usage(prefix, collections) {
     ${prefix} config validate                 Check the record against the contract and config.json for drift
     ${prefix} config rebuild                  Regenerate config.json from the SSSS record
     ${prefix} config import                   Record an existing config.json (adoption)
+    ${prefix} config check                    Contract checks: record, validity, drift, gate commands
     ${prefix} config schema                   Print core/config.schema.json
 ${nouns ? `${nouns}\n` : ''}    ${prefix} detect [--apply] [--force]       Propose a config from the repo (core/detect.mjs)
     ${prefix} init [--yes] [--force]           Create config.json from defaults, detection and prompts
@@ -111,6 +113,14 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
         if (state.source !== 'record') throw new SkillConfigError(`config.json is valid but not recorded in SSSS; run '${prefix} config import'`, { exitCode: 1 });
         if (!state.inSync) throw new SkillConfigError(`config.json has drifted from ${recordPath(skillId)}; run '${prefix} config rebuild'`, { exitCode: 1 });
         return out({ valid: true, in_sync: true }, `${recordPath(skillId)} satisfies core/config.schema.json and config.json matches it`);
+      }
+      if (action === 'check') {
+        const report = checkSkillLayerContract(skillDir);
+        const text = report.checks.map((c) => `${c.ok ? '✔' : c.level === 'warn' ? '⚠' : '✖'} ${c.message}`).join('\n');
+        if (json) console.log(JSON.stringify({ ok: report.ok, exit_code: report.ok ? 0 : 1, ...report }));
+        else console.log(text);
+        process.exitCode = report.ok ? 0 : 1;
+        return report;
       }
       if (action === 'rebuild') {
         if (state.source !== 'record') throw new SkillConfigError(`No ${recordPath(skillId)} record to rebuild from`, { exitCode: 1 });

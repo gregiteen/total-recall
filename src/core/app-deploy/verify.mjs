@@ -15,6 +15,7 @@ import {
   AppCapabilityInstallationSchema,
   AccessGrantSchema
 } from '../schema.mjs';
+import { checkSkillLayerContract } from '../skill-config.mjs';
 
 /**
  * Verifies an application's capability deployments, integrity, and conformance.
@@ -201,12 +202,29 @@ export async function verifyApplication(targetDir = process.cwd(), options = {})
     }
   }
 
+  // 4. Repo-layer contracts of layered skills (same check as `skill status`)
+  const skillsReport = [];
+  const skillsRoot = path.join(resolvedTarget, '.agent', 'skills');
+  if (fs.existsSync(skillsRoot)) {
+    for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const skillDir = path.join(skillsRoot, entry.name);
+      if (!fs.existsSync(path.join(skillDir, 'core', 'config.schema.json'))) continue;
+      const report = checkSkillLayerContract(skillDir);
+      skillsReport.push(report);
+      for (const failed of report.checks.filter((c) => !c.ok && c.level === 'error')) {
+        errors.push(`Skill '${report.skill_id}' contract: ${failed.message}`);
+      }
+    }
+  }
+
   return {
     valid: errors.length === 0,
     target: resolvedTarget,
     vault: vaultDir,
     capabilities: capabilitiesReport,
     grants: grantsReport,
+    skills: skillsReport,
     events_count: eventsCount,
     errors
   };
