@@ -33,7 +33,7 @@ Goal: Every plugin lives in its own repository; the core ships none.
 - [x] License for plugin repos: MIT, matching the core (user decision, 2026-09-25) (S)
 - [ ] Plugin repo template: manifest, specs, CI against a pinned core, release workflow emitting `tr-plugin-bundle/1` + digest (M)
 - [ ] `default-plugins.lock.json` + lock-driven install on `init`/`upgrade` via `plugin-store.mjs`; artifact cache for offline reinstall; digest mismatch refuses (M)
-- [ ] Move bundled `code-quality`, `git-sentinel`, `system-monitor` to their own repos; remove them from `plugins/` (M)
+- [/] Move bundled `code-quality`, `git-sentinel`, `system-monitor` to their own repos; remove them from `plugins/`. `code-quality` done 2026-09-26 (`gregiteen/tr-plugin-code-quality`, removed from `plugins/`); it is not yet in a default-plugin lock, so `init` does not install it (M)
 - [ ] Remove `plugins/` from `package.json` `files` once empty (S)
 
 ## ⏳ Phase 1: Extension points
