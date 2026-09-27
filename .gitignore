@@ -141,3 +141,7 @@ WINDSURF.md
 .cursor/rules/
 .vscode/copilot-instructions.md
 .claude/worktrees/
+
+# Per-run fixtures that specs must import through Vite (it only loads fresh
+# modules from inside the project root). Removed by each spec after use.
+.vitest-tmp/

@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { validateAppCliSpec } from './app-deploy/runtime-cli.mjs';
+import { validateUiSpec } from './app-deploy/ui-elements.mjs';
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -241,16 +242,7 @@ export function validatePluginManifest(manifest) {
   }
 
   if (manifest.ui !== undefined) {
-    if (typeof manifest.ui !== 'object' || manifest.ui === null) {
-      errors.push("'ui' must be an object");
-    } else {
-      if (manifest.ui.design_tokens !== undefined && !isSafeRelativePath(manifest.ui.design_tokens)) {
-        errors.push("'ui.design_tokens' must be a safe relative path");
-      }
-      if (manifest.ui.elements !== undefined && !Array.isArray(manifest.ui.elements)) {
-        errors.push("'ui.elements' must be an array");
-      }
-    }
+    errors.push(...validateUiSpec(manifest.ui));
   }
 
   if (manifest.app_cli !== undefined) {
