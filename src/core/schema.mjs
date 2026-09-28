@@ -231,6 +231,63 @@ export const ConversationSchema = z.object({
   created_at: ssssDatetime().optional(),
 });
 
+// SSSS 0.10 core primitives (spec §5.4). `role` and `thread` are the canonical
+// forms of `security_role` and `conversation`, which stay for existing vaults.
+export const AssetSchema = z.object({
+  type: z.literal('asset'),
+  name: z.string(),
+  mime_type: z.string(),
+  encoding: z.enum(['base64', 'utf-8', 'none']),
+  slug: z.string().optional(),
+  hash: z.string().optional(),
+  size_bytes: z.number().int().nonnegative().optional(),
+  description: z.string().optional(),
+});
+
+export const ResourceSchema = z.object({
+  type: z.literal('resource'),
+  name: z.string(),
+  kind: z.string(),
+  status: z.enum(['bound', 'unbound', 'pending', 'error']),
+  slug: z.string().optional(),
+  description: z.string().optional(),
+  binds: z.unknown().optional(),
+  provisioning: z.unknown().optional(),
+});
+
+export const RoleSchema = z.object({
+  type: z.literal('role'),
+  name: z.string(),
+  permissions: z.array(z.string()),
+  description: z.string().optional(),
+});
+
+export const TriggerSchema = z.object({
+  type: z.literal('trigger'),
+  name: z.string(),
+  source: z.enum(['cron', 'interval', 'webhook', 'event', 'file_change', 'condition', 'manual']),
+  status: z.enum(['active', 'paused', 'disabled']),
+  slug: z.string().optional(),
+  description: z.string().optional(),
+  cron: z.string().optional(),
+  interval: z.union([z.string(), z.number()]).optional(),
+  timezone: z.string().optional(),
+  target_workflow: z.string().optional(),
+  target_params: z.record(z.unknown()).optional(),
+  concurrency: z.enum(['allow_parallel', 'skip_if_running', 'enqueue', 'replace']).optional(),
+  misfire_policy: z.enum(['skip', 'run_once', 'catch_up']).optional(),
+});
+
+export const ThreadSchema = z.object({
+  type: z.literal('thread'),
+  thread_id: z.string(),
+  workspace_id: z.string().optional(),
+  user_id: z.string().optional(),
+  status: z.enum(['active', 'archived', 'closed']).optional(),
+  turn_count: z.number().int().optional(),
+  created_at: ssssDatetime().optional(),
+});
+
 export const RunSchema = z.object({
   type: z.literal('run'),
   run_id: z.string(),
@@ -1218,6 +1275,11 @@ export const SSSS_SCHEMAS = {
   security_role: SecurityRoleSchema,
   model: ModelSchema,
   conversation: ConversationSchema,
+  asset: AssetSchema,
+  resource: ResourceSchema,
+  role: RoleSchema,
+  trigger: TriggerSchema,
+  thread: ThreadSchema,
   run: RunSchema,
   primitive: PrimitiveSchema,
   proposal: ProposalSchema,

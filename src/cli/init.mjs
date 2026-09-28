@@ -883,8 +883,14 @@ export default async function init(args) {
       }
       const projectName = path.basename(cwd);
       const existingIdx = registry.findIndex(p => p.path === cwd);
+      // brainCfg is block-scoped to the bootstrap branch above; re-read the
+      // persisted brain.json so the project UUID reaches the registry.
+      let projectId;
+      try {
+        projectId = JSON.parse(fs.readFileSync(path.join(brainDir, 'config', 'brain.json'), 'utf8')).project_id;
+      } catch { projectId = undefined; }
       const entry = {
-        project_id: brainCfg.project_id || undefined,
+        project_id: projectId || undefined,
         name: projectName,
         path: cwd,
         brainDir: brainDir,
