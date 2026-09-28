@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.32.4
+
+- `plugin install` now registers the plugin's `commands` as composable commands (listed in the compiled instruction files) and `plugin remove` removes them; a hand-written command of the same name is never overwritten.
+- Provider inference for `secret set` looks up the provider catalog first, so a repo prefix (`JSN_SMTP2GO_API_KEY`) no longer becomes a bogus provider that triggers research.
+
 ## 3.32.3
 
 - New bundled plugin `operator-alerts` (`total-recall alerts send|test|config|log`): desktop, SMTP2GO email, Telnyx SMS, webhook and issue alerts with dedupe, quiet hours and a delivery ledger. Chat and push channels are stubs.

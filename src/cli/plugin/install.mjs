@@ -1,4 +1,5 @@
 import { installPlugin as install } from '../../core/plugin-store.mjs';
+import { syncPluginCommands } from '../command.mjs';
 
 export async function installPlugin(args = []) {
   const isGlobal = args.includes('--global') || args.includes('-g');
@@ -16,7 +17,11 @@ export async function installPlugin(args = []) {
     const from = result.source.kind === 'peer' ? `peer ${result.source.peer_hostname}` : result.source.kind;
     console.log(`\n✅ Installed '${result.plugin.name}' (id: ${result.plugin.id}, v${result.plugin.version}) from ${from}`);
     console.log(`   Location: ${result.plugin.dir}`);
-    console.log(`   sha256:   ${result.sha256}\n`);
+    console.log(`   sha256:   ${result.sha256}`);
+    const cmds = syncPluginCommands(result.plugin.dir, { global: isGlobal });
+    if (cmds.created.length) console.log(`   Commands: ${cmds.created.map((c) => `total-recall ${c}`).join(', ')}`);
+    for (const c of cmds.skipped) console.log(`   Skipped command '${c.name}': ${c.reason}`);
+    console.log('');
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);

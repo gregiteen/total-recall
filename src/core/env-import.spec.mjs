@@ -29,6 +29,10 @@ NOT_A_SECRET=hello
   it('infers provider labels generically (not a whitelist)', () => {
     expect(inferProvider('OPENAI_API_KEY')).toBe('openai');
     expect(inferProvider('ANTHROPIC_API_KEY')).toBe('anthropic');
+    // a repo prefix in front of a known provider must not become the provider
+    expect(inferProvider('JSN_SMTP2GO_API_KEY')).toBe('smtp2go');
+    expect(inferProvider('JSN_TELNYX_API_KEY')).toBe('telnyx');
+    expect(inferProvider('JSN_OPENROUTER_API_KEY')).toBe('openrouter');
     // Generic slug from name segments — not a product whitelist
     expect(inferProvider('MY_CUSTOM_VENDOR_API_KEY')).toMatch(/^my/);
     expect(inferProvider('WEIRD_THING_TOKEN')).toMatch(/^weird/);

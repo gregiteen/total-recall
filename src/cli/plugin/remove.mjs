@@ -1,4 +1,5 @@
 import { uninstallPlugin, setPluginShared } from '../../core/plugin-store.mjs';
+import { removePluginCommands } from '../command.mjs';
 import { publicPluginShareUrl } from '../../core/plugin-public.mjs';
 
 export async function removePlugin(args = []) {
@@ -13,7 +14,10 @@ export async function removePlugin(args = []) {
 
   try {
     const result = await uninstallPlugin(id, { projectRoot: process.cwd(), global: isGlobal ? true : undefined });
-    console.log(`\n✅ Removed plugin '${id}' (${result.scope}) from ${result.dir}\n`);
+    const removed = removePluginCommands(id, { global: result.scope === 'global' });
+    console.log(`\n✅ Removed plugin '${id}' (${result.scope}) from ${result.dir}`);
+    if (removed.length) console.log(`   Removed commands: ${removed.join(', ')}`);
+    console.log('');
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);
