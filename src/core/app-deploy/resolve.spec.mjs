@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
+  detectSsssVersion,
   resolveCapabilityGraph,
   IncompatibleAdapterError,
   IncompatibleSsssVersionError,
@@ -145,5 +149,28 @@ describe('Capability Graph & Dependency Resolver (app-deploy/resolve.mjs)', () =
         OwnershipCollisionError
       );
     });
+  });
+});
+
+describe('detectSsssVersion', () => {
+  it("reads the target app's installed SSSS CLI version", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-ver-'));
+    try {
+      const pkgDir = path.join(dir, 'node_modules', '@gregiteen', 'ssss-cli');
+      fs.mkdirSync(pkgDir, { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ version: '7.1.2' }));
+      expect(detectSsssVersion(dir)).toBe('7.1.2');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to the SSSS CLI bundled with Total Recall', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ssss-none-'));
+    try {
+      expect(detectSsssVersion(dir)).toMatch(/^\d+\.\d+\.\d+/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

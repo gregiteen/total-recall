@@ -10,7 +10,30 @@
  * - Access grant and resource requirement aggregation
  */
 
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const SSSS_PACKAGES = ['@gregiteen/ssss-cli', '@ssss/cli'];
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+function installedSsssVersion(root) {
+  for (const name of SSSS_PACKAGES) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'), 'utf8'));
+      if (pkg.version) return pkg.version;
+    } catch { /* not installed here */ }
+  }
+  return null;
+}
+
+/**
+ * The SSSS version a target app runs: its installed SSSS CLI package, else the
+ * one bundled with Total Recall (what `ssss new` would scaffold today).
+ */
+export function detectSsssVersion(targetDir) {
+  return (targetDir && installedSsssVersion(targetDir)) || installedSsssVersion(PACKAGE_ROOT);
+}
 
 /**
  * Custom error types for capability resolution
@@ -110,7 +133,12 @@ export function checkSsssVersionCompatibility(manifest, targetSsssVersion) {
   const req = manifest.deploy?.required_ssss_version;
   if (!req) return;
 
-  const currentVersion = targetSsssVersion || '0.9.6';
+  const currentVersion = targetSsssVersion || detectSsssVersion();
+  if (!currentVersion) {
+    throw new IncompatibleSsssVersionError(
+      `Plugin '${manifest.id}' requires SSSS version ${req}, but no SSSS CLI package is installed in the target app or Total Recall`
+    );
+  }
   if (!satisfiesVersionConstraint(currentVersion, req)) {
     throw new IncompatibleSsssVersionError(
       `Plugin '${manifest.id}' requires SSSS version ${req}, but target app environment provides ${currentVersion}`
@@ -138,7 +166,7 @@ export function checkSsssVersionCompatibility(manifest, targetSsssVersion) {
  */
 export async function resolveCapabilityGraph(rootDescriptor, options = {}) {
   const adapter = options.adapter || options.targetApp?.framework || 'ssss-app';
-  const targetSsssVersion = options.targetApp?.ssssVersion || '0.9.6';
+  const targetSsssVersion = options.targetApp?.ssssVersion || detectSsssVersion(options.targetApp?.dir);
   const pluginResolver = options.pluginResolver || (async () => null);
 
   const graph = new Map(); // id -> descriptor

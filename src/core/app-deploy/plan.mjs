@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { resolveCapabilitySource } from './source.mjs';
-import { resolveCapabilityGraph } from './resolve.mjs';
+import { resolveCapabilityGraph, detectSsssVersion } from './resolve.mjs';
 
 export const PROTECTED_APP_FILES = new Set([
   'package.json',
@@ -187,7 +187,7 @@ export async function createDeploymentPlan(source, options = {}) {
       targetApp: {
         dir: targetDir,
         framework: adapter,
-        ssssVersion: '0.9.6'
+        ssssVersion: detectSsssVersion(targetDir)
       },
       pluginResolver: options.pluginResolver
     });
