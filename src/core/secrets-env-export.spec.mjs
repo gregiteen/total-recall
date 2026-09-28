@@ -167,4 +167,10 @@ describe('exportEnvToProject', () => {
     expect(p.keys).not.toContain('__tr_secrets_meta');
     expect(p.body).not.toContain('__tr_secrets_meta');
   });
+  it('matches a repo bound by trimmed name when the directory name has trailing whitespace', () => {
+    expect(projectSlugFromPath('/tmp/Some Project ')).toBe('Some Project');
+    expect(
+      secretMatchesTarget({ key: 'K', repos: ['Some Project'] }, { projectPath: '/tmp/Some Project ' }),
+    ).toBe(true);
+  });
 });

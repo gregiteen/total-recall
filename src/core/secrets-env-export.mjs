@@ -67,7 +67,8 @@ export function mergeEnvManagedBlock(existing, managedBody) {
 export function projectSlugFromPath(projectPath) {
   if (!projectPath) return null;
   const abs = path.resolve(projectPath);
-  return path.basename(abs);
+  // Bindings are stored trimmed, so a directory name with stray whitespace must match.
+  return path.basename(abs).trim();
 }
 
 /**
@@ -107,9 +108,7 @@ export function secretMatchesTarget(metaRow, target = {}) {
   // Explicit key list mode
   if (target.keys?.length) return true;
 
-  // Bound to this repo by slug or path (policy: at most one product repo per key)
-  // Multi-repo keys are invalid — do not project them until fixed
-  if (repos.length > 1) return false;
+  // Bound to this repo by slug or path (a key may be bound to several repos)
   if (slug && repos.some((r) => r === slug || r === '*' || r.endsWith(`/${slug}`))) {
     return true;
   }

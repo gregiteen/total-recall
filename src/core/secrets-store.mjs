@@ -319,15 +319,14 @@ function appendAudit(brainDir, event) {
 }
 
 /**
- * Parse repos field. Policy: 0 (developer/tooling) or exactly 1 product repo.
- * Never allow multi-repo binding — each key is unique to one repo or to developer scope.
+ * Parse repos field. A credential may be bound to zero (developer/tooling),
+ * one, or several repos; uniqueness per repo is not required.
  *
  * @param {string|string[]|null|undefined} v
- * @param {{ strict?: boolean }} opts - strict throws if >1; false collapses for read-only display
+ * @param {object} [_opts] - accepted for compatibility; there is no limit
  * @returns {string[]}
  */
-export function normalizeReposBinding(v, opts = {}) {
-  const strict = opts.strict !== false;
+export function normalizeReposBinding(v, _opts = {}) {
   let list = [];
   if (Array.isArray(v)) {
     list = [...new Set(v.map(String).map((s) => s.trim()).filter(Boolean))];
@@ -341,18 +340,21 @@ export function normalizeReposBinding(v, opts = {}) {
       ),
     ];
   }
-  if (strict && list.length > 1) {
-    throw new Error(`A credential can be bound to at most ONE repo. Got ${list.length}: ${list.join(', ')}`);
-  }
   return list;
 }
 
 /**
- * True when meta has multi-repo violation (legacy data).
+ * Multi-repo binding is allowed, so this is never a violation. Kept because
+ * callers still read the field.
  */
-export function isMultiRepoViolation(meta = {}) {
-  const repos = Array.isArray(meta.repos) ? meta.repos.filter(Boolean) : [];
-  return repos.length > 1;
+export function isMultiRepoViolation(_meta = {}) {
+  return false;
+}
+
+/** Lowercase, de-duplicated tag list from an array or comma/space separated string. */
+export function normalizeTags(v) {
+  const raw = Array.isArray(v) ? v : String(v ?? '').split(/[,;\s]+/);
+  return [...new Set(raw.map((t) => String(t).trim().toLowerCase()).filter(Boolean))];
 }
 
 /**
@@ -370,8 +372,9 @@ export function mergeSecretMeta(prev = {}, patch = {}) {
   assign('scope', (v) => (v === 'project' ? 'project' : 'global'));
   assign('provider', (v) => (v ? String(v).toLowerCase() : null));
   assign('label', (v) => (v == null ? null : String(v)));
-  // Writes only — at most one product repo; empty = Developer secrets
-  assign('repos', (v) => normalizeReposBinding(v, { strict: true }));
+  // empty = Developer secrets
+  assign('repos', (v) => normalizeReposBinding(v));
+  assign('tags', normalizeTags);
   assign('subscription_tier', (v) => (v == null || v === '' ? null : String(v)));
   assign('monthly_cost_usd', (v) => (v == null || v === '' ? null : Number(v)));
   assign('monthly_cap_usd', (v) => (v == null || v === '' ? null : Number(v)));
@@ -478,19 +481,13 @@ export function buildSharedValueIndex(rows = []) {
     const multiKey = keys.length > 1;
     // Error unless every member is operator-waived
     const allOk = members.every((m) => m.shared_value_ok === true);
-    let severity = 'error';
-    let error = null;
-    if (allOk) {
-      severity = 'ok';
-      error = null;
-    } else if (multiApp) {
-      severity = 'error';
-      error = `SHARED CREDENTIAL across apps/repos [${apps.join(', ')}] as keys [${keys.join(', ')}]. Issue a unique API key per app and re-bind.`;
-    } else {
-      // Same app/developer but duplicated under multiple secret names — still force unique
-      severity = 'error';
-      error = `SHARED CREDENTIAL value stored under ${keys.length} secret names [${keys.join(', ')}] (app=${apps[0]}). Use one key name or issue distinct values per purpose.`;
-    }
+    // Sharing a value across keys or repos is allowed; it is reported for
+    // information only and never counts as unhealthy.
+    void allOk;
+    const severity = 'info';
+    const error = multiApp
+      ? `Shared value across [${apps.join(', ')}] as keys [${keys.join(', ')}] (allowed).`
+      : `Same value stored under ${keys.length} secret names [${keys.join(', ')}] (allowed).`;
 
     const group = {
       fingerprint: fp.slice(0, 12),
@@ -582,8 +579,9 @@ export async function listSecretsMeta(brainDir) {
       label: m.label || null,
       repos,
       repo: repos.length === 1 ? repos[0] : null,
-      multi_repo_error: isMultiRepoViolation(m),
-      binding_error: isMultiRepoViolation(m) ? `Legacy data error: Bound to ${repos.length} repos. Must be resolved to 1 or 0.` : null,
+      multi_repo_error: false,
+      binding_error: null,
+      tags: Array.isArray(m.tags) ? m.tags : [],
       project_path: m.project_path || null,
       subscription_tier: m.subscription_tier || null,
       monthly_cost_usd: m.monthly_cost_usd ?? null,
@@ -838,6 +836,7 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     scope: opts.scope || prev.scope || 'global',
     provider: opts.provider || prev.provider || null,
     repos: opts.repos !== undefined ? opts.repos : prev.repos,
+    tags: opts.tags !== undefined ? opts.tags : prev.tags,
     subscription_tier: opts.subscription_tier !== undefined ? opts.subscription_tier : prev.subscription_tier,
     monthly_cost_usd: opts.monthly_cost_usd !== undefined ? opts.monthly_cost_usd : prev.monthly_cost_usd,
     monthly_cap_usd: opts.monthly_cap_usd !== undefined ? opts.monthly_cap_usd : prev.monthly_cap_usd,
@@ -860,6 +859,7 @@ export async function setSecret(brainDir, key, value, opts = {}) {
     scope: secrets[META_KEY].keys[key].scope,
     provider: secrets[META_KEY].keys[key].provider,
     actor: opts.actor || 'cli',
+    project_id: opts.project_id || null,
   });
 
   // First-time set only: optionally queue product-level API research (not raw key-name scraping).
@@ -907,6 +907,7 @@ export async function getSecret(brainDir, key, opts = {}) {
     action: opts.action || 'get',
     key,
     actor: opts.actor || 'cli',
+    project_id: opts.project_id || null,
   });
   return { found: true, key, value: secrets[key] };
 }

@@ -57,8 +57,9 @@ import {
   deployKeyToRemotes,
 } from '../core/secrets-remote-deploy.mjs';
 import { listProviders, getProvider } from '../core/provider-catalog.mjs';
-import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
+import { resolveBrainDir, parseLayerFlag, detectProjectBrain } from './agent-dir.mjs';
 import fs from 'node:fs';
+import { ensureProjectId } from '../core/project-id.mjs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import os from 'node:os';
@@ -233,6 +234,7 @@ function printHelp() {
       --docs <url>        API docs URL
       --rotate-days <n>   Auto-rotation interval
       --auto-rotate       Enable auto-rotate flag
+    --tags <a,b,c>      Optional tags saying what the key is and what uses it
     --notes <text>
     --label <text>
     --project <path>
@@ -304,6 +306,7 @@ function parseArgs(args) {
     rotate_days: null,
     auto_rotate: false,
     notes: null,
+    tags: null,
     label: null,
     project: null,
     headscale_url: null,
@@ -389,6 +392,9 @@ function parseArgs(args) {
         break;
       case '--provider':
         out.provider = args[++i];
+        break;
+      case '--tags':
+        out.tags = args[++i];
         break;
       case '--scope':
         out.scope = args[++i];
@@ -573,6 +579,16 @@ function parseArgs(args) {
   return out;
 }
 
+/** Id of the project the command runs in (created on first use), or null outside a project. */
+function currentProjectId() {
+  try {
+    const project = detectProjectBrain(process.cwd());
+    return project ? ensureProjectId(project.brainDir).project_id : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function secretCli(argv) {
   const { layer, remainingArgs } = parseLayerFlag(argv);
   const opts = parseArgs(remainingArgs);
@@ -708,6 +724,8 @@ export default async function secretCli(argv) {
         process.exit(1);
       }
       await setSecret(brainDir, opts.key, opts.value, {
+        tags: opts.tags != null ? opts.tags : undefined,
+        project_id: currentProjectId(),
         provider: opts.provider || inferProvider(opts.key),
         scope: opts.scope,
         repos: opts.repos.length ? opts.repos : undefined,
@@ -955,6 +973,7 @@ export default async function secretCli(argv) {
       if (opts.rotate_days != null) patch.rotate_every_days = opts.rotate_days;
       if (opts.auto_rotate) patch.auto_rotate = true;
       if (opts.notes) patch.notes = opts.notes;
+      if (opts.tags != null) patch.tags = opts.tags;
       if (opts.label) patch.label = opts.label;
       if (opts.project) patch.project_path = opts.project;
       if (opts.provider) patch.provider = opts.provider;
@@ -1008,7 +1027,21 @@ export default async function secretCli(argv) {
         console.error('Usage: total-recall secret get <key>');
         process.exit(1);
       }
-      const r = await getSecret(brainDir, opts.key);
+      const project_id = currentProjectId();
+      let r = await getSecret(brainDir, opts.key, { project_id });
+      if (!r.found && layer === 'auto') {
+        // Credentials live in the global store (SSOT). From inside a project
+        // the auto layer resolves to the project store, so fall back to the
+        // global one, but only for keys bound to this repo or unbound.
+        const { globalBrainDir } = await import('../core/config.mjs');
+        const { secretMatchesTarget } = await import('../core/secrets-env-export.mjs');
+        if (globalBrainDir && globalBrainDir !== brainDir) {
+          const meta = (await listSecretsMeta(globalBrainDir)).find((k) => k.key === opts.key);
+          if (meta && secretMatchesTarget(meta, { projectPath: process.cwd(), includeGlobal: true })) {
+            r = await getSecret(globalBrainDir, opts.key, { project_id });
+          }
+        }
+      }
       if (!r.found) {
         console.error(`  Secret not found: ${opts.key}`);
         process.exit(1);
@@ -1313,7 +1346,7 @@ export default async function secretCli(argv) {
       }
       console.log(`\n  Secret audit (last ${events.length})\n`);
       for (const e of events) {
-        console.log(`  ${e.ts}  ${e.action.padEnd(8)}  ${e.key}  ${e.actor || ''}`);
+        console.log(`  ${e.ts}  ${e.action.padEnd(8)}  ${e.key}  ${e.actor || ''}${e.project_id ? `  project=${e.project_id}` : ''}`);
       }
       console.log('');
       return;
