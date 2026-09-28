@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.32.0] — 2026-09-28
+
+### ✨ Features
+- **`init --project` connects the IDEs it detects.** It projected skills into IDEs in use (for example `.claude/skills/`) but never registered them as connected clients, and compile writes an instruction shim (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`…) only for connected clients. A freshly scaffolded repo therefore never received the global rules. Detected IDEs are now connected during init (`connectDetectedClients`), so step 4's compile writes their shims.
+- Support SSSS 0.10 core primitives: `@ssss/cli` pinned to v0.10.0; schemas for `asset`, `resource`, `role`, `trigger` and `thread`; the composed registry is re-locked. The capability planner reads the target app's installed SSSS CLI version instead of assuming 0.9.6.
+
+### 🐛 Bug Fixes
+- **New rules no longer vanish from instruction surfaces.** Each rules section is capped (15 invariants, 10 preferences, 15 corrections) and ranked by importance and priority with no tie-break, so a newly saved rule of equal weight was silently dropped. Ties now go to the most recently created rule, and a capped section says how many rules it left out and how to search them.
+- **Long-running processes can no longer overwrite surfaces with stale code.** The server, daemon and vault watcher import the surface builder once; after an edit or upgrade they kept compiling with the old copy and overwrote fresh `CLAUDE.md`/`INSTRUCTIONS.md`. `compileSurface` now skips and warns when `surface.mjs` on disk differs from the loaded copy.
+- **`daemon stop` stops the daemon.** `daemon-control` tracked `logs/daemon.pid` while the daemon locked `<brain>/daemon.pid`, so stop could miss the live daemon and leave it running old code next to a new one. There is now one lockfile (`DAEMON_PID_FILE`), written only by the daemon; the daemon holds it until the process exits rather than releasing it at the start of shutdown; and `stopDaemon` waits for exit (SIGKILL after the grace period). `/api/daemon/restart` awaits the stop, which previously let restart start a second daemon.
+- `init --project` no longer fails to register the project with `brainCfg is not defined`.
+
+### 🧪 Testing
+- Regression coverage for rule tie-breaks and overflow notes, the stale-surface guard, IDE connection during init, the unified daemon lock, wait-for-exit stop and SIGKILL escalation.
+
 ## [3.31.2] — 2026-09-26
 
 ### 🐛 Bug Fixes
