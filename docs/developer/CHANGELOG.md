@@ -5,6 +5,13 @@
 ### 🔧 Maintenance
 - `@ssss/cli` pinned to v0.10.1, in which an empty list satisfies a required field. Memory nodes and extension documents with a required list field that is legitimately empty (for example `tags: []`) now validate instead of failing the SSSS contract.
 
+### 🐛 Fixes
+- **Rules are no longer dropped by a fixed count cap.** Compiled instruction files used to keep only the top 15 invariants, 10 preferences and 15 corrections and hide the rest. Each section now has a character budget: absolute-priority and MUST / MUST NOT rules are always written in full, other rules are written in full while the budget lasts, and the remainder appear as one-line entries (title and slug). Nothing is omitted. Budgets are settings: `total-recall config set rules_invariants_budget_chars 15000` (also `rules_preferences_budget_chars`, `rules_corrections_budget_chars`), stored in `config/surface.yml` per brain (project overrides global); `TR_RULE_BUDGET_CHARS` overrides both.
+- **`secret get` works from inside a project.** In a project repo the auto layer resolved to the project store, so keys in the global store (the SSOT) reported "Secret not found". It now falls back to the global store for keys bound to this repo or unbound; keys bound to another repo are still refused.
+- **Secrets policy change: uniqueness is no longer required.** A credential can be bound to several repos and a value can sit under several key names; shared values are reported as information and no longer make `secret check` unhealthy. Tags are optional (`secret set/meta --tags`). Every `secret get` and `secret set` records the calling project's id in the audit log (`secret audit` shows it).
+- **`total-recall project-id`** is now a built-in command (it was a machine-local composable command). It creates a random UUID in `config/brain.json` on first use; `project-id --all` gives every registered project an id and reconciles the registry with each brain.json.
+- Repo bindings are matched on the trimmed directory name, so a repo folder with a trailing space resolves its bound keys.
+
 ## [3.32.0] — 2026-09-28
 
 ### ✨ Features
