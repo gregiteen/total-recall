@@ -5,7 +5,8 @@ description: >-
   structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md
   file before executing.
 repo_scoped: true
-generated_at: 2026-09-26T20:36:20.475Z
+repository_id: "total-recall-brain"
+generated_at: 2026-09-28T08:00:09.594Z
 generated_from: total-recall
 ---
 
@@ -17,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (676 files), Markdown (298 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (684 files), Markdown (307 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -26,28 +27,6 @@ generated_from: total-recall
 ## Directory Structure
 
 ```
-.agent/
-  logs/  (1 items)
-  scratch/  (1 items)
-  skills/
-    code-mode/  (6 items)
-    code-quality/  (9 items)
-    meta-harness/  (1 items)
-    okf/  (5 items)
-    plugins/  (1 items)
-    project-management/  (6 items)
-    push/  (7 items)
-    repo-expert/  (7 items)
-    research/  (1 items)
-    security/  (7 items)
-    skill/  (8 items)
-    ssss/  (7 items)
-    test/  (7 items)
-    total-recall/  (18 items)
-    total-recall-project-management/  (6 items)
-.agents/
-  rules/  (3 items)
-  skills/  (15 items)
 bin/  (4 items)
 collab/
   backend/  (3 items)
@@ -65,7 +44,7 @@ docs/
     archived/  (8 items)
     completed/  (49 items)
     in-progress/  (3 items)
-    planned/  (1 items)
+    planned/  (3 items)
   reference/  (6 items)
   security/  (2 items)
   setup/  (1 items)
@@ -114,16 +93,12 @@ models/
   catalog/
     total-recall/  (1 items)
 plugins/
-  code-quality/  (3 items)
   git-sentinel/  (3 items)
   system-monitor/  (4 items)
 scaffold/
-  .agent/
-    skills/  (3 items)
   openwiki/  (6 items)
 scratch/
-  dummy-repo/
-    .agent/  (1 items)
+  dummy-repo/  (1 items)
 scripts/  (15 items)
 src/
   cli/
@@ -131,7 +106,7 @@ src/
     ingest/  (4 items)
     plugin/  (14 items)
   core/
-    app-deploy/  (18 items)
+    app-deploy/  (23 items)
   server/
     routes/  (96 items)
 templates/
@@ -147,7 +122,7 @@ templates/
 
 ## CLI Commands
 
-56 commands in `src/cli/`:
+57 commands in `src/cli/`:
 
 | Command | File | Description |
 |---------|------|-------------|
@@ -158,7 +133,7 @@ templates/
 | brain | brain.mjs |  |
 | chat | chat.mjs | Total Recall CLI Chat Interface |
 | collab | collab.mjs | total-recall collab |
-| command | command.mjs |  |
+| command | command.mjs | Generate `total-recall <name> config|<collection>|detect|ini |
 | config | config.mjs |  |
 | connect | connect.mjs |  |
 | daemon | daemon.mjs | total-recall daemon |
@@ -191,7 +166,7 @@ templates/
 | relay | relay.mjs | total-recall relay |
 | remember | remember.mjs | Parse a human-friendly duration string and return a Date in  |
 | repo-expert-generate | repo-expert-generate.mjs | repo-expert-generate.mjs — Auto-generate repo-expert SKILL.m |
-| ... | +16 more | |
+| ... | +17 more | |
 
 ## API Routes
 
@@ -603,7 +578,7 @@ templates/
 
 ## Core Modules
 
-131 modules in `src/core/`:
+133 modules in `src/core/`:
 
 - **agent-manager** — exports: loadAgentState, saveAgentState, isProcessRunning, listAgents, spawnAgent, killAgent, getAgentLogs
 - **append-log** — exports: compactAppendLogs
@@ -615,6 +590,7 @@ templates/
 - **browser-session** — exports: getChromium, resolveProfileDir, ensureProfileDir, launchRotationContext, openConsole, isAuthenticated, looksLikeLoginUrl, waitForLogin
 - **cache-prune** — exports: sessionIngestedGuard, isProtected, pruneCaches, formatBytes, maybePruneCaches
 - **clarity-rewriter** — exports: runClarityReview, runStalenessCheck, runFactSeeker, runCutoffAudit, writeCorrection
+- **command-surface** — exports: describeCommandFile, run, listSurfaceCommands, buildCommandsSection, surfaceInputsHash
 - **conclusion-writer** — exports: validateDraftNode, runConclusionWriter
 - **config** — exports: getEnvVar, detectProjectBrain, getActiveBrains, resolveBrainLayer
 - **conflict-detector** — exports: detectSemanticConflicts, scanVaultForConflicts, detectPatchConflict, computeFileHash, autoResolveConflict, applyAutoResolution, detectAndResolve, writeConflicts
@@ -708,6 +684,7 @@ templates/
 - **secure-file** — exports: chmodSecure, writeFileSecure, appendFileSecure
 - **server-restart** — exports: detectSupervisor, requestSelfRestart, packageVersionOnDisk
 - **session-watcher** — exports: createSessionEntry, parseClaudeCode, parseCodex, parseGeminiCli, parseAntigravity, parseCursor, parseVSCode, contentFingerprint
+- **skill-config** — exports: resolveSkillDir, loadConfigSchema, validateSkillConfig, configPath, recordPath, projectVaultFor, readSkillConfigState, readSkillConfig
 - **skills-registry** — exports: resolveRegistryDir, resolveRegistryPath, emptyRegistry, loadRegistry, saveRegistry, hashSkillContent, hashSkillLayer, readSkillMeta
 - **snapshot** — exports: getSnapshotsDir, createSnapshot, listSnapshots, rollbackVault
 - **source-adapters** — exports: loadResearchConfig, isDailyCapReached, getSearchUsageStats, braveSearch, serperSearch, tavilySearch, exaSearch, webSearch
@@ -716,7 +693,7 @@ templates/
 - **ssss-kernel-bridge** — exports: getKernelMode, inventorySummary, mapTrPrincipal, createTotalRecallRegistrySet, getTotalRecallEngine, isLowRiskEnvelope, isCoreRouteEnvelope, isProtocolPath
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
-- **surface** — exports: extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, mergeGlobalRuleNodes, compileSurface, routeNodesToSkills
+- **surface** — exports: commandDirsFor, extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, mergeGlobalRuleNodes, compileSurface
 - **tailscale-cli** — exports: resolveTailscaleBinary, hasTailscaleDaemon
 - **task-envelope** — exports: normalizePriority, buildTaskEnvelope, normalizeTask, persistEnvelope, addTask, listTasks, getTask, cancelTask
 - **task-executors** — exports: resolveExecutor, dispatchTask, listExecutorIds

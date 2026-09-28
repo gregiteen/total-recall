@@ -74,6 +74,24 @@ See **TESTS**. The full suite and the quality gates run only on the Mac Mini —
 never on a laptop or the cloud droplet. A single spec file may run on any mesh node. Builds and installs are fine on any machine; build large apps
 on the Mac Mini.
 
+### 5e. When operating any third-party provider (DNS, registrar, hosting, mail, payments, telephony)
+The user's providers are already integrated: their API keys live in the secrets
+store. "Use the API" for a provider means exactly that.
+1. `npx total-recall secret catalog` — find the provider's key(s) by provider tag.
+2. Call the provider's REST API or CLI with the value read inside your process
+   (never echoed, never in argv). Check the provider's current API docs first.
+3. **Do not** fall back to browser automation when an API exists, and **do not**
+   ask the user for a key the catalog already has. Browser only for flows with
+   no API (e.g. a portal-only compliance form).
+4. Prefer targeted writes over bulk ones: edit one DNS record by id, never
+   replace a whole zone by default; read the current state first and verify after.
+5. If a key is missing, find the service that already uses it (its deployed
+   env), import it with `secret set <key> --stdin`, and record where it lives
+   with `remember fact`.
+6. If the agent host's own permission mode blocks an action category (e.g. DNS
+   changes), say so in one line with the exact setting that allows it. Do not
+   argue repeatedly and do not route around it through another tool.
+
 ### 6. When troubleshooting connections, port blocks, or sync errors
 *   **Trigger**: If the REST server is unreachable, ports are blocked, or the upstream sync tool encounters errors.
 *   **Action**: Refer to the active diagnostics manual within this skill to heal the local runtime.
@@ -337,6 +355,18 @@ curl -H "Authorization: Bearer <YOUR_PAT_TOKEN>" \
 ---
 
 ## 🧩 SKILLS MANAGEMENT (`skill` subcommand)
+
+### Initializing a new repository
+
+After initializing a project brain, initialize that repository's own
+`.agent/skills/repo-expert/` from its current code, manifests, tests, and
+runtime configuration. `skill generate-expert --repo <repo>` is a starting
+point; review and trim generated output before use, especially directory trees
+that include runtime data. The local expert must declare `repo_scoped: true`
+and pass an identity check against the current repository. Register it in the
+project brain. The global `repo-expert` remains a repository-agnostic discovery
+method; never deploy another project's expert or synchronize local experts
+across repositories.
 
 Two distinct layers. Confusing them is the usual cause of "my edit disappeared".
 

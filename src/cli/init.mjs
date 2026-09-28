@@ -31,6 +31,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { exec, spawn, spawnSync } from 'node:child_process';
 import { projectSkillsForScope, detectActiveSkillTargets } from './skill-projection.mjs';
+import { ensureRepoExpert } from './repo-expert-generate.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -262,6 +263,9 @@ export default async function init(args) {
   }
 
   for (const skill of skillsToSeed) {
+    // A repository expert contains project facts and must never be copied from
+    // the global brain or package scaffold into a different checkout.
+    if (isProject && skill === 'repo-expert') continue;
     let skillSrc = path.join(scaffoldSkillsDir, skill);
 
     // For ssss: prefer the npm-installed @ssss/cli package over scaffold
@@ -600,6 +604,17 @@ export default async function init(args) {
   // and only offered interactively (that CLI has no --yes flag).
   logStep('3.6/4', 'Ensuring openwiki is present');
   await ensureOpenWiki(brainDir, isProject, opts.dryRun);
+
+  if (isProject) {
+    logStep('3.6/4', 'Ensuring repository-specific expert');
+    try {
+      const expert = ensureRepoExpert(cwd, { dryRun: opts.dryRun });
+      logOk(`repo-expert ${expert.action}: ${path.relative(cwd, expert.destFile)}`);
+    } catch (err) {
+      logWarn(`Project initialization stopped: ${err.message}`);
+      process.exit(1);
+    }
+  }
 
   // ── Step 3.7: Project skills into the IDEs in use ──
   // Scope matches the brain: `init --project` projects PROJECT skills into the
