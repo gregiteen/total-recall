@@ -145,3 +145,14 @@ WINDSURF.md
 # Per-run fixtures that specs must import through Vite (it only loads fresh
 # modules from inside the project root). Removed by each spec after use.
 .vitest-tmp/
+
+# Open-source hygiene: the canonical repo carries NO skills, commands, memories,
+# IDE projections or session handoffs. Those belong to each user's installation
+# (a machine may have any of them locally; none are committed).
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.windsurf/
+HANDOFF.md

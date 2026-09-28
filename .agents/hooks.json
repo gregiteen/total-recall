@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "write_file(~/.gemini/antigravity/brain)": "deny"
-  }
-}
