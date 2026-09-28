@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.32.3
+
+- New bundled plugin `operator-alerts` (`total-recall alerts send|test|config|log`): desktop, SMTP2GO email, Telnyx SMS, webhook and issue alerts with dedupe, quiet hours and a delivery ledger. Chat and push channels are stubs.
+
 ## 3.32.2
 
 - Test: `scaffold/` is pinned to a fixed generic allowlist (three skills, four seed nodes, no personal markers).
