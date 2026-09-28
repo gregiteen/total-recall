@@ -88,6 +88,11 @@ const COMMANDS = {
   brain:    'brain.mjs',
   config:   'config.mjs',
   skill:    'skill.mjs',
+  'project-id': 'project-id.mjs',
+  api:      'api.mjs',
+  brief:    'brief.mjs',
+  group:    'group.mjs',
+  groups:   'group.mjs',
   secret:   'secret.mjs',
   secrets:  'secret.mjs',
   help:     'help.mjs',
@@ -167,6 +172,19 @@ async function main() {
 
   const handlerFile = COMMANDS[command];
   if (!handlerFile) {
+    // Any HTTP API route group without a dedicated verb: `total-recall <group> <action> …`
+    try {
+      const { loadApiRoutes } = await import('../src/core/api-routes.mjs');
+      if ((await loadApiRoutes()).some((r) => r.group === command)) {
+        const { default: apiCli } = await import('../src/cli/api.mjs');
+        await apiCli(args);
+        process.exit(process.exitCode ?? 0);
+      }
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+
     // Check if it is a dynamic integration command configured in the VFS
     try {
       const { agentDir, resolveBrainLayer } = await import('../src/core/config.mjs');
