@@ -85,21 +85,21 @@ describe('secrets-store', () => {
     expect(dirty.keys).toContain('leak_key');
   });
 
-  it('rejects multi-repo binding on write', async () => {
+  it('allows binding one credential to several repos', async () => {
     await setSecret(brain, 'SHARED_KEY', 'value-long-enough-xx', { provider: 'openai' });
     const { updateSecretMeta, normalizeReposBinding } = await import('./secrets-store.mjs');
-    expect(() => normalizeReposBinding(['a', 'b'], { strict: true })).toThrow(/at most ONE repo/);
-    await expect(
-      updateSecretMeta(brain, 'SHARED_KEY', { repos: ['repo-a', 'repo-b'] }),
-    ).rejects.toThrow(/at most ONE repo/);
-    await updateSecretMeta(brain, 'SHARED_KEY', { repos: ['repo-a'] });
-    const meta = await listSecretsMeta(brain);
-    expect(meta[0].repos).toEqual(['repo-a']);
+    expect(normalizeReposBinding(['a', 'b'])).toEqual(['a', 'b']);
+    await updateSecretMeta(brain, 'SHARED_KEY', { repos: ['repo-a', 'repo-b'] });
+    let meta = await listSecretsMeta(brain);
+    expect(meta[0].repos).toEqual(['repo-a', 'repo-b']);
     expect(meta[0].multi_repo_error).toBe(false);
+    await updateSecretMeta(brain, 'SHARED_KEY', { repos: ['repo-a'], tags: 'Telnyx, SMS telnyx' });
+    meta = await listSecretsMeta(brain);
     expect(meta[0].repo).toBe('repo-a');
+    expect(meta[0].tags).toEqual(['telnyx', 'sms']);
   });
 
-  it('flags legacy multi-repo data as error', async () => {
+  it('does not flag multi-repo bindings as errors', async () => {
     await setSecret(brain, 'LEGACY_KEY', 'value-long-enough-yy');
     // Bypass metadata validation through the store API to simulate legacy data.
     const { loadSecrets, saveSecrets, resolveSecretsPath } = await import('./secrets-store.mjs');
@@ -108,15 +108,16 @@ describe('secrets-store', () => {
     await saveSecrets(brain, secrets);
     const meta = await listSecretsMeta(brain);
     const row = meta.find((m) => m.key === 'LEGACY_KEY');
-    expect(row.multi_repo_error).toBe(true);
-    expect(row.binding_error).toMatch(/2 repos/);
+    expect(row.multi_repo_error).toBe(false);
+    expect(row.binding_error).toBeNull();
+    expect(row.repos).toEqual(['alpha', 'beta']);
   });
 
   // Longer timeout: this test round-trips setSecret/updateSecretMeta/getSharedValueHealth
   // several times, each doing a real scrypt(N=2**16) key derivation (~64MB, OWASP-strength —
   // not weakened for tests). That's fast in isolation but the accumulated cost can exceed
   // the default 5s under CPU contention from the rest of the suite running concurrently.
-  it('detects same credential value shared across repos/apps as ERROR', async () => {
+  it('reports a value shared across repos/apps as information, not an error', async () => {
     const { updateSecretMeta, getSharedValueHealth } = await import('./secrets-store.mjs');
     const same = 'shared-api-key-material-xyz-999';
     await setSecret(brain, 'OPENROUTER_API_KEY', same, {
@@ -136,26 +137,17 @@ describe('secrets-store', () => {
     expect(b.shared_value).toBe(true);
     expect(a.shared_with.some((s) => s.key === 'DEVELOPER_OPENROUTER_API_KEY')).toBe(true);
     expect(a.shared_apps).toEqual(expect.arrayContaining(['developer', 'ultrachat']));
-    expect(a.shared_value_error).toMatch(/SHARED CREDENTIAL/i);
+    expect(a.shared_value_severity).toBe('info');
     expect(a.fingerprint).toBe(b.fingerprint);
 
     const health = await getSharedValueHealth(brain);
-    expect(health.healthy).toBe(false);
-    expect(health.multi_app_groups).toBeGreaterThanOrEqual(1);
-    expect(health.errors[0].keys).toEqual(
+    expect(health.healthy).toBe(true);
+    expect(health.groups[0].keys).toEqual(
       expect.arrayContaining(['OPENROUTER_API_KEY', 'DEVELOPER_OPENROUTER_API_KEY']),
     );
-
-    // Unique values clear the error
-    await setSecret(brain, 'DEVELOPER_OPENROUTER_API_KEY', 'unique-other-value-abc-111', {
-      provider: 'openrouter',
-      skip_integration_research: true,
-    });
-    const health2 = await getSharedValueHealth(brain);
-    expect(health2.healthy).toBe(true);
   }, 20000);
 
-  it('shared_value_ok waives intentional duplicate storage', async () => {
+  it('shared values stay healthy with or without shared_value_ok', async () => {
     const { updateSecretMeta, getSharedValueHealth } = await import('./secrets-store.mjs');
     const same = 'mirrored-intentionally-value-42';
     await setSecret(brain, 'KEY_A', same, { skip_integration_research: true });
@@ -165,7 +157,7 @@ describe('secrets-store', () => {
     const health = await getSharedValueHealth(brain);
     expect(health.healthy).toBe(true);
     expect(health.groups.length).toBe(1);
-    expect(health.groups[0].severity).toBe('ok');
+    expect(health.groups[0].severity).toBe('info');
   });
 
   it('records and summarizes usage', () => {
