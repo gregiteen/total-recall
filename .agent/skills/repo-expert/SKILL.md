@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-09-28T17:05:47.658Z
+generated_at: 2026-09-28T17:33:38.546Z
 generated_from: total-recall
 ---
 
@@ -693,7 +693,7 @@ templates/
 - **ssss-kernel-bridge** — exports: getKernelMode, inventorySummary, mapTrPrincipal, createTotalRecallRegistrySet, getTotalRecallEngine, isLowRiskEnvelope, isCoreRouteEnvelope, isProtocolPath
 - **ssss-operation-service** — exports: writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent, listVfsEvents
 - **steering** — exports: checkLayer1, checkLayer2, detectConflicts, quarantineConflict, resolveConflict
-- **surface** — exports: commandDirsFor, extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, mergeGlobalRuleNodes, compileSurface
+- **surface** — exports: isSurfaceCodeStale, commandDirsFor, extractWikilinks, replaceFirstManagedInjectionBlock, heuristicCompact, buildResearchSection, buildRulesBlock, mergeGlobalRuleNodes
 - **tailscale-cli** — exports: resolveTailscaleBinary, hasTailscaleDaemon
 - **task-envelope** — exports: normalizePriority, buildTaskEnvelope, normalizeTask, persistEnvelope, addTask, listTasks, getTask, cancelTask
 - **task-executors** — exports: resolveExecutor, dispatchTask, listExecutorIds

@@ -74,9 +74,11 @@ crashpad handler and blocked every start.
 ## Pitfalls
 
 - **`daemon-loop.mjs` is a separate process from the REST server.** Restarting
-  the brain (`launchctl kickstart -k gui/501/com.totalrecall.brain`) does **not**
-  reload daemon-loop code, and the old daemon survives as an orphan. Use
-  `npx total-recall daemon stop && npx total-recall daemon start`.
+  the brain (`launchctl kickstart -k gui/<uid>/com.totalrecall.brain`) does
+  **not** reload daemon-loop code. Use `npx total-recall daemon stop && npx
+  total-recall daemon start`; since 3.32.0 `stop` waits for the process to exit
+  and there is a single lockfile, `<brain>/daemon.pid`. Before 3.32.0 `stop`
+  read `logs/daemon.pid` and could leave the real daemon running as an orphan.
 - **`recall` and `compile` hold a vault filesystem watcher open ~60s** after
   results print. Piped output can look empty. Redirect to a file and read it.
 - **`test` is tier `remote`** — the full suite runs only on the Mac Mini, never on a laptop or the droplet (a single spec may run on any mesh node).
