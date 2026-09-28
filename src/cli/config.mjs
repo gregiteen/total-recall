@@ -21,7 +21,12 @@ const KEY_MAP = {
 
   'daily_cap_usd': { file: 'budget', path: 'budget.daily_cap_usd', type: 'number' },
   'weekly_cap_usd': { file: 'budget', path: 'budget.weekly_cap_usd', type: 'number' },
-  'budget_enabled': { file: 'budget', path: 'budget.enabled', type: 'boolean' }
+  'budget_enabled': { file: 'budget', path: 'budget.enabled', type: 'boolean' },
+
+  // Size of each rules section in the compiled instruction files (characters).
+  'rules_invariants_budget_chars': { file: 'surface', path: 'rules.invariants_budget_chars', type: 'number' },
+  'rules_preferences_budget_chars': { file: 'surface', path: 'rules.preferences_budget_chars', type: 'number' },
+  'rules_corrections_budget_chars': { file: 'surface', path: 'rules.corrections_budget_chars', type: 'number' },
 };
 
 function resolveKeyInfo(key) {
@@ -33,7 +38,7 @@ function resolveKeyInfo(key) {
 
   // Fallback / dynamic inference
   const isBudget = key.startsWith('budget.') || key === 'budget';
-  const file = isBudget ? 'budget' : 'security';
+  const file = isBudget ? 'budget' : key.startsWith('rules.') ? 'surface' : 'security';
   const targetPath = key;
 
   let type = 'string';
@@ -131,6 +136,9 @@ export default async function configCommand(args) {
     daily_cap_usd                Cost-control daily cap (number)
     weekly_cap_usd               Cost-control weekly cap (number)
     budget_enabled               Enable/disable cost limit checks (true | false)
+    rules_invariants_budget_chars    Characters for the invariants section of CLAUDE.md/AGENTS.md (number; default 9000)
+    rules_preferences_budget_chars   Same for preferences (default 4000)
+    rules_corrections_budget_chars   Same for corrections (default 8000)
     allowed_origins              CORS origins (e.g. "http://localhost:5173,http://localhost:3000")
 
   Examples:
@@ -145,12 +153,21 @@ export default async function configCommand(args) {
   const configDir = path.join(brainDir, 'config');
   const securityPath = path.join(configDir, 'security.yml');
   const budgetPath = path.join(configDir, 'budget.yml');
+  const surfacePath = path.join(configDir, 'surface.yml');
   const layerLabel = layer === 'project' ? '[project]' : layer === 'global' ? '[global]' : '[auto]';
 
   // Load configs safely
   let securityConfig = {};
   let budgetConfig = {};
+  let surfaceConfig = {};
+  const objFor = (file) => (file === 'budget' ? budgetConfig : file === 'surface' ? surfaceConfig : securityConfig);
+  const pathFor = (file) => (file === 'budget' ? budgetPath : file === 'surface' ? surfacePath : securityPath);
 
+  if (fs.existsSync(surfacePath)) {
+    try {
+      surfaceConfig = yaml.parse(fs.readFileSync(surfacePath, 'utf8')) || {};
+    } catch {}
+  }
   if (fs.existsSync(securityPath)) {
     try {
       securityConfig = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
@@ -166,7 +183,7 @@ export default async function configCommand(args) {
     const key = remainingArgs[1];
     if (key) {
       const info = resolveKeyInfo(key);
-      const targetObj = info.file === 'budget' ? budgetConfig : securityConfig;
+      const targetObj = objFor(info.file);
       const value = getNestedProp(targetObj, info.path);
       
       if (args.includes('--json') || args.includes('-j')) {
@@ -178,7 +195,7 @@ export default async function configCommand(args) {
       // List all known keys
       const allSettings = {};
       for (const [flatKey, info] of Object.entries(KEY_MAP)) {
-        const targetObj = info.file === 'budget' ? budgetConfig : securityConfig;
+        const targetObj = objFor(info.file);
         const val = getNestedProp(targetObj, info.path);
         allSettings[flatKey] = val !== undefined ? val : null;
       }
@@ -193,7 +210,8 @@ export default async function configCommand(args) {
         }
         console.log('\n  📍 Storage locations:');
         console.log(`     - Security: ${securityPath}`);
-        console.log(`     - Budget:   ${budgetPath}\n`);
+        console.log(`     - Budget:   ${budgetPath}`);
+        console.log(`     - Surface:  ${surfacePath}\n`);
       }
     }
     return;
@@ -214,8 +232,8 @@ export default async function configCommand(args) {
     }
 
     const info = resolveKeyInfo(key);
-    const targetObj = info.file === 'budget' ? budgetConfig : securityConfig;
-    const targetPath = info.file === 'budget' ? budgetPath : securityPath;
+    const targetObj = objFor(info.file);
+    const targetPath = pathFor(info.file);
 
     try {
       const parsedValue = castAndValidate(rawValue, info.type, info.values);

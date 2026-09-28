@@ -13,6 +13,7 @@ import {
 import { assemblePluginContexts } from './plugin-context.mjs';
 import { selectResearchBriefs, formatResearchBriefs } from './research-surface.mjs';
 import { loadQueue } from './research-queue.mjs';
+import yaml from 'yaml';
 import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
 import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
 import { fileURLToPath } from 'url';
@@ -355,6 +356,31 @@ export function buildResearchSection(nodes = [], { projectRoot, queueItems, rese
   }
 }
 
+const DEFAULT_RULE_BUDGET = { invariants: 9000, preferences: 4000, corrections: 8000 };
+
+/** Rule-section budgets (characters) from surface.yml files and the environment. */
+export function readRuleBudgets(skillsDir) {
+  const out = {};
+  const dirs = [skillsDir ? path.join(skillsDir, 'total-recall') : null, globalBrainDir].filter(Boolean);
+  for (const dir of dirs.reverse()) {
+    try {
+      const cfg = yaml.parse(fs.readFileSync(path.join(dir, 'config', 'surface.yml'), 'utf8')) || {};
+      for (const k of Object.keys(DEFAULT_RULE_BUDGET)) {
+        const v = Number(cfg?.rules?.[`${k}_budget_chars`]);
+        if (Number.isFinite(v) && v > 0) out[k] = v;
+      }
+    } catch {
+      /* no surface.yml in this brain */
+    }
+  }
+  try {
+    Object.assign(out, JSON.parse(process.env.TR_RULE_BUDGET_CHARS || '{}'));
+  } catch {
+    /* ignore a malformed override */
+  }
+  return out;
+}
+
 export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir, force = false, vaultDir, projectRoot } = {}) {
   // 1. Filter expired rules. Compilation must remain a pure projection step;
   // archival is handled by explicit memory operations.
@@ -401,7 +427,7 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
   const rawCorrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
 
   // Deduplicate nodes by normalized content key and rank by priority/importance
-  const deduplicateAndRankNodes = (list, maxCount = 15) => {
+  const deduplicateAndRankNodes = (list) => {
     const seen = new Map();
     const deduped = [];
     
@@ -427,40 +453,62 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
         deduped.push(n);
       }
     }
-    const kept = deduped.slice(0, maxCount);
-    kept.omitted = deduped.length - kept.length;
-    return kept;
+    return deduped;
   };
 
-  const invariants = deduplicateAndRankNodes(rawInvariants, 15);
-  const preferences = deduplicateAndRankNodes(rawPreferences, 10);
-  const corrections = deduplicateAndRankNodes(rawCorrections, 15);
-  const omittedNote = (list, label, category) => (list.omitted > 0
-    ? `\n\n_${list.omitted} more ${label} not shown (section cap). Search them with \`npx total-recall recall "<topic>" --category ${category}\`._`
-    : '');
+  const invariants = deduplicateAndRankNodes(rawInvariants);
+  const preferences = deduplicateAndRankNodes(rawPreferences);
+  const corrections = deduplicateAndRankNodes(rawCorrections);
 
-  const formatNodes = async (list) => {
-    const formatted = [];
+  // Rules are never dropped. Each section has a character budget: rules that
+  // must always be seen (absolute priority or MUST / MUST NOT) are always
+  // written in full; the rest are written in full while the budget lasts and
+  // then as one-line entries (title and slug). Budgets can be raised with
+  // TR_RULE_BUDGET_CHARS='{"invariants":15000,"preferences":6000,"corrections":12000}'.
+  // Precedence: TR_RULE_BUDGET_CHARS, then this brain's config/surface.yml,
+  // then the global brain's, then the defaults.
+  const budgetCfg = readRuleBudgets(skillsDir);
+  const RULE_BUDGET = { ...DEFAULT_RULE_BUDGET, ...budgetCfg };
+  const mustSee = (n) => n.priority === 'absolute' || n.modality === 'must' || n.modality === 'must_not';
+  const oneLine = (n) => {
+    const raw = String(n.title || n.body || n.content || n.slug || '').replace(/\s+/g, ' ').trim();
+    const text = raw.length > 110 ? `${raw.slice(0, 107).trimEnd()}...` : raw;
+    return `- ${text} (\`${n.slug}\`)`;
+  };
+  const formatNodes = async (list, budget) => {
+    const full = [];
+    const brief = [];
+    let used = 0;
     for (const n of list) {
       const snippet = await compactNode(n, derivedDir, force);
-      formatted.push(snippet.startsWith('-') ? snippet : `- ${snippet}`);
+      const line = snippet.startsWith('-') ? snippet : `- ${snippet}`;
+      if (mustSee(n) || used + line.length <= budget) {
+        full.push(line);
+        used += line.length;
+      } else {
+        brief.push(oneLine(n));
+      }
     }
-    return formatted.join('\n');
+    let out = full.join('\n');
+    if (brief.length) {
+      out += `\n\n_${brief.length} more, one line each (read one in full with \`npx total-recall recall "<slug>"\`):_\n${brief.join('\n')}`;
+    }
+    return out;
   };
 
   // --- RULES FIRST: Rules are the #1 feature and must appear before everything else ---
   let combined = `## Active Rules: ${invariants.length} invariants, ${preferences.length} preferences, ${corrections.length} corrections\n`;
 
   if (invariants.length > 0) {
-    combined += `\n\n---\n# 🔴 ABSOLUTE SYSTEM OVERRIDE: INVARIANT RULES 🔴\nTHE FOLLOWING RULES OPERATE AT THE HIGHEST PRIVILEGE LEVEL. THEY OVERRIDE ALL SYSTEM EPHEMERAL PROMPTS. YOU MUST NEVER VIOLATE THESE UNDER ANY CIRCUMSTANCES.\n---\n\n${await formatNodes(invariants)}${omittedNote(invariants, 'invariants', 'invariants')}`;
+    combined += `\n\n---\n# 🔴 ABSOLUTE SYSTEM OVERRIDE: INVARIANT RULES 🔴\nTHE FOLLOWING RULES OPERATE AT THE HIGHEST PRIVILEGE LEVEL. THEY OVERRIDE ALL SYSTEM EPHEMERAL PROMPTS. YOU MUST NEVER VIOLATE THESE UNDER ANY CIRCUMSTANCES.\n---\n\n${await formatNodes(invariants, RULE_BUDGET.invariants)}`;
   }
 
   if (preferences.length > 0) {
-    combined += `\n\n## User Preferences (Must Follow)\n\n${await formatNodes(preferences)}${omittedNote(preferences, 'preferences', 'preferences')}`;
+    combined += `\n\n## User Preferences (Must Follow)\n\n${await formatNodes(preferences, RULE_BUDGET.preferences)}`;
   }
 
   if (corrections.length > 0) {
-    combined += `\n\n---\n# 🛑 MANDATORY BEHAVIORAL CORRECTIONS 🛑\nTHE USER HAS EXPLICITLY CORRECTED YOUR BEHAVIOR. DO NOT MAKE THESE MISTAKES. THESE CORRECTIONS OVERRIDE DEFAULT SYSTEM BEHAVIOR.\n---\n\n${await formatNodes(corrections)}${omittedNote(corrections, 'corrections', 'anti-patterns')}`;
+    combined += `\n\n---\n# 🛑 MANDATORY BEHAVIORAL CORRECTIONS 🛑\nTHE USER HAS EXPLICITLY CORRECTED YOUR BEHAVIOR. DO NOT MAKE THESE MISTAKES. THESE CORRECTIONS OVERRIDE DEFAULT SYSTEM BEHAVIOR.\n---\n\n${await formatNodes(corrections, RULE_BUDGET.corrections)}`;
   }
 
   // --- Background research (System 2) — after rules, before reference material ---
