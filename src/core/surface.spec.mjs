@@ -122,17 +122,41 @@ describe('mergeGlobalRuleNodes', () => {
     expect(globalNode._layer).toBeUndefined();
   });
 
-  it('keeps the newest rule when a capped section has equal-weight ties, and reports the overflow', async () => {
-    const nodes = Array.from({ length: 16 }, (_, i) => ({
-      ...rule(`c${i}`, 'anti-patterns', `Correction number ${i} body`),
-      title: `Correction number ${i}`,
-      created: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
-    }));
-    const block = await buildRulesBlock(null, nodes);
-    expect(block).toContain('15 corrections');
-    expect(block).toContain('Correction number 15');
-    expect(block).not.toContain('Correction number 0 ');
-    expect(block).toContain('1 more corrections not shown');
+  it('never drops rules: overflow beyond the budget becomes one-line entries', async () => {
+    const prev = process.env.TR_RULE_BUDGET_CHARS;
+    process.env.TR_RULE_BUDGET_CHARS = JSON.stringify({ corrections: 200 });
+    try {
+      const nodes = Array.from({ length: 16 }, (_, i) => ({
+        ...rule(`c${i}`, 'anti-patterns', `Correction number ${i} body`),
+        title: `Correction number ${i}`,
+        modality: 'should',
+        created: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+      }));
+      const block = await buildRulesBlock(null, nodes);
+      expect(block).toContain('16 corrections');
+      for (let i = 0; i < 16; i++) expect(block).toContain(`Correction number ${i}`);
+      expect(block).toMatch(/\d+ more, one line each/);
+      expect(block).not.toContain('not shown');
+    } finally {
+      if (prev === undefined) delete process.env.TR_RULE_BUDGET_CHARS;
+      else process.env.TR_RULE_BUDGET_CHARS = prev;
+    }
+  });
+
+  it('always writes MUST rules in full even when the budget is exhausted', async () => {
+    const prev = process.env.TR_RULE_BUDGET_CHARS;
+    process.env.TR_RULE_BUDGET_CHARS = JSON.stringify({ corrections: 1 });
+    try {
+      const nodes = [
+        { ...rule('m1', 'anti-patterns', 'The full text of a must rule that has to be visible.'), modality: 'must', title: 'Must rule' },
+      ];
+      const block = await buildRulesBlock(null, nodes);
+      expect(block).toContain('The full text of a must rule that has to be visible.');
+      expect(block).not.toMatch(/more, one line each/);
+    } finally {
+      if (prev === undefined) delete process.env.TR_RULE_BUDGET_CHARS;
+      else process.env.TR_RULE_BUDGET_CHARS = prev;
+    }
   });
 
   it('renders an inherited global rule in the project rules block', async () => {
@@ -156,5 +180,30 @@ describe('isSurfaceCodeStale', () => {
 
   it('reports fresh code for the running module', () => {
     expect(isSurfaceCodeStale()).toBe(false);
+  });
+});
+
+describe('readRuleBudgets', () => {
+  it('reads surface.yml, lets a project override the global brain, and lets the env override both', async () => {
+    const { readRuleBudgets } = await import('./surface.mjs');
+    const skills = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-budget-'));
+    fs.mkdirSync(path.join(skills, 'total-recall', 'config'), { recursive: true });
+    fs.writeFileSync(
+      path.join(skills, 'total-recall', 'config', 'surface.yml'),
+      'rules:\n  invariants_budget_chars: 12345\n  corrections_budget_chars: 0\n',
+    );
+    const prev = process.env.TR_RULE_BUDGET_CHARS;
+    delete process.env.TR_RULE_BUDGET_CHARS;
+    try {
+      const b = readRuleBudgets(skills);
+      expect(b.invariants).toBe(12345);
+      expect(b.corrections).toBeUndefined(); // 0 is ignored, falls back to the default
+      process.env.TR_RULE_BUDGET_CHARS = JSON.stringify({ invariants: 99 });
+      expect(readRuleBudgets(skills).invariants).toBe(99);
+    } finally {
+      if (prev === undefined) delete process.env.TR_RULE_BUDGET_CHARS;
+      else process.env.TR_RULE_BUDGET_CHARS = prev;
+      fs.rmSync(skills, { recursive: true, force: true });
+    }
   });
 });
