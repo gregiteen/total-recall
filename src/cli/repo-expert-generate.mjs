@@ -13,6 +13,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
+const SKIP_SCAN_DIRS = new Set([
+  '.agent', '.agents', '.claude', '.git', '.venv', 'node_modules', 'dist',
+  'build', 'coverage', '__pycache__', 'vault', 'logs', 'vendor',
+]);
+
 /**
  * Scan a repo and return structured architecture data.
  */
@@ -83,7 +88,7 @@ export function scanRepo(repoRoot) {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'build') continue;
+        if (entry.name.startsWith('.') || SKIP_SCAN_DIRS.has(entry.name)) continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           walkForExtensions(full, depth + 1);
@@ -119,8 +124,7 @@ export function scanRepo(repoRoot) {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name.startsWith('.') && entry.name !== '.agent' && entry.name !== '.agents') continue;
-        if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'build' || entry.name === '.git') continue;
+        if (entry.name.startsWith('.') || SKIP_SCAN_DIRS.has(entry.name)) continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           const childCount = countChildren(full);
@@ -330,6 +334,7 @@ export function generateSkillMd(scan, repoRoot) {
   lines.push('  structure, and runtime topology. MANDATORY: You MUST read the full SKILL.md');
   lines.push('  file before executing.');
   lines.push('repo_scoped: true');
+  lines.push(`repository_id: ${JSON.stringify(scan.name || path.basename(path.resolve(repoRoot)))}`);
   lines.push(`generated_at: ${new Date().toISOString()}`);
   // Record the repo by name, never by absolute path. SKILL.md is committed, so
   // an absolute root bakes the generating machine's home directory into the
@@ -518,6 +523,35 @@ export function generateRepoExpert(repoRoot, opts = {}) {
       skills: scan.skills.length,
     },
   };
+}
+
+/** Preserve a local expert and reject one that identifies another repository. */
+export function ensureRepoExpert(repoRoot, opts = {}) {
+  const root = path.resolve(repoRoot);
+  const destFile = path.join(root, '.agent', 'skills', 'repo-expert', 'SKILL.md');
+  let repositoryId = path.basename(root);
+  try {
+    repositoryId = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).name || repositoryId;
+  } catch { /* non-Node repositories use the checkout name */ }
+
+  if (fs.existsSync(destFile)) {
+    const content = fs.readFileSync(destFile, 'utf8');
+    const header = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] || '';
+    const scoped = /^repo_scoped:\s*true\s*$/m.test(header);
+    const id = header.match(/^repository_id:\s*(.+)\s*$/m)?.[1]?.trim();
+    const generatedFrom = header.match(/^generated_from:\s*(.+)\s*$/m)?.[1]?.trim();
+    const parsedId = id?.replace(/^["']|["']$/g, '');
+    const parsedFrom = generatedFrom?.replace(/^["']|["']$/g, '');
+    if (!scoped || (parsedId ? parsedId !== repositoryId :
+      !parsedFrom || parsedFrom !== path.basename(root))) {
+      throw new Error(`Existing repo-expert does not match ${repositoryId}: ${destFile}`);
+    }
+    return { action: 'existing', destFile, repositoryId };
+  }
+
+  if (opts.dryRun) return { action: 'would-generate', destFile, repositoryId };
+  generateRepoExpert(root);
+  return { action: 'generated', destFile, repositoryId };
 }
 
 /**
