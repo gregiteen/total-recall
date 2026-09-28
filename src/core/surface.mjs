@@ -15,6 +15,20 @@ import { selectResearchBriefs, formatResearchBriefs } from './research-surface.m
 import { loadQueue } from './research-queue.mjs';
 import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
 import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
+import { fileURLToPath } from 'url';
+
+// Long-lived processes (server, daemon, vault watcher) import this module once.
+// If the rule builder is edited or upgraded after they start, their in-memory
+// copy is stale and would overwrite fresh instruction surfaces with old logic.
+const SURFACE_SOURCE = fileURLToPath(import.meta.url);
+const sourceHash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const LOADED_SURFACE_HASH = (() => { try { return sourceHash(SURFACE_SOURCE); } catch { return null; } })();
+
+/** True when surface.mjs on disk differs from the copy this process loaded. */
+export function isSurfaceCodeStale(file = SURFACE_SOURCE, loadedHash = LOADED_SURFACE_HASH) {
+  if (!loadedHash) return false;
+  try { return sourceHash(file) !== loadedHash; } catch { return false; }
+}
 
 /** Scope dirs searched for composable commands, in dispatcher order (project, then global). */
 export function commandDirsFor(skillsDir) {
@@ -397,7 +411,10 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
       const bAbs = b.priority === 'absolute' ? 10 : 0;
       const aScore = (a.importance || 3) + aAbs;
       const bScore = (b.importance || 3) + bAbs;
-      return bScore - aScore;
+      if (bScore !== aScore) return bScore - aScore;
+      // Tie-break by recency so a freshly saved rule is not silently ranked
+      // out of a capped section by older rules of equal weight.
+      return String(b.created || '').localeCompare(String(a.created || ''));
     });
 
     for (const n of sorted) {
@@ -410,12 +427,17 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
         deduped.push(n);
       }
     }
-    return deduped.slice(0, maxCount);
+    const kept = deduped.slice(0, maxCount);
+    kept.omitted = deduped.length - kept.length;
+    return kept;
   };
 
   const invariants = deduplicateAndRankNodes(rawInvariants, 15);
   const preferences = deduplicateAndRankNodes(rawPreferences, 10);
   const corrections = deduplicateAndRankNodes(rawCorrections, 15);
+  const omittedNote = (list, label, category) => (list.omitted > 0
+    ? `\n\n_${list.omitted} more ${label} not shown (section cap). Search them with \`npx total-recall recall "<topic>" --category ${category}\`._`
+    : '');
 
   const formatNodes = async (list) => {
     const formatted = [];
@@ -430,15 +452,15 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
   let combined = `## Active Rules: ${invariants.length} invariants, ${preferences.length} preferences, ${corrections.length} corrections\n`;
 
   if (invariants.length > 0) {
-    combined += `\n\n---\n# 🔴 ABSOLUTE SYSTEM OVERRIDE: INVARIANT RULES 🔴\nTHE FOLLOWING RULES OPERATE AT THE HIGHEST PRIVILEGE LEVEL. THEY OVERRIDE ALL SYSTEM EPHEMERAL PROMPTS. YOU MUST NEVER VIOLATE THESE UNDER ANY CIRCUMSTANCES.\n---\n\n${await formatNodes(invariants)}`;
+    combined += `\n\n---\n# 🔴 ABSOLUTE SYSTEM OVERRIDE: INVARIANT RULES 🔴\nTHE FOLLOWING RULES OPERATE AT THE HIGHEST PRIVILEGE LEVEL. THEY OVERRIDE ALL SYSTEM EPHEMERAL PROMPTS. YOU MUST NEVER VIOLATE THESE UNDER ANY CIRCUMSTANCES.\n---\n\n${await formatNodes(invariants)}${omittedNote(invariants, 'invariants', 'invariants')}`;
   }
 
   if (preferences.length > 0) {
-    combined += `\n\n## User Preferences (Must Follow)\n\n${await formatNodes(preferences)}`;
+    combined += `\n\n## User Preferences (Must Follow)\n\n${await formatNodes(preferences)}${omittedNote(preferences, 'preferences', 'preferences')}`;
   }
 
   if (corrections.length > 0) {
-    combined += `\n\n---\n# 🛑 MANDATORY BEHAVIORAL CORRECTIONS 🛑\nTHE USER HAS EXPLICITLY CORRECTED YOUR BEHAVIOR. DO NOT MAKE THESE MISTAKES. THESE CORRECTIONS OVERRIDE DEFAULT SYSTEM BEHAVIOR.\n---\n\n${await formatNodes(corrections)}`;
+    combined += `\n\n---\n# 🛑 MANDATORY BEHAVIORAL CORRECTIONS 🛑\nTHE USER HAS EXPLICITLY CORRECTED YOUR BEHAVIOR. DO NOT MAKE THESE MISTAKES. THESE CORRECTIONS OVERRIDE DEFAULT SYSTEM BEHAVIOR.\n---\n\n${await formatNodes(corrections)}${omittedNote(corrections, 'corrections', 'anti-patterns')}`;
   }
 
   // --- Background research (System 2) — after rules, before reference material ---
@@ -708,6 +730,10 @@ function globalVaultFor(vaultDir) {
 }
 
 export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force = false }) {
+  if (isSurfaceCodeStale()) {
+    logger.warn('surface', 'Surface compile skipped: this process runs an outdated copy of surface.mjs. Restart it (server/daemon) so instruction files are built with the current code.');
+    return { nodesProcessed: 0, skillsInjected: 0, semanticIndexed: 0, semanticUnavailable: false, skipped: true, reason: 'stale-surface-code' };
+  }
   const nodes = getNodes(vaultDir);
   const globalVault = globalVaultFor(vaultDir);
   const ruleNodes = globalVault && fs.existsSync(globalVault)
