@@ -116,10 +116,10 @@ export async function createPlugin(args = []) {
   const pluginDesc = description || skillFrontmatter.description || `${pluginName} extension for Total Recall AI OS`;
 
   const manifest = {
-    $schema: "https://github.com/total-recall/total-recall/blob/main/metadata.plugin.schema.json",
+    $schema: "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
     id,
     name: pluginName,
-    version: "1.0.0",
+    version: "0.1.0",
     description: pluginDesc,
     license: "MIT"
   };
@@ -145,8 +145,7 @@ export async function createPlugin(args = []) {
       command: id,
       handler: "./cli.mjs",
       subcommands: [
-        { name: "status", description: `Show ${pluginName} status` },
-        { name: "run", description: `Execute ${pluginName} primary task` }
+        { name: "status", description: `Show which ${pluginName} subcommands are implemented` }
       ]
     };
 
@@ -155,16 +154,27 @@ export async function createPlugin(args = []) {
  * ${pluginName} CLI Handler
  * Executed via: npx total-recall ${id} <subcommand>
  */
+// Scaffold: report honestly what exists. Add each real subcommand to
+// IMPLEMENTED and to plugin.json "cli.subcommands" as it is built.
+const IMPLEMENTED = {};
+
 export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   const sub = args[0] || "status";
-  
+  const json = args.includes("--json");
+
   if (sub === "status") {
-    console.log(\`✅ ${pluginName} v1.0.0 is operational.\`);
+    const status = { plugin: ${JSON.stringify(id)}, implemented: Object.keys(IMPLEMENTED) };
+    if (json) console.log(JSON.stringify(status));
+    else console.log(status.implemented.length
+      ? \`${pluginName}: implemented subcommands: \${status.implemented.join(", ")}\`
+      : \`${pluginName}: scaffold only — no subcommands implemented yet.\`);
     return;
   }
-  
-  console.log(\`${pluginName}: executed subcommand "\${sub}" with args:\`, args.slice(1));
+  if (IMPLEMENTED[sub]) return IMPLEMENTED[sub](args.slice(1));
+
+  console.error(\`${pluginName}: "\${sub}" is not implemented.\`);
+  process.exitCode = 2;
 }
 export default run;
 `;
@@ -204,7 +214,7 @@ export default run;
     const skillContent = `---
 name: ${id}
 description: "${pluginDesc}"
-version: 1.0.0
+version: 0.1.0
 ---
 
 # ${pluginName}
@@ -284,7 +294,7 @@ export default generateContext;
     "## Features",
     "",
     `- **Identifier**: \`${id}\``,
-    "- **Version**: 1.0.0"
+    "- **Version**: 0.1.0"
   ];
   if (useCases.length) lines.push(`- **Use cases**: ${useCases.join(", ")}`);
   if (category) lines.push(`- **SSSS Category**: \`${category}\``);

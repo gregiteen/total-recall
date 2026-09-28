@@ -13,7 +13,18 @@ import {
 import { assemblePluginContexts } from './plugin-context.mjs';
 import { selectResearchBriefs, formatResearchBriefs } from './research-surface.mjs';
 import { loadQueue } from './research-queue.mjs';
-import { brainDir as globalBrainDir } from './config.mjs';
+import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
+import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
+
+/** Scope dirs searched for composable commands, in dispatcher order (project, then global). */
+export function commandDirsFor(skillsDir) {
+  const dirs = [];
+  if (skillsDir) dirs.push({ scope: 'project', dir: path.join(path.dirname(skillsDir), 'commands') });
+  dirs.push({ scope: 'global', dir: path.join(globalAgentDir, 'commands') });
+  // Compiling the global brain itself: its commands are the global ones.
+  if (dirs.length === 2 && path.resolve(dirs[0].dir) === path.resolve(dirs[1].dir)) dirs.shift();
+  return dirs;
+}
 
 /**
  * Extract [[slug]] wikilink references and relative Markdown link targets from body text.
@@ -444,8 +455,10 @@ export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide',
 - \`npx total-recall recall "<query>" [options]\` — Search memory
 - \`npx total-recall forget <slug> [options]\` — Delete a memory node
 - \`npx total-recall compile\` — Rebuild instruction surfaces
+- \`npx total-recall command create <name> "<js>" --description "<when to use>" [--global]\` — Add a new verb to this CLI (composable)
 - \`npx total-recall --help\` — Full CLI reference
 `;
+    combined += buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir)));
   }
 
   // 2. Append legacy rule sheet files if they exist
@@ -708,11 +721,16 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   const currentHash = computeVaultHash(vaultDir);
   const globalHashFile = path.join(derivedDir, 'global-rules-hash.txt');
   const globalHash = globalVault && fs.existsSync(globalVault) ? computeVaultHash(globalVault) : '';
+  // Commands and skills feed the surface too; a change to either must recompile
+  // even when no memory node changed.
+  const inputsHashFile = path.join(derivedDir, 'surface-inputs-hash.txt');
+  const inputsHash = surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
 
   if (!force && fs.existsSync(hashFile)) {
     const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
     const storedGlobal = fs.existsSync(globalHashFile) ? fs.readFileSync(globalHashFile, 'utf8').trim() : '';
-    if (storedHash === currentHash && storedGlobal === globalHash) {
+    const storedInputs = fs.existsSync(inputsHashFile) ? fs.readFileSync(inputsHashFile, 'utf8').trim() : '';
+    if (storedHash === currentHash && storedGlobal === globalHash && storedInputs === inputsHash) {
       return {
         nodesProcessed: nodes.length,
         skillsInjected: 0,
@@ -791,6 +809,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   // 5. Write vault hash + projection manifest
   atomicWrite(hashFile, currentHash);
   atomicWrite(globalHashFile, globalHash);
+  atomicWrite(inputsHashFile, inputsHash);
   writeProjectionManifest(derivedDir, currentHash);
 
   // 6. Generate live OKF Index and Log
