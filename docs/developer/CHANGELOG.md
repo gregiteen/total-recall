@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.32.2
+
+- Test: `scaffold/` is pinned to a fixed generic allowlist (three skills, four seed nodes, no personal markers).
+
 ## [3.32.1] — 2026-09-28
 
 ### 🔧 Maintenance
