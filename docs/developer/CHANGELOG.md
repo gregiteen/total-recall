@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.32.1] — 2026-09-28
+
+### 🔧 Maintenance
+- `@ssss/cli` pinned to v0.10.1, in which an empty list satisfies a required field. Memory nodes and extension documents with a required list field that is legitimately empty (for example `tags: []`) now validate instead of failing the SSSS contract.
+
 ## [3.32.0] — 2026-09-28
 
 ### ✨ Features
