@@ -10,7 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Resolve templates dir relative to this file (src/cli/ → ../../templates/)
 const TEMPLATES_DIR = path.resolve(__dirname, '..', '..', 'templates');
 
-const CLIENTS = {
+export const CLIENTS = {
   vscode: {
     label: 'VS Code Copilot',
     mode: 'file',
