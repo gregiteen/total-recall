@@ -23,7 +23,7 @@ const router = Router();
 
 /**
  * GET /.well-known/total-recall.json
- * Used by UltraChat and other clients for auto-configuration.
+ * Used by clients for auto-configuration.
  */
 router.get('/.well-known/total-recall.json', (req, res) => {
   try {

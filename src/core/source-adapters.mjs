@@ -16,7 +16,7 @@ import {
 /**
  * Research Source Adapters — Real Service Integrations
  *
- * Env vars (matching UltraChat conventions — already set in your environment):
+ * Env vars (read from the environment or the secret store):
  *   BRAVE_SEARCH_API_KEY  — Brave Search API (primary web search)
  *   SERPER_API_KEY        — Serper.dev (fallback web search)
  *   GITHUB_TOKEN          — GitHub REST API (higher rate limits)
@@ -278,7 +278,7 @@ export async function braveSearch(query, config, count = 5) {
 
 /**
  * Search the web using Serper.dev API (fallback when Brave unavailable).
- * Uses SERPER_API_KEY — already defined in UltraChat .env.local.
+ * Uses SERPER_API_KEY from the environment or the secret store.
  * https://serper.dev/
  *
  * @param {string} query

@@ -464,7 +464,7 @@ function matchesOnTokenBoundary(k, stem) {
 export function providerForKeyName(keyName) {
   // Strip packaging prefixes so DEVELOPER_BRAVE_SEARCH_API_KEY → BRAVE_SEARCH_API_KEY
   let k = String(keyName || '').toUpperCase();
-  k = k.replace(/^(DEVELOPER_|VITE_|NEXT_PUBLIC_|PUBLIC_|NUXT_PUBLIC_|PORTFOLIO_|ULTRACHAT_)+/g, '');
+  k = k.replace(/^(DEVELOPER_|VITE_|NEXT_PUBLIC_|PUBLIC_|NUXT_PUBLIC_)+/g, '');
 
   // Tier 1 — exact pattern match.
   for (const p of PROVIDER_CATALOG) {
