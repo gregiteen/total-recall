@@ -60,6 +60,34 @@ describe('plugin command generation', () => {
     expect(JSON.parse(ran.stdout)).toEqual({ ok: false, exit_code: 7, result: { args: ['hello'] } });
   });
 
+  it('plugin install registers its commands and remove unregisters them', () => {
+    const brain = path.join(root, '.agent', 'skills', 'total-recall');
+    fs.mkdirSync(brain, { recursive: true });
+    fs.writeFileSync(path.join(brain, 'SKILL.md'), '# Test brain\n');
+    const cli = path.resolve('bin/total-recall.mjs');
+    const env = { ...process.env, TR_COMMAND_NO_COMPILE: '1' };
+    const installed = spawnSync(process.execPath, [cli, 'plugin', 'install', plugin], { cwd: root, encoding: 'utf8', env });
+    expect(installed.status).toBe(0);
+    expect(installed.stdout).toContain('Commands: total-recall sample-run');
+    const file = path.join(root, '.agent', 'commands', 'sample-run.mjs');
+    expect(fs.existsSync(file)).toBe(true);
+
+    // a hand-written command with the same name is never overwritten
+    fs.writeFileSync(file, '// mine\n');
+    fs.rmSync(path.join(root, '.agent', 'skills', 'total-recall', 'plugins'), { recursive: true, force: true });
+    const again = spawnSync(process.execPath, [cli, 'plugin', 'install', plugin], { cwd: root, encoding: 'utf8', env });
+    expect(again.stdout).toContain("Skipped command 'sample-run'");
+    expect(fs.readFileSync(file, 'utf8')).toBe('// mine\n');
+    fs.rmSync(file);
+
+    fs.rmSync(path.join(root, '.agent', 'skills', 'total-recall', 'plugins'), { recursive: true, force: true });
+    spawnSync(process.execPath, [cli, 'plugin', 'install', plugin], { cwd: root, encoding: 'utf8', env });
+    expect(fs.existsSync(file)).toBe(true);
+    const removed = spawnSync(process.execPath, [cli, 'plugin', 'remove', 'sample-plugin'], { cwd: root, encoding: 'utf8', env });
+    expect(removed.status).toBe(0);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
   it('runs an allowed long command in the background with a private report', async () => {
     const file = generatePluginCommand(plugin, 'sample-run', commands);
     const result = spawnSync(process.execPath, [file, '--background', '--json'], { encoding: 'utf8' });

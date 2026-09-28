@@ -170,7 +170,7 @@ function printHelp() {
 `);
 }
 
-function resolveTargetDir(isGlobal) {
+export function resolveTargetDir(isGlobal) {
   if (isGlobal) {
     try {
       const gBrain = resolveBrainLayer('global');
@@ -235,7 +235,7 @@ function existingTag(file, key) {
  * Composable instructions: the surfaces list every command, so any change to
  * the command set recompiles them (project layer, or every project for global).
  */
-function recompileSurfaces(isGlobal) {
+export function recompileSurfaces(isGlobal) {
   if (process.env.TR_COMMAND_NO_COMPILE === '1' || !process.argv[1]) return;
   try {
     const child = spawn(process.execPath, [process.argv[1], 'compile', isGlobal ? '--global' : '--project'], { detached: true, stdio: 'ignore' });
@@ -244,6 +244,48 @@ function recompileSurfaces(isGlobal) {
   } catch (error) {
     console.warn(`  ⚠️  Command saved, but surface recompile failed to start: ${error.message}`);
   }
+}
+
+/**
+ * Register every `commands` entry of an installed plugin as a composable command.
+ * A command that already exists and was generated from this plugin is refreshed;
+ * one that exists from anywhere else is left alone and reported.
+ */
+export function syncPluginCommands(pluginDir, { global: isGlobal = false } = {}) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(fs.realpathSync(pluginDir), 'plugin.json'), 'utf8'));
+  const commandsDir = resolveTargetDir(isGlobal);
+  const result = { created: [], skipped: [] };
+  for (const entry of manifest.commands || []) {
+    const file = path.join(commandsDir, `${entry.name}.mjs`);
+    if (fs.existsSync(file)) {
+      if (!fs.readFileSync(file, 'utf8').startsWith(`// Generated from plugin ${manifest.id};`)) {
+        result.skipped.push({ name: entry.name, reason: 'a different command with this name exists' });
+        continue;
+      }
+      fs.rmSync(file);
+    }
+    generatePluginCommand(pluginDir, entry.name, commandsDir);
+    result.created.push(entry.name);
+  }
+  if (result.created.length) recompileSurfaces(isGlobal);
+  return result;
+}
+
+/** Remove the commands a plugin generated (only files carrying its generated header). */
+export function removePluginCommands(pluginId, { global: isGlobal = false } = {}) {
+  const commandsDir = resolveTargetDir(isGlobal);
+  const removed = [];
+  if (!fs.existsSync(commandsDir)) return removed;
+  for (const name of fs.readdirSync(commandsDir)) {
+    if (!name.endsWith('.mjs')) continue;
+    const file = path.join(commandsDir, name);
+    if (fs.readFileSync(file, 'utf8').startsWith(`// Generated from plugin ${pluginId};`)) {
+      fs.rmSync(file);
+      removed.push(name.replace(/\.mjs$/, ''));
+    }
+  }
+  if (removed.length) recompileSurfaces(isGlobal);
+  return removed;
 }
 
 export default async function commandCmd(rawArgs = []) {

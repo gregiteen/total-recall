@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { setSecret, listSecretsMeta, updateSecretMeta } from './secrets-store.mjs';
+import { providerForKeyName } from './provider-catalog.mjs';
 
 /**
  * @deprecated Kept as empty/export for older callers. Import does NOT use this
@@ -108,13 +109,9 @@ export function inferProvider(key) {
   if (!key) return null;
   const k = String(key);
 
-  // Lazy catalog match (optional enrichment only)
-  try {
-    // Dynamic import avoided in sync path — inline thin match from catalog module if already loadable
-    // Use sync require-free approach: duplicate-free segment heuristic only here for speed.
-  } catch {
-    /* ignore */
-  }
+  // A known provider anywhere in the key name wins (JSN_SMTP2GO_API_KEY -> smtp2go).
+  const known = providerForKeyName(k);
+  if (known) return known.id;
 
   // Strip common prefixes that are not the vendor
   let base = k
