@@ -1,0 +1,20 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "operator-alerts",
+  "name": "Operator Alerts",
+  "version": "1.0.0",
+  "description": "Send operator alerts over desktop, email (SMTP2GO), SMS (Telnyx), webhook and GitHub with dedupe, quiet hours and delivery evidence. Keys come from the secret store; recipients from config.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": ["operations", "alerts"],
+  "cli": {
+    "command": "alerts",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      { "name": "send", "description": "Send an alert (--dry-run to resolve config without sending)" },
+      { "name": "test", "description": "Dry-run every configured channel" },
+      { "name": "config", "description": "Show the merged notify config" },
+      { "name": "log", "description": "Recent sends from the ledger" }
+    ]
+  }
+}

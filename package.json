@@ -23,6 +23,7 @@
     "frontend/src/",
     "extension/",
     "plugins/",
+    "!plugins/**/*.spec.mjs",
     "templates/",
     "scaffold/",
     "docs/ARCHITECTURE.md",
