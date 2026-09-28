@@ -41,7 +41,7 @@ vi.mock('node:child_process', () => {
 });
 
 // Constants derived from mocked config
-const PID_FILE = '/mock/brain/logs/daemon.pid';
+const PID_FILE = '/mock/brain/daemon.pid';
 const LOG_FILE = '/mock/brain/logs/daemon.log';
 
 describe('daemon-control', () => {
@@ -166,7 +166,7 @@ describe('daemon-control', () => {
   // startDaemon
   // ---------------------------------------------------------------------------
   describe('startDaemon', () => {
-    it('spawns a detached child, writes PID file, and returns the pid', async () => {
+    it('spawns a detached child and returns the pid, leaving the lockfile to the daemon', async () => {
       // No existing daemon running
       fs.existsSync.mockImplementation((p) => {
         if (typeof p === 'string' && p.includes('daemon-loop.mjs')) return true;
@@ -182,11 +182,7 @@ describe('daemon-control', () => {
       expect(pid).toBe(fakePid);
       expect(child_process.spawn).toHaveBeenCalled();
       expect(fakeChild.unref).toHaveBeenCalled();
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        PID_FILE,
-        expect.stringContaining(String(fakePid)),
-        'utf8'
-      );
+      expect(fs.writeFileSync).not.toHaveBeenCalledWith(PID_FILE, expect.anything(), expect.anything());
     });
 
     it('returns existing pid without re-spawning if daemon is already running', async () => {
@@ -206,16 +202,42 @@ describe('daemon-control', () => {
   // stopDaemon
   // ---------------------------------------------------------------------------
   describe('stopDaemon', () => {
-    it('sends SIGTERM, removes PID file, and returns true when pid exists', async () => {
+    it('sends SIGTERM, waits for the process to exit, and returns true', async () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('9876\n');
-      killSpy.mockReturnValue(true);
+      let probes = 0;
+      killSpy.mockImplementation((pid, sig) => {
+        if (sig === 0 && ++probes > 3) throw new Error('ESRCH'); // exits after a few polls
+        return true;
+      });
 
-      const result = await stopDaemon();
+      const result = await stopDaemon({ graceMs: 1000, pollMs: 1 });
 
       expect(result).toBe(true);
       expect(killSpy).toHaveBeenCalledWith(9876, 'SIGTERM');
-      expect(fs.unlinkSync).toHaveBeenCalledWith(PID_FILE);
+      expect(killSpy).not.toHaveBeenCalledWith(9876, 'SIGKILL');
+      expect(fs.unlinkSync).toHaveBeenCalledWith(PID_FILE); // stale lock of the exited pid
+    });
+
+    it('escalates to SIGKILL when the daemon outlives the grace period', async () => {
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue('9876\n');
+      killSpy.mockReturnValue(true); // never exits on its own
+
+      const result = await stopDaemon({ graceMs: 20, pollMs: 5 });
+
+      expect(result).toBe(true);
+      expect(killSpy).toHaveBeenCalledWith(9876, 'SIGKILL');
+    });
+
+    it('leaves a lock that now belongs to a different daemon', async () => {
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValueOnce('9876\n').mockReturnValue('5555\n');
+      killSpy.mockImplementation((pid, sig) => { if (sig === 0 && pid === 9876 && killSpy.mock.calls.length > 2) throw new Error('ESRCH'); return true; });
+
+      await stopDaemon({ graceMs: 1000, pollMs: 1 });
+
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
     });
 
     it('returns false immediately when no pid is found', async () => {

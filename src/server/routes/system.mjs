@@ -217,7 +217,7 @@ router.get('/api/usage/providers', requireAuth, async (req, res) => {
 router.post('/api/daemon/restart', requireAuth, requireScope('config:write'), async (_req, res) => {
   try {
     const { stopDaemon, startDaemon } = await import('../../core/daemon-control.mjs');
-    stopDaemon();
+    await stopDaemon();
     const pid = startDaemon();
     res.json({ success: true, message: `Daemon restarted successfully (PID ${pid})`, pid });
   } catch (err) {

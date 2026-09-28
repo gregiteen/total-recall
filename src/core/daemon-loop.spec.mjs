@@ -55,6 +55,17 @@ describe('daemon-loop.mjs', () => {
       expect(process.exit).not.toHaveBeenCalled();
     });
 
+    it('treats a lockfile holding its own pid as its own lock', () => {
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue(String(process.pid));
+      process.kill.mockReturnValue(true);
+
+      acquirePidLock();
+
+      expect(process.exit).not.toHaveBeenCalled();
+      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('daemon.pid'), String(process.pid), { mode: 0o644 });
+    });
+
     it('exits if existing PID is alive', () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('99999');
