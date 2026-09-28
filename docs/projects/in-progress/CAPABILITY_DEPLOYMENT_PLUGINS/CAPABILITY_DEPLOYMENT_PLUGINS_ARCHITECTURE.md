@@ -145,8 +145,15 @@ Hosted Headscale-based orchestration is a separate optional service. Headscale's
 | --- | --- |
 | `gregiteen/total-recall` | Composer CLI, deploy-manifest validation, source/provenance resolution, orchestrator, shared adapter tests, optional mesh integration. |
 | `gregiteen/ssss` | Normative contract, registry composition, bundle parameter/id-remap behavior, `ssss new`, language-neutral fixtures and conformance. |
-| One repo per substantial capability | Domain extension registry, structural bundle, source recipes/adapters, authoring skill, feature and standalone tests. Optional MCP bridge is its own plugin repo. |
+| One repo per substantial capability, named `tr-plugin-<name>` (user direction 2026-09-28); the plugin's 5-file project docs live in that repo | Domain extension registry, structural bundle, source recipes/adapters, authoring skill, feature and standalone tests. Optional MCP bridge is its own plugin repo. |
 | `gregiteen/festech-modular` | First reference composition and parity/cutover evidence; no generic composer logic. |
 | Existing `festech.live` | Current site and production runtime until separately approved cutover. |
 
 Before any plugin is publicly listed, its repository must have a deliberate license and provenance record, a clean independent history rather than a copy of Festech's full private history, a scan for credentials/private generated assets, reproducible package contents, and a pinned immutable artifact digest. A public listing is a later distribution act; a local private plugin is sufficient for the first app proof.
+
+
+## Plugin runtime: crons, daemons, startup (added 2026-09-28)
+
+Audit of five apps (festech, UltraChat, Dabber, portfolio-site, TWC — see `tr-plugin-phone` PHONE_PLUGIN_AUDIT) found four scheduler models (host crontab → authenticated HTTP route; in-process timers at boot; a Python scheduler thread gated by an env flag; launchd per Mac), no shared registry, no last-run record, and daemons running inside web processes. Result: festech's phone jobs exist in code but are not scheduled in production, and nothing reported it.
+
+Contract: a plugin that runs on its own declares in `plugin.json` a `runtime` section — `jobs` (id, schedule, handler, risk), `daemons` (id, handler, restart policy) and `startup` hooks. Host adapters install them (process manager, container, launchd, crontab, Windows Task Scheduler, or in-process for development); daemons run as their own supervised processes, not inside the web server. Every run writes an SSSS `job_run` event; `<plugin> jobs` and `<plugin> health` compare declared, installed and last run, and drift fails health. Single-deployment jobs carry a run-here guard so several machines never double-send. First implementation: `tr-plugin-phone`; it moves to core if a second plugin needs it first.

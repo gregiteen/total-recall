@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { spawn } from 'node:child_process';
 import { resolveBrainLayer } from '../core/config.mjs';
 import { isSafeRelativePath, validatePluginManifest } from '../core/plugin-loader.mjs';
 
@@ -150,7 +151,8 @@ function printHelp() {
   total-recall command — Manage custom composable CLI commands
 
   Usage:
-    total-recall command create <name> "<code>" [--global]   Create a custom CLI command
+    total-recall command create <name> "<code>" [--global] [--description "<when to use>"] [--risk <class>]
+                                                             Create a custom CLI command (listed in instruction surfaces)
     total-recall command create <name> --from-plugin <dir>   Generate from a plugin manifest
     total-recall command create <name> --config-for-skill <id>
                                                              Generate repo-layer config verbs for a
@@ -158,7 +160,7 @@ function printHelp() {
     total-recall command read <name> [--global]              Read the code of a custom CLI command
     total-recall command update <name> "<code>" [--global]   Update an existing custom CLI command
     total-recall command remove <name> [--global]            Remove a custom CLI command
-    total-recall command list [--global]                     List custom CLI commands
+    total-recall command list [--global] [--json]            List custom CLI commands
 
   Examples:
     npx total-recall command create hello "console.log('Hello from the brain!');"
@@ -196,9 +198,66 @@ export async function run(argv = []) {
   return commandCmd(args);
 }
 
+/**
+ * Built-in verbs resolve before custom commands (bin/total-recall.mjs), so a
+ * custom command with a built-in name could never run. Read the names from the
+ * dispatcher itself so this list cannot drift.
+ */
+export function builtinCommandNames() {
+  try {
+    const bin = fs.readFileSync(new URL('../../bin/total-recall.mjs', import.meta.url), 'utf8');
+    const block = bin.match(/^const COMMANDS = \{([\s\S]*?)^\};/m)?.[1] || '';
+    return new Set([...block.matchAll(/^\s+'?([a-z][a-z0-9-]*)'?\s*:/gm)].map((m) => m[1]));
+  } catch {
+    return new Set();
+  }
+}
+
+const RISKS = new Set(['read', 'write', 'money', 'dns-cert', 'production-deploy', 'secret-revoke']);
+
+/** Pull `--flag <value>` pairs out of argv so positional parsing is unaffected. */
+function takeOption(list, flag) {
+  const i = list.indexOf(flag);
+  if (i === -1) return { list, value: undefined };
+  return { list: [...list.slice(0, i), ...list.slice(i + 2)], value: list[i + 1] };
+}
+
+function headerTags(description, risk) {
+  const one = (v) => String(v).replace(/[\r\n]+/g, ' ').trim();
+  return (description ? `// @description ${one(description)}\n` : '') + (risk ? `// @risk ${risk}\n` : '');
+}
+
+function existingTag(file, key) {
+  try { return fs.readFileSync(file, 'utf8').match(new RegExp(`^// @${key} (.+)$`, 'm'))?.[1] || undefined; } catch { return undefined; }
+}
+
+/**
+ * Composable instructions: the surfaces list every command, so any change to
+ * the command set recompiles them (project layer, or every project for global).
+ */
+function recompileSurfaces(isGlobal) {
+  if (process.env.TR_COMMAND_NO_COMPILE === '1' || !process.argv[1]) return;
+  try {
+    const child = spawn(process.execPath, [process.argv[1], 'compile', isGlobal ? '--global' : '--project'], { detached: true, stdio: 'ignore' });
+    child.unref();
+    console.log('  ⏳ Instruction surfaces recompiling in the background (command list updated).');
+  } catch (error) {
+    console.warn(`  ⚠️  Command saved, but surface recompile failed to start: ${error.message}`);
+  }
+}
+
 export default async function commandCmd(rawArgs = []) {
   const isGlobal = rawArgs.includes('--global') || rawArgs.includes('-g');
-  const cleanArgs = rawArgs.filter(a => a !== '--global' && a !== '-g');
+  const asJson = rawArgs.includes('--json');
+  let cleanArgs = rawArgs.filter(a => a !== '--global' && a !== '-g' && a !== '--json');
+  let description; let risk;
+  ({ list: cleanArgs, value: description } = takeOption(cleanArgs, '--description'));
+  ({ list: cleanArgs, value: risk } = takeOption(cleanArgs, '--risk'));
+  if (risk !== undefined && !RISKS.has(risk)) {
+    console.error(`Error: --risk must be one of ${[...RISKS].join(', ')}`);
+    process.exitCode = 2;
+    return;
+  }
 
   const action = cleanArgs[0];
   const name = cleanArgs[1];
@@ -222,6 +281,15 @@ export default async function commandCmd(rawArgs = []) {
   const commandsDir = resolveTargetDir(isGlobal);
 
   if (action === 'create') {
+    if (builtinCommandNames().has(name)) {
+      console.error(`Error: '${name}' is a built-in Total Recall command; a custom command with that name could never run. Choose another name.`);
+      process.exitCode = 2;
+      return;
+    }
+    const otherDir = resolveTargetDir(!isGlobal);
+    if (path.resolve(otherDir) !== path.resolve(commandsDir) && fs.existsSync(path.join(otherDir, `${name}.mjs`))) {
+      console.warn(`  ⚠️  A ${isGlobal ? 'project' : 'global'} command '${name}' already exists (${otherDir}); the project one runs first here.`);
+    }
     const forSkill = cleanArgs.indexOf('--config-for-skill');
     if (forSkill !== -1) {
       try {
@@ -229,6 +297,7 @@ export default async function commandCmd(rawArgs = []) {
         if (!cleanArgs[forSkill + 1]) throw new Error('Missing skill id after --config-for-skill');
         const commandPath = generateSkillConfigCommand(cleanArgs[forSkill + 1], name, commandsDir);
         console.log(`✔ Generated npx total-recall ${name} config|detect|init; saved to: ${commandPath}`);
+        recompileSurfaces(isGlobal);
       } catch (error) {
         console.error(`Error: ${error.message}`);
         process.exitCode = 1;
@@ -241,6 +310,7 @@ export default async function commandCmd(rawArgs = []) {
         if (!cleanArgs[fromPlugin + 1]) throw new Error('Missing plugin directory after --from-plugin');
         const commandPath = generatePluginCommand(cleanArgs[fromPlugin + 1], name, commandsDir);
         console.log(`✔ Generated npx total-recall ${name} from plugin; saved to: ${commandPath}`);
+        recompileSurfaces(isGlobal);
       } catch (error) {
         console.error(`Error: ${error.message}`);
         process.exitCode = 1;
@@ -267,7 +337,7 @@ export default async function commandCmd(rawArgs = []) {
     
     // Wrap code in an exported run/default function for composable CLI execution
     const fileContent = `// Auto-generated custom CLI command: ${name}
-export async function run(argv = []) {
+${headerTags(description, risk)}export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   ${code}
 }
@@ -279,6 +349,8 @@ export default async function (args = []) {
     fs.writeFileSync(commandPath, fileContent, 'utf8');
     console.log(`\x1b[32m✔ Successfully created custom command: \x1b[1mnpx total-recall ${name}\x1b[0m`);
     console.log(`  Saved to: ${commandPath}`);
+    if (!description) console.log('  Tip: add --description "<when to use it>" so the instruction surfaces say when to use this command.');
+    recompileSurfaces(isGlobal);
   } else if (action === 'read') {
     const commandPath = path.join(commandsDir, `${name}.mjs`);
     if (fs.existsSync(commandPath)) {
@@ -301,8 +373,11 @@ export default async function (args = []) {
       process.exit(1);
     }
 
+    // Keep the declared description/risk unless the update replaces them.
+    const keptDescription = description ?? existingTag(commandPath, 'description');
+    const keptRisk = risk ?? existingTag(commandPath, 'risk');
     const fileContent = `// Auto-generated custom CLI command: ${name}
-export async function run(argv = []) {
+${headerTags(keptDescription, keptRisk)}export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   ${code}
 }
@@ -314,6 +389,7 @@ export default async function (args = []) {
     fs.writeFileSync(commandPath, fileContent, 'utf8');
     console.log(`\x1b[32m✔ Successfully updated custom command: \x1b[1m${name}\x1b[0m`);
     console.log(`  Saved to: ${commandPath}`);
+    recompileSurfaces(isGlobal);
   } else if (action === 'list') {
     const targets = isGlobal 
       ? [{ label: 'Global', dir: resolveTargetDir(true) }]
@@ -322,6 +398,11 @@ export default async function (args = []) {
           { label: 'Global', dir: resolveTargetDir(true) }
         ];
 
+    if (asJson) {
+      const { listSurfaceCommands } = await import('../core/command-surface.mjs');
+      console.log(JSON.stringify(listSurfaceCommands(targets.map((t) => ({ scope: t.label.toLowerCase(), dir: t.dir })))));
+      return;
+    }
     let foundAny = false;
     for (const t of targets) {
       if (fs.existsSync(t.dir)) {
@@ -343,6 +424,7 @@ export default async function (args = []) {
     if (fs.existsSync(commandPath)) {
       fs.unlinkSync(commandPath);
       console.log(`\x1b[32m✔ Successfully removed custom command: \x1b[1m${name}\x1b[0m`);
+      recompileSurfaces(isGlobal);
     } else {
       console.error(`Error: Custom command '${name}' does not exist.`);
       process.exit(1);

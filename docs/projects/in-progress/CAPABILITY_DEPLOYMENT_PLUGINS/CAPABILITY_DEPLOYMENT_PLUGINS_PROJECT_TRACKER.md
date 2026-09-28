@@ -101,15 +101,60 @@ Goal: Show that skills become portable app features, not Festech-specific runtim
 
 Goal: Turn each Festech capability in the [audit inventory](CAPABILITY_DEPLOYMENT_PLUGINS_AUDIT.md#festech-capability-inventory-extraction-source) into a standalone-or-composable Total Recall capability plugin. Every item needs clean extracted source, injected ports, a namespaced SSSS extension with alias fixtures, and passing standalone plus composed installs.
 
+### Plugin roster (user direction, 2026-09-28; code evidence verified 2026-09-28)
+
+**Conventions (user direction 2026-09-28):** every plugin repo is initialized with the standard scaffold — SSSS vault + conformance test (`ssss new --with-total-recall`), plugin manifest/CLI/skill (`total-recall plugin create --capability --with-cli`, CLI reports only what is implemented), repo push skill, Total Recall project brain with a project id (`init --project`), compiled instruction surfaces git-ignored.  every plugin is its own repository named `tr-plugin-<name>` (sibling checkout, not inside `total-recall/plugins/`, which TR_CORE_PLUGIN_SPLIT removes); planning docs (5-file Kanban) live in the plugin's repo once it exists; white-label, published by The Workshop Collective LLC (LLC must exist before any LICENSE names it). Plugins that run on their own **declare their crons, daemons and startup hooks** in `plugin.json` and a host adapter installs and supervises them (first designed in `tr-plugin-phone`, see item below).
+
+| Plugin | Repo | Status | Evidence / source |
+| --- | --- | --- | --- |
+| **composable-cli** | `tr-plugin-composable-cli` (scaffolded 2026-09-28; docs in the repo) | **PRIORITY 1** | Today in core: `src/cli/command.mjs` + dispatcher `bin/total-recall.mjs:155-272`. Shipped in core 2026-09-28: commands listed in instruction surfaces on every compile (`src/core/command-surface.mjs`), `--description`/`--risk`, `list --json`, built-in names refused. Live global commands: `brief` (used by global `/start`), `project-id`, `group`, `vercel-rotate`. Every other plugin is exposed through it. |
+| **total-recall** | `total-recall` (core) | core host | Desktop / in-IDE app: SSSS Markdown files, the vector index over them, and files; everything else is a plugin. |
+| openwiki | `tr-plugin-openwiki` (not created) | planned | Ships with every brain (`.agent/skills/total-recall/openwiki`) and repo-root `openwiki/`; read by `/start` (`brief` reports pages and staleness) |
+| secrets | `tr-plugin-secrets` (not created) | planned (item below) | TR encrypted store (`secret set/rotate/rotate-auto/remote deploy/shared/tracking-health`) |
+| code-quality | `tr-plugin-code-quality` | in progress | `plugin.json` 0.2.0, on GitHub |
+| ssss | `ssss` (existing package repo) | planned | `@gregiteen/ssss-cli` 0.9.7 |
+| domains | `tr-plugin-domains` (scaffolded 2026-09-28; docs in the repo) | planned | festech `domains.ts`, UltraChat domain services |
+| **phone** | **`tr-plugin-phone`** (scaffolded 2026-09-28; docs in the repo) | planned | UI from festech (`PhoneDialer`, `useWebRtcSession`/`sip.js`, `GlobalPhoneDrawer`, settings/phone); backend from UltraChat `server/services/asterisk/` + festech tenant-phone; audit covers festech, UltraChat, Dabber, portfolio-site, TWC |
+| text | `tr-plugin-text` (not created) | planned | Shares the Telnyx client package with phone; UltraChat `AsteriskSMSService.ts`, festech `comms-engine` Telnyx adapter, Dabber `telnyx_service.py` |
+| email | `tr-plugin-email` (not created) | planned | festech `lib/email.ts` + `packages/email`, UltraChat email services, portfolio-site `nodemailer`, Dabber Gmail/SMTP2GO |
+| asterisk | `tr-plugin-asterisk` (not created) | planned | UltraChat ARI/SIP/extensions/recording, festech `packages/asterisk` + `apps/communications`; per-tenant SIP/RTP allocation (two Asterisk containers share one node today) |
+| mailcow | `tr-plugin-mailcow` (not created) | planned | UltraChat `mailcowService.ts`; festech `install-mailcow.sh`; portfolio-site webmail scripts |
+| supabase | `tr-plugin-supabase` (not created) | planned | UltraChat data layer; not used by festech |
+| stripe | `tr-plugin-stripe` (not created) | planned | UltraChat + festech billing code |
+
+- [ ] **Composable-CLI plugin repo `tr-plugin-composable-cli` — PRIORITY 1** (user direction 2026-09-28; publisher The Workshop Collective LLC, white-label) — planned and tracked in its own repo: `tr-plugin-composable-cli` repo (`docs/projects/planned/COMPOSABLE_CLI_PLUGIN/`) (L):
+  - [ ] Extract `src/cli/command.mjs` + the custom-command dispatch into the plugin; core keeps only a thin loader (M)
+  - [ ] Command contract: `--help`, `--json`, exit codes, `--background` + reports, no values in output; composition helper to call other verbs (`tr(...)`) instead of each command re-spawning `process.argv[1]` (M)
+  - [ ] Command registry as SSSS documents (name, scope project|global|group, owner project UUID, description, version) so `command list` shows provenance; group-scoped commands via `total-recall group` (M)
+  - [ ] Safety: commands that touch money, DNS/certs, production deploys or secret revocation declare it; dry-run by default for those (M)
+  - [ ] Promote the 2026-09-28 global commands (`project-id`, `group`, `vercel-rotate`) into the plugin with tests on the Mac mini (M)
 - [ ] **Gate:** `festech-modular` type-ownership and alias map (its A-04) exists before any extraction renames a type (external) (M)
-- [ ] **Email plugin repo:** extract `email.ts` + `packages/email`; provider port; send/receive status events (L)
-- [ ] **Domains plugin repo:** extract `domains.ts`; registrar/DNS/SSL ports; shared identity contract with email (L)
+- [ ] **Email plugin repo `tr-plugin-email`:** extract `email.ts` + `packages/email`; provider port; send/receive status events (L)
+- [ ] **Domains plugin repo `tr-plugin-domains`:** extract `domains.ts`; registrar/DNS/SSL ports; shared identity contract with email — planned and tracked in its own repo: `tr-plugin-domains` repo (`docs/projects/planned/DOMAINS_PLUGIN/`) (L)
+- [ ] **Phone plugin repo `tr-plugin-phone`** (Telnyx voice + numbers; PBX via the asterisk plugin; UI from festech) — user direction 2026-09-28; planned and tracked in that repo (`docs/projects/planned/PHONE_PLUGIN/`, audit of festech, UltraChat, Dabber, portfolio-site, TWC phone/text/email/crons/daemons/startup). Items below are superseded by that tracker; kept as the summary (L):
+  - [ ] Push `tr-plugin-phone` to GitHub (awaiting go-ahead) (S)
+  - [ ] Runtime contract: plugin declares jobs/daemons/startup; host adapter installs + supervises; `phone jobs` / `phone health` detect declared-vs-installed drift (festech `provision-telephony` and `telecom-cleanup` are unscheduled in production today) (M)
+  - [ ] Extract festech phone UI (~5.5k lines React) behind ports: API client, i18n, design tokens, notifications, optional PWA media (L)
+  - [ ] Extract from UltraChat `server/services/asterisk/` (`TelnyxService`, `Telnyx10DLCService`, `NumberPoolService`, `PhoneNumberService`, `E911ComplianceService`, `CallBillingService`, `CallRecordingService`, SIP/ARI, `ReceptionistScriptService`) and festech `packages/comms-engine/src/adapters/telnyx.ts` + `packages/database/src/schema/telecom.ts` (numbers, routes, voicemails, 10DLC campaigns, E911 addresses, SMS/voice quotas, extensions, business hours) (L)
+  - [ ] Keep festech's hybrid fallback design: WebRTC/PWA → Asterisk first, Telnyx for external/emergency/offline (M)
+  - [ ] Phone CLI via the Telnyx API with keys from Total Recall secrets: numbers (search/buy/assign/pool/release), calls, voicemail (M)
+  - [ ] Compliance workflows as first-class commands: toll-free verification (TFV), 10DLC brand/campaign, E911 address — submit, track status, surface carrier errors such as 40329 (M)
+  - [ ] Adjustable pricing and branding shared with the Domains plugin: per-tenant markup over carrier cost, white-label caller/sender identity (M)
+  - [ ] Consumers to migrate after parity: UltraChat, festech, Dabber CRM (Telnyx SMS number pool) (L)
+- [ ] **Text plugin repo `tr-plugin-text`** (Telnyx SMS/MMS; shares the Telnyx client package with `tr-plugin-phone`): send, inbound webhook with Ed25519 verification, messaging profiles, number pools, STOP/HELP handling, delivery errors surfaced (e.g. 40329); toll-free verification and 10DLC compliance commands shared with phone (M)
+- [ ] **Asterisk plugin repo `tr-plugin-asterisk`** (PBX): extract UltraChat ARI/SIP/extension/recording services; festech hybrid WebRTC/PWA → Asterisk → Telnyx fallback; container lifecycle via mesh (L)
+- [ ] **Mailcow plugin repo:** self-hosted mail server adapter for the email plugin (domains, mailboxes, DKIM, aliases) from UltraChat `mailcowService.ts`; identity contract with domains (M)
+- [ ] **Supabase plugin repo:** data/auth provider adapter extracted from UltraChat; SSSS remains the source of truth, Supabase a projection (M)
+- [ ] **Stripe plugin repo:** products, checkout, subscriptions, webhooks; consumes the shared pricing config used by domains/phone/text (M)
+- [ ] **SSSS plugin repo:** package `@gregiteen/ssss-cli` as the ssss plugin (validate, export UCW, registries) (M)
 - [ ] **App-translator plugin repo:** extract `next-intl` catalogs + string extraction + translation pipeline; model port via CLI agents/OpenRouter (no Gemini API); per-app locale list; RTL check for `ar` (M)
 - [ ] **Tracking-cookies plugin repo:** extract consent banner, page-view tracker, analytics router; make consent gate every non-essential tracker (currently "Essential only" gates nothing); consent choice + page views as SSSS events (M)
 - [ ] **Onsite-operations plugin repo:** extract `operations.ts`/`liveops.ts` + scanner; event/scanner id contract with ticketing (L)
 - [ ] **Event-ticketing plugin repo:** move `tickets.ts` direct writes to canonical SSSS first, then extract sales/check-in/transfer/refund (L)
 - [ ] **Marketing plugin repo:** extract campaign paths from `comms.ts` onto the messaging plugin; independent runtime (M)
 - [ ] **Secrets-manager plugin repo:** re-test and fix `--keys` scoped delivery first; app-owned runtime store that works with Total Recall offline (L)
+  - [ ] **API rotation for every provider that supports it** (user direction 2026-09-28): move recipes from `provider_browser` to `provider_api` where a key-management API exists. First: Vercel — `POST /v3/user/tokens` (name, `expiresAt`, optional `projectId`; `bearerToken` returned once) → verify `GET /v2/user` → `secret rotate --stdin` → `secret remote deploy` → `DELETE /v3/user/tokens/{oldId}`; currently `provider-rotation-recipes.mjs:120-126` is console-only (`verified: false`) (M)
+  - [ ] Per-app token issuance on setup (one credential → one repo) using the same API, with `expiresAt` matching `--rotate-days` (M)
 - [ ] **Social plugin repo:** extract `social.ts`; live provider acceptance before the release flag is turned on (M)
 - [ ] **Accounting plugin repo:** canonicalize `finance.ts` ledger writes; protected-action authorization and audit (L)
 - [ ] **Legal plugin repo:** extract `legal.ts`/`contracts.ts`; protected-action audit; human review gate (L)

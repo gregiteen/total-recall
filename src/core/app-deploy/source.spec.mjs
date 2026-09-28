@@ -142,7 +142,9 @@ describe('Capability Source Resolver (app-deploy/source.mjs)', () => {
     it('resolves bundled plugins by ID', async () => {
       const bundledId = listBundledPlugins()[0]?.id;
       expect(bundledId).toBeTruthy();
-      const resolved = await resolveCapabilitySource(bundledId);
+      // Isolated project root: a plugin installed in the repo running the suite
+      // must not shadow the bundled one.
+      const resolved = await resolveCapabilitySource(bundledId, { projectRoot: tmpRoot });
       try {
         expect(resolved.id).toBe(bundledId);
         expect(resolved.sourceType).toBe('bundled');
