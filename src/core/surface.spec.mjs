@@ -3,7 +3,11 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
-import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes } from './surface.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale } from './surface.mjs';
 
 describe('Surface Routing Accuracy', () => {
 
@@ -118,10 +122,39 @@ describe('mergeGlobalRuleNodes', () => {
     expect(globalNode._layer).toBeUndefined();
   });
 
+  it('keeps the newest rule when a capped section has equal-weight ties, and reports the overflow', async () => {
+    const nodes = Array.from({ length: 16 }, (_, i) => ({
+      ...rule(`c${i}`, 'anti-patterns', `Correction number ${i} body`),
+      title: `Correction number ${i}`,
+      created: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+    }));
+    const block = await buildRulesBlock(null, nodes);
+    expect(block).toContain('15 corrections');
+    expect(block).toContain('Correction number 15');
+    expect(block).not.toContain('Correction number 0 ');
+    expect(block).toContain('1 more corrections not shown');
+  });
+
   it('renders an inherited global rule in the project rules block', async () => {
     const merged = mergeGlobalRuleNodes([], [{ ...rule('global-rule', 'anti-patterns'), title: 'Global correction', modality: 'must' }]);
     const block = await buildRulesBlock(null, merged);
     expect(block).toContain('1 corrections');
     expect(block).toContain('Global correction');
+  });
+});
+
+describe('isSurfaceCodeStale', () => {
+  it('is false for the code this process loaded and true once the file on disk changes', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tr-stale-')), 'surface.mjs');
+    fs.writeFileSync(file, 'v1');
+    const loaded = crypto.createHash('sha256').update('v1').digest('hex');
+    expect(isSurfaceCodeStale(file, loaded)).toBe(false);
+    fs.writeFileSync(file, 'v2');
+    expect(isSurfaceCodeStale(file, loaded)).toBe(true);
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+  });
+
+  it('reports fresh code for the running module', () => {
+    expect(isSurfaceCodeStale()).toBe(false);
   });
 });
