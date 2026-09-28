@@ -645,6 +645,7 @@ export default async function init(args) {
           logOk(`${t.label}: ${n} skill(s) → ${path.relative(cwd, t.destDir) || t.destDir}/`);
         }
         log(`  Discoverable skills: ${skills.map(s => s.name).join(', ')}`);
+        if (isProject) await connectDetectedClients(wired);
         if (available.length > 0) {
           log(`  Also available (opt-in): ${available.map(t => t.clients.join('/')).join(', ')} — \`npx total-recall connect <ide>\``);
         }
@@ -951,4 +952,26 @@ export default async function init(args) {
   }
 
   process.exit(0);
+}
+
+/**
+ * Register every IDE detected as in use as a connected client, so step 4's
+ * compile writes that IDE's instruction shim (CLAUDE.md, AGENTS.md, GEMINI.md…).
+ * Projecting skills alone left new repos without the global rules.
+ */
+export async function connectDetectedClients(wired, { connectFn } = {}) {
+  const { default: connect, CLIENTS } = await import('./connect.mjs');
+  const run = connectFn || connect;
+  const connected = [];
+  for (const target of wired) {
+    const client = (target.clients || []).find((c) => CLIENTS[c]);
+    if (!client || connected.includes(client)) continue;
+    try {
+      await run([client]);
+      connected.push(client);
+    } catch (err) {
+      logWarn(`Could not connect ${client}: ${err.message} — run \`npx total-recall connect ${client}\``);
+    }
+  }
+  return connected;
 }
