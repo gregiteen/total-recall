@@ -164,8 +164,8 @@ function directStart() {
   }
 }
 
-function directStop() {
-  const stopped = stopDaemon();
+async function directStop() {
+  const stopped = await stopDaemon();
   if (stopped) {
     console.error('  ✅ Daemon stopped');
   } else {
@@ -215,7 +215,7 @@ export default async function daemon(args) {
     case 'stop':
       if (useSystemd) systemdStop();
       else if (useLaunchd) launchctlStop();
-      else directStop();
+      else await directStop();
       break;
     case 'status':
       if (useSystemd) systemdStatus();

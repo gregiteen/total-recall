@@ -12,6 +12,7 @@
  */
 
 import path from 'path';
+import { DAEMON_PID_FILE } from './daemon-control.mjs';
 import fs from 'fs';
 import { fileURLToPath } from 'node:url';
 import { readProcessCommand, entryPathHint, shouldHonorPidLock } from './pid-lock.mjs';
@@ -102,7 +103,7 @@ export function writeInterrupt(message) {
 
 // ─── PID Lockfile ───────────────────────────────────────────────────────────────
 
-const PID_FILE = path.join(BRAIN_DIR, 'daemon.pid');
+const PID_FILE = DAEMON_PID_FILE;
 
 /**
  * Attempt to acquire the PID lockfile. If another daemon is alive, exit.
@@ -112,7 +113,7 @@ export function acquirePidLock() {
   try {
     if (fs.existsSync(PID_FILE)) {
       const existingPid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
-      if (existingPid && !isNaN(existingPid)) {
+      if (existingPid && !isNaN(existingPid) && existingPid !== process.pid) {
         // Liveness alone cannot tell our daemon from whatever else inherited
         // the number after a reboot — observed here holding a PID that had
         // since been handed to an unrelated desktop app, which would refuse
@@ -218,13 +219,19 @@ function shutdown(signal) {
       });
     })
     .finally(() => {
-      try {
-        releasePidLock();
-      } catch {
-        // Lock already gone — nothing to release.
-      }
+      // Keep the PID lock until the process really exits (see the 'exit'
+      // handler): releasing it here let a new daemon start while this one was
+      // still finishing its current task.
     });
 }
+
+process.on('exit', () => {
+  try {
+    releasePidLock();
+  } catch {
+    // Lock already gone — nothing to release.
+  }
+});
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

@@ -9,7 +9,11 @@ import { agentDir, brainDir } from './config.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
 
-const PID_FILE = path.join(brainDir, 'logs', 'daemon.pid');
+// The daemon's own lockfile (daemon-loop acquirePidLock). start/stop/status read the
+// same file: a separate logs/daemon.pid let `daemon stop` miss the live daemon and
+// leave it running old code alongside a newly started one.
+export const DAEMON_PID_FILE = path.join(brainDir, 'daemon.pid');
+const PID_FILE = DAEMON_PID_FILE;
 const LOG_FILE = path.join(brainDir, 'logs', 'daemon.log');
 
 /**
@@ -104,8 +108,8 @@ export function startDaemon() {
 
   child.unref();
   
-  // Write the PID file
-  fs.writeFileSync(PID_FILE, String(child.pid), 'utf8');
+  // The daemon writes DAEMON_PID_FILE itself when it acquires its lock;
+  // pre-writing the child's pid here made the child see a live lock and exit.
   fs.closeSync(logFd);
 
   logger.info('daemon-control', `Active Intelligence Daemon started detached (PID ${child.pid}).`);
@@ -113,10 +117,13 @@ export function startDaemon() {
 }
 
 /**
- * Stops the running background daemon.
- * @returns {boolean} True if successfully stopped, false otherwise.
+ * Stops the running background daemon and waits for the process to exit.
+ * The daemon owns its lockfile and removes it on exit, so a start issued right
+ * after stop can never run alongside a daemon that is still finishing work.
+ * @param {{ graceMs?: number, pollMs?: number }} [opts]
+ * @returns {Promise<boolean>} True if a daemon was running and has exited.
  */
-export function stopDaemon() {
+export async function stopDaemon({ graceMs = 35_000, pollMs = 250 } = {}) {
   const pid = readPid();
   if (!pid) {
     // Clear PID file in case it was a stale/dead record
@@ -126,19 +133,31 @@ export function stopDaemon() {
     return false;
   }
 
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
   try {
     process.kill(pid, 'SIGTERM');
     logger.info('daemon-control', `Sent SIGTERM to daemon PID ${pid}.`);
-    
-    // Wait briefly and verify cleanup
-    try {
-      if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
-    } catch {}
-    return true;
   } catch (err) {
     logger.error('daemon-control', `Failed to terminate daemon PID ${pid}: ${err.message}`);
     return false;
   }
+
+  const deadline = Date.now() + graceMs;
+  while (alive() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  if (alive()) {
+    logger.warn('daemon-control', `Daemon PID ${pid} still running after ${graceMs}ms — sending SIGKILL.`);
+    try { process.kill(pid, 'SIGKILL'); } catch {}
+  }
+
+  // A SIGKILLed daemon cannot run its exit handler; drop its lock if still ours.
+  try {
+    if (fs.existsSync(PID_FILE) && parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10) === pid) {
+      fs.unlinkSync(PID_FILE);
+    }
+  } catch {}
+  return true;
 }
 
 /**
