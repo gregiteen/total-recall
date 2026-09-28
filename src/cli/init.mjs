@@ -30,6 +30,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { exec, spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { projectSkillsForScope, detectActiveSkillTargets } from './skill-projection.mjs';
 import { ensureRepoExpert } from './repo-expert-generate.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
@@ -706,6 +707,11 @@ export default async function init(args) {
       needsBootstrap = true;
     }
 
+    if (isProject && !brainCfg.project_id) {
+      brainCfg.project_id = randomUUID();
+      needsBootstrap = true;
+    }
+
     if (needsBootstrap) {
       try {
         const { issueKey } = await import('../server/keys.mjs');
@@ -714,6 +720,9 @@ export default async function init(args) {
         brainCfg.token = brainCfg.token || keyData.token;
         writeFileSecure(brainJsonPath, JSON.stringify(brainCfg, null, 2), { mode: 0o600 });
         logOk(`Bootstrap configuration successfully generated and pre-authorized at ${brainCfg.url}`);
+        if (brainCfg.project_id) {
+          logOk(`Assigned project UUID ${brainCfg.project_id} to project brain`);
+        }
       } catch (err) {
         logWarn(`Could not auto-generate bootstrap developer key: ${err.message}`);
       }
@@ -875,6 +884,7 @@ export default async function init(args) {
       const projectName = path.basename(cwd);
       const existingIdx = registry.findIndex(p => p.path === cwd);
       const entry = {
+        project_id: brainCfg.project_id || undefined,
         name: projectName,
         path: cwd,
         brainDir: brainDir,

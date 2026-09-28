@@ -6,7 +6,7 @@ description: >-
   file before executing.
 repo_scoped: true
 repository_id: "total-recall-brain"
-generated_at: 2026-09-28T08:00:09.594Z
+generated_at: 2026-09-28T08:53:38.297Z
 generated_from: total-recall
 ---
 
@@ -18,7 +18,7 @@ generated_from: total-recall
 
 ## Stack
 
-- **Languages**: JavaScript (684 files), Markdown (307 files), TypeScript (133 files), Python (29 files), CSS (13 files)
+- **Languages**: JavaScript (684 files), Markdown (297 files), TypeScript (133 files), Python (29 files), CSS (13 files)
 - **Frameworks**: React, Express
 - **Tests**: Vitest
 - **Module system**: module
@@ -44,7 +44,7 @@ docs/
     archived/  (8 items)
     completed/  (49 items)
     in-progress/  (3 items)
-    planned/  (3 items)
+    planned/  (1 items)
   reference/  (6 items)
   security/  (2 items)
   setup/  (1 items)
