@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `skill register <path>` is authoritative for `repo_scoped`: a skill whose own SKILL.md no longer declares repo scope clears a stale catalog flag. Discovery stays fail-closed.
+
 ## 3.32.4
 
 - `plugin install` now registers the plugin's `commands` as composable commands (listed in the compiled instruction files) and `plugin remove` removes them; a hand-written command of the same name is never overwritten.

@@ -188,7 +188,9 @@ export function registerSkill(brainDir, skillPath, opts = {}) {
     // Fail closed once any registered copy declares repository scope. A later
     // discovery pass must never make that skill globally syncable merely
     // because another repository has an older entrypoint without the flag.
-    repo_scoped: meta.repo_scoped || prev.repo_scoped || false,
+    // An explicit `skill register <path>` is authoritative: the skill's own SKILL.md decides.
+    // Automatic discovery never passes authoritative_scope, so it stays fail-closed.
+    repo_scoped: opts.authoritative_scope ? meta.repo_scoped : (meta.repo_scoped || prev.repo_scoped || false),
     source: opts.source || prev.source || abs,
     source_type: opts.source_type || prev.source_type || 'local',
     source_path: abs,
