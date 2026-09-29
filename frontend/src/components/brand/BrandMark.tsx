@@ -1,6 +1,6 @@
-/** Official Total Recall brand marks. */
+import AnimatedBrandMark from './AnimatedBrandMark'
 
-export type BrandVariant = 'lockup' | 'icon' | 'badge' | 'mark'
+export type BrandVariant = 'lockup' | 'icon' | 'badge' | 'mark' | 'animated'
 
 interface BrandMarkProps {
   variant?: BrandVariant
@@ -10,14 +10,18 @@ interface BrandMarkProps {
   alt?: string
   /** Light plate behind lockup for dark surfaces (PNG has white bg). */
   plate?: boolean
+  /** Render dynamic looping 3D vector animation mark. */
+  animated?: boolean
 }
 
-const SRC: Record<BrandVariant, string> = {
+const SRC: Record<Exclude<BrandVariant, 'animated'>, string> = {
   lockup: '/brand/total-recall-lockup.png',
   icon: '/brand/total-recall-icon.svg',
   badge: '/brand/total-recall-badge.jpg',
   mark: '/brand/total-recall-mark.svg',
 }
+
+export { AnimatedBrandMark }
 
 export default function BrandMark({
   variant = 'lockup',
@@ -25,7 +29,12 @@ export default function BrandMark({
   className = '',
   alt = 'Total Recall',
   plate = false,
+  animated = false,
 }: BrandMarkProps) {
+  if (animated || variant === 'animated') {
+    return <AnimatedBrandMark size={height} className={className} alt={alt} />
+  }
+
   const isSquare = variant === 'icon' || variant === 'badge' || variant === 'mark'
   const img = (
     <img

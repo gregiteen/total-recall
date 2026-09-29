@@ -95,11 +95,15 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand">
-        <div className="sidebar-brand-lockup" title="Total Recall">
-          <BrandMark variant="lockup" height={48} alt="Total Recall" />
+      <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 14px' }}>
+        <BrandMark animated height={44} alt="Total Recall" />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: '#f8fafc' }}>Total Recall</span>
+            <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 5px', borderRadius: 4, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)' }}>v3.32</span>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', letterSpacing: '0.01em' }}>Portable memory · any IDE</span>
         </div>
-        <span style={{ paddingLeft: 2 }}>Portable memory · any IDE</span>
       </div>
       <nav className="sidebar-nav">
         <div className="nav-section-label">Memory</div>

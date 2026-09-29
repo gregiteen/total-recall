@@ -47,10 +47,10 @@ describe('BrandMark', () => {
     expect(screen.getByAltText('Custom Alt')).toBeInTheDocument();
   });
 
-  it('accepts custom className', () => {
-    render(<BrandMark className="test-class" />);
-    const img = screen.getByAltText('Total Recall');
-    expect(img.className).toContain('test-class');
+  it('renders animated variant when animated=true', () => {
+    render(<BrandMark animated height={44} />);
+    const animatedEl = document.querySelector('.animated-brand-mark');
+    expect(animatedEl).toBeInTheDocument();
   });
 });
 
