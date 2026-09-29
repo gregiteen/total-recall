@@ -157,6 +157,19 @@ describe('skills-registry', () => {
     expect(fs.existsSync(path.join(repoB, '.agent', 'skills', 'private-skill'))).toBe(false);
   });
 
+  it('an explicit register lets the skill itself clear a stale repo_scoped flag, discovery never does', () => {
+    const skillDir = writeSkill(workspace, 'was-scoped');
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: was-scoped\ndescription: "Now global."\nrepo_scoped: true\n---\n');
+    registerSkill(brain, skillDir);
+    expect(loadRegistry(brain).skills['was-scoped'].repo_scoped).toBe(true);
+
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: was-scoped\ndescription: "Now global."\n---\n');
+    registerSkill(brain, skillDir); // discovery-style: stays scoped
+    expect(loadRegistry(brain).skills['was-scoped'].repo_scoped).toBe(true);
+    registerSkill(brain, skillDir, { authoritative_scope: true });
+    expect(loadRegistry(brain).skills['was-scoped'].repo_scoped).toBe(false);
+  });
+
   it('keeps the installed skill intact when a replacement copy fails', () => {
     const source = writeSkill(workspace, 'source-skill');
     const destination = writeSkill(workspace, 'installed-skill');

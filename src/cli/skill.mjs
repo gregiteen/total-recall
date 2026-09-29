@@ -462,6 +462,7 @@ Provide a high-level explanation of the skill's capabilities and context.
       const entry = registerSkill(brainDir, skillPath, {
         source: target,
         source_type: fs.existsSync(path.resolve(target)) ? 'path' : 'local',
+        authoritative_scope: true,
       });
       console.log(`\n  ✅ Registered: ${entry.id}`);
       console.log(`     version=${entry.version} hash=${entry.content_hash}`);
