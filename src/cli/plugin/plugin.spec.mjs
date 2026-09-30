@@ -63,7 +63,8 @@ describe('CLI Plugin Manager', () => {
   it('filters bundled plugins by use case', async () => {
     await run(['plugin', 'available', '--use-case', 'operations', '--json']);
     const parsed = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-    expect(parsed.map(p => p.id)).toEqual(['system-monitor']);
+    expect(parsed.map(p => p.id)).toContain('system-monitor');
+    expect(parsed.every(p => p.use_cases.includes('operations'))).toBe(true);
   });
 
   it('lists plugins shared by mesh peers with install sources', async () => {
@@ -76,7 +77,8 @@ describe('CLI Plugin Manager', () => {
   it('searches bundled plugins and mesh peers together', async () => {
     await run(['plugin', 'search', '--use-case', 'research', '--json']);
     const parsed = JSON.parse(consoleLogSpy.mock.calls[0][0]);
-    expect(parsed.bundled).toEqual([]);
+    expect(parsed.bundled.map(p => p.id)).toContain('creative-search');
+    expect(parsed.bundled.every(p => p.use_cases.includes('research'))).toBe(true);
     expect(parsed.peers[0].source).toBe('peer:mac-mini/reading-list');
   });
 
@@ -104,4 +106,3 @@ describe('CLI Plugin Manager', () => {
     }
   });
 });
-

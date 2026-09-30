@@ -22,6 +22,25 @@ Welcome to the master control skill for the **Total Recall Autonomous AI OS**. >
 
 ---
 
+
+## Runtime checks, offline help, and research cleanup
+
+Use the installed repository launcher (or `total-recall` when none exists):
+
+```bash
+total-recall startup-check check --json
+total-recall status --json
+total-recall daemon status
+total-recall help daemon --json
+total-recall help startup --json
+```
+
+Native `startup check|ensure --json` is available in packages that ship it; the registered `startup-check` wrapper supplies compatible source resolution for older installed packages. Health and instructions probes each allow ten seconds and retry one transport failure. Do not retry authorization denials or restart a live, unknown or foreign process. After a transient failure, recheck before the final report and distinguish observed recovery from a proven root cause. `doctor` is an installation preflight: an occupied port is not proof of an unhealthy running service.
+
+Offline help requires `docs/reference/cli-reference.md` in the published package. Verify the installed package, not only the source checkout. Repair missing references from the matching canonical source and include them in the package files list. `help server` describes `start`; it does not add a `server` command.
+
+Research defaults to the current project brain; `--global` selects the global daemon queue. Inspect `research list --status pending`, `--status in_progress`, and `--status failed` in the requested scopes. Only clear when the user requests it: resolve each full ID with `research show <id-prefix>` and call `research cancel <full-id>` with the same scope. Preserve completed reports and unrelated daemon task envelopes. Verify zero unfinished jobs in every requested scope and confirm the server's `status --json` view. Never edit queue files by hand or claim clearing one scope cleared all scopes.
+
 ## 🎯 WHEN TO USE THIS SKILL
 
 You MUST actively reference and apply this skill under the following specific runtime scenarios:

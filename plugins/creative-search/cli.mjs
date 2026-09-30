@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 
 const SEARXNG_URL = process.env.SEARXNG_URL || 'http://100.64.0.1:8888';
-const TR_CLI = process.env.TR_CLI || `${process.env.HOME}/Github/total-recall/bin/total-recall.mjs`;
+const TR_CLI = process.env.TR_CLI || new URL('../../bin/total-recall.mjs', import.meta.url).pathname;
 
 // Stop words for keyword extraction
 const STOP_WORDS = new Set([
@@ -85,7 +85,7 @@ function printResult(r, i) {
 
 /** Run `total-recall remember` to save search results */
 async function rememberToTR(category, title, body, tags) {
-  const nodePath = TR_CLI || `${os.homedir()}/Github/total-recall/bin/total-recall.mjs`;
+  const nodePath = TR_CLI;
   const nodeBin = process.argv[0];
   try {
     const tagStr = Array.isArray(tags) ? tags.join(',') : tags;

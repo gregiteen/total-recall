@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import child_process from 'node:child_process';
-import doctor from './doctor.mjs';
+import doctor, { isOwnedServerPort } from './doctor.mjs';
 
 describe('doctor command', () => {
   let logSpy, errorSpy;
@@ -108,5 +108,17 @@ describe('doctor command', () => {
     
     // Cleanup exitCode
     process.exitCode = undefined;
+  });
+});
+
+describe('doctor listener ownership', () => {
+  it('accepts only the canonical server PID actually listening on the occupied port', async () => {
+    expect(await isOwnedServerPort(3000, { identity: () => ({status:'running',pid:123}), listener: async () => true })).toBe(true);
+    expect(await isOwnedServerPort(3000, { identity: () => ({status:'running',pid:123}), listener: async () => false })).toBe(false);
+    for (const status of ['unknown','conflict','stopped']) {
+      const listener = vi.fn();
+      expect(await isOwnedServerPort(3000, {identity:()=>({status}),listener})).toBe(false);
+      expect(listener).not.toHaveBeenCalled();
+    }
   });
 });

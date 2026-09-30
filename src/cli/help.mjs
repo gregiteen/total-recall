@@ -18,7 +18,8 @@ const ROOT = path.join(__dirname, '..', '..');
 
 export default async function run(argv) {
   const args = argv || [];
-  const topic = args[0] ? args[0].toLowerCase() : null;
+  const requestedTopic = args.find(arg => !arg.startsWith('-'))?.toLowerCase() || null;
+  const topic = ({ server: 'start', 'startup-check': 'startup' })[requestedTopic] || requestedTopic;
   const isJson = args.includes('--json') || args.includes('-j');
 
   const cliRefPath = path.join(ROOT, 'docs', 'reference', 'cli-reference.md');

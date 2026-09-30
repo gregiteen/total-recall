@@ -351,7 +351,21 @@ export default async function meshCli(argv = []) {
         fail('`ssh` requires a node name or address.', 'Run `total-recall mesh nodes`.');
         return;
       }
-      const node = findMeshNode(target, vaultRoot);
+
+      // Try enriched nodes first, then fall back to the Headscale registry
+      // for givenName matches (the friendly name shown in `mesh nodes`).
+      let node = findMeshNode(target, vaultRoot);
+      if (!node) {
+        let registry = null;
+        try {
+          const data = await headscaleFetchWithLegacyFallback(
+            '/api/v1/node', '/api/v1/machine', {}, brainDir,
+          );
+          registry = data?.nodes || data?.machines || [];
+        } catch {}
+        node = findMeshNode(target, vaultRoot, registry);
+      }
+
       if (!node) {
         fail(`No mesh node matches "${target}".`, 'Run `total-recall mesh nodes` to list them.');
         return;

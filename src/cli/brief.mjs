@@ -147,7 +147,10 @@ try { scripts = Object.keys(JSON.parse(fs.readFileSync(path.join(root, 'package.
 const launchers = fs.readdirSync(root).filter((f) => { try { const st = fs.statSync(path.join(root, f)); return st.isFile() && (st.mode & 0o111) && !f.includes('.'); } catch { return false; } });
 const domain = { providers, integrations, automations, launchers, npm_scripts: scripts };
 
+const { inspectStartup } = await import('./startup.mjs');
+const runtime = await inspectStartup().catch(() => ({ ready: false, status: 'unknown' }));
 const warnings = [];
+if (!runtime.ready) warnings.push('Shared runtime readiness failed or unknown: total-recall startup check --json.');
 if (!project?.project_id) warnings.push('No project brain here (total-recall init) — memory, secrets and rules are global-only.');
 if (secrets.rotation_due && secrets.rotation_due !== 0) warnings.push(`Secrets overdue for rotation: ${secrets.rotation_due} (total-recall secret rotation-due).`);
 if (secrets.shared_values && secrets.shared_values !== 0) warnings.push(`Credential values reused across keys/apps: ${secrets.shared_values} group(s) (total-recall secret shared).`);
@@ -161,7 +164,7 @@ const brief = {
   generated: { local: now.toString(), utc: now.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
   project: project ? { id: project.project_id, name: project.name, groups } : null,
   repo, rules, skills, repo_start_skill: startSkill ? rel(startSkill) : null, openwiki, trackers,
-  domain,
+  domain, runtime,
   commands: cmdList.map((c) => ({ name: c.name, scope: c.scope, risk: c.risk })),
   secrets, tasks: taskCounts,
   mesh: { configured: meshStatus?.configured ?? null, ping: pingData },
@@ -185,6 +188,7 @@ L.push(`Secrets: ${secrets.keys ?? '?'} keys / ${secrets.providers ?? '?'} provi
 L.push(`Providers with keys (${providers.length}): ${providers.join(', ') || 'none'}`);
 L.push(`Integrations: ${integrations.join(', ') || 'none'}  | automations: ${automations.join(', ') || 'none'}`);
 L.push(`Entry points: launchers ${launchers.map((f) => './' + f).join(' ') || 'none'}; npm scripts ${scripts.length}${scripts.length ? ` (${scripts.slice(0, 12).join(', ')}${scripts.length > 12 ? ', …' : ''})` : ''}`);
+L.push(`Runtime: server ${runtime.server?.status || 'unknown'}; brain ${runtime.brain?.status || 'unknown'}; daemon ${runtime.daemon?.status || 'unknown'}; SSSS ${runtime.ssss?.status || 'unknown'}; app ${runtime.app?.status || 'unknown'}`);
 L.push(`Tasks: ${taskCounts.pending} pending, ${taskCounts.in_progress} in progress`);
 L.push(`Mesh: ${meshStatus?.configured ? 'configured' : 'not configured'}${pingData ? ` — ping: ${JSON.stringify(pingData).slice(0, 300)}` : ' (add --mesh to ping nodes)'}`);
 L.push(`Trackers in progress: ${trackers.in_progress.join(', ') || 'none'}${trackers.planned.length ? `  | planned: ${trackers.planned.join(', ')}` : ''}`);

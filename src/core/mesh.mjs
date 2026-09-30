@@ -337,18 +337,45 @@ function findEntityForSelf(self, vaultRoot) {
   return entityForPeer(self, entities, otherHosts);
 }
 
-/** Find an enriched node (live + vault) by hostname or address. */
-export function findMeshNode(nameOrAddress, vaultRoot = meshVaultRoot()) {
+/** Find an enriched node (live + vault) by hostname, registry name, or address. */
+export function findMeshNode(nameOrAddress, vaultRoot = meshVaultRoot(), registry = null) {
   const wanted = String(nameOrAddress || '').trim();
   if (!wanted) return null;
   const key = meshNodeKey(wanted);
   const nodes = listEnrichedMeshNodes(vaultRoot);
 
-  return (
-    nodes.find((n) => String(n.ip) === wanted || String(n.lan_ip) === wanted) ||
-    nodes.find((n) => meshNodeKey(n.hostname) === key) ||
-    null
-  );
+  // 1. Match by Tailscale IP or LAN IP
+  let found = nodes.find((n) => String(n.ip) === wanted || String(n.lan_ip) === wanted);
+  if (found) return found;
+
+  // 2. Match by key derived from enriched hostname (Tailscale DNSName first part)
+  found = nodes.find((n) => meshNodeKey(n.hostname) === key);
+  if (found) return found;
+
+  // 3. Match by entity title
+  found = nodes.find((n) => n.title && meshNodeKey(n.title) === key);
+  if (found) return found;
+
+  // 4. When a registry (Headscale API) is available, match by givenName or name
+  if (registry && Array.isArray(registry)) {
+    const entry = registry.find(
+      (r) => (r.givenName && meshNodeKey(r.givenName) === key) ||
+            (r.name && meshNodeKey(r.name) === key)
+    );
+    if (entry) {
+      const addresses = entry.ipAddresses || [];
+      found = addresses.map((ip) => nodes.find((n) => String(n.ip) === String(ip))).find(Boolean);
+      if (found) return found;
+      // Return a synthetic node from registry details
+      return {
+        hostname: entry.givenName || entry.name || wanted,
+        ip: addresses[0] || null,
+        title: entry.givenName || entry.name || '',
+      };
+    }
+  }
+
+  return null;
 }
 
 /**

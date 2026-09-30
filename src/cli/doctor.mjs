@@ -14,6 +14,10 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import child_process from 'node:child_process';
+import { fileURLToPath, URL } from 'node:url';
+import { getGlobalBrainDir } from './agent-dir.mjs';
+import { processIdentity, verifyListener } from '../core/startup-health.mjs';
+import { loadKnownRepoRoots } from '../core/skills-registry.mjs';
 
 // ─── Formatting & UI Helpers ────────────────────────────────────────────────
 function log(msg)     { console.log(`  ${msg}`); }
@@ -57,6 +61,23 @@ function checkPort(port) {
     });
     server.listen(port, '127.0.0.1');
   });
+}
+
+export async function isOwnedServerPort(port, { brainDir = getGlobalBrainDir(), identity = processIdentity, listener = verifyListener } = {}) {
+  const entry = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../server/index.mjs');
+  const candidates = [entry];
+  // An installed CLI can inspect a server started from a registered source checkout.
+  for (const root of loadKnownRepoRoots(brainDir)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+      if (manifest.name === 'total-recall-brain') candidates.push(path.join(root, 'src/server/index.mjs'));
+    } catch {}
+  }
+  for (const candidate of candidates) {
+    const own = identity(path.join(brainDir, 'server.pid'), candidate);
+    if (own.status === 'running' && await listener(own.pid, new URL(`http://127.0.0.1:${port}`))) return true;
+  }
+  return false;
 }
 
 // ─── Main Doctor Routine ─────────────────────────────────────────────────────
@@ -150,7 +171,9 @@ export default async function doctor() {
     if (free) {
       logOk(`Port ${String(port.num).padEnd(5)}: Free (${port.desc})`);
     } else {
-      if (port.critical) {
+      if (port.critical && await isOwnedServerPort(port.num)) {
+        logOk(`Port ${String(port.num).padEnd(5)}: In use by verified Total Recall server (${port.desc})`);
+      } else if (port.critical) {
         logFail(`Port ${String(port.num).padEnd(5)}: CONFLICT — Already bound by another service (${port.desc})`);
         failures++;
       } else {

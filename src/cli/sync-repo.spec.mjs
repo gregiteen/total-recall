@@ -98,4 +98,20 @@ describe('sync-repo', () => {
     expect(fs.readFileSync(path.join(brain, 'SKILL.md'), 'utf8')).toContain('fresh template body');
   });
 
+  it('updates non-core skill support files from the template package', () => {
+    const templates = path.join(dir, 'templates');
+    const source = path.join(templates, 'shared-tool');
+    const target = path.join(dir, 'agent/skills/shared-tool');
+    fs.mkdirSync(path.join(source, 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(target, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(source, 'SKILL.md'), '---\nname: shared-tool\n---\n');
+    fs.writeFileSync(path.join(source, 'scripts', 'run.mjs'), 'export default 2;\n');
+    fs.writeFileSync(path.join(target, 'scripts', 'run.mjs'), 'export default 1;\n');
+
+    run(['--dry-run', '--source', templates]);
+    expect(fs.readFileSync(path.join(target, 'scripts', 'run.mjs'), 'utf8')).toContain('default 1');
+    run(['--source', templates]);
+    expect(fs.readFileSync(path.join(target, 'scripts', 'run.mjs'), 'utf8')).toContain('default 2');
+  });
+
 });

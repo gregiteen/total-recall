@@ -28,6 +28,9 @@
     "scaffold/",
     "docs/ARCHITECTURE.md",
     "docs/IDE_INTEGRATION.md",
+    "docs/reference/cli-reference.md",
+    "docs/reference/CLI_INVENTORY.md",
+    "docs/SSSS.md",
     "README.md",
     "LICENSE",
     "package.json"
