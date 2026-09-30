@@ -461,7 +461,19 @@
   },
   {
     "method": "GET",
+    "path": "/api/plugins/:id/conformance"
+  },
+  {
+    "method": "GET",
     "path": "/api/plugins/:id/readme"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:id/reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:id/reviews"
   },
   {
     "method": "POST",

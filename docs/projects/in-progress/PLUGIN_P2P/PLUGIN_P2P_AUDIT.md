@@ -1,3 +1,54 @@
+---
+type: project_document
+title: PLUGIN_P2P — Audit
+description: Audit with current implementation reconciliation and correction acceptance.
+timestamp: 2026-09-30T16:30:00Z
+tags: [project-management, plugins, corrections]
+---
+
+# PLUGIN_P2P — Audit
+
+> **Project Prefix**: `PLUGIN_P2P`
+> **Kanban State**: In progress — corrections and verification pending
+> **Date**: 2026-09-30
+> **Reconciliation author**: Codex
+> **Based on audit**: [PLUGIN_P2P_AUDIT.md](PLUGIN_P2P_AUDIT.md), current reconciliation
+
+## Current audit reconciliation
+
+**Audit Status:** Complete for this scoped reconciliation of current source and prior baseline; live public exchange remains unverified. **Audited commit:** `e5d9aad0dd7d7372363a7d5d0c97349949330446` plus reviewed working-tree changes. This section supersedes historical readiness claims below. See [central correction audit](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_AUDIT.md) for PIC-001–005 and PIC-021.
+
+Current source contains `plugin-public.mjs` parsing hash-pinned HTTPS links, `plugin-bundle.mjs` validating decoded checksums, `plugin-store.mjs` recording public/mesh share state and install provenance, and separate public/mesh routes. Focused tests exercise these boundaries with controlled dependencies. Their existence proves implementation/tests exist, not successful independent-user exchange. `plugin-store.mjs:142–149` distinguishes public and mesh share state and reports current/installed checksums plus modification status. `plugin-store.mjs:133` passes through manifest authorship; it is a publisher claim, not authenticated attribution.
+
+The current review route introduces an unregistered primitive, mismatched write/read storage, caller-controlled reviewer/verified fields, and manifest-only conformance defaults. These defects conflict with both the original no-fake-social-proof intent and the later genuine-review goal. Root causes are contradictory requirements, mock tests at the persistence boundary, and success claims disconnected from installed artifacts and walkthroughs.
+
+Prior Mac mini baseline: full Vitest run 361 files, 355 passed/6 failed; five failures came from snapshot omissions. Corrected rerun of the affected files had five pass and route inventory fail (54 tests pass/1 fail). No single full green run exists for the current snapshot. Historical 2026-09-25 green evidence below remains historical, not current certification.
+
+| Finding | Impact | Disposition |
+|---|---|---|
+| P2P requirements contradict showcase review/badge scope | Agents cannot apply a single honest trust contract | Resolve documented proposal before exposing additional social features |
+| Independent-user live exchange lacks current evidence | Public sharing readiness cannot be certified | Keep public sender/recipient install/run walkthrough pending |
+| Checksums are confused with authorship or conformance | Users may infer trust beyond measured facts | Display integrity, claimed author, authenticated review provenance, and measured evidence separately |
+| PIC-002–005 / PIC-021 | Broken review state and overstated verification | Track corrections centrally; no deployment claim |
+
+Scope includes distribution state, checksum/provenance display, privacy exclusions, tests, and documentation. Credentials remain in the secrets store; application state uses registered SSSS documents/core operations. Sharing must remain explicit, unsharing must remove public access, and installation must not export sender credentials, private vault data, or unrelated files. Existing bundle guards and outbound restrictions must be preserved and verified against the packaged/installed artifact. Deployment/rollback remain governed by repo skills and the prior verified artifact; this documentation makes no source or runtime change. All open findings have a correction disposition; no external API recommendation or new provider integration is introduced.
+
+## Requirement conflict and reviewable resolution (PIC-023)
+
+Historical P2P requirements prohibited all ratings, reviews, and verified fields. The later showcase requirements requested real user reviews and conformance displays. Those documents gave agents contradictory instructions. The proposed resolution is genuine opt-in, authenticated authored review text, separate from artifact-bound measured conformance evidence. Neither publisher assertions nor user opinion may generate a verified badge. Invented stars, download numbers, review totals, fabricated status, and manifest-only verification remain prohibited. This is a documented proposal for review, not a claim that Greg approved additional product scope. Numerical ratings and aggregate stars remain outside the agreed correction scope until this conflict is explicitly resolved.
+
+Public person-to-person sharing among independent Total Recall users is the requirement. Private mesh sharing is an additional own-device capability and cannot substitute for the public sender-to-recipient path. A checksum establishes byte integrity; it does not establish author identity, safety, live capability, or independent verification.
+
+---
+
+**Finding mapping:** PIC-020 owns authenticated review identity and rejection of caller-controlled verification/provenance; PIC-023 owns the cross-project requirements conflict and public-sharing scope. PIC-004 owns measured conformance evidence. See the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+
+---
+
+## Historical record — superseded where inconsistent
+
+Original text is retained for traceability. Dated source/test assertions are historical evidence, not certification of the current installed artifact. The reconciliation above controls current planning; no additional product scope is approved by its existence.
+
 # PLUGIN_P2P — Audit
 
 > **Project Prefix**: `PLUGIN_P2P`

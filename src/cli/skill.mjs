@@ -684,6 +684,11 @@ Provide a high-level explanation of the skill's capabilities and context.
         dryRun,
         includeCore,
       });
+      if (r.error) {
+        console.error(`❌ ${skillId}: ${r.error}`);
+        process.exitCode = 1;
+        return;
+      }
       if (r.skipped) {
         console.log(`  ⏭  ${skillId}: ${r.reason}`);
       } else if (r.in_sync) {

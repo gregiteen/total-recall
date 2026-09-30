@@ -2,7 +2,7 @@
 type: project_document
 title: PLUGIN_SHOWCASE_UI — Architecture Document
 description: Technical architecture for Total Recall plugin showcase, interactive preview components, SSSS review documents, and core decoupling.
-timestamp: 2026-09-28T20:37:00Z
+timestamp: 2026-09-30T16:30:00Z
 tags: [project-management, architecture, total-recall, plugins, ui, frontend, ssss]
 ---
 
@@ -12,9 +12,62 @@ tags: [project-management, architecture, total-recall, plugins, ui, frontend, ss
 > **Repository**: `total-recall`
 > **Kanban State**: 🚧 In progress
 > **Author**: Antigravity with Greg Iteen
-> **Date**: 2026-09-28
+> **Date**: 2026-09-30
+> **Reconciliation**: Codex; original authorship and historical text retained below
+
+
+> **Based on audit**: [PLUGIN_SHOWCASE_UI_AUDIT.md](PLUGIN_SHOWCASE_UI_AUDIT.md), reconciled 2026-09-30.
+
+> **Product-scope qualification (PIC-023):** Genuine opt-in authenticated authored review text is a proposed reconciliation of contradictory project requirements. This documentation does not establish Greg's approval of additional social features. Review schema/storage/provenance corrections repair existing defects; enabling expanded reviews or numerical ratings requires explicit requirements agreement. All review-specific target requirements below are conditional on that agreement. Measured artifact-bound conformance remains separate from user opinion.
+
+## Corrected target architecture — not a claim of current implementation
+
+The host owns generic discovery, artifact integrity, authorized execution, and UI loading. Installed plugins own capability adapters, commands, data projections, and functional UI. Do not maintain a second set of simulated capability implementations inside the host. Remove or replace the eight current host mock previews only after the functional plugin boundary and honest unavailable state are established (PIC-001).
+
+```mermaid
+flowchart LR
+    User[Authenticated user] --> Host[Generic plugin host]
+    Host --> Installed[Installed plugin artifact and UI]
+    Installed --> Capability[Real capability adapter]
+    Host --> Reviews[Registered review extension]
+    Reviews --> Contract[Authorized SSSS core contract]
+    Contract --> Vault[Canonical review and evidence documents]
+    Vault --> Projection[Read projection and trust display]
+    Evidence[Verification run tied to artifact digest] --> Contract
+```
+
+### Reviews and provenance (PIC-002, PIC-003)
+
+Use a registered plugin extension primitive with validated universal frontmatter and explicit canonical category. Resolve its namespace through the registry and make the reader use the same projection as the writer. Do not treat a locally invented `plugin_review` type as registered. No direct application-state writes bypass the SSSS operation pipeline. The implementation must select the registry-compliant primitive identifier before changing the route contract.
+
+Derive reviewer identity from the authenticated requester and store the applicable plugin artifact identity. Reviewer text and rating are user assertions. Provider delivery, test results, and conformance are separate evidence objects that reviewers cannot manufacture through `verified_conformance`. Include ownership checks, idempotent mutation, revision/conflict behavior, and authorized deletion. Tests exercise actual persistence and cleanup in an isolated vault.
+
+### Conformance and evidence (PIC-004)
+
+Return separate publisher claims and verified evidence. Verified evidence includes artifact digest, verification date, environment, executed command, actual exit status, counts, coverage scope, and sanitized log reference. Unknown, expired, absent, or digest-mismatched evidence produces an unverified state. A test-count percentage describes the executed suite only; it cannot imply completeness or delivery success. Reuse an appropriate registered evidence primitive or register the extension through the canonical schema process; no loose JSON persistence.
+
+### Routes and UI integration (PIC-005)
+
+The three existing review/conformance routes are present in source but their operational contract remains incomplete. Reconcile them with the route manifest, authorization tests, API client, and documentation after state/evidence corrections. Add required review mutation endpoints only through the tracked contract. PluginsPage loads the installed UI through the generic host and maps real capability readiness to enabled actions. Empty/offline/error/loading states must reflect actual availability.
+
+### Distribution and verification
+
+Public person-to-person sharing uses explicit sharing state, artifact integrity checks, and separate user ownership. Private mesh sharing remains supported. Verify the actual public sender-to-recipient path without substituting private mesh behavior. Capability functionality is proven in each installed plugin; credentials resolve through the secrets store and never appear in reviews or logs. The final gate runs on the Mac mini and preserves the prior verified artifact plus user vault data for rollback.
+
+## Cross-project requirement reconciliation (PIC-023)
+
+`PLUGIN_P2P` historically forbade ratings/reviews/verified badges while this project's historical PRD requested them. That contradictory instruction set helped produce disconnected trust features. Current target: no invented social proof or manifest-only verified badge. Authenticated review text is a planned opt-in capability, subject to registered schema, actual persistence round trips, and identity provenance. Numerical ratings and aggregate stars must not be presented as established product functionality; expose them only after requirements agree and their real data path is verified. Verification evidence remains distinct from user opinion. This aligns with the dated P2P reconciliation and makes no deployment claim.
 
 ---
+
+**Finding mapping:** PIC-020 owns authenticated review identity and rejection of caller-controlled verification/provenance; PIC-023 owns the cross-project requirements conflict and public-sharing scope. PIC-004 owns measured conformance evidence. See the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+
+---
+
+## Historical record — superseded by the reconciliation above
+
+The following original planning text is retained for traceability. It is not an assertion of current implementation, verified plugin status, or operational readiness.
+
 
 ## 1. System Topology & Separation
 
@@ -107,7 +160,7 @@ All review data persists in the SSSS filesystem vault:
 type: plugin_review
 title: Review for tr-plugin-phone
 description: Peer audit review and usability assessment
-timestamp: 2026-09-28T20:30:00Z
+timestamp: 2026-09-30T20:30:00Z
 plugin_id: phone
 rating: 5
 reviewer_node: macmini

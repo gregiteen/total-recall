@@ -87,14 +87,35 @@ export function saveRegistry(brainDir, registry) {
   return filePath;
 }
 
-/**
- * Hash SKILL.md (or whole skill marker file) for drift detection.
- */
+/** Files copied as part of a skill package, in stable relative-path order. */
+export function skillPackageFiles(skillDir) {
+  if (!fs.existsSync(path.join(skillDir, 'SKILL.md'))) return [];
+  const files = [];
+  const visit = (dir, relative = '') => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.DS_Store') continue;
+      const next = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) visit(path.join(dir, entry.name), next);
+      else if (entry.isFile() || entry.isSymbolicLink()) files.push(next);
+    }
+  };
+  visit(skillDir);
+  return files;
+}
+
+/** Hash the complete package, including nested support files. */
 export function hashSkillContent(skillDir) {
-  const skillMd = path.join(skillDir, 'SKILL.md');
-  if (!fs.existsSync(skillMd)) return null;
-  const buf = fs.readFileSync(skillMd);
-  return crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
+  const files = skillPackageFiles(skillDir);
+  if (!files.length) return null;
+  const hash = crypto.createHash('sha256');
+  for (const relative of files) {
+    const file = path.join(skillDir, relative);
+    hash.update(relative).update('\0');
+    if (fs.lstatSync(file).isSymbolicLink()) hash.update(fs.readlinkSync(file));
+    else hash.update(fs.readFileSync(file));
+    hash.update('\0');
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 /** Hash a skill layer without treating repo-owned edits as core drift. */
@@ -156,6 +177,7 @@ export function readSkillMeta(skillDir) {
     tags: Array.isArray(data.tags) ? data.tags : [],
     repo_scoped: Boolean(data.repo_scoped),
     content_hash: hashSkillContent(skillDir),
+    managed_files: skillPackageFiles(skillDir),
     core_hash: coreHash,
     source_path: path.resolve(skillDir),
   };
@@ -195,6 +217,7 @@ export function registerSkill(brainDir, skillPath, opts = {}) {
     source_type: opts.source_type || prev.source_type || 'local',
     source_path: abs,
     content_hash: meta.content_hash,
+    managed_files: meta.managed_files,
     core_hash: meta.core_hash,
     layered: Boolean(meta.core_hash),
     registered_at: prev.registered_at || new Date().toISOString(),
@@ -399,6 +422,13 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
   }
 
   const existed = fs.existsSync(path.join(destDir, 'SKILL.md'));
+  const priorInstall = loadRegistry(brainDir).installs.find(
+    (install) => install.skill_id === resolved.id && samePhysicalPath(install.path, destDir) && !install.discovered,
+  );
+  if (existed && !layered && !priorInstall && !samePhysicalPath(resolved.sourcePath, destDir) &&
+      !opts.force && hashSkillContent(destDir) !== hashSkillContent(resolved.sourcePath)) {
+    throw new Error(`Refusing unadopted same-name skill collision for "${resolved.id}" in ${repoRoot}; pass --force to adopt it`);
+  }
   if (layered && fs.existsSync(destDir) && fs.lstatSync(destDir).isSymbolicLink()) {
     throw new Error(`Refusing layered deploy into symlink: ${destDir}`);
   }
@@ -407,7 +437,7 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
         requiredFile: null,
         preserveExisting: false,
       })
-    : replaceSkillDir(resolved.sourcePath, destDir);
+    : replaceSkillDir(resolved.sourcePath, destDir, { managedFiles: priorInstall?.managed_files || [] });
 
   let adaptResult = { adapted: false };
   if (opts.adapt && (!layered || !existed)) {
@@ -440,6 +470,7 @@ export function deploySkill(brainDir, skillIdOrPath, opts = {}) {
     repo: repoRoot,
     version: entry?.version || readSkillMeta(destDir).version,
     content_hash: contentHash,
+    managed_files: skillPackageFiles(resolved.sourcePath),
     registry_hash: entry?.content_hash || null,
     ...(layered ? {
       layered: true,
@@ -621,6 +652,19 @@ export function inferSkillRepoRoot(skillPath) {
  */
 export function repoForSkillPath(brainDir, skillPath) {
   const physical = canonicalPath(skillPath);
+  // Global catalogs can appear in the install map as a home-root install.
+  // That bookkeeping is not repository ownership. Recognize actual global
+  // skill roots first, including the configured agent root and nested brain
+  // skills; compare physical paths so an alias to a real repo is not exempted.
+  const globalAgentRoots = [
+    path.join(os.homedir(), '.agent'),
+    process.env.AGENT_DIR,
+    process.env._TR_TEST_AGENT_DIR,
+  ].filter(Boolean);
+  for (const agentRoot of globalAgentRoots) {
+    const skillsRoot = canonicalPath(path.join(agentRoot, 'skills'));
+    if (physical.startsWith(skillsRoot + path.sep)) return null;
+  }
   try {
     for (const install of loadRegistry(brainDir).installs || []) {
       if (!install.path || !install.repo) continue;
@@ -994,16 +1038,22 @@ export function discoverAllSkills(
 }
 
 /**
- * mtime of SKILL.md (ms) or 0.
+ * Newest copied package file mtime (ms) or 0.
  */
 export function skillMtime(skillDir) {
-  const p = path.join(skillDir, 'SKILL.md');
-  if (!fs.existsSync(p)) return 0;
-  try {
-    return fs.statSync(p).mtimeMs;
-  } catch {
-    return 0;
-  }
+  if (!fs.existsSync(path.join(skillDir, 'SKILL.md'))) return 0;
+  let newest = 0;
+  const visit = (dir) => {
+    newest = Math.max(newest, fs.lstatSync(dir).mtimeMs);
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === '.DS_Store') continue;
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile() || entry.isSymbolicLink()) newest = Math.max(newest, fs.lstatSync(file).mtimeMs);
+    }
+  };
+  visit(skillDir);
+  return newest;
 }
 
 /**
@@ -1012,7 +1062,7 @@ export function skillMtime(skillDir) {
 export function replaceSkillDir(
   src,
   dest,
-  { dryRun = false, preserveExisting = true, requiredFile = 'SKILL.md', fsImpl = fs, copyFn = copySkillDir } = {},
+  { dryRun = false, preserveExisting = true, managedFiles = [], requiredFile = 'SKILL.md', fsImpl = fs, copyFn = copySkillDir } = {},
 ) {
   if (dryRun) return { dryRun: true, src, dest };
   if (!fsImpl.existsSync(src)) throw new Error(`Source missing: ${src}`);
@@ -1044,6 +1094,24 @@ export function replaceSkillDir(
     // references, evals, or scripts merely because the source is leaner.
     if (preserveExisting && fsImpl.existsSync(dest)) {
       copyFn(dest, stage);
+    }
+    // Remove only paths recorded as package-owned on the previous install.
+    // Destination-only repository files have no such record and survive.
+    for (const relative of managedFiles) {
+      if (typeof relative !== 'string' || !relative || path.isAbsolute(relative) ||
+          relative.split(/[\\/]/).some((part) => part === '..' || part === '.' || !part)) {
+        throw new Error(`Invalid managed skill path: ${relative}`);
+      }
+      if (fsImpl.existsSync(path.join(src, relative))) continue;
+      const parts = relative.split(/[\\/]/);
+      let cursor = stage;
+      for (const part of parts.slice(0, -1)) {
+        cursor = path.join(cursor, part);
+        if (fsImpl.existsSync(cursor) && fsImpl.lstatSync(cursor).isSymbolicLink()) {
+          throw new Error(`Managed skill path crosses a symlink: ${relative}`);
+        }
+      }
+      fsImpl.rmSync(path.join(stage, relative), { recursive: true, force: true });
     }
     copyFn(src, stage);
     if (requiredFile && !fsImpl.existsSync(path.join(stage, requiredFile))) {
@@ -1156,7 +1224,7 @@ export function pickSyncWinner(locations, prefer = 'newest') {
  *
  * Strategy:
  *  1. Collect source + all installs (+ discovered)
- *  2. Pick winner by prefer (default: newest SKILL.md mtime)
+ *  2. Pick winner by prefer (default: newest package file mtime)
  *  3. Copy winner → every other location
  *  4. Re-register source as catalog SSOT (winner becomes source_path if --promote-winner)
  *
@@ -1187,6 +1255,16 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
   const layered = Boolean(entry?.layered);
   const source = layered ? locations.find((loc) => loc.role === 'source') : null;
   if (layered && !source) return { skillId, error: 'layered skill has no catalog source' };
+  if (!layered && entry) {
+    const catalog = locations.find((loc) => loc.role === 'source');
+    const registry = loadRegistry(brainDir);
+    const collision = catalog && locations.find((loc) => {
+      if (loc.role === 'source' || loc.hash === catalog.hash) return false;
+      const install = registry.installs.find((item) => item.skill_id === skillId && samePhysicalPath(item.path, loc.path));
+      return loc.role === 'discovered' || install?.discovered;
+    });
+    if (collision) return { skillId, error: `unadopted same-name skill collision at ${collision.path}`, locations: locations.length };
+  }
   const hashes = new Set(locations.map((l) => l.hash).filter(Boolean));
   if (hashes.size <= 1 && locations.every((loc) => loc.hash)) {
     // already in sync — still refresh install map hashes
@@ -1195,6 +1273,9 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
       if (registry.skills[skillId]) {
         if (layered) registry.skills[skillId].core_hash = source.hash;
         else registry.skills[skillId].content_hash = locations[0].hash;
+        if (!layered) registry.skills[skillId].managed_files = skillPackageFiles(
+          registry.skills[skillId].source_path || locations[0].path,
+        );
         registry.skills[skillId].updated_at = new Date().toISOString();
       }
       for (const inst of registry.installs.filter((i) => i.skill_id === skillId)) {
@@ -1202,6 +1283,9 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
         if (fs.existsSync(inst.path)) {
           inst.content_hash = hashSkillContent(inst.path);
           inst.registry_hash = layered ? entry.content_hash : locations[0].hash;
+          if (!layered && !inst.managed_files) inst.managed_files = skillPackageFiles(
+            registry.skills[skillId]?.source_path || inst.path,
+          );
           if (layered) {
             inst.layered = true;
             inst.core_hash = hashSkillLayer(inst.path, 'core');
@@ -1242,7 +1326,10 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
           preserveExisting: false,
         });
       } else {
-        replaceSkillDir(winner.path, loc.path);
+        const prior = loadRegistry(brainDir).installs.find(
+          (install) => install.skill_id === skillId && samePhysicalPath(install.path, loc.path),
+        );
+        replaceSkillDir(winner.path, loc.path, { managedFiles: prior?.managed_files || [] });
       }
     }
   }
@@ -1259,7 +1346,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
         });
       } catch {}
     } else if (entry?.source_path && path.resolve(winner.path) !== path.resolve(entry.source_path)) {
-      replaceSkillDir(winner.path, entry.source_path);
+      replaceSkillDir(winner.path, entry.source_path, { managedFiles: entry.managed_files || [] });
       try {
         registerSkill(brainDir, entry.source_path, {
           source: entry.source,
@@ -1275,6 +1362,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
 
     if (registry.skills[skillId]) {
       registry.skills[skillId].content_hash = catalogHash;
+      registry.skills[skillId].managed_files = skillPackageFiles(registry.skills[skillId].source_path || winner.path);
       if (layered) registry.skills[skillId].core_hash = source.hash;
       registry.skills[skillId].updated_at = new Date().toISOString();
     }
@@ -1283,6 +1371,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
     registry.installs = registry.installs.filter((i) => i.skill_id !== skillId);
     const seenPaths = new Set();
     for (const loc of locations) {
+      if (loc.role === 'source') continue;
       const abs = path.resolve(loc.path);
       if (seenPaths.has(abs)) continue;
       seenPaths.add(abs);
@@ -1294,6 +1383,7 @@ export function syncSkillTwoWay(brainDir, skillId, opts = {}) {
         repo,
         version: registry.skills[skillId]?.version || '0.0.0',
         content_hash: hashSkillContent(loc.path),
+        managed_files: skillPackageFiles(winner.path),
         registry_hash: catalogHash,
         ...(layered ? {
           layered: true,

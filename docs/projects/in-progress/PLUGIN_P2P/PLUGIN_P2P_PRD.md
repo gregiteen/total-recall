@@ -1,3 +1,51 @@
+---
+type: project_document
+title: PLUGIN_P2P — Prd
+description: Prd with current implementation reconciliation and correction acceptance.
+timestamp: 2026-09-30T16:30:00Z
+tags: [project-management, plugins, corrections]
+---
+
+# PLUGIN_P2P — Prd
+
+> **Project Prefix**: `PLUGIN_P2P`
+> **Kanban State**: In progress — corrections and verification pending
+> **Date**: 2026-09-30
+> **Reconciliation author**: Codex
+> **Based on audit**: [PLUGIN_P2P_AUDIT.md](PLUGIN_P2P_AUDIT.md), current reconciliation
+
+## Corrected success criteria
+
+The original S1 blanket grep for any review/verified field is superseded by behavioral honesty and provenance checks. A genuine review feature is a proposal pending product-scope resolution; removing fabrication and fixing existing integrity defects are approved corrections.
+
+| Requirement | Acceptance evidence |
+|---|---|
+| Public sharing is explicitly opt-in | Private and mesh-only plugins return no public bundle; unshare disables access; no public bulk listing leaks private inventory |
+| Public install preserves exact bytes | Recipient verifies pinned hash, decoded bundle and installed tree; tampering/missing pins reject without partial install or successful install events |
+| Packaged plugin is operational | Independent sender and recipient inspect, install and run the shipped artifact without a common mesh; transcript records environment and digest |
+| Author claims remain honest | Manifest author is labeled a publisher claim; no checksum or review text implies verified authorship |
+| Sharing preserves privacy | Package inspection rejects/excludes secrets, private state, unrelated files, symlinks/traversal and oversized payloads; tests cover accidental inclusion |
+| Trust display reflects its source | Optional authenticated review text and measured conformance remain separate; absent/mismatched evidence stays unverified |
+| Release readiness is current | Full suite, configured gates and server boot on the Mac mini for the complete intended snapshot, followed by actual exchange walkthrough |
+
+Private mesh discovery and scheduled capability tasks retain their existing goals. Unknown live capability or provider delivery is not promoted to verified status. Public sharing completion remains pending until current evidence exists. Use the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md) for cross-project dependencies.
+
+## Requirement conflict and reviewable resolution (PIC-023)
+
+Historical P2P requirements prohibited all ratings, reviews, and verified fields. The later showcase requirements requested real user reviews and conformance displays. Those documents gave agents contradictory instructions. The proposed resolution is genuine opt-in, authenticated authored review text, separate from artifact-bound measured conformance evidence. Neither publisher assertions nor user opinion may generate a verified badge. Invented stars, download numbers, review totals, fabricated status, and manifest-only verification remain prohibited. This is a documented proposal for review, not a claim that Greg approved additional product scope. Numerical ratings and aggregate stars remain outside the agreed correction scope until this conflict is explicitly resolved.
+
+Public person-to-person sharing among independent Total Recall users is the requirement. Private mesh sharing is an additional own-device capability and cannot substitute for the public sender-to-recipient path. A checksum establishes byte integrity; it does not establish author identity, safety, live capability, or independent verification.
+
+---
+
+**Finding mapping:** PIC-020 owns authenticated review identity and rejection of caller-controlled verification/provenance; PIC-023 owns the cross-project requirements conflict and public-sharing scope. PIC-004 owns measured conformance evidence. See the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+
+---
+
+## Historical record — superseded where inconsistent
+
+Original text is retained for traceability. Dated source/test assertions are historical evidence, not certification of the current installed artifact. The reconciliation above controls current planning; no additional product scope is approved by its existence.
+
 # PLUGIN_P2P — PRD
 
 > **Project Prefix**: `PLUGIN_P2P`

@@ -44,6 +44,7 @@ const COMMANDS = {
   init:     'init.mjs',
   setup:    'setup.mjs',
   start:    'start.mjs',
+  startup:  'startup.mjs',
   deploy:   'deploy.mjs',
   doctor:   'doctor.mjs',
   backup:   'backup.mjs',
@@ -132,6 +133,7 @@ function printHelp() {
     agent <cmd>         Process controller: spawn, list, logs, kill across mesh
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics
+    startup check|ensure Readiness checks / missing managed local runtime start
 
   Optional:
     update [--apply]    Auto-download total-recall-brain for registered repos

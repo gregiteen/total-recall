@@ -2,7 +2,7 @@
 type: project_document
 title: TR_CORE_PLUGIN_SPLIT — Architecture
 description: Core boundary and plugin extension points for splitting Total Recall features.
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-09-30T16:30:00Z
 tags: [project-management, architecture, total-recall, plugins]
 ---
 
@@ -62,3 +62,27 @@ Plugin repos are `gregiteen/tr-plugin-<id>` (for example `gregiteen/tr-plugin-co
 ## Security
 
 Plugin routes and tools inherit no blanket access. They get only their declared scopes, run as a child process where they execute code, and cannot read the secrets store except through a declared, audited grant. This matches CAPABILITY_DEPLOYMENT_PLUGINS' permission model.
+
+## 2026-09-30 reconciliation: target architecture versus current implementation
+
+This section supersedes conflicting earlier statements without erasing historical scope or concurrent work. The five project documents remain present and tracked. This is a documentation/source reconciliation; no new implementation, tests, provider probes, commits or deployments occurred in this batch. Runtime baselines and readiness evidence are recorded in the central correction audit rather than inferred from checkboxes or previous session summaries.
+
+**Actual bundled inventory:** `plugins/creative-search` 2.0.0, `plugins/dsh` 1.1.0, `plugins/git-sentinel` 1.1.0, `plugins/operator-alerts` 1.0.0 and `plugins/system-monitor` 1.1.0, read from their current manifests. `plugins/code-quality` has been removed; its separate repository exists. `package.json:25` still includes `plugins/` in published files. `default-plugins.lock.json` is absent. Consequently repository-per-plugin extraction, lock-driven installation and a core package containing no capability code remain target outcomes, not shipped behavior.
+
+`metadata.plugin.schema.json` now declares `deploy`, `skills`, `commands`, `app_cli` and token-based `ui` elements. Schema support and source generators do not prove functioning dashboard mounts, provider calls, hooks, chat tools or independent applications. The DSH/Search UI source fails the current UI generator contract; their context generators return objects whereas `src/core/plugin-context.mjs:47` accepts strings.
+
+**Standalone remains a prototype:** `src/core/app-deploy/standalone.mjs:108–155` writes an entrypoint that prints messages and reports `ready`; its gate asserts file presence. `apply.mjs:272,298` writes installation/grant records directly and accepts a caller-supplied actor. Registry authorization, independent capability runtime and functional feature checks must precede any successful standalone readiness claim. A passing planner or export test does not establish these behaviors.
+
+The extraction target follows the user boundary: portable SSSS memory/vault/instruction shims are core; capability-specific integrations belong in standalone plugin repositories. Existing secrets/auth/daemon/network implementations in this tree are current topology, not an exemption from that target. Retain only the minimal generic kernel/host interfaces needed by installed plugins; record an explicit ownership decision for each remaining subsystem before moving it.
+
+Cross-project owner and acceptance register: [PLUGIN_IMPLEMENTATION_CORRECTIONS](../../in-progress/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md). Existing specific tasks remain in this project; central IDs prevent duplicate claims of closure.
+
+### Required dependency flow
+
+Validated plugin pin and schema → scoped host registration → plugin-owned CLI/UI/runtime → authorized SSSS operations → canonical app-owned documents/events → disposable projections → results with actual provenance. Distribution, installation, UI generation, runtime health and provider acceptance are separate states. Each state has its own evidence and failure status.
+
+Search and alerts own their config/event extensions; DSH owns runtime discovery/proxy/UI; Git Sentinel owns faithful git parsing. Composer owns plan/apply/verify contracts and real standalone scaffolding. Kernel host fixes the shared generator contract and generic route/UI registration. External plugin repos own source/tests/docs; the extraction plan may not copy their simulated host previews into product code.
+
+The diagram and extension-point tables above are target architecture unless this reconciliation identifies a consumed current contract. No compatibility shim or existing-user migration is required merely by hypothetical external installations; validate clean installs and actual developer brains.
+
+Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.

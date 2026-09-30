@@ -109,9 +109,32 @@ const ADAPTERS = {
     return { accepted: true, provider_id: r?.data?.id };
   },
 
-  // Stubs: not wired yet. They report `stub` instead of pretending to send.
-  async slack() { return { stub: true, note: 'slack adapter not implemented' }; },
-  async discord() { return { stub: true, note: 'discord adapter not implemented' }; },
+  // Slack incoming webhook
+  async slack({ title, message, eventId, severity, source }, cfg, ctx) {
+    if (!cfg.url && !cfg.url_secret) return { stub: true, note: 'slack adapter needs url or url_secret in config' };
+    if (ctx.dry) return { dry: true };
+    const url = await need(cfg, 'url_secret', ctx.cwd, 'slack');
+    const blocks = [
+      { type: 'header', text: { type: 'plain_text', text: title } },
+      { type: 'section', text: { type: 'mrkdwn', text: message } },
+    ];
+    if (severity || source) {
+      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `*${severity || 'info'}* · ${source || 'alert'}` }] });
+    }
+    await post(url, { text: `${title}\n${message}`, blocks, attachments: [{ color: severity === 'critical' ? 'danger' : severity === 'high' ? 'warning' : 'good' }] });
+    return { accepted: true };
+  },
+
+  // Discord webhook
+  async discord({ title, message, eventId, severity, source }, cfg, ctx) {
+    if (!cfg.url && !cfg.url_secret) return { stub: true, note: 'discord adapter needs url or url_secret in config' };
+    if (ctx.dry) return { dry: true };
+    const url = await need(cfg, 'url_secret', ctx.cwd, 'discord');
+    const color = severity === 'critical' ? 0xe74c3c : severity === 'high' ? 0xe67e22 : 0x3498db;
+    const embed = { title, description: message, color, timestamp: new Date().toISOString(), footer: { text: `${severity || 'info'} · ${source || 'alert'}` } };
+    await post(url, { content: `**${title}**`, embeds: [embed] });
+    return { accepted: true };
+  },
   async telegram() { return { stub: true, note: 'telegram adapter not implemented' }; },
   async expo() { return { stub: true, note: 'expo adapter not implemented' }; },
 

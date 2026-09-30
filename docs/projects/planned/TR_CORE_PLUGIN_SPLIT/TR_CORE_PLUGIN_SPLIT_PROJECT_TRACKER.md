@@ -2,7 +2,7 @@
 type: project_document
 title: TR_CORE_PLUGIN_SPLIT — Project Tracker
 description: Checklist for splitting standard Total Recall features into plugins, each in its own repository.
-timestamp: 2026-09-26T00:00:00Z
+timestamp: 2026-09-30T16:30:00Z
 tags: [project-management, tracker, total-recall, plugins]
 ---
 
@@ -114,3 +114,28 @@ Goal: Same features, smaller core, proven stable.
 - 2026-09-25: User decision: everything gets its own repo. Added Phase 0B (repo template, pinned default-plugin lock, move the 3 bundled plugins out).
 - 2026-09-25: User: plugin repos go under the `gregiteen` GitHub account, named `tr-plugin-<id>`.
 - 2026-09-25: User: plugin repos are MIT licensed.
+
+## 2026-09-30 reconciliation: target architecture versus current implementation
+
+This section supersedes conflicting earlier statements without erasing historical scope or concurrent work. The five project documents remain present and tracked. This is a documentation/source reconciliation; no new implementation, tests, provider probes, commits or deployments occurred in this batch. Runtime baselines and readiness evidence are recorded in the central correction audit rather than inferred from checkboxes or previous session summaries.
+
+**Actual bundled inventory:** `plugins/creative-search` 2.0.0, `plugins/dsh` 1.1.0, `plugins/git-sentinel` 1.1.0, `plugins/operator-alerts` 1.0.0 and `plugins/system-monitor` 1.1.0, read from their current manifests. `plugins/code-quality` has been removed; its separate repository exists. `package.json:25` still includes `plugins/` in published files. `default-plugins.lock.json` is absent. Consequently repository-per-plugin extraction, lock-driven installation and a core package containing no capability code remain target outcomes, not shipped behavior.
+
+`metadata.plugin.schema.json` now declares `deploy`, `skills`, `commands`, `app_cli` and token-based `ui` elements. Schema support and source generators do not prove functioning dashboard mounts, provider calls, hooks, chat tools or independent applications. The DSH/Search UI source fails the current UI generator contract; their context generators return objects whereas `src/core/plugin-context.mjs:47` accepts strings.
+
+**Standalone remains a prototype:** `src/core/app-deploy/standalone.mjs:108–155` writes an entrypoint that prints messages and reports `ready`; its gate asserts file presence. `apply.mjs:272,298` writes installation/grant records directly and accepts a caller-supplied actor. Registry authorization, independent capability runtime and functional feature checks must precede any successful standalone readiness claim. A passing planner or export test does not establish these behaviors.
+
+The extraction target follows the user boundary: portable SSSS memory/vault/instruction shims are core; capability-specific integrations belong in standalone plugin repositories. Existing secrets/auth/daemon/network implementations in this tree are current topology, not an exemption from that target. Retain only the minimal generic kernel/host interfaces needed by installed plugins; record an explicit ownership decision for each remaining subsystem before moving it.
+
+Cross-project owner and acceptance register: [PLUGIN_IMPLEMENTATION_CORRECTIONS](../../in-progress/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md). Existing specific tasks remain in this project; central IDs prevent duplicate claims of closure.
+
+### Dependency-ordered correction work
+
+- [ ] **1 — Honest contracts and output:** PIC-009/PIC-010/PIC-013/PIC-015/PIC-016/PIC-017/PIC-018: fail on missing/invalid evidence, unify generator return type, verify runtime identity and preserve git columns. Add synthetic regressions before wiring runtime changes.
+- [ ] **2 — Canonical configuration/state:** PIC-011/PIC-022: register owned SSSS extensions and route config/events through verified operations; connect actual CLI/UI settings and replayable projections.
+- [ ] **3 — Functional plugin UI:** PIC-014: pass UI adapter validation and mount DSH/Search plugin-owned elements with actual data, controls, error and recovery behavior. Coordinate showcase removal of simulated previews.
+- [ ] **4 — Real app lifecycle:** PIC-019: replace standalone shell with canonical scaffolder and independent runtime; operation-backed apply/grants; verify real feature execution, denied access, reapply, interrupted upgrade and tenant data preservation.
+- [ ] **5 — Extract without behavior loss:** create individual repositories for the five actual bundled plugins, pin artifacts/digests in default lock, implement generic registration/unload, and remove bundled code from the published core only after independent clean-install proof.
+- [ ] **6 — Verify and close:** run exact-tree full suite/conformance/gates on Mac mini as bounded background jobs; install from pinned artifacts in a clean brain; run real UI/CLI/independent app walkthroughs; retain hashes, commands and results. Live provider proof is separate from synthetic tests and HTTP reachability. No readiness checkbox closes without those records.
+
+Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.

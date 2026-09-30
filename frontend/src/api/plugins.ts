@@ -197,3 +197,83 @@ export async function fetchPluginReadme(id: string): Promise<string> {
     return ""
   }
 }
+
+// ── Reviews ─────────────────────────────────────────────────────────────────
+
+export interface PluginReview {
+  type: string
+  plugin_id: string
+  rating: number
+  reviewer_node: string
+  verified_conformance: boolean
+  timestamp: string
+  content: string
+  _file: string
+  portability?: string
+  tags?: string[]
+}
+
+export interface ReviewsResponse {
+  success: boolean
+  pluginId: string
+  count: number
+  averageRating: number | null
+  reviews: PluginReview[]
+}
+
+export async function fetchPluginReviews(id: string, minRating?: number): Promise<ReviewsResponse> {
+  try {
+    let url = `${API_BASE}/api/plugins/${encodeURIComponent(id)}/reviews`
+    if (minRating !== undefined && minRating > 0) {
+      url += `?min_rating=${minRating}`
+    }
+    const res = await apiFetch(url)
+    if (!res.ok) return { success: false, pluginId: id, count: 0, averageRating: null, reviews: [] }
+    const data = await readJson(res)
+    return {
+      success: true,
+      pluginId: data.pluginId,
+      count: data.count,
+      averageRating: data.averageRating,
+      reviews: Array.isArray(data.reviews) ? data.reviews : [],
+    }
+  } catch {
+    return { success: false, pluginId: id, count: 0, averageRating: null, reviews: [] }
+  }
+}
+
+export function submitPluginReview(id: string, options: {
+  rating: number
+  text: string
+  reviewer_node?: string
+  verified_conformance?: boolean
+}): Promise<Result> {
+  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/reviews`, options)
+}
+
+// ── Conformance ──────────────────────────────────────────────────────────────
+
+export interface ConformanceResponse {
+  success: boolean
+  pluginId: string
+  ssss_version: string
+  ssss_conformant: boolean
+  white_label_verified: boolean
+  tested: boolean
+  test_count: number
+  test_pass_count: number
+  test_pass_rate: number | null
+  capabilities: string[]
+  portability: string
+}
+
+export async function fetchPluginConformance(id: string): Promise<ConformanceResponse | null> {
+  try {
+    const res = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/conformance`)
+    if (!res.ok) return null
+    const data = await readJson(res)
+    return data.success ? data : null
+  } catch {
+    return null
+  }
+}

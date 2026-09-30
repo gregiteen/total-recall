@@ -138,7 +138,14 @@ Trigger an immediate execution of the background consolidation Dream Cycle.
 
 ---
 
+### `help`
+Read offline documentation shipped with the CLI.
+- **Usage**: `total-recall help [daemon|server|startup|research|architecture|ssss|settings] --json`
+- `server` selects the `start` documentation; `startup-check` selects `startup`.
+- Missing reference files are a package installation failure. Repair from the matching canonical package, then verify installed help; do not invent commands.
+
 ### `research`
+Queue operations default to the current project brain. Use `--global` explicitly for the daemon's global queue. `list --status pending`, `list --status in_progress`, `status`, `show <id-or-topic>`, and `cancel <full-id>` operate on the selected layer. Clear unfinished jobs only when requested; retain completed reports. After cleanup verify both requested layers and server status.
 Manage, query, or queue autonomous background research projects.
 - **Usage**:
   ```bash
@@ -352,7 +359,7 @@ Manage API keys and credentials (stored in `secrets.enc`, not in the memory vaul
 ---
 
 ### `daemon`
-Manage the background Dream Cycle service.
+Manage the background worker independently of the REST server. `status` reports its PID and recent activity; restarting the REST server does not reload the worker.
 - **Usage**:
   ```bash
   npx total-recall daemon <start|stop|status>
@@ -494,6 +501,16 @@ Export a specific memory node to a shareable markdown format.
 ### `snapshot`
 Create a point-in-time archive of the current memory vault state.
 - **Usage**: `npx total-recall snapshot`
+
+### `startup`
+Check the configured shared runtime or start missing managed local services.
+- **Usage**: `total-recall startup check|ensure --json`
+- `check` observes server health, authenticated instructions, daemon identity and SSSS tooling separately.
+- `ensure` starts only missing configured managed local services. It never restarts a running, unknown or foreign process.
+- Health and instructions probes each allow ten seconds and retry a transport failure once. HTTP authorization failures are not retried.
+- `--app-check <registered-command>` and optional `--app-start <registered-command>` apply only to explicitly declared commands in the current repository.
+- Older packages may use the registered `total-recall startup-check check|ensure --json` compatibility command.
+- Use `total-recall status --json` and `total-recall daemon status` for follow-up diagnosis. `doctor` checks installation prerequisites and port availability; an occupied port alone does not prove an unhealthy running service.
 
 ### `start`
 Start the primary REST API daemon process in the foreground.

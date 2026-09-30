@@ -1,3 +1,45 @@
+---
+type: project_document
+title: PLUGIN_P2P — Architecture
+description: Architecture with current implementation reconciliation and correction acceptance.
+timestamp: 2026-09-30T16:30:00Z
+tags: [project-management, plugins, corrections]
+---
+
+# PLUGIN_P2P — Architecture
+
+> **Project Prefix**: `PLUGIN_P2P`
+> **Kanban State**: In progress — corrections and verification pending
+> **Date**: 2026-09-30
+> **Reconciliation author**: Codex
+> **Based on audit**: [PLUGIN_P2P_AUDIT.md](PLUGIN_P2P_AUDIT.md), current reconciliation
+
+## Corrected architecture and trust boundaries
+
+The existing direct HTTPS hash-pinned transport and private mesh transport are distinct. Public serving checks explicit public share state; receiver parsing/fetch guards, bounded decoding, manifest validation, checksum verification, atomic installation, SSSS install records and events form the distribution path. Verify the installed tree checksum as well as fetched bytes. The runner executes the installed plugin; mere bundle receipt does not establish working capability.
+
+Model four independent facts: publisher-provided author/description; byte integrity and install source; authenticated opt-in review text; measured conformance evidence tied to artifact digest/date/environment/command/exit status/scope. None substitutes for another. Reviewer identity derives from authentication, not request fields. Review primitive registration and canonical write/read projection are prerequisites (PIC-002/003); manifest defaults and caller verification flags cannot create trusted evidence (PIC-004).
+
+Privacy validation belongs at package inspection and public serving boundaries. Preserve file-count/size/path guards and explicit audience state. Never include secret-store files, session credentials, private vault nodes or unrelated host data. Test unshare/re-share, legacy mesh-only records, missing public origin, changed plugin bytes, invalid manifest, archive tampering, interrupted install cleanup, and sender/recipient provenance. Hash pins are not publisher signatures; authenticated review attribution does not authenticate the plugin publisher. No author-verification system is claimed by this plan.
+
+The host loads plugin-owned functional UI through a generic installed-artifact contract, rather than duplicated simulated host previews. Public sender/recipient verification uses independent user environments without shared mesh credentials. Logs sanitize credentials and record the tested digest. Persist relevant state/evidence through registered SSSS extensions and authorized operations. See [central correction architecture](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_ARCHITECTURE.md).
+
+## Requirement conflict and reviewable resolution (PIC-023)
+
+Historical P2P requirements prohibited all ratings, reviews, and verified fields. The later showcase requirements requested real user reviews and conformance displays. Those documents gave agents contradictory instructions. The proposed resolution is genuine opt-in, authenticated authored review text, separate from artifact-bound measured conformance evidence. Neither publisher assertions nor user opinion may generate a verified badge. Invented stars, download numbers, review totals, fabricated status, and manifest-only verification remain prohibited. This is a documented proposal for review, not a claim that Greg approved additional product scope. Numerical ratings and aggregate stars remain outside the agreed correction scope until this conflict is explicitly resolved.
+
+Public person-to-person sharing among independent Total Recall users is the requirement. Private mesh sharing is an additional own-device capability and cannot substitute for the public sender-to-recipient path. A checksum establishes byte integrity; it does not establish author identity, safety, live capability, or independent verification.
+
+---
+
+**Finding mapping:** PIC-020 owns authenticated review identity and rejection of caller-controlled verification/provenance; PIC-023 owns the cross-project requirements conflict and public-sharing scope. PIC-004 owns measured conformance evidence. See the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+
+---
+
+## Historical record — superseded where inconsistent
+
+Original text is retained for traceability. Dated source/test assertions are historical evidence, not certification of the current installed artifact. The reconciliation above controls current planning; no additional product scope is approved by its existence.
+
 # PLUGIN_P2P — Architecture
 
 > **Project Prefix**: `PLUGIN_P2P` · **Date**: 2026-09-22
@@ -73,7 +115,7 @@ Path: `system/plugins/<id>.md` in the vault of the brain that owns the plugin di
 type: plugin_record
 title: "Git Sentinel"
 description: "Install record for plugin git-sentinel."
-timestamp: 2026-09-22T12:00:00.000Z
+timestamp: 2026-09-30T16:30:00Z
 plugin_id: git-sentinel
 version: 1.0.0
 scope: project | global

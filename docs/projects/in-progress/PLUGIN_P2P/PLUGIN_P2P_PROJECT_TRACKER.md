@@ -1,3 +1,78 @@
+---
+type: project_document
+title: PLUGIN_P2P — Project Tracker
+description: Project Tracker with current implementation reconciliation and correction acceptance.
+timestamp: 2026-09-30T16:30:00Z
+tags: [project-management, plugins, corrections]
+---
+
+# PLUGIN_P2P — Project Tracker
+
+> **Project Prefix**: `PLUGIN_P2P`
+> **Kanban State**: In progress — corrections and verification pending
+> **Date**: 2026-09-30
+> **Reconciliation author**: Codex
+> **Based on audit**: [PLUGIN_P2P_AUDIT.md](PLUGIN_P2P_AUDIT.md), current reconciliation
+
+## Current status — reopened verification
+
+Historical checked implementation tasks remain as dated records below. They do not certify the present artifact or the new review/conformance routes. Public independent-user exchange and current release readiness remain pending. The [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md) owns shared blockers PIC-001–005/PIC-021.
+
+## ✅ Phase 0 — Audit and documentation reconciliation
+
+- [x] Reconcile all five P2P documents and the review/badge requirements conflict.
+- [x] Distinguish public all-user sharing from optional own-device mesh transport.
+
+## ⏳ Phase 1 — Correction dependencies and scope
+
+- [ ] Resolve opt-in authenticated review-text proposal; do not infer approval of numerical ratings/aggregate social proof (M).
+- [ ] PIC-002/003: Prove registered review schema and real persistence lifecycle before review exposure (L).
+- [ ] PIC-004: Bind review provenance to authentication and measured conformance to artifact evidence (L).
+- [ ] PIC-005: Reconcile route inventory and API contract (M).
+
+## ⏳ Phase 2 — Packaged/installed integrity, privacy and attribution
+
+- [ ] Verify fetched/decoded/installed package checksum agreement and modified-since-install reporting (M).
+- [ ] Reject changed header/pin/content and malformed manifests without partial installs or false success events (M).
+- [ ] Verify traversal/symlink/size/file-count/interrupted-install handling and cleanup (M).
+- [ ] Verify private/mesh-only isolation, public opt-in and unshare revocation (M).
+- [ ] Inspect/test package contents for secret-store/session/private-vault/unrelated-data inclusion (M).
+- [ ] Test manifest authorship as a claim, authenticated review attribution separately, and hash integrity without false author-verification badges (M).
+
+## ⏳ Phase 3 — Live independent-user exchange
+
+- [ ] Complete public-host share/inspect/install/run with independent sender and recipient outside a shared mesh (L).
+- [ ] Verify actual plugin-owned UI and capability behavior from the installed package (L).
+- [ ] Verify unsharing and changed-artifact handling; record sanitized logs, environment/date/digest/exit status (M).
+- [ ] Complete private two-node mesh install separately (M).
+
+## ⏳ Phase 4 — Final verification and closure
+
+- [ ] Run complete current full Vitest/configured gates on Mac mini as background jobs (L).
+- [ ] Verify native backend boot and authenticated plugin browser walkthrough (M).
+- [ ] PIC-021: Reconcile current completion claims with evidence and resolve every correction before marking ready (M).
+
+## Reconciliation verification log
+
+- 2026-09-30: Documentation-only updates. No new source/test/deployment changes or live exchange completed.
+- Prior current-snapshot Mac mini full baseline: 361 files, 355 pass/6 fail; five snapshot omissions corrected. Affected-file rerun: five pass, route inventory fail; 54 tests pass/1 fail. Historical green results below do not supersede the current failure or satisfy independent-user exchange.
+
+## Requirement conflict and reviewable resolution (PIC-023)
+
+Historical P2P requirements prohibited all ratings, reviews, and verified fields. The later showcase requirements requested real user reviews and conformance displays. Those documents gave agents contradictory instructions. The proposed resolution is genuine opt-in, authenticated authored review text, separate from artifact-bound measured conformance evidence. Neither publisher assertions nor user opinion may generate a verified badge. Invented stars, download numbers, review totals, fabricated status, and manifest-only verification remain prohibited. This is a documented proposal for review, not a claim that Greg approved additional product scope. Numerical ratings and aggregate stars remain outside the agreed correction scope until this conflict is explicitly resolved.
+
+Public person-to-person sharing among independent Total Recall users is the requirement. Private mesh sharing is an additional own-device capability and cannot substitute for the public sender-to-recipient path. A checksum establishes byte integrity; it does not establish author identity, safety, live capability, or independent verification.
+
+---
+
+**Finding mapping:** PIC-020 owns authenticated review identity and rejection of caller-controlled verification/provenance; PIC-023 owns the cross-project requirements conflict and public-sharing scope. PIC-004 owns measured conformance evidence. See the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+
+---
+
+## Historical record — superseded where inconsistent
+
+Original text is retained for traceability. Dated source/test assertions are historical evidence, not certification of the current installed artifact. The reconciliation above controls current planning; no additional product scope is approved by its existence.
+
 # PLUGIN_P2P — Project Tracker
 
 > Living checklist. `[ ]` todo · `[/]` in progress · `[x]` done

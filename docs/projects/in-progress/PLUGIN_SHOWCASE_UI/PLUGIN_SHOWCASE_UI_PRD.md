@@ -2,7 +2,7 @@
 type: project_document
 title: PLUGIN_SHOWCASE_UI — Product Requirements Document
 description: PRD defining requirements for the Total Recall plugin showcase, interactive preview surfaces, peer review flow, and core memory extraction.
-timestamp: 2026-09-28T20:36:00Z
+timestamp: 2026-09-30T16:30:00Z
 tags: [project-management, prd, total-recall, plugins, ui, frontend, ssss]
 ---
 
@@ -12,9 +12,41 @@ tags: [project-management, prd, total-recall, plugins, ui, frontend, ssss]
 > **Repository**: `total-recall`
 > **Kanban State**: 🚧 In progress
 > **Author**: Antigravity with Greg Iteen
-> **Date**: 2026-09-28
+> **Date**: 2026-09-30
+> **Reconciliation**: Codex; original authorship and historical text retained below
+
+
+> **Based on audit**: [PLUGIN_SHOWCASE_UI_AUDIT.md](PLUGIN_SHOWCASE_UI_AUDIT.md), reconciled 2026-09-30.
+
+> **Product-scope qualification (PIC-023):** Genuine opt-in authenticated authored review text is a proposed reconciliation of contradictory project requirements. This documentation does not establish Greg's approval of additional social features. Review schema/storage/provenance corrections repair existing defects; enabling expanded reviews or numerical ratings requires explicit requirements agreement. All review-specific target requirements below are conditional on that agreement. Measured artifact-bound conformance remains separate from user opinion.
+
+## Current requirements — supersedes historical scope and success claims
+
+The showcase must help a user discover, inspect, install, and operate real plugins without fabricated data or inferred trust badges. Source-file existence, static rendering, manifest assertions, and mocked tests do not constitute operational success. Corrections reference [PIC-001–005 and PIC-021](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_AUDIT.md).
+
+1. **Functional plugin surfaces:** The generic host loads UI from the installed plugin artifact. Phone, Signing, Domains, Design, Text, Code Quality, Composable CLI, and Decision surfaces display real configured data and execute genuine plugin commands. Missing capability, credentials, or evidence produces an explicit unavailable or unverified state. Remove fabricated calls, messages, DNS records, gate reports, command output, and decision scores from product surfaces.
+2. **Review integrity:** Reviews use a registered SSSS extension and one canonical storage projection. Create/read/update/delete and restart behavior must pass against the real writer. Authenticated identity determines provenance; user input cannot set verified status. Handle malformed ratings, invalid plugin IDs, missing records, authorization failures, and conflicts explicitly.
+3. **Evidence-backed trust:** Test and conformance badges require independently recorded evidence tied to the installed artifact digest, date, environment, command, exit status, and test scope. Missing or mismatched evidence is unverified; publisher assertions remain clearly identified assertions. A focused mocked suite never proves live provider delivery.
+4. **Discovery and sharing:** Support public person-to-person sharing among Total Recall users as well as private mesh discovery. A central paid catalog is outside scope; mesh membership is not a prerequisite for public plugin exchange. Show provenance and artifact integrity before installation.
+5. **Dashboard and navigation:** Retain the existing goal of a prominent capability hub, searchable plugin information, marketing descriptions, and review visibility. Surface installed capability status from actual plugin state. Preserve user-authored copy.
+6. **Completion:** Require the full suite and configured quality gates on the Mac mini, route-inventory agreement, a real review persistence walkthrough, installed UI verification, and public sender-to-recipient exchange. Any unverified provider capability remains explicitly unverified and blocks claims that it works.
+
+Priorities are review/state integrity and honest trust (PIC-002–005), removal of fabricated product behavior (PIC-001), then showcase/navigation integration and final verification. Independent capability extraction is coordinated through its owning project; this documentation does not certify those repositories or authorize changes within them.
+
+## Cross-project requirement reconciliation (PIC-023)
+
+`PLUGIN_P2P` historically forbade ratings/reviews/verified badges while this project's historical PRD requested them. That contradictory instruction set helped produce disconnected trust features. Current target: no invented social proof or manifest-only verified badge. Authenticated review text is a planned opt-in capability, subject to registered schema, actual persistence round trips, and identity provenance. Numerical ratings and aggregate stars must not be presented as established product functionality; expose them only after requirements agree and their real data path is verified. Verification evidence remains distinct from user opinion. This aligns with the dated P2P reconciliation and makes no deployment claim.
 
 ---
+
+**Finding mapping:** PIC-020 owns authenticated review identity and rejection of caller-controlled verification/provenance; PIC-023 owns the cross-project requirements conflict and public-sharing scope. PIC-004 owns measured conformance evidence. See the [central correction tracker](../PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md).
+
+---
+
+## Historical record — superseded by the reconciliation above
+
+The following original planning text is retained for traceability. It is not an assertion of current implementation, verified plugin status, or operational readiness.
+
 
 ## 1. Problem Statement
 

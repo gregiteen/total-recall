@@ -1,3 +1,4 @@
+import { fetchStartup } from '../core/startup-health.mjs';
 /**
  * total-recall status
  *
@@ -167,7 +168,7 @@ export default async function statusCmd(args) {
       const { default: cfg } = await import('../core/config.mjs');
       if (cfg.port) healthPort = cfg.port;
     } catch {}
-    const res = await fetch(`http://localhost:${healthPort}/health`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetchStartup(`http://localhost:${healthPort}/health`);
     if (res.ok) {
       const hData = await res.json();
       serverHealth = hData.status || 'healthy';

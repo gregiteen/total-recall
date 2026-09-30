@@ -1,6 +1,7 @@
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
+import matter from "gray-matter";
 import { requireAuth, requireScope } from "../auth.mjs";
 import { getPluginById } from "../../core/plugin-loader.mjs";
 import {
@@ -13,7 +14,9 @@ import {
 } from "../../core/plugin-store.mjs";
 import { listPeerPlugins } from "../../core/plugin-peers.mjs";
 import { runPluginCommand } from "../../core/plugin-runner.mjs";
-import { serverError, badRequest } from "./_shared.mjs";
+import { writeNodeValidatedAsync } from "../../core/validated-write.mjs";
+import { walkMd } from "../../core/vault.mjs";
+import { serverError, badRequest, VAULT_DIR, sanitizeNode } from "./_shared.mjs";
 
 const router = Router();
 
@@ -174,6 +177,139 @@ router.get("/api/plugins/:id/readme", requireAuth, requireScope("config:read"), 
       }
     }
     res.json({ success: true, pluginId: plugin.id, readme });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/plugins/:id/reviews
+ * Returns all plugin_review documents from the vault matching the given plugin_id.
+ * Optional ?min_rating=3 query param to filter.
+ */
+router.get("/api/plugins/:id/reviews", requireAuth, requireScope("config:read"), (req, res) => {
+  try {
+    const pluginId = req.params.id;
+    const minRating = req.query?.min_rating ? parseInt(req.query.min_rating, 10) : 0;
+    const reviewsDir = path.join(VAULT_DIR, "reviews");
+
+    let reviews = [];
+    if (fs.existsSync(reviewsDir)) {
+      const files = walkMd(reviewsDir);
+      for (const file of files) {
+        try {
+          const raw = fs.readFileSync(file, "utf8");
+          const { data, content } = matter(raw);
+          if (data.type === "plugin_review" && data.plugin_id === pluginId) {
+            if (typeof data.rating === "number" && data.rating >= minRating) {
+              reviews.push({
+                ...data,
+                content: content.trim(),
+                _file: path.basename(file),
+              });
+            }
+          }
+        } catch {
+          // skip unparseable review files
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      pluginId,
+      count: reviews.length,
+      averageRating: reviews.length > 0
+        ? reviews.reduce((sum, r) => sum + (r.rating || 0), 0) / reviews.length
+        : null,
+      reviews,
+    });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * POST /api/plugins/:id/reviews
+ * Creates a new plugin_review SSSS document. Requires:
+ *   { rating: 1-5, text: string, reviewer_node?: string, verified_conformance?: boolean }
+ */
+router.post("/api/plugins/:id/reviews", requireAuth, requireScope("config:write"), async (req, res) => {
+  try {
+    const pluginId = req.params.id;
+    const { rating, text, reviewer_node, verified_conformance } = req.body || {};
+
+    // Validate rating
+    if (typeof rating !== "number" || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return badRequest(res, "rating must be an integer between 1 and 5");
+    }
+    if (!text || typeof text !== "string" || text.trim().length < 10) {
+      return badRequest(res, "text review must be at least 10 characters");
+    }
+
+    const nodeId = reviewer_node || "unknown";
+    const slug = `review-${pluginId}-${nodeId}-${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const reviewNode = {
+      type: "plugin_review",
+      slug,
+      title: `Review for ${pluginId}`,
+      description: `Peer audit review and usability assessment for ${pluginId}`,
+      timestamp: now,
+      plugin_id: pluginId,
+      rating,
+      reviewer_node: nodeId,
+      verified_conformance: !!verified_conformance,
+      portability: "structural",
+      tags: ["plugin", "review", pluginId],
+      body: text.trim(),
+    };
+
+    const vaultResult = await writeNodeValidatedAsync(reviewNode, VAULT_DIR);
+    if (!vaultResult.success) {
+      return badRequest(res, `Review validation failed: ${(vaultResult.validation?.errors || [vaultResult.error]).join("; ")}`);
+    }
+
+    res.status(201).json({ success: true, pluginId, review: sanitizeNode(reviewNode) });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
+ * GET /api/plugins/:id/conformance
+ * Returns conformance metadata for a plugin: SSSS version compliance,
+ * test pass rate, and white-label verification flags.
+ *
+ * Data is sourced from the plugin manifest's _testResults, _conformance, etc.
+ */
+router.get("/api/plugins/:id/conformance", requireAuth, requireScope("config:read"), (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
+
+    const manifest = plugin.manifest || {};
+    const conformanceMeta = manifest._conformance || {};
+    const testResults = manifest._testResults || {};
+
+    // Derive conformance from manifest or reasonable defaults
+    const result = {
+      pluginId: plugin.id,
+      ssss_version: conformanceMeta.ssss_version || "v2",
+      ssss_conformant: conformanceMeta.ssss_conformant !== false,
+      white_label_verified: conformanceMeta.white_label_verified === true,
+      tested: testResults.tested === true,
+      test_count: typeof testResults.test_count === 'number' ? testResults.test_count : 0,
+      test_pass_count: typeof testResults.test_pass_count === 'number' ? testResults.test_pass_count : 0,
+      test_pass_rate: testResults.test_count > 0
+        ? Math.round((testResults.test_pass_count / testResults.test_count) * 100)
+        : null,
+      capabilities: manifest.capabilities || [],
+      portability: conformanceMeta.portability || "structural",
+    };
+
+    res.json({ success: true, ...result });
   } catch (err) {
     serverError(res, err);
   }

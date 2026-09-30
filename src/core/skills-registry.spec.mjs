@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -16,6 +16,7 @@ import {
   adaptSkillDescription,
   hashSkillContent,
   hashSkillLayer,
+  skillMtime,
   readSkillMeta,
   syncSkillTwoWay,
   syncAllSkillsTwoWay,
@@ -28,6 +29,7 @@ import {
   trackRepo,
   normalizeRepoPaths,
   isRepoScopedSkill,
+  repoForSkillPath,
 } from './skills-registry.mjs';
 
 function tmpDir() {
@@ -366,6 +368,133 @@ describe('skills-registry', () => {
     expect(h1).toBe(h2);
   });
 
+  it('tracks nested support files in package hash and newest-copy time', () => {
+    const skillDir = writeSkill(workspace, 'complete-package');
+    const beforeHash = hashSkillContent(skillDir);
+    const beforeTime = skillMtime(skillDir);
+    const script = path.join(skillDir, 'scripts', 'check.mjs');
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, 'export default 1;\n');
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(script, future, future);
+    expect(hashSkillContent(skillDir)).not.toBe(beforeHash);
+    expect(skillMtime(skillDir)).toBeGreaterThan(beforeTime);
+    fs.writeFileSync(script, 'export default 2;\n');
+    expect(hashSkillContent(skillDir)).not.toBe(beforeHash);
+  });
+
+  it('syncs a support-file-only edit through push and pull, including dry runs', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'package-sync');
+    const support = path.join(source, 'references', 'guide.md');
+    fs.mkdirSync(path.dirname(support), { recursive: true });
+    fs.writeFileSync(support, 'version one\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'repo');
+    deploySkill(brain, 'package-sync', { repo });
+    const installed = path.join(repo, '.agent', 'skills', 'package-sync');
+    const installedSupport = path.join(installed, 'references', 'guide.md');
+
+    fs.writeFileSync(support, 'version two\n');
+    registerSkill(brain, source);
+    expect(skillStatus(brain, 'package-sync').any_drift).toBe(true);
+    const dryPush = syncSkillTwoWay(brain, 'package-sync', { prefer: 'registry', dryRun: true });
+    expect(dryPush.actions).toHaveLength(1);
+    expect(fs.readFileSync(installedSupport, 'utf8')).toBe('version one\n');
+    syncSkillTwoWay(brain, 'package-sync', { prefer: 'registry' });
+    expect(fs.readFileSync(installedSupport, 'utf8')).toBe('version two\n');
+    expect(listInstalls(brain, { skillId: 'package-sync' })).toHaveLength(1);
+
+    fs.writeFileSync(installedSupport, 'version three\n');
+    const dryPull = syncSkillTwoWay(brain, 'package-sync', { prefer: 'install', dryRun: true });
+    expect(dryPull.actions).toHaveLength(1);
+    expect(fs.readFileSync(support, 'utf8')).toBe('version two\n');
+    syncSkillTwoWay(brain, 'package-sync', { prefer: 'install', promoteWinner: false });
+    expect(fs.readFileSync(support, 'utf8')).toBe('version three\n');
+  });
+
+  it('selects a newer support-file edit during default two-way sync', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'newest-support');
+    const script = path.join(source, 'scripts', 'tool.mjs');
+    fs.mkdirSync(path.dirname(script), { recursive: true });
+    fs.writeFileSync(script, 'export default 1;\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'repo');
+    deploySkill(brain, 'newest-support', { repo });
+    const installedScript = path.join(repo, '.agent', 'skills', 'newest-support', 'scripts', 'tool.mjs');
+    fs.writeFileSync(installedScript, 'export default 2;\n');
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(installedScript, future, future);
+
+    const dry = syncSkillTwoWay(brain, 'newest-support', { dryRun: true });
+    expect(dry.winner.path).toBe(path.join(repo, '.agent', 'skills', 'newest-support'));
+    expect(fs.readFileSync(script, 'utf8')).toContain('default 1');
+    syncSkillTwoWay(brain, 'newest-support', { promoteWinner: false });
+    expect(fs.readFileSync(script, 'utf8')).toContain('default 2');
+  });
+
+  it('removes formerly managed files on deploy but keeps repository-only files', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'pruned-package');
+    const oldScript = path.join(source, 'scripts', 'old.mjs');
+    fs.mkdirSync(path.dirname(oldScript), { recursive: true });
+    fs.writeFileSync(oldScript, 'old\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'repo');
+    deploySkill(brain, 'pruned-package', { repo });
+    const installed = path.join(repo, '.agent', 'skills', 'pruned-package');
+    const repoOnly = path.join(installed, 'references', 'repo-only.md');
+    fs.mkdirSync(path.dirname(repoOnly), { recursive: true });
+    fs.writeFileSync(repoOnly, 'keep me\n');
+
+    fs.rmSync(oldScript);
+    deploySkill(brain, 'pruned-package', { repo });
+    expect(fs.existsSync(path.join(installed, 'scripts', 'old.mjs'))).toBe(false);
+    expect(fs.readFileSync(repoOnly, 'utf8')).toBe('keep me\n');
+  });
+
+  it('treats a support-file deletion as the newest package change', () => {
+    const source = writeSkill(path.join(workspace, 'catalog'), 'deleted-support');
+    const oldScript = path.join(source, 'scripts', 'old.mjs');
+    fs.mkdirSync(path.dirname(oldScript), { recursive: true });
+    fs.writeFileSync(oldScript, 'old\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'repo');
+    deploySkill(brain, 'deleted-support', { repo });
+    const installedScript = path.join(repo, '.agent', 'skills', 'deleted-support', 'scripts', 'old.mjs');
+    fs.rmSync(oldScript);
+    const future = new Date(Date.now() + 60_000);
+    fs.utimesSync(path.join(source, 'scripts'), future, future);
+
+    const dry = syncSkillTwoWay(brain, 'deleted-support', { dryRun: true });
+    expect(dry.winner.path).toBe(source);
+    syncSkillTwoWay(brain, 'deleted-support');
+    expect(fs.existsSync(installedScript)).toBe(false);
+  });
+
+  it('rejects an unadopted same-name local skill on deploy and sync', () => {
+    const source = writeSkill(path.join(workspace, 'global-catalog'), 'shared-global');
+    fs.appendFileSync(path.join(source, 'SKILL.md'), '\nCatalog instructions.\n');
+    registerSkill(brain, source);
+    const repo = path.join(workspace, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"repo"}\n');
+    const local = writeSkill(path.join(repo, '.agent', 'skills'), 'shared-global');
+    fs.appendFileSync(path.join(local, 'SKILL.md'), '\nLocal instructions.\n');
+    const original = fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8');
+    fs.mkdirSync(path.join(brain, 'config'), { recursive: true });
+    fs.writeFileSync(
+      path.join(brain, 'config', 'project-registry.json'),
+      JSON.stringify([{ name: 'repo', path: repo }]),
+    );
+
+    expect(() => deploySkill(brain, 'shared-global', { repo })).toThrow(/unadopted|collision/i);
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toBe(original);
+    const report = syncSkillTwoWay(brain, 'shared-global', { prefer: 'registry' });
+    expect(report.error).toMatch(/unadopted|collision/i);
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toBe(original);
+    deploySkill(brain, 'shared-global', { repo, force: true });
+    expect(fs.readFileSync(path.join(local, 'SKILL.md'), 'utf8')).toContain('Catalog instructions.');
+  });
+
   it('pickSyncWinner prefers newest by mtime', () => {
     const winner = pickSyncWinner(
       [
@@ -473,6 +602,39 @@ describe('skills-registry', () => {
     );
 
     expect(isRepoScopedSkill(brain, 'shared-name')).toBe(true);
+  });
+
+  it.each(['default', 'configured', 'nested'])('keeps %s global skill sources global despite stale home install ownership and divergent repo copies', (kind) => {
+    const previousAgentDir = process.env.AGENT_DIR;
+    const previousTestAgentDir = process.env._TR_TEST_AGENT_DIR;
+    const homeRoot = path.join(workspace, 'synthetic-home');
+    const agentRoot = kind === 'default' ? path.join(homeRoot, '.agent') : path.join(workspace, 'configured-agent-root');
+    const homeSpy = vi.spyOn(os, 'homedir').mockReturnValue(homeRoot);
+    try {
+      delete process.env._TR_TEST_AGENT_DIR;
+      if (kind === 'default') delete process.env.AGENT_DIR;
+      else process.env.AGENT_DIR = agentRoot;
+      const skillsRoot = kind === 'nested' ? path.join(agentRoot, 'skills', 'total-recall', 'skills') : path.join(agentRoot, 'skills');
+      const source = writeSkill(skillsRoot, 'generic-pm');
+      registerSkill(brain, source, { source_type: 'path', authoritative_scope: true });
+      const repo = path.join(workspace, 'real-project');
+      const installed = writeSkill(path.join(repo, '.agent', 'skills'), 'generic-pm', 'Older generic method');
+      fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"real-project"}\n');
+      const registry = loadRegistry(brain);
+      registry.installs.push({ skill_id: 'generic-pm', path: source, repo: homeRoot }, { skill_id: 'generic-pm', path: installed, repo });
+      saveRegistry(brain, registry);
+      expect(repoForSkillPath(brain, source)).toBe(null);
+      expect(repoForSkillPath(brain, installed)).toBe(path.resolve(repo));
+      expect(isRepoScopedSkill(brain, 'generic-pm')).toBe(false);
+      expect(syncSkillTwoWay(brain, 'generic-pm', { dryRun: true, prefer: 'registry' }).reason).not.toBe('repo_scoped');
+      fs.appendFileSync(path.join(installed, 'SKILL.md'), '\nUntouched divergent local content\n');
+      fs.writeFileSync(path.join(installed, 'SKILL.md'), fs.readFileSync(path.join(installed, 'SKILL.md'), 'utf8').replace('version: "1.2.0"', 'version: "1.2.0"\nrepo_scoped: true'));
+      expect(isRepoScopedSkill(brain, 'generic-pm')).toBe(true);
+    } finally {
+      homeSpy.mockRestore();
+      if (previousAgentDir === undefined) delete process.env.AGENT_DIR; else process.env.AGENT_DIR = previousAgentDir;
+      if (previousTestAgentDir === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = previousTestAgentDir;
+    }
   });
 
   it('deduplicates symlinked IDE surfaces that resolve to the same skill', () => {

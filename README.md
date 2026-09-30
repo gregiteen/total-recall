@@ -1,9 +1,11 @@
 # Total Recall
 
-[![Version](https://img.shields.io/badge/version-3.13.0-indigo.svg)](package.json)
+[![Version](https://img.shields.io/badge/version-3.32.4-indigo.svg)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-emerald.svg)](LICENSE)
 
 **Portable personal memory for any IDE** — filesystem-native, database-free, open source.
+
+Plugin status (September 30, 2026): the tree contains five bundled plugins; standalone plugin repos retain their own documents. Current review found incomplete operations, fabricated preview data and unsupported readiness claims. The [audit](docs/projects/in-progress/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_AUDIT.md) and [correction tracker](docs/projects/in-progress/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md) record evidence, owners and acceptance. Findings remain open. The version badge reflects the local manifest, not publication verification.
 
 Total Recall stores your rules, preferences, facts, and project knowledge as plain Markdown (SSSS). It compiles them into IDE instruction surfaces, runs a dream consolidation cycle, and lets agents enqueue background tasks. Host apps and product repos are equal implementations: **nothing is hard-coded to a specific codebase.**
 
