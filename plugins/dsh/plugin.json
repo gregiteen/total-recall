@@ -1,0 +1,57 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "dsh",
+  "name": "DeepSeek Harness",
+  "version": "1.1.0",
+  "description": "DeepSeek Harness (DSH) integration: query runtime state, monitor health, bridge Total Recall with the running DSH process.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": ["operations", "development", "self-hosting", "ai", "monitoring"],
+  "cli": {
+    "command": "dsh",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      { "name": "status", "description": "DSH runtime status (PID, port, memory, uptime)" },
+      { "name": "sessions", "description": "Session status and Web GUI info" },
+      { "name": "tools", "description": "Registered tool inventory" },
+      { "name": "models", "description": "Model provider packages" },
+      { "name": "plugins", "description": "Client plugin inventory" }
+    ]
+  },
+  "compile": {
+    "generator": "./generator.mjs",
+    "auto": true
+  },
+  "tasks": [
+    {
+      "intent": "DSH health check",
+      "schedule": "*/15 * * * *",
+      "command": "status"
+    }
+  ],
+  "ui": {
+    "design_tokens": "ui/DESIGN.md",
+    "elements": [
+      {
+        "id": "dsh-main",
+        "kind": "panel",
+        "tag": "dsh-main",
+        "module": "ui/dsh-main.js",
+        "description": "DSH plugin overview with branding and live status summary",
+        "events": [],
+        "tokens": ["color-primary", "color-accent", "color-success", "color-error", "color-text", "color-text-secondary", "color-text-tertiary", "color-surface", "color-surface-secondary", "color-border", "color-on-primary", "radius-sm", "radius-md", "radius-full", "spacing-xs", "spacing-sm", "spacing-md", "spacing-lg", "spacing-xl", "typography-body-size", "typography-h2-size", "typography-h3-size", "typography-caption-size", "font-family-ui"],
+        "optional_tokens": []
+      },
+      {
+        "id": "dsh-status",
+        "kind": "widget",
+        "tag": "dsh-status",
+        "module": "ui/dsh-status.js",
+        "description": "DSH runtime status widget with auto-refresh and health indicator",
+        "events": ["status-refresh"],
+        "tokens": ["color-success", "color-error", "color-warning", "color-text", "color-text-secondary", "color-text-tertiary", "color-surface", "color-surface-secondary", "color-border", "radius-sm", "radius-md", "radius-full", "spacing-xs", "spacing-sm", "spacing-md", "spacing-lg", "typography-body-size", "typography-caption-size", "font-family-ui"],
+        "optional_tokens": []
+      }
+    ]
+  }
+}
