@@ -1,0 +1,12 @@
+{
+  "version": "3.34.1",
+  "ssss": "0.10.3",
+  "node": "macmini.mesh.ultrachat.app",
+  "dailySchedule": "0 3 * * *",
+  "lastReportAt": "2026-10-01T19:38:12.008Z",
+  "counts": {
+    "current": 11
+  },
+  "cached": 10,
+  "storedPackages": 11
+}
