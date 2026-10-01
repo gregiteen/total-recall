@@ -101,7 +101,11 @@ CLI and API default to 4,000 estimated tokens. The CLI defaults to compact text;
 are opt-in (`--knowledge`; API `include_knowledge: true`). Diagnostic inventories
 require `--debug --format json` (API `debug: true`), within the same budget.
 Unknown applicability remains required. `ready: false` and exit 2 mean the full
-complete output exceeds the budget; never act from a truncated capsule. Status,
+complete output exceeds the budget; never act from a truncated capsule. Default
+CLI failures emit a compact diagnostic and explicit `required_budget`, without
+rule bodies. Re-run with that budget or curate applicability before acting.
+Successful capsules remain complete; explicit debug and API output preserve the
+full diagnostic contract. Status,
 metadata, JSON escaping, headings and separators all count. Refresh on task/action/project/rule/skill changes.
 Validated memory tags `context:universal` and `context:action:<action>` curate
 activation separately from modality. Unknown actions activate rules conservatively.

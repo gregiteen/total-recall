@@ -2,7 +2,7 @@
 name: total-recall
 provenance: total-recall
 description: Portable memory and instruction CLI. Read this compact entrypoint; load operation references only for the current task.
-version: 3.34.1
+version: 3.35.0
 repo_scoped: true
 ---
 

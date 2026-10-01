@@ -147,7 +147,7 @@ export function optimizeSkill(skillDir, options = {}) {
   }
 }
 
-function skillMetadata(source) {
+export function skillMetadata(source) {
   const { frontmatter } = splitSkill(source);
   return YAML.parse(frontmatter.replace(/^---\r?\n/, '').replace(/\r?\n---\r?\n?$/, ''));
 }

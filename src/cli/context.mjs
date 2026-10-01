@@ -35,6 +35,21 @@ export default async function context(args = []) {
     contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
   if (debug && format === 'text') throw new Error('--debug requires --format json');
   const response = capsuleResponse(result, { total: budget, debug, format });
+  if (!response.ready && !debug) {
+    // Admission failed: emitting bodies here makes each budget retry load the
+    // same rules again. Keep the full set in the compiler/API, and admit it only
+    // after the caller explicitly raises the budget or curates applicability.
+    const requiredBudget = response.stats.total_tokens + 32;
+    const diagnostic = { ready: false, reason: 'budget-overflow', context: '', stats: {
+      version: response.stats.version, required_count: response.stats.required_count,
+      budget, required_budget: requiredBudget,
+      token_measurement: 'estimated_chars_divided_by_four',
+    } };
+    console.log(format === 'json' ? JSON.stringify(diagnostic) :
+      `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} required_rules:${response.stats.required_count} version:${response.stats.version}\nRetry with --budget ${requiredBudget}; do not act until ready:true.`);
+    process.exitCode = 2;
+    return;
+  }
   console.log(renderCapsule(response, format));
   if (!response.ready) process.exitCode = 2;
 }
