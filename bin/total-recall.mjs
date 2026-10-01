@@ -61,6 +61,7 @@ const COMMANDS = {
   forget:   'forget.mjs',
   edit:     'edit.mjs',
   recall:   'recall.mjs',
+  context:  'context.mjs',
   search:   'recall.mjs',
   research: 'research.mjs',
   proposals: 'proposals.mjs',

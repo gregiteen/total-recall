@@ -1,0 +1,31 @@
+CONTEXT_OPTIMIZATION baseline, inspected by Codex on 2026-09-30 America/Denver.
+Audited commit: 5b67b20b73a3bd2896036e26cb02ba917fafbfb5
+Source archive SHA-256: b90f64bc33103c8f6f40f8cbfddd2fe0212c271490c8583c67774ef2c9af9b24
+Gate config SHA-256: 6fddd2952c1ff3d5b7b48a21c63b8b5bfb9275ed193be9c028e58d0c6918b390
+Host: sanctioned Mac mini; access resolved via Total Recall mesh CLI.
+Node: v25.9.0
+Snapshot: clean git archive; gate helper copied separately; final dependencies installed with npm ci.
+Remote path: /tmp/tr-context-baseline.0l5DCT (temporary; evidence retained here).
+Command: background node .agent/skills/code-quality/scripts/check.mjs --tier remote
+Started UTC: 2026-10-01T00:39:41.154Z
+Finished UTC: 2026-10-01T00:42:39.348Z
+Overall gate exit: 2
+dist-freshness: exit 1; frontend/dist absent from clean source export; opaque wrapper finding.
+open-source-paths: exit 0
+shipped-package-paths: exit 0
+scaffold-brain-state: exit 0
+ssss-registry: exit 0
+test: exit 0
+Observed Vitest summary from stored raw output:
+ Test Files  364 passed (364)
+      Tests  2256 passed (2256)
+   Duration  176.31s (transform 2.05s, setup 13.26s, import 11.88s, tests 45.72s, environment 75.49s)
+No source test failure observed. This is not a green publication gate or deployed verification.
+Initial attempt: linked host dependencies lacked Vitest; test exit 127; SSSS exit 1.
+Remediation: isolated npm ci exit 0; npm reported 6 advisories (4 moderate, 2 high), not investigated here.
+Runtime preflight: server 3.32.4 ready; daemon running; SSSS available; authenticated instructions HTTP 403; app undeclared.
+Single local read, not a benchmark or gate:
+ node bin/total-recall.mjs recall <known-project-slug> --project --fast --top-k 1 --format json
+ first stdout: 5860 ms; exit: 5935 ms; exit code: 0
+ Output bodies redacted; 992 stdout bytes, 588 stderr bytes.
+ No per-stage cause or statistical latency claim established.

@@ -123,7 +123,19 @@ export function surfaceInputsHash({ commandDirs = [], skillsDir } = {}) {
     hash.update(`dir:${dir}\n`);
   }
   if (skillsDir) {
-    try { fs.readdirSync(skillsDir).sort().forEach((e) => add(path.join(skillsDir, e, 'SKILL.md'))); } catch { /* none */ }
+    const references = (dir) => {
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+          const file = path.join(dir, entry.name);
+          if (entry.isFile()) add(file);
+          else if (entry.isDirectory()) references(file);
+        }
+      } catch { /* no references */ }
+    };
+    try { fs.readdirSync(skillsDir).sort().forEach((e) => {
+      add(path.join(skillsDir, e, 'SKILL.md'));
+      references(path.join(skillsDir, e, 'references'));
+    }); } catch { /* none */ }
   }
   return hash.digest('hex');
 }

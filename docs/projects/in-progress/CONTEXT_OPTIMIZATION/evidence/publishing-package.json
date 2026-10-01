@@ -1,0 +1,2949 @@
+{
+  "id": "total-recall-brain@3.33.0",
+  "name": "total-recall-brain",
+  "version": "3.33.0",
+  "size": 5087829,
+  "unpackedSize": 17384736,
+  "shasum": "d6cd38d6243640c959bd0b88704cf22a014c49c5",
+  "integrity": "sha512-0T0My2f26+I3QpfctZkPucsCZqLabVybBYdPAtayeJg1wB6J47cGbSr8KgxKtTVM0NKigbfxfB9aQK1Ln6APXA==",
+  "filename": "total-recall-brain-3.33.0.tgz",
+  "files": [
+    {
+      "path": "LICENSE",
+      "size": 1066,
+      "mode": 420
+    },
+    {
+      "path": "README.md",
+      "size": 5566,
+      "mode": 420
+    },
+    {
+      "path": "bin/antigravity.mjs",
+      "size": 4294,
+      "mode": 493
+    },
+    {
+      "path": "bin/init.mjs",
+      "size": 1148,
+      "mode": 493
+    },
+    {
+      "path": "bin/oci-sniper.sh",
+      "size": 2930,
+      "mode": 493
+    },
+    {
+      "path": "bin/total-recall.mjs",
+      "size": 11434,
+      "mode": 493
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "size": 28324,
+      "mode": 420
+    },
+    {
+      "path": "docs/IDE_INTEGRATION.md",
+      "size": 5242,
+      "mode": 420
+    },
+    {
+      "path": "docs/reference/CLI_INVENTORY.md",
+      "size": 3055,
+      "mode": 420
+    },
+    {
+      "path": "docs/reference/cli-reference.md",
+      "size": 27241,
+      "mode": 420
+    },
+    {
+      "path": "docs/SSSS.md",
+      "size": 9081,
+      "mode": 420
+    },
+    {
+      "path": "extension/background.js",
+      "size": 11209,
+      "mode": 420
+    },
+    {
+      "path": "extension/content-script.css",
+      "size": 397,
+      "mode": 420
+    },
+    {
+      "path": "extension/content-script.js",
+      "size": 14140,
+      "mode": 420
+    },
+    {
+      "path": "extension/icons/icon-16.png",
+      "size": 964,
+      "mode": 420
+    },
+    {
+      "path": "extension/icons/icon-32.png",
+      "size": 2824,
+      "mode": 420
+    },
+    {
+      "path": "extension/icons/icon-48.png",
+      "size": 5323,
+      "mode": 420
+    },
+    {
+      "path": "extension/icons/icon-128.png",
+      "size": 25751,
+      "mode": 420
+    },
+    {
+      "path": "extension/icons/mark.svg",
+      "size": 416,
+      "mode": 420
+    },
+    {
+      "path": "extension/lib/brain-client.js",
+      "size": 7204,
+      "mode": 420
+    },
+    {
+      "path": "extension/lib/tokens.css",
+      "size": 9299,
+      "mode": 420
+    },
+    {
+      "path": "extension/lib/ui-helpers.js",
+      "size": 8846,
+      "mode": 420
+    },
+    {
+      "path": "extension/lib/ui-helpers.spec.mjs",
+      "size": 4477,
+      "mode": 420
+    },
+    {
+      "path": "extension/manifest.json",
+      "size": 1585,
+      "mode": 420
+    },
+    {
+      "path": "extension/options/options.css",
+      "size": 4231,
+      "mode": 420
+    },
+    {
+      "path": "extension/options/options.html",
+      "size": 5955,
+      "mode": 420
+    },
+    {
+      "path": "extension/options/options.js",
+      "size": 8026,
+      "mode": 420
+    },
+    {
+      "path": "extension/sidepanel/sidepanel.css",
+      "size": 20901,
+      "mode": 420
+    },
+    {
+      "path": "extension/sidepanel/sidepanel.html",
+      "size": 15243,
+      "mode": 420
+    },
+    {
+      "path": "extension/sidepanel/sidepanel.js",
+      "size": 35976,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/assets/index-BPrkIYkZ.js",
+      "size": 2518868,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/assets/index-BUEZPLim.js",
+      "size": 2511838,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/assets/index-C7_Xpk27.css",
+      "size": 43659,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/assets/index-DGMNZi_1.js",
+      "size": 2513286,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/assets/index-FOJG4jQh.js",
+      "size": 2514313,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/brand/total-recall-badge.jpg",
+      "size": 735071,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/brand/total-recall-icon.svg",
+      "size": 416,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/brand/total-recall-lockup.png",
+      "size": 1312674,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/brand/total-recall-mark.svg",
+      "size": 504,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/favicon.ico",
+      "size": 4224,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/favicon.png",
+      "size": 5865,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/favicon.svg",
+      "size": 7975,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/icon-192.png",
+      "size": 37338,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/icon-512.png",
+      "size": 70,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/icons.svg",
+      "size": 5031,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/index.html",
+      "size": 1645,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/manifest.json",
+      "size": 890,
+      "mode": 420
+    },
+    {
+      "path": "frontend/dist/sw.js",
+      "size": 9176,
+      "mode": 420
+    },
+    {
+      "path": "frontend/index.html",
+      "size": 1547,
+      "mode": 420
+    },
+    {
+      "path": "frontend/package.json",
+      "size": 998,
+      "mode": 420
+    },
+    {
+      "path": "frontend/README.md",
+      "size": 2425,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/_base.ts",
+      "size": 2435,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/api.spec.ts",
+      "size": 8126,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/auth.ts",
+      "size": 2618,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/chat.ts",
+      "size": 3228,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/config.ts",
+      "size": 1723,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/docs.ts",
+      "size": 5753,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/embeddings.ts",
+      "size": 1483,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/extension.ts",
+      "size": 497,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/headscale.ts",
+      "size": 3914,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/index.ts",
+      "size": 747,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/integrations.ts",
+      "size": 1013,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/keys.ts",
+      "size": 16307,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/memory.ts",
+      "size": 9092,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/mesh.spec.ts",
+      "size": 3189,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/mesh.ts",
+      "size": 11488,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/models.ts",
+      "size": 1479,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/network.spec.ts",
+      "size": 1964,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/network.ts",
+      "size": 2236,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/notifications.ts",
+      "size": 2852,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/plugins.ts",
+      "size": 8601,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/research.ts",
+      "size": 1778,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/sandbox.ts",
+      "size": 901,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/secrets.spec.ts",
+      "size": 2087,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/secrets.ts",
+      "size": 1555,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/sessions.ts",
+      "size": 1039,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/skills.ts",
+      "size": 5653,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/system.ts",
+      "size": 10264,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/update.ts",
+      "size": 2430,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/webhooks.spec.ts",
+      "size": 2105,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/api/webhooks.ts",
+      "size": 1611,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/App.css",
+      "size": 235,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/App.spec.tsx",
+      "size": 3721,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/App.tsx",
+      "size": 27293,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/assets/hero.png",
+      "size": 13057,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/assets/react.svg",
+      "size": 4126,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/assets/vite.svg",
+      "size": 8709,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/BrainSelector.spec.tsx",
+      "size": 3355,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/BrainSelector.tsx",
+      "size": 12402,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/brand/AnimatedBrandMark.tsx",
+      "size": 5073,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/brand/BrandMark.spec.tsx",
+      "size": 2529,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/brand/BrandMark.tsx",
+      "size": 2751,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/ContextualHelp.spec.tsx",
+      "size": 2248,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/ContextualHelp.tsx",
+      "size": 4571,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/DaemonLogsTab.spec.tsx",
+      "size": 792,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/DaemonLogsTab.tsx",
+      "size": 1883,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/DocumentEditorModal.spec.tsx",
+      "size": 2369,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/DocumentEditorModal.tsx",
+      "size": 2694,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/DocumentTable.spec.tsx",
+      "size": 1526,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/DocumentTable.tsx",
+      "size": 1621,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/EmbeddingProviderPanel.spec.tsx",
+      "size": 4720,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/EmbeddingProviderPanel.tsx",
+      "size": 6171,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/Graph3D.spec.tsx",
+      "size": 2700,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/Graph3D.tsx",
+      "size": 17891,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/LatencySparkline.spec.tsx",
+      "size": 693,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/LatencySparkline.tsx",
+      "size": 1729,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/MarkdownUtils.spec.tsx",
+      "size": 3289,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/MarkdownUtils.tsx",
+      "size": 3809,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/MeshTopology.tsx",
+      "size": 3701,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/MobilePairing.spec.tsx",
+      "size": 5525,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/MobilePairing.tsx",
+      "size": 12860,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/CodeQualityPreview.tsx",
+      "size": 3497,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/ComposableCliPreview.tsx",
+      "size": 3705,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/DecisionPreview.tsx",
+      "size": 4078,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/DesignPreview.tsx",
+      "size": 3033,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/DomainsPreview.tsx",
+      "size": 3617,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/index.tsx",
+      "size": 2904,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/PhonePreview.tsx",
+      "size": 2143,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/SigningPreview.tsx",
+      "size": 2878,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/plugins/previews/TextPreview.tsx",
+      "size": 3509,
+      "mode": 384
+    },
+    {
+      "path": "frontend/src/components/ResearchAgendaTab.spec.tsx",
+      "size": 4764,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/ResearchAgendaTab.tsx",
+      "size": 41505,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/TailnetEnroll.spec.tsx",
+      "size": 8745,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/TailnetEnroll.tsx",
+      "size": 22445,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/TaskQueueTab.spec.tsx",
+      "size": 2348,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/TaskQueueTab.tsx",
+      "size": 7356,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/UsageChart.spec.tsx",
+      "size": 2804,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/UsageChart.tsx",
+      "size": 3728,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/VoiceInput.spec.tsx",
+      "size": 1396,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/components/VoiceInput.tsx",
+      "size": 3879,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/index.css",
+      "size": 47315,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/main.tsx",
+      "size": 597,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/AutomationsPage.spec.tsx",
+      "size": 2102,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/AutomationsPage.tsx",
+      "size": 17222,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/ChatPage.spec.tsx",
+      "size": 1500,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/ChatPage.tsx",
+      "size": 47407,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/CollabPage.spec.tsx",
+      "size": 2022,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/CollabPage.tsx",
+      "size": 24971,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/DesignDocsPage.spec.tsx",
+      "size": 1351,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/DesignDocsPage.tsx",
+      "size": 21347,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/FilesPage.spec.tsx",
+      "size": 1476,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/FilesPage.tsx",
+      "size": 18381,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/GraphPage.spec.tsx",
+      "size": 733,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/GraphPage.tsx",
+      "size": 2877,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/HealthPage.spec.tsx",
+      "size": 898,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/HealthPage.tsx",
+      "size": 12932,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/HelpPage.spec.tsx",
+      "size": 2080,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/HelpPage.tsx",
+      "size": 4913,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/InboxPage.spec.tsx",
+      "size": 1740,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/InboxPage.tsx",
+      "size": 3914,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/InstructionsPage.spec.tsx",
+      "size": 1615,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/InstructionsPage.tsx",
+      "size": 22878,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/IntegrationsPage.spec.tsx",
+      "size": 2258,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/IntegrationsPage.tsx",
+      "size": 15810,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/LoginPage.spec.tsx",
+      "size": 2397,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/LoginPage.tsx",
+      "size": 10475,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/MemoryPage.spec.tsx",
+      "size": 1582,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/MemoryPage.tsx",
+      "size": 54536,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/MeshPage.css",
+      "size": 1297,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/MeshPage.spec.tsx",
+      "size": 17863,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/MeshPage.tsx",
+      "size": 55048,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/NetworkPage.css",
+      "size": 6546,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/NetworkPage.spec.tsx",
+      "size": 1964,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/NetworkPage.tsx",
+      "size": 13624,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/NotificationsPage.css",
+      "size": 5266,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/NotificationsPage.spec.tsx",
+      "size": 1906,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/NotificationsPage.tsx",
+      "size": 11876,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/OkfPage.spec.tsx",
+      "size": 1469,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/OkfPage.tsx",
+      "size": 19664,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/OnboardingPage.spec.tsx",
+      "size": 1924,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/OnboardingPage.tsx",
+      "size": 23229,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/OpenWikiPage.spec.tsx",
+      "size": 790,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/OpenWikiPage.tsx",
+      "size": 25022,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/PluginsPage.spec.tsx",
+      "size": 5267,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/PluginsPage.tsx",
+      "size": 29779,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/RulesPage.spec.tsx",
+      "size": 1592,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/RulesPage.tsx",
+      "size": 7649,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SandboxPage.spec.tsx",
+      "size": 984,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SandboxPage.tsx",
+      "size": 4153,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SecretsPage.css",
+      "size": 2830,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SecretsPage.spec.tsx",
+      "size": 1237,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SecretsPage.tsx",
+      "size": 116164,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SettingsPage.spec.tsx",
+      "size": 3287,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SettingsPage.tsx",
+      "size": 47558,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SkillsPage.spec.tsx",
+      "size": 609,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/SkillsPage.tsx",
+      "size": 89628,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/TasksPage.spec.tsx",
+      "size": 670,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/TasksPage.tsx",
+      "size": 14769,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/UsagePage.spec.tsx",
+      "size": 845,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/UsagePage.tsx",
+      "size": 41632,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/WebhooksPage.css",
+      "size": 3268,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/WebhooksPage.spec.tsx",
+      "size": 4705,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/pages/WebhooksPage.tsx",
+      "size": 15370,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/setupTests.ts",
+      "size": 1388,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/types.ts",
+      "size": 8989,
+      "mode": 420
+    },
+    {
+      "path": "frontend/src/utils/onboarding.ts",
+      "size": 288,
+      "mode": 420
+    },
+    {
+      "path": "frontend/tsconfig.app.json",
+      "size": 617,
+      "mode": 420
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "size": 119,
+      "mode": 420
+    },
+    {
+      "path": "frontend/tsconfig.node.json",
+      "size": 591,
+      "mode": 420
+    },
+    {
+      "path": "frontend/vite.config.ts",
+      "size": 873,
+      "mode": 420
+    },
+    {
+      "path": "package.json",
+      "size": 2964,
+      "mode": 420
+    },
+    {
+      "path": "plugins/creative-search/cli.mjs",
+      "size": 18775,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/config.mjs",
+      "size": 3692,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/generator.mjs",
+      "size": 1837,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/plugin.json",
+      "size": 2884,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/README.md",
+      "size": 1889,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/ui/csearch-main.js",
+      "size": 9857,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/ui/csearch-settings.js",
+      "size": 13128,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/ui/DESIGN.md",
+      "size": 1980,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/ui/index.js",
+      "size": 127,
+      "mode": 384
+    },
+    {
+      "path": "plugins/creative-search/ui/tokens.css",
+      "size": 969,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/cli.mjs",
+      "size": 9596,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/generator.mjs",
+      "size": 2141,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/plugin.json",
+      "size": 2559,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/README.md",
+      "size": 1476,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/ui/DESIGN.md",
+      "size": 1811,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/ui/dsh-main.js",
+      "size": 6655,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/ui/dsh-status.js",
+      "size": 8390,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/ui/index.js",
+      "size": 107,
+      "mode": 384
+    },
+    {
+      "path": "plugins/dsh/ui/tokens.css",
+      "size": 889,
+      "mode": 384
+    },
+    {
+      "path": "plugins/git-sentinel/cli.mjs",
+      "size": 3208,
+      "mode": 420
+    },
+    {
+      "path": "plugins/git-sentinel/plugin.json",
+      "size": 687,
+      "mode": 420
+    },
+    {
+      "path": "plugins/git-sentinel/README.md",
+      "size": 1167,
+      "mode": 420
+    },
+    {
+      "path": "plugins/operator-alerts/cli.mjs",
+      "size": 2393,
+      "mode": 420
+    },
+    {
+      "path": "plugins/operator-alerts/notify-core.mjs",
+      "size": 9432,
+      "mode": 420
+    },
+    {
+      "path": "plugins/operator-alerts/plugin.json",
+      "size": 902,
+      "mode": 420
+    },
+    {
+      "path": "plugins/operator-alerts/README.md",
+      "size": 2293,
+      "mode": 420
+    },
+    {
+      "path": "plugins/system-monitor/cli.mjs",
+      "size": 2889,
+      "mode": 420
+    },
+    {
+      "path": "plugins/system-monitor/generator.mjs",
+      "size": 745,
+      "mode": 420
+    },
+    {
+      "path": "plugins/system-monitor/plugin.json",
+      "size": 904,
+      "mode": 420
+    },
+    {
+      "path": "plugins/system-monitor/README.md",
+      "size": 1016,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/meta-harness/SKILL.md",
+      "size": 4766,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/plugins/SKILL.md",
+      "size": 7623,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/evals/evals.json",
+      "size": 946,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/evals/resolve-startup-entry.test.mjs",
+      "size": 1975,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/references/runtime-contract.md",
+      "size": 1865,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/references/startup-check-registration.mjs",
+      "size": 1048,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/scripts/resolve-startup-entry.mjs",
+      "size": 2420,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/scripts/start-session.mjs",
+      "size": 1910,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/SKILL.md",
+      "size": 5635,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/start/subagents/runtime-review.md",
+      "size": 423,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/evals/evals.json",
+      "size": 981,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/memory-vault/concepts/cli-help-reference.md",
+      "size": 7807,
+      "mode": 384
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/memory-vault/invariants/operating-instructions.md",
+      "size": 4496,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/memory-vault/preferences/always-websearch-gap.md",
+      "size": 1638,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/memory-vault/preferences/topic-research-sop.md",
+      "size": 1927,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/agents/agents.yml",
+      "size": 2608,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/agents/README.md",
+      "size": 129,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/README.md",
+      "size": 395,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/skill-deploy/README.md",
+      "size": 189,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/.gitkeep",
+      "size": 0,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/find-skills.mjs",
+      "size": 5406,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/install-skill.mjs",
+      "size": 4134,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/scan-skill.mjs",
+      "size": 8909,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/openwiki/architecture.md",
+      "size": 221,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/openwiki/ide.md",
+      "size": 331,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/openwiki/memory.md",
+      "size": 299,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/openwiki/README.md",
+      "size": 341,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/openwiki/secrets.md",
+      "size": 286,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/openwiki/skills.md",
+      "size": 360,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/references/api-reference.md",
+      "size": 5405,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/references/architecture-reference.md",
+      "size": 5034,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/references/cli-reference.md",
+      "size": 4852,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/references/operations.md",
+      "size": 36979,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/references/ssss-reference.md",
+      "size": 3734,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/references/troubleshooting.md",
+      "size": 2806,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/scripts/brain-state.json",
+      "size": 1517,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/scripts/sync-repo.mjs",
+      "size": 8673,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/SKILL.md",
+      "size": 2379,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/.agent/skills/total-recall/subagents/total-recall-diagnostician.md",
+      "size": 1065,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/openwiki/architecture.md",
+      "size": 221,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/openwiki/ide.md",
+      "size": 331,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/openwiki/memory.md",
+      "size": 299,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/openwiki/README.md",
+      "size": 341,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/openwiki/secrets.md",
+      "size": 286,
+      "mode": 420
+    },
+    {
+      "path": "scaffold/openwiki/skills.md",
+      "size": 360,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/agent-dir.mjs",
+      "size": 4603,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/agent.mjs",
+      "size": 7255,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/api.mjs",
+      "size": 4997,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/app/index.mjs",
+      "size": 24678,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/backfill.mjs",
+      "size": 6582,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/backup.mjs",
+      "size": 20737,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/brain.mjs",
+      "size": 11759,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/brief.mjs",
+      "size": 14081,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/chat.mjs",
+      "size": 2314,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/collab.mjs",
+      "size": 1134,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/command.mjs",
+      "size": 20920,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/config.mjs",
+      "size": 10307,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/connect.mjs",
+      "size": 37926,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/context.mjs",
+      "size": 2499,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/daemon.mjs",
+      "size": 7793,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/deploy-ui.mjs",
+      "size": 80196,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/deploy.mjs",
+      "size": 77303,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/doctor.mjs",
+      "size": 10437,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/dream.mjs",
+      "size": 2678,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/edit.mjs",
+      "size": 8191,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/export.mjs",
+      "size": 2522,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/forget.mjs",
+      "size": 5936,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/friction.mjs",
+      "size": 653,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/generate-pat.mjs",
+      "size": 2191,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/group.mjs",
+      "size": 9302,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/harness.mjs",
+      "size": 6003,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/hash-password.mjs",
+      "size": 597,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/help.mjs",
+      "size": 6926,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/import-rules.mjs",
+      "size": 3712,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest-okf.mjs",
+      "size": 4162,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest-openwiki.mjs",
+      "size": 6142,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest.mjs",
+      "size": 4042,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/index.mjs",
+      "size": 11636,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/parsers/chrome-bookmarks.mjs",
+      "size": 6511,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/parsers/google-keep.mjs",
+      "size": 4352,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/parsers/search-history.mjs",
+      "size": 4158,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/parsers/youtube-history.mjs",
+      "size": 5068,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/utils/dedup.mjs",
+      "size": 1932,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/ingest/utils/takeout-walker.mjs",
+      "size": 3217,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/init.mjs",
+      "size": 39804,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/integration-dispatcher.mjs",
+      "size": 4313,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/key.mjs",
+      "size": 4774,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/lint.mjs",
+      "size": 7928,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/map.mjs",
+      "size": 6232,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/mesh.mjs",
+      "size": 34697,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/migrate.mjs",
+      "size": 2714,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/create.mjs",
+      "size": 9806,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/index.mjs",
+      "size": 6738,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/install.mjs",
+      "size": 1455,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/list.mjs",
+      "size": 2587,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/remove.mjs",
+      "size": 2043,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/scaffold-cmd.mjs",
+      "size": 764,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/plugin/search.mjs",
+      "size": 4743,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/project-id.mjs",
+      "size": 1715,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/proposals.mjs",
+      "size": 8862,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/rebuild.mjs",
+      "size": 6718,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/recall.mjs",
+      "size": 14096,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/relay.mjs",
+      "size": 18757,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/remember.mjs",
+      "size": 13663,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/repo-expert-generate.mjs",
+      "size": 22073,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/research.mjs",
+      "size": 14751,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/reset-password.mjs",
+      "size": 4864,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/restore.mjs",
+      "size": 4230,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/secret.mjs",
+      "size": 66243,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/setup.mjs",
+      "size": 26883,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/share.mjs",
+      "size": 6102,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/skill-config.mjs",
+      "size": 11335,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/skill-projection.mjs",
+      "size": 11778,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/skill.mjs",
+      "size": 30286,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/snapshot.mjs",
+      "size": 3709,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/start.mjs",
+      "size": 1831,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/startup.mjs",
+      "size": 2881,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/status.mjs",
+      "size": 11004,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/sync.mjs",
+      "size": 14501,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/task.mjs",
+      "size": 7987,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/uninstall.mjs",
+      "size": 25621,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/update.mjs",
+      "size": 5070,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/upgrade.mjs",
+      "size": 4618,
+      "mode": 420
+    },
+    {
+      "path": "src/cli/wizard.html",
+      "size": 162036,
+      "mode": 420
+    },
+    {
+      "path": "src/core/agent-manager.mjs",
+      "size": 8225,
+      "mode": 420
+    },
+    {
+      "path": "src/core/api-routes.mjs",
+      "size": 3570,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/adapter-contract.mjs",
+      "size": 7546,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/apply.mjs",
+      "size": 13553,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/design-tokens.mjs",
+      "size": 9602,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/plan.mjs",
+      "size": 7325,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/resolve.mjs",
+      "size": 11020,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/runtime-cli.mjs",
+      "size": 12939,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/runtime-cli/node.mjs.tmpl",
+      "size": 8258,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/runtime-cli/python.py.tmpl",
+      "size": 6672,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/source.mjs",
+      "size": 11051,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/standalone.mjs",
+      "size": 8084,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/ui-elements.mjs",
+      "size": 22419,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/upgrade.mjs",
+      "size": 8385,
+      "mode": 420
+    },
+    {
+      "path": "src/core/app-deploy/verify.mjs",
+      "size": 7971,
+      "mode": 420
+    },
+    {
+      "path": "src/core/append-log.mjs",
+      "size": 3951,
+      "mode": 420
+    },
+    {
+      "path": "src/core/autopull-install.mjs",
+      "size": 6936,
+      "mode": 420
+    },
+    {
+      "path": "src/core/blackboard.mjs",
+      "size": 1601,
+      "mode": 420
+    },
+    {
+      "path": "src/core/bound-hosts.mjs",
+      "size": 2403,
+      "mode": 420
+    },
+    {
+      "path": "src/core/brain-registry.mjs",
+      "size": 5691,
+      "mode": 420
+    },
+    {
+      "path": "src/core/brain-state.json",
+      "size": 1517,
+      "mode": 420
+    },
+    {
+      "path": "src/core/brain-state.mjs",
+      "size": 2980,
+      "mode": 420
+    },
+    {
+      "path": "src/core/browser-session.mjs",
+      "size": 7923,
+      "mode": 420
+    },
+    {
+      "path": "src/core/cache-prune.mjs",
+      "size": 11682,
+      "mode": 420
+    },
+    {
+      "path": "src/core/clarity-rewriter.mjs",
+      "size": 28219,
+      "mode": 420
+    },
+    {
+      "path": "src/core/command-surface.mjs",
+      "size": 6265,
+      "mode": 420
+    },
+    {
+      "path": "src/core/conclusion-writer.mjs",
+      "size": 9966,
+      "mode": 420
+    },
+    {
+      "path": "src/core/config.mjs",
+      "size": 13005,
+      "mode": 420
+    },
+    {
+      "path": "src/core/conflict-detector.mjs",
+      "size": 19715,
+      "mode": 420
+    },
+    {
+      "path": "src/core/context-cache.mjs",
+      "size": 3750,
+      "mode": 420
+    },
+    {
+      "path": "src/core/context-compiler.mjs",
+      "size": 6428,
+      "mode": 420
+    },
+    {
+      "path": "src/core/context-policy.mjs",
+      "size": 3777,
+      "mode": 420
+    },
+    {
+      "path": "src/core/crons.mjs",
+      "size": 1719,
+      "mode": 420
+    },
+    {
+      "path": "src/core/crypto.mjs",
+      "size": 6628,
+      "mode": 420
+    },
+    {
+      "path": "src/core/daemon-control.mjs",
+      "size": 5689,
+      "mode": 420
+    },
+    {
+      "path": "src/core/daemon-loop.mjs",
+      "size": 30173,
+      "mode": 420
+    },
+    {
+      "path": "src/core/device-io.mjs",
+      "size": 11495,
+      "mode": 420
+    },
+    {
+      "path": "src/core/dream.mjs",
+      "size": 22696,
+      "mode": 420
+    },
+    {
+      "path": "src/core/drift-detector.mjs",
+      "size": 4032,
+      "mode": 420
+    },
+    {
+      "path": "src/core/embeddings.mjs",
+      "size": 22462,
+      "mode": 420
+    },
+    {
+      "path": "src/core/emergency-alerts.mjs",
+      "size": 4647,
+      "mode": 420
+    },
+    {
+      "path": "src/core/env-import.mjs",
+      "size": 16239,
+      "mode": 420
+    },
+    {
+      "path": "src/core/evolution.mjs",
+      "size": 3912,
+      "mode": 420
+    },
+    {
+      "path": "src/core/evolving-context.mjs",
+      "size": 6958,
+      "mode": 420
+    },
+    {
+      "path": "src/core/fact-seeker.mjs",
+      "size": 59673,
+      "mode": 420
+    },
+    {
+      "path": "src/core/fast-recall.mjs",
+      "size": 7740,
+      "mode": 420
+    },
+    {
+      "path": "src/core/friction.mjs",
+      "size": 2729,
+      "mode": 420
+    },
+    {
+      "path": "src/core/github-sync.mjs",
+      "size": 10514,
+      "mode": 420
+    },
+    {
+      "path": "src/core/headscale-client.mjs",
+      "size": 12468,
+      "mode": 420
+    },
+    {
+      "path": "src/core/import-rules.mjs",
+      "size": 14221,
+      "mode": 420
+    },
+    {
+      "path": "src/core/inference-engine.mjs",
+      "size": 13028,
+      "mode": 420
+    },
+    {
+      "path": "src/core/lan-discovery.mjs",
+      "size": 11194,
+      "mode": 420
+    },
+    {
+      "path": "src/core/leader-election.mjs",
+      "size": 4750,
+      "mode": 420
+    },
+    {
+      "path": "src/core/logger.mjs",
+      "size": 2287,
+      "mode": 420
+    },
+    {
+      "path": "src/core/memory-layers.mjs",
+      "size": 3360,
+      "mode": 420
+    },
+    {
+      "path": "src/core/memory-title.mjs",
+      "size": 2301,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-access-sync.mjs",
+      "size": 5123,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-access.mjs",
+      "size": 10188,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-activity.mjs",
+      "size": 4169,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-auth.mjs",
+      "size": 1865,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-discover.mjs",
+      "size": 6216,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-enroll.mjs",
+      "size": 18253,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh-late-bind.mjs",
+      "size": 3216,
+      "mode": 420
+    },
+    {
+      "path": "src/core/mesh.mjs",
+      "size": 28513,
+      "mode": 420
+    },
+    {
+      "path": "src/core/meta-harness.mjs",
+      "size": 7692,
+      "mode": 420
+    },
+    {
+      "path": "src/core/migrate.mjs",
+      "size": 4669,
+      "mode": 420
+    },
+    {
+      "path": "src/core/network-bind.mjs",
+      "size": 579,
+      "mode": 420
+    },
+    {
+      "path": "src/core/network-interfaces.mjs",
+      "size": 4948,
+      "mode": 420
+    },
+    {
+      "path": "src/core/notifications.mjs",
+      "size": 8431,
+      "mode": 420
+    },
+    {
+      "path": "src/core/obsidian-sync.mjs",
+      "size": 3969,
+      "mode": 420
+    },
+    {
+      "path": "src/core/okf-adapter.mjs",
+      "size": 17478,
+      "mode": 420
+    },
+    {
+      "path": "src/core/ollama-embeddings.mjs",
+      "size": 11360,
+      "mode": 420
+    },
+    {
+      "path": "src/core/operation-validator.mjs",
+      "size": 2406,
+      "mode": 420
+    },
+    {
+      "path": "src/core/optimizer.mjs",
+      "size": 19618,
+      "mode": 420
+    },
+    {
+      "path": "src/core/package-auto-update.mjs",
+      "size": 15119,
+      "mode": 420
+    },
+    {
+      "path": "src/core/pairing.mjs",
+      "size": 7559,
+      "mode": 420
+    },
+    {
+      "path": "src/core/parallel-context.mjs",
+      "size": 10665,
+      "mode": 420
+    },
+    {
+      "path": "src/core/pid-lock.mjs",
+      "size": 2751,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-bundle.mjs",
+      "size": 6651,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-context.mjs",
+      "size": 7453,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-loader.mjs",
+      "size": 14924,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-peers.mjs",
+      "size": 7293,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-public.mjs",
+      "size": 3765,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-runner-child.mjs",
+      "size": 930,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-runner.mjs",
+      "size": 3893,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-store.mjs",
+      "size": 15656,
+      "mode": 420
+    },
+    {
+      "path": "src/core/plugin-tasks.mjs",
+      "size": 7958,
+      "mode": 420
+    },
+    {
+      "path": "src/core/post-mortem.mjs",
+      "size": 16272,
+      "mode": 420
+    },
+    {
+      "path": "src/core/project-brain.mjs",
+      "size": 10764,
+      "mode": 420
+    },
+    {
+      "path": "src/core/project-id.mjs",
+      "size": 2331,
+      "mode": 420
+    },
+    {
+      "path": "src/core/proposal-applier.mjs",
+      "size": 19809,
+      "mode": 420
+    },
+    {
+      "path": "src/core/protect-instructions.mjs",
+      "size": 5005,
+      "mode": 420
+    },
+    {
+      "path": "src/core/provider-account-sync.mjs",
+      "size": 40418,
+      "mode": 420
+    },
+    {
+      "path": "src/core/provider-catalog.mjs",
+      "size": 17844,
+      "mode": 420
+    },
+    {
+      "path": "src/core/provider-rotation-recipes.mjs",
+      "size": 10542,
+      "mode": 420
+    },
+    {
+      "path": "src/core/quick-capture.mjs",
+      "size": 5298,
+      "mode": 420
+    },
+    {
+      "path": "src/core/registration-watch.mjs",
+      "size": 7482,
+      "mode": 420
+    },
+    {
+      "path": "src/core/remote-vault-sync.mjs",
+      "size": 6488,
+      "mode": 420
+    },
+    {
+      "path": "src/core/repo-sync.mjs",
+      "size": 10218,
+      "mode": 420
+    },
+    {
+      "path": "src/core/research-gate.mjs",
+      "size": 7417,
+      "mode": 420
+    },
+    {
+      "path": "src/core/research-queue.mjs",
+      "size": 18626,
+      "mode": 420
+    },
+    {
+      "path": "src/core/research-surface.mjs",
+      "size": 9519,
+      "mode": 420
+    },
+    {
+      "path": "src/core/research.mjs",
+      "size": 22905,
+      "mode": 420
+    },
+    {
+      "path": "src/core/rotation-capability.mjs",
+      "size": 5982,
+      "mode": 420
+    },
+    {
+      "path": "src/core/runtime.mjs",
+      "size": 30694,
+      "mode": 420
+    },
+    {
+      "path": "src/core/sandbox.mjs",
+      "size": 8278,
+      "mode": 420
+    },
+    {
+      "path": "src/core/scheduler.mjs",
+      "size": 20625,
+      "mode": 420
+    },
+    {
+      "path": "src/core/schema.mjs",
+      "size": 49834,
+      "mode": 420
+    },
+    {
+      "path": "src/core/search.mjs",
+      "size": 11873,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secret-integration-research.mjs",
+      "size": 11664,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-env-diff.mjs",
+      "size": 5176,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-env-export.mjs",
+      "size": 10115,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-keychain.mjs",
+      "size": 3668,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-rekey.mjs",
+      "size": 13891,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-remote-deploy.mjs",
+      "size": 8823,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-rotate.mjs",
+      "size": 14567,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-store.mjs",
+      "size": 41560,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secrets-sync.mjs",
+      "size": 2985,
+      "mode": 420
+    },
+    {
+      "path": "src/core/secure-file.mjs",
+      "size": 2363,
+      "mode": 420
+    },
+    {
+      "path": "src/core/server-restart.mjs",
+      "size": 5122,
+      "mode": 420
+    },
+    {
+      "path": "src/core/session-watcher.mjs",
+      "size": 28004,
+      "mode": 420
+    },
+    {
+      "path": "src/core/skill-config.mjs",
+      "size": 18028,
+      "mode": 420
+    },
+    {
+      "path": "src/core/skills-registry.mjs",
+      "size": 55091,
+      "mode": 420
+    },
+    {
+      "path": "src/core/snapshot.mjs",
+      "size": 5836,
+      "mode": 420
+    },
+    {
+      "path": "src/core/source-adapters.mjs",
+      "size": 42687,
+      "mode": 420
+    },
+    {
+      "path": "src/core/source-watcher.mjs",
+      "size": 4277,
+      "mode": 420
+    },
+    {
+      "path": "src/core/ssss-host-extension.mjs",
+      "size": 3248,
+      "mode": 420
+    },
+    {
+      "path": "src/core/ssss-kernel-bridge.mjs",
+      "size": 21144,
+      "mode": 420
+    },
+    {
+      "path": "src/core/ssss-operation-service.mjs",
+      "size": 2384,
+      "mode": 420
+    },
+    {
+      "path": "src/core/startup-health.mjs",
+      "size": 12622,
+      "mode": 420
+    },
+    {
+      "path": "src/core/steering.mjs",
+      "size": 4141,
+      "mode": 420
+    },
+    {
+      "path": "src/core/surface.mjs",
+      "size": 30986,
+      "mode": 420
+    },
+    {
+      "path": "src/core/tailscale-cli.mjs",
+      "size": 2333,
+      "mode": 420
+    },
+    {
+      "path": "src/core/task-envelope.mjs",
+      "size": 8932,
+      "mode": 420
+    },
+    {
+      "path": "src/core/task-executors.mjs",
+      "size": 24228,
+      "mode": 420
+    },
+    {
+      "path": "src/core/throttled-fetch.mjs",
+      "size": 23091,
+      "mode": 420
+    },
+    {
+      "path": "src/core/total-recall-memory-validator.mjs",
+      "size": 1229,
+      "mode": 420
+    },
+    {
+      "path": "src/core/tts.mjs",
+      "size": 4483,
+      "mode": 420
+    },
+    {
+      "path": "src/core/usage-fetcher.mjs",
+      "size": 11145,
+      "mode": 420
+    },
+    {
+      "path": "src/core/usage-tracker.mjs",
+      "size": 12933,
+      "mode": 420
+    },
+    {
+      "path": "src/core/validated-write.mjs",
+      "size": 8606,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vault-backfill.mjs",
+      "size": 9686,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vault-cache.mjs",
+      "size": 5703,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vault-watcher.mjs",
+      "size": 2775,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vault.mjs",
+      "size": 8412,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vector-field.mjs",
+      "size": 25916,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vector-store.mjs",
+      "size": 2502,
+      "mode": 420
+    },
+    {
+      "path": "src/core/vfs-documents.mjs",
+      "size": 2754,
+      "mode": 420
+    },
+    {
+      "path": "src/core/watchdog.mjs",
+      "size": 7638,
+      "mode": 420
+    },
+    {
+      "path": "src/core/webauthn-store.mjs",
+      "size": 8194,
+      "mode": 420
+    },
+    {
+      "path": "src/core/webhook-handlers.mjs",
+      "size": 4691,
+      "mode": 420
+    },
+    {
+      "path": "src/server/api.mjs",
+      "size": 42819,
+      "mode": 420
+    },
+    {
+      "path": "src/server/auth.mjs",
+      "size": 18801,
+      "mode": 420
+    },
+    {
+      "path": "src/server/health-coverage.mjs",
+      "size": 2875,
+      "mode": 420
+    },
+    {
+      "path": "src/server/index.mjs",
+      "size": 49012,
+      "mode": 420
+    },
+    {
+      "path": "src/server/keys.mjs",
+      "size": 6426,
+      "mode": 420
+    },
+    {
+      "path": "src/server/rest.mjs",
+      "size": 9563,
+      "mode": 420
+    },
+    {
+      "path": "src/server/route-inventory.mjs",
+      "size": 2127,
+      "mode": 420
+    },
+    {
+      "path": "src/server/route-manifest.json",
+      "size": 15532,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/_shared.mjs",
+      "size": 6403,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/auth.mjs",
+      "size": 2512,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/brains.mjs",
+      "size": 7988,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/capture.mjs",
+      "size": 1229,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/collab.mjs",
+      "size": 11698,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/config.mjs",
+      "size": 8546,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/context.mjs",
+      "size": 3178,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/dashboard.mjs",
+      "size": 2338,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/docs.mjs",
+      "size": 8995,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/dream.mjs",
+      "size": 934,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/embeddings.mjs",
+      "size": 4111,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/export.mjs",
+      "size": 2477,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/extension.mjs",
+      "size": 3426,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/field.mjs",
+      "size": 1787,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/files.mjs",
+      "size": 1010,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/graph.mjs",
+      "size": 11940,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/headscale.mjs",
+      "size": 3853,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/help.mjs",
+      "size": 7324,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/import.mjs",
+      "size": 1953,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/instructions.mjs",
+      "size": 2232,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/integrations.mjs",
+      "size": 5553,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/keys.mjs",
+      "size": 1752,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/memory.mjs",
+      "size": 16455,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/mesh-presence.mjs",
+      "size": 4317,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/mesh.mjs",
+      "size": 23610,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/models.mjs",
+      "size": 14369,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/network.mjs",
+      "size": 4477,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/notifications.mjs",
+      "size": 2953,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/plugins-mesh.mjs",
+      "size": 2006,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/plugins.mjs",
+      "size": 11677,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/proposals.mjs",
+      "size": 4599,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/research.mjs",
+      "size": 3593,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/rules.mjs",
+      "size": 2489,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/sandbox.mjs",
+      "size": 1860,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/scripts.mjs",
+      "size": 3738,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/secrets.mjs",
+      "size": 24543,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/sessions.mjs",
+      "size": 11697,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/share.mjs",
+      "size": 5101,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/skills.mjs",
+      "size": 25309,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/ssss.mjs",
+      "size": 7131,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/sync.mjs",
+      "size": 1570,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/system.mjs",
+      "size": 9498,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/tasks.mjs",
+      "size": 3019,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/tts.mjs",
+      "size": 1483,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/update.mjs",
+      "size": 7127,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/vault.mjs",
+      "size": 5143,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/webauthn.mjs",
+      "size": 5416,
+      "mode": 420
+    },
+    {
+      "path": "src/server/routes/webhooks.mjs",
+      "size": 13638,
+      "mode": 420
+    },
+    {
+      "path": "src/server/tools.mjs",
+      "size": 34525,
+      "mode": 420
+    },
+    {
+      "path": "src/server/update-route-manifest.mjs",
+      "size": 1306,
+      "mode": 420
+    },
+    {
+      "path": "templates/Caddyfile",
+      "size": 1654,
+      "mode": 420
+    },
+    {
+      "path": "templates/com.totalrecall.backup.plist",
+      "size": 1048,
+      "mode": 420
+    },
+    {
+      "path": "templates/com.totalrecall.daemon.plist",
+      "size": 877,
+      "mode": 420
+    },
+    {
+      "path": "templates/com.totalrecall.duckdns.plist",
+      "size": 628,
+      "mode": 420
+    },
+    {
+      "path": "templates/com.totalrecall.server.plist",
+      "size": 1037,
+      "mode": 420
+    },
+    {
+      "path": "templates/default-config/budget.yml",
+      "size": 211,
+      "mode": 420
+    },
+    {
+      "path": "templates/default-config/runtime.yml",
+      "size": 432,
+      "mode": 420
+    },
+    {
+      "path": "templates/default-config/security.yml",
+      "size": 1508,
+      "mode": 420
+    },
+    {
+      "path": "templates/default-config/voice.yml",
+      "size": 1498,
+      "mode": 420
+    },
+    {
+      "path": "templates/obsidian-queries/conflicts.md",
+      "size": 521,
+      "mode": 420
+    },
+    {
+      "path": "templates/obsidian-queries/daily.md",
+      "size": 264,
+      "mode": 420
+    },
+    {
+      "path": "templates/obsidian-queries/index.md",
+      "size": 792,
+      "mode": 420
+    },
+    {
+      "path": "templates/obsidian-queries/skills.md",
+      "size": 229,
+      "mode": 420
+    },
+    {
+      "path": "templates/onboarding-interview.md",
+      "size": 3362,
+      "mode": 420
+    },
+    {
+      "path": "templates/openwiki/architecture.md",
+      "size": 221,
+      "mode": 420
+    },
+    {
+      "path": "templates/openwiki/ide.md",
+      "size": 331,
+      "mode": 420
+    },
+    {
+      "path": "templates/openwiki/memory.md",
+      "size": 299,
+      "mode": 420
+    },
+    {
+      "path": "templates/openwiki/README.md",
+      "size": 341,
+      "mode": 420
+    },
+    {
+      "path": "templates/openwiki/secrets.md",
+      "size": 286,
+      "mode": 420
+    },
+    {
+      "path": "templates/openwiki/skills.md",
+      "size": 360,
+      "mode": 420
+    },
+    {
+      "path": "templates/skill_engineering.md",
+      "size": 1632,
+      "mode": 420
+    },
+    {
+      "path": "templates/total-recall-daemon.service",
+      "size": 588,
+      "mode": 420
+    },
+    {
+      "path": "templates/total-recall-server.service",
+      "size": 503,
+      "mode": 420
+    }
+  ],
+  "entryCount": 587,
+  "bundled": []
+}

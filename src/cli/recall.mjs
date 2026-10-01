@@ -1,5 +1,4 @@
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
-import { semanticSearch } from '../core/search.mjs';
 import path from 'node:path';
 
 function printHelp() {
@@ -19,6 +18,9 @@ function printHelp() {
     --importance, -i <1-5>     Filter results by minimum numerical importance
     --priority, -p <level>     Filter results by priority level
     --fast                     Force frontmatter-only search without semantic fallback
+    --local                    Search indexed body text without a provider (default)
+    --semantic                 Opt into semantic enrichment
+    --timings                  Print local stage timings on stderr
 
   Examples:
     npx total-recall recall "Never run tsc directly"
@@ -51,6 +53,8 @@ export default async function recall(args) {
   let importance = null;
   let priority = null;
   let forceFast = false;
+  let semantic = false;
+  let timings = false;
 
   for (let i = 1; i < remainingArgs.length; i++) {
     const arg = remainingArgs[i];
@@ -101,6 +105,12 @@ export default async function recall(args) {
       }
     } else if (arg === '--fast') {
       forceFast = true;
+    } else if (arg === '--semantic') {
+      semantic = true;
+    } else if (arg === '--local') {
+      semantic = false;
+    } else if (arg === '--timings') {
+      timings = true;
     }
   }
 
@@ -161,12 +171,18 @@ export default async function recall(args) {
           tags,
           modality,
           importance,
-          priority
+          priority,
+          fullText: !forceFast,
         });
+        if (timings) console.error(JSON.stringify({ brain: target.label, ...fastResults.stats }));
+        if (['missing', 'corrupt', 'metadata-only'].includes(fastResults.stats.index) && !forceFast) {
+          console.error(`Local full-text index for ${target.label}: ${fastResults.stats.index}. Run total-recall compile to rebuild; available metadata results may be incomplete.`);
+        }
 
-        if (fastResults.length >= top_k || forceFast) {
+        if (!semantic || fastResults.some(result => result.score === 1) || forceFast) {
           results = fastResults;
         } else {
+          const { semanticSearch } = await import('../core/search.mjs');
           results = await semanticSearch(query, {
             vaultDir,
             derivedDir,
@@ -209,6 +225,8 @@ export default async function recall(args) {
     allResults = allResults.slice(0, top_k);
 
     if (format === 'json') {
+      for (const error of searchErrors) console.error(`Search failed for ${error.label}: ${error.message.split('\n')[0]}`);
+      if (searchErrors.length && !allResults.length) process.exitCode = 1;
       console.log(JSON.stringify(allResults, null, 2));
       return;
     }
@@ -264,7 +282,7 @@ export default async function recall(args) {
     // The old header said exactly that regardless, so degraded keyword output
     // was indistinguishable from real vector results — same header, same
     // percentage scores. If the label doesn't change, nobody can tell.
-    const modeLabel = isDegraded ? '🔤 KEYWORD-ONLY results' : '🔍 Semantic search results';
+    const modeLabel = isDegraded ? '🔤 KEYWORD-ONLY results' : semantic && !forceFast ? '🔍 Search results (semantic requested)' : '🔍 Local search results';
     console.log(`\n  ${modeLabel} for "${query}"${layerSuffix}:\n`);
     for (let i = 0; i < allResults.length; i++) {
       const match = allResults[i];

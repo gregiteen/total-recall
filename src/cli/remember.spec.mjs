@@ -166,7 +166,7 @@ Core Invariants`
       json: async () => ({ embedding: { values: [1, 0, 0] } })
     });
 
-    await recall(['tsc', '--top-k', '1']);
+    await recall(['tsc', '--top-k', '1', '--semantic']);
 
     const outputs = consoleSpy.mock.calls.flat().join('\n');
     expect(outputs).toContain('Vault Match');

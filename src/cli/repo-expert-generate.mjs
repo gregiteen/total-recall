@@ -324,7 +324,7 @@ function scanPages(dir, result) {
 /**
  * Generate SKILL.md content from scan data.
  */
-export function generateSkillMd(scan, repoRoot) {
+export function generateReferenceMd(scan, repoRoot) {
   const lines = [];
 
   lines.push('---');
@@ -349,7 +349,7 @@ export function generateSkillMd(scan, repoRoot) {
     lines.push(`> ${scan.description}`);
     lines.push('');
   }
-  lines.push('> **Auto-generated** by `npx total-recall skill generate-expert`. Regenerate anytime to stay current.');
+  lines.push('> **Auto-generated** by \`npx total-recall skill generate-expert\`. Regenerate anytime to stay current.');
   lines.push('');
 
   // Stack summary
@@ -487,6 +487,37 @@ export function generateSkillMd(scan, repoRoot) {
   return lines.join('\n');
 }
 
+/** Compact canonical routing; inventories are loaded only for architecture work. */
+export function generateSkillMd(scan, repoRoot) {
+  const name = scan.name || path.basename(repoRoot);
+  return `---
+name: repo-expert
+description: Read for repository architecture and ownership; load only relevant reference sections.
+repo_scoped: true
+repository_id: ${JSON.stringify(name)}
+generated_from: ${path.basename(path.resolve(repoRoot))}
+generated_at: ${new Date().toISOString()}
+---
+
+# ${name} — Codebase Architecture
+
+${scan.description || ''}
+
+- **Languages**: ${scan.languages.join(', ')}
+- **Frameworks**: ${scan.frameworks.join(', ')}
+- **Module system**: ${scan.type}
+- **Tests**: ${scan.testFramework || 'Inspect manifest'}
+
+> **Auto-generated** by \`npx total-recall skill generate-expert\`.
+
+Verify repository identity and the current user request before changing code.
+Read [architecture reference](references/architecture.md) for the relevant entry points,
+module owners and runtime paths. Search its headings first; do not load the whole
+inventory for routine tasks. Confirm mutable facts against source and manifests.
+The reference is generated; regenerate with \`total-recall skill generate-expert\`.
+`;
+}
+
 /**
  * Generate and write repo-expert SKILL.md for a target repo.
  */
@@ -506,6 +537,8 @@ export function generateRepoExpert(repoRoot, opts = {}) {
     fs.copyFileSync(destFile, path.join(destDir, backupName));
   }
 
+  fs.mkdirSync(path.join(destDir, 'references'), { recursive: true });
+  fs.writeFileSync(path.join(destDir, 'references', 'architecture.md'), generateReferenceMd(scan, repoRoot), 'utf8');
   fs.writeFileSync(destFile, content, 'utf8');
 
   return {

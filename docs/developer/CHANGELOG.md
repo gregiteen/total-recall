@@ -1,3 +1,10 @@
+## 3.33.0 — 2026-09-30
+
+- Replace permanent rule/manual injection with compact task routing and complete required-rule capsules. Explicit activation tags preserve unknown constraints; required overflow blocks action.
+- Default recall to local indexed full-text retrieval with selective Markdown hydration. Semantic enrichment is explicit; exact matches avoid providers.
+- Split core and generated expert skill entrypoints from detailed references. Include reference edits in context invalidation and expose complete-render contribution accounting.
+- Preserve selected-brain isolation for instruction/context retrieval; unknown selections fail rather than falling back to another brain.
+
 # Changelog
 
 ## Unreleased

@@ -36,4 +36,33 @@ describe('fast-recall', () => {
     expect(res).toHaveLength(1);
     expect(res[0].slug).toBe('test-node-2');
   });
+
+  it('hydrates only selected documents and searches body-only terms locally', async () => {
+    const { buildLocalSearchIndex } = await import('./fast-recall.mjs');
+    const vaultDir = path.join(derivedDir, 'vault');
+    fs.mkdirSync(path.join(vaultDir, 'facts'), { recursive: true });
+    const file = path.join(vaultDir, 'facts', 'alpha.md');
+    fs.writeFileSync(file, '---\ntype: memory\nslug: alpha\ncategory: facts\nstatus: active\n---\nbodyonlyword');
+    buildLocalSearchIndex([{ slug: 'alpha', category: 'facts', status: 'active', body: 'bodyonlyword', _filePath: file }], { derivedDir, vaultDir });
+    expect(buildLocalSearchIndex([{ slug: 'alpha', category: 'facts', status: 'active', body: 'bodyonlyword', _filePath: file }], { derivedDir, vaultDir }).reused).toBe(1);
+    const result = fastSearch('bodyonlyword', { derivedDir, vaultDir, fullText: true });
+    expect(result[0].body).toBe('bodyonlyword');
+    expect(result.stats.hydrated_documents).toBe(1);
+    fs.writeFileSync(file, '---\ntype: memory\nslug: alpha\ncategory: facts\nstatus: active\n---\nchangedword');
+    expect(fastSearch('bodyonlyword', { derivedDir, vaultDir, fullText: true })).toHaveLength(0);
+    fs.rmSync(file);
+    expect(fastSearch('alpha', { derivedDir, vaultDir })).toHaveLength(0);
+  });
+
+  it('rejects symlink escapes and unsafe document locators', async () => {
+    const { buildLocalSearchIndex } = await import('./fast-recall.mjs');
+    const vaultDir = path.join(derivedDir, 'safe-vault');
+    fs.mkdirSync(vaultDir, { recursive: true });
+    const outside = path.join(derivedDir, 'outside.md');
+    fs.writeFileSync(outside, '---\ntype: memory\nslug: escape\n---\nprivate');
+    const link = path.join(vaultDir, 'escape.md');
+    fs.symlinkSync(outside, link);
+    buildLocalSearchIndex([{ slug: 'escape', body: 'private', _filePath: link }], { derivedDir, vaultDir });
+    expect(fastSearch('escape', { derivedDir, vaultDir })).toHaveLength(0);
+  });
 });

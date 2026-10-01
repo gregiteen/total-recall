@@ -1,0 +1,81 @@
+{
+  "schema": 3,
+  "toolchain": "javascript",
+  "repoRoot": "/private/tmp/tr-context-baseline.0l5DCT",
+  "tier": "remote",
+  "ranChecks": [
+    "dist-freshness",
+    "open-source-paths",
+    "shipped-package-paths",
+    "scaffold-brain-state",
+    "ssss-registry",
+    "test"
+  ],
+  "skippedChecks": [],
+  "startedAt": "2026-10-01T00:39:41.154Z",
+  "finishedAt": "2026-10-01T00:42:39.348Z",
+  "durationMs": 178194,
+  "gitHead": null,
+  "sourceFileCount": 714,
+  "checks": [
+    {
+      "id": "dist-freshness",
+      "ok": false,
+      "exitCode": 1,
+      "timedOut": false,
+      "durationMs": 132
+    },
+    {
+      "id": "open-source-paths",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "scanned": 352
+    },
+    {
+      "id": "shipped-package-paths",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "scanned": 169
+    },
+    {
+      "id": "scaffold-brain-state",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 45
+    },
+    {
+      "id": "ssss-registry",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 629
+    },
+    {
+      "id": "test",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 177300
+    }
+  ],
+  "infrastructureFailure": false,
+  "totalFindings": 1,
+  "findings": [
+    {
+      "file": ".agent/skills/code-quality/config.json",
+      "line": 1,
+      "col": 1,
+      "code": "DIST-FRESHNESS-FAIL",
+      "check": "dist-freshness",
+      "severity": "error",
+      "opaque": true,
+      "message": "dist-freshness exited 1 with no parsed findings. Inspect: node .agent/skills/code-quality/core/report.mjs raw dist-freshness",
+      "snippet": "> node scripts/check-dist-freshness.mjs ❌ No dashboard bundle at frontend/dist — the published package would serve nothing.    Build it, then publish:  npm --pr"
+    }
+  ]
+}
