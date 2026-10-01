@@ -2,10 +2,10 @@
   "id": "total-recall-brain@3.33.0",
   "name": "total-recall-brain",
   "version": "3.33.0",
-  "size": 5087829,
-  "unpackedSize": 17384736,
-  "shasum": "d6cd38d6243640c959bd0b88704cf22a014c49c5",
-  "integrity": "sha512-0T0My2f26+I3QpfctZkPucsCZqLabVybBYdPAtayeJg1wB6J47cGbSr8KgxKtTVM0NKigbfxfB9aQK1Ln6APXA==",
+  "size": 3097215,
+  "unpackedSize": 9845299,
+  "shasum": "eb5c209f8884caf75ffb4213a515206255fcb4a3",
+  "integrity": "sha512-yf16AeygYu0B79u4EjJSKL+2X+oniQ47NFIJha1PQyk/dd6NvIPXXigZfshj3F7Yfmy5Wrw4Np1vGr+novhLKQ==",
   "filename": "total-recall-brain-3.33.0.tgz",
   "files": [
     {
@@ -164,23 +164,8 @@
       "mode": 420
     },
     {
-      "path": "frontend/dist/assets/index-BUEZPLim.js",
-      "size": 2511838,
-      "mode": 420
-    },
-    {
       "path": "frontend/dist/assets/index-C7_Xpk27.css",
       "size": 43659,
-      "mode": 420
-    },
-    {
-      "path": "frontend/dist/assets/index-DGMNZi_1.js",
-      "size": 2513286,
-      "mode": 420
-    },
-    {
-      "path": "frontend/dist/assets/index-FOJG4jQh.js",
-      "size": 2514313,
       "mode": 420
     },
     {
@@ -2944,6 +2929,6 @@
       "mode": 420
     }
   ],
-  "entryCount": 587,
+  "entryCount": 584,
   "bundled": []
 }
