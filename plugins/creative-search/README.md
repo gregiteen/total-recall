@@ -4,7 +4,10 @@ SearXNG metasearch plugin. Its manifest registers query, categories, deep, remem
 
 ## Configuration and commands
 
-Provide `SEARXNG_URL` explicitly. The CLI currently has a personal mesh fallback, which violates generic configuration and is scheduled for removal. `TR_CLI` can select a host CLI file; its derived default is unreliable after installation.
+Set `total-recall csearch config set searxngUrl <instance-url>` or override with
+`SEARXNG_URL`. There is no default host. Settings validate and persist in the
+owning SSSS plugin record. The CLI and generator consume that configuration;
+compilation does not probe external engines. `TR_CLI` may override the host CLI.
 
 ```bash
 npx total-recall plugin install creative-search
@@ -17,7 +20,11 @@ npx total-recall csearch engines
 npx total-recall csearch stats
 ```
 
-There is no registered `csearch config` or `csearch-config` command. CLI settings load loose JSON selected by `AGENT_DIR` or a user-config path; UI settings use localStorage. They are disconnected and some controls are ignored. The correction requires one validated SSSS configuration consumed by every surface.
+`csearch config show|set <key> <value>|reset` manages canonical settings. Legacy
+loose JSON is not automatically imported. The overview panel accepts the host's
+canonical `config` property and shows an unset state without a request. The
+standalone settings panel's localStorage controls remain disconnected; host
+settings persistence and a functioning UI mount still require correction.
 
 ## Current verified limitations
 

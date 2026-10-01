@@ -202,6 +202,12 @@ describe('connect — repo skills projected as slash commands', () => {
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   });
 
+  it('cline: projects skills to its documented workspace directory', async () => {
+    seedSkill('decision', 'Make typed decisions');
+    await runConnect(['cline']);
+    expect(fs.lstatSync(path.join(tmpProject, '.cline', 'skills', 'decision')).isSymbolicLink()).toBe(true);
+  });
+
   it('self-heals a stale/broken skill symlink without --force', async () => {
     const dir = seedSkill('push', 'Deploy to production');
     const destDir = path.join(tmpProject, '.claude', 'skills');

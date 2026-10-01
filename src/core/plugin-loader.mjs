@@ -143,6 +143,9 @@ export function validatePluginManifest(manifest) {
         if (!manifest.cli?.handler) {
           errors.push(`Task '${t.intent}' requires 'cli.handler' to run its command`);
         }
+        if (t.placement !== undefined && !['per-node', 'selected-node'].includes(t.placement)) {
+          errors.push(`Task '${t.intent}' has unsupported placement '${t.placement}'`);
+        }
       }
     }
   }

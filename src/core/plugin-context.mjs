@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest, resolveProjectRoot } from './plugin-loader.mjs';
+import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest, resolveProjectRoot, PACKAGE_ROOT } from './plugin-loader.mjs';
 
 export { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest };
 
@@ -38,6 +38,8 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
           const fn = mod.generateContext || mod.default;
           if (typeof fn === 'function') {
             const generated = await fn({
+              plugin,
+              packageRoot: PACKAGE_ROOT,
               projectRoot: resolvedProjectRoot,
               vaultDir,
               nodes,

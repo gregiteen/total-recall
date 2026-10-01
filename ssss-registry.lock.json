@@ -19,16 +19,43 @@
         "slug",
         "hash",
         "size_bytes",
-        "description"
+        "description",
+        "storage_uri",
+        "resource_ref",
+        "x_portability"
       ],
+      "required_when": {
+        "encoding==none": [
+          "storage_uri",
+          "x_portability"
+        ]
+      },
       "enums": {
         "encoding": [
           "base64",
           "utf-8",
           "none"
+        ],
+        "x_portability": [
+          "resource_bound",
+          "tenant_private"
         ]
       },
-      "notes": "A text-encoded asset payload: source code, vector graphics, or base64-encoded binary content.",
+      "references": {
+        "resource_ref": {
+          "allowed_types": [
+            "resource"
+          ]
+        }
+      },
+      "resource": {
+        "kind": "storage",
+        "binds": [
+          "storage_uri"
+        ],
+        "provision_relation": "stores_asset"
+      },
+      "notes": "A text-encoded asset payload: source code, vector graphics, or base64-encoded binary content. With `encoding: none` the body is empty and the asset is a pointer to a large file: `storage_uri` locates the object, `resource_ref` optionally names the `resource` document (bucket, store) that holds it, and `hash`/`size_bytes` pin its content. A pointer MUST be marked `x_portability: resource_bound` (or `tenant_private`), so template/sale exports replace `storage_uri` with `REQUIREMENT` instead of shipping the seller's storage location.",
       "spec_ref": "§5.4 asset",
       "type": "asset",
       "qualified_type": "ssss:asset",
@@ -560,5 +587,5 @@
       "registry": "core"
     }
   ],
-  "integrity": "sha256:04dcb3783ff6927fed81e5f7314d71c8f1c8cf160b8b71504a08522599b3c62d"
+  "integrity": "sha256:c771fdbe5983fc8ef5d0b936662b4fa0094a365b94caddf4851ead0346c291fe"
 }
