@@ -1,5 +1,9 @@
 # CONTEXT_OPTIMIZATION — Architecture
 
+A-030 separates budget admission diagnostics from admitted instruction capsules at the CLI output boundary. The compiler still preserves the complete required set; only a failed default CLI response omits bodies because the caller must stop. Successful output and API contracts remain complete.
+
+A-029: plugin-owned metadata routing filters authorized roots and repository identity before selection. An explicitly configured existing client export supplies raw typed answers. Choice proposes a label; Noul checks its description. Complete validated answers and configured gates are required. Task/catalog/config/repository fingerprints govern the canonical last-result cache. The core capsule remains unchanged and authoritative; this optional CLI does not automatically alter IDE context.
+
 Deployment verification (2026-10-01): the selected daemon uses a persistent installed npm 3.34.1 runtime independent of authored source checkouts. Node selection, explicit authorized roots and optimizer reports remain canonical plugin-record state; release replacement preserves them. A real earlier daemon slot and the restored daily 03:00 schedule are verified separately from package tests. Published-runtime report persistence and cache are verified against actual SSSS 0.10.3. File-size estimates and routing capsule estimates remain separate from native fresh-session total context. See `evidence/release-3.34.1/` for source/package/registry identity and deployment evidence.
 
 A-028 correction preserves the `@ssss/cli` import identity through an exact published npm alias. Registry integrity and actual module resolution are part of upgrade verification; an existing Git resolution must not masquerade as the repaired dependency. This changes dependency distribution, not the SSSS operation or event format.

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { validateDecisionConfig, loadDecisionClient, routeMetadata } from './route.mjs';
 
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 
@@ -23,7 +24,7 @@ export function validateConfig(input) {
     if (!physical.startsWith(repoRoot + path.sep)) throw new Error('Skill root must belong to its repository');
     return { path: physical, scope: 'repository', repoRoot };
   });
-  return { node: input.node.trim(), autoApply: input.autoApply, maxTokens: input.maxTokens, roots };
+  return { node: input.node.trim(), autoApply: input.autoApply, maxTokens: input.maxTokens, roots, ...(input.decision ? { decision: validateDecisionConfig(input.decision) } : {}) };
 }
 
 // Include supporting references: a changed requirement invalidates the cached audit.
@@ -92,10 +93,28 @@ export async function run(argv) {
       config: record?.optimizer_config || null, lastReport: record?.optimizer_report || null }));
     return;
   }
-  if (!['audit', 'optimize'].includes(command)) throw new Error('Unknown skill-manager command');
+  if (!['audit', 'optimize', 'route'].includes(command)) throw new Error('Unknown skill-manager command');
   if (!record?.optimizer_config) throw new Error('Configure authorized roots and a selected node first');
   if (!taskRunsOnNode({ command: 'optimize', placement: 'selected-node' }, record, mesh.getMeshSelf())) throw new Error('This is not the selected mesh node');
   const config = validateConfig(record.optimizer_config);
+  if (command === 'route') {
+    if (argv.length !== 5 && argv.length !== 7 || argv.length === 7 && argv[5] !== '--repo') throw Error('Usage: skill-manager route <task> [--repo <repository on selected node>]');
+    const repoRoot = argv[6] || process.cwd();
+    const client = config.decision ? await loadDecisionClient(config.decision, getPlugin(config.decision.plugin)) : null;
+    let request;
+    if (client) {
+      const [{ brainDir }, { getSecret }] = await Promise.all([load('config.mjs'), load('secrets-store.mjs')]);
+      const secret = await getSecret(brainDir, config.decision.secretKey).catch(() => ({ found: false }));
+      if (secret.found) {
+        request = options => client({ ...options, apiKey: secret.value });
+        request.fingerprint = client.fingerprint;
+      }
+    }
+    const result = await routeMetadata(argv[4], config, optimizer, { repoRoot, request, previous: record.optimizer_route });
+    if (!result.cached) await store.patchPluginRecord(plugin, { optimizer_route: result });
+    console.log(JSON.stringify(result));
+    return;
+  }
   const report = await inspect(config, record.optimizer_report, optimizer, { apply: command === 'optimize' && config.autoApply });
   await store.patchPluginRecord(plugin, { optimizer_report: report });
   console.log(JSON.stringify(report));

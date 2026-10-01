@@ -1,5 +1,9 @@
 # CONTEXT_OPTIMIZATION — Product Requirements
 
+A-030 acceptance: a failed CLI budget admission emits no rule bodies and exits 2 with an explicit required budget. Raising that budget must return the full ready capsule. Required instructions remain intact in the assembler and API. Keep debug inspection explicit. Verify with synthetic long required rules and separate recorded fresh-session usage; no claim that smaller failure output fixes native base/browser context.
+
+A-029 acceptance: optional skill-manager route emits at most one advisory skill name through the existing installed decision client. Explicit config selects model, endpoint, secret key, gates and request budget. Missing configuration/invalid answers preserve deterministic navigation. No skill bodies, paths or canonical rules go outbound; required instructions remain authoritative. A requested repository cannot select another repository's skills. Keep one decision skill and distinguish synthetic checks from live accuracy.
+
 Acceptance update (2026-10-01): published package 3.34.0, consumer/core propagation and selected daemon deployment have release evidence. The extension remains In Progress until its remaining startup and integration acceptance items are resolved. The reported fresh 78k Dabber session is not considered fixed from reduced Markdown sizes or another IDE's invocation metrics.
 
 The 3.34.1 correction subsequently verifies all actual consumer/global SSSS versions, retained-lock upgrade, native runtime and persisted optimizer cache. The fresh total-context and optional decision advice requirements remain open.

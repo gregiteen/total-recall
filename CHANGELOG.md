@@ -1,3 +1,12 @@
+## 3.35.0 — 2026-10-01
+
+- Emit a compact CLI budget-failure diagnostic instead of repeatedly loading
+  the entire unadmitted rule set. Successful retries still return all required
+  instructions; API and explicit debug coverage remain unchanged.
+- Add optional bounded metadata navigation to skill-manager through the
+  existing configured decision client, with scope checks, typed validation,
+  deterministic fallback and a short-lived content/config cache.
+
 ## 3.34.1 — 2026-10-01
 
 - Pin the repaired SSSS 0.10.3 through its exact npm registry alias. Existing

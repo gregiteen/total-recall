@@ -1,7 +1,7 @@
 {
   "id": "skill-manager",
   "name": "Skill Manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Conservative skill optimization on an explicitly selected daemon node and authorized roots.",
   "license": "MIT",
   "use_cases": ["skills", "automation"],
@@ -12,7 +12,8 @@
       { "name": "configure", "description": "Select a mesh node and authorized skill roots from a JSON configuration" },
       { "name": "status", "description": "Show selection, configuration and last report" },
       { "name": "audit", "description": "Inspect changed skill packages without applying changes" },
-      { "name": "optimize", "description": "Run configured conservative optimization on the selected node" }
+      { "name": "optimize", "description": "Run configured conservative optimization on the selected node" },
+      { "name": "route", "description": "Suggest at most one skill using bounded metadata and optional existing decision assistance" }
     ]
   },
   "tasks": [{

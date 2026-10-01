@@ -1,0 +1,75 @@
+{
+  "version": "3.35.0",
+  "stages": [
+    {
+      "command": "npm",
+      "args": [
+        "pack",
+        "--json",
+        "--ignore-scripts",
+        "--pack-destination",
+        "/tmp"
+      ],
+      "exit": 0
+    },
+    {
+      "command": "npm",
+      "args": [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "/tmp/total-recall-brain-3.35.0.tgz"
+      ],
+      "exit": 0
+    },
+    {
+      "command": "npm",
+      "args": [
+        "rebuild",
+        "better-sqlite3"
+      ],
+      "exit": 0
+    },
+    {
+      "command": "/opt/homebrew/Cellar/node/25.9.0_1/bin/node",
+      "args": [
+        "/var/folders/hm/yzplvjvd3dq1_2wlzkng83k40000gn/T/tr-package-3350-2xDdzM/node_modules/total-recall-brain/bin/total-recall.mjs",
+        "init",
+        "--project",
+        "--yes"
+      ],
+      "exit": 0
+    },
+    {
+      "command": "/opt/homebrew/Cellar/node/25.9.0_1/bin/node",
+      "args": [
+        "/var/folders/hm/yzplvjvd3dq1_2wlzkng83k40000gn/T/tr-package-3350-2xDdzM/node_modules/total-recall-brain/bin/total-recall.mjs",
+        "connect",
+        "codex"
+      ],
+      "exit": 0
+    },
+    {
+      "command": "/opt/homebrew/Cellar/node/25.9.0_1/bin/node",
+      "args": [
+        "/var/folders/hm/yzplvjvd3dq1_2wlzkng83k40000gn/T/tr-package-3350-2xDdzM/node_modules/total-recall-brain/bin/total-recall.mjs",
+        "context",
+        "scaffold startup",
+        "--action",
+        "read"
+      ],
+      "exit": 0
+    }
+  ],
+  "packageFiles": 634,
+  "shasum": "48fa62fdd57411c7a96c77308458f1fa0f319da6",
+  "ssssVersion": "0.10.3",
+  "ready": true,
+  "decisionProjection": true,
+  "native": {
+    "status": "healthy",
+    "version": "3.35.0"
+  },
+  "coreBytes": 2379
+}

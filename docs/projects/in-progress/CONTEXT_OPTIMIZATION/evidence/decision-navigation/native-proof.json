@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "liveProvider": false,
+  "nativeClientImport": true,
+  "installedCommand": true,
+  "canonicalReport": true,
+  "cache": true,
+  "reusedExistingClient": true,
+  "calls": 2,
+  "selected": "mail"
+}

@@ -1,0 +1,150 @@
+{
+  "threadTitle": "Start Dabber CRM session",
+  "sessionStartedAt": "2026-10-01T20:04:55.214Z",
+  "originator": "Codex Desktop",
+  "model": "gpt-6.1-sol",
+  "measurement": "recorded last_token_usage input_tokens per request, not aggregate billed input",
+  "initialInputTokens": 34736,
+  "finalStartupInputTokens": 88526,
+  "capsuleEstimatedTokens": 11694,
+  "capsuleReads": 3,
+  "browserBootstrapOutputChars": 56872,
+  "usage": [
+    {
+      "timestamp": "2026-10-01T20:05:22.701Z",
+      "input_tokens": 34736,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 153,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 34889
+    },
+    {
+      "timestamp": "2026-10-01T20:05:31.204Z",
+      "input_tokens": 37870,
+      "cached_input_tokens": 34560,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 155,
+      "reasoning_output_tokens": 13,
+      "total_tokens": 38025
+    },
+    {
+      "timestamp": "2026-10-01T20:05:37.906Z",
+      "input_tokens": 47651,
+      "cached_input_tokens": 37632,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 81,
+      "reasoning_output_tokens": 17,
+      "total_tokens": 47732
+    },
+    {
+      "timestamp": "2026-10-01T20:05:45.047Z",
+      "input_tokens": 47852,
+      "cached_input_tokens": 47488,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 39,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 47891
+    },
+    {
+      "timestamp": "2026-10-01T20:05:53.923Z",
+      "input_tokens": 57859,
+      "cached_input_tokens": 47616,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 148,
+      "reasoning_output_tokens": 38,
+      "total_tokens": 58007
+    },
+    {
+      "timestamp": "2026-10-01T20:05:59.156Z",
+      "input_tokens": 58129,
+      "cached_input_tokens": 57728,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 68,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 58197
+    },
+    {
+      "timestamp": "2026-10-01T20:06:02.382Z",
+      "input_tokens": 62799,
+      "cached_input_tokens": 57984,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 21,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 62820
+    },
+    {
+      "timestamp": "2026-10-01T20:06:08.430Z",
+      "input_tokens": 69464,
+      "cached_input_tokens": 62592,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 41,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 69505
+    },
+    {
+      "timestamp": "2026-10-01T20:06:23.746Z",
+      "input_tokens": 69563,
+      "cached_input_tokens": 69248,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 61,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 69624
+    },
+    {
+      "timestamp": "2026-10-01T20:06:32.861Z",
+      "input_tokens": 81618,
+      "cached_input_tokens": 69376,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 67,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 81685
+    },
+    {
+      "timestamp": "2026-10-01T20:06:39.840Z",
+      "input_tokens": 81991,
+      "cached_input_tokens": 81408,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 73,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 82064
+    },
+    {
+      "timestamp": "2026-10-01T20:06:49.203Z",
+      "input_tokens": 83741,
+      "cached_input_tokens": 81792,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 53,
+      "reasoning_output_tokens": 12,
+      "total_tokens": 83794
+    },
+    {
+      "timestamp": "2026-10-01T20:06:54.766Z",
+      "input_tokens": 83850,
+      "cached_input_tokens": 83584,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 102,
+      "reasoning_output_tokens": 8,
+      "total_tokens": 83952
+    },
+    {
+      "timestamp": "2026-10-01T20:07:04.807Z",
+      "input_tokens": 86128,
+      "cached_input_tokens": 83712,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 144,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 86272
+    },
+    {
+      "timestamp": "2026-10-01T20:07:11.194Z",
+      "input_tokens": 88526,
+      "cached_input_tokens": 85888,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 105,
+      "reasoning_output_tokens": 0,
+      "total_tokens": 88631
+    }
+  ],
+  "conclusion": "Fresh startup still bloated; complete required capsule reprinted after budget failure and retried twice. Base desktop context and browser/tool documentation also contribute. No proof of post-fix token reduction."
+}

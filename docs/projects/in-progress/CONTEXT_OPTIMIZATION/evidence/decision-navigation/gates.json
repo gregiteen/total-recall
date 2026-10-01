@@ -1,0 +1,69 @@
+{
+  "schema": 3,
+  "toolchain": "javascript",
+  "repoRoot": "/private/tmp/tr-skill-brevity.KHhROg",
+  "tier": "remote",
+  "ranChecks": [
+    "dist-freshness",
+    "open-source-paths",
+    "shipped-package-paths",
+    "scaffold-brain-state",
+    "ssss-registry",
+    "test"
+  ],
+  "skippedChecks": [],
+  "startedAt": "2026-10-01T20:13:48.130Z",
+  "finishedAt": "2026-10-01T20:16:50.246Z",
+  "durationMs": 182116,
+  "gitHead": null,
+  "sourceFileCount": 734,
+  "checks": [
+    {
+      "id": "dist-freshness",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 142
+    },
+    {
+      "id": "open-source-paths",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "scanned": 358
+    },
+    {
+      "id": "shipped-package-paths",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "scanned": 214
+    },
+    {
+      "id": "scaffold-brain-state",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46
+    },
+    {
+      "id": "ssss-registry",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 342
+    },
+    {
+      "id": "test",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 181505
+    }
+  ],
+  "infrastructureFailure": false,
+  "totalFindings": 0,
+  "findings": []
+}
