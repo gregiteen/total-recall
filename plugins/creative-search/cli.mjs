@@ -6,11 +6,9 @@
 
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
+import { loadConfig, run as configure } from './config.mjs';
 
-const SEARXNG_URL = process.env.SEARXNG_URL || 'http://100.64.0.1:8888';
-const TR_CLI = process.env.TR_CLI || new URL('../../bin/total-recall.mjs', import.meta.url).pathname;
+const TR_CLI = process.env.TR_CLI || (process.env.TR_PACKAGE_ROOT && path.join(process.env.TR_PACKAGE_ROOT, 'bin/total-recall.mjs'));
 
 // Stop words for keyword extraction
 const STOP_WORDS = new Set([
@@ -25,31 +23,25 @@ const STOP_WORDS = new Set([
   'more','most','some','any','new','using','based'
 ]);
 
-/** Load config; returns defaults if file not found */
-function loadConfig() {
-  const CONFIG_PATH = process.env.AGENT_DIR
-    ? path.join(process.env.AGENT_DIR, 'skills', 'total-recall', 'plugins', 'creative-search', 'config.json')
-    : path.join(os.homedir(), '.config', 'total-recall', 'creative-search', 'config.json');
-  try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')); }
-  catch { return {}; }
-}
-
 /** Search SearXNG with query + optional category */
-async function searchSearXNG(query, { categories, lang, limit } = {}) {
+export async function searchSearXNG(query, { categories, lang, limit, config } = {}) {
+  const cfg = config || await loadConfig();
+  if (!cfg.searxngUrl) throw new Error('Configure your instance with csearch config set searxngUrl <URL>, or SEARXNG_URL');
   const params = new URLSearchParams({ q: query, format: 'json' });
   if (lang) params.set('language', lang);
   else params.set('language', 'en');
   if (categories) {
     // Categories can be a comma-separated string or an array
     const cats = Array.isArray(categories) ? categories : categories.split(',');
-    for (const c of cats) params.append('categories', c.trim());
+    params.set('categories', cats.map(c => c.trim()).join(','));
   }
   // Limit results on SearXNG side if possible (SearXNG doesn't support this parameter directly)
-  const url = `${SEARXNG_URL}/search?${params.toString()}`;
-  const res = await fetch(url);
+  const url = `${cfg.searxngUrl}/search?${params.toString()}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(cfg.timeoutMs) });
   if (!res.ok) throw new Error(`SearXNG returned HTTP ${res.status}`);
   const data = await res.json();
-  const results = (data.results || []).slice(0, limit || 15);
+  if (!Array.isArray(data.results)) throw new Error('SearXNG JSON results missing; enable JSON output on the instance');
+  const results = data.results.slice(0, limit || cfg.maxResults);
   return { results, unresponsive: data.unresponsive_engines || [] };
 }
 
@@ -104,10 +96,12 @@ export async function run(argv) {
   const args = argv.slice(4);
 
   switch (subcommand) {
+    case 'config':
+      return configure([argv[0], argv[1], argv[2], ...argv.slice(4)]);
 
     // ── query ──
     case 'query': {
-      const cfg = loadConfig();
+      const cfg = await loadConfig();
       let categories = (cfg.categories || ['general']).join(',');
 
       // Extract --categories flag from args (can appear anywhere)
@@ -277,7 +271,7 @@ export async function run(argv) {
       const query = args.join(' ');
       if (!query) { console.error('Usage: total-recall csearch remember <search terms>'); process.exitCode = 1; return; }
 
-      const cfg = loadConfig();
+      const cfg = await loadConfig();
       const categories = (cfg.categories || ['general', 'science']).join(',');
 
       const { results } = await searchSearXNG(query, {
@@ -414,8 +408,8 @@ export async function run(argv) {
       console.log('  health                    Check SearXNG health');
       console.log('  engines                   List active engines across categories');
       console.log('\nEnvironment:');
-      console.log('  SEARXNG_URL  (default: http://100.64.0.1:8888)');
-      console.log('\nConfig: total-recall csearch-config show');
+      console.log('  SEARXNG_URL  (optional instance URL override; no default host)');
+      console.log('\nConfig: total-recall csearch config show|set <key> <value>|reset');
       return;
   }
 }

@@ -236,7 +236,6 @@ const ENGINE_GROUPS = {
   'Multimedia': ['flickr', 'unsplash'],
 };
 
-const STORAGE_KEY = 'csearch-settings';
 
 export class CSearchMain extends HTMLElement {
   constructor() {
@@ -256,29 +255,33 @@ export class CSearchMain extends HTMLElement {
   }
 
   _loadSettings() {
-    let categories = ['general', 'science'];
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.categories && parsed.categories.length) categories = parsed.categories;
-      }
-    } catch {}
+    const categories = this.config.categories || ['general', 'science'];
     const container = this.shadowRoot.getElementById('categoriesList');
     container.innerHTML = categories.map(c => `<span class="tag">${c}</span>`).join('');
   }
 
+  set config(value) {
+    this._config = value || {};
+    if (this.isConnected) { this._loadSettings(); this._checkHealth(); }
+  }
+
+  get config() { return this._config || {}; }
+
   async _checkHealth() {
     const indicator = this.shadowRoot.getElementById('healthIndicator');
+    const base = this.config.searxngUrl;
+    if (!base) { indicator.textContent = 'Not configured'; this.shadowRoot.getElementById('engineCount').textContent = '—'; return; }
     try {
-      const res = await fetch('http://100.64.0.1:8888/search?q=health&format=json&categories=general&engines=duckduckgo', {
+      const url = new URL(base);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid instance URL');
+      const res = await fetch(`${url.href.replace(/\/$/, '')}/search?q=health&format=json&categories=general`, {
         signal: AbortSignal.timeout(5000),
       });
       if (res.ok) {
         const data = await res.json();
-        const engineCount = data.engines ? Object.keys(data.engines).length : 0;
+        const engineCount = new Set((data.results || []).flatMap(result => result.engines || (result.engine ? [result.engine] : []))).size;
         indicator.textContent = engineCount > 0 ? `${engineCount} engines` : '✓ Online';
-        this.shadowRoot.getElementById('engineCount').textContent = engineCount || '25+';
+        this.shadowRoot.getElementById('engineCount').textContent = engineCount || '—';
       } else {
         indicator.textContent = '⚠ Error';
       }

@@ -139,3 +139,19 @@ Cross-project owner and acceptance register: [PLUGIN_IMPLEMENTATION_CORRECTIONS]
 - [ ] **6 — Verify and close:** run exact-tree full suite/conformance/gates on Mac mini as bounded background jobs; install from pinned artifacts in a clean brain; run real UI/CLI/independent app walkthroughs; retain hashes, commands and results. Live provider proof is separate from synthetic tests and HTTP reachability. No readiness checkbox closes without those records.
 
 Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.
+
+## ⏳ Skill manager extraction — gated on current verification
+
+- [ ] **SPLIT-SKILL-001:** Attach CONTEXT_OPTIMIZATION evidence for optimizer, clean scaffolding, scope/collisions, IDE invocation and periodic operation before extraction.
+- [ ] Refresh import/consumer audit and define the minimal generic core host boundary; preserve existing CLI compatibility.
+- [ ] **SPLIT-SKILL-002:** Reuse schema-validated generic configs and repo-owned overlays; verify public packages exclude personal instances and private memory.
+- [ ] **SPLIT-SKILL-003:** Reuse the existing decision capability for optional configurable Jev advice; preserve deterministic fallback and required rules.
+- [ ] Create and extract the standalone skill manager plugin after prerequisites pass.
+- [ ] Verify independent clean install/upgrade/disable/offline/rollback, ownership and full remote gates before removing capability code from core.
+
+## Action Log
+
+| Timestamp (UTC) | Agent | Action / files or commands | Result | Evidence |
+|---|---|---|---|---|
+
+| 2026-10-01T14:36:36.475161+00:00 | Codex | Read existing split docs and skill/config/decision source; add skill manager candidate across five project docs | Extraction remains planned until current context optimization is verified; generic public config and existing decision ownership required. Earlier aggregate read exceeded output budget; bounded source/reference reads followed. No extraction or runtime test performed | SPLIT-SKILL-001–003; CONTEXT_OPTIMIZATION tracker; src/core/skill-config.mjs |

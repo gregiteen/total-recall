@@ -3,8 +3,8 @@
  *
  * A manifest task `{ intent, schedule: "<5-field cron>", command }` runs the
  * plugin's own CLI subcommand on that schedule, out of process. Tasks are per
- * node: a plugin installed on this machine runs here whether or not this node
- * is the mesh leader.
+ * node by default, regardless of leadership. Tasks with selected-node placement
+ * require an explicit matching node in plugin_record.task_nodes[command].
  *
  * The last minute-slot each command ran in is kept in the plugin_record, so a
  * restart neither repeats a slot nor loses one: when the daemon was busy or
@@ -18,6 +18,7 @@ import { runPluginCommand } from './plugin-runner.mjs';
 import { appendVfsEvent } from './ssss-operation-service.mjs';
 import { vaultForPluginsDir } from './plugin-loader.mjs';
 import { logger } from './logger.mjs';
+import { getMeshSelf, meshNodeKey } from './mesh.mjs';
 
 const TASK_TIMEOUT_MS = 60_000;
 const MAX_CATCHUP_MINUTES = 24 * 60;
@@ -78,6 +79,14 @@ export function cronMatches(cron, date) {
 
 const pad = (n) => String(n).padStart(2, '0');
 
+/** A selected-node task stays idle until this node's plugin record selects it. */
+export function taskRunsOnNode(task, record, self) {
+  if (task.placement !== 'selected-node') return true;
+  const selected = String(record?.task_nodes?.[task.command] || '').trim();
+  if (!selected || !self?.hostname) return false;
+  return selected === self.ip || meshNodeKey(selected) === meshNodeKey(self.hostname);
+}
+
 /** Local minute-slot key, e.g. 2026-09-22T14:05. */
 export function minuteSlot(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -106,11 +115,12 @@ export function latestDueSlot(cron, lastSlot, now = new Date()) {
 /**
  * Run every task that is due. Tasks run sequentially so a slow plugin cannot
  * multiply into concurrent processes on a constrained host.
- * @param {{ projectRoot?: string, now?: Date, runner?: Function }} [options]
+ * @param {{ projectRoot?: string, now?: Date, runner?: Function, selfNode?: object }} [options]
  * @returns {Promise<Array<{ plugin: string, command: string, slot: string, ok: boolean, exitCode: number|null }>>}
  */
 export async function runDuePluginTasks(options = {}) {
   const { projectRoot = process.cwd(), now = new Date(), runner = runPluginCommand } = options;
+  const selfNode = options.selfNode === undefined ? getMeshSelf() : options.selfNode;
   const results = [];
 
   for (const plugin of discoverPlugins(projectRoot)) {
@@ -122,6 +132,7 @@ export async function runDuePluginTasks(options = {}) {
     let changed = false;
 
     for (const task of plugin.manifest.tasks) {
+      if (!taskRunsOnNode(task, record, selfNode)) continue;
       let cron;
       try {
         cron = parseCron(task.schedule);

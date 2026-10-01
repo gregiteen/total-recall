@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Development Plan
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
@@ -67,3 +67,48 @@ Default task routing returns required instructions only with compact output. Kno
 ## Authorized 3.33.1 release — A-016
 
 Update only the compatible ip-address lock resolution, verify the exact package/source snapshot on Mac mini with zero production audit findings, native boot and clean scaffold, then commit/tag/publish, verify registry and registered installs, refresh the managed runtime and archive after cleanup.
+
+
+## Skill optimizer extension (A-017–A-019)
+
+Provide `skill optimize` with explicit package/root scope, default dry-run, lossless reference extraction, content-hash concurrency checks, retained source, package lock and bounded output. Compact authored routers carry essential constraints; automatic optimization retains normative paragraphs and flags ambiguous/oversized candidates for review. Preserve repo ownership and managed blocks. Include task-ranked reference navigation as advice only. Ship updated shared scaffold methods, propagate identical shared copies and schedule a daily Total Recall daemon task. Total fresh-start token count remains an acceptance item independent of package estimates.
+
+
+## Jev and IDE acceptance (A-020–A-022)
+
+Use current primary docs; expose one portable `decision` skill with Jev guidance in its references. Implement optional typed decision assistance over bounded skill metadata; enforce scope/required rules in code and retain deterministic failure fallback. Verify real adapter formats and supported native invocation syntax, preserve command collisions and repo-specific content, and include public scaffolds. Do not claim interactive IDE/provider readiness solely from generated files or mocked tests.
+
+## Generic scaffold configuration and later extraction
+
+Public scaffolded skills use generic schema/default configuration where possible; resolve repository paths, runtime targets and decision providers from configuration or flags. Keep repository-specific instances in local config/overlays and exclude personal hosts, credentials, accounts and private injected memory from shipped artifacts. Prefer the existing decision capability as the public skill name, with Jev as a configurable implementation.
+
+Verify current behavior in this project. Subsequent skill manager extraction is explicitly tracked in [TR_CORE_PLUGIN_SPLIT](../../planned/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) and waits for functional evidence; no migration is performed by this addendum.
+
+## A-023 execution order
+
+1. Complete the official-doc/local-adapter matrix in the audit, correct the historical automation claim, and run a current-tree Mac mini baseline plus `project-management/check-audit.mjs` before any more code edits. The earlier provisional IDE edits remain explicitly disclosed.
+2. Inspect plugin manifest validation, daemon discovery, scheduler persistence and current optimizer CLI. Add a small daemon-owned plugin task using generic configuration and conservative automatic application. Require explicit authorized roots and do not traverse foreign repositories by default. Add a validated, shared node selector that each daemon checks, with a fail-closed unset state. Add synthetic selected/non-selected due-slot, idempotence, invalid config, collision and report tests before live wiring. Choose the Mac mini through mesh-resolved deployment configuration; its current LaunchAgent targets old `dream.mjs` and exits on a missing dependency, so repair/restart it before claiming daemon ownership. Verify the laptop does not run the optimizer.
+3. Reconcile IDE projection tests with the documented host-specific invocation syntax; test scaffold package paths and generic configuration. Verify a native `/decision` on a supported installed host. Label remaining hosts unverified.
+4. Add optional Jev suggestion only through `decision`, parse the documented typed fields, enforce deterministic scope and mandatory rules, and fall back without provider reliance. Keep the foreign plugin repository untouched.
+5. Capture a fresh Dabber startup context measurement, then build, run the full Mac mini suite and quality gates on an exact source snapshot, verify daemon run/report and runtime startup, and only then proceed with the already-authorized release/version/consumer update. Reconcile the action log and cleanup before archival.
+6. Remove the A-025 private SearXNG default from the shipped integration. Reuse one validated setting across its CLI, compiled generator and browser UI; test unconfigured/no-network and configured URL behavior. Preserve this installation's URL only in private instance configuration. Re-run the shipped-file literal audit before release.
+7. Add the A-026 OpenAI Decisions preview to the existing single `decision` skill's integration reference and its tracked scaffold copy. Keep Jev and OpenAI contracts distinct and provider selection configurable. Do not add an OpenAI API call until public schema, access and runtime tests are available.
+
+Current implementation passes selected/unset/other-node synthetic checks and an
+installed CLI walkthrough on the mini. Next: freeze exact source, run full
+sanctioned gates, deploy the verified runtime without overwriting the mini's
+authored skill overlays, repair its old LaunchAgent command, configure the
+selected plugin and observe one actual daemon slot. Complete native invocation,
+optional decision-advice, fresh startup measurement and release/consumer
+requirements before closing the project.
+
+A-027 interrupts deployment: baseline the SSSS dependency on the mini, add
+synthetic multi-chunk/UTF-8/cursor/duplicate/corrupt-log cases, implement bounded
+index/replay reads, run full conformance, bump the owning package and consume
+the verified dependency. Then retry the actual plugin installation and daemon
+configuration before releasing Total Recall. This is a directly blocking
+dependency repair within this project; preserve other repo-local edits.
+
+Actual installed interactive commands also require the existing runner's host
+package/plugin context. Align CLI dispatch and verify the real executable in an
+isolated installed-plugin fixture, then repeat the mini configuration command.

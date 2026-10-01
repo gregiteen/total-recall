@@ -62,6 +62,7 @@ function printHelp() {
     remove <name>         Delete skill from brain skills dir (alias: rm)
     publish <name>        Publish and share your skill to the skills.sh open registry
     generate-expert       Auto-generate repo-expert SKILL.md from codebase analysis
+    optimize             Audit/split oversized skills; explicit --skill or --root required
 
   Registry / deploy / multi-repo sync (TR_CORE_FOCUS):
     register <path|name>  Add skill to global skills-registry (from path or local name)
@@ -133,6 +134,12 @@ function parseFlagValue(args, flag) {
 
 export default async function skillCli(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
+  if (remainingArgs[0] === 'optimize') {
+    const { runSkillOptimize } = await import('./skill-optimize.mjs');
+    try { process.exitCode = runSkillOptimize(remainingArgs.slice(1)); }
+    catch (error) { console.error(error.message); process.exitCode = 1; }
+    return;
+  }
   if (remainingArgs[0] === 'config') {
     // Repo-layer config is per repository; it needs no brain resolution.
     const repoAt = remainingArgs.indexOf('--repo');

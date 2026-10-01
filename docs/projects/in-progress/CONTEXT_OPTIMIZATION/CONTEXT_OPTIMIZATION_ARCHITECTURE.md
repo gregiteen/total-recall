@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Architecture
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
@@ -116,3 +116,49 @@ and denied access are tested separately from native authenticated API delivery.
 ## Reopened correction — A-014/A-015
 
 Default task routing returns required instructions only with compact output. Knowledge and diagnostic inventories are explicit opt-ins. Entire serialized responses determine readiness. A repository-local validated decision records manually curated action triggers and concise directives bound to canonical source hashes; unknown, malformed or stale entries retain original required rules. Canonical bodies remain retrievable. Verify actual local capsule sizes and conservative fallback, then run focused/full sanctioned checks before completion.
+
+
+## Skill optimizer extension (A-017–A-019)
+
+Provide `skill optimize` with explicit package/root scope, default dry-run, lossless reference extraction, content-hash concurrency checks, retained source, package lock and bounded output. Compact authored routers carry essential constraints; automatic optimization retains normative paragraphs and flags ambiguous/oversized candidates for review. Preserve repo ownership and managed blocks. Include task-ranked reference navigation as advice only. Ship updated shared scaffold methods and propagate identical shared copies. Schedule periodic checks through the existing daemon plugin-task path, with explicit root configuration and a VFS `plugin.task_run` event; retain bounded output and do not run an app automation. Total fresh-start token count remains an acceptance item independent of package estimates.
+
+
+## Jev and IDE acceptance (A-020–A-022)
+
+Use current primary docs; expose one portable `decision` skill with Jev guidance in its references. Implement optional typed decision assistance over bounded skill metadata; enforce scope/required rules in code and retain deterministic failure fallback. Verify real adapter formats and supported native invocation syntax, preserve command collisions and repo-specific content, and include public scaffolds. Gemini CLI and Antigravity share workspace `.agents/skills` but use their documented global paths and command behavior. Do not claim interactive IDE/provider readiness solely from generated files or mocked tests.
+
+## Generic scaffold configuration and later extraction
+
+Public scaffolded skills use generic schema/default configuration where possible; resolve repository paths, runtime targets and decision providers from configuration or flags. Keep repository-specific instances in local config/overlays and exclude personal hosts, credentials, accounts and private injected memory from shipped artifacts. Prefer the existing decision capability as the public skill name, with Jev as a configurable implementation.
+
+Verify current behavior in this project. Subsequent skill manager extraction is explicitly tracked in [TR_CORE_PLUGIN_SPLIT](../../planned/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) and waits for functional evidence; no migration is performed by this addendum.
+
+## A-023 researched integration boundary
+
+The existing daemon calls `startPluginTaskScheduler()` and executes manifest `tasks` on each node. A thin skill-optimizer plugin should own its daily manifest command and invoke the generic optimizer over explicitly configured roots. A shared, validated node selector in instance configuration determines which daemon may execute it; every node checks the selector, and an unset or unresolved selector fails closed. Resolve device identity through the existing mesh/device layer, never a shipped personal hostname. The plugin scheduler retains last-run slots in the plugin record and records VFS events; the optimizer's report must identify reviewed/applied/skipped packages without raw private skill bodies. First sighting does not immediately run a job. Test a due slot on selected and non-selected nodes, then observe one real daemon slot before declaring the schedule live.
+
+Implemented contract: `plugins/skill-manager` declares daily 03:00 local-time
+`optimize` with `placement: selected-node`. The owning SSSS plugin record stores
+`task_nodes.optimize`, validated `optimizer_config` and `optimizer_report`.
+Configuration happens on the selected node through its mesh CLI, so configured
+paths belong to that node. Other nodes fail closed unless their local/synced
+record names their own mesh identity. Roots explicitly identify global ownership
+or a repository root. Full package/reference hashes and configuration/apply mode
+invalidate cached results; conservative application retains original source and
+normative instructions. This does not yet prove the selected live daemon ran.
+
+Creative Search 2.1.0 stores validated `search_config` in its plugin record;
+`SEARXNG_URL` is an explicit override. CLI and compiled context share it. Context
+generation reads settings without network probes. The overview custom element
+accepts canonical settings through its `config` property and stays idle when
+unset. Its separate settings panel/host mount remains a documented plugin
+correction limitation, not a claim of complete UI persistence.
+
+A-027 dependency repair belongs in the SSSS JSONL reference adapter. Both index
+construction and replay use the same bounded UTF-8 line reader; cache freshness,
+file locks and immutable event IDs retain their existing contracts. Update the
+dependency version/lock after verifying that owning package, then rebuild and
+retest the Total Recall release snapshot. Do not bypass canonical operations or
+discard the existing event history to make deployment succeed.
+
+Project skill projection is host-specific. Antigravity uses `.agents/skills` in a workspace, `~/.gemini/config/skills` in the IDE and `~/.gemini/antigravity-cli/skills` in its CLI; it converts skills to `/name`. Legacy Gemini CLI still supports enterprise/API-key use but needs `.gemini/commands/*.toml` for explicit `/name`. Codex uses `$name` or `/skills`, Pi uses `/skill:name`, OpenClaw guarantees `/skill name`, and Aider reads instruction files. Keep the adapter registry and user-facing descriptions faithful to each verified host. Treat an installed file or successful unit test as projection evidence, not proof of live native activation.

@@ -142,6 +142,10 @@
           "command": {
             "type": "string",
             "description": "Subcommand passed to the plugin CLI handler (requires cli.handler)"
+          },
+          "placement": {
+            "enum": ["per-node", "selected-node"],
+            "description": "Default per-node; selected-node requires plugin_record.task_nodes[command] to match this mesh node"
           }
         }
       }

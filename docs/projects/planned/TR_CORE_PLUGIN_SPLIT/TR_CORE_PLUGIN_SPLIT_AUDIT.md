@@ -96,3 +96,15 @@ Cross-project owner and acceptance register: [PLUGIN_IMPLEMENTATION_CORRECTIONS]
 Audit status: current source and documentation findings recorded; broad extraction/runtime certification remains pending. Historical count/coupling figures above refer to the dated commit, not current tree measurements. Prior summary claims of live plugin exchange or phase completion require linked source-exact evidence before becoming acceptance.
 
 Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.
+
+## 2026-10-01 skill manager extraction scope
+
+Scope audit: Complete for adding this extraction candidate; extraction readiness remains pending.
+
+| Finding | Evidence | Required outcome |
+|---|---|---|
+| SPLIT-SKILL-001 | Skill management currently spans `src/cli/skill.mjs`, `src/core/skills-registry.mjs`, `src/core/skill-config.mjs` and the uncommitted optimizer in `src/core/skill-optimizer.mjs` / `src/cli/skill-optimize.mjs`. CONTEXT_OPTIMIZATION records 12 focused remote tests, while clean scaffold, complete gates, periodic optimization and total fresh-start measurement remain open. | Confirm current behavior before extraction; retain exact-source evidence and package ownership/configuration contracts. |
+| SPLIT-SKILL-002 | `skill-config.mjs` already defines a plugin-owned JSON Schema and a repo-owned SSSS `skill_config` record with a rebuildable `config.json` projection. | Reuse this generic contract where applicable; ship no machine, account, credential or private memory instances. |
+| SPLIT-SKILL-003 | The separate decision plugin already owns a skill named `decision`; Jev is a configurable provider implementation. | Reuse the decision capability for optional routing advice; do not create a competing global skill or bake Jev into mandatory core behavior. |
+
+User explicitly requested extraction later, after confirmation that the current implementation works. This addition does not authorize immediate migration or establish plugin runtime readiness. Source pointers are inventory, not a proven minimal extraction boundary.

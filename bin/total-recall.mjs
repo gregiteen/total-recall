@@ -266,7 +266,7 @@ async function main() {
       }
 
       // Check installed plugins for custom CLI commands declared in manifest
-      const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
+      const { discoverPlugins, PACKAGE_ROOT } = await import('../src/core/plugin-loader.mjs');
       const plugins = discoverPlugins(process.cwd());
       for (const p of plugins) {
         if (p.valid && p.manifest.cli?.command === command) {
@@ -274,6 +274,10 @@ async function main() {
           if (handlerRel) {
             const absHandler = path.resolve(p.dir, handlerRel);
             if (fs.existsSync(absHandler)) {
+              // Match the host context supplied to dashboard/daemon handlers.
+              process.env.TR_PACKAGE_ROOT = PACKAGE_ROOT;
+              process.env.TR_PLUGIN_ID = p.id;
+              process.env.TR_PLUGIN_DIR = p.dir;
               const handler = await import(absHandler);
               if (handler.run) {
                 await handler.run(process.argv);

@@ -2,15 +2,10 @@
  * Creative Search config — view and update plugin settings.
  */
 import path from 'node:path';
-import fs from 'node:fs';
-import os from 'node:os';
-
-const CONFIG_PATH = process.env.AGENT_DIR
-  ? path.join(process.env.AGENT_DIR, 'skills', 'total-recall', 'plugins', 'creative-search', 'config.json')
-  : path.join(os.homedir(), '.config', 'total-recall', 'creative-search', 'config.json');
+import { pathToFileURL } from 'node:url';
 
 const DEFAULTS = {
-  searxngUrl: 'http://100.64.0.1:8888',
+  searxngUrl: '',
   defaultLang: 'en',
   maxResults: 15,
   categories: ['general', 'science'],
@@ -33,21 +28,50 @@ const CATEGORY_DESCRIPTIONS = {
   timeoutMs: 'Request timeout in milliseconds',
 };
 
-function loadConfig() {
-  try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) }; }
-  catch { return { ...DEFAULTS }; }
+export function validateConfig(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Configuration must be an object');
+  for (const key of Object.keys(input)) if (!Object.hasOwn(DEFAULTS, key)) throw new Error(`Unsupported setting: ${key}`);
+  const config = { ...DEFAULTS, ...input };
+  if (typeof config.searxngUrl !== 'string') throw new Error('Instance URL must be a string');
+  if (config.searxngUrl) {
+    const url = new URL(config.searxngUrl);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('Use HTTP(S) without URL credentials, query or fragment');
+    config.searxngUrl = url.href.replace(/\/$/, '');
+  }
+  for (const [key, min, max] of [['maxResults', 1, 100], ['timeoutMs', 100, 60000], ['deepResearchSteps', 1, 5]]) {
+    if (!Number.isInteger(config[key]) || config[key] < min || config[key] > max) throw new Error(`${key} must be ${min}..${max}`);
+  }
+  for (const key of ['categories', 'engineGroups']) if (!Array.isArray(config[key]) || config[key].some(v => typeof v !== 'string' || !v.trim())) throw new Error(`${key} must contain strings`);
+  for (const key of ['autoSave', 'includeSnippets']) if (typeof config[key] !== 'boolean') throw new Error(`${key} must be boolean`);
+  if (typeof config.defaultLang !== 'string' || !config.defaultLang.trim()) throw new Error('Language must be nonempty');
+  return config;
 }
 
-function saveConfig(config) {
-  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+async function hostApi({ packageRoot = process.env.TR_PACKAGE_ROOT, projectRoot = process.cwd(), plugin } = {}) {
+  if (!packageRoot) throw new Error('Run through the Total Recall plugin host');
+  const load = name => import(pathToFileURL(path.join(packageRoot, 'src/core', name)).href);
+  const [{ getPlugin }, store] = await Promise.all([load('plugin-loader.mjs'), load('plugin-store.mjs')]);
+  const installed = plugin || getPlugin('creative-search', projectRoot);
+  if (!installed?.valid) throw new Error('Install Creative Search first');
+  return { plugin: installed, store };
+}
+
+export async function loadConfig(host) {
+  const { plugin, store } = await hostApi(host);
+  const config = store.readPluginRecord(plugin)?.search_config || {};
+  return validateConfig({ ...config, ...(process.env.SEARXNG_URL ? { searxngUrl: process.env.SEARXNG_URL } : {}) });
+}
+
+async function saveConfig(config) {
+  const { plugin, store } = await hostApi();
+  await store.patchPluginRecord(plugin, { search_config: validateConfig(config) });
 }
 
 export async function run(argv) {
   const sub = argv[3] || 'show';
   switch (sub) {
     case 'show': {
-      const c = loadConfig();
+      const c = await loadConfig();
       console.log('\n⚙️  Creative Search — Configuration\n');
       for (const [k, v] of Object.entries(c)) {
         const desc = CATEGORY_DESCRIPTIONS[k];
@@ -55,7 +79,7 @@ export async function run(argv) {
         if (desc) console.log(`       ${desc}`);
         console.log();
       }
-      console.log(`  Config file: ${CONFIG_PATH}\n`);
+      console.log('  Storage: SSSS plugin record\n');
       return { data: c };
     }
     case 'set': {
@@ -69,12 +93,14 @@ export async function run(argv) {
         process.exitCode = 1;
         return;
       }
-      const c = loadConfig();
+      if (!Object.hasOwn(DEFAULTS, key)) throw new Error(`Unsupported setting: ${key}`);
+      const { plugin, store } = await hostApi();
+      const c = validateConfig(store.readPluginRecord(plugin)?.search_config || {});
       // Parse numbers, booleans, and arrays
       if (key === 'categories' || key === 'engineGroups') {
         c[key] = value.split(',').map(s => s.trim());
       } else if (key === 'deepResearchSteps' || key === 'maxResults' || key === 'timeoutMs') {
-        c[key] = parseInt(value, 10);
+        c[key] = Number(value);
       } else if (value === 'true') {
         c[key] = true;
       } else if (value === 'false') {
@@ -84,12 +110,12 @@ export async function run(argv) {
       } else {
         c[key] = value;
       }
-      saveConfig(c);
+      await saveConfig(c);
       console.log(`✅ Set ${key} = ${JSON.stringify(c[key])}`);
       return { data: { [key]: c[key] } };
     }
     case 'reset':
-      saveConfig({ ...DEFAULTS });
+      await saveConfig({ ...DEFAULTS });
       console.log('✅ Config reset to defaults');
       return { data: { ...DEFAULTS } };
     default:

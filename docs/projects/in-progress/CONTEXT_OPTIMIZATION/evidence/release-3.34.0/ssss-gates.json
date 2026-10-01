@@ -1,0 +1,35 @@
+{
+  "schema": 3,
+  "toolchain": "javascript",
+  "repoRoot": "/private/tmp/tr-ssss-context.MsDwAL",
+  "tier": "full",
+  "ranChecks": [
+    "conformance-engine",
+    "conformance-full"
+  ],
+  "skippedChecks": [],
+  "startedAt": "2026-10-01T16:44:09.647Z",
+  "finishedAt": "2026-10-01T16:44:18.839Z",
+  "durationMs": 9192,
+  "gitHead": null,
+  "sourceFileCount": 377,
+  "checks": [
+    {
+      "id": "conformance-engine",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 9033
+    },
+    {
+      "id": "conformance-full",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 149
+    }
+  ],
+  "infrastructureFailure": false,
+  "totalFindings": 0,
+  "findings": []
+}

@@ -441,6 +441,17 @@ Search, install, security audit, and remove packages from the skills.sh registry
   - `scan <skill-name>`: Trigger a static security vulnerability audit.
   - `list` (or `ls`): Enumerate all active parent skills and sub-skills.
   - `remove <name>` (or `rm`): Safely delete a skill and re-compile rules.
+  - `optimize [paths...]`: Audit skill ownership and entrypoint size. Explicit
+    `--apply` performs verified lossless extraction; original instructions and
+    references are retained. Ambiguous ownership requires review.
+
+### `skill-manager` (installed plugin)
+
+`configure <file>` selects a mesh node and authorized roots from JSON on that
+node. `status` reports configuration and the last SSSS report; `audit` inspects
+without applying; `optimize` follows the configured `autoApply` preference.
+The daemon runs daily at 03:00 local time and processes changed packages only.
+See the bundled skill-manager README for global and repository configuration.
 
 ---
 

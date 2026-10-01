@@ -78,3 +78,11 @@ Cross-project owner and acceptance register: [PLUGIN_IMPLEMENTATION_CORRECTIONS]
 No stubs, successful placeholders, product mocks, fabricated metrics, ignored controls or message-only runtimes may be delivered as capabilities. Test-only synthetic fixtures are retained to verify failures and boundaries, followed by real clean-install/runtime proof. Disabling/removing a plugin preserves its app-owned SSSS data while removing operational surfaces.
 
 Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.
+
+## Skill manager extraction after verification
+
+Add **skill manager** as a standalone plugin candidate (SPLIT-SKILL-001–003). CONTEXT_OPTIMIZATION owns verification of the current implementation; this project owns subsequent extraction and migration. Do not extract before retained evidence confirms optimization, ownership/scope protection, clean scaffolding, supported IDE invocation and periodic operation.
+
+Reusable scaffolded skills use generic configuration wherever possible. Discover repository paths, test/deploy targets, IDEs and decision providers from validated configuration or explicit flags. Ship schemas, portable defaults and safe examples; repository-specific values stay in repo-owned config/overlays. Exclude personal hosts, accounts, credentials, vault content and injected private memory from public packages.
+
+Keep a compact portable instruction entrypoint. Skill registry/deploy/optimization/scheduling and IDE adapters are extraction candidates; retain only demonstrated generic memory/instruction and plugin-host interfaces in core. Reuse the existing decision capability for optional Jev assistance, with deterministic fallback and code-enforced ownership/required instructions.

@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { parseCron, cronMatches, latestDueSlot, minuteSlot, runDuePluginTasks } from './plugin-tasks.mjs';
-import { projectPluginsDir } from './plugin-loader.mjs';
+import { parseCron, cronMatches, latestDueSlot, minuteSlot, runDuePluginTasks, taskRunsOnNode } from './plugin-tasks.mjs';
+import { projectPluginsDir, getPlugin } from './plugin-loader.mjs';
+import { patchPluginRecord } from './plugin-store.mjs';
 
 describe('cron parsing', () => {
   it('matches steps, ranges and lists', () => {
@@ -85,5 +86,31 @@ describe('runDuePluginTasks', () => {
       'utf8'
     );
     expect(record).toMatch(/tick: "?2026-09-22T12:10"?/);
+  });
+
+  it('runs a selected-node task only on the configured mesh node', async () => {
+    const manifestPath = path.join(projectPluginsDir(root), 'ticker', 'plugin.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.tasks[0].placement = 'selected-node';
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    const calls = [];
+    const runner = async () => { calls.push('ran'); return { ok: true, exitCode: 0, output: '', durationMs: 1 }; };
+    const other = { hostname: 'other.mesh.example', ip: '100.64.0.4' };
+    const selected = { hostname: 'box.mesh.example', ip: '100.64.0.2' };
+    const first = new Date(2026, 8, 22, 12, 5);
+    expect(await runDuePluginTasks({ projectRoot: root, now: first, runner, selfNode: other })).toEqual([]);
+    expect(calls).toEqual([]);
+    const recordPath = path.join(root, '.agent', 'skills', 'total-recall', 'memory-vault', 'system', 'plugins', 'ticker.md');
+    // A selected-node task fails closed until the SSSS plugin record is configured.
+    expect(taskRunsOnNode(manifest.tasks[0], { task_nodes: { tick: 'box' } }, other)).toBe(false);
+    expect(taskRunsOnNode(manifest.tasks[0], { task_nodes: { tick: 'box' } }, selected)).toBe(true);
+    expect(fs.readFileSync(recordPath, 'utf8')).not.toMatch(/task_runs:/);
+    await patchPluginRecord(getPlugin('ticker', root), { task_nodes: { tick: 'box' } });
+    expect(await runDuePluginTasks({ projectRoot: root, now: first, runner, selfNode: selected })).toEqual([]);
+    expect(await runDuePluginTasks({ projectRoot: root, now: new Date(2026, 8, 22, 12, 12), runner, selfNode: other })).toEqual([]);
+    expect(await runDuePluginTasks({ projectRoot: root, now: new Date(2026, 8, 22, 12, 12), runner, selfNode: selected })).toEqual([
+      { plugin: 'ticker', command: 'tick', slot: '2026-09-22T12:10', ok: true, exitCode: 0 }
+    ]);
+    expect(calls).toEqual(['ran']);
   });
 });

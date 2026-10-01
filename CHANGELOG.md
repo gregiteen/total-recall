@@ -1,3 +1,16 @@
+## 3.34.0 — 2026-10-01
+
+- Add lossless skill optimization with compact entrypoints, retained source and
+  supporting references, explicit ownership checks and content-hash caching.
+- Add the skill-manager daemon plugin with configurable skill roots and an
+  explicitly selected mesh node; unset and other nodes remain idle.
+- Align installed plugin CLI host context with daemon and dashboard commands.
+- Remove private SearXNG defaults and persist validated creative-search settings
+  through SSSS; context compilation performs no network health probes.
+- Update portable IDE skill projections and the single decision skill's current
+  integration guidance. OpenAI Decisions remains a limited-preview capability.
+- Consume SSSS 0.10.3, which reads large event histories in bounded UTF-8 chunks.
+
 ## 3.21.0 — 2026-08-01
 
 ### Proposal lifecycle — the optimizer finally has a consumer
@@ -140,4 +153,3 @@ across 5 consecutive full runs, 1269 tests, 0 failures.
 - Research queue actually produces memory nodes (phase gates, deep research factSlug)
 - webSearch fallback chain; **SearXNG preferred** via SEARX_URL
 - GitHub push webhooks coalesce deploy tasks (no queue flood)
-

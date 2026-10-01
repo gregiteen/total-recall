@@ -1150,6 +1150,8 @@ export const PluginRecordSchema = z.object({
   installed_at: ssssDatetime(),
   /** Last minute-slot (YYYY-MM-DDTHH:MM) each scheduled task command ran in. */
   task_runs: z.record(z.string()).optional(),
+  /** Explicit mesh node for commands with selected-node placement. */
+  task_nodes: z.record(z.string().min(1)).optional(),
 }).passthrough();
 
 const SECRET_KEY_PATTERN = /^(.*_)?(secret|token|password|api[_-]?key|private[_-]?key|credentials|auth[_-]?header|bearer)$/i;

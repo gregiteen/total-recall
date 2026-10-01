@@ -86,3 +86,11 @@ Search and alerts own their config/event extensions; DSH owns runtime discovery/
 The diagram and extension-point tables above are target architecture unless this reconciliation identifies a consumed current contract. No compatibility shim or existing-user migration is required merely by hypothetical external installations; validate clean installs and actual developer brains.
 
 Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.
+
+## Proposed skill manager boundary
+
+The future skill manager plugin owns skill catalog administration, scoped deployment, optimization, periodic audits and IDE invocation adapters, subject to a refreshed importer/consumer audit. Core retains generic SSSS operations, memory/instruction retrieval and the minimal plugin-host interface. Existing CLI paths remain compatible during migration.
+
+Use the existing layered skill contract (`core/config.schema.json` plus repo-owned SSSS `skill_config`, with disposable `config.json` projection) where applicable. Portable methods are global; local overlays/configuration own repository identity and runtime topology. Publish no resolved private instance data. Resolve optional decision assistance through the decision plugin contract; Jev remains provider configuration. Disabling either plugin must preserve source skills, canonical config and memory, and retain a deterministic safe path for instruction retrieval.
+
+This is a proposed boundary, not a completed extraction or a new implemented config interface.

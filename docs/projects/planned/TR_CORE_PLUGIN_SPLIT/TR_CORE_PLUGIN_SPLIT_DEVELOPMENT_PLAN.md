@@ -70,3 +70,13 @@ Cross-project owner and acceptance register: [PLUGIN_IMPLEMENTATION_CORRECTIONS]
 - [ ] **6 — Verify and close:** run exact-tree full suite/conformance/gates on Mac mini as bounded background jobs; install from pinned artifacts in a clean brain; run real UI/CLI/independent app walkthroughs; retain hashes, commands and results. Live provider proof is separate from synthetic tests and HTTP reachability. No readiness checkbox closes without those records.
 
 Scope stays Planned while prerequisites are unresolved. Code Quality runner extraction is historical progress, not completion of a UI/default-install contract. The five currently bundled integrations expand the extraction inventory beyond the old three-plugin list. No immediate migration work for hypothetical external users is a release dependency.
+
+## Skill manager extraction dependency
+
+1. Link CONTEXT_OPTIMIZATION's exact-source functional evidence before scheduling extraction (SPLIT-SKILL-001).
+2. Refresh the dependency audit for skill registry, config, optimizer, scheduler and IDE adapters; identify minimal host interfaces and preserve CLI compatibility.
+3. Define generic config schemas/defaults and repo-owned overlays using the existing layered configuration contract (SPLIT-SKILL-002). Verify public artifacts exclude private instances.
+4. Extract into a standalone skill manager plugin repository through verified plugin interfaces. Integrate optional decision assistance through the existing decision capability (SPLIT-SKILL-003).
+5. Prove independent clean install, upgrade, disable, offline fallback, scope/collision protection and rollback; retain exact-source remote gates and package evidence before removing capability code from core.
+
+Extraction stays planned until the current implementation is confirmed working; this explicit user sequencing does not defer the active context optimization work.

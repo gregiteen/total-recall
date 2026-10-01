@@ -44,11 +44,30 @@ export const IDE_SKILLS = [
     id: 'agents',
     label: 'Antigravity / Gemini',
     clients: ['antigravity', 'gemini'],
-    // Antigravity & Gemini both read <repo>/.agents/skills as the workspace
-    // Agent-Skills location. Their *global* surface is ~/.gemini/commands
-    // (markdown commands), wired by the slash-command writer, not here.
+    // Both read workspace skills from the shared Agent Skills location.
     project: { dir: ['.agents', 'skills'], markers: ['.agents', '.gemini'], env: ['ANTIGRAVITY', 'GEMINI_CLI'] },
     global:  null
+  },
+  {
+    id: 'antigravity-global',
+    label: 'Antigravity IDE',
+    clients: ['antigravity'],
+    project: null,
+    global: { dir: ['.gemini', 'config', 'skills'], markers: ['.gemini', 'config'] }
+  },
+  {
+    id: 'antigravity-cli-global',
+    label: 'Antigravity CLI',
+    clients: ['antigravity'],
+    project: null,
+    global: { dir: ['.gemini', 'antigravity-cli', 'skills'], markers: ['.gemini', 'antigravity-cli'] }
+  },
+  {
+    id: 'cline',
+    label: 'Cline',
+    clients: ['cline'],
+    project: { dir: ['.cline', 'skills'], markers: ['.cline', '.clinerules'], env: ['CLINE'] },
+    global: { dir: ['.cline', 'skills'], markers: ['.cline'] }
   },
   {
     id: 'codex',

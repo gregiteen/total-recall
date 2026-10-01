@@ -79,13 +79,8 @@ export const CLIENTS = {
     // Cline uses a .clinerules/ directory (primary); plain markdown, no frontmatter.
     target: path.join('.clinerules', 'total-recall.md'),
     render: instructions => instructions,
-    // Cline scans <project>/.clinerules/skills, <project>/.cline/skills,
-    // <project>/.claude/skills and <project>/.agents/skills (plus the global
-    // ~/.cline/skills and ~/.agents/skills). Only .clinerules/.cline/.agents are
-    // scanned by the `next` (SDK) bundle too — .claude/skills is VS Code-bundle
-    // only — so project into .agents/skills, which is also where Cline's own
-    // "New skill..." writes and where the codex/gemini/antigravity presets land.
-    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') },
+    // Cline's documented primary workspace location is .cline/skills.
+    skillsProjection: { scope: 'project', dir: path.join('.cline', 'skills') },
   },
   'claude-code': {
     label: 'Claude Code',
@@ -107,9 +102,8 @@ export const CLIENTS = {
     label: 'Antigravity',
     mode: 'symlink',
     target: '.agents/rules/AGENTS.md',
-    writeSlashCommands: true,
-    // Antigravity CLI (the Agent Skills standard) reads project workspace skills
-    // from <project>/.agents/skills/ and turns each into a /name slash command.
+    // Antigravity reads workspace skills from .agents/skills and exposes
+    // native /name invocation; Gemini TOML commands are a separate surface.
     skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   gemini: {
@@ -117,9 +111,8 @@ export const CLIENTS = {
     mode: 'symlink',
     target: '.agents/rules/GEMINI.md',
     writeSlashCommands: true,
-    // Gemini CLI reads project workspace skills from <project>/.agents/skills/
-    // (the same Agent Skills location Antigravity uses) and turns each into a
-    // /name slash command.
+    // Gemini CLI activates workspace skills from .agents/skills via /skills;
+    // explicit /name commands require separate .gemini/commands/*.toml files.
     skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
   aider: {
@@ -950,7 +943,7 @@ export default async function connect(args) {
 
   // Write slash commands
   if (preset.writeSlashCommands) {
-    if (opts.client === 'antigravity' || opts.client === 'gemini') {
+    if (opts.client === 'gemini') {
       const slashResults = writeGeminiSlashCommands(opts);
       result.slash_commands = slashResults;
       const created = slashResults.filter(r => r.action !== 'exists');

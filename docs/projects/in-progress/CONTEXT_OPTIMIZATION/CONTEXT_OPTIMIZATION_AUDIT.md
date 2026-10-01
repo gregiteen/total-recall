@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Audit
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Audit Status**: Complete
@@ -242,3 +242,113 @@ No schema primitive, credential, provider, server authorization or other reposit
 The versioned 3.33.1 isolated mini dependency audit found one moderate production dependency advisory group in transitive `ip-address` 10.4.0 (four address-classification/parser advisories). `npm audit --omit=dev --json` is retained with release evidence. Source/lock baseline was unchanged before this inspection. Disposition: fix in this release by updating only the compatible transitive resolution to 10.7.2; re-run the full gate and production audit before publication. No direct dependency ranges or application code change.
 
 A-016 final disposition: fixed and verified in 3.33.1; final production audit has zero vulnerabilities. A-014/A-015 source, live and delivery evidence are preserved under evidence/release-3.33.1.
+
+
+## Fresh-start and skill optimization addendum (2026-10-01T14:02:51.087707+00:00)
+
+User confirms 78k after fresh Dabber startup and authorizes brief skills plus a periodic optimization algorithm. Previous capsule verification did not measure total fresh-start context; project completion is reopened.
+
+Scope and method: inspected skill package ownership, discovery aliases, registry source pointers, scaffold init and surface compiler. Source baseline ba4bb42a3f89a022f7f521cd7552dd25b869600a; isolated Mac mini fast gates passed with zero findings. Initial snapshot lacked ignored checker/bundle; restored checker and rebuilt frontend on sanctioned node; these setup failures are not product failures. No private vault inspection.
+
+Inventory/runtime: local PM 28,322 bytes, research 18,603, security 13,784, CLI agents 10,955. Global and repo discovery overlap. Full bodies load only when selected; summing every skill is not measured startup context. Skill files in .agent are ignored; shipped scaffold is authoritative for public availability. Current source CLI and global projections resolve independently.
+
+Data/state and security/privacy: preserve authored manuals, frontmatter ownership, managed blocks, scripts/assets and reference paths. Optimizer writes only explicit skill packages, never vault/state. Hash/version checks and exclusive package lock protect concurrent edits; retain original source for recovery. No model, provider, credentials or external fetch required.
+
+Integrations/deploy: registry contains stale and repo-owned sources; do not synchronize arbitrary skills across repositories. Apply global edits in their global owner and local edits in this repo. Copy only byte-identical shared counterparts, preserve distinct local overrides. The periodic optimizer belongs to the Total Recall daemon plugin task scheduler; the earlier Codex heartbeat was deleted. Its first daemon run and output remain unverified.
+
+Debt/content/standing-rule conflicts: old injected skill content contains unrelated historical memory; preserve managed blocks rather than silently rewrite it. New compact entrypoints route to relevant references. No semantic truncation of required rules. Fresh session host/tool context remains independently unmeasured.
+
+| ID | Severity | Finding | Resolution |
+| --- | --- | --- | --- |
+| A-017 | P1 | Fresh startup still 78k; capsule-only completion claim insufficient | Reopen; compact selected skill bodies and measure concrete source reductions; retain overall measurement as open |
+| A-018 | P1 | Large shared/local skills load entire manuals; updates can regress | Lossless section optimizer, bounded entrypoints, safety checks, targeted rollout, periodic audit |
+| A-019 | P1 | Ignored live skill edits alone do not ship/scaffold | Update tracked scaffold methods and verify clean init/connect |
+
+Impact/decisions: extend existing five-file project, implement default dry-run CLI with explicit scoped apply and conservative review outcomes. Semantic rewrites require authored routing guidance; automatic pass retains all normative paragraphs and refuses budget overflow. Verify meaningful edge cases, idempotence, links, fenced headings, conflict/lock behavior, scaffolding and remote gates. Audit addendum status Complete.
+
+
+## Jev, ownership and IDE extension audit — Complete
+
+User explicitly requests correct global/repo ownership, decision assistance, Jev skill/reference routing, working IDE slash commands and web research before further work. Primary TypeSafe launch/docs, OpenRouter endpoints, Claude, Gemini, Codex, Cursor, Cline, VS Code, Antigravity, Pi, Hermes and OpenClaw documentation researched October 1. Choice returns choice/probabilities/confidence; Noul returns a yes probability. OpenRouter's model router differs from a custom skill router. Historical decision plugin choice helper reads label/value, not current choice; use its raw typed answers at the boundary without editing the foreign repo.
+
+A-020 (P1): current Gemini adapter incorrectly claims every discovered skill is /name; native custom commands require TOML. Cline's documented .cline/skills path differs from current projection. Verify adapter contracts, collisions, safe references and global/repo scope. Codex native skill invocation is $name, Pi /skill:name; do not invent universal /name support. Unknown clients remain explicit unsupported for generated commands.
+
+A-021 (P1): global typesafe-jev entrypoint has outdated categorical accuracy and latency assertions. Replace it with current brief decision/routing guidance plus official references; add /jev as a portable alias without changing repo-specific implementations. Keep credentials/model configured, state minimal, confidence and fallback explicit. Provider calls require supported installed adapter and outbound policy. Jev ranks knowledge/navigation; unknown mandatory rules and ownership stay deterministic.
+
+2026-10-01 correction to A-021: the later user instruction requires exactly one public skill, `decision`. Jev is guidance and a configurable engine within that skill; no `/jev` alias is to be shipped. The original finding above is retained as historical audit text.
+
+A-022 (P1): optimizer ownership originally relied on caller scope. Add explicit authorized roots, physical-owner deduplication, scope declaration and repository identity checks. Existing brain entrypoint uses repo_scoped to protect brain package propagation; this is not permission to copy brain state.
+
+Quality baseline remains the verified source snapshot and focused remote tests; additions require new meaningful tests and final remote gates. Scope includes this repo plus explicitly authorized global skills, not foreign repo implementation changes.
+
+## 2026-10-01 single decision skill consolidation
+
+Documentation/ownership audit: Complete for this consolidation. The global typesafe-jev package was the active portable method; the separate decision plugin exposes the same capability name but is not installed in the current command catalog. Keep one public skill name, decision, with Jev guidance in references. Global catalog registration and public scaffold copies are verified separately from actual plugin/provider readiness. Existing decision adapter source defaults missing confidence to 1 and does not read current choice/noul fields correctly; it requires the already-planned runtime correction before trusted routing. No foreign implementation was changed.
+
+## A-023 — current integration contracts and daemon ownership (2026-10-01)
+
+This addendum records official documentation and current local adapters before any further integration edits. Some Cline/Google projection edits in the working tree preceded the complete audit; they are provisional and require a fresh review and remote tests. The verified baseline before those edits is the earlier Mac mini source baseline; the later 13-test optimizer and 44-test IDE runs cover snapshots before the final Google correction, so neither certifies the current tree. The daemon currently starts `startPluginTaskScheduler()` (`src/core/daemon-loop.mjs:378-384`). `src/core/plugin-tasks.mjs:110-204` discovers manifest `tasks`, matches five-field cron once per local minute, records last slots in the plugin record, invokes commands sequentially with a 60-second timeout and appends `plugin.task_run` VFS events. `plugins/system-monitor/plugin.json:22-28` is a working manifest example. No optimizer task is installed yet. The earlier Codex heartbeat was created in error and subsequently deleted; no scheduled optimization is currently verified.
+
+| Integration | Official contract checked 2026-10-01 | Local adapter and decision |
+| --- | --- | --- |
+| Antigravity IDE / CLI | [Google skills](https://antigravity.google/docs/skills): workspace `.agents/skills`; IDE/global `~/.gemini/config/skills`; CLI/global `~/.gemini/antigravity-cli/skills`; native `/name`. | `connect.mjs:101-117` and `skill-projection.mjs:44-64` now distinguish globals. Verify actual `/decision` interactively before claiming activation. |
+| Gemini CLI legacy | [Google transition](https://github.com/google-gemini/gemini-cli/discussions/28017) stopped individual-account service June 18; enterprise Code Assist and API-key users remain supported. [Gemini skills](https://geminicli.com/docs/cli/skills/) uses `.gemini/skills` or `.agents/skills`; [custom commands](https://geminicli.com/docs/cli/custom-commands/) use `.gemini/commands/*.toml` for `/name`. | `connect.mjs:109-117,590-653,946-953` retains explicit legacy connect support. Shared project skill projection remains; no universal native skill `/name` claim. Local `gemini skills list` sees one `decision` via `~/.agents/skills` after duplicate link removal; this is discovery only. |
+| Claude Code | [Anthropic skills](https://code.claude.com/docs/en/skills): `.claude/skills`, native `/name`; collisions and user invocation metadata apply. | `connect.mjs:85-93` and `skill-projection.mjs:35-42` project package; inspect collisions before writing commands. |
+| Codex | [OpenAI skills](https://learn.chatgpt.com/docs/build-skills): `.agents/skills`, `$skill-name` mention and `/skills` picker; duplicate names can appear. | `connect.mjs:94-100`, `skill-projection.mjs:44-50,73-79` and global skill catalog; do not advertise `/name`. |
+| VS Code Copilot | [Microsoft skills](https://code.visualstudio.com/docs/agent-customization/agent-skills): `.github/skills`, `.claude/skills` or `.agents/skills`; slash invocation depends on skill metadata. | `connect.mjs:14-19` writes instruction file, not dedicated skill projection. Shared `.agents/skills` can serve the project; native activation remains unverified. |
+| Cline | [Cline skills](https://docs.cline.bot/customization/skills): project `.cline/skills` (also compatible locations), global `~/.cline/skills`, native `/name`; global same-name wins. | `connect.mjs:76-84` and `skill-projection.mjs:66-71` changed provisionally; test owner collision behavior and installed discovery. |
+| Pi | [Pi maintainer skills](https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/docs/skills.md): `.agents/skills`, `/skill:name`, reload after change. | `connect.mjs:20-25,810-834` writes instructions link, while shared skills are discoverable; never claim `/name`. |
+| Hermes | [Hermes skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills), [slash reference](https://hermes-agent.nousresearch.com/docs/reference/slash-commands): project `.hermes/skills` or `.agents/skills`, dynamic `/name` subject to built-in collision, `/skill name` fallback and project trust. | `connect.mjs:26-39,834-869`, `skill-projection.mjs:80-86`; project projection is declared, live command unresolved. |
+| OpenClaw | [OpenClaw skills](https://docs.openclaw.ai/tools/skills), [slash reference](https://docs.openclaw.ai/tools/slash-commands): workspace `.agents/skills`, generic `/skill name`; native names are configurable and collision-adjusted. | `connect.mjs:56-67,901-929` writes workspace instructions; shared skill projection may work, but `/name` cannot be guaranteed. |
+| Aider | [Aider conventions](https://aider.chat/docs/usage/conventions.html): read a conventions file via `/read` or config; no verified Agent Skills native slash contract. | `connect.mjs:118-129` writes `.aider.rules.md` and instructions, file-only support. |
+| DeepSeek Harness | [Maintainer repository](https://github.com/deepseek-ai/deepseek-harness) documents a developer preview; exact stable skill/slash contract was not established. | `connect.mjs:48-55` and `skill-projection.mjs:87-94` exist; mark command activation unverified. Do not advertise native `/name`. |
+| Decision / Jev | [TypeSafe typed API](https://docs.typesafe.ai/introduction), [skill suggestion cookbook](https://docs.typesafe.ai/cookbooks/skill_suggestion): Choice yields `choice`, probabilities and confidence; Noul is a 0–1 yes probability. Cookbook suggests a bounded shortlist and at most one skill. | One `decision` skill owns Jev guidance. Existing foreign decision adapter reads incompatible fields and defaults missing confidence to 1; no provider readiness claim or foreign repository edit. |
+
+`src/cli/connect.mjs` also lists HTTP API, Obsidian and generic instruction adapters; these are not native skill hosts. The `IDE_SKILLS` registry in `src/cli/skill-projection.mjs` and live/global symlinks are inventory inputs, not proof that every host has activated a command. The project must test install/scaffold and at least one interactive native invocation, report unverified hosts accurately, and keep generic public paths and credentials out of shipped files.
+
+A-023 (P1-high): the previous periodic-work owner and cross-IDE slash claims diverged from current contracts. Implement the optimizer as a Total Recall daemon plugin task with explicit authorized roots, dry-run/review safety, idempotent slot handling and VFS run evidence. Correct adapter claims only to documented behavior. Record a new sanctioned-host current-tree baseline and verify the audit checker before the next code edit; historical pre-audit edits remain disclosed above.
+
+The user's selected node is the always-on Mac mini via the recorded Total Recall mesh access. Live mesh inspection at 15:50 UTC found its `com.totalrecall.daemon` LaunchAgent loaded but exiting code 1 (17,056 recorded attempts), with no daemon-loop process. Its old command targets `src/core/dream.mjs`; the log reports missing `gray-matter`. The source checkout is at 3023ece and its `node_modules` lacks that package, while the isolated test snapshot has it. The laptop currently has `src/core/daemon-loop.mjs` PID 13250. Thus neither a Mac mini daemon run nor host selection is active yet. Resolve the Mac mini service and add an explicit, generic node-selection configuration that every daemon checks before running the optimizer; merely installing a plugin on one host is insufficient for open-source users. Set this installation's selection to the mini using mesh-resolved identity and verify no second node executes it. Do not hardcode this personal node in shipped code. This is A-024 (P1-high), a live deployment blocker independent of unit tests.
+
+A-025 (P1-high): a shipped integration plugin embeds this installation's private SearXNG mesh IP in `plugins/creative-search/cli.mjs:12,417`, `config.mjs:13`, `generator.mjs:7` and `ui/csearch-main.js:274`. The user's portability rule applies to plugins too. [Official SearXNG Search API](https://docs.searxng.org/dev/search_api.html) supports a configured instance URL with `GET /search?q=...&format=json`; JSON may be disabled by the instance. The local adapter already has a `searxngUrl` setting (`config.mjs:9-46`) but its CLI/generator ignore that setting, and the UI has no configurable URL field. Replace the private default with validated instance configuration, use it across CLI/generator/UI, and present an unconfigured state without outbound calls. Review the plugin's existing config-file persistence against the SSSS state contract before choosing the write path. A source scan across shipped `src`, `plugins`, `scaffold`, `templates`, `bin`, `scripts` and `frontend` found no other personal runtime host/path literal in core; the remaining core mesh-address references are comments/examples, while repository-author URLs are project metadata. This targeted literal scan is not a proof against all possible generated/private configuration.
+
+Current working-tree baseline before further code edits: Mac mini isolated snapshot `/tmp/tr-skill-brevity.KHhROg`, focused Vitest 4 files / 56 tests passed, exit 0, `/tmp/tr-current-baseline-20261001.log`. The project audit checker passed on the mini against the synced five-file project folder. This snapshot was an overlay of changed source and docs onto a prior isolated checkout with installed dependencies and a built frontend; it was not a clean Git export. A later full exact-source snapshot remains required for release.
+
+A-026 (P2-medium): [OpenAI's September 29 DevDay recap](https://openai.com/index/devday-2026-recap/) announces a Luna-powered Decisions API for finite, predefined answers from text or image context, in limited preview with broader release planned. The current public [OpenAI API overview](https://developers.openai.com/api/reference/overview) does not establish a Decisions endpoint or request/response schema. OpenRouter's public model API checked October 1 returned zero matching OpenAI decision models; its documented [Decisions endpoint](https://openrouter.ai/docs/guides/community/jev) is a Jev/TypeSafe surface, not evidence that OpenAI Decisions is available there. The local single `decision` skill currently documents Jev only (`/Users/greg/.agent/skills/decision/references/integration.md`, with tracked scaffold counterpart). Add a short provider-neutral preview note to that one skill; do not invent an OpenAI adapter or model slug until the actual contract and account availability are verified. Keep deterministic fallback.
+
+16:16 UTC implementation evidence: the global/scaffold decision integration
+references match and include the A-026 preview note. The first new focused run
+had one manifest inventory failure because skill-manager omitted `use_cases`;
+adding its capability tags fixed it. The next run passed 5 files/36 tests. A
+separate isolated installed-plugin command walkthrough passed selection,
+lossless apply, retained source/rule, cache invalidation behavior and canonical
+SearXNG setting persistence. No personal SearXNG default remains in the plugin.
+The mini's authored checkout overlays are dirty; deployment must preserve them.
+Actual daemon execution, full-source gate and remaining UI limitations remain
+unverified.
+
+## A-027 — event-log scalability blocks selected daemon deployment
+
+The verified Total Recall snapshot passed all six gates (371 files/2,314
+tests). Its packed runtime installed successfully on the mini. Installing
+skill-manager globally then failed with `Commit failed: Cannot create a string
+longer than 0x1fffffe8 characters`; plugin-store rolled back its file install,
+so configuration did not proceed. No daemon service has yet been changed.
+The current SSSS dependency, 0.10.1, allocates a buffer for the complete event
+log and converts it to one UTF-8 string in `src/events.mjs:87-104`; replay also
+reads each full log as a string. This is a deployment blocker despite passing
+small fixture tests. [Official SSSS repository](https://github.com/gregiteen/ssss)
+and installed/local reference code confirm the JSONL append/replay and
+duplicate-ID contracts. Repair bounded log reading in its owning dependency,
+preserve locking/duplicate detection/cursor/UTF-8 semantics and existing logs,
+run its sanctioned baseline before edits, then full conformance and a live
+mini installation retry. Preserve unrelated authored overlays in that repo.
+
+### Installed CLI host context (2026-10-01)
+
+SSSS 0.10.3 passes both sanctioned gates and allows installation against the
+mini's existing event history. Actual `skill-manager configure` then fails
+because `bin/total-recall.mjs` imports plugin handlers without the host context
+provided by `plugin-runner.mjs`. This also affects creative-search SSSS config.
+Align the CLI package/plugin environment with the existing runner contract,
+and verify the real executable with an isolated installed plugin before gates.
