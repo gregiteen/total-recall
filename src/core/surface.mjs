@@ -18,7 +18,7 @@ import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
 import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
 import { fileURLToPath } from 'url';
 import { buildLocalSearchIndex } from './fast-recall.mjs';
-import { selectRules, assembleContext } from './context-policy.mjs';
+import { selectRules, assembleContext, curatedRules } from './context-policy.mjs';
 
 // Long-lived processes (server, daemon, vault watcher) import this module once.
 // If the rule builder is edited or upgraded after they start, their in-memory
@@ -395,14 +395,14 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
   consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total = bootstrap ? 1000 : 4000,
 } = {}) {
   const root = projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd());
-  const rules = selectRules(nodes, { actions, projectRoot: root, bootstrap });
+  const rules = selectRules(curatedRules(nodes), { actions, projectRoot: root, bootstrap });
   const contributions = [];
   const counts = category => rules.filter(n => n.category === category).length;
   const header = bootstrap ? `## Total Recall task routing\n\nBefore taking action, run \`total-recall context "task description" --action <actions>\` using the installed CLI (in a source checkout: \`node bin/total-recall.mjs context ...\`). Read the complete returned capsule and require ready:true. Unknown rule applicability is conservatively required. If it exits 2, stop: the required set exceeds its budget; inspect overflow and explicitly raise the budget or curate applicability before action.\n\nRefresh at every changed task, action or project, and after a memory/skill edit. Do not infer applicability from semantic similarity. CLI retrieval is local and works without the server. Skills have compact entrypoints; load only relevant references. Canonical vault writes use the validated CLI.\n\nDo not act from this bootstrap alone.\n` :
     `## Active Rules: ${counts('invariants')} invariants, ${counts('preferences')} preferences, ${counts('anti-patterns')} corrections`;
   contributions.push({ id: 'routing', text: header, required: true });
   for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
-    text: `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
+    text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
   if (!bootstrap) {
     if (skillsDir) {
       contributions.push(...legacyRuleContributions(skillsDir));

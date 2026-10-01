@@ -22,7 +22,7 @@ export default defineConfig({
     // slower suite for a deterministic one; a flaky suite is worth nothing
     // because nobody can tell a real regression from noise.
     fileParallelism: false,
-    exclude: ['**/node_modules/**', '**/.agent/**', '**/.agents/**', '**/.claude/**', '**/.cursor/**'],
+    exclude: ['**/node_modules/**', '**/.agent/**', '**/.agents/**', '**/.claude/**', '**/.cursor/**', '**/.gemini/**', '**/.codex/**'],
     // The secrets store falls back to the host's Keychain entry and
     // ~/.agent/tr.env when TR_SECRETS_PASSWORD is unset. Specs that clear the
     // variable to test the no-password path must not find the machine's real

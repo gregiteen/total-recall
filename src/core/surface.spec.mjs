@@ -8,6 +8,17 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale } from './surface.mjs';
+import { ruleFingerprint } from './context-policy.mjs';
+
+it('renders the same curated operative directive in bootstrap and task surfaces', async () => {
+  const rule = { slug: 'short', category: 'invariants', status: 'active', body: 'Historical detail '.repeat(400) };
+  const policy = { slug: 'routing', category: 'decisions', status: 'active', tags: ['context:policy'],
+    body: JSON.stringify({ rules: { 'project:short': { source_hash: ruleFingerprint(rule), actions: ['universal'], directive: 'Preserve data.' } } }) };
+  const block = await buildRulesBlock(null, [rule, policy], { bootstrap: true });
+  expect(block).toContain('Preserve data.');
+  expect(block).not.toContain('Historical detail');
+  await expect(buildRulesBlock(null, [{ ...rule, body: 'Changed detail '.repeat(400) }, policy], { bootstrap: true })).resolves.not.toContain('Preserve data.');
+});
 
 describe('Surface Routing Accuracy', () => {
 

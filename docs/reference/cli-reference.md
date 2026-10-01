@@ -90,21 +90,34 @@ Autonomously learn and save a new memory node to the vault.
 ---
 
 ### `context`
-Assemble required rules and supporting knowledge for the current task before action.
+Assemble applicable required rules for the current task before action.
 
 ```sh
-total-recall context "task description" --action edit,test --format json
+total-recall context "task description" --action edit,test
 ```
 
-The CLI defaults to 16,000 estimated tokens for conservative uncurated rule sets;
-`--budget 4000` selects a smaller explicit budget. The API defaults to 4,000.
+CLI and API default to 4,000 estimated tokens. The CLI defaults to compact text;
+`--format json` returns a compact machine-readable response. Supporting documents
+are opt-in (`--knowledge`; API `include_knowledge: true`). Diagnostic inventories
+require `--debug --format json` (API `debug: true`), within the same budget.
 Unknown applicability remains required. `ready: false` and exit 2 mean the full
-required set exceeds the budget; never act from a truncated capsule. All headings
-and separators count. Refresh on task/action/project/rule/skill changes.
+complete output exceeds the budget; never act from a truncated capsule. Status,
+metadata, JSON escaping, headings and separators all count. Refresh on task/action/project/rule/skill changes.
 Validated memory tags `context:universal` and `context:action:<action>` curate
 activation separately from modality. Unknown actions activate rules conservatively.
 Supported actions: read, edit, test, build, publish, deploy, secrets, network,
 memory, skills and project. The local CLI works without a server.
+
+For explicit local curation, save one project `decision` through the CLI with
+tag `context:policy`. Its JSON body contains `rules`, keyed by `project:<slug>`
+or `global:<slug>`. Each entry has `source_hash` (from debug `curation_sources`),
+`actions` (supported actions or `universal`) and a manually verified `directive`.
+Keep every operative constraint; move history and examples to the original,
+retrievable rule. A deliberate local exclusion uses `enabled: false` and a
+nonempty `reason`. Original bodies and global rules remain intact.
+Malformed, conflicting, expired or source-mismatched curation falls back to the
+canonical rule. Never generate applicability from semantic ranking. Curation
+is private runtime state and must not be included in scaffolds or releases.
 
 ### `recall`
 Search local metadata and indexed full text across enabled memory layers.

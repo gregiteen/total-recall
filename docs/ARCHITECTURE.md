@@ -334,7 +334,13 @@ Connected instruction files contain a small routing bootstrap. Before action,
 Activation uses existing validated memory tags, not semantic inference or storage
 scope. Unknown applicability stays required; oversized required sets report
 not-ready status. Contributions are admitted whole under complete-render token
-estimates. User-authored text outside generated blocks remains intact.
+estimates. The 4,000-token default counts the complete serialized response. CLI
+output defaults to text; JSON, supporting knowledge and diagnostics are explicit
+options. A local `context:policy` decision can assign concise directives/actions
+to exact canonical source fingerprints. Invalid, conflicting, expired or stale
+entries fall back to the full original rules. Canonical bodies stay unchanged and
+private curation is excluded from scaffolds. Static surfaces use the same policy.
+User-authored text outside generated blocks remains intact.
 
 `recall` defaults to local retrieval. Compilation builds `local-search.json` as a
 disposable full-text posting/locator projection; matching documents are hydrated

@@ -1,5 +1,36 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+vi.mock('./agent-dir.mjs', () => ({
+  parseLayerFlag: args => ({ layer: 'project', remainingArgs: args }),
+  getBothBrains: () => ({ project: { brainDir: '/fixture/brain' } }),
+}));
+vi.mock('../core/vault-cache.mjs', () => ({ getNodes: () => [
+  { slug: 'required', category: 'invariants', status: 'active', body: 'Preserve records.' },
+  { slug: 'manual', category: 'facts', status: 'active', body: 'deployment '.repeat(500) },
+] }));
+vi.mock('../core/surface.mjs', () => ({ mergeGlobalRuleNodes: nodes => nodes, legacyRuleContributions: () => [] }));
+vi.mock('../core/brain-registry.mjs', () => ({ isBrainEnabled: () => true }));
+vi.mock('../core/command-surface.mjs', () => ({ surfaceInputsHash: () => 'fixture' }));
 import context from './context.mjs';
+const originalExitCode = process.exitCode;
+afterEach(() => { vi.restoreAllMocks(); process.exitCode = originalExitCode; });
 describe('context CLI', () => {
   it('provides a local action capsule entrypoint', () => expect(typeof context).toBe('function'));
+  it('defaults to rules-only text and accounts for everything printed', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await context(['deployment', '--action', 'read']);
+    const output = log.mock.calls.at(-1)[0];
+    expect(output).toMatch(/^ready:true tokens:\d+ version:/);
+    expect(output).toContain('Preserve records.');
+    expect(output).not.toContain('manual');
+    expect(Number(output.match(/tokens:(\d+)/)[1])).toBe(Math.ceil((output.length + 1) / 4));
+  });
+  it('accepts boolean flags without consuming the following option and preserves overflow', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await context(['deployment', '--knowledge', '--format', 'json', '--debug', '--action', 'read', '--budget', '2']);
+    const output = JSON.parse(log.mock.calls.at(-1)[0]);
+    expect(output.ready).toBe(false);
+    expect(output.context).toContain('Preserve records.');
+    expect(output.stats.curation_sources).toHaveLength(1);
+    expect(process.exitCode).toBe(2);
+  });
 });
