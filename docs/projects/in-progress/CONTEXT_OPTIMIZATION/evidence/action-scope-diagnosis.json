@@ -1,0 +1,31 @@
+{
+  "source": "validated vault API and selectRules, global-only inventory",
+  "knownActions": [
+    "read",
+    "edit",
+    "test",
+    "build",
+    "publish",
+    "deploy",
+    "secrets",
+    "network",
+    "memory",
+    "skills",
+    "project"
+  ],
+  "counts": {
+    "start": {
+      "rules": 46,
+      "bodyEstimatedTokens": 3769
+    },
+    "read": {
+      "rules": 46,
+      "bodyEstimatedTokens": 3769
+    },
+    "network": {
+      "rules": 46,
+      "bodyEstimatedTokens": 3769
+    }
+  },
+  "limits": "Global-only estimate; not a whole merged capsule or native startup measurement."
+}

@@ -1,5 +1,7 @@
 # CONTEXT_OPTIMIZATION — Architecture
 
+Deployed 3.35.0 uses the existing selected-node runtime. Manager 1.1.0 files and canonical version/hash metadata were refreshed with instance configuration preserved. Ready instruction capsules remain complete; failed CLI admission is compact. Optional metadata advice is independent of native skill loading and required rule enforcement.
+
 A-030 separates budget admission diagnostics from admitted instruction capsules at the CLI output boundary. The compiler still preserves the complete required set; only a failed default CLI response omits bodies because the caller must stop. Successful output and API contracts remain complete.
 
 A-029: plugin-owned metadata routing filters authorized roots and repository identity before selection. An explicitly configured existing client export supplies raw typed answers. Choice proposes a label; Noul checks its description. Complete validated answers and configured gates are required. Task/catalog/config/repository fingerprints govern the canonical last-result cache. The core capsule remains unchanged and authoritative; this optional CLI does not automatically alter IDE context.

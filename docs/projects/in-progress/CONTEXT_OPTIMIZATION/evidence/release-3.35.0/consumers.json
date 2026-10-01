@@ -1,0 +1,96 @@
+{
+  "checkedAt": "2026-10-01T20:37:14.770Z",
+  "lifecycleScripts": false,
+  "consumers": [
+    {
+      "root": "/Users/greg/Github/ultrachat-ai-powered",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/dd",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/portfolio-site",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/festech.live",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/hedgehog",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/PAT",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/moogie_crm",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-phone",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-domains",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-composable-cli",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-code-quality",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-decision",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-design",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-signing",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-text",
+      "declared": "^3.35.0",
+      "installed": "3.35.0",
+      "ssss": "0.10.3"
+    }
+  ]
+}

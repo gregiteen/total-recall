@@ -1,5 +1,7 @@
 # CONTEXT_OPTIMIZATION — Development Plan
 
+3.35.0 is delivered and verified. A-029 has synthetic and plain Node installed-command/client/cache evidence; the selected mini's actual route is deterministic until explicit provider configuration. A-030 admission diagnostics are shipped. Continue total native context acceptance using separate measurements of base instructions, complete ready capsule, retries and browser/tool output; the pre-correction fresh result is 88,526, not an achieved reduction.
+
 A-030: verify fresh native usage and updated audit, add failed-admission/no-body/complete-retry CLI tests, then implement compact failure rendering. Run focused and versioned full selected-node gates, clean scaffold/native boot, publish the corrective release and verify consumers. Re-measure a fresh native startup afterward; base desktop and browser documentation remain separately identified contributors.
 
 A-029: verify focused baseline and scoped audit; add synthetic contract/scope/abstention/error/cache cases before implementation. Add explicit decision configuration and an advisory route command using the existing raw client inside skill-manager. Preserve daemon optimization. Verify selected-node tests, source gates and configured synthetic installed-client walkthrough; live provider accuracy and fresh native startup remain separate acceptance requirements.
