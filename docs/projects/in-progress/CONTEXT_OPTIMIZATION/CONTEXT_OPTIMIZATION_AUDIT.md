@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Audit
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Audit Status**: Complete
@@ -224,4 +224,19 @@ CLI measurement over 10k synthetic files, with twelve warm samples. These meet t
 candidate local targets without establishing a population-wide production p95. The
 live laptop comparison is a single observation. Smaller generated files affect future
 loads; they do not erase the current host conversation. Conservative uncurated CLI
-budget is 16k because the measured required set alone exceeds 13k estimated tokens.
+budget was 16k in 3.33.0 because the measured required set alone exceeded 13k estimated tokens. This historical adjustment is superseded by A-014/A-015 below.
+
+## 2026-10-01 reopened audit — Complete
+
+Source remains a6b2531; post-release documentation changes were present. User reports Dabber startup fixed separately and authorizes fixing this repository. Inspected its compact launch skill read-only; no CRM modifications. Existing architecture, integration, mutation, authentication and release boundaries remain unchanged. Focused Mac mini baseline: 4 files / 27 tests passed (isolated snapshot; initial missing dependency symlink failed, corrected with npm ci).
+
+| ID | Severity | Evidence | Impact and disposition |
+| --- | --- | --- | --- |
+| A-014 | P1 | context CLI reproduction: 85 required rules, 13,388 estimated required tokens, 15,973 body tokens, 31,891 compact-JSON tokens | Diagnostics bypass aggregate budget; fix output accounting and compact default. |
+| A-015 | P1 | context-compiler.mjs automatically packs ranked knowledge; context-policy.mjs requires every unclassified rule | Static size savings did not establish actual startup savings. Make knowledge opt-in; curate repository-local activation and concise operative clauses with source fingerprints, preserving originals and conservative stale-policy fallback. |
+
+No schema primitive, credential, provider, server authorization or other repository change is required. Curation is private validated memory; it must not ship in scaffold. Detailed diagnostic output is opt-in and must also satisfy its declared budget before readiness. Canonical wording and history remain retrievable.
+
+## Release audit addendum — A-016 (Complete, 2026-10-01)
+
+The versioned 3.33.1 isolated mini dependency audit found one moderate production dependency advisory group in transitive `ip-address` 10.4.0 (four address-classification/parser advisories). `npm audit --omit=dev --json` is retained with release evidence. Source/lock baseline was unchanged before this inspection. Disposition: fix in this release by updating only the compatible transitive resolution to 10.7.2; re-run the full gate and production audit before publication. No direct dependency ranges or application code change.

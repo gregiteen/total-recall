@@ -1,0 +1,119 @@
+{
+  "checked_at": "2026-10-01T05:46:24.523Z",
+  "brains": [
+    {
+      "name": "global",
+      "kind": "global",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "total-recall",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "dd",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "ssss",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "portfolio-site",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "festech.live",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "documenso",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "hedgehog",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "PAT",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "moogie_crm",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-phone",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-domains",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-composable-cli",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-code-quality",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-decision",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-design",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-signing",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    },
+    {
+      "name": "tr-plugin-text",
+      "kind": "project",
+      "core_bytes": 2379,
+      "entrypoint_matches": true
+    }
+  ]
+}

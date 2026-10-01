@@ -16,13 +16,15 @@ const router = Router();
 
 router.post('/api/context', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
-    const { compileContext } = await import('../../core/context-compiler.mjs');
-    const { query, budget, momentum_slugs, actions } = req.body || {};
+    const { compileContext, capsuleResponse } = await import('../../core/context-compiler.mjs');
+    const { query, budget, momentum_slugs, actions, include_knowledge, debug } = req.body || {};
+    if (include_knowledge !== undefined && typeof include_knowledge !== 'boolean') return badRequest(res, 'include_knowledge must be boolean');
+    if (debug !== undefined && typeof debug !== 'boolean') return badRequest(res, 'debug must be boolean');
     if (actions !== undefined && (!Array.isArray(actions) || actions.some(action => typeof action !== 'string'))) return badRequest(res, 'actions must be an array of strings');
     const vaultDir = resolveVaultFromQuery(req, { strict: true });
     const { derivedDir, skillsDir } = pathsForVault(vaultDir);
     const globalVault = path.join(globalBrainDir, 'memory-vault');
-    const nodes = path.resolve(vaultDir) === path.resolve(globalVault) ? getNodes(vaultDir) :
+    const nodes = path.resolve(vaultDir) === path.resolve(globalVault) ? getNodes(vaultDir).map(n => ({ ...n, _layer: 'global' })) :
       mergeGlobalRuleNodes(getNodes(vaultDir), getNodes(globalVault));
     const result = await compileContext({
       query: query || '',
@@ -32,12 +34,13 @@ router.post('/api/context', requireAuth, requireScope('memory:read'), async (req
       consumer: 'api',
       momentumSlugs: momentum_slugs || [],
       actions: actions || [],
+      includeKnowledge: include_knowledge === true,
       nodes,
       projectRoot: path.dirname(path.dirname(skillsDir)),
       contributions: legacyRuleContributions(skillsDir),
       versionInputs: surfaceInputsHash({ skillsDir }),
     });
-    res.json(result);
+    res.json(capsuleResponse(result, { total: budget?.total ?? 4000, debug: debug === true }));
   } catch (err) {
     serverError(res, err);
   }

@@ -5,13 +5,40 @@ export const RULE_CATEGORIES = new Set(['invariants', 'preferences', 'anti-patte
 export const CONTEXT_ACTIONS = new Set(['read', 'edit', 'test', 'build', 'publish', 'deploy', 'secrets', 'network', 'memory', 'skills', 'project']);
 export const estimateTokens = text => Math.ceil(String(text || '').length / 4);
 
+/** Curation is local, explicit and invalidated by any canonical rule change. */
+export const ruleFingerprint = node => crypto.createHash('sha256').update(JSON.stringify(
+  Object.fromEntries(Object.entries(node).filter(([key]) => !key.startsWith('_')).sort(([a], [b]) => a.localeCompare(b))),
+)).digest('hex');
+
+export function curatedRules(nodes, now = Date.now()) {
+  const policies = nodes.filter(n => n._layer !== 'global' && n.category === 'decisions' && n.status === 'active' &&
+    !n.superseded_by && !(n.expires_at && Date.parse(n.expires_at) <= now) && n.tags?.includes('context:policy'));
+  // Multiple policies are ambiguous, never pick a winner by order or relevance.
+  if (policies.length !== 1) return nodes;
+  let rules;
+  try { rules = JSON.parse(policies[0].body || '').rules; } catch { return nodes; }
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return nodes;
+  return nodes.map(node => {
+    const entry = rules[`${node._layer || 'project'}:${node.slug}`];
+    if (!RULE_CATEGORIES.has(node.category) || !entry || entry.source_hash !== ruleFingerprint(node)) return node;
+    if (entry.enabled === false && typeof entry.reason === 'string' && entry.reason.trim()) return { ...node, _contextExcluded: true };
+    if (entry.enabled !== undefined && entry.enabled !== true) return node;
+    if (
+      !Array.isArray(entry.actions) || !entry.actions.length || entry.actions.some(a => a !== 'universal' && !CONTEXT_ACTIONS.has(a)) ||
+      typeof entry.directive !== 'string' || !entry.directive.trim()) return node;
+    const tags = (node.tags || []).filter(t => !t.startsWith('context:action:') && t !== 'context:universal');
+    return { ...node, tags: [...tags, ...entry.actions.map(a => a === 'universal' ? 'context:universal' : `context:action:${a}`)],
+      _directive: entry.directive.trim() };
+  });
+}
+
 /** Applicability is explicit validated memory tags, independent of obligation.
  * Unknown rules remain required in task capsules. No inference from prose.
  */
 export function selectRules(nodes, { actions = [], projectRoot = process.cwd(), bootstrap = false, now = Date.now() } = {}) {
   const repo = path.basename(projectRoot).toLowerCase();
   const applicable = nodes.filter(node => {
-    if (!RULE_CATEGORIES.has(node.category) || node.status !== 'active' || node.superseded_by) return false;
+    if (!RULE_CATEGORIES.has(node.category) || node.status !== 'active' || node.superseded_by || node._contextExcluded) return false;
     if (node.expires_at && Date.parse(node.expires_at) <= now) return false;
     if (node.repos?.length && !node.repos.some(r => String(r).toLowerCase() === repo)) return false;
     if (node.project && String(node.project).toLowerCase() !== repo) return false;

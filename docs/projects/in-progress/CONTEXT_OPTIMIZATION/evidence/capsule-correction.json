@@ -1,0 +1,59 @@
+{
+  "measurement": "ceil(output characters / 4); estimated, not tokenizer-measured",
+  "before": {
+    "required_rules": 85,
+    "required_body_tokens": 13388,
+    "body_tokens": 15973,
+    "compact_json_tokens": 31891
+  },
+  "after": [
+    {
+      "scenario": "startup",
+      "actions": "read",
+      "budget": 4000,
+      "ready": true,
+      "exit": 0,
+      "estimated_tokens": 541,
+      "reported_tokens": 541
+    },
+    {
+      "scenario": "work",
+      "actions": "read,edit,test",
+      "budget": 4000,
+      "ready": true,
+      "exit": 0,
+      "estimated_tokens": 1887,
+      "reported_tokens": 1887
+    },
+    {
+      "scenario": "json",
+      "actions": "read,edit,test",
+      "budget": 4000,
+      "ready": true,
+      "exit": 0,
+      "estimated_tokens": 1977,
+      "reported_tokens": 1977,
+      "required_rules": 46
+    },
+    {
+      "scenario": "overflow",
+      "actions": "read,edit,test",
+      "budget": 100,
+      "ready": false,
+      "exit": 2,
+      "estimated_tokens": 1978,
+      "reported_tokens": 1978,
+      "required_rules": 46
+    },
+    {
+      "scenario": "debug",
+      "actions": "read",
+      "budget": 4000,
+      "ready": false,
+      "exit": 2,
+      "estimated_tokens": 4908,
+      "reported_tokens": 4908,
+      "required_rules": 14
+    }
+  ]
+}

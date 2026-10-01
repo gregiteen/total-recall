@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Product Requirements
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
@@ -65,10 +65,18 @@ Token estimates must be labeled. A configured tokenizer may supply exact counts 
 
 Synthetic edge cases and selection fixtures precede production wiring. A shadow comparison records required coverage and savings before the default changes. Mac mini full suite and sanctioned gates, isolated save/recall/compile walkthrough, real client verification, clean package/scaffold inspection and cleanup must finish before project completion. Current audit baseline passed 2,256 tests but the source-only publication gate is not green; the project is Planned.
 
-## Accepted implementation target adjustment
+## Historical 3.33.0 target adjustment (superseded by the correction below)
 
 On 2026-09-30 the live required set measured 13,388 estimated tokens before supporting
 knowledge. The conservative CLI default is therefore 16,000. Explicit --budget 4000
 and the API's 4,000 default remain available, with not-ready required overflow.
 Bootstrap retains the 1,000 estimate ceiling. Permanent TR-owned file content is
 measured separately from the task capsule and host-owned session context.
+
+## Reopened correction — A-014/A-015
+
+Default task routing returns required instructions only with compact output. Knowledge and diagnostic inventories are explicit opt-ins. Entire serialized responses determine readiness. A repository-local validated decision records manually curated action triggers and concise directives bound to canonical source hashes; unknown, malformed or stale entries retain original required rules. Canonical bodies remain retrievable. Verify actual local capsule sizes and conservative fallback, then run focused/full sanctioned checks before completion.
+
+## Release requirement — A-016
+
+Compatible transitive address-classifier remediation is included in 3.33.1. Require zero production dependency advisories in addition to the existing runtime/package/full-suite evidence. Default CLI budget is 4,000 estimated tokens for the complete response; explicit text/JSON and knowledge/debug contracts follow the corrected CLI reference.

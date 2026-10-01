@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "selected_brain": "project:total-recall",
+  "ready": true,
+  "estimated_wire_tokens": 1977,
+  "reported_tokens": 1977,
+  "required_rules": 46,
+  "default_inventory_present": false
+}

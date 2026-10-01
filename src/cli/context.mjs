@@ -2,20 +2,23 @@ import path from 'node:path';
 import { getBothBrains, parseLayerFlag } from './agent-dir.mjs';
 import { getNodes } from '../core/vault-cache.mjs';
 import { mergeGlobalRuleNodes, legacyRuleContributions } from '../core/surface.mjs';
-import { compileContext } from '../core/context-compiler.mjs';
+import { compileContext, capsuleResponse, renderCapsule } from '../core/context-compiler.mjs';
 import { isBrainEnabled } from '../core/brain-registry.mjs';
 import { surfaceInputsHash } from '../core/command-surface.mjs';
 
 export default async function context(args = []) {
   if (!args.length || args.includes('--help')) {
-    console.log('Usage: total-recall context "task" [--action edit,test,publish] [--budget 16000] [--format json|text] [--project|--global]\nLocal only. Unknown applicability is required. A required-set overflow exits 2: do not act until a complete capsule fits. Refresh on task/action/project or policy version changes.');
+    console.log('Usage: total-recall context "task" [--action edit,test,publish] [--budget 4000] [--format text|json] [--knowledge] [--debug] [--project|--global]\nLocal rules only by default. Unknown applicability is required. Overflow exits 2; do not act until the complete output fits. --knowledge adds supporting documents; --debug exposes inventories within the same budget. Refresh on task/action/project or policy changes.');
     return;
   }
   const { layer, remainingArgs } = parseLayerFlag(args);
   const query = remainingArgs[0];
-  let actions = [], budget = 16000, format = 'json';
+  let actions = [], budget = 4000, format = 'text', includeKnowledge = false, debug = false;
   for (let i = 1; i < remainingArgs.length; i++) {
-    const flag = remainingArgs[i], value = remainingArgs[++i];
+    const flag = remainingArgs[i];
+    if (flag === '--knowledge') { includeKnowledge = true; continue; }
+    if (flag === '--debug') { debug = true; continue; }
+    const value = remainingArgs[++i];
     if (flag === '--action') actions = value?.split(',').filter(Boolean) || [];
     else if (flag === '--budget') budget = Number(value);
     else if (flag === '--format' && ['json', 'text'].includes(value)) format = value;
@@ -28,8 +31,10 @@ export default async function context(args = []) {
   const nodes = own ? mergeGlobalRuleNodes(getNodes(path.join(own, 'memory-vault')), global ? getNodes(path.join(global, 'memory-vault')) : []) :
     getNodes(path.join(global, 'memory-vault')).map(n => ({ ...n, _layer: 'global' }));
   const skillsDir = path.dirname(own || global);
-  const result = await compileContext({ query, actions, nodes, budget: { total: budget }, projectRoot: process.cwd(),
+  const result = await compileContext({ query, actions, nodes, includeKnowledge, budget: { total: budget }, projectRoot: process.cwd(),
     contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
-  console.log(format === 'json' ? JSON.stringify(result, null, 2) : `${result.ready ? 'READY' : 'NOT READY: required instructions exceed budget'}\n${result.context}`);
-  if (!result.ready) process.exitCode = 2;
+  if (debug && format === 'text') throw new Error('--debug requires --format json');
+  const response = capsuleResponse(result, { total: budget, debug, format });
+  console.log(renderCapsule(response, format));
+  if (!response.ready) process.exitCode = 2;
 }

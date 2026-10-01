@@ -1,0 +1,229 @@
+{
+  "checked_at": "2026-10-01T05:51:01.667Z",
+  "files": [
+    {
+      "name": "total-recall",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "total-recall",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "total-recall",
+      "file": "GEMINI.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1471
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1471
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "file": "GEMINI.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "dd",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "dd",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "dd",
+      "file": "GEMINI.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "ssss",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "ssss",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "portfolio-site",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2618
+    },
+    {
+      "name": "portfolio-site",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2618
+    },
+    {
+      "name": "portfolio-site",
+      "file": "GEMINI.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "festech.live",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1471
+    },
+    {
+      "name": "festech.live",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1471
+    },
+    {
+      "name": "festech.live",
+      "file": "GEMINI.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 3301
+    },
+    {
+      "name": "documenso",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 3748
+    },
+    {
+      "name": "hedgehog",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "hedgehog",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2168
+    },
+    {
+      "name": "hedgehog",
+      "file": "GEMINI.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1007
+    },
+    {
+      "name": "PAT",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2525
+    },
+    {
+      "name": "moogie_crm",
+      "file": "AGENTS.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 1957
+    },
+    {
+      "name": "moogie_crm",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 4240
+    },
+    {
+      "name": "tr-plugin-phone",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2175
+    },
+    {
+      "name": "tr-plugin-domains",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2177
+    },
+    {
+      "name": "tr-plugin-composable-cli",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2184
+    },
+    {
+      "name": "tr-plugin-code-quality",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2182
+    },
+    {
+      "name": "tr-plugin-decision",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2178
+    },
+    {
+      "name": "tr-plugin-design",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2176
+    },
+    {
+      "name": "tr-plugin-signing",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2177
+    },
+    {
+      "name": "tr-plugin-text",
+      "file": "CLAUDE.md",
+      "task_routing": true,
+      "legacy_privilege_banner": false,
+      "bytes": 2174
+    }
+  ]
+}

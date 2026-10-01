@@ -2,7 +2,7 @@
 
 import { getNodes } from './vault-cache.mjs';
 import crypto from 'node:crypto';
-import { selectRules, assembleContext } from './context-policy.mjs';
+import { selectRules, assembleContext, curatedRules, ruleFingerprint, RULE_CATEGORIES } from './context-policy.mjs';
 import {
   getEmbedding,
   cosineSimilarity,
@@ -69,21 +69,21 @@ function temporalScore(node) {
 export async function compileContext({
   query = '', vaultDir, derivedDir, budget = {}, consumer = 'api',
   momentumSlugs = [], actions = [], projectRoot = process.cwd(), semantic = false,
-  nodes, contributions = [], versionInputs = '',
+  nodes, contributions = [], versionInputs = '', includeKnowledge = false,
 } = {}) {
   const startTime = Date.now();
   const b = { ...DEFAULT_BUDGET, total: 4000, ...budget };
   const allNodes = (nodes || getNodes(vaultDir)).map(n => ({ ...n }));
-  const rules = selectRules(allNodes, { actions, projectRoot });
+  const rules = selectRules(curatedRules(allNodes), { actions, projectRoot });
   const required = rules.map(n => ({ id: `${n._layer || 'project'}:${n.slug}`, required: true,
-    text: `## ${n.title || n.slug} [${n.slug}]\n\n${(n.body || n.content || '').trim()}` }));
+    text: n._directive ? `[${n.slug}] ${n._directive}` : `## ${n.title || n.slug} [${n.slug}]\n\n${(n.body || n.content || '').trim()}` }));
   let queryEmbedding = null, embeddingsIndex = {};
-  if (semantic && query) {
+  if (includeKnowledge && semantic && query) {
     try { queryEmbedding = await getEmbedding(String(query)); embeddingsIndex = loadEmbeddingsIndex(derivedDir); } catch { /* local ranking remains usable */ }
   }
   const terms = String(query).toLowerCase().match(/[\p{L}\p{N}_-]+/gu) || [];
   const selectedIds = new Set(rules.map(n => n.slug));
-  const candidates = allNodes.filter(n => n.status === 'active' && !selectedIds.has(n.slug) &&
+  const candidates = (includeKnowledge ? allNodes : []).filter(n => n.status === 'active' && !n.tags?.includes('context:policy') && !selectedIds.has(n.slug) &&
     !['invariants', 'preferences', 'anti-patterns'].includes(n.category)).map(n => {
     const text = `${n.title || ''} ${n.body || n.content || ''}`.toLowerCase();
     const overlap = terms.filter(term => text.includes(term)).length;
@@ -98,16 +98,48 @@ export async function compileContext({
   result.stats.compile_ms = Date.now() - startTime;
   result.stats.consumer = consumer;
   result.stats.actions = actions;
+  result.stats.curation_sources = allNodes.filter(n => RULE_CATEGORIES.has(n.category)).map(n => ({
+    id: `${n._layer || 'project'}:${n.slug}`, source_hash: ruleFingerprint(n),
+  }));
   result.stats.unresolved_contradictions = rules.flatMap(node => (node.contradicts || [])
     .filter(slug => rules.some(other => other.slug === slug)).map(slug => [node.slug, slug]));
   result.stats.version = crypto.createHash('sha256').update(JSON.stringify({
-    policy: 1, projectRoot, actions, versionInputs, nodes: allNodes, capsule: result.stats.version,
+    policy: 2, projectRoot, actions, includeKnowledge, versionInputs, nodes: allNodes, capsule: result.stats.version,
   })).digest('hex');
   result.stats.mode = queryEmbedding ? 'semantic' : 'local';
   result.stats.slots = { invariants: { nodes: rules.filter(n => n.category === 'invariants').length,
     tokens: result.stats.required_tokens } };
   result.stats.slots_filled = result.stats.contributions.length;
   return result;
+}
+
+export function renderCapsule(result, format = 'json') {
+  return format === 'text' ? `ready:${result.ready} tokens:${result.stats.total_tokens} version:${result.stats.version}\n${result.context}` : JSON.stringify(result);
+}
+
+/** Budget the actual wire representation, including metadata, escaping and status. */
+export function capsuleResponse(result, { total = 4000, debug = false, format = 'json' } = {}) {
+  if (!Number.isFinite(total) || total < 1) throw new Error('Context total must be a positive finite token estimate');
+  const stats = debug ? { ...result.stats } : {
+    version: result.stats.version, mode: result.stats.mode,
+    token_measurement: 'estimated_chars_divided_by_four',
+    required_count: result.stats.required_ids.length, body_tokens: estimateTokens(result.context),
+  };
+  const response = { ready: result.ready, context: result.context, stats };
+  stats.budget = total;
+  // Counts affect serialization themselves. Iterate to a stable representation.
+  for (let i = 0; i < 20; i++) {
+    const previous = renderCapsule(response, format);
+    stats.total_tokens = estimateTokens(previous + '\n');
+    if (debug) {
+      stats.budget_used = stats.total_tokens;
+      stats.budget_remaining = Math.max(0, total - stats.total_tokens);
+    }
+    stats.overflow_tokens = Math.max(0, stats.total_tokens - total);
+    response.ready = result.ready && stats.overflow_tokens === 0;
+    if (renderCapsule(response, format) === previous) return response;
+  }
+  throw new Error('Context output accounting did not converge');
 }
 
 /**

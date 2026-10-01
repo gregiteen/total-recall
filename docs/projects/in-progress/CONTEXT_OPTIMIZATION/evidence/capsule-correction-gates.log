@@ -1,0 +1,14 @@
+🔍 [code-quality] javascript — 6 check(s) in /private/tmp/tr-context-fix.J2GBIF
+   → dist-freshness: npm run check:dist
+     ✅ 0 error(s), exit 0 (0.1s)
+   → open-source-paths: grep-forbid (4 pattern(s))
+     ✅ 0 error(s), exit 0 (0.0s)
+   → shipped-package-paths: grep-forbid (4 pattern(s))
+     ✅ 0 error(s), exit 0 (0.0s)
+   → scaffold-brain-state: node scripts/check-scaffold-state.mjs
+     ✅ 0 error(s), exit 0 (0.0s)
+   → ssss-registry: npm run check:ssss-registry
+     ✅ 0 error(s), exit 0 (0.3s)
+   → test: npm test
+     ✅ 0 error(s), exit 0 (189.2s)
+📊 [code-quality] 0 finding(s) in 189.9s — read with: node .agent/skills/code-quality/core/report.mjs

@@ -1,0 +1,276 @@
+{
+  "updated_at": "2026-10-01T05:45:11.933Z",
+  "scope": "only core entrypoint and operations reference; canonical brain data untouched",
+  "updated": [
+    {
+      "brainDir": "/Users/greg/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/ultrachat-ai-powered/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/dd/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/ssss/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/portfolio-site/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/festech.live/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/documenso/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/hedgehog/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/PAT/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/moogie_crm/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-phone/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-domains/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-composable-cli/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-code-quality/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-decision/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-design/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-signing/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    },
+    {
+      "brainDir": "/Users/greg/Github/tr-plugin-text/.agent/skills/total-recall",
+      "files": [
+        {
+          "path": "SKILL.md",
+          "bytes": 2379,
+          "sha256": "2d4cbc3dcb365a956c403e273be4e7c8730c367879b3045b89074d498f204679"
+        },
+        {
+          "path": "references/operations.md",
+          "bytes": 36979,
+          "sha256": "910271dd90a3d2b92c7dcc1fad83b594a70ce17a2baf7d8dfd6d3b991744da13"
+        }
+      ]
+    }
+  ]
+}

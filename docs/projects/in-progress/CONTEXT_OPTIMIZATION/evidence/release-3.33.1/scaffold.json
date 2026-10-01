@@ -1,0 +1,30 @@
+{
+  "version": "3.33.1",
+  "files": 584,
+  "stages": [
+    {
+      "stage": "pack --json --ignore-scripts",
+      "exit": 0
+    },
+    {
+      "stage": "install /private/tmp/tr-push-3331.qu5kdp/total-recall-brain-3.33.1.tgz --ignore-scripts --no-audit --no-fund",
+      "exit": 0
+    },
+    {
+      "stage": "/var/folders/hm/yzplvjvd3dq1_2wlzkng83k40000gn/T/tr-scaffold-3331-WwzDbM/node_modules/total-recall-brain/bin/total-recall.mjs init --project --yes",
+      "exit": 0
+    },
+    {
+      "stage": "/var/folders/hm/yzplvjvd3dq1_2wlzkng83k40000gn/T/tr-scaffold-3331-WwzDbM/node_modules/total-recall-brain/bin/total-recall.mjs connect codex",
+      "exit": 0
+    },
+    {
+      "stage": "/var/folders/hm/yzplvjvd3dq1_2wlzkng83k40000gn/T/tr-scaffold-3331-WwzDbM/node_modules/total-recall-brain/bin/total-recall.mjs context scaffold startup --action read",
+      "exit": 0
+    }
+  ],
+  "default_text_ready": true,
+  "private_state": false,
+  "core_bytes": 2379,
+  "projection_bytes": 2379
+}

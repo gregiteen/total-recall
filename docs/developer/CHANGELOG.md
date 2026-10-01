@@ -1,3 +1,12 @@
+## 3.33.1 — 2026-10-01
+
+- Update transitive `ip-address` to 10.7.2 in the lockfile to resolve address-classification and parser advisories.
+
+- Default task capsules to concise text and required rules only; supporting knowledge and diagnostic inventories require explicit flags. CLI callers needing JSON must pass `--format json`.
+- Count the complete serialized CLI/API response against the 4,000-token estimate budget and block action on overflow without truncating required rules.
+- Support explicit repository-local rule directives bound to canonical source fingerprints. Missing, stale or invalid curation preserves full original rules; private policies never ship in the scaffold.
+- Apply the same curated directives to static instruction surfaces and task capsules. Exclude generated IDE skill projections from test discovery.
+
 ## 3.33.0 — 2026-09-30
 
 - Replace permanent rule/manual injection with compact task routing and complete required-rule capsules. Explicit activation tags preserve unknown constraints; required overflow blocks action.

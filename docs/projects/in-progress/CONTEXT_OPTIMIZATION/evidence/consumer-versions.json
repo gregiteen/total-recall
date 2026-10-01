@@ -1,0 +1,151 @@
+{
+  "checked_at": "2026-10-01T05:45:29.038Z",
+  "consumers": 15,
+  "not_current": 0,
+  "results": [
+    {
+      "name": "total-recall",
+      "root": "/Users/greg/Github/total-recall",
+      "declared": "^3.17.0",
+      "installed": "3.33.0",
+      "isSourceTree": true,
+      "packageName": "total-recall-brain"
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "root": "/Users/greg/Github/ultrachat-ai-powered",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "ultrachat"
+    },
+    {
+      "name": "dd",
+      "root": "/Users/greg/Github/dd",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "dd"
+    },
+    {
+      "name": "ssss",
+      "root": "/Users/greg/Github/ssss",
+      "declared": null,
+      "installed": null,
+      "isSourceTree": false,
+      "packageName": "@gregiteen/ssss-cli"
+    },
+    {
+      "name": "portfolio-site",
+      "root": "/Users/greg/Github/portfolio-site",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "portfolio-site"
+    },
+    {
+      "name": "festech.live",
+      "root": "/Users/greg/Github/festech.live",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "festech.live-monorepo"
+    },
+    {
+      "name": "documenso",
+      "root": "/Users/greg/Github/documenso",
+      "declared": null,
+      "installed": null,
+      "isSourceTree": false,
+      "packageName": "@documenso/root"
+    },
+    {
+      "name": "hedgehog",
+      "root": "/Users/greg/Github/hedgehog",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "hedgehog"
+    },
+    {
+      "name": "PAT",
+      "root": "/Users/greg/Github/PAT",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "personal-assistive-technologies"
+    },
+    {
+      "name": "moogie_crm",
+      "root": "/Users/greg/Github/moogie_crm",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "dr-dabber-field-crm"
+    },
+    {
+      "name": "tr-plugin-phone",
+      "root": "/Users/greg/Github/tr-plugin-phone",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-phone"
+    },
+    {
+      "name": "tr-plugin-domains",
+      "root": "/Users/greg/Github/tr-plugin-domains",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-domains"
+    },
+    {
+      "name": "tr-plugin-composable-cli",
+      "root": "/Users/greg/Github/tr-plugin-composable-cli",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-composable-cli"
+    },
+    {
+      "name": "tr-plugin-code-quality",
+      "root": "/Users/greg/Github/tr-plugin-code-quality",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-code-quality"
+    },
+    {
+      "name": "tr-plugin-decision",
+      "root": "/Users/greg/Github/tr-plugin-decision",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-decision"
+    },
+    {
+      "name": "tr-plugin-design",
+      "root": "/Users/greg/Github/tr-plugin-design",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-design"
+    },
+    {
+      "name": "tr-plugin-signing",
+      "root": "/Users/greg/Github/tr-plugin-signing",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-signing"
+    },
+    {
+      "name": "tr-plugin-text",
+      "root": "/Users/greg/Github/tr-plugin-text",
+      "declared": "^3.33.0",
+      "installed": "3.33.0",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-text"
+    }
+  ]
+}

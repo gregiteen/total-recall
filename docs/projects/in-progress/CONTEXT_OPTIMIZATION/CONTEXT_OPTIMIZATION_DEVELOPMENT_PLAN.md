@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Development Plan
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
@@ -10,7 +10,7 @@
 
 ## Execution boundary
 
-This plan follows the completed audit and PRD. Implementation is complete and passed the final frozen-snapshot gates. Retain the audit baseline and final verification evidence. Read SSSS and skill-management methods only when the corresponding implementation is activated. Test and quality jobs run in background on the sanctioned Mac mini. The user subsequently authorized build and publication after completion.
+This plan follows the completed audit and PRD. Release 3.33.0 passed its frozen-snapshot gates, but the capsule path was reopened for A-014/A-015; those corrections require their own verification. Retain the audit baseline and final verification evidence. Read SSSS and skill-management methods only when the corresponding implementation is activated. Test and quality jobs run in background on the sanctioned Mac mini. The user subsequently authorized build and publication after completion.
 
 ## Phase 0 — Audit and planning
 
@@ -59,3 +59,11 @@ Refresh authoritative architecture and repository expert references, remove temp
 ## Dependency and ownership notes
 
 Measurement precedes choosing storage/index optimizations. Required-set policy precedes reducing static visibility. Canonical source changes precede generated artifact refresh. Synthetic cases precede production wiring. No cross-repository skill deployment, provider migration, general security audit or unrelated dependency remediation is bundled into this project.
+
+## Reopened correction — A-014/A-015
+
+Default task routing returns required instructions only with compact output. Knowledge and diagnostic inventories are explicit opt-ins. Entire serialized responses determine readiness. A repository-local validated decision records manually curated action triggers and concise directives bound to canonical source hashes; unknown, malformed or stale entries retain original required rules. Canonical bodies remain retrievable. Verify actual local capsule sizes and conservative fallback, then run focused/full sanctioned checks before completion.
+
+## Authorized 3.33.1 release — A-016
+
+Update only the compatible ip-address lock resolution, verify the exact package/source snapshot on Mac mini with zero production audit findings, native boot and clean scaffold, then commit/tag/publish, verify registry and registered installs, refresh the managed runtime and archive after cleanup.

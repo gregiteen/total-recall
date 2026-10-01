@@ -195,8 +195,8 @@ describe('parallel subagent dispatch', () => {
     // A budget tight enough that the query, not the vault size, decides content.
     const budget = { total: 500 };
     const [deploy, auth] = await Promise.all([
-      compileContext({ query: 'production droplet build RAM natively', vaultDir, derivedDir, budget }),
-      compileContext({ query: 'kubernetes pod scheduling container image', vaultDir, derivedDir, budget }),
+      compileContext({ query: 'production droplet build RAM natively', vaultDir, derivedDir, budget, includeKnowledge: true }),
+      compileContext({ query: 'kubernetes pod scheduling container image', vaultDir, derivedDir, budget, includeKnowledge: true }),
     ]);
     expect(deploy.context).not.toBe(auth.context);
   });

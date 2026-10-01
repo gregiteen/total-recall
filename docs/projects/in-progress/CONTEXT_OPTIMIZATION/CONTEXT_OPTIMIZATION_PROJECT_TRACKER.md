@@ -1,16 +1,16 @@
 # CONTEXT_OPTIMIZATION — Project Tracker
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
 
 ---
 
-Implementation Status: Complete. Built and published as 3.33.0.
+Implementation Status: Capsule correction 3.33.1 complete; versioned source and package verified. Publication and installed rollout are executing under /push authorization.
 
-Readiness Status: Verified for source, built artifact, isolated authenticated workflow and npm/Git publication. Running deployment on other hosts is not certified by this project.
+Readiness Status: Source CLI, compiled local surfaces, selected running API and full Mac mini gate verified. Correction publication and installed-consumer rollout remain pending, so the project stays in progress.
 
 ## ✅ Phase 0: Audit
 
@@ -78,6 +78,31 @@ Goal: verify the implemented path and clean up before declaring readiness.
 - [x] Publish and independently verify npm 3.33.0.
 - [x] Preserve release evidence and clean owned temporary work before closing.
 
+## Post-release propagation — user requested 2026-10-01
+
+- [x] Restart owned local server and verify live 3.33.0 with managed daemon.
+- [x] Inspect all registered roots, dependency versions and install lifecycle hooks.
+- [x] Update consumers requiring 3.33.0 and verify declared/installed versions.
+- [x] Refresh global and registered core skill entrypoints plus their operations references; preserve all brain state.
+- [x] Compile global and registered instruction surfaces and inspect generated bootstrap/projection identity.
+- [x] Resume managed daemon and record final propagation evidence.
+
+## ✅ Capsule correction (A-014/A-015)
+
+- [x] Reproduce and fix default document/diagnostic inflation; count complete CLI/API output.
+- [x] Add explicit repository-local, source-fingerprinted rule curation; retain canonical bodies and fail conservatively on drift.
+- [x] Curate this repository and verify ordinary read/edit/test and overflow behavior.
+- [x] Run focused and full Mac mini checks; update contracts and evidence; clean owned jobs.
+
+## ⏳ Correction release 3.33.1
+
+- [x] A-016: update transitive ip-address and verify zero production advisories.
+
+- [x] Verify versioned source with full remote gates, native boot, package dry run and clean scaffold.
+- [ ] Commit, tag, push, publish and independently verify registry artifact.
+- [ ] Update installed consumers, refresh runtime and preserve delivery evidence.
+- [ ] Clean owned jobs and archive verified project.
+
 ## Verification Log
 
 - 2026-09-30: clean source commit `5b67b20b73a3bd2896036e26cb02ba917fafbfb5`; initial working tree clean.
@@ -122,3 +147,31 @@ Goal: verify the implemented path and clean up before declaring readiness.
 | 2026-10-01T01:54:00Z | Codex | Commit implementation e0b4f94 and fast-forward main; compare tested and publishing package | Publishing folder contained three stale frontend asset files after the initial copy. Mirrored verified dist with deletion, reran publishing checks in background, and confirmed exact 584-file manifest parity. No source change | evidence/publishing-package.json; dist checks exit 0 |
 
 | 2026-10-01T05:19:16Z | Codex | Verify npm registry and Git remote after successful background publication; clean owned Mac mini snapshot | Registry latest is 3.33.0, shasum eb5c209f8884caf75ffb4213a515206255fcb4a3. Remote main and v3.33.0 resolve to 1a12d42957381a9bfec1481e52dd84206fbc8ef7. Publish exit 0 and npmrc restoration confirmed. Owned snapshot removed; no owned snapshot process observed. User continuation arrived after publication | evidence/release-verification.json |
+
+| 2026-10-01T05:41:14Z | Codex | Restart owned com.totalrecall.brain after managed daemon stop; force fresh registered repo dry-run | Initial immediate health probe raced startup and returned offline; subsequent probe ready 3.33.0, daemon PID 83582. Fresh scan found 15 updates, 2 no-dependency skips, source checkout current. Earlier plain update showed throttled historical 3.32.4 results; --force corrected the observation | CLI startup JSON and forced update report |
+
+| 2026-10-01T05:44:05Z | Codex | Inspect global core entrypoint and propagation mechanics; complete current project compile | Global entrypoint still 35,827 bytes/version 3.23.3: global skill and all-repo surface refresh were missed at release. Core registry sync is repo_scoped and copies full packages including brain state, so use a bounded two-file instruction refresh under explicit user authorization. --help on compile was not implemented and ran current-project rebuild; it completed with 704 nodes/zero drift. One nonexistent inspection export failed without mutation and was corrected | Skill source metadata; rebuild output; propagation checklist |
+
+| 2026-10-01T05:50:47Z | Codex | Verify dependency rollout, global/core skill parity, existing IDE reconnection, all-surface compile and clean published-package scaffold on Mac mini | 15 consumers declared/installed 3.33.0. Lifecycle scripts suppressed during explicit dependency update; separate app integration tests/deployments not claimed. 19 brain entrypoints match 2,379-byte canonical core including global. Automatic daemon updater overlapped explicit installs; paused daemon and terminated its duplicate installer, then resumed after completion. Existing client reconnects exited 0; one incorrectly quoted worker failed before mutation and was corrected. Final compile exit 0; all 32 inspected IDE files contain task routing and no old privilege banner. Fresh npm 3.33.0 install/init/connect exited 0, reference and Codex projection verified. Temporary fixture removed after evidence copy | evidence/consumer-versions.json; core-entrypoint-verification.json; connection-refresh.json; surface-verification.json; scaffold-verification.json |
+
+| 2026-10-01T06:56:00Z | Codex | Reopen project; inspect CRM launch fix read-only, routing source and full task capsule; isolated focused Mac mini baseline | 27 tests passed; reproduced body/JSON accounting gap and 85 unclassified rules. Initial baseline dependency symlink failure corrected by isolated npm ci. No CRM writes | Audit A-014/A-015; /tmp/tr-context-fix.J2GBIF/baseline.log |
+
+| 2026-10-01T07:10:00Z | Codex | Implement compact text/JSON output, rules-only default, explicit knowledge/debug flags and complete serialized accounting; add local source-hashed curation through validated remember CLI; compile this project | Read-only capsule 541 estimated tokens; read/edit/test text 1,887, JSON 1,977; full required text retained at budget 100 with exit 2. Diagnostic output at budget 4,000 correctly exits 2. Canonical rule bodies, global brain and CRM remain unchanged. Project compile processed 705 nodes with zero drift; owned compile exited. Tests include stale/malformed/conflicting/expired policy fallbacks and explicit exclusions | evidence/capsule-correction.json; source diff; /tmp/tr-context-compile.log |
+
+| 2026-10-01T07:12:00Z | Codex | First full remote gate and correction of isolated test setup | First gate: five package/path/scaffold/registry checks passed; suite failed on missing native SQLite bindings, omitted public scaffold seeds and generated IDE projections collected as tests. Rebuilt the isolated native dependency, restored public seeds, excluded generated .gemini/.codex skill projections in canonical Vitest config, added API response contract tests, froze updated source and launched full gate 2. No findings are treated as waived | /tmp/tr-context-fix.J2GBIF/full.log; full2.log; source diff |
+
+| 2026-10-01T07:16:30Z | Codex | Probe selected local API; stop old daemon and restart owned LaunchAgent, then restore daemon; fix API test configuration mock | First live probe returned 500 from mixed cached modules; after managed restart selected project context returned HTTP 200, ready:true, 1,977 complete-response estimated tokens, no default inventory. Second full suite found only the six new API tests failing because their config mock hid imported config exports; corrected mock and six focused tests passed. Final frozen full gate launched; no product assertion waived. Publication/installed npm consumers are outside this local correction result | evidence/capsule-correction-live.json; remote api-focused.log and full3.log |
+
+| 2026-10-01T07:20:00Z | Codex | Verify final immutable source digest, full remote gate and local runtime; preserve evidence and clean isolated snapshot/owned temporary files | All six gates passed, zero findings; 367 files / 2,294 tests passed. Remote source hashes exactly match local changed sources/config. Selected live API returns compact ready capsule; server, daemon and SSSS readiness confirmed. Cleanup is verified separately below. Correction is local and unpublished; project remains in progress for delivery | evidence/capsule-correction-gates.json; capsule-correction-gates.log; capsule-correction-source.sha256; capsule-correction-live.json |
+
+| 2026-10-01T07:21:34.928592+00:00 | Codex | Confirm cleanup and final whitespace check | Owned remote test snapshot and local temporary files removed; managed server/daemon intentionally remain running. Initial shell cleanup was automatically rejected for force-removal syntax before execution; explicit validated-path cleanup succeeded. Earlier correction ledger times were rounded; this row uses the observed clock. Git diff --check passed. No source changes after final frozen gate | Final tool results; durable correction evidence |
+
+| 2026-10-01T08:44:07.142485+00:00 | Codex | Begin authorized /push; read release/security/quality/test/management contracts, inspect working tree and prior evidence, fetch origin, bump 3.33.1 and prepare isolated mini snapshot | Patch release scoped to capsule correction. Initial remote npm ci exited 127 because non-login PATH lacks npm; resolve installed executable before retry | Release diff; /tmp/tr-push-3331.qu5kdp/install.log |
+
+| 2026-10-01T08:46:27.611722+00:00 | Codex | Run isolated install/build/full gate, native 3.33.1 boot and production dependency audit; update ip-address lock resolution 10.4.0 → 10.7.2 | Build/native passed; audit found one moderate group and triggered compatible lock-only repair. Full gate of initial dependencies still running; no snapshot mutated during it. Local dry-run stdout contains prepublish text before JSON, so plain JSON parsing failed and will use explicit JSON boundary | A-016; native-result.json; audit.json; lock diff |
+
+| 2026-10-01T08:49:41.864055+00:00 | Codex | Verify initial versioned gate/native; correct clean-scaffold npm fixture boundary and refreeze dependency snapshot | Initial six checks green but scaffold install without its own manifest targeted the parent workspace and changed isolated package.json. Restored source package+lock, stopped owned invalid second gate process tree, launched fail-closed npm ci/full gate 3. Fixture now outside source workspace with independent manifest. Local source unaffected; no invalid gate is release evidence | gates.log/gates2.log/install2.log; corrected scaffold runner; gates3.log |
+
+| 2026-10-01T08:52:40.642072+00:00 | Codex | Verify clean standalone tarball install/init/connect/context, source digest and patched production audit; prepare release-only remote pre-push hook | 584 public files; compact default ready; both core/projection 2,379 bytes; zero production advisories. Digest initial inventory accidentally included two ignored .DS_Store files; removed those from measurement, all intended source/config/package hashes match. Hook runs fresh sanctioned-node gates rather than laptop gates or cached reports | scaffold-result.json; audit3.json; source.sha256; temporary release hook |
+
+| 2026-10-01T08:53:52.761302+00:00 | Codex | Review final versioned mini gate, native health, zero production audit, clean scaffold and complete source/package digests; copy durable evidence, update public architecture/CLI/changelog and prepare release commit | All six gates exit 0, zero findings. Native HTTP 200 healthy 3.33.1; standalone scaffold ready. Complete 584-file public package digest matches both hosts; docs-only architecture update copied after full suite, fresh remote pre-push gates will check it | evidence/release-3.33.1/*; publishing dry-run exit 0; diff --check |

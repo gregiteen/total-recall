@@ -1,7 +1,7 @@
 # CONTEXT_OPTIMIZATION — Architecture
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: ✅ Completed
+> **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
@@ -88,11 +88,13 @@ a dedicated reader with only ssss:read, memory:read and instructions:read was
 verified in process and installed without exposing a token. No other repository's
 configuration was changed.
 
-The CLI uses a 16,000-token conservative default because the live required set
-measured 13,388 estimated tokens before supporting knowledge. The API retains
-4,000 and returns not-ready for oversized sets. A curated 4,000-token capsule
-remains available with --budget. This changes the initial candidate target on
-measured coverage grounds; no required prose was rewritten to meet a size target.
+The reopened correction restores a 4,000-token CLI/API default and budgets the
+entire serialized response. CLI defaults to compact text; knowledge and diagnostic
+inventories are explicit opt-ins. Required content is retained on overflow.
+Repository-local explicit curation uses one validated decision tagged context:policy,
+with source fingerprints, supported action triggers and manually verified concise
+directives. Source edits, malformed/expired policies and conflicting policies fall
+back to canonical rule behavior. Canonical bodies and global data remain intact.
 
 Persistent bootstrap plus core/expert entrypoints measured 4,400 bytes compared
 with the 108,840-byte audit inventory (95.96% reduction). This is TR-owned file
@@ -110,3 +112,7 @@ invoke the local CLI before changed actions. Stateless fallback refreshes every
 task/action/project and after memory/skill edits. Context versions include rule,
 project/action and skill/reference input changes. Server-independent retrieval
 and denied access are tested separately from native authenticated API delivery.
+
+## Reopened correction — A-014/A-015
+
+Default task routing returns required instructions only with compact output. Knowledge and diagnostic inventories are explicit opt-ins. Entire serialized responses determine readiness. A repository-local validated decision records manually curated action triggers and concise directives bound to canonical source hashes; unknown, malformed or stale entries retain original required rules. Canonical bodies remain retrievable. Verify actual local capsule sizes and conservative fallback, then run focused/full sanctioned checks before completion.

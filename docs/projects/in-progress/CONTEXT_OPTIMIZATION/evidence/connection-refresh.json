@@ -1,0 +1,165 @@
+{
+  "updated_at": "2026-10-01T05:49:51.629Z",
+  "results": [
+    {
+      "name": "total-recall",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "total-recall",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "total-recall",
+      "client": "gemini",
+      "exit": 0
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "ultrachat-ai-powered",
+      "client": "gemini",
+      "exit": 0
+    },
+    {
+      "name": "dd",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "dd",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "dd",
+      "client": "gemini",
+      "exit": 0
+    },
+    {
+      "name": "ssss",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "ssss",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "portfolio-site",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "portfolio-site",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "portfolio-site",
+      "client": "gemini",
+      "exit": 0
+    },
+    {
+      "name": "festech.live",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "festech.live",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "festech.live",
+      "client": "gemini",
+      "exit": 0
+    },
+    {
+      "name": "documenso",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "hedgehog",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "hedgehog",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "hedgehog",
+      "client": "gemini",
+      "exit": 0
+    },
+    {
+      "name": "PAT",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "moogie_crm",
+      "client": "codex",
+      "exit": 0
+    },
+    {
+      "name": "moogie_crm",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-phone",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-domains",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-composable-cli",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-code-quality",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-decision",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-design",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-signing",
+      "client": "claude-code",
+      "exit": 0
+    },
+    {
+      "name": "tr-plugin-text",
+      "client": "claude-code",
+      "exit": 0
+    }
+  ]
+}

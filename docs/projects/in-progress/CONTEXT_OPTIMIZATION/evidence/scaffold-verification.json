@@ -1,0 +1,7 @@
+{
+  "version": "3.33.0",
+  "entrypoint_bytes": 2379,
+  "operations_reference": true,
+  "bootstrap": true,
+  "codex_projection_matches": true
+}
