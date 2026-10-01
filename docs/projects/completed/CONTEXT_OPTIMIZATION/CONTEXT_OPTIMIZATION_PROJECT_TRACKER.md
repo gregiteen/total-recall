@@ -1,16 +1,18 @@
 # CONTEXT_OPTIMIZATION — Project Tracker
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: 🏗️ In Progress
+> **Kanban State**: ✅ Completed
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
 
 ---
 
-Implementation Status: Capsule correction 3.33.1 complete; versioned source and package verified. Publication and installed rollout are executing under /push authorization.
+Implementation Status: Complete. Capsule correction 3.33.1 is committed, tagged, pushed and registry-verified; all 15 registered consumers plus the global CLI are installed at 3.33.1.
 
-Readiness Status: Source CLI, compiled local surfaces, selected running API and full Mac mini gate verified. Correction publication and installed-consumer rollout remain pending, so the project stays in progress.
+Readiness Status: Verified
+
+Readiness Evidence: evidence/release-3.33.1/ — six-gate source-exact Mac mini verification, zero production audit findings, healthy native boot, clean scaffold, byte-matched registry tarball, verified installed consumers/global skill parity and live 3.33.1 selected API. Consumer app integration/deployment is outside this package release. Private rule curation remains local to this repository.
 
 ## ✅ Phase 0: Audit
 
@@ -94,14 +96,14 @@ Goal: verify the implemented path and clean up before declaring readiness.
 - [x] Curate this repository and verify ordinary read/edit/test and overflow behavior.
 - [x] Run focused and full Mac mini checks; update contracts and evidence; clean owned jobs.
 
-## ⏳ Correction release 3.33.1
+## ✅ Correction release 3.33.1
 
 - [x] A-016: update transitive ip-address and verify zero production advisories.
 
 - [x] Verify versioned source with full remote gates, native boot, package dry run and clean scaffold.
-- [ ] Commit, tag, push, publish and independently verify registry artifact.
-- [ ] Update installed consumers, refresh runtime and preserve delivery evidence.
-- [ ] Clean owned jobs and archive verified project.
+- [x] Commit, tag, push, publish and independently verify registry artifact.
+- [x] Update installed consumers, refresh runtime and preserve delivery evidence.
+- [x] Clean owned jobs and archive verified project.
 
 ## Verification Log
 
@@ -175,3 +177,11 @@ Goal: verify the implemented path and clean up before declaring readiness.
 | 2026-10-01T08:52:40.642072+00:00 | Codex | Verify clean standalone tarball install/init/connect/context, source digest and patched production audit; prepare release-only remote pre-push hook | 584 public files; compact default ready; both core/projection 2,379 bytes; zero production advisories. Digest initial inventory accidentally included two ignored .DS_Store files; removed those from measurement, all intended source/config/package hashes match. Hook runs fresh sanctioned-node gates rather than laptop gates or cached reports | scaffold-result.json; audit3.json; source.sha256; temporary release hook |
 
 | 2026-10-01T08:53:52.761302+00:00 | Codex | Review final versioned mini gate, native health, zero production audit, clean scaffold and complete source/package digests; copy durable evidence, update public architecture/CLI/changelog and prepare release commit | All six gates exit 0, zero findings. Native HTTP 200 healthy 3.33.1; standalone scaffold ready. Complete 584-file public package digest matches both hosts; docs-only architecture update copied after full suite, fresh remote pre-push gates will check it | evidence/release-3.33.1/*; publishing dry-run exit 0; diff --check |
+
+| 2026-10-01T08:55:03.943993+00:00 | Codex | Commit complete correction as 24e4fe7, tag v3.33.1, run publish.mjs with fresh remote release hook | Git remote main/tag both resolve to release commit; publish script exit 0 and npmrc restored. Registry still processing (version endpoint 404), so publication confirmation/consumer rollout remain pending. Initial scaffold reference path guess nonexistent; discover actual canonical scaffold path before inspection | Git ls-remote; /tmp/tr-publish-3331.log; hook prepush.log |
+
+| 2026-10-01T08:59:08.726138+00:00 | Codex | Check registry metadata and tarball independently; align local installed dependency tree to verified lock and reload managed server | Registry metadata/version/tarball still 404 after npm accepted processing; npm view confirms absence. Consumers held until availability. Source npm install --ignore-scripts exit 0, source manifests unchanged, ip-address 10.7.2 installed. Managed daemon stopped before LaunchAgent restart | Source install log; registry probes; npm ls; launchctl exit 0 |
+
+| 2026-10-01T09:03:48.997354+00:00 | Codex | Independently confirm registry 3.33.1 and release shasum/Git identity; verify selected live source API and shared readiness; start registered dependency and global CLI installs | Registry gitHead matches 24e4fe7 and shasum matches accepted publishing artifact (049744d1111b9ba5fffca49eaddd8eb7b529aaf2). Live API 200 ready, 1,977 estimates/46 required rules/no default inventory; shared runtime 3.33.1 ready. Installs in progress with lifecycle scripts suppressed; other apps not redeployed or tested | registry.json; live.json; startup.json; rollout logs |
+
+| 2026-10-01T09:06:52.221578+00:00 | Codex | Verify registry tarball, 15 installed consumers, global CLI/skill parity and ready live runtime; close release checklist and archive complete project | All 584 registry files match verified package hashes; global CLI and all consumers 3.33.1; installed startup capsule ready at 541 estimates. No owned mini snapshot process remains. Python HTTPS fetch initially failed its local CA configuration; Node validated TLS download succeeded, with no verification bypass. Temporary snapshot/files removal follows final documentation push | evidence/release-3.33.1/tarball.json, consumers.json, global-skill.json, startup.json, live.json; fresh process inventory |

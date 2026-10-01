@@ -1,0 +1,170 @@
+{
+  "checked_at": "2026-10-01T09:05:13.413Z",
+  "consumers": 15,
+  "not_current": 0,
+  "global_version": "3.33.1",
+  "results": [
+    {
+      "root": "/Users/greg/Github/total-recall",
+      "name": "total-recall",
+      "source": "project-registry",
+      "declared": "^3.17.0",
+      "installed": "3.33.1",
+      "isSourceTree": true,
+      "packageName": "total-recall-brain"
+    },
+    {
+      "root": "/Users/greg/Github/ultrachat-ai-powered",
+      "name": "ultrachat-ai-powered",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "ultrachat"
+    },
+    {
+      "root": "/Users/greg/Github/dd",
+      "name": "dd",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "dd"
+    },
+    {
+      "root": "/Users/greg/Github/ssss",
+      "name": "ssss",
+      "source": "project-registry",
+      "declared": null,
+      "installed": null,
+      "isSourceTree": false,
+      "packageName": "@gregiteen/ssss-cli"
+    },
+    {
+      "root": "/Users/greg/Github/portfolio-site",
+      "name": "portfolio-site",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "portfolio-site"
+    },
+    {
+      "root": "/Users/greg/Github/festech.live",
+      "name": "festech.live",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "festech.live-monorepo"
+    },
+    {
+      "root": "/Users/greg/Github/documenso",
+      "name": "documenso",
+      "source": "project-registry",
+      "declared": null,
+      "installed": null,
+      "isSourceTree": false,
+      "packageName": "@documenso/root"
+    },
+    {
+      "root": "/Users/greg/Github/hedgehog",
+      "name": "hedgehog",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "hedgehog"
+    },
+    {
+      "root": "/Users/greg/Github/PAT",
+      "name": "PAT",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "personal-assistive-technologies"
+    },
+    {
+      "root": "/Users/greg/Github/moogie_crm",
+      "name": "moogie_crm",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "dr-dabber-field-crm"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-phone",
+      "name": "tr-plugin-phone",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-phone"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-domains",
+      "name": "tr-plugin-domains",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-domains"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-composable-cli",
+      "name": "tr-plugin-composable-cli",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-composable-cli"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-code-quality",
+      "name": "tr-plugin-code-quality",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-code-quality"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-decision",
+      "name": "tr-plugin-decision",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-decision"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-design",
+      "name": "tr-plugin-design",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-design"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-signing",
+      "name": "tr-plugin-signing",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-signing"
+    },
+    {
+      "root": "/Users/greg/Github/tr-plugin-text",
+      "name": "tr-plugin-text",
+      "source": "project-registry",
+      "declared": "^3.33.1",
+      "installed": "3.33.1",
+      "isSourceTree": false,
+      "packageName": "tr-plugin-text"
+    }
+  ]
+}
