@@ -1,16 +1,16 @@
 # CONTEXT_OPTIMIZATION — Project Tracker
 
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
-> **Kanban State**: 🏗️ In Progress
+> **Kanban State**: ✅ Completed
 > **Author**: Codex
 > **Date**: 2026-09-30
 > **Based on audit**: CONTEXT_OPTIMIZATION_AUDIT.md (Complete, 5b67b20b73a3bd2896036e26cb02ba917fafbfb5)
 
 ---
 
-Implementation Status: Complete. Release publication is in progress under user authorization.
+Implementation Status: Complete. Built and published as 3.33.0.
 
-Readiness Status: Verified for source, built artifact and isolated authenticated workflow. Registry publication remains in progress.
+Readiness Status: Verified for source, built artifact, isolated authenticated workflow and npm/Git publication. Running deployment on other hosts is not certified by this project.
 
 ## ✅ Phase 0: Audit
 
@@ -74,9 +74,9 @@ Goal: verify the implemented path and clean up before declaring readiness.
 
 ## Release publication
 
-- [ ] Commit complete working tree, tag 3.33.0 and push main.
-- [ ] Publish and independently verify npm 3.33.0.
-- [ ] Preserve release evidence and clean owned temporary work before closing.
+- [x] Commit complete working tree, tag 3.33.0 and push main.
+- [x] Publish and independently verify npm 3.33.0.
+- [x] Preserve release evidence and clean owned temporary work before closing.
 
 ## Verification Log
 
@@ -120,3 +120,5 @@ Goal: verify the implemented path and clean up before declaring readiness.
 | 2026-10-01T01:53:28Z | Codex | Verify publishing-host dist check and package dry run in background; inspect all package paths | Both exited 0; 584 entries include context policy/CLI, reference manual and frontend bundle. Four allowlisted public scaffold memory nodes are expected; no private vault, token or derived search index ships | evidence/publishing-package.json; final mini scaffold-brain-state gate |
 
 | 2026-10-01T01:54:00Z | Codex | Commit implementation e0b4f94 and fast-forward main; compare tested and publishing package | Publishing folder contained three stale frontend asset files after the initial copy. Mirrored verified dist with deletion, reran publishing checks in background, and confirmed exact 584-file manifest parity. No source change | evidence/publishing-package.json; dist checks exit 0 |
+
+| 2026-10-01T05:19:16Z | Codex | Verify npm registry and Git remote after successful background publication; clean owned Mac mini snapshot | Registry latest is 3.33.0, shasum eb5c209f8884caf75ffb4213a515206255fcb4a3. Remote main and v3.33.0 resolve to 1a12d42957381a9bfec1481e52dd84206fbc8ef7. Publish exit 0 and npmrc restoration confirmed. Owned snapshot removed; no owned snapshot process observed. User continuation arrived after publication | evidence/release-verification.json |

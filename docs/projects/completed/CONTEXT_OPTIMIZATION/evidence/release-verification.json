@@ -1,0 +1,14 @@
+{
+  "verified_at_utc": "2026-10-01T05:19:16Z",
+  "version": "3.33.0",
+  "registry_latest": "3.33.0",
+  "registry_shasum": "eb5c209f8884caf75ffb4213a515206255fcb4a3",
+  "release_commit": "1a12d42957381a9bfec1481e52dd84206fbc8ef7",
+  "tag": "v3.33.0",
+  "publish_exit": 0,
+  "full_gate_exit": 0,
+  "full_test_files_passed": 367,
+  "full_tests_passed": 2281,
+  "owned_remote_snapshot_removed": true,
+  "deployment_scope": "isolated native 3.33.0 walkthrough; other host deployment not certified"
+}
