@@ -39,7 +39,7 @@ export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-rec
  * @param {import('express').Request} req
  * @returns {string} Absolute path to the memory-vault directory
  */
-export function resolveVaultFromQuery(req) {
+export function resolveVaultFromQuery(req, { strict = false } = {}) {
   const rawBrainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
   let brainId = rawBrainId;
 
@@ -61,6 +61,7 @@ export function resolveVaultFromQuery(req) {
     const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
 
     if (!fs.existsSync(registryPath)) {
+      if (strict) throw Object.assign(new Error('Selected brain is unavailable'), { status: 404 });
       return VAULT_DIR;
     }
 
@@ -89,7 +90,8 @@ export function resolveVaultFromQuery(req) {
     }
   }
 
-  // Unknown brain ID format or resolution failed → default vault
+  if (strict) throw Object.assign(new Error('Selected brain is unavailable'), { status: 404 });
+  // Legacy callers retain the default fallback; context/instructions fail closed.
   return VAULT_DIR;
 }
 
@@ -145,6 +147,7 @@ export function badRequest(res, msg) {
 }
 
 export function serverError(res, err) {
+  if (err.status === 404) return res.status(404).json({ error: 'Selected brain is unavailable' });
   logger.error('rest', 'Internal server error', { error: err.message, stack: err.stack });
   return res.status(500).json({ error: 'Internal server error' });
 }

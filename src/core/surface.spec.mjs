@@ -122,7 +122,7 @@ describe('mergeGlobalRuleNodes', () => {
     expect(globalNode._layer).toBeUndefined();
   });
 
-  it('never drops rules: overflow beyond the budget becomes one-line entries', async () => {
+  it('preserves all unknown required rules without lossy overflow summaries', async () => {
     const prev = process.env.TR_RULE_BUDGET_CHARS;
     process.env.TR_RULE_BUDGET_CHARS = JSON.stringify({ corrections: 200 });
     try {
@@ -135,7 +135,7 @@ describe('mergeGlobalRuleNodes', () => {
       const block = await buildRulesBlock(null, nodes);
       expect(block).toContain('16 corrections');
       for (let i = 0; i < 16; i++) expect(block).toContain(`Correction number ${i}`);
-      expect(block).toMatch(/\d+ more, one line each/);
+      expect(block).not.toMatch(/\d+ more, one line each/);
       expect(block).not.toContain('not shown');
     } finally {
       if (prev === undefined) delete process.env.TR_RULE_BUDGET_CHARS;

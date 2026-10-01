@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import { requireAuth, requireScope } from '../auth.mjs';
+import path from 'node:path';
+import { getNodes } from '../../core/vault-cache.mjs';
+import { mergeGlobalRuleNodes, legacyRuleContributions } from '../../core/surface.mjs';
+import { brainDir as globalBrainDir } from '../../core/config.mjs';
+import { surfaceInputsHash } from '../../core/command-surface.mjs';
 import {
   serverError,
   badRequest,
@@ -12,9 +17,13 @@ const router = Router();
 router.post('/api/context', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
     const { compileContext } = await import('../../core/context-compiler.mjs');
-    const { query, budget, momentum_slugs } = req.body || {};
-    const vaultDir = resolveVaultFromQuery(req);
-    const { derivedDir } = pathsForVault(vaultDir);
+    const { query, budget, momentum_slugs, actions } = req.body || {};
+    if (actions !== undefined && (!Array.isArray(actions) || actions.some(action => typeof action !== 'string'))) return badRequest(res, 'actions must be an array of strings');
+    const vaultDir = resolveVaultFromQuery(req, { strict: true });
+    const { derivedDir, skillsDir } = pathsForVault(vaultDir);
+    const globalVault = path.join(globalBrainDir, 'memory-vault');
+    const nodes = path.resolve(vaultDir) === path.resolve(globalVault) ? getNodes(vaultDir) :
+      mergeGlobalRuleNodes(getNodes(vaultDir), getNodes(globalVault));
     const result = await compileContext({
       query: query || '',
       vaultDir,
@@ -22,6 +31,11 @@ router.post('/api/context', requireAuth, requireScope('memory:read'), async (req
       budget: budget || {},
       consumer: 'api',
       momentumSlugs: momentum_slugs || [],
+      actions: actions || [],
+      nodes,
+      projectRoot: path.dirname(path.dirname(skillsDir)),
+      contributions: legacyRuleContributions(skillsDir),
+      versionInputs: surfaceInputsHash({ skillsDir }),
     });
     res.json(result);
   } catch (err) {

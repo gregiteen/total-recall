@@ -89,9 +89,26 @@ Autonomously learn and save a new memory node to the vault.
 
 ---
 
+### `context`
+Assemble required rules and supporting knowledge for the current task before action.
+
+```sh
+total-recall context "task description" --action edit,test --format json
+```
+
+The CLI defaults to 16,000 estimated tokens for conservative uncurated rule sets;
+`--budget 4000` selects a smaller explicit budget. The API defaults to 4,000.
+Unknown applicability remains required. `ready: false` and exit 2 mean the full
+required set exceeds the budget; never act from a truncated capsule. All headings
+and separators count. Refresh on task/action/project/rule/skill changes.
+Validated memory tags `context:universal` and `context:action:<action>` curate
+activation separately from modality. Unknown actions activate rules conservatively.
+Supported actions: read, edit, test, build, publish, deploy, secrets, network,
+memory, skills and project. The local CLI works without a server.
+
 ### `recall`
-Perform Vector Semantic Search or exact keyword queries across memory layers.
-- **What it does**: Queries the local semantic vector embedding files, prints cosine-similarity rankings, and resolves session history traces.
+Search local metadata and indexed full text across enabled memory layers.
+- **What it does**: Searches a disposable local index and reads only selected Markdown documents. Semantic enrichment is opt-in and exact hits bypass providers.
 - **Usage**:
   ```bash
   npx total-recall recall "<query>" [options]
@@ -101,6 +118,10 @@ Perform Vector Semantic Search or exact keyword queries across memory layers.
   - `--project`: Query the local project layer only.
   - `--top-k, -k <number>`: Number of results to return (default: 5).
   - `--no-sessions, -ns`: Exclude ingested session archives from search results.
+  - `--local`: Indexed metadata and body text (default), without a provider.
+  - `--fast`: Metadata matches and selective hydration only.
+  - `--semantic`: Request semantic enrichment for non-exact queries.
+  - `--timings`: Report local index, matching and hydration timing on stderr.
   - `--category <name>`: Filter results by SSSS category.
   - `--tags <list>`: Filter by comma-separated tags list.
 

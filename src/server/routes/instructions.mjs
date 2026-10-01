@@ -14,15 +14,13 @@ import { logger } from '../../core/logger.mjs';
 const router = Router();
 
 function resolveInstructionsPath(req) {
-  const vaultDir = resolveVaultFromQuery(req);
+  const vaultDir = resolveVaultFromQuery(req, { strict: true });
   const paths = pathsForVault(vaultDir);
   // Prefer brain-local INSTRUCTIONS, then shared constant, then package ROOT
   const candidates = [
     paths.instructionsFile,
     // surface compile often writes to parent of .agent (repo root)
     path.join(path.dirname(path.dirname(paths.skillsDir)), 'INSTRUCTIONS.md'),
-    INSTRUCTIONS,
-    path.join(ROOT, 'INSTRUCTIONS.md'),
   ];
   for (const p of candidates) {
     if (p && fs.existsSync(p)) return p;
@@ -43,7 +41,10 @@ function sendTextResource(res, filePath, label) {
 }
 
 router.get('/api/instructions', requireAuth, requireScope('instructions:read'), (req, res) => {
-  return sendTextResource(res, resolveInstructionsPath(req), 'instructions');
+  try {
+    res.set('X-Total-Recall-Brain', req.query?.brain || 'global');
+    return sendTextResource(res, resolveInstructionsPath(req), 'instructions');
+  } catch (err) { return serverError(res, err); }
 });
 
 router.put('/api/instructions', requireAuth, requireScope('instructions:write'), (req, res) => {

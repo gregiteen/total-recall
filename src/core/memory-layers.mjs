@@ -87,6 +87,8 @@ export function buildMemoryLayerIndex(nodes) {
     layer: inferMemoryLayer(node),
     category: node.category,
     status: node.status,
+    modality: node.modality,
+    priority: node.priority,
     confidence: node.confidence,
     importance: node.importance,
     title: node.title,

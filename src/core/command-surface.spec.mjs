@@ -79,5 +79,9 @@ describe('surfaceInputsHash', () => {
     expect(h2).not.toBe(h1);
     fs.writeFileSync(path.join(skills, 'k', 'SKILL.md'), 'xy');
     expect(surfaceInputsHash(opts)).not.toBe(h2);
+    const h3 = surfaceInputsHash(opts);
+    fs.mkdirSync(path.join(skills, 'k', 'references'));
+    fs.writeFileSync(path.join(skills, 'k', 'references', 'manual.md'), 'new reference');
+    expect(surfaceInputsHash(opts)).not.toBe(h3);
   });
 });

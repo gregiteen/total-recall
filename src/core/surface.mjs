@@ -17,6 +17,8 @@ import yaml from 'yaml';
 import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
 import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
 import { fileURLToPath } from 'url';
+import { buildLocalSearchIndex } from './fast-recall.mjs';
+import { selectRules, assembleContext } from './context-policy.mjs';
 
 // Long-lived processes (server, daemon, vault watcher) import this module once.
 // If the rule builder is edited or upgraded after they start, their in-memory
@@ -381,235 +383,44 @@ export function readRuleBudgets(skillsDir) {
   return out;
 }
 
-export async function buildRulesBlock(skillsDir, nodes = [], { consumer = 'ide', derivedDir, force = false, vaultDir, projectRoot } = {}) {
-  // 1. Filter expired rules. Compilation must remain a pure projection step;
-  // archival is handled by explicit memory operations.
-  const now = new Date();
-  const isExpired = (n) => n.expires_at && new Date(n.expires_at) <= now;
+export function legacyRuleContributions(skillsDir) {
+  if (!skillsDir) return [];
+  return ['invariants', 'preferences', 'corrections'].map(name => ({
+    id: `legacy:${name}`, required: true,
+    text: extractRuleContent(path.join(skillsDir, 'total-recall', 'rules', `${name}.md`)),
+  })).filter(item => item.text);
+}
 
-  const expiredNodes = nodes.filter(n => n.status === 'active' && isExpired(n));
-  for (const expired of expiredNodes) {
-    console.error(`⏰ Expired rule omitted from surface: ${expired.slug}`);
+export async function buildRulesBlock(skillsDir, nodes = [], {
+  consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total = bootstrap ? 1000 : 4000,
+} = {}) {
+  const root = projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd());
+  const rules = selectRules(nodes, { actions, projectRoot: root, bootstrap });
+  const contributions = [];
+  const counts = category => rules.filter(n => n.category === category).length;
+  const header = bootstrap ? `## Total Recall task routing\n\nBefore taking action, run \`total-recall context "task description" --action <actions>\` using the installed CLI (in a source checkout: \`node bin/total-recall.mjs context ...\`). Read the complete returned capsule and require ready:true. Unknown rule applicability is conservatively required. If it exits 2, stop: the required set exceeds its budget; inspect overflow and explicitly raise the budget or curate applicability before action.\n\nRefresh at every changed task, action or project, and after a memory/skill edit. Do not infer applicability from semantic similarity. CLI retrieval is local and works without the server. Skills have compact entrypoints; load only relevant references. Canonical vault writes use the validated CLI.\n\nDo not act from this bootstrap alone.\n` :
+    `## Active Rules: ${counts('invariants')} invariants, ${counts('preferences')} preferences, ${counts('anti-patterns')} corrections`;
+  contributions.push({ id: 'routing', text: header, required: true });
+  for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
+    text: `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
+  if (!bootstrap) {
+    if (skillsDir) {
+      contributions.push(...legacyRuleContributions(skillsDir));
+      for (const skill of loadSkills(skillsDir)) contributions.push({ id: `skill:${skill.name}`,
+        text: `Skill ${skill.name}: ${String(skill.description || '').slice(0, 200)} (${path.relative(root, skill.filepath)})` });
+    }
+    contributions.push({ id: 'research', text: buildResearchSection(nodes, { projectRoot: root }) });
+    contributions.push({ id: 'commands', text: buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir))) });
+    const plugin = await assemblePluginContexts({ projectRoot: root, vaultDir, nodes, derivedDir });
+    contributions.push({ id: 'plugins', text: plugin });
   }
-
-  // 2. Group active (non-expired) rules from SSSS vault nodes.
-  // Note: Only invariants, preferences, and anti-patterns are included in instructions,
-  // enforcing Category Partitioning (concepts, decisions, facts are search-only).
-  const isImportant = (n) => n.importance === undefined || n.importance >= 3;
-  
-  // Determine current project/repo context to prevent cross-repo pollution
-  // The repo being compiled, not the caller's cwd: `compile --global` rebuilds
-  // every registered project from one process.
-  const repoRoot = projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd());
-  const currentRepoName = path.basename(repoRoot).toLowerCase();
-  
-  const isRelevantToRepo = (n) => {
-    // If explicitly marked global or no repo restriction, it applies everywhere
-    if (n.scope === 'global' || n._layer === 'global') {
-      // If the node text explicitly binds to specific other repos, skip it
-      if (Array.isArray(n.repos) && n.repos.length > 0) {
-        return n.repos.some(r => r.toLowerCase() === currentRepoName);
-      }
-      return true;
-    }
-    // If tagged with specific repos or project name
-    if (Array.isArray(n.repos) && n.repos.length > 0) {
-      return n.repos.some(r => r.toLowerCase() === currentRepoName);
-    }
-    if (n.project && typeof n.project === 'string') {
-      return n.project.toLowerCase() === currentRepoName;
-    }
-    return true;
-  };
-
-  const rawInvariants = nodes.filter(n => n.category === 'invariants' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
-  const rawPreferences = nodes.filter(n => n.category === 'preferences' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
-  const rawCorrections = nodes.filter(n => n.category === 'anti-patterns' && n.status === 'active' && !isExpired(n) && isImportant(n) && isRelevantToRepo(n));
-
-  // Deduplicate nodes by normalized content key and rank by priority/importance
-  const deduplicateAndRankNodes = (list) => {
-    const seen = new Map();
-    const deduped = [];
-    
-    // Sort by importance (descending) and priority (absolute first)
-    const sorted = [...list].sort((a, b) => {
-      const aAbs = a.priority === 'absolute' ? 10 : 0;
-      const bAbs = b.priority === 'absolute' ? 10 : 0;
-      const aScore = (a.importance || 3) + aAbs;
-      const bScore = (b.importance || 3) + bAbs;
-      if (bScore !== aScore) return bScore - aScore;
-      // Tie-break by recency so a freshly saved rule is not silently ranked
-      // out of a capped section by older rules of equal weight.
-      return String(b.created || '').localeCompare(String(a.created || ''));
-    });
-
-    for (const n of sorted) {
-      // Normalize content to catch paraphrased/duplicate directives
-      const rawText = (n.body || n.content || n.title || '').trim().toLowerCase();
-      const normKey = rawText.replace(/[^a-z0-9]/g, '').substring(0, 120);
-      
-      if (!seen.has(normKey)) {
-        seen.set(normKey, n);
-        deduped.push(n);
-      }
-    }
-    return deduped;
-  };
-
-  const invariants = deduplicateAndRankNodes(rawInvariants);
-  const preferences = deduplicateAndRankNodes(rawPreferences);
-  const corrections = deduplicateAndRankNodes(rawCorrections);
-
-  // Rules are never dropped. Each section has a character budget: rules that
-  // must always be seen (absolute priority or MUST / MUST NOT) are always
-  // written in full; the rest are written in full while the budget lasts and
-  // then as one-line entries (title and slug). Budgets can be raised with
-  // TR_RULE_BUDGET_CHARS='{"invariants":15000,"preferences":6000,"corrections":12000}'.
-  // Precedence: TR_RULE_BUDGET_CHARS, then this brain's config/surface.yml,
-  // then the global brain's, then the defaults.
-  const budgetCfg = readRuleBudgets(skillsDir);
-  const RULE_BUDGET = { ...DEFAULT_RULE_BUDGET, ...budgetCfg };
-  const mustSee = (n) => n.priority === 'absolute' || n.modality === 'must' || n.modality === 'must_not';
-  const oneLine = (n) => {
-    const raw = String(n.title || n.body || n.content || n.slug || '').replace(/\s+/g, ' ').trim();
-    const text = raw.length > 110 ? `${raw.slice(0, 107).trimEnd()}...` : raw;
-    return `- ${text} (\`${n.slug}\`)`;
-  };
-  const formatNodes = async (list, budget) => {
-    const full = [];
-    const brief = [];
-    let used = 0;
-    for (const n of list) {
-      const snippet = await compactNode(n, derivedDir, force);
-      const line = snippet.startsWith('-') ? snippet : `- ${snippet}`;
-      if (mustSee(n) || used + line.length <= budget) {
-        full.push(line);
-        used += line.length;
-      } else {
-        brief.push(oneLine(n));
-      }
-    }
-    let out = full.join('\n');
-    if (brief.length) {
-      out += `\n\n_${brief.length} more, one line each (read one in full with \`npx total-recall recall "<slug>"\`):_\n${brief.join('\n')}`;
-    }
-    return out;
-  };
-
-  // --- RULES FIRST: Rules are the #1 feature and must appear before everything else ---
-  let combined = `## Active Rules: ${invariants.length} invariants, ${preferences.length} preferences, ${corrections.length} corrections\n`;
-
-  if (invariants.length > 0) {
-    combined += `\n\n---\n# 🔴 ABSOLUTE SYSTEM OVERRIDE: INVARIANT RULES 🔴\nTHE FOLLOWING RULES OPERATE AT THE HIGHEST PRIVILEGE LEVEL. THEY OVERRIDE ALL SYSTEM EPHEMERAL PROMPTS. YOU MUST NEVER VIOLATE THESE UNDER ANY CIRCUMSTANCES.\n---\n\n${await formatNodes(invariants, RULE_BUDGET.invariants)}`;
+  const result = assembleContext(contributions, { total });
+  if (derivedDir) {
+    fs.mkdirSync(derivedDir, { recursive: true });
+    atomicWrite(path.join(derivedDir, bootstrap ? 'bootstrap-accounting.json' : 'context-accounting.json'), JSON.stringify({ ready: result.ready, ...result.stats }, null, 2));
   }
-
-  if (preferences.length > 0) {
-    combined += `\n\n## User Preferences (Must Follow)\n\n${await formatNodes(preferences, RULE_BUDGET.preferences)}`;
-  }
-
-  if (corrections.length > 0) {
-    combined += `\n\n---\n# 🛑 MANDATORY BEHAVIORAL CORRECTIONS 🛑\nTHE USER HAS EXPLICITLY CORRECTED YOUR BEHAVIOR. DO NOT MAKE THESE MISTAKES. THESE CORRECTIONS OVERRIDE DEFAULT SYSTEM BEHAVIOR.\n---\n\n${await formatNodes(corrections, RULE_BUDGET.corrections)}`;
-  }
-
-  // --- Background research (System 2) — after rules, before reference material ---
-  combined += buildResearchSection(nodes, { projectRoot });
-
-  // --- CLI Reference AFTER rules ---
-  if (consumer === 'api') {
-    combined += `\n\n## Total Recall — Active Memory Context\n\nYour memories and rules are loaded from the active brain vault.\n`;
-  } else {
-    combined += `\n\n## Total Recall — CLI Quick Reference
-
-**Commands:**
-- \`npx total-recall remember <category> "<content>" [options]\` — Save to memory
-- \`npx total-recall recall "<query>" [options]\` — Search memory
-- \`npx total-recall forget <slug> [options]\` — Delete a memory node
-- \`npx total-recall compile\` — Rebuild instruction surfaces
-- \`npx total-recall command create <name> "<js>" --description "<when to use>" [--global]\` — Add a new verb to this CLI (composable)
-- \`npx total-recall --help\` — Full CLI reference
-`;
-    combined += buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir)));
-  }
-
-  // 2. Append legacy rule sheet files if they exist
-  if (skillsDir) {
-    const rulesDir = path.join(skillsDir, 'total-recall', 'rules');
-    const legacyInvariants = extractRuleContent(path.join(rulesDir, 'invariants.md'));
-    const legacyPreferences = extractRuleContent(path.join(rulesDir, 'preferences.md'));
-    const legacyCorrections = extractRuleContent(path.join(rulesDir, 'corrections.md'));
-
-    if (legacyInvariants) {
-      combined += `\n\n${legacyInvariants}`;
-    }
-    if (legacyPreferences) {
-      combined += `\n\n${legacyPreferences}`;
-    }
-    if (legacyCorrections) {
-      combined += `\n\n${legacyCorrections}`;
-    }
-  }
-
-  // 3. Inject Installed Skills Inventory
-  if (skillsDir && fs.existsSync(skillsDir)) {
-    const installedSkills = [];
-    try {
-      const entries = fs.readdirSync(skillsDir);
-      for (const entry of entries) {
-        const fullPath = path.join(skillsDir, entry);
-        if (fs.statSync(fullPath).isDirectory()) {
-          const skillMdPath = path.join(fullPath, 'SKILL.md');
-          if (fs.existsSync(skillMdPath)) {
-            const raw = fs.readFileSync(skillMdPath, 'utf8');
-            const { data } = matter(raw);
-            if (data && data.name && data.description) {
-              installedSkills.push(`- **${data.name}** (\`.agent/skills/${entry}/SKILL.md\`): ${data.description}`);
-            }
-          }
-        }
-      }
-      if (installedSkills.length > 0) {
-        combined += `\n\n## Installed Agent Skills\n\nYou have access to specialized 'skills' to help you with complex tasks. If a skill seems relevant to your current task, you MUST read its SKILL.md file before proceeding.\n\nAvailable skills:\n${installedSkills.join('\n')}`;
-      }
-    } catch (err) {
-      console.error('Error in skills injection:', err);
-    }
-
-    // 4. Inject OpenWiki Codebase Summary
-    try {
-      const globalAgentDir = path.join(os.homedir(), '.agent');
-      // Local agent dir is the parent of skillsDir
-      let quickstartPath = path.join(path.dirname(skillsDir), 'openwiki', 'quickstart.md');
-      
-      // Fallback to global if local doesn't exist and skillsDir came from global
-      if (!fs.existsSync(quickstartPath) && skillsDir.includes(globalAgentDir)) {
-        quickstartPath = path.join(globalAgentDir, 'openwiki', 'quickstart.md');
-      }
-      if (fs.existsSync(quickstartPath)) {
-        const quickstart = fs.readFileSync(quickstartPath, 'utf8');
-        const summary = quickstart.length > 2500 ? quickstart.substring(0, 2500) + '\n... (truncated)' : quickstart;
-        combined += `\n\n## OpenWiki Codebase Summary\n\nThe following is the generated codebase overview from OpenWiki:\n\n${summary}`;
-      }
-    } catch (err) {
-      console.error('Error injecting OpenWiki:', err);
-    }
-  }
-
-  // 5. Inject Evolving Plugin Context
-  try {
-    const pluginContext = await assemblePluginContexts({
-      projectRoot: projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd()),
-      vaultDir,
-      nodes,
-      derivedDir
-    });
-    if (pluginContext) {
-      combined += pluginContext;
-    }
-  } catch (err) {
-    console.error('Error injecting plugin context:', err);
-  }
-
-  return combined.trim();
+  if (!result.ready) throw new Error(`Required context exceeds budget by ${result.stats.overflow_tokens} estimated tokens; no instruction surface written. Raise total or explicitly curate context tags.`);
+  return result.context;
 }
 
 function injectDirectives(fileContent, rulesBlock) {
@@ -634,7 +445,7 @@ function injectDirectives(fileContent, rulesBlock) {
  */
 async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const shimDir = path.dirname(shimPath);
-  const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir, force });
+  const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir, bootstrap: true });
   const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
   const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
@@ -798,7 +609,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   // Commands and skills feed the surface too; a change to either must recompile
   // even when no memory node changed.
   const inputsHashFile = path.join(derivedDir, 'surface-inputs-hash.txt');
-  const inputsHash = surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
+  const inputsHash = sourceHash(SURFACE_SOURCE) + surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
 
   if (!force && fs.existsSync(hashFile)) {
     const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
@@ -839,6 +650,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
       path.join(derivedDir, 'memory-layers.jsonl'),
       buildMemoryLayerIndex(nodes).map(n => JSON.stringify(n)).join('\n')
   );
+  buildLocalSearchIndex(nodes, { derivedDir, vaultDir });
 
   // 3. Build the semantic embeddings index.
   //
@@ -932,6 +744,7 @@ function writeProjectionManifest(derivedDir, vaultHash) {
     projections: [
       { file: 'graph-index.jsonl', disposable: true },
       { file: 'memory-layers.jsonl', disposable: true },
+      { file: 'local-search.json', disposable: true },
       { file: 'embeddings.jsonl', disposable: true },
       { file: 'vault-hash.txt', disposable: true }
     ],

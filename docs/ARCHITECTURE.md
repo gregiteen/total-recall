@@ -326,3 +326,18 @@ Headless tools, IDE editors, and session Relays authenticate via standard HTTP B
 - **Role-Based Granular Scopes**: Validated PAT keys carry granular permission scopes (e.g., `chat:write`, `memory:read`, `sandbox:run`), permitting fine-grained access control boundaries for different editors.
 
 ```
+
+## Task context and local retrieval
+
+Connected instruction files contain a small routing bootstrap. Before action,
+`total-recall context` assembles required rules using `src/core/context-policy.mjs`.
+Activation uses existing validated memory tags, not semantic inference or storage
+scope. Unknown applicability stays required; oversized required sets report
+not-ready status. Contributions are admitted whole under complete-render token
+estimates. User-authored text outside generated blocks remains intact.
+
+`recall` defaults to local retrieval. Compilation builds `local-search.json` as a
+disposable full-text posting/locator projection; matching documents are hydrated
+individually after path and source checks. `--semantic` opts into the existing
+provider path. Static files do not erase context already loaded in a client.
+Core and generated expert skill entrypoints route into package-relative references.
