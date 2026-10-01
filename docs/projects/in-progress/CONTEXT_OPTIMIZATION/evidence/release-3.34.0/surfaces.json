@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-10-01T19:10:37.169Z",
+  "exitCode": 0,
+  "results": [
+    "✅ Processed 714 canonical memory nodes.",
+    "✅ Injected memory into 2 skill files.",
+    "✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.",
+    "✅ Embeddings: 1 built, 713 unchanged.",
+    "✅ Post-build verification passed: 0 drift.",
+    "✅ total-recall: rules recompiled (2 surfaces)",
+    "✅ ultrachat-ai-powered: rules recompiled (4 surfaces)",
+    "✅ dd: rules recompiled (4 surfaces)",
+    "✅ ssss: rules recompiled (2 surfaces)",
+    "✅ portfolio-site: rules recompiled (5 surfaces)",
+    "✅ festech.live: rules recompiled (3 surfaces)",
+    "✅ documenso: rules recompiled (2 surfaces)",
+    "✅ hedgehog: rules recompiled (6 surfaces)",
+    "✅ PAT: rules recompiled (2 surfaces)",
+    "✅ moogie_crm: rules recompiled (3 surfaces)",
+    "✅ tr-plugin-phone: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-domains: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-composable-cli: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-code-quality: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-decision: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-design: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-signing: rules recompiled (2 surfaces)",
+    "✅ tr-plugin-text: rules recompiled (2 surfaces)"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "domMounted": true,
+  "unconfiguredNoNetwork": true,
+  "configuredBasePath": true,
+  "observedEngineCount": true,
+  "invalidSchemeNoNetwork": true,
+  "scope": "Custom-element props with synthetic response; dashboard persistence and external SearXNG service are not certified"
+}

@@ -344,7 +344,15 @@ preserve locking/duplicate detection/cursor/UTF-8 semantics and existing logs,
 run its sanctioned baseline before edits, then full conformance and a live
 mini installation retry. Preserve unrelated authored overlays in that repo.
 
+### Verified release and deployment update — 19:08 UTC
+
+The later 3.34.0 snapshot passed all six sanctioned gates (372 files/2,315 tests), a fresh frontend build, zero production audit findings and clean installed-package native health/scaffold checks. Registry Git identity and all 633 file contents/modes match the verified publishing package. Fifteen existing consumers now declare/install 3.34.0; 27 owned core entrypoints were refreshed. The mini runs the published persistent runtime under launchd after a transient bootstrap failure and successful retry. Its selected-node config, authorized global root and daily 03:00 schedule survived replacement. Earlier successful optimizer report covers 11 compact packages; this does not certify a future daily slot. Mesh secrets sync still lacks its configured token. Claude native discovery could not be tested because its authentication probe failed. Fresh Dabber total context and optional decision-provider routing remain unverified. Evidence is in `evidence/release-3.34.0/`.
+
 ### Installed CLI host context (2026-10-01)
+
+### A-028 — stale transitive Git installs after an in-place update
+
+At 19:12 UTC the actual published-runtime optimizer failed its report commit with the oversized-string error. Runtime module resolution still loads SSSS 0.10.1 even though Total Recall 3.34.0 declares the new Git tag. All 15 updated consumers similarly retain old SSSS versions (0.9.0–0.10.1), while the clean release snapshot loads 0.10.3. Thus the earlier consumer-version evidence proves only the top-level package update. Source package-lock correctly records commit 3697de9, but an existing source installation also retains the older module. The published SSSS 0.10.3 registry artifact matches that commit and verified SHA-1. [Current npm installation documentation](https://docs.npmjs.com/cli/install/) supports versioned registry aliases. Replace the Git dependency with the exact registry alias `npm:@gregiteen/ssss-cli@0.10.3`, retaining the imported `@ssss/cli` identity. Verify an upgrade from the old retained lock, actual module resolution and real report persistence/cache; then release a patch and repeat consumer verification including SSSS. The clean 3.34.0 baseline has six passed gates, 2,315 tests and actual SSSS 0.10.3. No API changes or foreign repository source edits are required.
 
 SSSS 0.10.3 passes both sanctioned gates and allows installation against the
 mini's existing event history. Actual `skill-manager configure` then fails

@@ -1,5 +1,9 @@
 # CONTEXT_OPTIMIZATION — Architecture
 
+Deployment verification (2026-10-01): the selected daemon uses a persistent installed npm 3.34.0 runtime independent of authored source checkouts. Node selection, explicit authorized roots and optimizer reports remain canonical plugin-record state; release replacement preserves them. A real earlier daemon slot and the restored daily 03:00 schedule are verified separately from package tests. File-size estimates and routing capsule estimates remain separate from native fresh-session total context. See `evidence/release-3.34.0/` for source/package/registry identity and deployment evidence.
+
+A-028 correction preserves the `@ssss/cli` import identity through an exact published npm alias. Registry integrity and actual module resolution are part of upgrade verification; an existing Git resolution must not masquerade as the repaired dependency. This changes dependency distribution, not the SSSS operation or event format.
+
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
 > **Kanban State**: 🏗️ In Progress
 > **Author**: Codex

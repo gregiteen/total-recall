@@ -1,0 +1,13 @@
+{
+  "status": "SUCCESS",
+  "response": "Choice: alpha\nSkill name: decision\n",
+  "duration_seconds": 7.14637,
+  "num_turns": 1,
+  "usage": {
+    "input_tokens": 14333,
+    "output_tokens": 584,
+    "thinking_tokens": 576,
+    "cache_read_tokens": 0,
+    "total_tokens": 14917
+  }
+}

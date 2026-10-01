@@ -1,3 +1,9 @@
+## 3.34.1 — 2026-10-01
+
+- Pin the repaired SSSS 0.10.3 through its exact npm registry alias. Existing
+  installations could retain an older Git dependency after updating Total
+  Recall, causing large event-log commits to fail despite the new version.
+
 ## 3.34.0 — 2026-10-01
 
 - Add lossless skill optimization with compact entrypoints, retained source and

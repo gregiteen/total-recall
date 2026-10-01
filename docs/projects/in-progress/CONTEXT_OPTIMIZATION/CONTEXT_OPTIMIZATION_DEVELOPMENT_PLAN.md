@@ -76,6 +76,10 @@ Provide `skill optimize` with explicit package/root scope, default dry-run, loss
 
 ## Jev and IDE acceptance (A-020–A-022)
 
+A-028 correction: switch the SSSS dependency to its exact published registry alias before a 3.34.1 patch. First verify retained-lock upgrade and actual resolved module, then the real optimizer report and cache on the mini. Run full exact-source gates/native package checks, publish, and verify top-level plus transitive versions across existing consumers. Preserve user-owned dependency declarations and unrelated app state.
+
+Delivery update (2026-10-01 19:08 UTC): 3.34.0 is published, all 633 registry files match the verified package, 15 existing package consumers and the global CLI are updated, and 27 owned core entrypoints are compact/current. The selected mini daemon now uses the published runtime. Retain the open native startup/decision/UI acceptance items; publication does not close them. Finish surface compilation, preserve release evidence and reconcile the remaining integration limitations before archival.
+
 Use current primary docs; expose one portable `decision` skill with Jev guidance in its references. Implement optional typed decision assistance over bounded skill metadata; enforce scope/required rules in code and retain deterministic failure fallback. Verify real adapter formats and supported native invocation syntax, preserve command collisions and repo-specific content, and include public scaffolds. Do not claim interactive IDE/provider readiness solely from generated files or mocked tests.
 
 ## Generic scaffold configuration and later extraction

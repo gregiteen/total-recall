@@ -1,0 +1,27 @@
+{
+  "before": "0.10.1",
+  "after": "0.10.3",
+  "retainedLock": true,
+  "stages": [
+    {
+      "args": [
+        "install",
+        "total-recall-brain@3.33.1",
+        "--ignore-scripts",
+        "--no-fund",
+        "--no-audit"
+      ],
+      "exit": 0
+    },
+    {
+      "args": [
+        "install",
+        "/tmp/total-recall-brain-3.34.1.tgz",
+        "--ignore-scripts",
+        "--no-fund",
+        "--no-audit"
+      ],
+      "exit": 0
+    }
+  ]
+}

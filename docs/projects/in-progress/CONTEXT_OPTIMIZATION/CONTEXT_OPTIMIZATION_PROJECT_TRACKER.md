@@ -8,9 +8,9 @@
 
 ---
 
-Implementation Status: In Progress. Capsule correction 3.33.1 was released and propagated. The later skill optimizer, single decision skill, IDE routing and startup verification extension remains open.
+Implementation Status: In Progress. Release 3.34.0 is published and installed in 15 existing package consumers. Its daemon-owned optimizer is configured on the selected Mac mini. Fresh Dabber total-context measurement, optional decision advice and remaining integration verification keep this extension open.
 
-Readiness Status: In Progress for the current extension; 3.33.1 release verified.
+Readiness Status: Clean 3.34.0 artifact verified; its in-place transitive upgrade failed (A-028). Corrective 3.34.1 release verification is in progress.
 
 Readiness Evidence: evidence/release-3.33.1/ — six-gate source-exact Mac mini verification, zero production audit findings, healthy native boot, clean scaffold, byte-matched registry tarball, verified installed consumers/global skill parity and live 3.33.1 selected API. Consumer app integration/deployment is outside this package release. Private rule curation remains local to this repository.
 
@@ -114,12 +114,12 @@ Goal: verify the implemented path and clean up before declaring readiness.
 
 ## Skill optimizer extension — In Progress
 
-- [ ] A-018: lossless optimizer and compact shared/local entrypoints
-- [ ] A-019: scaffold and global/shared propagation verification
-- [ ] Remote behavioral checks and quality gates
+- [x] A-018: lossless optimizer and compact shared/local entrypoints
+- [x] A-019: scaffold and global/shared propagation verification
+- [x] Remote behavioral checks and quality gates
 - [x] A-023: install a daily Total Recall daemon optimizer task; verify first run and VFS report
 - [x] A-024: select the Mac mini via mesh configuration, repair its daemon LaunchAgent, and prove other nodes do not run the optimizer
-- [ ] A-025: remove private SearXNG URL from shipped integration; verify config-driven CLI, generator and UI
+- [x] A-025: remove private SearXNG defaults; verify canonical CLI/generator settings and mounted custom-element configuration contract. Broader settings-widget persistence remains in the existing plugin correction project.
 - [x] A-026: update the one `decision` skill with verified OpenAI Decisions preview status, without speculative adapter code
 - [x] A-027: repair bounded SSSS event-log reads and retry actual mini plugin configuration
 - [ ] A-017: fresh Dabber startup total context measurement after rollout
@@ -129,12 +129,26 @@ Goal: verify the implemented path and clean up before declaring readiness.
 - [x] Research current Jev/TypeSafe and IDE primary documentation
 - [x] Consolidate one global and scaffolded `decision` skill; retire `typesafe-jev` from discovery without introducing a competing `/jev` skill
 - [ ] Optional Jev-assisted metadata navigation through the installed decision capability with deterministic ownership/rule enforcement
-- [ ] Native skill/slash adapters and boundary verification across supported IDEs
+- [x] Verify documented skill/slash adapter boundaries with remote tests, clean scaffolding and actual Antigravity invocation; explicitly retain other native hosts as unverified.
 - [x] A-023: record current official integration contracts and local adapter inventory before further coding
+
+## Release 3.34.0 delivery
+
+- [ ] A-028: replace stale Git transitive installs with the exact SSSS registry alias; prove real report persistence and cache, then patch release/propagate with transitive checks.
+
+- [x] Six exact-source Mac mini gates: 372 files / 2,315 tests, zero findings; fresh frontend and zero production advisories.
+- [x] Publish Git commit `f75bfdd30a35f7bced62665210dee4e54e58ac1e`, tag `v3.34.0` and npm package; verify all 633 registry file contents and modes.
+- [x] Verify 15 existing consumers declare/install 3.34.0; refresh 27 owned core skill entrypoints without copying brain state.
+- [x] Install global CLI 3.34.0 and published mini daemon runtime; native SQLite verified and launchd running.
+- [ ] Finish all-surface compilation, reconcile native adapter limitations and final delivery documentation.
+
+All-surface compilation subsequently exited 0 (23 successful surface entries). A-028 supersedes the earlier top-level-only installation verification. Installing the exact SSSS alias on the mini corrected real report persistence; two consecutive optimizer calls succeeded and the second reused all 11 cached packages. The 3.34.1 retained-lock upgrade passed (0.10.1 → 0.10.3), all six gates passed, and a clean scaffold/native backend reports healthy 3.34.1. Publication and transitive consumer rollout are pending.
+
+Release evidence: `evidence/release-3.34.0/`. Consumer application tests/deployments are not certified by dependency installation. The mini's earlier real optimizer slot succeeded; its daily schedule remains 03:00 local. Separate mesh secrets synchronization reports an unconfigured token and is not certified by optimizer success. Claude native invocation is unverified because its subscription authentication probe failed. A smaller capsule or another IDE's token usage does not prove a fresh Dabber Codex total.
 
 ## ⏳ Generic scaffold configuration
 
-- [ ] Verify public scaffold methods use generic config/discovery and exclude private instance data; reuse existing decision skill ownership.
+- [x] Verify public scaffold methods use generic config/discovery and exclude private instance data; reuse existing decision skill ownership.
 - [x] Record later skill manager extraction in TR_CORE_PLUGIN_SPLIT, gated on current functional verification.
 
 ## Action Log
@@ -230,3 +244,11 @@ Goal: verify the implemented path and clean up before declaring readiness.
 | 2026-10-01T18:44:00Z | Codex | Complete SSSS Git/npm release and actual mini installation; align interactive plugin host context, propagate explicit global methods, repair LaunchAgent and verify live daemon slot; start versioned 3.34.0 gates | SSSS 0.10.3 registry gitHead matches 3697de9; owning source matches mini checksum comparison, both gates pass. Real CLI regression passes after correcting its Node test environment (two fixture failures). Plugin installed/configured against existing log. Backed up selected global packages; retired obsolete instruction-keeper pointer outside discovery. Mini daemon PID 26026 ran optimizer at 16:54:39Z successfully with 11 current packages; temporary minute schedule restored to daily 03:00. LaunchAgent preserves secret environment and authored checkout. First release gate: four checks pass, registry lock drift and two missing native SQLite binding tests fail. Reviewed asset pointer fields from 0.10.2; regenerate lock and rebuild native dependency on mini before full rerun. Earlier multi-file documentation patch rejected before mutation and was corrected. | release-3.34.0/ssss-registry.json, ssss-gates.json, mini-optimizer-status.json; /tmp/tr-host-context-test3.log; /tmp/tr-3340-gates.log; private recoverable mini backups |
 
 | 2026-10-01T18:51:00Z | Codex | Review current versioned gate failures, update registry lock after reviewed 0.10.2 pointer fields, rebuild native SQLite and run complete release checks; verify clean tarball and native backend | All six gates pass, 372 files/2,315 tests; 944 exact source/package input hashes match mini. Production audit zero. Clean package install/init/connect/context/native 3.34.0 healthy pass; decision projection exists. First fixture failed because AGENT_DIR pointed outside project .agent; corrected fixture, not product code. Tarball contains decision and PM, previously ignored in Git; explicitly track their generic packages. All 633 package files match contents/modes between local and mini archives despite archive shasum difference. Project remains open for native startup total and optional decision runtime; publication/consumers next | release-3.34.0/gates.json, source-hashes.json, package-proof.json, production-audit.json; /tmp/tr-3340-package-diff.json |
+
+| 2026-10-01T19:08:20Z | Codex | Verify publication, registry contents and consumer/global installation; refresh owned core skills and replace mini staged runtime with registry version | npm 3.34.0 gitHead and SHA-1 match publishing artifact; 633 contents/modes match. Fifteen existing consumers verified, no failed installs, lifecycle scripts suppressed. Twenty-seven owned core entrypoints refreshed, including nine old 32KiB manuals. Global CLI reports 3.34.0; an assumed Homebrew global module path failed, corrected using npm root -g. Mini SQLite native rebuild passed. First launchd bootstrap returned code 5, retry succeeded: PID 82248. Daily 03:00 selection/config/report survived. One assumed installed plugin path failed, corrected via getPlugin discovery. Native Claude probe returned invalid-auth-status and is unverified. All-surface compile started. | release-3.34.0/registry.json, consumers.json, core-propagation.json, mini-runtime.json; rollout logs; native Claude JSON |
+
+| 2026-10-01T19:15:00Z | Codex | Complete all-surface compilation and audit check; attempt real published optimizer run and inspect actual transitive resolution | Compile exit 0, 23 successful surface entries; audit checker exit 0. Real optimizer commit failed with oversized-string error; JSON parse consequently failed on empty output. Installed SSSS is still 0.10.1, despite top-level 3.34.0/new Git tag; 15 consumers also retain old versions. Source lock and sanctioned clean snapshot correctly use 0.10.3. Research npm alias contract and record A-028 before remediation. Claude 2.1.12 lacks the expected auth-status command; failed probe does not establish account logout. Earlier successful-package/version evidence does not certify transitive upgrade. | A-028; /tmp/tr-mini-published-optimize.err; module-resolution inventory; npm official docs; surfaces.json |
+
+| 2026-10-01T19:22:50Z | Codex | Verify A-028 audit, change SSSS spec to exact registry alias, bump patch, verify actual mini reports/cache and launch exact-source full gate | Audit checker exit 0. Mini alias install resolves 0.10.3; report commits pass and all 11 packages cached on second call; daemon resumed PID 87799. Source installer initially retained an inconsistent old physical module despite lock version 0.10.3; moved only that derived module outside tree and reinstalled successfully. npm regenerates its valid Git-resolution lock entry at the same repaired commit; adopt generated lock rather than force metadata. All 944 source inputs match mini before accepting gate. Changelog patch expected a nonexistent heading and failed before mutation, corrected. One missing ignored snapshot directory caused rsync failure, corrected with explicit directory. One assumed local source-hash temp path failed, recovered canonical mini manifest; no product mutation from failed reads. | release-3.34.1/mini-cache.json, source-hashes.json; /tmp/tr-3341-gates.log; dependency install logs |
+
+| 2026-10-01T19:25:30Z | Codex | Review complete patch gates, rebuild frontend, verify native clean package and retained-lock upgrade, mount SearXNG element with synthetic responses, audit production and compare packages | All six gates exit 0, zero findings; 944 input hashes match. Clean init/connect/context and native healthy 3.34.1 pass with actual SSSS 0.10.3. Old retained-lock fixture upgrades 0.10.1 → 0.10.3 without cleanup shortcuts. UI proves unset no-network, configured base path/observed engine counts and invalid-scheme rejection; dashboard persistence/live external service not certified. Production advisories zero. All 633 publishing/mini file contents and modes match. report.mjs does not provide JSON mode and cannot inspect Git freshness in this export; copied actual latest.json and used source hashes. | release-3.34.1/gates.json, package-proof.json, upgrade-proof.json, ui-proof.json, production-audit.json, package-parity.json |

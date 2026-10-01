@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-10-01T18:56:33.838Z",
+  "server": {
+    "status": "ready",
+    "version": "3.34.0",
+    "source": "local-verified-listener"
+  },
+  "brain": {
+    "status": "ready",
+    "scope": "instructions-access-only; selected project identity not independently verified"
+  },
+  "daemon": {
+    "status": "running",
+    "pid": 13250,
+    "source": "local-pid"
+  },
+  "ssss": {
+    "status": "available",
+    "role": "document-engine-tooling; no standalone daemon required"
+  },
+  "app": {
+    "status": "not-declared"
+  },
+  "actions": [],
+  "shared_ready": true,
+  "ready_scope": "shared-runtime-only",
+  "ready": true
+}

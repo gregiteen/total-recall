@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.34.0",
+  "version": "3.34.1",
   "description": "Personal AI system — database-free, SSSS-powered intelligence engine deployable to any POSIX host.",
   "type": "module",
   "workspaces": [
@@ -68,7 +68,7 @@
   "homepage": "https://github.com/gregiteen/total-recall#readme",
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
-    "@ssss/cli": "github:gregiteen/ssss#v0.10.3",
+    "@ssss/cli": "npm:@gregiteen/ssss-cli@0.10.3",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.11.1",
     "cookie-parser": "^1.4.7",

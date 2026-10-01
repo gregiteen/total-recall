@@ -1,5 +1,9 @@
 # CONTEXT_OPTIMIZATION — Product Requirements
 
+Acceptance update (2026-10-01): published package 3.34.0, consumer/core propagation and selected daemon deployment have release evidence. The extension remains In Progress until its remaining startup and integration acceptance items are resolved. The reported fresh 78k Dabber session is not considered fixed from reduced Markdown sizes or another IDE's invocation metrics.
+
+A-028 acceptance: an in-place upgrade must resolve the repaired SSSS version, persist the real daemon optimizer report and preserve its cache. Top-level version alone is insufficient. The corrective patch must retain generic import/configuration contracts and existing user data.
+
 > **Project Prefix**: `CONTEXT_OPTIMIZATION`
 > **Kanban State**: 🏗️ In Progress
 > **Author**: Codex
