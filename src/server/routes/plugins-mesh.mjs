@@ -7,11 +7,19 @@
 import { Router } from "express";
 import { requireMeshSyncAuth } from "../../core/mesh-auth.mjs";
 import { getMeshHostname } from "../../core/mesh.mjs";
-import { listSharedPlugins, packSharedPlugin, packPublicPlugin } from "../../core/plugin-store.mjs";
+import { listInstalledPlugins, listSharedPlugins, packSharedPlugin, packPublicPlugin } from "../../core/plugin-store.mjs";
 import { serverError } from "./_shared.mjs";
 
 const router = Router();
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
+
+router.get('/api/mesh/plugins/installed', requireMeshSyncAuth, (_req, res) => {
+  try {
+    const plugins = listInstalledPlugins(process.cwd()).map(({ id, name, valid, tasks }) => ({ id, name, valid, tasks }));
+    res.json({ plugins });
+  }
+  catch (err) { serverError(res, err); }
+});
 
 router.get("/api/mesh/plugins", requireMeshSyncAuth, (_req, res) => {
   try {

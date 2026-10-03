@@ -33,7 +33,14 @@ describe('open-source repo hygiene', () => {
     const skills = new Set(
       scaffold.map((f) => f.match(/^scaffold\/\.agent\/skills\/([^/]+)\//)?.[1]).filter(Boolean),
     );
-    expect([...skills].sort()).toEqual(['meta-harness', 'plugins', 'total-recall']);
+    expect([...skills].sort()).toEqual([
+      'decision',
+      'meta-harness',
+      'plugins',
+      'project-management',
+      'start',
+      'total-recall',
+    ]);
     const vault = scaffold
       .filter((f) => f.includes('/memory-vault/'))
       .map((f) => f.split('/memory-vault/')[1])

@@ -360,6 +360,10 @@
     "path": "/api/mesh/plugins/:id/bundle"
   },
   {
+    "method": "GET",
+    "path": "/api/mesh/plugins/installed"
+  },
+  {
     "method": "POST",
     "path": "/api/mesh/preauthkey"
   },
@@ -460,19 +464,31 @@
     "path": "/api/plugins/:id"
   },
   {
+    "method": "POST",
+    "path": "/api/plugins/:id/branding"
+  },
+  {
     "method": "GET",
     "path": "/api/plugins/:id/conformance"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:id/deploy-store"
+  },
+  {
+    "method": "POST",
+    "path": "/api/plugins/:id/lock"
   },
   {
     "method": "GET",
     "path": "/api/plugins/:id/readme"
   },
   {
-    "method": "POST",
+    "method": "GET",
     "path": "/api/plugins/:id/reviews"
   },
   {
-    "method": "GET",
+    "method": "POST",
     "path": "/api/plugins/:id/reviews"
   },
   {
@@ -482,6 +498,10 @@
   {
     "method": "POST",
     "path": "/api/plugins/:id/share"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:id/ui/:element"
   },
   {
     "method": "GET",

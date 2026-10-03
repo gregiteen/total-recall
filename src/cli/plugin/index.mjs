@@ -44,6 +44,11 @@ Commands:
                               --category <cat>      Declare an SSSS memory category
                               --with-cli            Generate CLI command handler
                               --with-generator      Generate context generator
+                              --with-ui             Generate token-driven panel element
+                              --with-task           Declare a selected-node scheduled task
+                              --task-command <cmd>  Task CLI subcommand (requires --with-task)
+                              --task-schedule <cron> Five-field local-time schedule
+                              --task-intent <text>   Human description of the task
                               --global, -g          Create machine-wide
 
 Examples:

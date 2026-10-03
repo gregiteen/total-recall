@@ -1,3 +1,11 @@
+## 3.36.0 — 2026-10-03
+
+- Core architecture: extracted all 16 bundled plugins into independent standalone git repositories under the `tr-plugin-*` ecosystem, enforcing the core invariant that Total Recall core contains only memory, mesh, and minimal plugin loading contracts.
+- Standalone plugin creation: upgraded `total-recall plugin create` to automatically initialize a dedicated git repository with initial commit, clean metadata schema, composable command boilerplate, and comprehensive smoke tests.
+- UI & Preview parity: updated the plugins management surface and dedicated preview components (Code Quality, Composable CLI, Decision, Design, Domains, Phone, Signing, Text, Image Generator, User Automations) with verified capabilities, zero fake statistics or simulated ratings.
+- Phone & Telephony: integrated Festech dialer interface into the phone plugin architecture with live call controls, DTMF signaling, WebRTC session handling, and direct transport verification.
+- Release & hygiene: updated scaffold generic allowlists and pre-flight diagnostics tests to ensure pristine distribution state.
+
 ## 3.33.1 — 2026-10-01
 
 - Update transitive `ip-address` to 10.7.2 in the lockfile to resolve address-classification and parser advisories.

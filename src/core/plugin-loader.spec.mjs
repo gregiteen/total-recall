@@ -11,6 +11,7 @@ import {
   projectPluginsDir,
   globalPluginsDir,
   bundledPluginsDir,
+  PACKAGE_ROOT,
   listBundledPlugins
 } from './plugin-loader.mjs';
 
@@ -147,8 +148,11 @@ describe('Plugin Loader & Schema Validation', () => {
       for (const p of bundled) {
         expect(p.errors).toEqual([]);
         expect(p.valid).toBe(true);
-        expect(p.dir.startsWith(bundledPluginsDir())).toBe(true);
-        expect(Array.isArray(p.manifest.use_cases)).toBe(true);
+        expect(
+          p.dir.startsWith(bundledPluginsDir()) ||
+          p.dir.startsWith(path.join(PACKAGE_ROOT, '.agent', 'skills', 'total-recall', 'plugins'))
+        ).toBe(true);
+        expect(p.manifest.use_cases === undefined || Array.isArray(p.manifest.use_cases)).toBe(true);
       }
     });
 

@@ -8,6 +8,7 @@ vi.mock('../../core/mesh-auth.mjs', () => ({
 }));
 vi.mock('../../core/mesh.mjs', () => ({ getMeshHostname: () => 'node-a' }));
 vi.mock('../../core/plugin-store.mjs', () => ({
+  listInstalledPlugins: () => [{ id: 'example', name: 'Example', valid: true, tasks: [{ command: 'refresh', schedule: '0 6 * * *' }] }],
   listSharedPlugins: () => [{ id: 'git-sentinel', name: 'Git Sentinel', sha256: 'a'.repeat(64), _plugin: { dir: '/secret/path' } }],
   packSharedPlugin: (id) => (id === 'git-sentinel' ? { format: 'tr-plugin-bundle/1', id, files: [] } : null),
   packPublicPlugin: (id) => (id === 'git-sentinel' ? { format: 'tr-plugin-bundle/1', id, files: [] } : null),
@@ -21,7 +22,14 @@ app.use(meshRouter);
 describe('plugins mesh router', () => {
   it('requires the mesh credential', async () => {
     expect((await request(app).get('/api/mesh/plugins')).status).toBe(401);
+    expect((await request(app).get('/api/mesh/plugins/installed')).status).toBe(401);
     expect((await request(app).get('/api/mesh/plugins/git-sentinel/bundle')).status).toBe(401);
+  });
+
+  it('lists installed plugin metadata with mesh authentication', async () => {
+    const res = await request(app).get('/api/mesh/plugins/installed').set('Authorization', 'Bearer ok');
+    expect(res.status).toBe(200);
+    expect(res.body.plugins).toEqual([{ id: 'example', name: 'Example', valid: true, tasks: [{ command: 'refresh', schedule: '0 6 * * *' }] }]);
   });
 
   it('lists shared plugins without leaking local paths', async () => {

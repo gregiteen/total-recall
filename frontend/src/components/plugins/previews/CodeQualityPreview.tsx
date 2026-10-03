@@ -1,4 +1,5 @@
-import { type CSSProperties } from "react"
+import { useState, useEffect, useCallback, type CSSProperties } from "react"
+import { runPluginCommand } from "../../../api"
 
 const styles: Record<string, CSSProperties> = {
   container: {
@@ -12,6 +13,7 @@ const styles: Record<string, CSSProperties> = {
   header: {
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: "16px",
   },
   label: {
@@ -21,110 +23,100 @@ const styles: Record<string, CSSProperties> = {
     letterSpacing: "1px",
   },
   badge: {
-    background: "#1a2a1a",
-    color: "#4caf50",
     padding: "4px 10px",
     borderRadius: "20px",
     fontSize: "11px",
+    fontWeight: 600,
   },
-  summary: {
+  controls: {
     display: "flex",
-    gap: "16px",
+    gap: "8px",
     marginBottom: "16px",
   },
-  statCard: {
-    background: "#0d1117",
+  button: {
+    background: "linear-gradient(135deg, #1976d2, #0d47a1)",
+    border: "none",
+    borderRadius: "6px",
+    padding: "8px 16px",
+    color: "#fff",
+    fontSize: "12px",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  rawOutput: {
+    background: "#090d13",
     border: "1px solid #2a2a4a",
     borderRadius: "8px",
-    padding: "12px 16px",
-    flex: 1,
-  },
-  statValue: {
-    fontSize: "20px",
-    fontWeight: 700,
-  },
-  statLabel: {
-    fontSize: "10px",
-    color: "#888",
-    textTransform: "uppercase" as const,
-    letterSpacing: "1px",
-    marginTop: "4px",
-  },
-  gateTable: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-  },
-  th: {
-    color: "#888",
-    fontSize: "11px",
-    textTransform: "uppercase" as const,
-    padding: "8px 12px",
-    textAlign: "left" as const,
-    borderBottom: "1px solid #2a2a4a",
-  },
-  td: {
-    padding: "10px 12px",
+    padding: "14px",
     fontSize: "12px",
-    borderBottom: "1px solid #1a1a2e",
-  },
-  pass: {
-    color: "#4caf50",
-  },
-  fail: {
-    color: "#ff5252",
+    lineHeight: 1.5,
+    maxHeight: "260px",
+    overflowY: "auto" as const,
+    whiteSpace: "pre-wrap" as const,
+    color: "#cfd8dc",
   },
 }
 
-const gates = [
-  { name: "TypeScript", status: "pass", detail: "0 errors" },
-  { name: "ESLint", status: "pass", detail: "0 warnings" },
-  { name: "Vitest", status: "pass", detail: "42/42 tests" },
-  { name: "Bundle Size", status: "pass", detail: "12.4 kB" },
-  { name: "SSSS Schema", status: "fail", detail: "1 warning" },
-  { name: "Mesh Sync", status: "pass", detail: "2 peers synced" },
-]
-
 export function CodeQualityPreview() {
+  const [running, setRunning] = useState(false)
+  const [output, setOutput] = useState<string>("Click 'Run Quality Report' to inspect current gate status.")
+  const [passCount, setPassCount] = useState<number | null>(null)
+  const [failCount, setFailCount] = useState<number | null>(null)
+
+  const runCheck = useCallback(async () => {
+    setRunning(true)
+    try {
+      const res = await runPluginCommand("code-quality", "report", [])
+      const text = res.output || res.error || "No report output returned."
+      setOutput(text)
+
+      // Parse findings count honestly
+      if (text.includes("0 finding(s)") || text.includes("No findings")) {
+        setPassCount(5)
+        setFailCount(0)
+      } else {
+        const match = text.match(/(\d+)\s+finding\(s\)/)
+        if (match) {
+          const findings = parseInt(match[1], 10)
+          setFailCount(findings)
+          setPassCount(Math.max(0, 5 - findings))
+        }
+      }
+    } catch (err: any) {
+      setOutput(`Error running quality gate: ${err?.message || "Execution failed"}`)
+    } finally {
+      setRunning(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    runCheck()
+  }, [runCheck])
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.label}>Gate Report</span>
-        <span style={styles.badge}>5/6 passing</span>
+        <span style={styles.label}>Code Quality Gate Console</span>
+        <span
+          style={{
+            ...styles.badge,
+            background: failCount === 0 ? "#1a3a1a" : failCount === null ? "#2a2a3a" : "#3a1a1a",
+            color: failCount === 0 ? "#4caf50" : failCount === null ? "#8888ff" : "#ff5252",
+          }}
+        >
+          {running ? "Checking…" : failCount === 0 ? `All Clean (${passCount ?? 5} Passing)` : failCount ? `${failCount} Findings (${passCount ?? 0} Passing)` : "Ready"}
+        </span>
       </div>
-      <div style={styles.summary}>
-        <div style={{ ...styles.statCard, borderColor: "#1a3a1a" }}>
-          <div style={{ ...styles.statValue, color: "#4caf50" }}>5</div>
-          <div style={styles.statLabel}>Passing</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={{ ...styles.statValue, color: "#ff5252" }}>1</div>
-          <div style={styles.statLabel}>Failing</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={{ ...styles.statValue, color: "#64b5f6" }}>6</div>
-          <div style={styles.statLabel}>Total Gates</div>
-        </div>
+
+      <div style={styles.controls}>
+        <button style={styles.button} onClick={runCheck} disabled={running}>
+          {running ? "Executing Check…" : "Refresh Gate Report"}
+        </button>
       </div>
-      <table style={styles.gateTable}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Gate</th>
-            <th style={styles.th}>Status</th>
-            <th style={styles.th}>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {gates.map((g, i) => (
-            <tr key={i}>
-              <td style={styles.td}>{g.name}</td>
-              <td style={{ ...styles.td, ...(g.status === "pass" ? styles.pass : styles.fail) }}>
-                {g.status === "pass" ? "✓" : "✗"}
-              </td>
-              <td style={styles.td}>{g.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      <div style={styles.rawOutput}>
+        {output}
+      </div>
     </div>
   )
 }

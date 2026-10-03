@@ -1,17 +1,19 @@
 import { useState, type CSSProperties } from "react"
+import { runPluginCommand } from "../../../api"
 
 const styles: Record<string, CSSProperties> = {
   container: {
-    background: "linear-gradient(135deg, #0f1923, #1a1a2e)",
+    background: "linear-gradient(135deg, #0a1628, #1a1a2e)",
     borderRadius: "12px",
     padding: "24px",
-    fontFamily: "var(--font-sans, system-ui, sans-serif)",
+    fontFamily: "var(--font-mono, 'SF Mono', monospace)",
     color: "#e0e0e0",
-    maxWidth: "480px",
+    maxWidth: "580px",
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: "16px",
   },
   label: {
@@ -21,136 +23,186 @@ const styles: Record<string, CSSProperties> = {
     letterSpacing: "1px",
   },
   badge: {
-    background: "#3a1a1a",
-    color: "#ff8a80",
+    background: "#2a1a3a",
+    color: "#ce93d8",
     padding: "4px 10px",
     borderRadius: "20px",
     fontSize: "11px",
-  },
-  confidence: {
-    marginBottom: "16px",
-  },
-  sliderRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    marginBottom: "8px",
-  },
-  slider: {
-    flex: 1,
-    WebkitAppearance: "none" as const,
-    height: "6px",
-    borderRadius: "3px",
-    background: "#2a2a4a",
-    outline: "none",
-  },
-  thresholdValue: {
-    fontSize: "18px",
-    fontWeight: 700,
-    color: "#7c4dff",
-    minWidth: "36px",
-    textAlign: "center" as const,
-  },
-  stage: {
-    background: "#0d1117",
-    border: "1px solid #2a2a4a",
-    borderRadius: "8px",
-    padding: "12px 16px",
-    marginBottom: "8px",
-  },
-  stageHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginBottom: "6px",
-  },
-  stageName: {
-    fontSize: "13px",
     fontWeight: 600,
   },
-  stageStatus: {
-    fontSize: "12px",
+  table: {
+    width: "100%",
+    borderCollapse: "collapse" as const,
+    marginBottom: "16px",
   },
-  stageBar: {
-    height: "4px",
-    borderRadius: "2px",
-    background: "#2a2a4a",
-    overflow: "hidden" as const,
-  },
-  barFill: {
-    height: "100%",
-    borderRadius: "2px",
-    transition: "width 0.3s ease",
-  },
-  fallbackNote: {
-    fontSize: "11px",
+  th: {
     color: "#888",
-    marginTop: "12px",
+    fontSize: "11px",
+    textTransform: "uppercase" as const,
     padding: "8px",
-    border: "1px dashed #2a2a4a",
-    borderRadius: "6px",
-    textAlign: "center" as const,
+    textAlign: "left" as const,
+    borderBottom: "1px solid #2a2a4a",
   },
-}
-
-interface DecisionStage {
-  name: string
-  score: number
-  passes: boolean
+  td: {
+    padding: "8px",
+    fontSize: "12px",
+    borderBottom: "1px solid #1a1a2e",
+  },
+  slider: {
+    width: "100%",
+    accentColor: "#ab47bc",
+  },
+  winnerBox: {
+    background: "#0d1117",
+    border: "1px solid #4a148c",
+    borderRadius: "8px",
+    padding: "14px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  score: {
+    fontSize: "18px",
+    fontWeight: 700,
+    color: "#e1bee7",
+  },
 }
 
 export function DecisionPreview() {
-  const [threshold, setThreshold] = useState(65)
+  const [weights, setWeights] = useState<Record<string, number>>({
+    Performance: 8,
+    Maintainability: 7,
+    Security: 9,
+  })
 
-  const stages: DecisionStage[] = [
-    { name: "Rule Match", score: 92, passes: 92 >= threshold },
-    { name: "Semantic Coherence", score: 78, passes: 78 >= threshold },
-    { name: "Mesh Consensus", score: 45, passes: 45 >= threshold },
-  ]
+  const [optAScores, setOptAScores] = useState<Record<string, number>>({
+    Performance: 9,
+    Maintainability: 7,
+    Security: 8,
+  })
 
-  const allPass = stages.every((s) => s.passes)
+  const [optBScores, setOptBScores] = useState<Record<string, number>>({
+    Performance: 7,
+    Maintainability: 9,
+    Security: 9,
+  })
+
+  const [evaluating, setEvaluating] = useState(false)
+  const [output, setOutput] = useState<string | null>(null)
+
+  const calcWeightedScore = (scores: Record<string, number>) => {
+    let sum = 0
+    let totalWeight = 0
+    for (const [k, w] of Object.entries(weights)) {
+      sum += (scores[k] || 0) * w
+      totalWeight += w
+    }
+    return totalWeight > 0 ? (sum / totalWeight).toFixed(2) : "0.00"
+  }
+
+  const scoreA = parseFloat(calcWeightedScore(optAScores))
+  const scoreB = parseFloat(calcWeightedScore(optBScores))
+  const winner = scoreA >= scoreB ? "Option A" : "Option B"
+
+  const handleRunEvaluation = async () => {
+    setEvaluating(true)
+    try {
+      const res = await runPluginCommand("decision", "eval", [
+        `OptionA=${scoreA}`,
+        `OptionB=${scoreB}`,
+      ])
+      setOutput(res.output || res.error || `Decision logged: Winner is ${winner}`)
+    } catch (err: any) {
+      setOutput(`Evaluation error: ${err?.message || "Check decision plugin"}`)
+    } finally {
+      setEvaluating(false)
+    }
+  }
 
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.label}>Decision Gate</span>
-        <span style={{ ...styles.badge, color: allPass ? "#4caf50" : "#ff8a80", background: allPass ? "#1a3a1a" : "#3a1a1a" }}>
-          {allPass ? "Passed" : "Blocked"}
-        </span>
+        <span style={styles.label}>Typed Decision Matrix</span>
+        <span style={styles.badge}>Jev Evaluation</span>
       </div>
-      <div style={styles.confidence}>
-        <div style={{ fontSize: "11px", color: "#888", marginBottom: "6px" }}>Confidence Threshold</div>
-        <div style={styles.sliderRow}>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={threshold}
-            onChange={(e) => setThreshold(Number(e.target.value))}
-            style={styles.slider}
-          />
-          <span style={styles.thresholdValue}>{threshold}%</span>
-        </div>
-      </div>
-      <div>
-        {stages.map((s) => (
-          <div key={s.name} style={styles.stage}>
-            <div style={styles.stageHeader}>
-              <span style={styles.stageName}>{s.name}</span>
-              <span style={{ ...styles.stageStatus, color: s.passes ? "#4caf50" : "#ff8a80" }}>
-                {s.passes ? "✓" : "✗"} {s.score}%
-              </span>
-            </div>
-            <div style={styles.stageBar}>
-              <div style={{ ...styles.barFill, width: `${s.score}%`, background: s.passes ? "#4caf50" : "#ff5252" }} />
-            </div>
+
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Criterion</th>
+            <th style={styles.th}>Weight</th>
+            <th style={styles.th}>Option A</th>
+            <th style={styles.th}>Option B</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.keys(weights).map((c) => (
+            <tr key={c}>
+              <td style={styles.td}>{c}</td>
+              <td style={styles.td}>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={weights[c]}
+                  style={styles.slider}
+                  onChange={(e) => setWeights({ ...weights, [c]: parseInt(e.target.value, 10) })}
+                />
+              </td>
+              <td style={styles.td}>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={optAScores[c]}
+                  style={styles.slider}
+                  onChange={(e) => setOptAScores({ ...optAScores, [c]: parseInt(e.target.value, 10) })}
+                />
+              </td>
+              <td style={styles.td}>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={optBScores[c]}
+                  style={styles.slider}
+                  onChange={(e) => setOptBScores({ ...optBScores, [c]: parseInt(e.target.value, 10) })}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div style={styles.winnerBox}>
+        <div>
+          <div style={{ fontSize: "11px", color: "#888" }}>RANKED OUTCOME</div>
+          <div style={{ fontSize: "16px", fontWeight: 700, color: "#fff" }}>
+            {winner} (Score: {Math.max(scoreA, scoreB)})
           </div>
-        ))}
+        </div>
+        <button
+          style={{
+            background: "linear-gradient(135deg, #7b1fa2, #4a148c)",
+            border: "none",
+            borderRadius: "6px",
+            padding: "8px 16px",
+            color: "#fff",
+            fontSize: "12px",
+            cursor: "pointer",
+          }}
+          onClick={handleRunEvaluation}
+          disabled={evaluating}
+        >
+          {evaluating ? "Evaluating…" : "Evaluate Decision"}
+        </button>
       </div>
-      <div style={styles.fallbackNote}>
-        {allPass
-          ? "All gates passed — executing primary route"
-          : "Mesh consensus below threshold — activating fallback route"}
-      </div>
+
+      {output && (
+        <div style={{ marginTop: "12px", fontSize: "11px", color: "#ce93d8" }}>
+          {output}
+        </div>
+      )}
     </div>
   )
 }

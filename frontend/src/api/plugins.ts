@@ -50,6 +50,10 @@ export interface PluginInfo {
   openwiki_hubs: Array<{ title?: string; path: string }>
   cli: { command: string | null; subcommands: Array<{ name: string; description?: string }> } | null
   has_generator: boolean
+  branding?: { icon?: string | null; image?: string | null; color?: string | null; badge?: string | null }
+  locked?: boolean
+  store_deployed?: boolean
+  secrets?: Array<{ key: string; description?: string; required?: boolean }>
   manifest?: Record<string, unknown>
 }
 
@@ -63,6 +67,8 @@ export interface BundledPlugin {
   tasks: Array<{ intent: string; schedule: string; command: string }>
   cli: { command: string; subcommands: Array<{ name: string; description?: string }> } | null
   installed: boolean
+  branding?: { icon?: string | null; color?: string | null; badge?: string | null }
+  locked?: boolean
 }
 
 export interface PeerPlugin {
@@ -175,6 +181,18 @@ export function removePlugin(id: string, global = false): Promise<Result> {
 
 export function setPluginShared(id: string, shared: boolean): Promise<Result> {
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/share`, { shared })
+}
+
+export function updatePluginBranding(id: string, branding: { icon?: string; image?: string; color?: string; badge?: string }): Promise<Result> {
+  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/branding`, { branding })
+}
+
+export function setPluginLocked(id: string, locked: boolean): Promise<Result> {
+  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/lock`, { locked })
+}
+
+export function deployPluginToStore(id: string, autoLock = true): Promise<Result & { storePackage?: any }> {
+  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/deploy-store`, { autoLock })
 }
 
 export async function runPluginCommand(

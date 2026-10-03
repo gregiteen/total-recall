@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import child_process from 'node:child_process';
+import * as startupHealth from '../core/startup-health.mjs';
 import doctor, { isOwnedServerPort } from './doctor.mjs';
 
 describe('doctor command', () => {
@@ -81,6 +82,7 @@ describe('doctor command', () => {
     });
  
     // Mock port taken
+    vi.spyOn(startupHealth, 'processIdentity').mockReturnValue({ status: 'stopped' });
     const mockServer = {
       once: vi.fn().mockImplementation((event, callback) => {
         if (event === 'error') {

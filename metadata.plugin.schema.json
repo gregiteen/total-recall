@@ -209,6 +209,19 @@
         }
       }
     },
+    "secrets": {
+      "type": "array",
+      "description": "Declared secrets and API keys required for authentication by this plugin",
+      "items": {
+        "type": "object",
+        "required": ["key"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Z0-9_]{1,64}$", "description": "Environment variable or secret store key" },
+          "description": { "type": "string", "description": "What this secret is used for" },
+          "required": { "type": "boolean", "default": true }
+        }
+      }
+    },
     "skills": {
       "type": "array",
       "description": "Repo-adapted skills provided by this capability plugin",
@@ -337,6 +350,32 @@
           }
         }
       }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Customizable branding and icon metadata for showcase and store presentation",
+      "properties": {
+        "icon": {
+          "type": "string",
+          "description": "Identifier for the plugin icon (e.g. phone, globe, shield, terminal, or emoji)"
+        },
+        "color": {
+          "type": "string",
+          "description": "Primary brand color hex (e.g. #10b981, #3b82f6)"
+        },
+        "image": {
+          "type": "string",
+          "description": "Image URL or data URI for branding presentation"
+        },
+        "badge": {
+          "type": "string",
+          "description": "Custom status or badge text"
+        }
+      }
+    },
+    "locked": {
+      "type": "boolean",
+      "description": "When true, editing is locked to protect a completed plugin from inadvertent modification"
     }
   }
 }

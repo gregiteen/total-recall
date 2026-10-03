@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { validatePluginManifest, projectPluginsDir, globalPluginsDir } from "../../core/plugin-loader.mjs";
+import { spawnSync } from "node:child_process";
+import { validatePluginManifest } from "../../core/plugin-loader.mjs";
+import { installPlugin } from "../../core/plugin-store.mjs";
+import { parseCron } from "../../core/plugin-tasks.mjs";
+import { generateUiElements } from "../../core/app-deploy/ui-elements.mjs";
 
 function toTitleCase(kebab) {
   return kebab
@@ -13,19 +17,29 @@ export async function createPlugin(args = []) {
   const isGlobal = args.includes("--global") || args.includes("-g");
   const withCli = args.includes("--with-cli");
   const withGenerator = args.includes("--with-generator");
+  const withUi = args.includes("--with-ui");
+  const withTask = args.includes("--with-task");
+  const createGithub = args.includes("--github");
+  const publicRepo = args.includes("--public");
+  const skipInstall = args.includes("--no-install");
+  let repoDirArg = null;
 
   let name = null;
   let description = null;
   let category = null;
   let fromSkillPath = null;
+  let taskCommand = null;
+  let taskSchedule = null;
+  let taskIntent = null;
   const useCases = [];
 
   const cleanArgs = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--global" || arg === "-g" || arg === "--with-cli" || arg === "--with-generator") {
+    if (["--global", "-g", "--with-cli", "--with-generator", "--with-ui", "--with-task", "--with-skill", "--capability", "--github", "--public", "--no-install"].includes(arg)) {
       continue;
     }
+    if (arg === "--repo-dir" && args[i + 1]) { repoDirArg = args[++i]; continue; }
     if (arg === "--name" && args[i + 1]) {
       name = args[i + 1];
       i++;
@@ -51,6 +65,9 @@ export async function createPlugin(args = []) {
       i++;
       continue;
     }
+    if (arg === "--task-command" && args[i + 1]) { taskCommand = args[++i]; continue; }
+    if (arg === "--task-schedule" && args[i + 1]) { taskSchedule = args[++i]; continue; }
+    if (arg === "--task-intent" && args[i + 1]) { taskIntent = args[++i]; continue; }
     cleanArgs.push(arg);
   }
 
@@ -102,18 +119,28 @@ export async function createPlugin(args = []) {
     process.exit(1);
   }
 
-  const pluginsBaseDir = isGlobal ? globalPluginsDir() : projectPluginsDir(process.cwd());
+  if (withTask) {
+    if (!taskCommand || !/^[a-z][a-z0-9-]*$/.test(taskCommand) || !taskSchedule || !taskIntent) {
+      throw new Error('--with-task requires --task-command <subcommand>, --task-schedule "<five-field cron>", and --task-intent <description>');
+    }
+    parseCron(taskSchedule);
+  } else if (taskCommand || taskSchedule || taskIntent) {
+    throw new Error('--task-* options require --with-task');
+  }
 
-  const pluginDir = path.join(pluginsBaseDir, id);
-  if (fs.existsSync(pluginDir)) {
-    console.error(`❌ Error: Plugin directory already exists at ${pluginDir}`);
+  // Every plugin is its own repository (tr-plugin-<id>). The repo root IS the
+  // plugin directory (plugin.json at the root); the project/global install is
+  // a symlink to it, so edits in the repo are what runs.
+  const pluginDir = path.resolve(repoDirArg || path.join(path.dirname(process.cwd()), `tr-plugin-${id}`));
+  if (fs.existsSync(pluginDir) && fs.readdirSync(pluginDir).length > 0) {
+    console.error(`❌ Error: Plugin repository directory already exists and is not empty: ${pluginDir}`);
     process.exit(1);
   }
 
   fs.mkdirSync(pluginDir, { recursive: true });
 
   const pluginName = name || skillFrontmatter.name || toTitleCase(id);
-  const pluginDesc = description || skillFrontmatter.description || `${pluginName} extension for Total Recall AI OS`;
+  const pluginDesc = description || skillFrontmatter.description || `${pluginName} extension for Total Recall`;
 
   const manifest = {
     $schema: "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
@@ -140,7 +167,7 @@ export async function createPlugin(args = []) {
   const withSkill = args.includes("--with-skill") || args.includes("--capability") || Boolean(fromSkillPath);
   const isCapability = args.includes("--capability") || Boolean(fromSkillPath);
 
-  if (withCli || isCapability) {
+  if (withCli || isCapability || withTask) {
     manifest.cli = {
       command: id,
       handler: "./cli.mjs",
@@ -171,6 +198,7 @@ export async function run(argv = []) {
       : \`${pluginName}: scaffold only — no subcommands implemented yet.\`);
     return;
   }
+
   if (IMPLEMENTED[sub]) return IMPLEMENTED[sub](args.slice(1));
 
   console.error(\`${pluginName}: "\${sub}" is not implemented.\`);
@@ -179,6 +207,21 @@ export async function run(argv = []) {
 export default run;
 `;
     fs.writeFileSync(path.join(pluginDir, "cli.mjs"), cliContent, "utf8");
+  }
+
+  if (withTask) {
+    manifest.tasks = [{ intent: taskIntent, schedule: taskSchedule, command: taskCommand, placement: 'selected-node' }];
+  }
+
+  if (withUi) {
+    manifest.ui = {
+      design_tokens: 'ui/DESIGN.md',
+      elements: [{ id: 'panel', kind: 'panel', tag: `${id}-panel`, module: 'ui/panel.js', description: `${pluginName} panel`, events: [], tokens: ['color-text', 'color-surface', 'color-border', 'spacing-md', 'radius-md'], optional_tokens: [] }],
+    };
+    const panelClass = `${id.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join('')}Panel`;
+    fs.mkdirSync(path.join(pluginDir, 'ui'), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'ui', 'DESIGN.md'), '---\ncolors:\n  text: "#20242a"\n  surface: "#ffffff"\n  border: "#dce2e8"\nspacing:\n  md: 12px\nrounded:\n  md: 8px\n---\n\n# Design tokens\n\nReplace these defaults with the host design tokens.\n');
+    fs.writeFileSync(path.join(pluginDir, 'ui', 'panel.js'), `class ${panelClass} extends HTMLElement {\n  connectedCallback() {\n    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });\n    root.replaceChildren();\n    const style = document.createElement('style');\n    style.textContent = ':host { display:block; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-md); }';\n    const text = document.createElement('p');\n    text.textContent = ${JSON.stringify(`${pluginName} panel scaffold. Add the actual capability before sharing.`)};\n    root.append(style, text);\n  }\n}\ncustomElements.define('${id}-panel', ${panelClass});\n`);
   }
 
   if (isCapability) {
@@ -269,6 +312,10 @@ export default generateContext;
     fs.rmSync(pluginDir, { recursive: true, force: true });
     process.exit(1);
   }
+  if (withUi) {
+    try { generateUiElements(manifest, { pluginDir, target: 'web-components' }); }
+    catch (error) { fs.rmSync(pluginDir, { recursive: true, force: true }); throw error; }
+  }
 
   fs.writeFileSync(
     path.join(pluginDir, "plugin.json"),
@@ -299,17 +346,115 @@ export default generateContext;
   if (useCases.length) lines.push(`- **Use cases**: ${useCases.join(", ")}`);
   if (category) lines.push(`- **SSSS Category**: \`${category}\``);
   if (withCli) lines.push(`- **CLI Command**: \`npx total-recall ${id}\``);
+  if (withTask) lines.push(`- **Scheduled task**: \`${taskCommand}\` at \`${taskSchedule}\` (selected node; implement the command and choose a node before use)`);
+  if (withUi) lines.push('- **UI**: `ui/panel.js` custom element with DESIGN.md tokens');
   lines.push("");
 
   fs.writeFileSync(path.join(pluginDir, "README.md"), lines.join("\n"), "utf8");
 
-  console.log(`\n🎉 Successfully scaffolded plugin "${pluginName}"!`);
-  console.log(`   Location: \x1b[36m${pluginDir}\x1b[0m`);
-  console.log(`   Manifest: \x1b[33m${path.join(pluginDir, "plugin.json")}\x1b[0m`);
+  // ── Standalone repository files ──────────────────────────────────────────
+  const holder = gitOutput(['config', 'user.name']) || 'Plugin authors';
+  fs.writeFileSync(path.join(pluginDir, 'package.json'), JSON.stringify({
+    name: `tr-plugin-${id}`,
+    version: '0.1.0',
+    private: true,
+    type: 'module',
+    description: pluginDesc,
+    scripts: { test: 'node --test test/*.test.mjs' },
+    devDependencies: { 'total-recall-brain': '^3.35.0' },
+    license: 'MIT'
+  }, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(path.join(pluginDir, '.gitignore'), 'node_modules/\n.env*\n.agent/skills/total-recall/\ndist/\nreports/\n.DS_Store\nINSTRUCTIONS.md\nAGENTS.md\nGEMINI.md\n', 'utf8');
+  fs.writeFileSync(path.join(pluginDir, 'LICENSE'), mitLicense(holder), 'utf8');
+  fs.mkdirSync(path.join(pluginDir, 'test'), { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, 'test', 'manifest.test.mjs'), `import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
+
+test('manifest identifies the plugin', () => {
+  assert.equal(manifest.id, ${JSON.stringify(id)});
+  assert.match(manifest.version, /^\\\\d+\\\\.\\\\d+\\\\.\\\\d+/);
+  assert.equal(manifest.license, 'MIT');
+});
+
+test('every file the manifest references exists', () => {
+  const refs = [manifest.cli?.handler, manifest.compile?.generator, manifest.ui?.design_tokens, ...(manifest.skills || []).map((s) => s.path), ...(manifest.ui?.elements || []).map((e) => e.module)].filter(Boolean);
+  for (const ref of refs) assert.ok(fs.existsSync(path.join(root, ref)), \`missing \${ref}\`);
+});
+`, 'utf8');
+
+  gitOutput(['init', '-q', '-b', 'main'], pluginDir);
+  gitOutput(['remote', 'add', 'origin', `https://github.com/${githubOwner() || 'OWNER'}/tr-plugin-${id}.git`], pluginDir);
+
+  // ── Install: a link to the repo, so the repo is what runs ───────────────
+  let installed = false;
+  if (!skipInstall) {
+    await installPlugin(pluginDir, { link: true, global: isGlobal, projectRoot: process.cwd() });
+    installed = true;
+  }
+
+  // ── Optional GitHub repository (private unless --public) ────────────────
+  let githubUrl = null;
+  if (createGithub) {
+    const out = spawnSync('gh', ['repo', 'create', `tr-plugin-${id}`, publicRepo ? '--public' : '--private', '--description', pluginDesc, '--source', pluginDir, '--remote', 'origin'], { encoding: 'utf8' });
+    if (out.status !== 0) {
+      console.error(`❌ GitHub repository creation failed: ${(out.stderr || out.stdout || '').trim()}`);
+      process.exitCode = 1;
+    } else {
+      githubUrl = (out.stdout || '').trim().split('\n').pop();
+    }
+  }
+
+  console.log(`\n🎉 Successfully scaffolded plugin "${pluginName}" as its own repository!`);
+  console.log(`   Repository: \x1b[36m${pluginDir}\x1b[0m`);
+  console.log(`   Manifest:   \x1b[33m${path.join(pluginDir, "plugin.json")}\x1b[0m`);
   if (withCli) {
     console.log(`   CLI Handler: \x1b[32m${path.join(pluginDir, "cli.mjs")}\x1b[0m`);
   }
+  console.log(`   Installed:  ${installed ? `linked into ${isGlobal ? 'the global' : 'this project\'s'} plugins` : 'no (--no-install)'}`);
+  console.log(`   GitHub:     ${githubUrl || (createGithub ? 'creation failed' : 'not created (re-run with --github, or: gh repo create tr-plugin-' + id + ' --private --source ' + pluginDir + ')')}`);
   console.log(`\nNext steps:`);
+  console.log(`   Test:    \x1b[32mcd ${pluginDir} && npm test\x1b[0m`);
   console.log(`   Inspect: \x1b[32mnpx total-recall plugin info ${id}\x1b[0m`);
   console.log(`   List:    \x1b[32mnpx total-recall plugin list\x1b[0m\n`);
+}
+
+function gitOutput(gitArgs, cwd) {
+  const out = spawnSync('git', gitArgs, { cwd, encoding: 'utf8' });
+  return out.status === 0 ? (out.stdout || '').trim() : '';
+}
+
+function githubOwner() {
+  const out = spawnSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf8' });
+  return out.status === 0 ? (out.stdout || '').trim() : '';
+}
+
+function mitLicense(holder) {
+  return `MIT License
+
+Copyright (c) ${new Date().getFullYear()} ${holder}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`;
 }

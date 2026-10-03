@@ -7,6 +7,9 @@ import {
   installPlugin,
   removePlugin,
   setPluginShared,
+  updatePluginBranding,
+  setPluginLocked,
+  deployPluginToStore,
   runPluginCommand,
   fetchPluginReadme,
   type PluginInfo,
@@ -15,13 +18,14 @@ import {
   type PeerNode
 } from "../api"
 import { renderMarkdown } from "../components/MarkdownUtils"
+import { getPreviewComponent, PreviewFallback } from "../components/plugins/previews"
 
 interface PluginsPageProps {
   activeBrainId?: string | null
 }
 
 type Tab = "installed" | "bundled" | "mesh"
-type DetailTab = "run" | "readme" | "details"
+type DetailTab = "preview" | "run" | "readme" | "details"
 type Alert = { type: "success" | "error"; message: string } | null
 
 const PEER_STATUS_LABEL: Record<PeerNode["status"], string> = {
@@ -35,6 +39,33 @@ const PEER_STATUS_LABEL: Record<PeerNode["status"], string> = {
 
 const mono: CSSProperties = { fontFamily: "var(--font-mono)", fontSize: "12px" }
 const muted: CSSProperties = { color: "var(--text-secondary)", fontSize: "13px", lineHeight: 1.5 }
+
+const DEFAULT_BRANDING: Record<string, { icon: string; color: string; badge: string }> = {
+  phone: { icon: "📞", color: "#10b981", badge: "Telephony" },
+  domains: { icon: "🌐", color: "#3b82f6", badge: "DNS" },
+  signing: { icon: "✍️", color: "#8b5cf6", badge: "Signing" },
+  "code-quality": { icon: "🛡️", color: "#06b6d4", badge: "Quality Gates" },
+  "composable-cli": { icon: "💻", color: "#14b8a6", badge: "CLI Engine" },
+  decision: { icon: "⚖️", color: "#a855f7", badge: "Decisions" },
+  design: { icon: "🎨", color: "#ec4899", badge: "Design System" },
+  text: { icon: "💬", color: "#22c55e", badge: "Messaging" },
+  "creative-search": { icon: "🔍", color: "#f59e0b", badge: "Search" },
+  "git-sentinel": { icon: "🌿", color: "#84cc16", badge: "Git Health" },
+  "system-monitor": { icon: "📊", color: "#6366f1", badge: "Telemetry" },
+  "operator-alerts": { icon: "🔔", color: "#ef4444", badge: "Alerts" },
+  dsh: { icon: "🐚", color: "#64748b", badge: "Remote Shell" },
+}
+
+function resolvePluginBranding(p: { id: string; branding?: { icon?: string | null; color?: string | null; badge?: string | null } }) {
+  const custom = p.branding || {}
+  const shortId = p.id.replace(/^tr-plugin-/, "")
+  const fallback = DEFAULT_BRANDING[shortId] || DEFAULT_BRANDING[p.id] || { icon: "🧩", color: "#3b82f6", badge: "Capability" }
+  return {
+    icon: custom.icon || fallback.icon,
+    color: custom.color || fallback.color,
+    badge: custom.badge || fallback.badge,
+  }
+}
 
 function shortHash(sha: string | null | undefined) {
   return sha ? `${sha.slice(0, 12)}…` : "—"
@@ -106,11 +137,18 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   const [installGlobal, setInstallGlobal] = useState(false)
 
   const [detail, setDetail] = useState<PluginInfo | null>(null)
-  const [detailTab, setDetailTab] = useState<DetailTab>("run")
+  const [detailTab, setDetailTab] = useState<DetailTab>("preview")
   const [subcommand, setSubcommand] = useState("")
   const [args, setArgs] = useState("")
   const [output, setOutput] = useState<{ text: string; ok: boolean } | null>(null)
   const [readme, setReadme] = useState("")
+
+  // Branding Customization Modal state
+  const [brandingOpen, setBrandingOpen] = useState(false)
+  const [brandingPlugin, setBrandingPlugin] = useState<PluginInfo | null>(null)
+  const [brandingIcon, setBrandingIcon] = useState("")
+  const [brandingColor, setBrandingColor] = useState("#3b82f6")
+  const [brandingBadge, setBrandingBadge] = useState("")
 
   const loadLocal = useCallback(async () => {
     setLoading(true)
@@ -195,9 +233,78 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
     loadLocal()
   }
 
-  const openDetail = async (p: PluginInfo) => {
+  const doToggleLock = async (p: PluginInfo) => {
+    setBusy(p.id)
+    const nextLocked = !p.locked
+    const res = await setPluginLocked(p.id, nextLocked)
+    setBusy(null)
+    if (!res.success) {
+      setAlert({ type: "error", message: res.error || "Could not update lock status" })
+      return
+    }
+    if (res.plugin && detail?.id === p.id) setDetail(res.plugin)
+    setAlert({
+      type: "success",
+      message: nextLocked ? `${p.name} is locked against further editing.` : `${p.name} is unlocked for editing.`
+    })
+    loadLocal()
+  }
+
+  const doDeployStore = async (p: PluginInfo) => {
+    setBusy(p.id)
+    const res = await deployPluginToStore(p.id, true)
+    setBusy(null)
+    if (!res.success) {
+      setAlert({ type: "error", message: res.error || "Could not deploy plugin to store" })
+      return
+    }
+    if (res.plugin && detail?.id === p.id) setDetail(res.plugin)
+    setAlert({
+      type: "success",
+      message: `${p.name} deployed to the plugin store and locked as complete.`
+    })
+    loadLocal()
+  }
+
+  const openBrandingModal = (p: PluginInfo) => {
+    const branding = resolvePluginBranding(p)
+    setBrandingPlugin(p)
+    setBrandingIcon(branding.icon)
+    setBrandingColor(branding.color)
+    setBrandingBadge(branding.badge)
+    setBrandingOpen(true)
+  }
+
+  const saveBranding = async () => {
+    if (!brandingPlugin) return
+    if (brandingPlugin.locked) {
+      setAlert({ type: "error", message: "Plugin is locked. Unlock it before editing branding." })
+      setBrandingOpen(false)
+      return
+    }
+    setBusy(brandingPlugin.id)
+    const res = await updatePluginBranding(brandingPlugin.id, {
+      icon: brandingIcon.trim() || undefined,
+      color: brandingColor.trim() || undefined,
+      badge: brandingBadge.trim() || undefined
+    })
+    setBusy(null)
+    setBrandingOpen(false)
+    if (!res.success) {
+      setAlert({ type: "error", message: res.error || "Could not save branding" })
+      return
+    }
+    setAlert({ type: "success", message: `Updated branding for ${brandingPlugin.name}` })
+    await loadLocal()
+    if (detail?.id === brandingPlugin.id && res.plugin) {
+      setDetail(res.plugin)
+    }
+  }
+
+  const openDetail = async (p: PluginInfo, targetTab: DetailTab = "preview") => {
     setDetail(p)
-    setDetailTab(p.cli ? "run" : "details")
+    const hasPreview = !!getPreviewComponent(p.id)
+    setDetailTab(hasPreview ? targetTab : (p.cli ? "run" : "details"))
     setSubcommand(p.cli?.subcommands?.[0]?.name || "")
     setArgs("")
     setOutput(null)
@@ -222,7 +329,6 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, installed])
 
-  // Keep an open detail panel in sync after share/remove/reload.
   useEffect(() => {
     if (!detail) return
     const fresh = installed.find((p) => p.id === detail.id)
@@ -261,8 +367,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
         <div>
           <h1>Plugins</h1>
           <p>
-            Plugins shape Total Recall for a particular use — memory categories, agent context, commands and scheduled jobs.
-            Share them directly with other users through a hash-pinned HTTPS link. Your mesh peers can use the same shared plugins.
+            Plugins deliver modular capabilities into Total Recall and SSSS apps — memory categories, agent context, commands, and design-token UI.
+            Customizable branding, locked release status, and direct store deployment are managed on each card.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => { setInstallOpen(true); setAlert(null) }}>
@@ -302,33 +408,160 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
           </Empty>
         ) : (
           <div className="card-grid">
-            {filteredInstalled.map((p) => (
-              <div key={`${p.scope}:${p.id}`} className="card" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
-                  <button onClick={() => openDetail(p)} style={{ background: "none", border: "none", padding: 0, color: "var(--text-primary)", fontWeight: 600, fontSize: "15px", cursor: "pointer", textAlign: "left" }}>
-                    {p.name}
-                  </button>
-                  <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span>
+            {filteredInstalled.map((p) => {
+              const branding = resolvePluginBranding(p)
+              return (
+                <div
+                  key={`${p.scope}:${p.id}`}
+                  className="card"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                    borderTop: `3px solid ${branding.color}`,
+                    position: "relative"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                      <div
+                        style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "8px",
+                          background: `${branding.color}20`,
+                          border: `1px solid ${branding.color}50`,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "18px",
+                          flexShrink: 0
+                        }}
+                      >
+                        {branding.icon}
+                      </div>
+                      <div>
+                        <button
+                          onClick={() => openDetail(p, "preview")}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            color: "var(--text-primary)",
+                            fontWeight: 600,
+                            fontSize: "15px",
+                            cursor: "pointer",
+                            textAlign: "left"
+                          }}
+                        >
+                          {p.name}
+                        </button>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "2px" }}>
+                          <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span>
+                          <span
+                            className="badge"
+                            style={{
+                              fontSize: "10px",
+                              background: `${branding.color}15`,
+                              color: branding.color,
+                              borderColor: `${branding.color}40`,
+                              padding: "1px 6px"
+                            }}
+                          >
+                            {branding.badge}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "4px" }}>
+                      {p.locked ? (
+                        <span className="badge" style={{ background: "#2e1065", color: "#c084fc", borderColor: "#7e22ce" }} title="Editing locked">
+                          🔒 Locked
+                        </span>
+                      ) : (
+                        <span className="badge" style={{ background: "#064e3b", color: "#6ee7b7", borderColor: "#059669" }} title="Editing enabled">
+                          🔓 Editable
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={muted}>{p.description}</div>
+                  <UseCaseChips useCases={p.use_cases} />
+
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", fontSize: "11px" }}>
+                    <span className="badge">{p.scope}</span>
+                    <span className="badge">{sourceLabel(p)}</span>
+                    {p.shared && <span className="badge badge-accent">shared</span>}
+                    {p.store_deployed && <span className="badge badge-success">🏪 in store</span>}
+                    {!p.valid && <span className="badge badge-error">invalid manifest</span>}
+                    {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
+                  </div>
+
+                  <div style={{ ...mono, color: "var(--text-tertiary)", fontSize: "11px" }} title={p.sha256 || undefined}>
+                    sha256 {shortHash(p.sha256)}
+                  </div>
+
+                  {/* Common Config Controls & Action Toolbar */}
+                  <div style={{ display: "flex", gap: "6px", marginTop: "auto", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid var(--border)" }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => openDetail(p, "preview")}
+                      title="Open interactive component preview"
+                    >
+                      Preview
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => openDetail(p, "run")}
+                      title="Run plugin CLI handler"
+                    >
+                      Run CLI
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => openBrandingModal(p)}
+                      disabled={p.locked}
+                      title={p.locked ? "Plugin is locked" : "Customize icon and branding"}
+                    >
+                      🎨 Brand
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => doToggleLock(p)}
+                      disabled={busy === p.id}
+                      title={p.locked ? "Unlock editing" : "Lock editing when complete"}
+                    >
+                      {p.locked ? "🔓 Unlock" : "🔒 Lock"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => doDeployStore(p)}
+                      disabled={busy === p.id || !p.valid}
+                      title="Publish and deploy to the plugin store"
+                    >
+                      {p.store_deployed ? "✓ Store" : "🚀 Store"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={busy === p.id || (!p.valid && !p.shared)}
+                      onClick={() => doShare(p, !p.shared)}
+                      title="Share over mesh or direct link"
+                    >
+                      {p.shared ? "Unshare" : "Share"}
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      disabled={busy === p.id}
+                      onClick={() => doRemove(p)}
+                      title="Uninstall plugin"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <div style={muted}>{p.description}</div>
-                <UseCaseChips useCases={p.use_cases} />
-                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                  <span className="badge">{p.scope}</span>
-                  <span className="badge">{sourceLabel(p)}</span>
-                  {p.shared && <span className="badge badge-accent">shared</span>}
-                  {!p.valid && <span className="badge badge-error">invalid manifest</span>}
-                  {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
-                </div>
-                <div style={{ ...mono, color: "var(--text-tertiary)" }} title={p.sha256 || undefined}>sha256 {shortHash(p.sha256)}</div>
-                <div style={{ display: "flex", gap: "8px", marginTop: "auto", flexWrap: "wrap" }}>
-                  <button className="btn btn-ghost btn-sm" onClick={() => openDetail(p)}>Open</button>
-                  <button className="btn btn-ghost btn-sm" disabled={busy === p.id || (!p.valid && !p.shared)} onClick={() => doShare(p, !p.shared)}>
-                    {p.shared ? "Stop sharing" : "Share"}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" disabled={busy === p.id} onClick={() => doRemove(p)}>Remove</button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )
       )}
@@ -337,32 +570,56 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
         loading ? <div style={muted}>Loading…</div> :
         filteredBundled.length === 0 ? <Empty title="No bundled plugins match" /> : (
           <>
-            <p style={{ ...muted, marginBottom: "16px" }}>Shipped with this version of Total Recall, so they install on any node.</p>
+            <p style={{ ...muted, marginBottom: "16px" }}>Shipped with this version of Total Recall, installable on any node.</p>
             <div className="card-grid">
-              {filteredBundled.map((p) => (
-                <div key={p.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
-                    <span style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</span>
-                    <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span>
-                  </div>
-                  <div style={muted}>{p.description}</div>
-                  <UseCaseChips useCases={p.use_cases} />
-                  <div style={{ ...muted, fontSize: "12px" }}>
-                    {[
-                      p.cli && `command: total-recall ${p.cli.command}`,
-                      p.tasks.length > 0 && `${p.tasks.length} scheduled task${p.tasks.length > 1 ? "s" : ""}`,
-                      p.categories.length > 0 && `${p.categories.length} memory categor${p.categories.length > 1 ? "ies" : "y"}`
-                    ].filter(Boolean).join(" · ")}
-                  </div>
-                  <div style={{ marginTop: "auto" }}>
-                    {p.installed
-                      ? <span className="badge badge-success">installed</span>
-                      : <button className="btn btn-primary btn-sm" disabled={busy === p.id} onClick={() => doInstall(p.id)}>
+              {filteredBundled.map((p) => {
+                const branding = resolvePluginBranding(p)
+                return (
+                  <div key={p.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "10px", borderTop: `3px solid ${branding.color}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        <div
+                          style={{
+                            width: "32px",
+                            height: "32px",
+                            borderRadius: "6px",
+                            background: `${branding.color}20`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "16px"
+                          }}
+                        >
+                          {branding.icon}
+                        </div>
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</span>
+                          <div style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</div>
+                        </div>
+                      </div>
+                      <span className="badge" style={{ background: `${branding.color}15`, color: branding.color }}>{branding.badge}</span>
+                    </div>
+                    <div style={muted}>{p.description}</div>
+                    <UseCaseChips useCases={p.use_cases} />
+                    <div style={{ ...muted, fontSize: "12px" }}>
+                      {[
+                        p.cli && `command: total-recall ${p.cli.command}`,
+                        p.tasks.length > 0 && `${p.tasks.length} scheduled task${p.tasks.length > 1 ? "s" : ""}`,
+                        p.categories.length > 0 && `${p.categories.length} memory categor${p.categories.length > 1 ? "ies" : "y"}`
+                      ].filter(Boolean).join(" · ")}
+                    </div>
+                    <div style={{ marginTop: "auto", display: "flex", gap: "8px" }}>
+                      {p.installed ? (
+                        <span className="badge badge-success">installed</span>
+                      ) : (
+                        <button className="btn btn-primary btn-sm" disabled={busy === p.id} onClick={() => doInstall(p.id)}>
                           {busy === p.id ? "Installing…" : "Install"}
-                        </button>}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )
@@ -468,97 +725,307 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
         </div>
       )}
 
+      {/* Branding Customization Modal */}
+      {brandingOpen && brandingPlugin && (
+        <div role="dialog" aria-modal="true" aria-label="Customize Plugin Branding" onClick={() => setBrandingOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "16px" }}>
+          <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: "480px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: "16px" }}>Customize Branding: {brandingPlugin.name}</div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setBrandingOpen(false)}>✕</button>
+            </div>
+
+            {brandingPlugin.locked && (
+              <div className="alert alert-warning" style={{ fontSize: "12px" }}>
+                🔒 This plugin is marked complete and locked against editing. Unlock it to change branding.
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Icon (Emoji or Symbol)</label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  className="input"
+                  value={brandingIcon}
+                  onChange={(e) => setBrandingIcon(e.target.value)}
+                  style={{ width: "80px", textAlign: "center", fontSize: "18px" }}
+                  disabled={brandingPlugin.locked}
+                />
+                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
+                  {["📞", "🌐", "✍️", "🛡️", "💻", "⚖️", "🎨", "💬", "🔍", "🌿", "📊", "🔔", "🐚"].map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: "4px 8px", fontSize: "14px" }}
+                      disabled={brandingPlugin.locked}
+                      onClick={() => setBrandingIcon(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Theme Color (Hex)</label>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <input
+                  type="color"
+                  value={brandingColor}
+                  onChange={(e) => setBrandingColor(e.target.value)}
+                  style={{ width: "42px", height: "38px", border: "none", cursor: "pointer", background: "none" }}
+                  disabled={brandingPlugin.locked}
+                />
+                <input
+                  className="input"
+                  value={brandingColor}
+                  onChange={(e) => setBrandingColor(e.target.value)}
+                  style={{ flex: 1, fontFamily: "var(--font-mono)" }}
+                  disabled={brandingPlugin.locked}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Domain Badge Text</label>
+              <input
+                className="input"
+                value={brandingBadge}
+                onChange={(e) => setBrandingBadge(e.target.value)}
+                placeholder="e.g. Telephony, Quality, DNS"
+                disabled={brandingPlugin.locked}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setBrandingOpen(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={saveBranding}
+                disabled={brandingPlugin.locked || busy !== null}
+              >
+                Save Branding
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plugin Detail & Interactive Preview Drawer */}
       {detail && (
         <div role="dialog" aria-modal="true" aria-label={detail.name} onClick={closeDetail}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", justifyContent: "flex-end", zIndex: 1000 }}>
           <div onClick={(e) => e.stopPropagation()}
-            style={{ width: "100%", maxWidth: "640px", height: "100%", overflowY: "auto", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border)", padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-              <div>
-                <div style={{ fontSize: "18px", fontWeight: 700 }}>{detail.name}</div>
-                <div style={{ ...mono, color: "var(--text-tertiary)" }}>{detail.id} · v{detail.version}</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={closeDetail} aria-label="Close">Close</button>
-            </div>
-            <div style={muted}>{detail.description}</div>
-            {!detail.valid && (
-              <div className="alert alert-error">
-                {detail.errors.map((e) => <div key={e}>{e}</div>)}
-              </div>
-            )}
-            <div role="tablist" style={{ display: "flex", gap: "8px" }}>
-              {detail.cli && <button role="tab" aria-selected={detailTab === "run"} className={`btn btn-sm ${detailTab === "run" ? "btn-primary" : "btn-ghost"}`} onClick={() => setDetailTab("run")}>Run</button>}
-              <button role="tab" aria-selected={detailTab === "details"} className={`btn btn-sm ${detailTab === "details" ? "btn-primary" : "btn-ghost"}`} onClick={() => setDetailTab("details")}>Details</button>
-              <button role="tab" aria-selected={detailTab === "readme"} className={`btn btn-sm ${detailTab === "readme" ? "btn-primary" : "btn-ghost"}`} onClick={() => setDetailTab("readme")}>README</button>
-            </div>
-
-            {detailTab === "run" && detail.cli && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <select className="select" value={subcommand} onChange={(e) => setSubcommand(e.target.value)} aria-label="Subcommand" style={{ paddingRight: "32px" }}>
-                    {(detail.cli.subcommands.length ? detail.cli.subcommands : [{ name: "" }]).map((s) => (
-                      <option key={s.name} value={s.name}>{s.name || "(default)"}</option>
-                    ))}
-                  </select>
-                  <input className="input" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="extra arguments" aria-label="Arguments" style={{ flex: 1, minWidth: "160px" }} />
-                  <button className="btn btn-primary" onClick={runCommand} disabled={busy === `run:${detail.id}` || !detail.valid}>
-                    {busy === `run:${detail.id}` ? "Running…" : "Run"}
-                  </button>
-                </div>
-                <div style={{ ...muted, fontSize: "12px" }}>
-                  {detail.cli.subcommands.find((s) => s.name === subcommand)?.description}
-                  {" "}Same as <code style={mono}>npx total-recall {detail.cli.command} {subcommand} {args}</code>. Runs in a separate process.
-                </div>
-                {output && (
-                  <pre style={{ ...mono, margin: 0, padding: "14px", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", border: `1px solid ${output.ok ? "var(--border)" : "var(--error)"}`, whiteSpace: "pre-wrap", maxHeight: "420px", overflow: "auto" }}>
-                    {output.text}
-                  </pre>
-                )}
-              </div>
-            )}
-
-            {detailTab === "details" && (
-              <div>
-                <Fact label="Scope">{detail.scope}{detail.linked ? " (linked folder)" : ""}</Fact>
-                <Fact label="Source">{sourceLabel(detail)} — <span style={mono}>{detail.source.ref}</span></Fact>
-                <Fact label="Installed">{detail.installed_at ? new Date(detail.installed_at).toLocaleString() : "no install record"}</Fact>
-                <Fact label="Content sha256"><span style={mono}>{detail.sha256 || "—"}</span></Fact>
-                {detail.modified_since_install && <Fact label="At install"><span style={mono}>{detail.installed_sha256}</span></Fact>}
-                <Fact label="Files">{detail.file_count ?? "—"} · {formatBytes(detail.size_bytes)}</Fact>
-                <Fact label="Shared">{detail.shared ? "yes" : "no"}</Fact>
-                {detail.shared && <Fact label="Public link">{detail.share_url ? <input className="input" aria-label="Public plugin share link" readOnly value={detail.share_url} onFocus={(e) => e.currentTarget.select()} /> : "Set TR_PUBLIC_BASE_URL to your public HTTPS origin to create a link."}</Fact>}
-                <Fact label="Use cases">{detail.use_cases.join(", ") || "—"}</Fact>
-                {detail.author && <Fact label="Author">{detail.author}</Fact>}
-                {detail.license && <Fact label="License">{detail.license}</Fact>}
-                <Fact label="Location"><span style={mono}>{detail.dir}</span></Fact>
-                <Fact label="Agent context">{detail.has_generator ? "adds a block to compiled instructions" : "—"}</Fact>
-                <Fact label="Memory categories">
-                  {detail.categories.length ? detail.categories.map((c) => c.name).join(", ") : "—"}
-                </Fact>
-                <Fact label="Scheduled tasks">
-                  {detail.tasks.length === 0 ? "—" : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      {detail.tasks.map((t) => (
-                        <div key={t.command}>
-                          <span style={mono}>{t.schedule}</span> {t.command} — {t.intent}
-                          <div style={{ color: "var(--text-tertiary)", fontSize: "12px" }}>last run: {t.last_run || "not yet"}</div>
+            style={{ width: "100%", maxWidth: "680px", height: "100%", overflowY: "auto", background: "var(--bg-secondary)", borderLeft: "1px solid var(--border)", padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            
+            {/* Drawer Header */}
+            {(() => {
+              const branding = resolvePluginBranding(detail)
+              const PreviewComponent = getPreviewComponent(detail.id)
+              return (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
+                    <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                      <div
+                        style={{
+                          width: "44px",
+                          height: "44px",
+                          borderRadius: "10px",
+                          background: `${branding.color}20`,
+                          border: `1px solid ${branding.color}50`,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "22px",
+                          flexShrink: 0
+                        }}
+                      >
+                        {branding.icon}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "18px", fontWeight: 700 }}>{detail.name}</div>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "2px" }}>
+                          <span style={{ ...mono, color: "var(--text-tertiary)" }}>{detail.id} · v{detail.version}</span>
+                          <span className="badge" style={{ background: `${branding.color}15`, color: branding.color, borderColor: `${branding.color}40`, fontSize: "11px" }}>
+                            {branding.badge}
+                          </span>
+                          {detail.locked && <span className="badge" style={{ background: "#2e1065", color: "#c084fc" }}>🔒 Locked</span>}
                         </div>
-                      ))}
+                      </div>
+                    </div>
+                    <button className="btn btn-ghost btn-sm" onClick={closeDetail} aria-label="Close">Close</button>
+                  </div>
+
+                  <div style={muted}>{detail.description}</div>
+
+                  {!detail.valid && (
+                    <div className="alert alert-error">
+                      {detail.errors.map((e) => <div key={e}>{e}</div>)}
                     </div>
                   )}
-                </Fact>
-                <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
-                  <button className="btn btn-ghost btn-sm" disabled={busy === detail.id || (!detail.valid && !detail.shared)} onClick={() => doShare(detail, !detail.shared)}>
-                    {detail.shared ? "Stop sharing" : "Share"}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" disabled={busy === detail.id} onClick={() => doRemove(detail)}>Remove</button>
-                </div>
-              </div>
-            )}
 
-            {detailTab === "readme" && (
-              <div style={{ fontSize: "14px", lineHeight: 1.6 }}>{readme ? renderMarkdown(readme) : <span style={muted}>Loading…</span>}</div>
-            )}
+                  {/* Drawer Navigation Tabs */}
+                  <div role="tablist" style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "10px" }}>
+                    {PreviewComponent && (
+                      <button
+                        role="tab"
+                        aria-selected={detailTab === "preview"}
+                        className={`btn btn-sm ${detailTab === "preview" ? "btn-primary" : "btn-ghost"}`}
+                        onClick={() => setDetailTab("preview")}
+                      >
+                        Interactive Preview
+                      </button>
+                    )}
+                    {detail.cli && (
+                      <button
+                        role="tab"
+                        aria-selected={detailTab === "run"}
+                        className={`btn btn-sm ${detailTab === "run" ? "btn-primary" : "btn-ghost"}`}
+                        onClick={() => setDetailTab("run")}
+                      >
+                        Run CLI
+                      </button>
+                    )}
+                    <button
+                      role="tab"
+                      aria-selected={detailTab === "details"}
+                      className={`btn btn-sm ${detailTab === "details" ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => setDetailTab("details")}
+                    >
+                      Details & Config
+                    </button>
+                    <button
+                      role="tab"
+                      aria-selected={detailTab === "readme"}
+                      className={`btn btn-sm ${detailTab === "readme" ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => setDetailTab("readme")}
+                    >
+                      README
+                    </button>
+                  </div>
+
+                  {/* Tab 1: 100% Functional Interactive Preview */}
+                  {detailTab === "preview" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {PreviewComponent ? (
+                        <PreviewComponent />
+                      ) : (
+                        <PreviewFallback pluginId={detail.id} />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tab 2: CLI Command Runner */}
+                  {detailTab === "run" && detail.cli && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <select className="select" value={subcommand} onChange={(e) => setSubcommand(e.target.value)} aria-label="Subcommand" style={{ paddingRight: "32px" }}>
+                          {(detail.cli.subcommands.length ? detail.cli.subcommands : [{ name: "" }]).map((s) => (
+                            <option key={s.name} value={s.name}>{s.name || "(default)"}</option>
+                          ))}
+                        </select>
+                        <input className="input" value={args} onChange={(e) => setArgs(e.target.value)} placeholder="extra arguments" aria-label="Arguments" style={{ flex: 1, minWidth: "160px" }} />
+                        <button className="btn btn-primary" onClick={runCommand} disabled={busy === `run:${detail.id}` || !detail.valid}>
+                          {busy === `run:${detail.id}` ? "Running…" : "Run"}
+                        </button>
+                      </div>
+                      <div style={{ ...muted, fontSize: "12px" }}>
+                        {detail.cli.subcommands.find((s) => s.name === subcommand)?.description}
+                        {" "}Same as <code style={mono}>npx total-recall {detail.cli.command} {subcommand} {args}</code>. Runs in a separate process.
+                      </div>
+                      {output && (
+                        <pre style={{ ...mono, margin: 0, padding: "14px", borderRadius: "var(--radius-sm)", background: "var(--bg-primary)", border: `1px solid ${output.ok ? "var(--border)" : "var(--error)"}`, whiteSpace: "pre-wrap", maxHeight: "420px", overflow: "auto" }}>
+                          {output.text}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tab 3: Plugin Facts & Config Controls */}
+                  {detailTab === "details" && (
+                    <div>
+                      <Fact label="Scope">{detail.scope}{detail.linked ? " (linked folder)" : ""}</Fact>
+                      <Fact label="Source">{sourceLabel(detail)} — <span style={mono}>{detail.source.ref}</span></Fact>
+                      <Fact label="Installed">{detail.installed_at ? new Date(detail.installed_at).toLocaleString() : "no install record"}</Fact>
+                      <Fact label="Content sha256"><span style={mono}>{detail.sha256 || "—"}</span></Fact>
+                      {detail.modified_since_install && <Fact label="At install"><span style={mono}>{detail.installed_sha256}</span></Fact>}
+                      <Fact label="Files">{detail.file_count ?? "—"} · {formatBytes(detail.size_bytes)}</Fact>
+                      <Fact label="Shared">{detail.shared ? "yes" : "no"}</Fact>
+                      <Fact label="Lock Status">{detail.locked ? "🔒 Locked (Completed)" : "🔓 Unlocked (Editable)"}</Fact>
+                      <Fact label="Store Status">{detail.store_deployed ? "🏪 Published in Plugin Store" : "Not yet deployed to store"}</Fact>
+                      {detail.shared && <Fact label="Public link">{detail.share_url ? <input className="input" aria-label="Public plugin share link" readOnly value={detail.share_url} onFocus={(e) => e.currentTarget.select()} /> : "Set TR_PUBLIC_BASE_URL to your public HTTPS origin to create a link."}</Fact>}
+                      <Fact label="Use cases">{detail.use_cases.join(", ") || "—"}</Fact>
+                      {detail.author && <Fact label="Author">{detail.author}</Fact>}
+                      {detail.license && <Fact label="License">{detail.license}</Fact>}
+                      <Fact label="Location"><span style={mono}>{detail.dir}</span></Fact>
+                      <Fact label="Agent context">{detail.has_generator ? "adds a block to compiled instructions" : "—"}</Fact>
+                      <Fact label="Memory categories">
+                        {detail.categories.length ? detail.categories.map((c) => c.name).join(", ") : "—"}
+                      </Fact>
+                      <Fact label="Scheduled tasks">
+                        {detail.tasks.length === 0 ? "—" : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            {detail.tasks.map((t) => (
+                              <div key={t.command}>
+                                <span style={mono}>{t.schedule}</span> {t.command} — {t.intent}
+                                <div style={{ color: "var(--text-tertiary)", fontSize: "12px" }}>last run: {t.last_run || "not yet"}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </Fact>
+
+                      {/* Config Actions Toolbar inside drawer */}
+                      <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => openBrandingModal(detail)}
+                          disabled={detail.locked}
+                        >
+                          🎨 Customize Branding
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => doToggleLock(detail)}
+                          disabled={busy === detail.id}
+                        >
+                          {detail.locked ? "🔓 Unlock Editing" : "🔒 Lock When Complete"}
+                        </button>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => doDeployStore(detail)}
+                          disabled={busy === detail.id || !detail.valid}
+                        >
+                          {detail.store_deployed ? "✓ Deployed to Store" : "🚀 Deploy to Plugin Store"}
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy === detail.id || (!detail.valid && !detail.shared)}
+                          onClick={() => doShare(detail, !detail.shared)}
+                        >
+                          {detail.shared ? "Stop sharing" : "Share"}
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          disabled={busy === detail.id}
+                          onClick={() => doRemove(detail)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tab 4: Markdown Readme */}
+                  {detailTab === "readme" && (
+                    <div style={{ fontSize: "14px", lineHeight: 1.6 }}>{readme ? renderMarkdown(readme) : <span style={muted}>Loading…</span>}</div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         </div>
       )}
