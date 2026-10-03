@@ -64,23 +64,48 @@ async function emit(vaultRoot, id, kind, payload) {
   );
 }
 
+export function buildPluginDocumentBody(manifest, id) {
+  const m = manifest || {};
+  const lines = [`# ${m.name || id}`, ''];
+  if (m.description) {
+    lines.push(m.description, '');
+  }
+  if (m.use_cases?.length) {
+    lines.push('## Use Cases', ...m.use_cases.map((u) => `- ${u}`), '');
+  }
+  if (m.cli?.subcommands?.length) {
+    lines.push('## CLI Subcommands', ...m.cli.subcommands.map((s) => `- \`${s.name}\`: ${s.description || ''}`), '');
+  }
+  if (m.secrets?.length) {
+    lines.push('## Authentication & Secrets', ...m.secrets.map((s) => `- \`${s.key}\`: ${s.description || ''}${s.required ? ' (required)' : ' (optional)'}`), '');
+  }
+  return lines.join('\n');
+}
+
 async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, shared = false }) {
   const now = new Date().toISOString();
   const frontmatter = {
     type: 'plugin_record',
-    title: manifest.name || id,
-    description: `Install record for plugin ${id}.`,
+    title: manifest?.name || id,
+    description: manifest?.description || `Install record for plugin ${id}.`,
     timestamp: now,
     plugin_id: id,
-    version: manifest.version,
+    version: manifest?.version || '0.1.0',
+    category: 'plugins',
+    use_cases: manifest?.use_cases || [],
+    tags: ['plugin', ...(manifest?.use_cases || [])],
     scope,
     shared,
     public_shared: false,
     source,
     sha256: sha256 || null,
-    installed_at: now
+    installed_at: now,
+    branding: manifest?.branding || null,
+    secrets: manifest?.secrets || [],
+    commands: manifest?.cli?.subcommands?.map((s) => s.name) || []
   };
-  await writeVfsDocument(recordPath(id), frontmatter, '', {
+  const body = buildPluginDocumentBody(manifest, id);
+  await writeVfsDocument(recordPath(id), frontmatter, body, {
     actorRole: 'system',
     intent: `Record install of plugin ${id}`,
     vaultRoot: vaultForPluginsDir(pluginsDir)
@@ -89,9 +114,10 @@ async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, sh
 }
 
 /** Ensure a discovered plugin has a record (a hand-copied plugin has none). */
-export async function ensurePluginRecord(plugin) {
+export async function ensurePluginRecord(plugin, options = {}) {
   const existing = readPluginRecord(plugin);
-  if (existing) return existing;
+  const needsRefresh = options.forceRefresh || !existing?.category || !existing?.tags || !existing?.commands;
+  if (existing && !needsRefresh) return existing;
   let sha256 = null;
   try {
     sha256 = hashPluginDir(plugin.dir).sha256;
@@ -101,9 +127,19 @@ export async function ensurePluginRecord(plugin) {
     manifest: plugin.manifest,
     scope: plugin.scope,
     pluginsDir: plugin.pluginsDir,
-    source: { kind: plugin.linked ? 'link' : 'local', ref: plugin.dir },
-    sha256
+    source: existing?.source || { kind: plugin.linked ? 'link' : 'local', ref: plugin.dir },
+    sha256: sha256 || existing?.sha256,
+    shared: existing?.shared || false
   });
+}
+
+export async function syncAllPluginRecords(projectRoot = process.cwd()) {
+  const plugins = discoverPlugins(projectRoot);
+  for (const p of plugins) {
+    if (p.valid) {
+      await ensurePluginRecord(p, { forceRefresh: true });
+    }
+  }
 }
 
 export async function patchPluginRecord(plugin, patches) {
@@ -153,7 +189,11 @@ export function describePlugin(plugin) {
     tasks: (m.tasks || []).map((t) => ({ ...t, last_run: t.command ? taskRuns[t.command] || null : null })),
     openwiki_hubs: m.openwiki_hubs || [],
     cli: m.cli ? { command: m.cli.command || null, subcommands: m.cli.subcommands || [] } : null,
-    has_generator: !!m.compile?.generator
+    has_generator: !!m.compile?.generator,
+    branding: record?.branding || m.branding || { icon: null, image: null, color: null, badge: null },
+    locked: record?.locked === true || m.locked === true,
+    store_deployed: record?.store_deployed === true,
+    secrets: m.secrets || []
   };
 }
 
@@ -175,7 +215,9 @@ export function listAvailableBundled(projectRoot = process.cwd()) {
       categories: p.manifest.ssss_schemas?.categories || [],
       tasks: p.manifest.tasks || [],
       cli: p.manifest.cli ? { command: p.manifest.cli.command, subcommands: p.manifest.cli.subcommands || [] } : null,
-      installed: installed.has(p.id)
+      installed: installed.has(p.id),
+      branding: p.manifest.branding || { icon: null, color: null, badge: null },
+      locked: p.manifest.locked === true
     }));
 }
 
@@ -201,6 +243,26 @@ function assertNotInstalled(id, pluginsDir) {
 
 export function isGitSource(source) {
   return /^(https:\/\/|http:\/\/|ssh:\/\/|git@)/.test(source) || source.endsWith('.git');
+}
+
+export async function recompileAfterPluginMutation(projectRoot = process.cwd(), isGlobal = false) {
+  try {
+    const { compileSurface } = await import('./surface.mjs');
+    const { resolveAgentDir, resolveBrainDir } = await import('../cli/agent-dir.mjs');
+    const layer = isGlobal ? 'global' : 'project';
+    const agentDir = resolveAgentDir(layer);
+    const brainDir = resolveBrainDir(layer);
+    const vaultDir = path.join(brainDir, 'memory-vault');
+    const skillsDir = path.join(agentDir, 'skills');
+    const derivedDir = path.join(brainDir, 'memory-derived');
+    const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
+    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true });
+  } catch (err) {
+    try {
+      const { logger } = await import('./logger.mjs');
+      logger.warn('plugin-store', `Automatic compilation after plugin change failed: ${err.message}`);
+    } catch {}
+  }
 }
 
 /**
@@ -294,6 +356,7 @@ export async function installPlugin(source, options = {}) {
   try {
     await writeRecord({ id: manifest.id, manifest, scope, pluginsDir, source: sourceRecord, sha256 });
     await emit(vaultRoot, manifest.id, 'installed', { version: manifest.version, scope, source: sourceRecord, sha256 });
+    await recompileAfterPluginMutation(projectRoot, isGlobal);
   } catch (err) {
     // A plugin on disk without its record would be installed but unaccounted
     // for. Undo the install rather than leave the two out of step.
@@ -331,6 +394,7 @@ export async function uninstallPlugin(id, options = {}) {
     await deleteVfsDocument(recordPath(id), { actorRole: 'system', intent: `Remove plugin record ${id}`, vaultRoot });
   }
   await emit(vaultRoot, id, 'removed', { scope: plugin.scope, linked: stat.isSymbolicLink() });
+  await recompileAfterPluginMutation(options.projectRoot || process.cwd(), plugin.scope === 'global');
   return { id, dir: plugin.dir, scope: plugin.scope };
 }
 
@@ -340,6 +404,53 @@ export async function setPluginShared(id, shared, options = {}) {
   if (shared && !plugin.valid) throw new Error(`Plugin '${id}' has an invalid manifest and cannot be shared`);
   await patchPluginRecord(plugin, { shared: !!shared, public_shared: !!shared });
   await emit(vaultFor(plugin), id, shared ? 'shared' : 'unshared', { scope: plugin.scope });
+  return describePlugin(plugin);
+}
+
+export async function setPluginBranding(id, branding, options = {}) {
+  const plugin = findInstalled(id, options);
+  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
+  const record = readPluginRecord(plugin);
+  if (record?.locked === true) {
+    throw new Error(`Plugin '${id}' is locked against editing`);
+  }
+  const cleanBranding = {
+    icon: typeof branding?.icon === 'string' ? branding.icon.trim() : (record?.branding?.icon || null),
+    image: typeof branding?.image === 'string' ? branding.image.trim() : (record?.branding?.image || null),
+    color: typeof branding?.color === 'string' ? branding.color.trim() : (record?.branding?.color || null),
+    badge: typeof branding?.badge === 'string' ? branding.badge.trim() : (record?.branding?.badge || null)
+  };
+  await patchPluginRecord(plugin, { branding: cleanBranding });
+  await emit(vaultFor(plugin), id, 'branding_updated', { branding: cleanBranding, scope: plugin.scope });
+  return describePlugin(plugin);
+}
+
+export async function setPluginLocked(id, locked, options = {}) {
+  const plugin = findInstalled(id, options);
+  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
+  await patchPluginRecord(plugin, { locked: !!locked });
+  await emit(vaultFor(plugin), id, locked ? 'locked' : 'unlocked', { scope: plugin.scope });
+  return describePlugin(plugin);
+}
+
+export async function deployPluginToStore(id, options = {}) {
+  const plugin = findInstalled(id, options);
+  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
+  if (!plugin.valid) throw new Error(`Plugin '${id}' has an invalid manifest and cannot be deployed: ${plugin.errors.join('; ')}`);
+  
+  const autoLock = options.autoLock !== false;
+  await patchPluginRecord(plugin, {
+    shared: true,
+    public_shared: true,
+    store_deployed: true,
+    store_deployed_at: new Date().toISOString(),
+    locked: autoLock
+  });
+  await emit(vaultFor(plugin), id, 'store_deployed', {
+    version: plugin.manifest?.version,
+    scope: plugin.scope,
+    locked: autoLock
+  });
   return describePlugin(plugin);
 }
 

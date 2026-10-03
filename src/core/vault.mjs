@@ -93,10 +93,14 @@ export function loadNodes(vaultDir) {
     try {
       const raw = fs.readFileSync(file, 'utf8');
       const { data, content } = matter(raw);
-      if (data.type === 'memory') {
-        // Attach absolute path for stampers/rewriters (both spellings used in codebase)
+      if (data.type === 'memory' || data.type === 'plugin_record') {
+        const slug = data.slug || (data.plugin_id ? `plugin-${data.plugin_id}` : path.basename(file, '.md'));
+        const category = data.category || (data.type === 'plugin_record' ? 'plugins' : undefined);
         nodes.push({
           ...data,
+          slug,
+          category,
+          tags: Array.isArray(data.tags) ? data.tags : (data.use_cases || []),
           body: content.trim(),
           _filePath: file,
           _filepath: file,

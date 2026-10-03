@@ -449,6 +449,8 @@ export function nodeToEmbedText(node) {
   parts.push(`Title: ${title}`);
   if (node.category) parts.push(`Category: ${node.category}`);
   if (node.tags?.length) parts.push(`Tags: ${node.tags.join(', ')}`);
+  if (node.description) parts.push(`Description: ${node.description}`);
+  if (node.commands?.length) parts.push(`Commands: ${node.commands.join(', ')}`);
   if (node.body) parts.push(`Body: ${node.body.slice(0, 2000)}`);
   return parts.join('\n\n');
 }

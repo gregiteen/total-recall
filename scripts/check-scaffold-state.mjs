@@ -64,4 +64,16 @@ if (!fs.existsSync(SHIPPED_MANIFEST)) {
   }
 }
 
+// 3. No self-dependency or stale self-install
+const pkgJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+if (pkgJson.dependencies?.['total-recall-brain'] || pkgJson.devDependencies?.['total-recall-brain']) {
+  console.error('\n❌ package.json must not depend on total-recall-brain (self-dependency).');
+  failed = 1;
+} else if (fs.existsSync(path.join(ROOT, 'node_modules', 'total-recall-brain'))) {
+  console.error('\n❌ node_modules/total-recall-brain exists in source repository.');
+  failed = 1;
+} else {
+  console.log('✅ no self-dependency on total-recall-brain');
+}
+
 process.exit(failed);

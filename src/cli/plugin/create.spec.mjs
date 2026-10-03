@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createPlugin } from './create.mjs';
+import { generateUiElements } from '../../core/app-deploy/ui-elements.mjs';
 
 describe('Plugin Creation CLI (cli/plugin/create.mjs)', () => {
   let tmpProject;
@@ -76,5 +77,25 @@ Instructions here.
     expect(fs.existsSync(path.join(destSkillDir, 'SKILL.md'))).toBe(true);
     expect(fs.existsSync(path.join(destSkillDir, 'helper.sh'))).toBe(true);
     expect(fs.existsSync(path.join(pluginDir, 'cli.mjs'))).toBe(true);
+  });
+
+  it('creates a scheduled plugin with a valid token-driven UI panel', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
+    try {
+      await createPlugin(['daily-review', '--name', 'Daily Review', '--with-task', '--task-command', 'refresh', '--task-schedule', '0 6 * * *', '--task-intent', 'Refresh the review', '--with-ui']);
+    } finally { cwdSpy.mockRestore(); }
+    const dir = path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'daily-review');
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
+    expect(manifest.tasks).toEqual([{ intent: 'Refresh the review', schedule: '0 6 * * *', command: 'refresh', placement: 'selected-node' }]);
+    expect(generateUiElements(manifest, { pluginDir: dir, target: 'web-components' }).files.some((file) => file.path === 'elements/panel.js')).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toContain('selected node');
+  });
+
+  it('rejects incomplete task options before creating a directory', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
+    try {
+      await expect(createPlugin(['daily-review', '--with-task', '--task-command', 'refresh'])).rejects.toThrow('--task-schedule');
+    } finally { cwdSpy.mockRestore(); }
+    expect(fs.existsSync(path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'daily-review'))).toBe(false);
   });
 });

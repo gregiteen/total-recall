@@ -10,7 +10,10 @@ import {
   describePlugin,
   installPlugin,
   uninstallPlugin,
-  setPluginShared
+  setPluginShared,
+  setPluginBranding,
+  setPluginLocked,
+  deployPluginToStore
 } from "../../core/plugin-store.mjs";
 import { listPeerPlugins } from "../../core/plugin-peers.mjs";
 import { runPluginCommand } from "../../core/plugin-runner.mjs";
@@ -24,6 +27,20 @@ const router = Router();
 // a caller-supplied `root`, which let a request point discovery — and the
 // runner — at any directory on disk.
 const projectRoot = () => process.cwd();
+
+/** Serve only modules declared by an installed plugin's UI manifest. */
+router.get('/api/plugins/:id/ui/:element', requireAuth, requireScope('config:read'), (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin?.valid) return res.status(404).json({ error: 'Plugin unavailable' });
+    const element = plugin.manifest?.ui?.elements?.find((item) => item.id === req.params.element);
+    if (!element) return res.status(404).json({ error: 'UI element unavailable' });
+    const root = fs.realpathSync(plugin.dir);
+    const file = fs.realpathSync(path.resolve(root, element.module));
+    if (!file.startsWith(root + path.sep)) return res.status(400).json({ error: 'Invalid UI module path' });
+    res.type('text/javascript').set('X-Content-Type-Options', 'nosniff').send(fs.readFileSync(file, 'utf8'));
+  } catch (err) { serverError(res, err); }
+});
 
 /**
  * GET /api/plugins
@@ -104,6 +121,53 @@ router.post("/api/plugins/:id/share", requireAuth, requireScope("config:write"),
     if (typeof shared !== "boolean") return badRequest(res, "Body must include shared: true|false");
     const plugin = await setPluginShared(req.params.id, shared, { projectRoot: projectRoot() });
     res.json({ success: true, plugin });
+  } catch (err) {
+    badRequest(res, err.message);
+  }
+});
+
+/**
+ * POST /api/plugins/:id/branding  body: { icon?, color?, badge? }
+ * Updates branding and icon for the plugin. Fails if plugin is locked.
+ */
+router.post("/api/plugins/:id/branding", requireAuth, requireScope("config:write"), async (req, res) => {
+  try {
+    const branding = req.body?.branding || req.body || {};
+    const plugin = await setPluginBranding(req.params.id, branding, { projectRoot: projectRoot() });
+    res.json({ success: true, plugin });
+  } catch (err) {
+    badRequest(res, err.message);
+  }
+});
+
+/**
+ * POST /api/plugins/:id/lock  body: { locked: boolean }
+ * Lock or unlock editing for a completed plugin.
+ */
+router.post("/api/plugins/:id/lock", requireAuth, requireScope("config:write"), async (req, res) => {
+  try {
+    const locked = req.body?.locked;
+    if (typeof locked !== "boolean") return badRequest(res, "Body must include locked: true|false");
+    const plugin = await setPluginLocked(req.params.id, locked, { projectRoot: projectRoot() });
+    res.json({ success: true, plugin, message: locked ? `Plugin ${req.params.id} is locked` : `Plugin ${req.params.id} is unlocked` });
+  } catch (err) {
+    badRequest(res, err.message);
+  }
+});
+
+/**
+ * POST /api/plugins/:id/deploy-store  body: { autoLock?: boolean }
+ * Deploys the plugin to the plugin store and optionally locks it upon completion.
+ */
+router.post("/api/plugins/:id/deploy-store", requireAuth, requireScope("config:write"), async (req, res) => {
+  try {
+    const { autoLock = true } = req.body || {};
+    const plugin = await deployPluginToStore(req.params.id, { projectRoot: projectRoot(), autoLock: !!autoLock });
+    res.json({
+      success: true,
+      message: `Plugin ${plugin.name} deployed to the plugin store`,
+      plugin
+    });
   } catch (err) {
     badRequest(res, err.message);
   }

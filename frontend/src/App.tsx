@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import './App.css'
-import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth, fetchPlugins, type PluginInfo } from './api'
+import { getApiBase, setApiBase, checkSession, logout, registerUnauthedCallback, fetchHealth } from './api'
 import type { HealthData } from './types'
 import LoginPage from './pages/LoginPage'
 import ChatPage from './pages/ChatPage'
@@ -87,12 +87,6 @@ interface SidebarProps {
 const getNavLinkClass = ({ isActive }: { isActive: boolean }) => `nav-link ${isActive ? 'active' : ''}`;
 
 function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProps) {
-  const [plugins, setPlugins] = useState<PluginInfo[]>([])
-
-  useEffect(() => {
-    fetchPlugins().then(setPlugins).catch(() => {})
-  }, [])
-
   return (
     <aside className="sidebar">
       <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 14px' }}>
@@ -148,6 +142,7 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           Tasks
         </NavLink>
 
+
         <div className="nav-section-label">Connect</div>
         <NavLink to="/integrations" className={getNavLinkClass} id="nav-integrations">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -177,28 +172,6 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
           </svg>
           Plugins
         </NavLink>
-
-        {plugins.length > 0 && (
-          <>
-            <div className="nav-section-label">Plugins</div>
-            {plugins.map((p) => (
-              <NavLink
-                key={p.id}
-                to={`/plugins?id=${encodeURIComponent(p.id)}`}
-                className={getNavLinkClass}
-                id={`nav-plugin-${p.id}`}
-                title={p.description}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-                {p.name}
-              </NavLink>
-            ))}
-          </>
-        )}
 
         <div className="nav-section-label">Account</div>
         <NavLink to="/network" className={getNavLinkClass} id="nav-network">
@@ -450,7 +423,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             {/* Legacy OS-control-plane routes → core product */}
             <Route path="/vault" element={<Navigate to="/memory" replace />} />
             <Route path="/inbox" element={<Navigate to="/tasks" replace />} />
-            <Route path="/automations" element={<Navigate to="/tasks" replace />} />
+            <Route path="/automations" element={<Navigate to="/plugins?id=user-automations" replace />} />
             <Route path="/files" element={<Navigate to="/memory" replace />} />
             <Route path="/sandbox" element={<Navigate to="/memory" replace />} />
             <Route path="/models" element={<Navigate to="/settings" replace />} />

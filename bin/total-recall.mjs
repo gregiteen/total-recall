@@ -110,7 +110,20 @@ const COMMANDS = {
   scaffold: 'plugin/scaffold-cmd.mjs',
   'scaffold-plugin': 'plugin/scaffold-cmd.mjs',
 };
-function printHelp() {
+async function printHelp() {
+  let pluginsSection = '';
+  try {
+    const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
+    const plugins = discoverPlugins(process.cwd()).filter((p) => p.valid);
+    if (plugins.length > 0) {
+      pluginsSection = '\n  Installed Plugins:\n' + plugins.map((p) => {
+        const cmd = (p.manifest.cli?.command || p.id).padEnd(19, ' ');
+        const desc = p.manifest.description ? (p.manifest.description.length > 55 ? p.manifest.description.slice(0, 52) + '…' : p.manifest.description) : 'Plugin capability';
+        return `    ${cmd} ${desc}`;
+      }).join('\n') + '\n';
+    }
+  } catch {}
+
   console.log(`
   total-recall — Portable personal memory for any IDE
 
@@ -127,7 +140,7 @@ function printHelp() {
     task <cmd>          Enqueue daemon work (open envelope)
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync
-    plugin <cmd>        Plugin manager: list, install, remove, info
+    plugin <cmd>        Plugin manager: list, install, search, remove, info
     secret <cmd>        Secrets store + usage (not the vault)
     mesh <cmd>          Control-server mesh: nodes, ACL policy, Tailscale SSH
     harness <cmd>       Meta-harness orchestration & council across IDEs & local LLMs
@@ -135,7 +148,7 @@ function printHelp() {
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics
     startup check|ensure Readiness checks / missing managed local runtime start
-
+${pluginsSection}
   Optional:
     update [--apply]    Auto-download total-recall-brain for registered repos
     research, share, ingest, import, export, relay, setup, deploy,
@@ -163,7 +176,7 @@ async function main() {
   const command = args[0];
 
   if (!command || command === '--help' || command === '-h') {
-    printHelp();
+    await printHelp();
     process.exit(0);
   }
 

@@ -14,6 +14,8 @@ import { TextPreview } from "./TextPreview"
 import { CodeQualityPreview } from "./CodeQualityPreview"
 import { ComposableCliPreview } from "./ComposableCliPreview"
 import { DecisionPreview } from "./DecisionPreview"
+import { ImageGeneratorPreview } from "./ImageGeneratorPreview"
+import { UserAutomationsPreview } from "./UserAutomationsPreview"
 import type { FC } from "react"
 
 /**
@@ -40,6 +42,9 @@ export const previewRegistry: Record<string, FC> = {
   "composable-cli": ComposableCliPreview,
   "tr-plugin-decision": DecisionPreview,
   "decision": DecisionPreview,
+  "image-generator": ImageGeneratorPreview,
+  "tr-plugin-image-generator": ImageGeneratorPreview,
+  "user-automations": UserAutomationsPreview,
 }
 
 /**

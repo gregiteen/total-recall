@@ -1,18 +1,19 @@
-import { type CSSProperties } from "react"
+import { useState, type CSSProperties } from "react"
 
 const styles: Record<string, CSSProperties> = {
   container: {
-    background: "linear-gradient(135deg, #0f1923, #1a1a2e)",
+    background: "linear-gradient(135deg, #0a1628, #1a1a2e)",
     borderRadius: "12px",
     padding: "24px",
     fontFamily: "var(--font-sans, system-ui, sans-serif)",
     color: "#e0e0e0",
-    maxWidth: "480px",
+    maxWidth: "540px",
   },
   header: {
     display: "flex",
     justifyContent: "space-between",
-    marginBottom: "20px",
+    alignItems: "center",
+    marginBottom: "16px",
   },
   label: {
     color: "#888",
@@ -21,97 +22,130 @@ const styles: Record<string, CSSProperties> = {
     letterSpacing: "1px",
   },
   badge: {
-    background: "#2a1a3a",
-    color: "#ce93d8",
+    background: "#3a2a1a",
+    color: "#ffb74d",
     padding: "4px 10px",
     borderRadius: "20px",
     fontSize: "11px",
+    fontWeight: 600,
   },
-  palette: {
-    display: "flex",
+  controlsGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
     gap: "12px",
-    marginBottom: "20px",
-    flexWrap: "wrap" as const,
-  },
-  swatch: {
-    width: "44px",
-    height: "44px",
-    borderRadius: "10px",
-    border: "2px solid #2a2a4a",
-  },
-  typography: {
     marginBottom: "16px",
   },
-  h1: {
-    fontSize: "24px",
-    fontWeight: 700,
-    color: "#ffffff",
-    marginBottom: "4px",
+  control: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
   },
-  h2: {
-    fontSize: "18px",
-    fontWeight: 600,
-    color: "#d0d0ff",
-    marginBottom: "4px",
-  },
-  bodyText: {
-    fontSize: "13px",
+  ctlLabel: {
+    fontSize: "11px",
     color: "#aaa",
-    lineHeight: 1.6,
   },
-  glass: {
-    background: "rgba(255, 255, 255, 0.05)",
-    backdropFilter: "blur(12px)",
-    border: "1px solid rgba(255, 255, 255, 0.1)",
-    borderRadius: "10px",
-    padding: "14px 20px",
-    fontSize: "13px",
-    color: "#ccc",
-  },
-  labelSm: {
-    fontSize: "10px",
-    color: "#666",
-    textTransform: "uppercase" as const,
-    letterSpacing: "1px",
-    marginBottom: "8px",
+  input: {
+    background: "#0d1117",
+    border: "1px solid #2a2a4a",
+    borderRadius: "6px",
+    padding: "6px 10px",
+    color: "#fff",
+    fontSize: "12px",
+    fontFamily: "var(--font-mono, monospace)",
   },
 }
 
-const swatches = [
-  { name: "Primary", color: "#7c4dff" },
-  { name: "Secondary", color: "#00bfa5" },
-  { name: "Accent", color: "#ff6d00" },
-  { name: "Surface", color: "#1a1a2e" },
-  { name: "Error", color: "#ff1744" },
-]
-
 export function DesignPreview() {
+  const [primaryColor, setPrimaryColor] = useState("#ec4899")
+  const [borderRadius, setBorderRadius] = useState("10px")
+  const [surfaceBg, setSurfaceBg] = useState("#1e1e38")
+  const [accentText, setAccentText] = useState("Generative UI Active")
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.label}>Design Tokens</span>
-        <span style={styles.badge}>DESIGN.md</span>
+        <span style={styles.label}>Design System & Token Playground</span>
+        <span style={styles.badge}>Live Tokens</span>
       </div>
-      <div style={styles.labelSm}>Color Palette</div>
-      <div style={styles.palette}>
-        {swatches.map((s) => (
-          <div key={s.name} title={s.name}>
-            <div style={{ ...styles.swatch, background: s.color }} />
-            <div style={{ fontSize: "9px", color: "#666", textAlign: "center" as const, marginTop: "4px" }}>{s.name}</div>
-          </div>
-        ))}
-      </div>
-      <div style={styles.labelSm}>Typography</div>
-      <div style={styles.typography}>
-        <div style={styles.h1}>Heading 1</div>
-        <div style={styles.h2}>Heading 2</div>
-        <div style={styles.bodyText}>
-          Body text with a clean 400-weight font at 13px. Designed for readability at scale.
+
+      <div style={styles.controlsGrid}>
+        <div style={styles.control}>
+          <label style={styles.ctlLabel}>--color-primary</label>
+          <input
+            type="color"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+            style={{ ...styles.input, height: "34px", padding: "2px", cursor: "pointer" }}
+          />
+        </div>
+        <div style={styles.control}>
+          <label style={styles.ctlLabel}>--border-radius</label>
+          <select
+            style={styles.input}
+            value={borderRadius}
+            onChange={(e) => setBorderRadius(e.target.value)}
+          >
+            <option value="4px">4px (Subtle)</option>
+            <option value="10px">10px (Default)</option>
+            <option value="18px">18px (Smooth)</option>
+            <option value="28px">28px (Pill)</option>
+          </select>
+        </div>
+        <div style={styles.control}>
+          <label style={styles.ctlLabel}>--surface-bg</label>
+          <input
+            type="color"
+            value={surfaceBg}
+            onChange={(e) => setSurfaceBg(e.target.value)}
+            style={{ ...styles.input, height: "34px", padding: "2px", cursor: "pointer" }}
+          />
         </div>
       </div>
-      <div style={styles.labelSm}>Glassmorphic Surface</div>
-      <div style={styles.glass}>
-        backdrop-filter: blur(12px) — the modern glass aesthetic
+
+      {/* Live Component styled solely by the active token values */}
+      <div
+        style={{
+          background: surfaceBg,
+          borderRadius: borderRadius,
+          border: `1px solid ${primaryColor}40`,
+          padding: "20px",
+          transition: "all 0.2s ease",
+          boxShadow: `0 4px 20px ${primaryColor}20`,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Dynamic Token Card</span>
+          <span
+            style={{
+              background: `${primaryColor}25`,
+              color: primaryColor,
+              borderRadius: borderRadius,
+              padding: "4px 8px",
+              fontSize: "11px",
+              fontWeight: 600,
+            }}
+          >
+            Active
+          </span>
+        </div>
+        <div style={{ fontSize: "12px", color: "#bbb", marginBottom: "14px" }}>
+          Custom elements consume DESIGN.md tokens without modifying plugin source code.
+        </div>
+        <button
+          style={{
+            background: primaryColor,
+            color: "#fff",
+            border: "none",
+            borderRadius: borderRadius,
+            padding: "8px 16px",
+            fontSize: "12px",
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+          onClick={() => setAccentText(`Updated ${new Date().toLocaleTimeString()}`)}
+        >
+          {accentText}
+        </button>
       </div>
     </div>
   )

@@ -347,9 +347,24 @@ export function discoverPlugins(projectRoot = process.cwd()) {
   return plugins;
 }
 
-/** Plugins shipped inside the total-recall package, installable on any node. */
-export function listBundledPlugins() {
-  return readPluginsDir(bundledPluginsDir(), 'bundled');
+/** Plugins shipped inside the total-recall package or repository, installable on any node. */
+export function listBundledPlugins(projectRoot = process.cwd()) {
+  const seen = new Set();
+  const out = [];
+  const dirs = [
+    bundledPluginsDir(),
+    path.join(PACKAGE_ROOT, '.agent', 'skills', 'total-recall', 'plugins')
+  ];
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const p of readPluginsDir(dir, 'bundled')) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        out.push(p);
+      }
+    }
+  }
+  return out;
 }
 
 /**

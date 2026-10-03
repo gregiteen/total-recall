@@ -19,6 +19,7 @@ import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './
 import { fileURLToPath } from 'url';
 import { buildLocalSearchIndex } from './fast-recall.mjs';
 import { selectRules, assembleContext, curatedRules } from './context-policy.mjs';
+import { discoverPlugins } from './plugin-loader.mjs';
 
 // Long-lived processes (server, daemon, vault watcher) import this module once.
 // If the rule builder is edited or upgraded after they start, their in-memory
@@ -391,8 +392,27 @@ export function legacyRuleContributions(skillsDir) {
   })).filter(item => item.text);
 }
 
+export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
+  try {
+    const plugins = discoverPlugins(projectRoot).filter((p) => p.valid);
+    if (!plugins.length) return '';
+    const lines = [
+      '## Installed Plugins & Capabilities\n',
+      'The following plugins are installed and available via `total-recall <plugin> [command]`:\n'
+    ];
+    for (const p of plugins) {
+      const cmd = p.manifest.cli?.command || p.id;
+      const desc = p.manifest.description ? (p.manifest.description.length > 80 ? p.manifest.description.slice(0, 77) + '…' : p.manifest.description) : 'Plugin capability';
+      lines.push(`- **${p.id}** (v${p.manifest.version || '0.1.0'}): ${desc} (\`total-recall ${cmd}\`)`);
+    }
+    return lines.join('\n') + '\n';
+  } catch {
+    return '';
+  }
+}
+
 export async function buildRulesBlock(skillsDir, nodes = [], {
-  consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total = bootstrap ? 1000 : 4000,
+  consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total = bootstrap ? 2500 : 4000,
 } = {}) {
   const root = projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd());
   const rules = selectRules(curatedRules(nodes), { actions, projectRoot: root, bootstrap });
@@ -403,6 +423,10 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
   contributions.push({ id: 'routing', text: header, required: true });
   for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
     text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
+  const pluginsSummary = buildInstalledPluginsSummary(root);
+  if (pluginsSummary) {
+    contributions.push({ id: 'installed-plugins', text: pluginsSummary, required: true });
+  }
   if (!bootstrap) {
     if (skillsDir) {
       contributions.push(...legacyRuleContributions(skillsDir));
@@ -593,6 +617,10 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     logger.warn('surface', 'Surface compile skipped: this process runs an outdated copy of surface.mjs. Restart it (server/daemon) so instruction files are built with the current code.');
     return { nodesProcessed: 0, skillsInjected: 0, semanticIndexed: 0, semanticUnavailable: false, skipped: true, reason: 'stale-surface-code' };
   }
+  try {
+    const { syncAllPluginRecords } = await import('./plugin-store.mjs');
+    await syncAllPluginRecords();
+  } catch {}
   const nodes = getNodes(vaultDir);
   const globalVault = globalVaultFor(vaultDir);
   const ruleNodes = globalVault && fs.existsSync(globalVault)

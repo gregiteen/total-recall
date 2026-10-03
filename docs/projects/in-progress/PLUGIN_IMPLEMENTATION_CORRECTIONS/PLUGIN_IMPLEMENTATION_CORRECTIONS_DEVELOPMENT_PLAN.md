@@ -70,3 +70,15 @@ Evidence: Mac mini `/tmp/tr-agent-operations-20260930/frontend-build.log`, exit2
 - [ ] Remove the static active-call timer, connected peer claim and idle status; disable the unwired call control and label the component as a visual preview. Run the frontend build and package gates on Mac mini. This removes false evidence; actual installed calling remains open under PIC-030–032.
 
 Evidence: full remote quality gate exited1 solely on TR-SHIP-004 at PhonePreview.tsx:100. Source contains a literal 00:42 timer, connection text, idle badge and button without handler. Full backend suite passed within the same gate. Recorded before edits.
+
+## Authorized parallel execution — October 1, 2026
+
+Greg requested all remaining proposed-plugin work analyzed and implemented in parallel through cli-agents; he selected DSH DeepSeek flash for lower-cost bounded tasks. First reconcile source against historical findings, establish exact-tree Mac mini baselines, then assign disjoint repository/file owners. Use explicit prompts, synthetic failure regressions before wiring, researched current provider contracts, and parent-reviewed changes. Shared SSSS schema/host interfaces and machine-wide quality gates are serialized. Preserve all existing dirty plugin trees. Worker completion, passing tests, installed behavior and provider delivery are separate evidence. All original remaining scope stays active; no automatic deferrals or readiness claims.
+
+PIC-052: Replace the fabricated Automations schedule cards with an installable user-automations plugin. Add a read-only, authenticated local and mesh task inventory derived from installed plugin manifests and persisted task slots; report offline, unsupported and unavailable nodes without filling gaps. Provide a plugin CLI list command and token-styled custom element. Keep OS cron/process maintenance outside this user-automation view. Verify with exact-tree Mac mini tests, then inspect the live UI before claiming deployment.
+
+PIC-052 placement correction: mount the plugin's custom element in its Plugins page detail preview. Remove the Automations navigation and page; redirect the legacy URL to the plugin detail view.
+
+PIC-052 core-boundary correction: delete the user-automations-specific core module and HTTP routes. Add only a generic mesh-installed-plugin metadata endpoint under the existing mesh plugin router. Move inventory composition, peer status handling, and CLI output into `plugins/user-automations`. Have its custom element call the generic authenticated plugin runner. Verify peer access, unavailable states, and the plugin detail view without presenting a scheduler slot as a completed job.
+
+PIC-053: Extend `total-recall plugin create` with opt-in `--with-task` and `--with-ui` scaffolds. Require a valid five-field schedule and command for a task, and generate a self-contained custom element with parsed DESIGN.md tokens for UI. Validate the generated manifest and UI files, add focused creator tests, and make the command print the install step. Keep generated capability handlers honest until implemented.

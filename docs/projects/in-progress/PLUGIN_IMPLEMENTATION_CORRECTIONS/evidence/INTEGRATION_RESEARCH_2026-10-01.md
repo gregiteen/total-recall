@@ -1,0 +1,10 @@
+# Current official integration research — October 1, 2026
+
+This is initial contract research, not provider/runtime verification or a completed lane audit. Each implementation owner must confirm its configured server/version and source adapter before integration changes.
+
+- [Telnyx messaging callbacks](https://developers.telnyx.com/docs/messaging/messages/receiving-webhooks): verified official documentation distinguishes queued/sent/delivered/failure states; uses Ed25519 headers and timestamp plus exact payload, five-minute replay tolerance, retry and event identifiers. Preserve raw bytes and synthetic signed fixtures. Existing Text CLI/status adapter is inventoried in PLUGIN_REMAINING_WORK_2026-10-01.md; live account/callback state not tested.
+- [Documenso developer guide](https://docs.documenso.com/docs/developers): current upstream API v2; envelopes replace documents/templates. Self-host base URL is configurable. Configured fork endpoint/version and exact signature protocol remain unverified; the attempted webhook/security documentation URL returned an internal error, so do not implement an assumed signature contract.
+- [Vercel REST](https://vercel.com/docs/rest-api): Bearer auth; account/team resource binding and rate-limit headers; dedicated DNS and registrar resources. Current Domains adapters are inventoried; configured account/API version, pagination and operation-specific contracts still need lane-level verification before DNS/registrar changes.
+- [OpenRouter Jev](https://openrouter.ai/blog/insights/what-is-jev/): official current material confirms typed decision use and alpha Decisions endpoint. [Tool calling](https://openrouter.ai/docs/guides/features/tool-calling) documents request/tool/result loop. DSH discovery separately verifies exact V4.1 Flash model from live models API and native credential path; Decision/Design configured server/client response contracts still require lane-level checks.
+
+No production send, signing envelope, DNS purchase/mutation or model task is certified by documentation.
