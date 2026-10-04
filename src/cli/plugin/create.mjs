@@ -13,11 +13,104 @@ function toTitleCase(kebab) {
     .join(" ");
 }
 
+/** CLI token subcommands every API-key plugin starts with. */
+function tokenCliBlock(apiKeys) {
+  return `import { spawnSync } from "node:child_process";
+
+// The service API key lives in the Total Recall secrets store, never argv or logs.
+const TOKEN_KEY = ${JSON.stringify(apiKeys[0])};
+const TR = process.env.TOTAL_RECALL_BIN || "total-recall";
+
+function tokenValue() {
+  if (process.env[TOKEN_KEY]) return process.env[TOKEN_KEY].trim();
+  const run = spawnSync(TR, ["secret", "get", TOKEN_KEY], { encoding: "utf8" });
+  if (run.status !== 0) return "";
+  const lines = String(run.stdout || "").split("\\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("{"));
+  return lines.length ? lines[lines.length - 1] : "";
+}
+
+async function readStdin() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8").trim();
+}
+
+// TODO(plugin author): call a cheap authenticated endpoint here and return
+// { valid: true } or { valid: false, message }. Never save a key that fails it.
+async function verifyToken(_value) {
+  return { valid: true };
+}
+
+async function tokenCommand(args) {
+  const [action = "status"] = args;
+  const json = args.includes("--json");
+  if (action === "status") {
+    const status = { present: Boolean(tokenValue()), secretKey: TOKEN_KEY };
+    console.log(json ? JSON.stringify(status) : \`API key: \${status.present ? "present" : "missing"} (\${TOKEN_KEY})\`);
+    if (!status.present) process.exitCode = 1;
+    return;
+  }
+  if (action === "set" && args.includes("--stdin")) {
+    const value = await readStdin();
+    if (!value) { console.error("No key received on stdin."); process.exitCode = 2; return; }
+    const check = await verifyToken(value);
+    if (!check.valid) { console.error(\`Key rejected, not saved: \${check.message || "verification failed"}\`); process.exitCode = 1; return; }
+    const saved = spawnSync(TR, ["secret", "set", TOKEN_KEY, "--stdin"], { input: value, encoding: "utf8" });
+    if (saved.status !== 0) { console.error("Could not save the key to the secrets store."); process.exitCode = 1; return; }
+    console.log(json ? JSON.stringify({ saved: true, valid: true }) : "API key verified and saved.");
+    return;
+  }
+  console.error("usage: token <status|set --stdin>");
+  process.exitCode = 2;
+}
+
+`;
+}
+
+/** UI panel with the paste-your-key form every API-key plugin starts with. */
+function tokenPanelSource(id, panelClass, pluginName, apiKeys) {
+  return `// Paste-your-key panel. Emits \`save-token\`; the host pipes it to
+// \`total-recall ${id} token set --stdin\` (stored in secrets, never shown again).
+class ${panelClass} extends HTMLElement {
+  set view(value) { this._view = value; this.render(); }
+  get view() { return this._view; }
+  connectedCallback() { this.render(); }
+  render() {
+    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });
+    root.replaceChildren();
+    const present = Boolean(this._view && this._view.present);
+    const style = document.createElement('style');
+    style.textContent = ':host { display:block; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-md); } .row { display:flex; gap:8px; margin-top:8px; } input { flex:1; padding:6px 8px; }';
+    const title = document.createElement('h3');
+    title.textContent = ${JSON.stringify(pluginName + ' API key')};
+    const state = document.createElement('p');
+    state.textContent = present ? 'A key is saved. Paste a new one to replace it.' : 'No key yet. Paste it to start using this plugin.';
+    const form = document.createElement('form');
+    form.className = 'row';
+    const input = document.createElement('input');
+    input.type = 'password'; input.autocomplete = 'off'; input.required = true;
+    input.placeholder = ${JSON.stringify(apiKeys[0])};
+    input.setAttribute('aria-label', ${JSON.stringify(pluginName + ' API key')});
+    const button = document.createElement('button');
+    button.type = 'submit'; button.textContent = 'Save and test';
+    form.append(input, button);
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.dispatchEvent(new CustomEvent('save-token', { detail: { key: ${JSON.stringify(apiKeys[0])}, token: input.value.trim() }, bubbles: true, composed: true }));
+      input.value = '';
+    });
+    root.append(style, title, state, form);
+  }
+}
+customElements.define('${id}-panel', ${panelClass});
+`;
+}
+
 export async function createPlugin(args = []) {
   const isGlobal = args.includes("--global") || args.includes("-g");
-  const withCli = args.includes("--with-cli");
+  let withCli = args.includes("--with-cli");
   const withGenerator = args.includes("--with-generator");
-  const withUi = args.includes("--with-ui");
+  let withUi = args.includes("--with-ui");
   const withTask = args.includes("--with-task");
   const createGithub = args.includes("--github");
   const publicRepo = args.includes("--public");
@@ -32,6 +125,7 @@ export async function createPlugin(args = []) {
   let taskSchedule = null;
   let taskIntent = null;
   const useCases = [];
+  const apiKeys = [];
 
   const cleanArgs = [];
   for (let i = 0; i < args.length; i++) {
@@ -39,6 +133,7 @@ export async function createPlugin(args = []) {
     if (["--global", "-g", "--with-cli", "--with-generator", "--with-ui", "--with-task", "--with-skill", "--capability", "--github", "--public", "--no-install"].includes(arg)) {
       continue;
     }
+    if (arg === "--api-key" && args[i + 1]) { apiKeys.push(args[++i]); continue; }
     if (arg === "--repo-dir" && args[i + 1]) { repoDirArg = args[++i]; continue; }
     if (arg === "--name" && args[i + 1]) {
       name = args[i + 1];
@@ -152,6 +247,14 @@ export async function createPlugin(args = []) {
   };
   if (useCases.length > 0) manifest.use_cases = useCases;
 
+  // House rule: a plugin for a service that needs an API key ships a UI to paste
+  // that key and a CLI to save it, so it works the moment the key is pasted.
+  if (apiKeys.length) {
+    withCli = true;
+    withUi = true;
+    manifest.secrets = apiKeys.map((key) => ({ key, description: `${pluginName} service API key (paste it in the plugin UI)`, required: true }));
+  }
+
   if (category) {
     manifest.ssss_schemas = {
       categories: [
@@ -183,7 +286,7 @@ export async function createPlugin(args = []) {
  */
 // Scaffold: report honestly what exists. Add each real subcommand to
 // IMPLEMENTED and to plugin.json "cli.subcommands" as it is built.
-const IMPLEMENTED = {};
+${apiKeys.length ? tokenCliBlock(apiKeys) : ''}const IMPLEMENTED = {};${apiKeys.length ? '\nIMPLEMENTED.token = tokenCommand;' : ''}
 
 export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
@@ -221,7 +324,11 @@ export default run;
     const panelClass = `${id.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join('')}Panel`;
     fs.mkdirSync(path.join(pluginDir, 'ui'), { recursive: true });
     fs.writeFileSync(path.join(pluginDir, 'ui', 'DESIGN.md'), '---\ncolors:\n  text: "#20242a"\n  surface: "#ffffff"\n  border: "#dce2e8"\nspacing:\n  md: 12px\nrounded:\n  md: 8px\n---\n\n# Design tokens\n\nReplace these defaults with the host design tokens.\n');
-    fs.writeFileSync(path.join(pluginDir, 'ui', 'panel.js'), `class ${panelClass} extends HTMLElement {\n  connectedCallback() {\n    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });\n    root.replaceChildren();\n    const style = document.createElement('style');\n    style.textContent = ':host { display:block; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-md); }';\n    const text = document.createElement('p');\n    text.textContent = ${JSON.stringify(`${pluginName} panel scaffold. Add the actual capability before sharing.`)};\n    root.append(style, text);\n  }\n}\ncustomElements.define('${id}-panel', ${panelClass});\n`);
+    if (apiKeys.length) {
+      manifest.ui.elements[0].events = ['save-token'];
+      manifest.ui.elements[0].props = { view: { type: 'object', description: `Printed by \`total-recall ${id} token status --json\`: { present, secretKey }` } };
+    }
+    fs.writeFileSync(path.join(pluginDir, 'ui', 'panel.js'), apiKeys.length ? tokenPanelSource(id, panelClass, pluginName, apiKeys) : `class ${panelClass} extends HTMLElement {\n  connectedCallback() {\n    const root = this.shadowRoot || this.attachShadow({ mode: 'open' });\n    root.replaceChildren();\n    const style = document.createElement('style');\n    style.textContent = ':host { display:block; color:var(--color-text); background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-md); }';\n    const text = document.createElement('p');\n    text.textContent = ${JSON.stringify(`${pluginName} panel scaffold. Add the actual capability before sharing.`)};\n    root.append(style, text);\n  }\n}\ncustomElements.define('${id}-panel', ${panelClass});\n`);
   }
 
   if (isCapability) {
@@ -348,6 +455,7 @@ export default generateContext;
   if (withCli) lines.push(`- **CLI Command**: \`npx total-recall ${id}\``);
   if (withTask) lines.push(`- **Scheduled task**: \`${taskCommand}\` at \`${taskSchedule}\` (selected node; implement the command and choose a node before use)`);
   if (withUi) lines.push('- **UI**: `ui/panel.js` custom element with DESIGN.md tokens');
+  if (apiKeys.length) lines.push('- **API key**: paste it in the plugin UI (`save-token` event) or pipe it to `npx total-recall ' + id + ' token set --stdin`; stored as `' + apiKeys[0] + '` in the secrets store');
   lines.push("");
 
   fs.writeFileSync(path.join(pluginDir, "README.md"), lines.join("\n"), "utf8");

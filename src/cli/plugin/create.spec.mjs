@@ -91,6 +91,25 @@ Instructions here.
     expect(fs.readFileSync(path.join(dir, 'README.md'), 'utf8')).toContain('selected node');
   });
 
+  it('--api-key scaffolds a paste-your-key UI, a token CLI and a declared secret', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
+    try {
+      await createPlugin(['acme-sync', '--name', 'Acme Sync', '--api-key', 'ACME_API_KEY']);
+    } finally { cwdSpy.mockRestore(); }
+    const dir = path.join(tmpProject, '.agent', 'skills', 'total-recall', 'plugins', 'acme-sync');
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'plugin.json'), 'utf8'));
+    expect(manifest.secrets).toEqual([expect.objectContaining({ key: 'ACME_API_KEY', required: true })]);
+    expect(manifest.ui.elements[0].events).toContain('save-token');
+    const panel = fs.readFileSync(path.join(dir, 'ui', 'panel.js'), 'utf8');
+    expect(panel).toContain("type = 'password'");
+    expect(panel).toContain('save-token');
+    const cli = fs.readFileSync(path.join(dir, 'cli.mjs'), 'utf8');
+    expect(cli).toContain('"secret", "set", TOKEN_KEY, "--stdin"');
+    expect(cli).toContain('IMPLEMENTED.token = tokenCommand');
+    expect(cli).not.toMatch(/argv.*TOKEN/);
+    expect(generateUiElements(manifest, { pluginDir: dir, target: 'web-components' }).files.some((file) => file.path === 'elements/panel.js')).toBe(true);
+  });
+
   it('rejects incomplete task options before creating a directory', async () => {
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpProject);
     try {
