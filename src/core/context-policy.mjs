@@ -32,6 +32,14 @@ export function curatedRules(nodes, now = Date.now()) {
   });
 }
 
+/** A rule scoped to other repos (repos[] or project) never reaches this repo's capsule. */
+export function ruleAppliesToRepo(node, repo) {
+  const r = String(repo).toLowerCase();
+  if (node.repos?.length && !node.repos.some(x => String(x).toLowerCase() === r)) return false;
+  if (node.project && String(node.project).toLowerCase() !== r) return false;
+  return true;
+}
+
 /** Applicability is explicit validated memory tags, independent of obligation.
  * Unknown rules remain required in task capsules. No inference from prose.
  */
@@ -40,8 +48,7 @@ export function selectRules(nodes, { actions = [], projectRoot = process.cwd(), 
   const applicable = nodes.filter(node => {
     if (!RULE_CATEGORIES.has(node.category) || node.status !== 'active' || node.superseded_by || node._contextExcluded) return false;
     if (node.expires_at && Date.parse(node.expires_at) <= now) return false;
-    if (node.repos?.length && !node.repos.some(r => String(r).toLowerCase() === repo)) return false;
-    if (node.project && String(node.project).toLowerCase() !== repo) return false;
+    if (!ruleAppliesToRepo(node, repo)) return false;
     const tags = Array.isArray(node.tags) ? node.tags : [];
     if (tags.includes('context:universal')) return true;
     if (bootstrap) return false;

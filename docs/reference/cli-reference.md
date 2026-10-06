@@ -123,6 +123,15 @@ Malformed, conflicting, expired or source-mismatched curation falls back to the
 canonical rule. Never generate applicability from semantic ranking. Curation
 is private runtime state and must not be included in scaffolds or releases.
 
+Shorten rules per repo with `total-recall rules`: `audit` shows capsule tokens per
+action and the largest rules; `draft --out policy.json` scaffolds the policy with
+each rule's original text; shorten the directives by hand (keep every operative
+constraint), narrow `actions`, or exclude locally with `enabled:false` plus a
+`reason`; `apply policy.json` validates hashes and merges into the single
+`context:policy` decision; `verify` exits 1 on stale or orphan curation or an
+action capsule over budget; `prune [--apply] [--archive]` drops stale entries and
+lists expired, superseded or duplicate rules. Originals are never modified.
+
 ### `recall`
 Search local metadata and indexed full text across enabled memory layers.
 - **What it does**: Searches a disposable local index and reads only selected Markdown documents. Semantic enrichment is opt-in and exact hits bypass providers.

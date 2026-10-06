@@ -46,7 +46,7 @@ export default async function context(args = []) {
       token_measurement: 'estimated_chars_divided_by_four',
     } };
     console.log(format === 'json' ? JSON.stringify(diagnostic) :
-      `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} required_rules:${response.stats.required_count} version:${response.stats.version}\nRetry with --budget ${requiredBudget}; do not act until ready:true.`);
+      `ready:false reason:budget-overflow budget:${budget} required_budget:${requiredBudget} required_rules:${response.stats.required_count} version:${response.stats.version}\nRetry with --budget ${requiredBudget}; do not act until ready:true.\nTo shorten the rules for good: total-recall rules audit, then rules draft/apply.`);
     process.exitCode = 2;
     return;
   }
