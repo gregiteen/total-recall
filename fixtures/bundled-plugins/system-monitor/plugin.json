@@ -1,0 +1,12 @@
+{
+  "id": "system-monitor",
+  "name": "System Monitor",
+  "version": "1.0.0",
+  "description": "Host load and memory in the compiled agent context.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": [
+    "operations",
+    "self-hosting"
+  ]
+}

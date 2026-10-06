@@ -27,7 +27,7 @@ export function globalPluginsDir() {
 }
 
 export function bundledPluginsDir() {
-  return path.join(PACKAGE_ROOT, 'plugins');
+  return process.env._TR_TEST_BUNDLED_PLUGINS_DIR || path.join(PACKAGE_ROOT, 'plugins');
 }
 
 /** The vault that owns records for plugins installed in `pluginsDir` (`<brain>/plugins` → `<brain>/memory-vault`). */
@@ -351,10 +351,11 @@ export function discoverPlugins(projectRoot = process.cwd()) {
 export function listBundledPlugins(projectRoot = process.cwd()) {
   const seen = new Set();
   const out = [];
-  const dirs = [
-    bundledPluginsDir(),
-    path.join(PACKAGE_ROOT, '.agent', 'skills', 'total-recall', 'plugins')
-  ];
+  // Under test the fixture directory is the only source, so results never
+  // depend on plugins installed in the developer's own brain.
+  const dirs = process.env._TR_TEST_BUNDLED_PLUGINS_DIR
+    ? [bundledPluginsDir()]
+    : [bundledPluginsDir(), path.join(PACKAGE_ROOT, '.agent', 'skills', 'total-recall', 'plugins')];
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;
     for (const p of readPluginsDir(dir, 'bundled')) {
