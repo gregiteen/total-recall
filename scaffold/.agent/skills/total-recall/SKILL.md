@@ -29,6 +29,7 @@ to rules or skills; the returned version fingerprints capsule inputs.
 - `recall "query" --local` searches metadata and indexed body text locally.
 - `recall "slug" --fast` retrieves matching documents without a provider.
 - `recall "query" --semantic` explicitly requests provider-assisted search.
+- Rules (invariant, preference, anti-pattern) must be brief: one or two sentences under 300 characters, the constraint only. History, dates, quotes and examples go in a fact. `remember` warns over 300 and refuses over 800.
 - `remember <category> "content" --project|--global` validates and saves memory.
 - `edit <slug> --tags <existing-tags,context:action:test> --project` curates activation without changing rule wording. `context:universal` opts into the permanent bootstrap.
 - `rules audit|draft|apply|verify|prune` shortens this repo's rule capsule; run `rules audit` when `context` overflows, and `rules verify` after editing rules.

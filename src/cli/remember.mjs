@@ -74,6 +74,9 @@ function parseDuration(str) {
   return date;
 }
 
+const RULE_SOFT_LIMIT = 300;
+const RULE_HARD_LIMIT = 800;
+
 export default async function remember(args) {
   // Parse layer flag first
   const { layer: explicitLayer, remainingArgs: layerArgs } = parseLayerFlag(args);
@@ -131,6 +134,7 @@ export default async function remember(args) {
   let related = [];
   let expiresAt = null;
   let noDedup = false;
+  let allowLong = false;
 
   for (let i = 2; i < layerArgs.length; i++) {
     const arg = layerArgs[i];
@@ -210,7 +214,19 @@ export default async function remember(args) {
       }
     } else if (arg === '--no-dedup') {
       noDedup = true;
+    } else if (arg === '--allow-long') {
+      allowLong = true;
     }
+  }
+
+  // Rules load into every task capsule, so they must be brief.
+  if (['invariants', 'preferences', 'anti-patterns'].includes(category) && !tags.includes('context:policy')) {
+    const n = bodyContent.trim().length;
+    if (n > RULE_HARD_LIMIT && !allowLong) {
+      console.error(`❌ Rule is ${n} characters (limit ${RULE_HARD_LIMIT}). Rules must be brief: one or two sentences, no history, dates, quotes or incident detail (save those as a fact). Shorten it, or pass --allow-long.`);
+      process.exit(1);
+    }
+    if (n > RULE_SOFT_LIMIT) console.error(`⚠️  Rule is ${n} characters. Keep rules brief (under ${RULE_SOFT_LIMIT}): state the constraint only, move history and examples to a fact. Shorten with: total-recall edit <slug> "<shorter>"`);
   }
 
   const resolvedAgentDir = resolveAgentDir(layer);

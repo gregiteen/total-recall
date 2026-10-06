@@ -15,6 +15,10 @@
   `context:policy` decision, and report stale or orphan curation. Rules scoped
   to other repos, superseded rules and expired rules are ignored. The
   `context` budget-overflow message now points to `rules audit`.
+- Rules must be brief: `remember` warns on an invariant, preference or
+  anti-pattern over 300 characters and refuses one over 800 (`--allow-long`
+  overrides). The skill entrypoint tells agents to keep rules to one or two
+  sentences and to put history and examples in a fact.
 - Honor a caller-supplied `updated`/`last_accessed` in the kernel bridge. The
   replay-stable key-derived stamp had been overwriting real write times with a
   fake 2026 date (`created` after `updated`), breaking recency and expiry.
