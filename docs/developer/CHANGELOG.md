@@ -20,6 +20,10 @@
   `auto-pull.sh` appends to `server.log`.
 - `plugin create --api-key` scaffolds a paste-your-key panel, token CLI and
   manifest secret.
+- `secret … --stdin` and the hidden prompt finish on Enter in a terminal.
+- Plugin specs are hermetic: they install fixture plugins instead of whatever
+  is in the developer's own brain, and `plugin create` specs no longer collide
+  with repositories left in the temp directory by earlier runs.
 
 ## 3.36.0 — 2026-10-03
 
