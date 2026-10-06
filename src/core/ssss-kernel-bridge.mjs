@@ -266,6 +266,7 @@ export function prepareEnvelopeForKernel(envelope, options = {}) {
   const warnings = [];
   const errors = [];
   const role = options.agentRole || envelope.actor?.role || null;
+  // Key-derived stamp keeps idempotent replays byte-identical; callers that mean "now" supply updated/last_accessed themselves.
   const now = options.clock?.() || stableTimestampForKey(envelope.idempotency_key);
   let env = { ...envelope };
 
@@ -289,8 +290,9 @@ export function prepareEnvelopeForKernel(envelope, options = {}) {
 
     if (data.type === 'memory') {
       if (!env.dry_run) {
-        data.updated = now;
-        data.last_accessed = now;
+        // Honor a caller-supplied real timestamp; the key-derived `now` is only a replay-stable fallback.
+        data.updated = data.updated || now;
+        data.last_accessed = data.last_accessed || now;
         if (!data.created) data.created = now;
       }
       // TR host overlay (schema v2 + sentiment_target).
