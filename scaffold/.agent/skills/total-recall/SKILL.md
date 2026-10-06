@@ -31,6 +31,7 @@ to rules or skills; the returned version fingerprints capsule inputs.
 - `recall "query" --semantic` explicitly requests provider-assisted search.
 - `remember <category> "content" --project|--global` validates and saves memory.
 - `edit <slug> --tags <existing-tags,context:action:test> --project` curates activation without changing rule wording. `context:universal` opts into the permanent bootstrap.
+- `rules audit|draft|apply|verify|prune` shortens this repo's rule capsule; run `rules audit` when `context` overflows, and `rules verify` after editing rules.
 - `compile` rebuilds disposable indexes and connected instruction surfaces.
 - `startup check --json` verifies shared runtime; selected-project and app readiness are separate.
 
