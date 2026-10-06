@@ -1,3 +1,24 @@
+## 3.38.0 — 2026-10-05
+
+- `connect claude-code` (and `init`, which connects detected IDEs) installs
+  Claude Code hooks into `~/.claude`: a SessionStart loader for the Total Recall
+  skill, and a gate that denies scheduling (scheduled tasks, routines, cron),
+  reaching another machine (`ssh`, `scp`, `rsync`), service managers
+  (`launchctl`, `crontab`, `systemctl`) and Claude sign-in until the session has
+  run `total-recall recall` or `context` in the last 30 minutes. The install is
+  idempotent, keeps hooks it does not own, backs up `settings.json` and refuses
+  a settings file that is not JSON.
+- First npm publication of the 3.37.0 changes below.
+- Add `total-recall rules` (audit, draft, apply, verify, prune) so any repo can
+  shorten its instruction capsule without touching the original rules. Policy
+  entries are validated against each rule's source hash, merge into the single
+  `context:policy` decision, and report stale or orphan curation. Rules scoped
+  to other repos, superseded rules and expired rules are ignored. The
+  `context` budget-overflow message now points to `rules audit`.
+- Honor a caller-supplied `updated`/`last_accessed` in the kernel bridge. The
+  replay-stable key-derived stamp had been overwriting real write times with a
+  fake 2026 date (`created` after `updated`), breaking recency and expiry.
+
 ## 3.37.0 — 2026-10-05
 
 - `agent spawn` runs workflow-capable agents: Claude Code keeps its built-in tools
