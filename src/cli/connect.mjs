@@ -87,6 +87,7 @@ export const CLIENTS = {
     mode: 'symlink',
     target: 'CLAUDE.md',
     writeSlashCommands: true,
+    installHooks: true,
     // Project-scoped: repo skills are repo-specific. Claude Code discovers
     // these as native skills / slash commands under <project>/.claude/skills/.
     skillsProjection: { scope: 'project', dir: path.join('.claude', 'skills') }
@@ -959,6 +960,19 @@ export default async function connect(args) {
         result.notes.push(`  Slash commands written to ~/.claude/commands/:\n` +
           created.map(r => `    /${r.file.replace('.md', '')} (${r.action})`).join('\n'));
       }
+    }
+  }
+
+  // Claude Code hooks: load the Total Recall skill at session start and gate
+  // decision-making actions on a fresh recall (src/core/claude-hooks.mjs).
+  if (preset.installHooks && !opts.dryRun) {
+    try {
+      const { installClaudeCodeHooks } = await import('../core/claude-hooks.mjs');
+      const hooks = installClaudeCodeHooks();
+      result.claude_hooks = hooks;
+      if (hooks.added.length > 0) result.notes.push(`  Claude Code hooks installed in ${hooks.settings}: ${hooks.added.join(', ')}`);
+    } catch (err) {
+      result.notes.push(`  Could not install Claude Code hooks: ${err.message}`);
     }
   }
 
