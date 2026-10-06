@@ -154,6 +154,43 @@ export const DEFAULT_POLICIES = [
   },
 ];
 
+/**
+ * Logs written next to the brain rather than inside it. The installed
+ * LaunchAgents and `auto-pull.sh` send daemon/server/auto-pull output to
+ * `<agent home>/logs` (normally `~/.agent/logs`), which the brain policies above
+ * never saw: one node's `daemon.log` there reached 9 GB with the disk at 95%.
+ * Same rule as the brain log: truncate in place, never unlink.
+ *
+ * @type {Policy[]}
+ */
+export const AGENT_HOME_POLICIES = [
+  {
+    id: 'agent-logs',
+    dir: 'logs',
+    match: /\.log$/,
+    mode: 'size',
+    limit: 25 * 1024 * 1024,
+    keepBytes: 5 * 1024 * 1024,
+  },
+  {
+    id: 'agent-system-logs',
+    dir: 'logs',
+    match: /^system-\d{4}-\d{2}-\d{2}\.jsonl$/,
+    mode: 'age',
+    limit: 14,
+  },
+];
+
+/**
+ * The agent home that holds a conventionally placed brain
+ * (`<agent home>/skills/total-recall`), or null for any other layout.
+ */
+export function agentHomeFor(brainDir) {
+  const abs = path.resolve(brainDir);
+  if (path.basename(abs) !== 'total-recall' || path.basename(path.dirname(abs)) !== 'skills') return null;
+  return path.dirname(path.dirname(abs));
+}
+
 /** Is this path inside a protected directory? */
 export function isProtected(brainDir, target) {
   const root = path.resolve(brainDir);
@@ -219,10 +256,31 @@ function truncateKeepingTail(file, keepBytes) {
 /**
  * Apply every policy.
  *
- * @param {{brainDir: string, policies?: Policy[], dryRun?: boolean, now?: number}} opts
+ * `agentDir` (derived from a conventionally placed brain) also gets the
+ * AGENT_HOME_POLICIES; pass `agentDir: null` to skip it.
+ *
+ * @param {{brainDir: string, policies?: Policy[], agentDir?: string|null, agentPolicies?: Policy[], dryRun?: boolean, now?: number}} opts
  * @returns {{freed_bytes: number, removed: number, dry_run: boolean, results: object[]}}
  */
-export function pruneCaches({ brainDir, policies = DEFAULT_POLICIES, dryRun = false, now = Date.now() } = {}) {
+export function pruneCaches({
+  brainDir,
+  policies = DEFAULT_POLICIES,
+  agentDir = agentHomeFor(brainDir),
+  agentPolicies = AGENT_HOME_POLICIES,
+  dryRun = false,
+  now = Date.now(),
+} = {}) {
+  const report = runPolicies(brainDir, policies, { dryRun, now });
+  if (agentDir && path.resolve(agentDir) !== path.resolve(brainDir) && agentPolicies?.length) {
+    const extra = runPolicies(agentDir, agentPolicies, { dryRun, now });
+    report.freed_bytes += extra.freed_bytes;
+    report.removed += extra.removed;
+    report.results.push(...extra.results.map((r) => ({ ...r, root: 'agent-home' })));
+  }
+  return report;
+}
+
+function runPolicies(brainDir, policies, { dryRun, now }) {
   const results = [];
   let freed = 0;
   let removed = 0;

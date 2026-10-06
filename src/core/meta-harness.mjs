@@ -29,8 +29,14 @@ export const HARNESS_SPECS = {
     name: 'Claude Code CLI',
     binary: 'claude',
     category: 'code_engineering',
-    defaultFlags: ['--output-format', 'json', '--permission-mode', 'bypassPermissions', '--setting-sources', 'local', '--tools', '', '-p'],
+    defaultFlags: ['--output-format', 'json', '--permission-mode', 'bypassPermissions', '-p'],
     execType: 'flag_last',
+    // Options the harness accepts for the built-in tool set and settings layers.
+    toolsFlag: '--tools',
+    settingSourcesFlag: '--setting-sources',
+    // Headless subscription auth (`claude setup-token`), read from the secret
+    // store when the caller's environment does not already carry it.
+    authSecrets: ['CLAUDE_CODE_OAUTH_TOKEN'],
     description: 'Deep codebase editing, refactoring, and Unix command execution.'
   },
   codex: {
@@ -61,6 +67,79 @@ export const HARNESS_SPECS = {
     description: 'Local neural inference, offline reasoning, zero API cost.'
   }
 };
+
+/**
+ * Normalise a caller's tool selection.
+ *   undefined | null | 'default' | 'all'  -> null (the harness's full built-in set)
+ *   'none' | ''                            -> '' (no tools)
+ *   'Bash,Read' | ['Bash', 'Read']         -> 'Bash,Read'
+ */
+export function normalizeToolSelection(tools) {
+  if (tools === undefined || tools === null) return null;
+  const list = (Array.isArray(tools) ? tools : String(tools).split(','))
+    .map((t) => String(t).trim())
+    .filter(Boolean);
+  if (list.length === 0 || (list.length === 1 && list[0] === 'none')) return '';
+  if (list.length === 1 && (list[0] === 'default' || list[0] === 'all')) return null;
+  return list.join(',');
+}
+
+/**
+ * Argument vector for a harness, before the task prompt.
+ * `tools` and `settingSources` are only accepted by harnesses that declare the
+ * matching flag; asking another harness for them is an error, not a silent no-op.
+ */
+export function buildHarnessArgs(spec, { tools, settingSources } = {}) {
+  const args = [...spec.defaultFlags];
+  const extra = [];
+  const selection = normalizeToolSelection(tools);
+  if (selection !== null) {
+    if (!spec.toolsFlag) throw new Error(`Harness "${spec.name}" does not support choosing its tool set.`);
+    extra.push(spec.toolsFlag, selection);
+  }
+  if (settingSources) {
+    if (!spec.settingSourcesFlag) throw new Error(`Harness "${spec.name}" does not support --setting-sources.`);
+    extra.push(spec.settingSourcesFlag, String(settingSources));
+  }
+  if (!extra.length) return args;
+  // Prompt-mode flags such as `-p` stay last so the task follows them.
+  const last = args[args.length - 1];
+  return spec.execType === 'flag_last' && last && last.startsWith('-')
+    ? [...args.slice(0, -1), ...extra, last]
+    : [...args, ...extra];
+}
+
+/** POSIX single-quote a value for a remote shell command line. */
+export function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+async function readStoreSecret(key) {
+  const { getSecret, defaultBrainDir } = await import('./secrets-store.mjs');
+  const res = await getSecret(defaultBrainDir(), key, { actor: 'agent-harness', action: 'harness-auth' });
+  return res.found ? res.value : null;
+}
+
+/**
+ * Environment for a harness process. Headless auth secrets the harness declares
+ * (for Claude Code, CLAUDE_CODE_OAUTH_TOKEN) are filled from the secret store
+ * when the base environment lacks them, so a session without a login keychain
+ * (SSH, launchd, cron) can still authenticate. A store that cannot be opened is
+ * not fatal: the harness falls back to its own login. Values are never logged.
+ */
+export async function resolveHarnessEnv(spec, baseEnv = process.env, { readSecret = readStoreSecret } = {}) {
+  const env = { ...baseEnv };
+  for (const key of spec.authSecrets || []) {
+    if (env[key]) continue;
+    try {
+      const value = await readSecret(key);
+      if (value) env[key] = value;
+    } catch {
+      // Store locked or missing; leave auth to the harness.
+    }
+  }
+  return env;
+}
 
 /**
  * Detect all installed and operational harnesses on this computer.
@@ -94,6 +173,12 @@ export async function dispatchTask(harnessId, taskPrompt, options = {}) {
   }
 
   const timeoutMs = options.timeoutMs || 180000; // 3 min default
+  // A dispatch is a single answer, not a workflow: tool-less and isolated from
+  // user/project settings unless the caller asks otherwise.
+  const harnessArgs = buildHarnessArgs(spec, {
+    tools: options.tools !== undefined ? options.tools : (spec.toolsFlag ? 'none' : undefined),
+    settingSources: options.settingSources !== undefined ? options.settingSources : (spec.settingSourcesFlag ? 'local' : undefined),
+  });
 
   // Remote mesh execution branch
   if (options.node) {
@@ -111,10 +196,11 @@ export async function dispatchTask(harnessId, taskPrompt, options = {}) {
         message: `Dispatching to ${spec.name} remotely on mesh node "${options.node}" (${targetNode.ip})...`
       });
 
-      const flags = spec.defaultFlags.join(' ');
+      const flags = harnessArgs.map(shellQuote).join(' ');
+      const cd = options.cwd ? `cd ${shellQuote(options.cwd)} && ` : '';
       const remoteCmd = spec.execType === 'pipe_stdin'
-        ? `echo ${JSON.stringify(taskPrompt)} | ${spec.binary} ${flags}`
-        : `${spec.binary} ${flags} ${JSON.stringify(taskPrompt)}`;
+        ? `${cd}printf '%s' ${shellQuote(taskPrompt)} | ${spec.binary} ${flags}`
+        : `${cd}${spec.binary} ${flags} ${shellQuote(taskPrompt)}`;
       const execResult = await execMeshCommand(options.node, remoteCmd, {
         vaultRoot: options.vaultRoot,
         timeoutMs,
@@ -140,7 +226,8 @@ export async function dispatchTask(harnessId, taskPrompt, options = {}) {
   }
 
   const cwd = options.cwd || process.cwd();
-  const args = [...spec.defaultFlags];
+  const args = [...harnessArgs];
+  const env = await resolveHarnessEnv(spec, process.env, options);
 
   if (spec.execType === 'subcommand' || spec.execType === 'flag_last') {
     args.push(taskPrompt);
@@ -156,7 +243,7 @@ export async function dispatchTask(harnessId, taskPrompt, options = {}) {
       cwd,
       stdio: spec.execType === 'pipe_stdin' ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
       env: {
-        ...process.env,
+        ...env,
         TR_HARNESS_DISPATCH: '1'
       }
     });

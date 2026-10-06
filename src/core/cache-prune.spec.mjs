@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { pruneCaches, maybePruneCaches, sessionIngestedGuard, isProtected, PROTECTED, DEFAULT_POLICIES, formatBytes } from './cache-prune.mjs';
+import { pruneCaches, maybePruneCaches, sessionIngestedGuard, isProtected, PROTECTED, DEFAULT_POLICIES, AGENT_HOME_POLICIES, agentHomeFor, formatBytes } from './cache-prune.mjs';
 
 const DAY = 24 * 60 * 60 * 1000;
 let brain;
@@ -259,5 +259,45 @@ describe('session ingestion guard', () => {
     index('alpha');
     write('sessions/empty.jsonl', '', 90);
     expect(sessionIngestedGuard(brain)({ abs: path.join(brain, 'sessions/empty.jsonl') })).toBe(true);
+  });
+});
+
+describe('agent-home logs', () => {
+  it('trims oversized logs beside a conventionally placed brain, in place', () => {
+    const home = brain;
+    const nested = path.join(home, 'skills', 'total-recall');
+    fs.mkdirSync(nested, { recursive: true });
+    const log = path.join(home, 'logs', 'daemon.log');
+    fs.mkdirSync(path.dirname(log), { recursive: true });
+    const line = 'x'.repeat(1023) + '\n';
+    fs.writeFileSync(log, line.repeat(30 * 1024)); // 30 MB
+    const fd = fs.openSync(log, 'a'); // an appender holding the file open
+    const inode = fs.statSync(log).ino;
+
+    const report = pruneCaches({ brainDir: nested });
+
+    expect(agentHomeFor(nested)).toBe(path.resolve(home));
+    expect(fs.statSync(log).ino).toBe(inode);
+    expect(fs.statSync(log).size).toBeLessThanOrEqual(AGENT_HOME_POLICIES[0].keepBytes);
+    expect(report.results.find((r) => r.id === 'agent-logs')).toMatchObject({ root: 'agent-home' });
+    fs.writeSync(fd, 'after\n');
+    fs.closeSync(fd);
+    expect(fs.readFileSync(log, 'utf8').endsWith('after\n')).toBe(true);
+  });
+
+  it('leaves agent-home logs alone for a brain outside the conventional layout', () => {
+    fs.mkdirSync(path.join(brain, 'logs'), { recursive: true });
+    expect(agentHomeFor(brain)).toBeNull();
+    const report = pruneCaches({ brainDir: brain, dryRun: true });
+    expect(report.results.some((r) => r.root === 'agent-home')).toBe(false);
+  });
+
+  it('never reaches into the brain or secrets from the agent home', () => {
+    const nested = path.join(brain, 'skills', 'total-recall');
+    fs.mkdirSync(path.join(nested, 'config'), { recursive: true });
+    const secrets = path.join(nested, 'config', 'secrets.enc');
+    fs.writeFileSync(secrets, 'y'.repeat(30 * 1024 * 1024));
+    pruneCaches({ brainDir: nested, agentPolicies: [{ id: 'evil', dir: 'skills', mode: 'size', limit: 1, keepBytes: 1 }] });
+    expect(fs.statSync(secrets).size).toBe(30 * 1024 * 1024);
   });
 });

@@ -1,3 +1,26 @@
+## 3.37.0 — 2026-10-05
+
+- `agent spawn` runs workflow-capable agents: Claude Code keeps its built-in tools
+  (search, fetch, shell, edit) by default instead of being started with
+  `--tools ''`. Choose a set with `--tools <list|none|default>` (alias
+  `--allow-tools`) or `--no-tools`; `spawnAgent(…, { tools, settingSources })` in
+  code. `harness dispatch` and councils keep their tool-less, local-settings
+  default and accept the same overrides.
+- `agent spawn --cwd <dir>` sets the working directory, including on a `--node`
+  target (`~` is that node's home). A missing directory fails before spawning.
+- Claude Code spawns and dispatches read `CLAUDE_CODE_OAUTH_TOKEN` (from
+  `claude setup-token`) from the secret store when the environment lacks it, so
+  SSH, launchd and cron sessions without a login keychain authenticate.
+- Remote spawn and dispatch commands POSIX-quote every argument; prompt text can
+  no longer expand on the remote shell.
+- `agent spawn` option values no longer leak into the task text; unknown options
+  are rejected.
+- Daemon log housekeeping now covers `<agent home>/logs` (`daemon.log`,
+  `server.log`, `auto-pull.log`, `system-*.jsonl`), truncating in place;
+  `auto-pull.sh` appends to `server.log`.
+- `plugin create --api-key` scaffolds a paste-your-key panel, token CLI and
+  manifest secret.
+
 ## 3.36.0 — 2026-10-03
 
 - Core architecture: extracted all 16 bundled plugins into independent standalone git repositories under the `tr-plugin-*` ecosystem, enforcing the core invariant that Total Recall core contains only memory, mesh, and minimal plugin loading contracts.

@@ -162,7 +162,9 @@ restart_brain() {
     fi
     # The index.mjs watchdog starts the daemon.
     log "Starting the standalone server on $SERVER_HOST:$SERVER_PORT..."
-    nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port "$SERVER_PORT" --host "$SERVER_HOST" > "$SERVER_LOG" 2>&1 &
+    # Append, never truncate: the daemon's log policy trims this file in place,
+    # and a non-append writer would keep its old offset and leave a sparse file.
+    nohup "$NODE_BIN" "$REPO_DIR/bin/total-recall.mjs" start --port "$SERVER_PORT" --host "$SERVER_HOST" >> "$SERVER_LOG" 2>&1 &
   fi
 
   want="$(checkout_version)"
