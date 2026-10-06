@@ -23,6 +23,14 @@ Options:
   --detach                  Spawn process detached in background (default: true)
   --name <label>            Assign a human-readable name to the agent session
   --tail <lines>            Number of log lines to inspect (default: 50)
+  --cwd <dir>               Working directory for the agent (on the target node with --node)
+  --tools <list>            Built-in tools for the harness: default (all), none, or e.g. "Bash,Read,WebFetch"
+                            (alias --allow-tools; --no-tools = none). Spawns default to all tools.
+  --setting-sources <list>  Settings layers the harness loads (e.g. local, or user,project)
+
+Auth:
+  Claude Code reads CLAUDE_CODE_OAUTH_TOKEN (from \`claude setup-token\`) from the environment,
+  else from the Total Recall secret store, so SSH/launchd sessions without a login keychain work.
 
 Available Harnesses:
   agy, claude, codex, gemini
@@ -31,9 +39,51 @@ Examples:
   npx total-recall agent list
   npx total-recall agent spawn claude "Refactor src/cli/harness.mjs error handling"
   npx total-recall agent spawn agy "Crawl recent preprints on quantum shuttling" --name "Quantum Scout"
+  npx total-recall agent spawn claude "Run the lead search workflow" --node build-box --cwd '~/code/app'
   npx total-recall agent logs agent-claude-xyz --tail 100
   npx total-recall agent kill agent-claude-xyz
 `);
+}
+
+const SPAWN_VALUE_FLAGS = {
+  '--node': 'targetNode',
+  '-n': 'targetNode',
+  '--name': 'name',
+  '--cwd': 'cwd',
+  '--tools': 'tools',
+  '--allow-tools': 'tools',
+  '--setting-sources': 'settingSources',
+};
+
+/**
+ * Parse `agent spawn` arguments. Option values are consumed with their flag, so
+ * they never leak into the task text; `--tools ""` is a real (empty) value.
+ */
+export function parseSpawnArgs(rest) {
+  const out = { detach: true, isJson: false, name: null, targetNode: null, cwd: undefined, tools: undefined, settingSources: undefined };
+  const positional = [];
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i];
+    const eq = arg.startsWith('--') ? arg.indexOf('=') : -1;
+    const flag = eq > 0 ? arg.slice(0, eq) : arg;
+    if (SPAWN_VALUE_FLAGS[flag]) {
+      let value;
+      if (eq > 0) value = arg.slice(eq + 1);
+      else {
+        if (i + 1 >= rest.length) throw new Error(`${flag} requires a value`);
+        value = rest[++i];
+      }
+      out[SPAWN_VALUE_FLAGS[flag]] = value;
+    } else if (arg === '--json') out.isJson = true;
+    else if (arg === '--no-detach') out.detach = false;
+    else if (arg === '--detach') out.detach = true;
+    else if (arg === '--no-tools') out.tools = 'none';
+    else if (arg.startsWith('--')) throw new Error(`Unknown option for agent spawn: ${arg}`);
+    else positional.push(arg);
+  }
+  out.harness = positional[0];
+  out.task = positional.slice(1).join(' ').trim();
+  return out;
 }
 
 export async function run(argv) {
@@ -79,34 +129,25 @@ export async function run(argv) {
   }
 
   if (command === 'spawn') {
-    let targetNode = null;
-    const filteredRest = [];
-    for (let i = 0; i < rest.length; i++) {
-      if (rest[i] === '--node' || rest[i] === '-n') {
-        targetNode = rest[i + 1];
-        i++;
-      } else {
-        filteredRest.push(rest[i]);
-      }
+    let parsed;
+    try {
+      parsed = parseSpawnArgs(rest);
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
     }
-
-    const harness = filteredRest[0];
-    const task = filteredRest.filter(r => !r.startsWith('--')).slice(1).join(' ').trim();
-    const detach = !filteredRest.includes('--no-detach');
-    const isJson = filteredRest.includes('--json');
-    const nameIdx = filteredRest.indexOf('--name');
-    const name = nameIdx !== -1 ? filteredRest[nameIdx + 1] : null;
+    const { harness, task, detach, isJson, name, targetNode, cwd, tools, settingSources } = parsed;
 
     if (!harness || !task) {
       console.error('Error: Please specify harness ID and task prompt.');
-      console.error('Usage: npx total-recall agent spawn <harness> "<task>" [--name "..."] [--node <node>]');
+      console.error('Usage: npx total-recall agent spawn <harness> "<task>" [--name "..."] [--node <node>] [--cwd <dir>] [--tools <list|none|default>]');
       process.exit(1);
     }
 
     const nodeStr = targetNode ? ` on mesh node \x1b[1;33m${targetNode}\x1b[0m` : '';
     if (!isJson) console.log(`\n🚀 Spawning agent on harness: \x1b[1;36m${harness}\x1b[0m${nodeStr}...`);
     try {
-      const record = await spawnAgent(harness, task, { detach, name, node: targetNode });
+      const record = await spawnAgent(harness, task, { detach, name, node: targetNode, cwd, tools, settingSources });
       if (isJson) {
         console.log(JSON.stringify(record, null, 2));
         return;

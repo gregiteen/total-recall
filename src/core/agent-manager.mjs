@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { HARNESS_SPECS, detectHarnesses } from './meta-harness.mjs';
+import { HARNESS_SPECS, buildHarnessArgs, normalizeToolSelection, resolveHarnessEnv, shellQuote } from './meta-harness.mjs';
 import { findBinaryInPath } from './runtime.mjs';
 import { logger } from './logger.mjs';
 
@@ -81,14 +81,45 @@ export function listAgents() {
   return updated;
 }
 
+/** Tool selection as recorded in the agent registry. */
+function describeTools(tools) {
+  const selection = normalizeToolSelection(tools);
+  return selection === null ? 'default' : selection || 'none';
+}
+
+/**
+ * The `total-recall agent spawn` command line that recreates a spawn on another
+ * node. Every value is shell-quoted: the prompt, name and paths are caller data.
+ */
+export function buildRemoteSpawnCommand(harnessId, taskPrompt, options = {}) {
+  const parts = ['total-recall', 'agent', 'spawn', harnessId, taskPrompt];
+  if (options.name) parts.push('--name', options.name);
+  if (options.cwd) parts.push('--cwd', options.cwd);
+  if (options.tools !== undefined && options.tools !== null) {
+    parts.push('--tools', Array.isArray(options.tools) ? options.tools.join(',') : String(options.tools));
+  }
+  if (options.settingSources) parts.push('--setting-sources', options.settingSources);
+  if (options.detach === false) parts.push('--no-detach');
+  parts.push('--json');
+  return parts.map(shellQuote).join(' ');
+}
+
 /**
  * Spawn an agent harness headlessly or in background detach mode.
+ *
+ * A spawn runs a workflow, so the harness keeps its full built-in tool set and
+ * normal settings unless the caller narrows them:
+ *   options.tools           'none' | 'default' | 'Bash,Read' | ['Bash', 'Read']
+ *   options.settingSources  e.g. 'local' or 'user,project'
+ *   options.cwd             working directory (on the target node for --node)
  */
 export async function spawnAgent(harnessId, taskPrompt, options = {}) {
   const spec = HARNESS_SPECS[harnessId];
   if (!spec) {
     throw new Error(`Unknown harness ID "${harnessId}". Available: ${Object.keys(HARNESS_SPECS).join(', ')}`);
   }
+  // Validate the tool/settings selection before touching any node.
+  const harnessArgs = buildHarnessArgs(spec, { tools: options.tools, settingSources: options.settingSources });
 
   // Remote mesh execution branch
   if (options.node) {
@@ -102,9 +133,10 @@ export async function spawnAgent(harnessId, taskPrompt, options = {}) {
 
     if (!isSelf) {
       const id = `agent-${harnessId}-${Date.now().toString(36)}`;
-      const remoteCmd = `total-recall agent spawn ${harnessId} ${JSON.stringify(taskPrompt)} ${options.name ? `--name ${JSON.stringify(options.name)}` : ''} --json`;
+      const remoteCmd = buildRemoteSpawnCommand(harnessId, taskPrompt, options);
       const execResult = await execMeshCommand(options.node, remoteCmd, {
         vaultRoot: options.vaultRoot,
+        timeoutMs: options.timeoutMs,
       });
 
       let remoteRecord = null;
@@ -118,7 +150,8 @@ export async function spawnAgent(harnessId, taskPrompt, options = {}) {
         id: remoteRecord?.id || id,
         node: options.node,
         remote: true,
-        status: execResult.success ? 'running' : 'failed',
+        status: execResult.success ? (remoteRecord?.status || 'running') : 'failed',
+        ...(execResult.success ? {} : { error: (execResult.stderr || execResult.stdout || '').slice(-2000) }),
         startedAt: remoteRecord?.startedAt || new Date().toISOString(),
         task: taskPrompt,
         harness: harnessId,
@@ -136,20 +169,27 @@ export async function spawnAgent(harnessId, taskPrompt, options = {}) {
     throw new Error(`Binary "${spec.binary}" for harness "${spec.name}" not found on PATH.`);
   }
 
+  // A remote caller sends `~/…` unexpanded; it means this node's home.
+  const requestedCwd = options.cwd && /^~(?=$|\/)/.test(options.cwd) ? path.join(os.homedir(), options.cwd.slice(1)) : options.cwd;
+  const cwd = requestedCwd ? path.resolve(requestedCwd) : process.cwd();
+  if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+    throw new Error(`Working directory does not exist: ${cwd}`);
+  }
+  const env = await resolveHarnessEnv(spec, process.env, options);
+
   const id = `agent-${harnessId}-${Date.now().toString(36)}`;
   const logDir = resolveLogDir();
   const logFile = path.join(logDir, `${id}.log`);
   const logFd = fs.openSync(logFile, 'a');
 
-  const args = [...spec.defaultFlags, taskPrompt];
-  const cwd = options.cwd || process.cwd();
+  const args = [...harnessArgs, taskPrompt];
 
   const child = spawn(binPath, args, {
     cwd,
     detached: options.detach !== false,
     stdio: options.detach !== false ? ['ignore', logFd, logFd] : 'pipe',
     env: {
-      ...process.env,
+      ...env,
       TR_AGENT_ID: id,
       TR_HARNESS: harnessId
     }
@@ -163,6 +203,7 @@ export async function spawnAgent(harnessId, taskPrompt, options = {}) {
     pid: child.pid,
     task: taskPrompt,
     cwd,
+    tools: describeTools(options.tools),
     logFile,
     startedAt: new Date().toISOString(),
     status: 'running',
