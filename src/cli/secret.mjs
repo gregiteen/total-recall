@@ -81,8 +81,32 @@ import { agentDir as configuredAgentDir, getActiveBrains } from '../core/config.
 // pasted/piped value normally carries), not all whitespace, so a value that
 // legitimately starts or ends with a space round-trips intact.
 function readStdinValue() {
+  // A terminal never sends EOF on Enter, so readFileSync(0) would wait for a
+  // Ctrl-D on an empty line. Read one line (Enter ends it) with echo off.
+  if (process.stdin.isTTY) return readTtyLine();
   const raw = fs.readFileSync(0, 'utf8');
   return raw.endsWith('\n') ? raw.slice(0, -1) : raw;
+}
+
+function readTtyLine() {
+  const stty = (arg) => { try { execFileSync('stty', [arg], { stdio: ['inherit', 'ignore', 'ignore'] }); } catch { /* not a tty */ } };
+  process.stderr.write('Paste the value and press Enter: ');
+  stty('-echo');
+  let line = '';
+  try {
+    const chunk = Buffer.alloc(4096);
+    for (;;) {
+      let n;
+      try { n = fs.readSync(0, chunk, 0, chunk.length, null); } catch (err) { if (err.code === 'EAGAIN') continue; throw err; }
+      if (n === 0) break;
+      line += chunk.toString('utf8', 0, n);
+      if (/[\r\n]/.test(line)) break;
+    }
+  } finally {
+    stty('echo');
+    process.stderr.write('\n');
+  }
+  return line.split(/[\r\n]/)[0];
 }
 
 /**
@@ -133,13 +157,16 @@ function readSecretValue(label) {
     input.resume();
     input.setEncoding('utf8');
     let buf = '';
-    const onData = (ch) => {
+    // A paste arrives as one chunk (often with the Enter in it): walk it character by character.
+    const onData = (chunk) => { for (const ch of chunk) { if (onChar(ch)) return; } };
+    const onChar = (ch) => {
       if (ch === '\n' || ch === '\r' || ch === '\u0004') {
         input.setRawMode(false);
         input.pause();
         input.removeListener('data', onData);
         process.stdout.write('\n');
         resolve(buf.trim());
+        return true;
       } else if (ch === '\u0003') {
         input.setRawMode(false);
         process.stdout.write('\n');
