@@ -197,8 +197,11 @@ if [ "$BRANCH" != "main" ]; then
   exit 0
 fi
 git checkout -- .agent/skills/repo-expert/SKILL.md 2>/dev/null || true
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  log "⏭️ Uncommitted changes to tracked files — not updating: $(git diff --name-only HEAD | head -5 | tr '\n' ' ')"
+# An embedded repository (gitlink) that moved on its own is not local work in
+# this checkout, and a fast-forward never touches it; counting it as a change
+# stopped one host from updating at all.
+if ! git diff --quiet --ignore-submodules=all || ! git diff --cached --quiet --ignore-submodules=all; then
+  log "⏭️ Uncommitted changes to tracked files — not updating: $(git diff --name-only --ignore-submodules=all HEAD | head -5 | tr '\n' ' ')"
   exit 0
 fi
 
