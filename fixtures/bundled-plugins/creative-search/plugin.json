@@ -1,0 +1,12 @@
+{
+  "id": "creative-search",
+  "name": "Creative Search",
+  "version": "1.0.0",
+  "description": "Metasearch with categories and deep research.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": [
+    "research",
+    "search"
+  ]
+}

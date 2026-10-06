@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
@@ -31,6 +32,9 @@ export default defineConfig({
     env: {
       TR_SECRETS_NO_KEYCHAIN: '1',
       TR_ENV_FILE: '/nonexistent/total-recall-test/tr.env',
+      // Plugins ship as standalone repositories; specs use fixed fixtures
+      // instead of whatever is installed in the developer's own brain.
+      _TR_TEST_BUNDLED_PLUGINS_DIR: fileURLToPath(new URL('./fixtures/bundled-plugins', import.meta.url)),
     },
     setupFiles: ['./frontend/src/setupTests.ts'],
     coverage: {

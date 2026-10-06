@@ -6,12 +6,18 @@ import { createPlugin } from './create.mjs';
 import { generateUiElements } from '../../core/app-deploy/ui-elements.mjs';
 
 describe('Plugin Creation CLI (cli/plugin/create.mjs)', () => {
+  let tmpParent;
   let tmpProject;
   let tmpSkillDir;
   let logSpy;
 
   beforeEach(() => {
-    tmpProject = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-create-proj-'));
+    // `plugin create` writes its standalone repo beside the project
+    // (<parent>/tr-plugin-<id>), so the project gets a private parent; a shared
+    // os.tmpdir() parent collides with repos left by earlier runs.
+    tmpParent = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-create-'));
+    tmpProject = path.join(tmpParent, 'project');
+    fs.mkdirSync(tmpProject);
     tmpSkillDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-source-skill-'));
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -33,7 +39,7 @@ Instructions here.
 
   afterEach(() => {
     logSpy.mockRestore();
-    if (fs.existsSync(tmpProject)) fs.rmSync(tmpProject, { recursive: true, force: true });
+    if (fs.existsSync(tmpParent)) fs.rmSync(tmpParent, { recursive: true, force: true });
     if (fs.existsSync(tmpSkillDir)) fs.rmSync(tmpSkillDir, { recursive: true, force: true });
   });
 

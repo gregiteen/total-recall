@@ -1,0 +1,11 @@
+{
+  "id": "git-sentinel",
+  "name": "Git Sentinel",
+  "version": "1.0.0",
+  "description": "Reports the state of the current git repository: branch, dirty files, unpushed commits and stashes.",
+  "author": "Total Recall",
+  "license": "MIT",
+  "use_cases": [
+    "software-development"
+  ]
+}

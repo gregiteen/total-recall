@@ -6,7 +6,8 @@ import { listPlugins } from './list.mjs';
 import { run } from './index.mjs';
 
 // Never touch the real mesh from a unit test.
-vi.mock('../../core/plugin-peers.mjs', () => ({
+vi.mock('../../core/plugin-peers.mjs', async (importOriginal) => ({
+  ...(await importOriginal()),
   listPeerPlugins: vi.fn(async () => ({
     mesh: { available: true, configured: true },
     peers: [{ hostname: 'mac-mini', ip: '100.64.0.2', status: 'ok', plugins: [
@@ -83,7 +84,9 @@ describe('CLI Plugin Manager', () => {
   });
 
   it('scaffolds a new plugin using createPlugin', async () => {
-    const tmpDir = path.join(os.tmpdir(), `tr-test-plugin-${Date.now()}`);
+    // The standalone repo lands beside the project; keep both under one private parent.
+    const tmpParent = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-test-plugin-'));
+    const tmpDir = path.join(tmpParent, 'project');
     fs.mkdirSync(tmpDir, { recursive: true });
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
 
@@ -102,7 +105,7 @@ describe('CLI Plugin Manager', () => {
       expect(fs.existsSync(path.join(pluginDir, 'generator.mjs'))).toBe(true);
     } finally {
       cwdSpy.mockRestore();
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpParent, { recursive: true, force: true });
     }
   });
 });
