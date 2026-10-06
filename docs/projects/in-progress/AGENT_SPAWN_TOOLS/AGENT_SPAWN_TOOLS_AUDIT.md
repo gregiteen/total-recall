@@ -76,6 +76,8 @@ The help text promised spawning a coding agent for refactors; with zero tools Cl
 | A-006 | P1-high | `~/.agent/logs` unbounded (9.1 GB on the test node) | Agent-home size policy, truncate in place; auto-pull appends |
 | A-007 | P0-critical | Master password in plaintext LaunchAgents and leaked on 2026-10-05 | Rotate fleet-wide; Mac mini daemon reads the Keychain; plaintext removed from plists |
 | A-008 | P2-medium | Vault watcher recompile loop floods the daemon log | Out of scope; tracked as a separate task |
+| A-009 | P1-high | 20 plugin specs failed on a clean checkout since the 3.36.0 plugin extraction (they read the developer's own `.agent` plugins; `plugin create` specs used fixed temp names) — identical failures at 810bda7 on the Mac mini | Fixture plugins via `_TR_TEST_BUNDLED_PLUGINS_DIR`; private temp parents |
+| A-010 | P1-high | Mac mini server watchdog reports a live daemon as `not_started` and spawns another (26,655 auto-restarts logged; four daemon-loop processes at once) | Duplicates without the lock stopped; root cause tracked as a separate task |
 
 ## 13. Impact on the requested change
 
