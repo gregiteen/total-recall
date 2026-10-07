@@ -1,0 +1,82 @@
+{
+  "recorded_at": "2026-10-07T16:42:10.226775+00:00",
+  "source_commit": "9b2e21f5ad2591e8d3c3c34ef97af94c13ee83ff",
+  "source_sha256": {
+    "package.json": "c2201ab47b60bf865f146e890540b526729a34ed5e3541770015d815749fb15c",
+    "metadata.plugin.schema.json": "9368766e07a9b4dc434623e3d5fc9006ece961f3cc1f38791b567f8ebedad0c1",
+    "src/server/rest.mjs": "d29a6b3a8f4b47139336d5e1d247db9b9dc8f426458d2a33ab5c8b323eb3dade",
+    "src/server/tools.mjs": "96b1ed5e534eba423d48a81e08db145fa3837149ea36b29bd2b1aee1b3e83de0",
+    "src/core/daemon-loop.mjs": "b7cffc69e4c155bb8bb28b27636066fde74df084dfa244dfa71bb72f3997d01d",
+    "src/core/vault-watcher.mjs": "69f1e2e283c8722dac24b17dd474ca4203d2cfbea6e69ba685d4dd5b70798dba",
+    "src/core/vault-watcher-settled.spec.mjs": "2e5ca8af8752055cb89d3f843e405454c74034ea919592bfa304fc74a0bf94cd",
+    "src/core/plugin-loader.mjs": "4d97ce9f7248e855e606f8916ddc4fc8b472aebe5375fb23c9ad319516273270",
+    "src/core/plugin-context.mjs": "cc25cec5ee26fce95ca823fc5676e413d8149151a6e8f11330e47bd74a6c03e8",
+    "src/core/app-deploy/standalone.mjs": "9e5f979b0c6955d6a42f6440d759f3647006fdb51d29ca9d5b3622cf78141b59",
+    "src/core/app-deploy/apply.mjs": "f1761e5e62eff919d7cbc80a2bb451524ec8e83413b3da55ce3d8988e4480254",
+    "src/server/routes/plugins.mjs": "7fcf93a5416a807dbad3edfec282a52437118a13a6d47b7cd3d434d18ca010f8",
+    "src/core/startup-health.mjs": "ab62c431fbc38ab85bfedb495430dc2ae5d36731ab391ef505d3c29e30f00580",
+    "src/core/skills-registry.mjs": "f0f2e9541e81990bdac7896149a6bd163e168f4af885b5d94af85f41ba90bc18",
+    "extension/manifest.json": "5319778767a65cbd23541096ec5a76c9c87d30b42107a837088c02568eb8fc9b",
+    "src/core/search.mjs": "024b58d1462c823c53e4e04de9c4ceb0ba53d50eafef5d8770ba4de216884a80",
+    "src/server/routes/memory.mjs": "43c73123b9179d23bacd4556fa317ad826d0fa0e191be1ad57e20cf039a66901",
+    "src/server/routes/collab.mjs": "5fb4b556fb93ca8b34e86097305239cc056c7453fbfb229ccb41de1134e5ef45",
+    "frontend/src/pages/PluginsPage.tsx": "ab244d02e98666612662a1dc4b40d6807b26ee54be42a60dc9925328b0156a84"
+  },
+  "test_host": "sanctioned Mac mini",
+  "full_suite": {
+    "exit": 0,
+    "files_passed": 373,
+    "tests_passed": 2353
+  },
+  "remote_gate": {
+    "exit": 0,
+    "findings": 0,
+    "checks": [
+      "dist-freshness",
+      "open-source-paths",
+      "shipped-package-paths",
+      "scaffold-brain-state",
+      "ssss-registry",
+      "test"
+    ],
+    "seconds": 209.8
+  },
+  "native_boot": {
+    "status": "healthy",
+    "version": "3.38.0",
+    "owned_process_stopped": true
+  },
+  "helper_tests": {
+    "exit": 0,
+    "passed": 20,
+    "failed": 0,
+    "initial_snapshot_failure": "missing hook support copied before rerun"
+  },
+  "package": {
+    "version": "3.38.0",
+    "sha256": "3fc723cc9d36d86a7456778b21f3240b1770931e28cdd8bef031f14fa66e8c08",
+    "dry_run_exit": 0,
+    "published": false
+  },
+  "limitations": [
+    "Core split remains incomplete",
+    "Historical boxes are claims requiring source/runtime proof",
+    "No independent public sharing/provider/installed browser proof implied",
+    "Cloud 3.37.0 remains live; unsafe auto-pull held"
+  ],
+  "consolidation": {
+    "verified_at": "2026-10-07T16:51:03Z",
+    "audit_exit": 0,
+    "integrity_exit": 0,
+    "source_projects": 14,
+    "source_items": 549,
+    "active_projects": 1,
+    "canonical_work_packages": 6,
+    "pending_source_dispositions": {
+      "merged": 78,
+      "external_owner": 97,
+      "retired": 78,
+      "fulfilled_current_evidence": 1
+    }
+  }
+}
