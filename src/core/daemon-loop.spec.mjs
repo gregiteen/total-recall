@@ -4,7 +4,7 @@ vi.mock('./logger.mjs', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { writeInterrupt, acquirePidLock, releasePidLock } from './daemon-loop.mjs';
+import { writeInterrupt, acquirePidLock, releasePidLock, reassertPidLock } from './daemon-loop.mjs';
 import fs from 'fs';
 
 
@@ -95,6 +95,37 @@ describe('daemon-loop.mjs', () => {
       releasePidLock();
       
       expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reassertPidLock', () => {
+    it('restores a missing lock file', () => {
+      fs.existsSync.mockReturnValue(false);
+      expect(reassertPidLock()).toBe('owner');
+      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('daemon.pid'), String(process.pid), { mode: 0o644 });
+    });
+
+    it('takes the lock back from a dead holder', () => {
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue('99999');
+      process.kill.mockImplementation(() => { throw new Error('Process dead'); });
+      expect(reassertPidLock()).toBe('owner');
+      expect(fs.writeFileSync).toHaveBeenCalled();
+    });
+
+    it('leaves its own lock untouched', () => {
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue(String(process.pid));
+      expect(reassertPidLock()).toBe('owner');
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('reports a duplicate when another live daemon holds the lock', () => {
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue('99999');
+      process.kill.mockReturnValue(true);
+      expect(reassertPidLock()).toBe('duplicate');
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
   });
 });

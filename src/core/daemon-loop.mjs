@@ -154,6 +154,49 @@ export function acquirePidLock() {
   logger.info({ subsystem: 'daemon-loop', message: `PID lockfile acquired: ${PID_FILE} (PID: ${process.pid})` });
 }
 
+/**
+ * Re-check the lock on every heartbeat. A lock file deleted or overwritten after
+ * startup (an unrelated stop, cleanup or restart) made the server watchdog see
+ * `not_started` and spawn another daemon beside the live one, and the duplicates
+ * never converged. A daemon that finds its lock missing or stale takes it back;
+ * one that finds a different live daemon holding it is the duplicate and stops.
+ * @returns {'owner'|'duplicate'}
+ */
+export function reassertPidLock() {
+  let holder = null;
+  try {
+    if (fs.existsSync(PID_FILE)) {
+      holder = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+    }
+  } catch {
+    holder = null;
+  }
+  if (holder && !isNaN(holder) && holder !== process.pid) {
+    const verdict = shouldHonorPidLock(holder, {
+      isAlive: (pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      readCommand: readProcessCommand,
+      entryHint: entryPathHint(fileURLToPath(import.meta.url)),
+    });
+    if (verdict.honor) return 'duplicate';
+  }
+  if (holder !== process.pid) {
+    try {
+      fs.writeFileSync(PID_FILE, String(process.pid), { mode: 0o644 });
+      logger.info({ subsystem: 'daemon-loop', message: `PID lockfile restored: ${PID_FILE} (PID: ${process.pid})` });
+    } catch {
+      // Best effort; the next heartbeat retries.
+    }
+  }
+  return 'owner';
+}
+
 export function releasePidLock() {
   try {
     if (fs.existsSync(PID_FILE)) {
@@ -385,6 +428,11 @@ async function main() {
   }
 
   while (running) {
+    if (!shuttingDown && reassertPidLock() === 'duplicate') {
+      logger.warn('daemon-loop', 'Another daemon holds the PID lock; this duplicate is exiting.');
+      shutdown('duplicate-daemon');
+      break;
+    }
     try {
       const leader = await isLeader();
       if (!leader) {
