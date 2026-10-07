@@ -44,6 +44,20 @@ describe('rules CLI', () => {
     expect(writes).toEqual([]);
   });
 
+  it('refuses to exclude a rule and warns when a directive drops numbers or paths', async () => {
+    const f = tmp();
+    fs.writeFileSync(f, JSON.stringify({ rules: {
+      'project:dup-rule': { source_hash: ruleFingerprint(nodes[2]), enabled: false, reason: 'x' },
+      'project:long-rule': { source_hash: ruleFingerprint(nodes[0]), actions: ['deploy'], directive: 'No Friday deploys.' },
+    } }));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(rules(['apply', f])).rejects.toThrow(/1 invalid entry/);
+    const changed = { ...nodes[0], body: 'Deploy only to 100.64.0.1 via scripts/ship.mjs, never before 9.' };
+    fs.writeFileSync(f, JSON.stringify({ rules: { 'project:long-rule': { source_hash: ruleFingerprint(changed), actions: ['deploy'], directive: 'No Friday deploys.' } } }));
+    const { warnings } = validatePolicyFile(f, { ids: new Map([['project:long-rule', changed]]) });
+    expect(warnings.join(' ')).toMatch(/100\.64\.0\.1/);
+  });
+
   it('applies a valid shortened policy by creating the single context:policy decision', async () => {
     const f = tmp();
     fs.writeFileSync(f, JSON.stringify({ rules: {

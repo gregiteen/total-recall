@@ -22,7 +22,7 @@ function help() {
 
     audit   [--budget N] [--top N] [--json]   Capsule size per action, largest rules, curation health
     draft   [--all] [--actions a,b] [--out F]  Write a policy scaffold (original text as directives) to shorten
-    apply   <file> [--dry-run]                 Validate a policy file and merge it into this repo's policy node
+    apply   <file> [--dry-run] [--allow-exclude]  Validate a policy file and merge it into this repo's policy node
     verify  [--budget N]                       Exit 1 on stale/orphan curation or an action capsule over budget
     prune   [--apply] [--archive]              Drop stale policy entries; list (or archive) expired/superseded/duplicate rules
 
@@ -149,7 +149,21 @@ function draft(args) {
   console.error('Edit each entry: shorten "directive" keeping every operative constraint, narrow "actions", or replace it with {"enabled": false, "reason": "..."} to exclude locally. Then: total-recall rules apply <file>.');
 }
 
-export function validatePolicyFile(file, state) {
+
+// Facts an agent would act on: numbers, paths, URLs, identifiers, quoted strings. A shorter directive must keep them.
+export function operativeFacts(text) {
+  const t = String(text || '');
+  const found = new Set([
+    ...(t.match(/\$?\d[\d,.]*[kKM%]?/g) || []),
+    ...(t.match(/https?:\/\/\S+/g) || []),
+    ...(t.match(/[\w~.-]+(?:\/[\w.-]+)+/g) || []),
+    ...(t.match(/\b[A-Z][A-Z0-9_]{3,}\b/g) || []),
+    ...(t.match(/\b[a-z]+_[a-z_]+\b/g) || []),
+  ].map(x => x.replace(/[.,;:)(]+$/, '')).filter(x => x.length > 2 && !/^(19|20)\d\d(-\d\d)*$/.test(x) && !/^\d{1,2}$/.test(x)));
+  return [...found];
+}
+
+export function validatePolicyFile(file, state, { allowExclude = false } = {}) {
   let parsed;
   try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { throw new Error(`Cannot read policy file ${file}: ${e.message}`); }
   if (!parsed.rules || typeof parsed.rules !== 'object' || Array.isArray(parsed.rules)) throw new Error('Policy file needs a top-level "rules" object');
@@ -159,6 +173,7 @@ export function validatePolicyFile(file, state) {
     if (!n) { errors.push(`${id}: no such rule (use layer:slug)`); continue; }
     if (entry.source_hash !== ruleFingerprint(n)) { errors.push(`${id}: stale source_hash (rule changed; re-run draft)`); continue; }
     if (entry.enabled === false) {
+      if (!allowExclude) { errors.push(`${id}: excluding a rule drops it from context; shorten it instead (or pass --allow-exclude)`); continue; }
       if (typeof entry.reason !== 'string' || !entry.reason.trim()) { errors.push(`${id}: exclusion needs a non-empty reason`); continue; }
       clean[id] = { source_hash: entry.source_hash, enabled: false, reason: entry.reason.trim() };
       continue;
@@ -168,6 +183,8 @@ export function validatePolicyFile(file, state) {
     if (typeof entry.directive !== 'string' || !entry.directive.trim()) { errors.push(`${id}: directive must be non-empty`); continue; }
     const body = (n.body || n.content || '').trim();
     if (entry.directive.trim().length > body.length) warnings.push(`${id}: directive is longer than the original`);
+    const lost = operativeFacts(body).filter(f => !entry.directive.toLowerCase().includes(f.toLowerCase()));
+    if (lost.length) warnings.push(`${id}: directive drops ${lost.slice(0, 8).join(', ')}${lost.length > 8 ? ', ...' : ''} - keep what an agent must act on`);
     clean[id] = { source_hash: entry.source_hash, actions: acts, directive: entry.directive.trim() };
   }
   return { clean, errors, warnings };
@@ -179,7 +196,7 @@ async function apply(args) {
   const state = loadState();
   if (state.health === 'ambiguous') throw new Error('More than one active context:policy decision; archive extras first');
   if (state.health === 'malformed') throw new Error('Existing context:policy body is not valid policy JSON; fix or archive it first');
-  const { clean, errors, warnings } = validatePolicyFile(rest[0], state);
+  const { clean, errors, warnings } = validatePolicyFile(rest[0], state, { allowExclude: Boolean(flags['allow-exclude']) });
   if (errors.length) { for (const e of errors) console.error(`  ✖ ${e}`); throw new Error(`Policy rejected: ${errors.length} invalid entr${errors.length === 1 ? 'y' : 'ies'}; nothing written`); }
   for (const w of warnings) console.error(`  ⚠ ${w}`);
   const kept = Object.fromEntries(Object.entries(state.policy.rules)

@@ -1,5 +1,13 @@
 ## 3.38.0 — 2026-10-05
 
+- Keep the daemon PID lock accurate across heartbeat cycles: a live daemon
+  restores a missing or stale lock, while a duplicate exits when another live
+  daemon owns it. Suppress vault watcher events for files unchanged since the
+  previous recompile to prevent a self-triggered rebuild loop.
+- Require an explicit `--allow-exclude` when applying rule policies that disable
+  a rule, and warn when a shortened directive drops actionable numbers, paths,
+  URLs or identifiers. Keep the shipped operating protocol brief.
+- Document the separate-brain cloud daemon handoff and its operational checks.
 - `connect claude-code` (and `init`, which connects detected IDEs) installs
   Claude Code hooks into `~/.claude`: a SessionStart loader for the Total Recall
   skill, and a gate that denies scheduling (scheduled tasks, routines, cron),

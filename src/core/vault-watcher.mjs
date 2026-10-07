@@ -16,6 +16,38 @@ const RECOMPILE_DEBOUNCE_MS = 2000;
 let watcher = null;
 let stopWrapper = null;
 
+// What each top-level markdown file looked like when the last recompile finished.
+// The recompile writes files in the watched directory itself, and the events for
+// those writes arrive after it ends; reacting to them started another recompile,
+// which wrote the files again and flooded the daemon log without end.
+let settledSignatures = new Map();
+
+function fileSignature(file) {
+  try {
+    const st = fs.statSync(file);
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return 'missing';
+  }
+}
+
+export function snapshotSignatures(vaultDir) {
+  const snapshot = new Map();
+  try {
+    for (const name of fs.readdirSync(vaultDir)) {
+      if (name.endsWith('.md')) snapshot.set(name, fileSignature(path.join(vaultDir, name)));
+    }
+  } catch {
+    // Directory unreadable: an empty snapshot treats every later event as external.
+  }
+  return snapshot;
+}
+
+/** True when the event reports a file exactly as the last recompile left it. */
+export function isSettledEvent(vaultDir, filename, snapshot = settledSignatures) {
+  return snapshot.has(filename) && snapshot.get(filename) === fileSignature(path.join(vaultDir, filename));
+}
+
 export function startVaultWatcher(vaultDir, skillsDir, derivedDir, sessionsDir, instructionsFile) {
   if (watcher && stopWrapper) return stopWrapper;
   
@@ -26,6 +58,9 @@ export function startVaultWatcher(vaultDir, skillsDir, derivedDir, sessionsDir, 
   const callback = (eventType, filename) => {
     // Only react to markdown files
     if (!filename || !filename.endsWith('.md')) return;
+
+    // Our own recompile output, unchanged since it finished: nothing external to do.
+    if (isSettledEvent(vaultDir, filename)) return;
 
     // Immediately invalidate the cache so subsequent reads see the change
     invalidate(vaultDir);
@@ -55,6 +90,8 @@ export function startVaultWatcher(vaultDir, skillsDir, derivedDir, sessionsDir, 
         } catch (embedErr) {
           // local_llm/embeddings offline non-fatal
         }
+
+        settledSignatures = snapshotSignatures(vaultDir);
 
         logger.info({
           subsystem: 'vault-watcher',
