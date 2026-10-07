@@ -1,4 +1,4 @@
-## 3.38.0 — 2026-10-05
+## 3.38.0 — 2026-10-07
 
 - Keep the daemon PID lock accurate across heartbeat cycles: a live daemon
   restores a missing or stale lock, while a duplicate exits when another live
@@ -8,6 +8,9 @@
   a rule, and warn when a shortened directive drops actionable numbers, paths,
   URLs or identifiers. Keep the shipped operating protocol brief.
 - Document the separate-brain cloud daemon handoff and its operational checks.
+- Consolidate 13 active projects and the planned core split into one reduced
+  memory-core/plugin project. Preserve predecessor records, verify current
+  source claims, and remove duplicated or speculative work from active scope.
 - `connect claude-code` (and `init`, which connects detected IDEs) installs
   Claude Code hooks into `~/.claude`: a SessionStart loader for the Total Recall
   skill, and a gate that denies scheduling (scheduled tasks, routines, cron),
