@@ -3,7 +3,8 @@ import { installPlugin } from './install.mjs';
 import { removePlugin, sharePlugin } from './remove.mjs';
 import { listAvailable, listPeers, searchPlugins } from './search.mjs';
 import { createPlugin } from './create.mjs';
-import { getPlugin } from '../../core/plugin-loader.mjs';
+import { managePluginLicense } from './monetization.mjs';
+import { getPlugin, getPluginMonetization } from '../../core/plugin-loader.mjs';
 import { describePlugin } from '../../core/plugin-store.mjs';
 
 function printHelp() {
@@ -33,9 +34,10 @@ Commands:
                               <path>              a local directory
                               --link, -l    Symlink a local directory instead of copying
                               --global, -g  Install for every project on this machine
-  share <id>                Offer an installed plugin by direct link and mesh
+   share <id>                Offer an installed plugin by direct link and mesh
   unshare <id>              Stop offering it
   remove <id>               Uninstall (--global for the machine-wide copy)
+  license <id> [cmd]        Check or activate plugin license (status, activate, verify)
   info <id>                 Manifest, provenance, hash and task history
   create <id>               Scaffold a new plugin
                               --name <name>         Human-readable plugin name
@@ -118,6 +120,11 @@ export async function run(argv = []) {
     return;
   }
 
+  if (command === 'license' || command === 'lic' || command === 'monetize') {
+    await managePluginLicense(rest);
+    return;
+  }
+
   if (command === 'info' || command === 'show') {
     const id = rest.find(a => !a.startsWith('-'));
     if (!id) {
@@ -150,6 +157,13 @@ export async function run(argv = []) {
     if (d.share_url) console.log(`   Share link:  ${d.share_url}`);
     console.log(`   Valid:       ${d.valid ? '✅ Yes' : '❌ No'}`);
     for (const e of d.errors) console.log(`     - ${e}`);
+
+    if (plugin.manifest?.monetization) {
+      const mon = getPluginMonetization(plugin);
+      console.log(`   Monetization: Model: ${mon.model} (${mon.priceFormatted})`);
+      if (mon.license_key_secret) console.log(`   License Secret: ${mon.license_key_secret}`);
+      if (mon.checkout_url) console.log(`   Checkout:    ${mon.checkout_url}`);
+    }
 
     if (d.cli?.command) console.log(`   CLI Command: total-recall ${d.cli.command}`);
     if (d.categories.length > 0) {
