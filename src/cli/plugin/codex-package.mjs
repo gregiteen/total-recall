@@ -4,10 +4,24 @@ import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { discoverRepoSkills } from '../skill-projection.mjs';
 
+function resolveRealOrParent(targetPath) {
+  const resolved = path.resolve(targetPath);
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    const parent = path.dirname(resolved);
+    try {
+      return path.join(fs.realpathSync(parent), path.basename(resolved));
+    } catch {
+      return resolved;
+    }
+  }
+}
+
 export function packageCodexSkills({ repo, output, name, skills: selected }) {
   if (!/^[a-z][a-z0-9-]{1,63}$/.test(name || '')) throw new Error('Use a kebab-case plugin name.');
-  repo = path.resolve(repo);
-  output = path.resolve(output);
+  repo = resolveRealOrParent(repo);
+  output = resolveRealOrParent(output);
   if (fs.existsSync(output)) throw new Error('Output already exists; existing packages are preserved.');
   const skills = discoverRepoSkills(path.join(repo, '.agent'))
     .filter(s => !selected || selected.includes(s.name));
