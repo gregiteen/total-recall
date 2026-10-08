@@ -280,6 +280,32 @@ export function validatePluginManifest(manifest) {
     }
   }
 
+  if (manifest.monetization !== undefined) {
+    if (typeof manifest.monetization !== 'object' || manifest.monetization === null) {
+      errors.push("'monetization' must be an object");
+    } else {
+      const allowedModels = ['free', 'one-time', 'subscription', 'metered', 'take-rate'];
+      if (!manifest.monetization.model || !allowedModels.includes(manifest.monetization.model)) {
+        errors.push(`'monetization.model' must be one of: ${allowedModels.join(', ')}`);
+      }
+      if (manifest.monetization.price_cents !== undefined) {
+        if (typeof manifest.monetization.price_cents !== 'number' || manifest.monetization.price_cents < 0 || !Number.isInteger(manifest.monetization.price_cents)) {
+          errors.push("'monetization.price_cents' must be a non-negative integer");
+        }
+      }
+      if (manifest.monetization.take_rate_basis_points !== undefined) {
+        if (typeof manifest.monetization.take_rate_basis_points !== 'number' || manifest.monetization.take_rate_basis_points < 0 || manifest.monetization.take_rate_basis_points > 10000 || !Number.isInteger(manifest.monetization.take_rate_basis_points)) {
+          errors.push("'monetization.take_rate_basis_points' must be an integer between 0 and 10000");
+        }
+      }
+      if (manifest.monetization.license_key_secret !== undefined) {
+        if (typeof manifest.monetization.license_key_secret !== 'string' || !/^[A-Z0-9_]{1,64}$/.test(manifest.monetization.license_key_secret)) {
+          errors.push("'monetization.license_key_secret' must be an uppercase alphanumeric identifier");
+        }
+      }
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors
@@ -446,4 +472,26 @@ export function getPluginWatchPaths(projectRoot = process.cwd(), vaultDir) {
   }
 
   return Array.from(paths);
+}
+
+/**
+ * Return normalized monetization parameters and pricing description.
+ */
+export function getPluginMonetization(plugin) {
+  if (!plugin?.manifest?.monetization) {
+    return {
+      model: 'free',
+      requiresLicense: false,
+      priceFormatted: 'Free'
+    };
+  }
+  const m = plugin.manifest.monetization;
+  const isPaid = m.model !== 'free';
+  return {
+    ...m,
+    requiresLicense: isPaid && Boolean(m.license_key_secret),
+    priceFormatted: m.price_cents !== undefined
+      ? `$${(m.price_cents / 100).toFixed(2)}`
+      : (m.model === 'take-rate' ? `${(m.take_rate_basis_points || 0) / 100}% platform fee` : 'Custom')
+  };
 }

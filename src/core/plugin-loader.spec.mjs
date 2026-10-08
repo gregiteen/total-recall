@@ -12,7 +12,8 @@ import {
   globalPluginsDir,
   bundledPluginsDir,
   PACKAGE_ROOT,
-  listBundledPlugins
+  listBundledPlugins,
+  getPluginMonetization
 } from './plugin-loader.mjs';
 
 describe('Plugin Loader & Schema Validation', () => {
@@ -132,6 +133,43 @@ describe('Plugin Loader & Schema Validation', () => {
       expect(res.errors.some(e => e.includes('invalid or unsafe \'path\''))).toBe(true);
       expect(res.errors.some(e => e.includes('invalid or unsafe \'handler\''))).toBe(true);
       expect(res.errors.some(e => e.includes('ui.design_tokens must be a normalized relative path'))).toBe(true);
+    });
+
+    it('validates plugin monetization models and license configuration', () => {
+      const paidManifest = {
+        id: 'paid-plugin',
+        name: 'Paid Plugin',
+        version: '1.0.0',
+        description: 'Commercial capability with license key',
+        monetization: {
+          model: 'take-rate',
+          take_rate_basis_points: 250,
+          period: 'per-ticket',
+          license_key_secret: 'TICKETS_LICENSE_KEY',
+          checkout_url: 'https://example.com/checkout'
+        }
+      };
+      const res = validatePluginManifest(paidManifest);
+      expect(res.valid).toBe(true);
+
+      const mon = getPluginMonetization({ manifest: paidManifest });
+      expect(mon.model).toBe('take-rate');
+      expect(mon.requiresLicense).toBe(true);
+      expect(mon.priceFormatted).toBe('2.5% platform fee');
+
+      const invalidManifest = {
+        ...paidManifest,
+        monetization: {
+          model: 'unsupported-model',
+          take_rate_basis_points: 15000,
+          license_key_secret: 'invalid secret with spaces!'
+        }
+      };
+      const invRes = validatePluginManifest(invalidManifest);
+      expect(invRes.valid).toBe(false);
+      expect(invRes.errors.some(e => e.includes("'monetization.model' must be one of"))).toBe(true);
+      expect(invRes.errors.some(e => e.includes("'monetization.take_rate_basis_points' must be an integer between 0 and 10000"))).toBe(true);
+      expect(invRes.errors.some(e => e.includes("'monetization.license_key_secret' must be an uppercase alphanumeric identifier"))).toBe(true);
     });
   });
 

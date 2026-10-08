@@ -390,6 +390,58 @@
     "locked": {
       "type": "boolean",
       "description": "When true, editing is locked to protect a completed plugin from inadvertent modification"
+    },
+    "monetization": {
+      "type": "object",
+      "description": "Creator monetization contract: pricing tier, license enforcement, and payment models.",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["free", "one-time", "subscription", "metered", "take-rate"],
+          "description": "Monetization tier model"
+        },
+        "price_cents": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Base price in cents (USD)"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[a-z]{3}$",
+          "default": "usd",
+          "description": "ISO currency code in lowercase"
+        },
+        "period": {
+          "type": "string",
+          "enum": ["monthly", "yearly", "per-use", "per-ticket"],
+          "description": "Billing period or metering unit"
+        },
+        "take_rate_basis_points": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Platform or creator take-rate in basis points (e.g. 250 = 2.5%)"
+        },
+        "recipient": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "enum": ["stripe_account", "crypto_address", "mesh_identity"] },
+            "account_id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "license_key_secret": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]{1,64}$",
+          "description": "Total Recall secret store key holding the user's active license key"
+        },
+        "checkout_url": {
+          "type": "string",
+          "description": "Web URL or checkout link to purchase license or subscription"
+        }
+      }
     }
   }
 }
