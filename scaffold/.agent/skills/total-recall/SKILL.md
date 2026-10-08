@@ -6,7 +6,7 @@ version: 3.35.0
 repo_scoped: true
 ---
 
-# Total Recall
+# Total Recall (MANDATORY ENTRYPOINT)
 
 Canonical memory is SSSS Markdown. Derived indexes are disposable. Use the CLI
 for all vault reads and writes; never edit or search vault files manually.
@@ -14,13 +14,14 @@ Use the installed `total-recall` executable, or `node bin/total-recall.mjs` in
 this source checkout. Read this entrypoint once per session and refresh after
 its contents change. Do not reload the operations manual on every turn.
 
-Before acting on a new task or changed action/project, run:
+**🔴 MANDATORY FIRST STEP ON EVERY TURN:**
+Before acting on a new task or changed action/project, you MUST run:
 
 ```sh
 total-recall context "task description" --action edit,test
 ```
 
-Read the complete capsule and require `ready: true`. Unknown applicability is
+Read the complete capsule and require `ready: true`. This is required before taking ANY action. Never skip this. Unknown applicability is
 required conservatively. Overflow exits 2; inspect it and increase the explicit
 budget or curate rule applicability before action. Never truncate required
 instructions or interpret knowledge ranking as permission. Refresh after edits

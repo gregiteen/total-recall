@@ -1,3 +1,11 @@
+## 3.39.1 — 2026-10-08
+
+- Enforce mandatory Total Recall first-step directives across IDE instruction
+  surfaces, shims, startup skill prerequisites, and operating instructions.
+- Provide explicit CLI help discovery (`total-recall --help`), context routing
+  (`total-recall context`), and local recall (`total-recall recall --local`) in
+  all generated agent instruction surfaces.
+
 ## 3.39.0 — 2026-10-08
  
 - Preserve the compatible dashboard/plugin scaffold and add an explicit portable

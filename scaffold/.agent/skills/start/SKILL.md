@@ -9,6 +9,9 @@ repo_scoped: false
 
 # Session start
 
+**🔴 MANDATORY PREREQUISITE — TOTAL RECALL FIRST:**
+Before executing any startup step, running any launcher, or doing ANY work, you MUST read and follow `.agent/skills/total-recall/SKILL.md` and run `total-recall context "session start" --action run`. Total Recall is the mandatory entrypoint and working memory across all tasks and harnesses without exception. NEVER SKIP THIS.
+
 Use the installed CLI or repository launcher. Run `startup-check ensure --json` (native `startup ensure --json` fallback), then `brief`. These start only missing configured managed services; brief is read-only. The bounded `scripts/start-session.mjs` wrapper implements this sequence.
 
 Report transport health, authenticated brain access, daemon identity, SSSS tooling, integrated harness quota readiness (5-hour rolling session and weekly remaining percentages), version currency, and app readiness separately. Unknown app configuration stays unknown. Never guess service commands, change credentials, restart a live process to hide a timeout or start sibling repos.
