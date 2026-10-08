@@ -3,11 +3,11 @@
  *
  * Core document primitives come from `@ssss/cli/registry/core.json`.
  * Package-shipped SSSS extensions are consumed as-is.
- * Everything else in local Zod schemas becomes the TR host extension.
+ * Existing host type names remain compatibility metadata for stored records.
  */
 import { createRequire } from 'node:module';
 import { loadRegistries } from '@ssss/cli/registry';
-import { SSSS_SCHEMAS } from './schema.mjs';
+import { HOST_TYPE_CATALOG } from './host-type-catalog.mjs';
 
 const require = createRequire(import.meta.url);
 const core = require('@ssss/cli/registry/core.json');
@@ -22,7 +22,7 @@ function packageKnownTypes() {
 /** Types that exist only in Total Recall (or product overlays carried here). */
 export function listHostOnlyTypes() {
   const known = packageKnownTypes();
-  return Object.keys(SSSS_SCHEMAS)
+  return HOST_TYPE_CATALOG
     .filter((type) => !known.has(type))
     .sort();
 }
@@ -30,7 +30,7 @@ export function listHostOnlyTypes() {
 /** Types present in TR Zod schemas that already come from package core/extensions. */
 export function listTypesProvidedByPackage() {
   const known = packageKnownTypes();
-  return Object.keys(SSSS_SCHEMAS)
+  return HOST_TYPE_CATALOG
     .filter((type) => known.has(type))
     .sort();
 }
@@ -42,7 +42,7 @@ export function listCoreTypes() {
 
 /** Core types present in package but missing from local Zod registry. */
 export function listMissingCoreSchemas() {
-  return listCoreTypes().filter((type) => !(type in SSSS_SCHEMAS));
+  return listCoreTypes().filter((type) => !HOST_TYPE_CATALOG.includes(type));
 }
 
 function hostPrimitive(type, options = {}) {

@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
-import { deleteNode } from '../core/vault.mjs';
+import { isSafeVaultName } from '../core/vault.mjs';
+import { getNodes } from '../core/vault-cache.mjs';
+import { deleteVfsDocument } from '../core/ssss-operation-service.mjs';
+import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
 import { invalidate } from '../core/vault-cache.mjs';
 
 function printHelp() {
@@ -14,7 +17,7 @@ function printHelp() {
     Options:
     --global              Delete from the global brain
     --project             Delete from the project brain
-    --project-all <name>  Soft-delete all nodes for an abandoned project by moving them to .trash
+    --project-all <name>  Archive nodes for a project through validated memory operations
     --no-compile          Skip auto-recompilation after deletion
     --help, -h            Show this help
 
@@ -51,37 +54,19 @@ export default async function forget(args) {
       return;
     }
     
-    const trashDir = path.join(globalVaultDir, '.trash', projectName);
-    fs.mkdirSync(trashDir, { recursive: true });
-    
     let count = 0;
-    // We need to move the actual file. We have node.slug and node.category.
-    for (const n of nodes) {
-      const sourcePath = path.join(globalVaultDir, n.category, `${n.slug}.md`);
-      if (fs.existsSync(sourcePath)) {
-        const destPath = path.join(trashDir, `${n.slug}.md`);
-        fs.renameSync(sourcePath, destPath);
-        count++;
-      }
+    for (const node of nodes) {
+      const result = await writeNodeValidatedAsync({ ...node, status: 'archived', updated: new Date().toISOString() }, globalVaultDir,
+        { path: path.relative(globalVaultDir, node._filePath).split(path.sep).join('/') });
+      if (!result.success) throw new Error(`Archiving ${node.slug} failed: ${result.validation?.errors?.join('; ') || result.error}`);
+      count++;
     }
-    
-    console.log(`  ✅ Soft-deleted ${count} nodes for project "${projectName}" (moved to .trash/)`);
-
-    // Files moved under .trash still invalidate the vault cache (watcher may lag)
-    invalidate(globalVaultDir);
-    
+    console.log(`  ✅ Archived ${count} nodes for project "${projectName}"; canonical records preserved.`);
     if (!remainingArgs.includes('--no-compile')) {
-      console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
-      try {
-        const { spawn } = await import('node:child_process');
-        // Soft-delete from global vault tags — recompile global surfaces
-        const child = spawn(process.argv[0], [process.argv[1], 'compile', '--global'], {
-          detached: true,
-          stdio: 'ignore'
-        });
-        child.unref();
-        console.log('  ✅ Background compilation started.');
-      } catch (err) {}
+      const brainDir = path.dirname(globalVaultDir);
+      const agentDir = path.dirname(path.dirname(brainDir));
+      await compileSurface({ vaultDir: globalVaultDir, skillsDir: path.join(agentDir, 'skills'),
+        derivedDir: path.join(brainDir, 'memory-derived'), instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'), semantic: false });
     }
     return;
   }
@@ -128,12 +113,16 @@ export default async function forget(args) {
   const layerLabel = layer === 'project' ? '[project]' : '[global]';
 
   // Attempt deletion
-  const deleted = deleteNode(slug, vaultDir);
+  const node = isSafeVaultName(slug) ? getNodes(vaultDir).find(n => n.slug === slug) : null;
 
-  if (!deleted) {
+  if (!node) {
     console.error(`  ❌ Node "${slug}" not found in ${layerLabel} vault at ${vaultDir}`);
     process.exit(1);
   }
+
+  await deleteVfsDocument(path.relative(vaultDir, node._filePath).split(path.sep).join('/'), {
+    vaultRoot: vaultDir, actorRole: 'system', intent: `Forget memory ${slug}`,
+  });
 
   // Drop cached nodes immediately (fs.watch may lag or miss same-process deletes)
   invalidate(vaultDir);
@@ -142,21 +131,12 @@ export default async function forget(args) {
 
   // Recompile unless --no-compile
   if (!noCompile) {
-    console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
     try {
-      const { spawn } = await import('node:child_process');
-      // Pass layer so project forget recompiles the project brain, not auto/wrong vault
-      const compileArgs = [process.argv[1], 'compile'];
-      if (layer === 'project') compileArgs.push('--project');
-      else if (layer === 'global') compileArgs.push('--global');
-      const child = spawn(process.argv[0], compileArgs, {
-        detached: true,
-        stdio: 'ignore'
-      });
-      child.unref();
-      console.log('  ✅ Background compilation started.');
+      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, semantic: false });
+      console.log('  ✅ Local memory indexes and instruction surfaces updated.');
     } catch (err) {
-      console.warn(`  ⚠️  Node deleted, but background recompilation spawn failed: ${err.message}`);
+      console.error(`  ❌ Memory deleted, but local compilation failed: ${err.message}`);
+      process.exitCode = 1;
     }
   }
 }

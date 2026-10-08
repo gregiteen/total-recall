@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 
+vi.mock('../auth.mjs', () => ({
+  requireAuth: (_req, _res, next) => next(),
+  requireScope: () => (_req, _res, next) => next(),
+}));
+
 vi.mock('./_shared.mjs', () => ({
   VAULT_DIR: '/global/memory-vault',
   resolveAllVaultsFromQuery: vi.fn(),

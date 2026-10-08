@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import crypto from 'crypto';
 import os from 'os';
 import { callLocalRuntime, loadRuntimeConfig } from './runtime.mjs';

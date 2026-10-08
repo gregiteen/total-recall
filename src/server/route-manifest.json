@@ -469,6 +469,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/plugins/:id/configuration"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/plugins/:id/configuration"
+  },
+  {
+    "method": "GET",
     "path": "/api/plugins/:id/conformance"
   },
   {

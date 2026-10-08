@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { writeNode, deleteNode } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { brainDir } from './config.mjs';

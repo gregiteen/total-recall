@@ -17,7 +17,7 @@ import { removeSessionEmbeddingFromIndex } from '../core/embeddings.mjs';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import matter from 'gray-matter';
+import matter from '../core/frontmatter.mjs';
 import { agentDir, brainDir } from '../core/config.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || agentDir;

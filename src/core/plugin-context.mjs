@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest, resolveProjectRoot, PACKAGE_ROOT } from './plugin-loader.mjs';
+import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest, resolveProjectRoot, resolvePluginFile, PACKAGE_ROOT } from './plugin-loader.mjs';
 
 export { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest };
 
@@ -18,19 +17,14 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
   const blocks = [];
 
   for (const plugin of plugins) {
+    if (!plugin.valid) continue;
     const { manifest, dir, id } = plugin;
     const name = manifest.name || id;
 
     // 1. Check if plugin directs compilation via a custom generator
     if (manifest.compile?.generator) {
-      const generatorRel = manifest.compile.generator;
-      let generatorPath = path.isAbsolute(generatorRel)
-        ? generatorRel
-        : path.resolve(dir, generatorRel);
-
-      if (!fs.existsSync(generatorPath)) generatorPath = path.resolve(resolvedProjectRoot, generatorRel);
-      if (fs.existsSync(generatorPath)) {
         try {
+          const generatorPath = resolvePluginFile(dir, manifest.compile.generator);
           // Keyed by mtime so an edited generator is picked up without a restart.
           const url = pathToFileURL(generatorPath);
           url.searchParams.set('mtime', String(fs.statSync(generatorPath).mtimeMs));
@@ -59,31 +53,18 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
         } catch (err) {
           // Generator error falls back to standard assembly
         }
-      }
     }
 
     // 2. Standard SSSS category aggregation fallback
     const categories = (manifest.ssss_schemas?.categories || []).map(c => c.name);
     const pluginNodes = nodes.filter(n => categories.includes(n.category) && n.status === 'active');
 
-    const userProjects = pluginNodes.filter(n => n.category === 'user-projects');
-    const benchmarks = pluginNodes.filter(n => n.category === 'benchmarks');
-    const research = pluginNodes.filter(n => n.category === 'research');
-
     let externalContext = '';
-    const candidates = [
-      derivedDir ? path.join(derivedDir, 'evolving-context.md') : null,
-      path.join(dir, 'evolving-context.md'),
-      path.join(dir, 'context.md')
-    ].filter(Boolean);
-
-    for (const cand of candidates) {
-      if (fs.existsSync(cand)) {
+    for (const relative of ['evolving-context.md', 'context.md']) {
         try {
-          externalContext = fs.readFileSync(cand, 'utf8').trim();
+          externalContext = fs.readFileSync(resolvePluginFile(dir, relative), 'utf8').trim();
           break;
         } catch {}
-      }
     }
 
     if (pluginNodes.length === 0 && !externalContext) {
@@ -95,50 +76,14 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
       pluginBlock += `> ${manifest.description}\n\n`;
     }
 
-    if (userProjects.length > 0) {
-      pluginBlock += `#### Grounded User Projects & Bottlenecks\n`;
-      for (const p of userProjects) {
-        pluginBlock += `- **${p.title || p.slug}** (\`${p.source?.repo_path || 'local'}\`)\n`;
-        if (p.description) pluginBlock += `  - Context: ${p.description}\n`;
-        if (Array.isArray(p.enables) && p.enables.length > 0) {
-          pluginBlock += `  - Active Frontier Unlocks: ${p.enables.join(', ')}\n`;
-        }
-      }
-      pluginBlock += '\n';
-    }
-
-    if (benchmarks.length > 0) {
-      pluginBlock += `#### State-of-the-Art Benchmark Ledger\n`;
-      for (const b of benchmarks) {
-        const src = b.source || {};
-        const metric = src.metric_name || b.title;
-        const current = `${src.current_record ?? '—'} ${src.unit || ''}`.trim();
-        const prev = src.previous_record ? ` (Previous: ${src.previous_record} ${src.unit || ''})` : '';
-        const status = src.verification_status ? ` | Status: ${src.verification_status}` : '';
-        pluginBlock += `- **${metric}**: \`${current}\`${prev}${status}\n`;
-        if (src.doi) pluginBlock += `  - Source/DOI: https://doi.org/${src.doi}\n`;
-      }
-      pluginBlock += '\n';
-    }
-
-    if (research.length > 0) {
-      pluginBlock += `#### Verified Capability Breakthroughs\n`;
-      for (const r of research) {
-        const src = r.source || {};
-        const tier = src.epistemic_tier ? `[Tier ${src.epistemic_tier}] ` : '';
-        const modality = src.empirical_modality ? `(\`${src.empirical_modality}\`) ` : '';
-        pluginBlock += `- ${tier}**${r.title || r.slug}** ${modality}\n`;
-        if (r.description) pluginBlock += `  - ${r.description}\n`;
-        if (src.doi) pluginBlock += `  - DOI: https://doi.org/${src.doi}\n`;
-        if (Array.isArray(r.enables) && r.enables.length > 0) {
-          pluginBlock += `  - Unlocks: ${r.enables.join(', ')}\n`;
-        }
-      }
-      pluginBlock += '\n';
+    for (const node of pluginNodes) {
+      pluginBlock += `#### ${node.title || node.slug}\n`;
+      const text = node.body || node.content || node.description || '';
+      if (text) pluginBlock += `${text}\n`;
     }
 
     if (externalContext) {
-      pluginBlock += `#### Deep Evolving Context Block\n${externalContext}\n\n`;
+      pluginBlock += `${externalContext}\n\n`;
     }
 
     blocks.push(pluginBlock.trim());

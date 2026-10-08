@@ -34,6 +34,7 @@ vi.mock('./auth.mjs', () => ({
   loginHandler: (_req, res) => res.json({}),
   logoutHandler: (_req, res) => res.json({}),
   changePasswordHandler: (_req, res) => res.json({}),
+  authRateLimiter: () => (_req, _res, next) => next(),
   apiRateLimiter: () => (_req, _res, next) => next(),
   sandboxRateLimiter: () => (_req, _res, next) => next(),
   ingestRateLimiter: () => (_req, _res, next) => next(),

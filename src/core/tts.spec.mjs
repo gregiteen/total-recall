@@ -9,7 +9,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { loadVoiceConfig, synthesize, TtsNotConfiguredError, isTtsEnabled } from './tts.mjs';
 
-const AGENT_DIR = process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+const AGENT_DIR = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
 const BRAIN_DIR = path.join(AGENT_DIR, 'skills', 'total-recall');
 const VOICE_FILE = path.join(BRAIN_DIR, 'config', 'voice.yml');
 

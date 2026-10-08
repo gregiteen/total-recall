@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { writeNode } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';

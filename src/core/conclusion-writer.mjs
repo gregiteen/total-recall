@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { callLocalRuntime } from './runtime.mjs';
 import { atomicWrite, safeStringify, writeNode } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';

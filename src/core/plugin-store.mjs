@@ -1,5 +1,5 @@
 /**
- * Plugin store — the one implementation of install / remove / share used by
+ * Portable plugin store — shared local/Git install and remove used by
  * both the CLI and the REST API.
  *
  * Plugin code lives on disk under `<brain>/plugins/<id>/`. What the node knows
@@ -26,13 +26,9 @@ import {
 } from './plugin-loader.mjs';
 import {
   hashPluginDir,
-  packPlugin,
-  decodeBundle,
   writeEntriesAtomic,
   copyPluginAtomic
 } from './plugin-bundle.mjs';
-import { parsePeerSource, fetchPeerBundle } from './plugin-peers.mjs';
-import { parsePublicPluginSource, fetchPublicBundle, publicPluginShareUrl } from './plugin-public.mjs';
 import { writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent } from './ssss-operation-service.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
 
@@ -44,7 +40,7 @@ export function recordPath(id) {
   return `system/plugins/${id}.md`;
 }
 
-function vaultFor(plugin) {
+export function vaultFor(plugin) {
   return vaultForPluginsDir(plugin.pluginsDir);
 }
 
@@ -56,7 +52,7 @@ export function readPluginRecord(plugin) {
   }
 }
 
-async function emit(vaultRoot, id, kind, payload) {
+export async function emit(vaultRoot, id, kind, payload) {
   await appendVfsEvent(
     `plugins/${id}/${kind}-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
     { kind: `plugin.${kind}`, plugin_id: id, at: new Date().toISOString(), ...payload },
@@ -84,6 +80,7 @@ export function buildPluginDocumentBody(manifest, id) {
 
 async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, shared = false }) {
   const now = new Date().toISOString();
+  const previous = findVfsDocumentByPath(recordPath(id), vaultForPluginsDir(pluginsDir));
   const frontmatter = {
     type: 'plugin_record',
     title: manifest?.name || id,
@@ -100,7 +97,10 @@ async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, sh
     source,
     sha256: sha256 || null,
     installed_at: now,
-    branding: manifest?.branding || null,
+    branding: previous?.branding || manifest?.branding || null,
+    configuration: previous?.configuration || {},
+    task_runs: previous?.task_runs || {},
+    locked: previous?.locked === true,
     secrets: manifest?.secrets || [],
     commands: manifest?.cli?.subcommands?.map((s) => s.name) || []
   };
@@ -177,7 +177,7 @@ export function describePlugin(plugin) {
     dir: plugin.dir,
     shared: record?.public_shared === true,
     mesh_shared: record?.shared === true,
-    share_url: record?.public_shared === true && current?.sha256 ? publicPluginShareUrl(plugin.id, current.sha256) : null,
+    share_url: null,
     source: record?.source || { kind: plugin.linked ? 'link' : 'local', ref: plugin.dir },
     installed_at: record?.installed_at || null,
     sha256: current?.sha256 || null,
@@ -193,7 +193,9 @@ export function describePlugin(plugin) {
     branding: record?.branding || m.branding || { icon: null, image: null, color: null, badge: null },
     locked: record?.locked === true || m.locked === true,
     store_deployed: record?.store_deployed === true,
-    secrets: m.secrets || []
+    secrets: m.secrets || [],
+    ui: m.ui || null,
+    configuration: m.configuration || null
   };
 }
 
@@ -250,13 +252,13 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
     const { compileSurface } = await import('./surface.mjs');
     const { resolveAgentDir, resolveBrainDir } = await import('../cli/agent-dir.mjs');
     const layer = isGlobal ? 'global' : 'project';
-    const agentDir = resolveAgentDir(layer);
-    const brainDir = resolveBrainDir(layer);
+    const agentDir = resolveAgentDir(layer, projectRoot);
+    const brainDir = resolveBrainDir(layer, projectRoot);
     const vaultDir = path.join(brainDir, 'memory-vault');
     const skillsDir = path.join(agentDir, 'skills');
     const derivedDir = path.join(brainDir, 'memory-derived');
     const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
-    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true });
+    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false });
   } catch (err) {
     try {
       const { logger } = await import('./logger.mjs');
@@ -271,7 +273,7 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
  * @param {{ projectRoot?: string, global?: boolean, link?: boolean, peerDeps?: object, publicDeps?: object }} [options]
  */
 export async function installPlugin(source, options = {}) {
-  const { projectRoot = process.cwd(), global: isGlobal = false, link = false, peerDeps, publicDeps } = options;
+  const { projectRoot = process.cwd(), global: isGlobal = false, link = false, resolveBundle } = options;
   if (!source || typeof source !== 'string') throw new Error('Missing plugin source');
   source = source.trim();
 
@@ -283,35 +285,17 @@ export async function installPlugin(source, options = {}) {
   let sourceRecord;
   let verifiedSha = null;
 
-  const peer = parsePeerSource(source);
-  const publicSource = parsePublicPluginSource(source);
-  const bundled = !peer && !publicSource && ID_PATTERN.test(source) ? listBundledPlugins().find((p) => p.id === source) : null;
+  const resolved = resolveBundle ? await resolveBundle(source, options) : null;
+  const bundled = !resolved && ID_PATTERN.test(source) ? listBundledPlugins().find((p) => p.id === source) : null;
 
-  if (publicSource) {
-    assertNotInstalled(publicSource.id, pluginsDir);
-    const { bundle, sha256 } = await fetchPublicBundle(source, publicDeps);
-    const decoded = decodeBundle(bundle, { expectedSha256: sha256 });
-    const manifestEntry = decoded.entries.find((e) => e.path === 'plugin.json');
-    if (!manifestEntry) throw new Error('Shared plugin bundle has no plugin.json');
-    manifest = JSON.parse(manifestEntry.data.toString('utf8'));
+  if (resolved) {
+    manifest = resolved.manifest;
     const validation = validatePluginManifest(manifest);
-    if (!validation.valid) throw new Error(`Invalid plugin manifest from share link: ${validation.errors.join('; ')}`);
-    if (manifest.id !== publicSource.id) throw new Error(`Share link requested '${publicSource.id}' but bundle contained '${manifest.id}'`);
-    dest = writeEntriesAtomic(pluginsDir, manifest.id, decoded.entries);
-    verifiedSha = decoded.sha256;
-    sourceRecord = { kind: 'public', ref: source };
-  } else if (peer) {
-    assertNotInstalled(peer.id, pluginsDir);
-    const { bundle, advertised, peer: peerNode } = await fetchPeerBundle(peer.hostname, peer.id, peerDeps);
-    const decoded = decodeBundle(bundle, { expectedSha256: advertised.sha256 });
-    const manifestEntry = decoded.entries.find((e) => e.path === 'plugin.json');
-    manifest = JSON.parse(manifestEntry.data.toString('utf8'));
-    const validation = validatePluginManifest(manifest);
-    if (!validation.valid) throw new Error(`Invalid plugin manifest from peer: ${validation.errors.join('; ')}`);
-    if (manifest.id !== peer.id) throw new Error(`Peer sent plugin '${manifest.id}' when '${peer.id}' was requested`);
-    dest = writeEntriesAtomic(pluginsDir, manifest.id, decoded.entries);
-    verifiedSha = decoded.sha256;
-    sourceRecord = { kind: 'peer', ref: `peer:${peerNode.hostname}/${peer.id}`, peer_hostname: peerNode.hostname };
+    if (!validation.valid) throw new Error(`Invalid plugin manifest: ${validation.errors.join('; ')}`);
+    assertNotInstalled(manifest.id, pluginsDir);
+    dest = writeEntriesAtomic(pluginsDir, manifest.id, resolved.entries);
+    verifiedSha = resolved.sha256;
+    sourceRecord = resolved.source;
   } else if (bundled) {
     if (!bundled.valid) throw new Error(`Bundled plugin '${source}' is invalid: ${bundled.errors.join('; ')}`);
     manifest = bundled.manifest;
@@ -373,7 +357,7 @@ export async function installPlugin(source, options = {}) {
   };
 }
 
-function findInstalled(id, { projectRoot = process.cwd(), global: isGlobal } = {}) {
+export function findInstalled(id, { projectRoot = process.cwd(), global: isGlobal } = {}) {
   const all = isGlobal === true ? [] : discoverPlugins(projectRoot);
   if (isGlobal === true) {
     // discoverPlugins() hides a global plugin shadowed by a project one.
@@ -396,100 +380,4 @@ export async function uninstallPlugin(id, options = {}) {
   await emit(vaultRoot, id, 'removed', { scope: plugin.scope, linked: stat.isSymbolicLink() });
   await recompileAfterPluginMutation(options.projectRoot || process.cwd(), plugin.scope === 'global');
   return { id, dir: plugin.dir, scope: plugin.scope };
-}
-
-export async function setPluginShared(id, shared, options = {}) {
-  const plugin = findInstalled(id, options);
-  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
-  if (shared && !plugin.valid) throw new Error(`Plugin '${id}' has an invalid manifest and cannot be shared`);
-  await patchPluginRecord(plugin, { shared: !!shared, public_shared: !!shared });
-  await emit(vaultFor(plugin), id, shared ? 'shared' : 'unshared', { scope: plugin.scope });
-  return describePlugin(plugin);
-}
-
-export async function setPluginBranding(id, branding, options = {}) {
-  const plugin = findInstalled(id, options);
-  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
-  const record = readPluginRecord(plugin);
-  if (record?.locked === true) {
-    throw new Error(`Plugin '${id}' is locked against editing`);
-  }
-  const cleanBranding = {
-    icon: typeof branding?.icon === 'string' ? branding.icon.trim() : (record?.branding?.icon || null),
-    image: typeof branding?.image === 'string' ? branding.image.trim() : (record?.branding?.image || null),
-    color: typeof branding?.color === 'string' ? branding.color.trim() : (record?.branding?.color || null),
-    badge: typeof branding?.badge === 'string' ? branding.badge.trim() : (record?.branding?.badge || null)
-  };
-  await patchPluginRecord(plugin, { branding: cleanBranding });
-  await emit(vaultFor(plugin), id, 'branding_updated', { branding: cleanBranding, scope: plugin.scope });
-  return describePlugin(plugin);
-}
-
-export async function setPluginLocked(id, locked, options = {}) {
-  const plugin = findInstalled(id, options);
-  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
-  await patchPluginRecord(plugin, { locked: !!locked });
-  await emit(vaultFor(plugin), id, locked ? 'locked' : 'unlocked', { scope: plugin.scope });
-  return describePlugin(plugin);
-}
-
-export async function deployPluginToStore(id, options = {}) {
-  const plugin = findInstalled(id, options);
-  if (!plugin) throw new Error(`Plugin '${id}' is not installed`);
-  if (!plugin.valid) throw new Error(`Plugin '${id}' has an invalid manifest and cannot be deployed: ${plugin.errors.join('; ')}`);
-  
-  const autoLock = options.autoLock !== false;
-  await patchPluginRecord(plugin, {
-    shared: true,
-    public_shared: true,
-    store_deployed: true,
-    store_deployed_at: new Date().toISOString(),
-    locked: autoLock
-  });
-  await emit(vaultFor(plugin), id, 'store_deployed', {
-    version: plugin.manifest?.version,
-    scope: plugin.scope,
-    locked: autoLock
-  });
-  return describePlugin(plugin);
-}
-
-/** What this node offers to mesh peers: valid installed plugins whose record says shared. */
-export function listSharedPlugins(projectRoot = process.cwd()) {
-  const out = [];
-  for (const plugin of discoverPlugins(projectRoot)) {
-    if (!plugin.valid) continue;
-    const record = readPluginRecord(plugin);
-    if (record?.shared !== true) continue;
-    try {
-      const h = hashPluginDir(plugin.dir);
-      out.push({
-        id: plugin.id,
-        name: plugin.manifest.name,
-        version: plugin.manifest.version,
-        description: plugin.manifest.description,
-        use_cases: plugin.manifest.use_cases || [],
-        sha256: h.sha256,
-        file_count: h.file_count,
-        size_bytes: h.size_bytes,
-        _plugin: plugin
-      });
-    } catch {
-      // Unreadable plugin directory: not offered.
-    }
-  }
-  return out;
-}
-
-export function packSharedPlugin(id, projectRoot = process.cwd()) {
-  const entry = listSharedPlugins(projectRoot).find((p) => p.id === id);
-  if (!entry) return null;
-  return packPlugin(entry._plugin.dir, entry._plugin.manifest);
-}
-
-/** Public sharing is a separate, explicit opt-in from legacy mesh sharing. */
-export function packPublicPlugin(id, projectRoot = process.cwd()) {
-  const plugin = discoverPlugins(projectRoot).find((p) => p.id === id && p.valid);
-  if (!plugin || readPluginRecord(plugin)?.public_shared !== true) return null;
-  return packPlugin(plugin.dir, plugin.manifest);
 }

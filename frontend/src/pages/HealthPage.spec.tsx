@@ -28,4 +28,14 @@ describe('HealthPage', () => {
       expect(screen.getAllByText(/healthy/i)[0]).toBeInTheDocument();
     });
   });
+
+  it('shows preview features without a host update prompt when only consumers are behind', async () => {
+    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy', version: '3.38.0', uptime_seconds: 10 } as never);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false, previewFeatures: true,
+      consumerUpdatesAvailable: true, currentVersion: '3.38.0', latestVersion: '3.37.0' });
+    render(<HealthPage />);
+    expect(await screen.findByText('(Preview features)')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Update Now' })).not.toBeInTheDocument();
+    expect(screen.queryByText('(Latest)')).not.toBeInTheDocument();
+  });
 });

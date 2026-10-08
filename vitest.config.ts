@@ -4,8 +4,12 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  // The dashboard has its own lockfile; tests must share one React dispatcher.
+  resolve: { dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom'] },
   test: {
     environment: 'jsdom',
+    // Apply React deduplication to separately installed dashboard dependencies too.
+    server: { deps: { inline: [/frontend[\/]node_modules/, 'react-router', 'react-router-dom'] } },
     globals: true,
     // Default 5000ms is too tight for CPU-bound work (scrypt key derivation, module
     // imports doing real init) under contention from the rest of the suite running
@@ -36,7 +40,7 @@ export default defineConfig({
       // instead of whatever is installed in the developer's own brain.
       _TR_TEST_BUNDLED_PLUGINS_DIR: fileURLToPath(new URL('./fixtures/bundled-plugins', import.meta.url)),
     },
-    setupFiles: ['./frontend/src/setupTests.ts'],
+    setupFiles: ['./scripts/test-memory-root.mjs', './frontend/src/setupTests.ts'],
     coverage: {
       provider: 'v8',
       thresholds: {

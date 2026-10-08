@@ -8,6 +8,9 @@ import {
   normalizeToolSelection,
   resolveHarnessEnv,
   shellQuote,
+  getInstalledHarnessVersion,
+  getLatestHarnessVersion,
+  queryHarnessUsage,
 } from './meta-harness.mjs';
 
 describe('Meta Harness & Multi-Agent Manager', () => {
@@ -17,18 +20,20 @@ describe('Meta Harness & Multi-Agent Manager', () => {
     expect(HARNESS_SPECS).toHaveProperty('codex');
     expect(HARNESS_SPECS).toHaveProperty('gemini');
     expect(HARNESS_SPECS).toHaveProperty('ollama');
+    expect(HARNESS_SPECS).toHaveProperty('grok');
 
     expect(HARNESS_SPECS.agy.defaultFlags).toContain('-p');
     expect(HARNESS_SPECS.claude.defaultFlags).toContain('--permission-mode');
     expect(HARNESS_SPECS.codex.defaultFlags).toContain('exec');
     expect(HARNESS_SPECS.gemini.defaultFlags).toContain('--sandbox=false');
     expect(HARNESS_SPECS.ollama.defaultFlags).toContain('run');
+    expect(HARNESS_SPECS.grok.defaultFlags).toContain('-p');
   });
 
   it('detects available harnesses without crashing', () => {
     const detected = detectHarnesses();
     expect(Array.isArray(detected)).toBe(true);
-    expect(detected.length).toBe(5);
+    expect(detected.length).toBe(6);
     for (const h of detected) {
       expect(h).toHaveProperty('id');
       expect(h).toHaveProperty('name');
@@ -121,5 +126,41 @@ describe('resolveHarnessEnv', () => {
       readSecret: async () => { throw new Error('must not be asked'); },
     });
     expect(env).toEqual({ A: '1' });
+  });
+});
+
+describe('Harness version currency and quota usage inspection', () => {
+  it('detects installed harness versions safely', () => {
+    const ver = getInstalledHarnessVersion('agy');
+    expect(typeof ver).toBe('string');
+  });
+
+  it('queries harness usage and returns 5h and weekly quota percentages', async () => {
+    const reports = await queryHarnessUsage();
+    expect(Array.isArray(reports)).toBe(true);
+    expect(reports.length).toBe(6);
+
+    for (const r of reports) {
+      expect(r).toHaveProperty('id');
+      expect(r).toHaveProperty('name');
+      expect(r).toHaveProperty('version');
+      expect(r).toHaveProperty('latestVersion');
+      expect(r).toHaveProperty('isCurrent');
+      expect(r).toHaveProperty('rolling5hRemainingPct');
+      expect(r).toHaveProperty('weeklyRemainingPct');
+      expect(r).toHaveProperty('status');
+
+      if (r.available) {
+        expect(typeof r.rolling5hRemainingPct).toBe('string');
+        expect(typeof r.weeklyRemainingPct).toBe('string');
+      }
+    }
+
+    const agy = reports.find((h) => h.id === 'agy');
+    expect(agy).toBeDefined();
+    if (agy.available && agy.authed) {
+      expect(agy.rolling5hRemainingPct).toContain('%');
+      expect(agy.weeklyRemainingPct).toContain('%');
+    }
   });
 });

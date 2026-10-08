@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({ configured: false, local: true, changed: 0 }))
 
 vi.mock('../auth.mjs', () => ({
   requireAuth: (_req, _res, next) => next(),
+  requireScope: () => (_req, _res, next) => next(),
+  authRateLimiter: () => (_req, _res, next) => next(),
   isLocalRequest: () => state.local,
   loadSecurityConfig: () => (state.configured ? { dashboard: { password_hash: 'x' } } : {}),
   loginHandler: (_req, res) => res.json({ success: true }),
@@ -54,6 +56,14 @@ describe('POST /auth/setup — claiming an unconfigured brain', () => {
     expect(state.changed).toBe(0);
     // The refusal has to name the way out, or a headless install is bricked.
     expect(res.body.error).toMatch(/reset-password/);
+  });
+
+  it('rejects hostile, opaque and rebound browser origins even through loopback', async () => {
+    for (const origin of ['https://attacker.invalid', 'http://127.0.0.1.attacker.invalid', 'null']) {
+      expect((await request(app()).post('/auth/setup').set('Origin', origin).send({ newPassword: 'attacker chosen' })).status).toBe(403);
+    }
+    expect(state.changed).toBe(0);
+    expect((await request(app()).post('/auth/setup').set('Origin', 'http://localhost:5173').send({ newPassword: 'local chosen' })).status).toBe(200);
   });
 
   it('still refuses once a password exists, local or not', async () => {

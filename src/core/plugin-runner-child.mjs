@@ -9,16 +9,28 @@ const [handlerPath, ...pluginArgv] = process.argv.slice(2);
 
 try {
   const mod = await import(pathToFileURL(handlerPath).href);
-  const argv = ['node', 'total-recall', ...pluginArgv];
+  const composable = process.env.TR_PLUGIN_COMMAND_MODE === 'composable';
+  const json = composable && pluginArgv.slice(1).includes('--json');
+  const args = composable ? [pluginArgv[0], ...pluginArgv.slice(1).filter(arg => arg !== '--json')] : pluginArgv;
+  const argv = ['node', 'total-recall', ...args];
+  let result;
   if (typeof mod.run === 'function') {
-    await mod.run(argv);
+    result = await mod.run(argv);
   } else if (typeof mod.default === 'function') {
-    await mod.default(argv.slice(3));
+    result = await mod.default(argv.slice(3));
   } else {
     console.error(`Plugin handler ${handlerPath} exports neither run() nor a default function`);
     process.exitCode = 1;
   }
+  if (composable) {
+    const exitCode = Number.isInteger(result?.exitCode) ? result.exitCode : process.exitCode || 0;
+    if (json) console.log(JSON.stringify({ ok: exitCode === 0, exit_code: exitCode, result: result?.data ?? result ?? null }));
+    process.exitCode = exitCode;
+  }
 } catch (err) {
-  console.error(err?.stack || String(err));
-  process.exitCode = 1;
+  const code = Number.isInteger(err?.exitCode) ? err.exitCode : 1;
+  if (process.env.TR_PLUGIN_COMMAND_MODE === 'composable' && pluginArgv.slice(1).includes('--json')) {
+    console.log(JSON.stringify({ ok: false, exit_code: code, error: err.message }));
+  } else console.error(err?.stack || String(err));
+  process.exitCode = code;
 }

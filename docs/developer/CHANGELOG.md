@@ -1,3 +1,35 @@
+## 3.39.0 — 2026-10-07
+
+- Add an isolated memory CLI (`total-recall-memory`), HTTP runtime and package
+  export (`total-recall-brain/memory`) with empty initialization, authenticated
+  memory/context/rules operations and required-rule budget enforcement.
+- Reuse minimal plugin contracts, validated installation records, confined
+  handlers, isolated command dispatch and encrypted secret storage. Preserve
+  authored brain identity and await local indexing after memory mutations.
+- Display **Preview features** when an installed version exceeds public npm
+  latest. Separate host update prompts from registered-project upgrades and
+  never downgrade preview installs, including forced updates. Compare
+  prereleases correctly and ignore build metadata for release precedence.
+- Plugin API-key templates reject credential saves until the author implements
+  service verification, rather than falsely reporting a verified key.
+- Include the current plugin dashboard, touch context menus, plugin creation
+  scaffold and earlier 3.38.0 changes. Preserve the existing CLI/service entry
+  points while capability extraction continues; default memory-only packaging
+  is not part of this compatible release.
+
+- Harden password-write permissions, first-run browser origins, public auth rate
+  limits and TLS proxy trust. Isolate plugin UI modules from dashboard DOM,
+  storage and direct networking; retain authorized declared-command access.
+- Reject executable JavaScript frontmatter and update vulnerable production
+  and development dependencies.
+- Extend universal IDE instruction surfaces across Cursor (`.cursor/rules/*.mdc`),
+  Grok (`AGENTS.md`), Replit (`replit.md`), Lovable (`AGENTS.md`), Windsurf and
+  Devin Desktop (`.devin/rules/`), Trae, Goose, Aider, OpenHands, Zed, and Roo Code.
+- Add live harness version currency detection and quota remaining tracking
+  (5-hour rolling session window and weekly compute allocations) across
+  `total-recall brief`, `total-recall startup check`, and `total-recall harness usage`.
+- Synchronize scaffold skills for new installations with strict personal-data exclusion.
+
 ## 3.38.0 — 2026-10-07
 
 - Keep the daemon PID lock accurate across heartbeat cycles: a live daemon

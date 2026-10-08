@@ -13,7 +13,7 @@
 import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
+import matter from '../../core/frontmatter.mjs';
 import { spawnSync } from 'node:child_process';
 import { requireAuth, requireAuthOrLocal } from '../auth.mjs';
 import { loadRuntimeConfig } from '../../core/runtime.mjs';

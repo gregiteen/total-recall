@@ -2,42 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'node:readline';
 import { logger, logEvents, LOG_DIR, getLogFile } from './logger.mjs';
+import { authGuard } from './auth-guard.mjs';
 import { brainDir } from './config.mjs';
 
-const QUARANTINE_FILE = path.join(brainDir, 'config', 'quarantine.json');
-
-let state = {
-  sandboxFailures: 0,
-  authFailures: {},
-  tokenSpikes: 0,
-  latencyBaseline: 1000,
-  latencySamples: [],
-  blockedIps: new Set(),
-  writeHalt: false
-};
-
-const saveQuarantine = () => {
-  try {
-    fs.mkdirSync(path.dirname(QUARANTINE_FILE), { recursive: true });
-    fs.writeFileSync(QUARANTINE_FILE, JSON.stringify({ blockedIps: Array.from(state.blockedIps) }), 'utf8');
-  } catch (e) {
-    logger.error('watchdog', `Failed to save quarantine state: ${e.message}`);
-  }
-};
-
-const loadQuarantine = () => {
-  if (fs.existsSync(QUARANTINE_FILE)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(QUARANTINE_FILE, 'utf8'));
-      if (data.blockedIps) {
-        state.blockedIps = new Set(data.blockedIps);
-      }
-    } catch (e) {
-      logger.error('watchdog', `Failed to load quarantine state: ${e.message}`);
-    }
-  }
-};
-loadQuarantine();
+let state = { sandboxFailures: 0, tokenSpikes: 0, latencyBaseline: 1000, latencySamples: [], writeHalt: false };
 
 export const watchdog = {
   recordSandboxFailure: () => {
@@ -52,23 +20,7 @@ export const watchdog = {
   },
   isSandboxQuarantined: () => state.sandboxFailures >= 3,
 
-  recordAuthFailure: (ip) => {
-    state.authFailures[ip] = (state.authFailures[ip] || 0) + 1;
-    logger.warn('watchdog', `Auth failure for IP ${ip}. Count: ${state.authFailures[ip]}`);
-    if (state.authFailures[ip] >= 9999) {
-      if (!state.blockedIps.has(ip)) {
-        logger.error('watchdog', `Auth lockout triggered for IP ${ip}. Blocking.`);
-        state.blockedIps.add(ip);
-        saveQuarantine();
-      }
-    }
-  },
-  resetAuthFailures: (ip) => {
-    if (state.authFailures[ip]) {
-      state.authFailures[ip] = 0;
-    }
-  },
-  isIpBlocked: (ip) => state.blockedIps.has(ip),
+  ...authGuard,
 
   recordTokens: (count) => {
     if (count > 8000) {

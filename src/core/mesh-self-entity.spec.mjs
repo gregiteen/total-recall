@@ -198,6 +198,6 @@ describe('meshVaultRoot', () => {
     process.env.AGENT_DIR = '/tmp/pinned-agent';
     expect(meshVaultRoot()).toBe(path.join('/tmp/pinned-agent', 'skills', 'total-recall', 'memory-vault'));
     delete process.env.AGENT_DIR;
-    expect(meshVaultRoot()).toBe(path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'memory-vault'));
+    expect(meshVaultRoot()).toBe(path.join(process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent'), 'skills', 'total-recall', 'memory-vault'));
   });
 });

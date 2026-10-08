@@ -242,6 +242,10 @@ export interface UpdateCheckResult {
   currentVersion: string
   latestVersion: string
   updateAvailable: boolean
+  versionStatus?: 'preview_features' | 'current' | 'update_available' | 'unknown' | 'not_installed'
+  previewFeatures?: boolean
+  consumerUpdatesAvailable?: boolean
+  consumersBehind?: number
 }
 
 // ─── Instruction Surface Types ──────────────────────────────────────────────────
@@ -377,4 +381,3 @@ export interface MemoryVaultStats {
   avgImportance: number
   avgConfidence: number
 }
-

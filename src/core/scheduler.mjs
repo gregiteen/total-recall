@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import crypto from 'crypto';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import config from './config.mjs';

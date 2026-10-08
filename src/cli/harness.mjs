@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { detectHarnesses, dispatchTask, runCouncil, HARNESS_SPECS } from '../core/meta-harness.mjs';
+import { detectHarnesses, detectHarnessesWithAuth, queryHarnessUsage, dispatchTask, runCouncil, HARNESS_SPECS } from '../core/meta-harness.mjs';
 
 function printHelp() {
   console.log(`
@@ -10,7 +10,8 @@ Usage:
   npx total-recall harness <command> [options]
 
 Commands:
-  list                      Inspect all external IDE and CLI developer harnesses
+  list                      Inspect all external developer harnesses, versions & auth
+  usage                     Query harness account APIs for 5h & weekly quota remaining %
   dispatch <id> "<task>"    Headlessly invoke a specific agent harness
                             Options: --node <name> to execute remotely on a mesh node
   council "<task>"          Run concurrent multi-harness consensus deliberation
@@ -19,11 +20,13 @@ Available Harness IDs:
   agy                       Google Antigravity CLI (Frontier reasoning, AI Ultra)
   claude                    Claude Code CLI (Deep codebase refactoring & Unix execution)
   codex                     OpenAI Codex CLI (Program synthesis & sandbox execution)
+  grok                      xAI Grok Build CLI (Autonomous coding, inspection, shell execution)
   gemini                    Google Gemini CLI (Fast utilities & completion chaining)
   ollama                    Ollama Local LLM (Local neural reasoning, zero API cost)
 
 Examples:
   npx total-recall harness list
+  npx total-recall harness usage
   npx total-recall harness dispatch claude "Review and run code quality checks on src/core/"
   npx total-recall harness dispatch ollama --node build-box "What is test-time compute scaling?"
   npx total-recall harness council "Propose architecture for decentralized research mesh"
@@ -41,22 +44,37 @@ export async function run(argv) {
 
   const command = args[0];
   const rest = args.slice(1);
+  const asJson = args.includes('--json');
 
-  if (!command || command === 'list' || command === 'status') {
-    const harnesses = detectHarnesses();
-    console.log(`\n🎮 Total Recall — Connected Agent Harnesses & Runtimes\n`);
+  if (!command || command === 'list' || command === 'status' || command === 'usage') {
+    const reports = await queryHarnessUsage();
+    if (asJson) {
+      console.log(JSON.stringify(reports, null, 2));
+      return;
+    }
+
+    console.log(`\n🎮 Total Recall — Connected Agent Harnesses, Versions & Quotas\n`);
 
     const pad = (s, l) => String(s || '').padEnd(l).slice(0, l);
-    console.log('┌──────────────┬──────────────────────────────┬──────────────┬────────────────────────────────────────────────────────┐');
-    console.log(`│ ${pad('Harness ID', 12)} │ ${pad('Name', 28)} │ ${pad('Status', 12)} │ ${pad('Binary Path', 54)} │`);
-    console.log('├──────────────┼──────────────────────────────┼──────────────┼────────────────────────────────────────────────────────┤');
+    console.log('┌──────────────┬──────────────────────────────┬──────────────┬──────────────┬──────────────────────────┬──────────────────────┬──────────────────────┬──────────────┐');
+    console.log(`│ ${pad('Harness ID', 12)} │ ${pad('Name', 28)} │ ${pad('Version', 12)} │ ${pad('Current?', 12)} │ ${pad('Auth Route', 24)} │ ${pad('5h Quota Rem. %', 20)} │ ${pad('Weekly Rem. %', 20)} │ ${pad('Status', 12)} │`);
+    console.log('├──────────────┼──────────────────────────────┼──────────────┼──────────────┼──────────────────────────┼──────────────────────┼──────────────────────┼──────────────┤');
 
-    for (const h of harnesses) {
-      const status = h.available ? '\x1b[32mActive ✅\x1b[0m   ' : '\x1b[31mNot Found ❌\x1b[0m';
-      const p = h.binaryPath || '—';
-      console.log(`│ \x1b[1m${pad(h.id, 12)}\x1b[0m │ ${pad(h.name, 28)} │ ${status} │ ${pad(p, 54)} │`);
+    for (const h of reports) {
+      const ver = h.version || '—';
+      const cur = h.isCurrent ? 'Current ✅   ' : (h.latestVersion ? `Update (${h.latestVersion.slice(0, 5)})` : 'Check ⚠️     ');
+      const auth = h.authRoute || '—';
+      const q5h = h.rolling5hRemainingPct || '—';
+      const qWeek = h.weeklyRemainingPct || '—';
+      let statusStr = '\x1b[31mNot Found ❌\x1b[0m';
+      if (h.available) {
+        if (h.status === 'ready') statusStr = '\x1b[32mReady ✅\x1b[0m     ';
+        else if (h.status === 'update_available') statusStr = '\x1b[33mUpdate 🔄\x1b[0m   ';
+        else statusStr = '\x1b[33mNo Auth ⚠️\x1b[0m   ';
+      }
+      console.log(`│ \x1b[1m${pad(h.id, 12)}\x1b[0m │ ${pad(h.name, 28)} │ ${pad(ver, 12)} │ ${pad(cur, 12)} │ ${pad(auth, 24)} │ ${pad(q5h, 20)} │ ${pad(qWeek, 20)} │ ${statusStr} │`);
     }
-    console.log('└──────────────┴──────────────────────────────┴──────────────┴────────────────────────────────────────────────────────┘\n');
+    console.log('└──────────────┴──────────────────────────────┴──────────────┴──────────────┴──────────────────────────┴──────────────────────┴──────────────────────┴──────────────┘\n');
     return;
   }
 

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { logger } from './logger.mjs';
 
 // Slug allowlist shared with validated-write.mjs — a slug is a filename, so it

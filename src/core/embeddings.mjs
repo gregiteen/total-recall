@@ -316,6 +316,9 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
 }
 
 export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
+  if (process.env.TR_EMBEDDINGS_DISABLED === '1') {
+    throw new Error('Semantic embeddings explicitly disabled; local recall remains available');
+  }
   const input = String(text).slice(0, 8000);
   const openRouterKey = resolveOpenRouterApiKey();
   const googleKey = resolveGoogleApiKey();

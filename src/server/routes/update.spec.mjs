@@ -65,7 +65,7 @@ vi.mock('../../core/package-auto-update.mjs', () => ({
     up_to_date: 0,
     results: [{ name: 'app', status: 'updated', installed: '3.18.0', latest: '3.18.0' }],
   })),
-  needsUpdate: vi.fn((a, b) => a !== b),
+  needsUpdate: vi.fn((a, b) => !a || a.localeCompare(b, undefined, { numeric: true }) < 0),
   isPackageAutoUpdateEnabled: vi.fn(() => true),
 }));
 
@@ -96,11 +96,25 @@ describe('update router', () => {
     expect(res.status).toBe(200);
     expect(res.body.latest).toBe('3.18.0');
     expect(res.body.latestVersion).toBe('3.18.0');
-    expect(res.body.updateAvailable).toBe(true);
+    expect(res.body.updateAvailable).toBe(false);
+    expect(res.body.previewFeatures).toBe(true);
+    expect(res.body.consumerUpdatesAvailable).toBe(true);
+    expect(res.body.consumers_behind).toBe(1);
     expect(res.body.package).toBe('total-recall-brain');
     expect(res.body.projects).toHaveLength(1);
     expect(res.body.auto_update_enabled).toBe(true);
     expect(pkgUpd.fetchLatestNpmVersionAsync).toHaveBeenCalled();
+  });
+
+  it('reports preview consumers without offering a host downgrade', async () => {
+    vi.mocked(pkgUpd.inspectProjectPackage).mockReturnValueOnce({ installed: '99.0.0-preview.1', declared: '^99.0.0', isSourceTree: false });
+    const app = express();
+    app.use(updateRouter);
+    const res = await request(app).get('/api/update/check');
+    expect(res.body.updateAvailable).toBe(false);
+    expect(res.body.versionStatus).toBe('preview_features');
+    expect(res.body.consumerUpdatesAvailable).toBe(false);
+    expect(res.body.projects[0]).toMatchObject({ version_status: 'preview_features', update_available: false });
   });
 
   it('POST /api/update/run runs package auto-update', async () => {

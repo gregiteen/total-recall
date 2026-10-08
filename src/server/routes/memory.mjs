@@ -11,17 +11,14 @@
  */
 
 import express from 'express';
-import fs from 'node:fs';
 import path from 'node:path';
-import { createMemoryNode, walkMd } from '../../core/vault.mjs';
+import { createMemoryNode } from '../../core/vault.mjs';
 import { writeNodeValidatedAsync } from '../../core/validated-write.mjs';
 import { getNodes, invalidate } from '../../core/vault-cache.mjs';
 import { semanticSearch } from '../../core/search.mjs';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { compileSurface } from '../../core/surface.mjs';
-import { buildEmbeddingsIndex, buildSessionEmbeddingsIndex } from '../../core/embeddings.mjs';
-import { detectAndResolve } from '../../core/conflict-detector.mjs';
-import { listQueue, updateQueueItem } from '../../core/research-queue.mjs';
+import { deleteVfsDocument } from '../../core/ssss-operation-service.mjs';
 import {
   VAULT_DIR,
   notFound,
@@ -35,74 +32,25 @@ import {
 
 const router = express.Router();
 
-/* ── OPT-6: debounce recompilation across rapid consecutive writes ── */
-let recompileTimer = null;
-const RECOMPILE_DEBOUNCE_MS = 2000; // 2-second quiet period
-/** @type {Map<string, ReturnType<typeof setTimeout>>} */
-const recompileTimersByVault = new Map();
-
-function nodes(vaultDir = VAULT_DIR) {
-  return getNodes(vaultDir);
+/** Serialize selected-vault projection updates and await them before returning. */
+const maintenanceByVault = new Map();
+export function stopMemoryMaintenance() {
+  return Promise.allSettled([...maintenanceByVault.values()]);
 }
 
-/**
- * Trigger background SSSS semantic conflict resolution, surface compile, and embedding build.
- * Auto-mutates the brain in real time when any fact is written, updated, or deleted!
- */
-async function triggerMutation(node, vaultDir = VAULT_DIR) {
+function nodes(vaultDir = VAULT_DIR) { return getNodes(vaultDir); }
+
+async function triggerMutation(_node, vaultDir = VAULT_DIR) {
   const paths = pathsForVault(vaultDir);
-
-  // 1. Semantic conflict detection runs IMMEDIATELY (lightweight, per-node)
-  try {
-    const existing = nodes(vaultDir);
-    if (node && node.type === 'memory') {
-      detectAndResolve(node, existing, {
-        vaultDir,
-        inboxDir: paths.inboxDir,
-      });
-    }
-  } catch (conflictErr) {
-    // Non-fatal fallback
-  }
-
-  // 2+3. Debounce the EXPENSIVE recompile + embeddings rebuild per vault.
-  //       Rapid consecutive writes accumulate; only ONE compile fires
-  //       after a quiet period. Vault-cache is already invalidated
-  //       immediately at each call-site via invalidate().
-  const prev = recompileTimersByVault.get(vaultDir);
-  if (prev) clearTimeout(prev);
-  // Keep legacy single-timer field in sync for default vault (tests/introspection)
-  if (vaultDir === VAULT_DIR && recompileTimer) clearTimeout(recompileTimer);
-
-  const timer = setTimeout(async () => {
-    recompileTimersByVault.delete(vaultDir);
-    if (vaultDir === VAULT_DIR) recompileTimer = null;
-    try {
-      // Recompile instructions surface for THIS vault's brain
-      await compileSurface({
-        vaultDir,
-        skillsDir: paths.skillsDir,
-        derivedDir: paths.derivedDir,
-        instructionsFile: paths.instructionsFile,
-      });
-
-      // Rebuild dense embeddings index for THIS vault
-      try {
-        const vaultNodes = nodes(vaultDir);
-        await buildEmbeddingsIndex(vaultNodes, paths.derivedDir);
-        await buildSessionEmbeddingsIndex(paths.sessionsDir, paths.derivedDir);
-      } catch (embedErr) {
-        // local_llm/embeddings offline non-fatal
-      }
-    } catch (err) {
-      // Non-fatal background log
-    }
-  }, RECOMPILE_DEBOUNCE_MS);
-
-  recompileTimersByVault.set(vaultDir, timer);
-  if (vaultDir === VAULT_DIR) recompileTimer = timer;
+  const previous = maintenanceByVault.get(vaultDir) || Promise.resolve();
+  const job = previous.catch(() => {}).then(() => compileSurface({
+    vaultDir, skillsDir: paths.skillsDir, derivedDir: paths.derivedDir,
+    instructionsFile: paths.instructionsFile, semantic: false,
+  }));
+  maintenanceByVault.set(vaultDir, job);
+  try { await job; }
+  finally { if (maintenanceByVault.get(vaultDir) === job) maintenanceByVault.delete(vaultDir); }
 }
-
 
 // SSSS v2 frontmatter fields we pass through verbatim from request bodies.
 const PASSTHROUGH_FIELDS = [
@@ -132,7 +80,7 @@ function stripInternalFields(result) {
 
 router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = resolveAllVaultsFromQuery(req, { strict: true });
     let list = [];
 
     // Track unique slugs so we don't count shadowing duplicates twice
@@ -196,7 +144,7 @@ router.get('/api/memory', requireAuth, requireScope('memory:read'), (req, res) =
 
 router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = resolveAllVaultsFromQuery(req, { strict: true });
     const byCategory = {};
     let total = 0;
 
@@ -222,41 +170,11 @@ router.get('/api/memory/stats', requireAuth, requireScope('memory:read'), (req, 
 });
 
 /**
- * Expand vault search: query brain(s) first, then global, then every registered
- * project brain. Fixes dashboard 404s when the list came from a project vault
- * but GET omitted ?brain=.
+ * Slug reads use the same selected brains as list and mutation operations.
+ * A miss cannot broaden the request into unrelated registered brains.
  */
 function vaultDirsForSlugLookup(req) {
-  const dirs = [...resolveAllVaultsFromQuery(req)];
-  const seen = new Set(dirs);
-
-  const push = (dir) => {
-    if (dir && !seen.has(dir) && fs.existsSync(dir)) {
-      seen.add(dir);
-      dirs.push(dir);
-    }
-  };
-
-  push(VAULT_DIR);
-
-  try {
-    const home = process.env.HOME || process.env.USERPROFILE || '';
-    const registryPath = path.join(home, '.agent', 'skills', 'total-recall', 'config', 'project-registry.json');
-    if (fs.existsSync(registryPath)) {
-      const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-      if (Array.isArray(registry)) {
-        for (const project of registry) {
-          if (project?.brainDir) {
-            push(path.join(project.brainDir, 'memory-vault'));
-          }
-        }
-      }
-    }
-  } catch {
-    // non-fatal
-  }
-
-  return dirs;
+  return resolveAllVaultsFromQuery(req, { strict: true });
 }
 
 router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, res) => {
@@ -278,7 +196,7 @@ router.get('/api/memory/:slug', requireAuth, requireScope('memory:read'), (req, 
 
 router.post('/api/memory', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
+    const vaultDir = resolveVaultFromQuery(req, { strict: true });
     const { slug, title, category, content, body, tags } = req.body || {};
     const actualContent = content || body;
     if (!slug || !title || !category || !actualContent) {
@@ -308,7 +226,7 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), async (req
       });
     }
     invalidate(vaultDir);
-    triggerMutation(node, vaultDir);
+    await triggerMutation(node, vaultDir);
     res.status(201).json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -317,7 +235,7 @@ router.post('/api/memory', requireAuth, requireScope('memory:write'), async (req
 
 router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
-    const vaultDir = resolveVaultFromQuery(req);
+    const vaultDir = resolveVaultFromQuery(req, { strict: true });
     const { title, category, content, body, tags } = req.body || {};
     const actualContent = content || body;
     if (!title || !category || !actualContent) {
@@ -338,8 +256,8 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), async
         repair: vaultResult.repair,
       });
     }
-    invalidate(targetVaultDir);
-    triggerMutation(node, targetVaultDir);
+    invalidate(vaultDir);
+    await triggerMutation(node, vaultDir);
     res.json(sanitizeNode(node));
   } catch (err) {
     serverError(res, err);
@@ -348,7 +266,7 @@ router.put('/api/memory/:slug', requireAuth, requireScope('memory:write'), async
 
 router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = resolveAllVaultsFromQuery(req, { strict: true });
     let existing;
     let targetVaultDir = vaultDirs[vaultDirs.length - 1]; // Default to most specific
 
@@ -389,16 +307,16 @@ router.patch('/api/memory/:slug', requireAuth, requireScope('memory:write'), asy
       });
     }
     invalidate(targetVaultDir);
-    triggerMutation(updated, targetVaultDir);
+    await triggerMutation(updated, targetVaultDir);
     res.json(sanitizeNode(updated));
   } catch (err) {
     serverError(res, err);
   }
 });
 
-router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (req, res) => {
+router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), async (req, res) => {
   try {
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = resolveAllVaultsFromQuery(req, { strict: true });
     let node;
     let targetVaultDir;
 
@@ -412,27 +330,11 @@ router.delete('/api/memory/:slug', requireAuth, requireScope('memory:write'), (r
 
     if (!node) return notFound(res, `Memory node not found: ${req.params.slug}`);
 
-    if (node._filePath && fs.existsSync(node._filePath)) {
-      fs.unlinkSync(node._filePath);
-    } else {
-      for (const file of walkMd(targetVaultDir)) {
-        const raw = fs.readFileSync(file, 'utf8');
-        if (raw.includes(`slug: ${req.params.slug}`)) {
-          fs.unlinkSync(file);
-          break;
-        }
-      }
-    }
+    await deleteVfsDocument(path.relative(targetVaultDir, node._filePath).split(path.sep).join('/'), {
+      vaultRoot: targetVaultDir, actorRole: 'system', intent: `Delete memory ${req.params.slug}`,
+    });
     invalidate(targetVaultDir);
-    triggerMutation(null, targetVaultDir);
-
-    // Keep interface and queue in sync: clear this node_slug from any research agenda items
-    const queue = listQueue({});
-    for (const item of queue.items) {
-      if (item.node_slug === req.params.slug) {
-        updateQueueItem(item.id, { node_slug: null });
-      }
-    }
+    await triggerMutation(null, targetVaultDir);
 
     res.json({ deleted: true, slug: req.params.slug });
   } catch (err) {
@@ -452,7 +354,7 @@ router.post('/api/memory/search/semantic', requireAuth, requireScope('memory:rea
     if (!query) return badRequest(res, 'query is required');
 
     const k = Math.min(Number(top_k) || 5, 20);
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = resolveAllVaultsFromQuery(req, { strict: true });
     const merged = [];
     let anyIndex = false;
 

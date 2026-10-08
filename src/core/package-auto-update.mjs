@@ -16,6 +16,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
+import { packageVersionStatus } from './package-version.mjs';
 
 export const PACKAGE_NAME = 'total-recall-brain';
 export const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -299,24 +300,12 @@ export function clearLatestNpmVersionCache() {
 }
 
 /**
- * Semver-ish compare: true if installed is missing or older than latest.
- * Handles simple x.y.z only (npm publish tags).
+ * Only install when missing or semantically older than public npm latest.
  * @param {string|null} installed
  * @param {string} latest
  */
 export function needsUpdate(installed, latest) {
-  if (!latest) return false;
-  if (!installed) return true;
-  if (installed === latest) return false;
-  const a = installed.split('.').map((n) => parseInt(n, 10) || 0);
-  const b = latest.split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] || 0;
-    const y = b[i] || 0;
-    if (x < y) return true;
-    if (x > y) return false;
-  }
-  return false;
+  return ['not_installed', 'update_available'].includes(packageVersionStatus(installed, latest));
 }
 
 /**
@@ -433,7 +422,7 @@ export async function runPackageAutoUpdate(opts = {}) {
         name,
         root,
         source,
-        status: 'up_to_date',
+        status: packageVersionStatus(installed, latest) === 'preview_features' ? 'preview_features' : packageVersionStatus(installed, latest) === 'current' ? 'up_to_date' : 'unknown_version',
         declared: info.declared,
         installed,
         latest,
@@ -480,6 +469,7 @@ export async function runPackageAutoUpdate(opts = {}) {
     would_update: results.filter((r) => r.status === 'would_update').length,
     failed: results.filter((r) => r.status === 'failed').length,
     up_to_date: results.filter((r) => r.status === 'up_to_date').length,
+    preview_features: results.filter((r) => r.status === 'preview_features').length,
     results,
   };
 

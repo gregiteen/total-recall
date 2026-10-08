@@ -66,7 +66,7 @@ const store = vi.hoisted(() => ({
   uninstallPlugin: vi.fn(async (id) => ({ id, dir: '/x', scope: 'project' })),
   setPluginShared: vi.fn(async (id, shared) => ({ id, shared })),
 }));
-vi.mock('../../core/plugin-store.mjs', () => store);
+vi.mock('../../core/plugin-distribution.mjs', () => store);
 
 vi.mock('../../core/plugin-peers.mjs', () => ({
   listPeerPlugins: vi.fn(async () => ({
@@ -254,7 +254,7 @@ describe('plugins router', () => {
     const res = await request(app).post('/api/plugins/git-sentinel/run').send({ subcommand: 'audit', args: ['--json'] });
     expect(res.status).toBe(200);
     expect(res.body.output).toBe('hello');
-    expect(runner.runPluginCommand).toHaveBeenCalledWith(plugin, { subcommand: 'audit', args: ['--json'], cwd: process.cwd() });
+    expect(runner.runPluginCommand).toHaveBeenCalledWith(plugin, expect.objectContaining({ subcommand: 'audit', args: ['--json'], cwd: process.cwd(), secretsBrainDir: expect.any(String) }));
     expect(scopes).toContainEqual(['config:write']);
   });
 

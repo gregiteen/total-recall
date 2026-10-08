@@ -124,7 +124,9 @@ export default async function recall(args) {
     }
   }
   if (layer === 'project' || layer === 'auto') {
-    if (brains.project) {
+    if (layer === 'project' && process.env.AGENT_DIR) {
+      searchTargets.push({ label: 'project', brainDir: resolveBrainDir('project') });
+    } else if (brains.project) {
       searchTargets.push({ label: 'project', brainDir: brains.project.brainDir });
     }
   }

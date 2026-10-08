@@ -1,9 +1,11 @@
 ---
 name: project-management
-description: "Manage five-file project docs, trackers, GitHub issues and reviews."
-repo_scoped: false
+description: Manage five-file project docs, trackers, GitHub issues and reviews.
 command: /project-management
+repo_scoped: false
 ---
+
+<!-- total-recall:skill-router:v1 -->
 
 # Project management
 
@@ -15,4 +17,30 @@ Track every blocker and append timestamp, actor, action, outcome and evidence to
 
 Read the document conventions and the relevant operating mode from the task index when planning, triaging, reviewing or verifying. Discover real test/deploy commands; synthetic checks do not prove production readiness. Vault changes use their owning CLI/API. Delegation requires authorization.
 
-For audit content, use [the audit template](references/audit-template.md) and verify with `scripts/check-audit.mjs`. For document formats, read [project documents](references/project-documents.md).
+Before an operation, read its [task references](references/optimized/index.md), including prerequisites and constraints. If the applicable procedure is unclear, read the preserved original instead of guessing. Commands assume the skill root.
+
+<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
+<!-- @route: tfidf, generated_at: 2026-05-21T06:00:44.284Z -->
+
+- **no-cursor-or-windsurf-mentions** (confidence 1, importance critical):
+  Do not mention Cursor or Windsurf
+
+- **always-reply-to-all-messages** (confidence 1, importance critical):
+  Always reply directly to all user messages without exception
+
+- **operating-instructions** (confidence 1, importance 5):
+  Total Recall Core Operating Protocol
+
+- **inviolable-ide-instruction-7a4d8913** (confidence 1, importance critical):
+  Inviolable IDE Instruction: # Temporary Cursor Rules for testing
+
+- **security-audit-protocol** (confidence 1, importance 4):
+  Security audit protocol and hardening requirements
+
+- **research-code-as-agent-harness** (confidence 0.95, importance 4):
+  Research: Code as Agent Harness (arXiv:2605.18747)
+
+- **chocolate-brownies** (confidence 0.95, importance 4):
+  Chocolate brownies must be fudgey and rich
+
+<!-- END INJECTED MEMORY -->

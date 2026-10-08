@@ -36,6 +36,11 @@ immutable: true
 timestamp: "2026-05-25T22:36:21.376Z"
 ---
 
-# Topic Research
+# Standard Operating Procedure for Topic Research
 
-On a research request: queue the topic (POST /api/research), keep exactly one living scratch document in .agent/scratch/, write and compile memory nodes (POST /api/vault/compile) so it is searchable, and work silently until the user asks for status.
+When the user requests research on a topic, the agent MUST automatically set the brain to become an expert in that topic. The agent MUST:
+
+1. **Queue Research Instantly**: Queue the topic in the background research daemon (`POST /api/research`) to autonomously crawl and acquire deep mastery.
+2. **Maintain a Single Living Scratch Document**: Keep exactly one living document under `.agent/scratch/` and update it continuously as new findings arise. Do NOT create multiple different files or reports.
+3. **Ensure Full Searchability**: Autonomously write memory nodes to the brain and execute index compilation (`POST /api/vault/compile`) so the knowledge is fully searchable.
+4. **Operate Completely Autonomously**: Perform these steps without asking the user for review, instructions, or permission. The agent must proceed silently and automatically until the user explicitly asks for status or results.

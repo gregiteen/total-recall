@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { callLocalRuntime } from './runtime.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 import { logger } from './logger.mjs';

@@ -6,10 +6,10 @@
  * process.exit() stopped the server, and concurrent runs interleaved output.
  */
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PACKAGE_ROOT } from './plugin-loader.mjs';
+import { PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
+import { readPluginRecord } from './plugin-store.mjs';
 
 const CHILD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plugin-runner-child.mjs');
 export const DEFAULT_TIMEOUT_MS = 30_000;
@@ -21,16 +21,13 @@ export const MAX_OUTPUT_BYTES = 256 * 1024;
  * @returns {Promise<{ ok: boolean, exitCode: number|null, signal: string|null, timedOut: boolean, truncated: boolean, output: string, durationMs: number }>}
  */
 export function runPluginCommand(plugin, options = {}) {
-  const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+  const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs = DEFAULT_TIMEOUT_MS, stdin = 'ignore', composable = false, secretsBrainDir } = options;
   const handlerRel = plugin?.manifest?.cli?.handler;
   if (!handlerRel) return Promise.reject(new Error(`Plugin ${plugin?.id} does not declare a CLI handler`));
 
-  const handler = path.resolve(plugin.dir, handlerRel);
-  const rel = path.relative(fs.realpathSync(plugin.dir), fs.existsSync(handler) ? fs.realpathSync(handler) : handler);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    return Promise.reject(new Error(`Plugin ${plugin.id} handler resolves outside the plugin directory`));
-  }
-  if (!fs.existsSync(handler)) return Promise.reject(new Error(`Plugin CLI handler file not found: ${handler}`));
+  let handler;
+  try { handler = resolvePluginFile(plugin.dir, handlerRel); }
+  catch (err) { return Promise.reject(err); }
 
   const command = plugin.manifest.cli.command || plugin.id;
   const safeArgs = (Array.isArray(args) ? args : []).map(String);
@@ -51,10 +48,14 @@ export function runPluginCommand(plugin, options = {}) {
         TR_PACKAGE_ROOT: PACKAGE_ROOT,
         TR_PLUGIN_ID: plugin.id,
         TR_PLUGIN_DIR: plugin.dir,
+        TR_PLUGIN_CONFIG: JSON.stringify(readPluginRecord(plugin)?.configuration || {}),
+        ...(plugin.pluginsDir ? { TR_PLUGIN_STATE_DIR: path.join(path.dirname(plugin.pluginsDir), 'plugin-state', plugin.id) } : {}),
+        ...(secretsBrainDir ? { TR_SECRETS_BRAIN: secretsBrainDir } : {}),
+        TR_PLUGIN_COMMAND_MODE: composable ? 'composable' : 'cli',
         FORCE_COLOR: '0',
         NO_COLOR: '1'
       },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: [stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
     });
 
     const collect = (buf) => {

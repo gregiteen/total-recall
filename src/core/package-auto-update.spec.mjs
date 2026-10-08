@@ -30,6 +30,7 @@ import {
   isPackageAutoUpdateEnabled,
   PACKAGE_NAME,
   runPackageAutoUpdate,
+  clearLatestNpmVersionCache,
 } from './package-auto-update.mjs';
 
 describe('package-auto-update', () => {
@@ -38,10 +39,13 @@ describe('package-auto-update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pkg-upd-'));
+    vi.spyOn(os, 'homedir').mockReturnValue(tmp);
     spawnSyncMock.mockReset();
+    clearLatestNpmVersionCache();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tmp, { recursive: true, force: true });
     delete process.env.TR_AUTO_UPDATE_PACKAGE;
     delete process.env.TR_SYNC_REPOS;
@@ -52,6 +56,9 @@ describe('package-auto-update', () => {
     expect(needsUpdate('3.16.1', '3.18.0')).toBe(true);
     expect(needsUpdate('3.18.0', '3.18.0')).toBe(false);
     expect(needsUpdate('3.19.0', '3.18.0')).toBe(false);
+    expect(needsUpdate('3.19.0-preview.2', '3.18.0')).toBe(false);
+    expect(needsUpdate('3.18.0-preview.2', '3.18.0')).toBe(true);
+    expect(needsUpdate('3.18.0+local.2', '3.18.0')).toBe(false);
   });
 
   it('detects source monorepo and declared deps', () => {
@@ -131,5 +138,18 @@ describe('package-auto-update', () => {
     expect(summary.latest).toBe('3.18.0');
     const row = summary.results.find((r) => r.root === consumer);
     expect(row.status).toBe('would_update');
+  });
+
+  it('preserves a preview consumer even when forced to apply', async () => {
+    const consumer = path.join(tmp, 'preview-app');
+    fs.mkdirSync(path.join(consumer, 'node_modules', PACKAGE_NAME), { recursive: true });
+    fs.writeFileSync(path.join(consumer, 'package.json'), JSON.stringify({ dependencies: { [PACKAGE_NAME]: '^3.19.0' } }));
+    fs.writeFileSync(path.join(consumer, 'node_modules', PACKAGE_NAME, 'package.json'), JSON.stringify({ version: '3.19.0-preview.2' }));
+    spawnSyncMock.mockReturnValue({ status: 0, stdout: '3.18.0\n' });
+    const summary = await runPackageAutoUpdate({ brainDir: path.join(tmp, 'brain'), roots: [consumer], force: true, skipThrottle: true });
+    expect(summary.results.find(row => row.root === consumer).status).toBe('preview_features');
+    expect(summary.preview_features).toBe(1);
+    expect(spawnSyncMock.mock.calls.some(([, args]) => args?.[0] === 'install')).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(consumer, 'node_modules', PACKAGE_NAME, 'package.json'))).version).toBe('3.19.0-preview.2');
   });
 });

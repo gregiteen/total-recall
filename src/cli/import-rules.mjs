@@ -40,7 +40,7 @@ export async function run(argv = []) {
 
   console.log(`\n🔍 Scanning for rule files in: ${dirs.join(', ')}\n`);
 
-  const result = detectAndImport({ dirs, force, vaultDir, dryRun });
+  const result = await detectAndImport({ dirs, force, vaultDir, dryRun });
 
   if (result.detected.length === 0) {
     console.log('ℹ️  No rule files detected. Nothing to import.');
@@ -75,10 +75,16 @@ export async function run(argv = []) {
   if (result.failed.length > 0) {
     console.log(`\n❌ Failed ${result.failed.length}:`);
     for (const f of result.failed) console.log(`   ${f.filename}: ${f.error}`);
+    process.exitCode = 1;
   }
 
   if (result.imported.length > 0) {
-    console.log('\n💡 Run  npx total-recall compile  to rebuild INSTRUCTIONS.md with your imported rules.\n');
+    const { compileSurface } = await import('../core/surface.mjs');
+    const agentDir = path.resolve(brainDir, '../..');
+    await compileSurface({ vaultDir, skillsDir: path.join(agentDir, 'skills'),
+      derivedDir: path.join(brainDir, 'memory-derived'),
+      instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'), semantic: false });
+    console.log('\nLocal memory indexes and instruction surfaces updated.\n');
   }
 }
 

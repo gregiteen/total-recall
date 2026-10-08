@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import matter from 'gray-matter';
+import matter from '../../core/frontmatter.mjs';
 
 import { requireAuth, requireScope } from '../auth.mjs';
 import {

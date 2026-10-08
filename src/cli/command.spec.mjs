@@ -50,12 +50,12 @@ describe('plugin command generation', () => {
     const cli = path.resolve('bin/total-recall.mjs');
     const created = spawnSync(process.execPath,
       [cli, 'command', 'create', 'sample-run', '--from-plugin', plugin],
-      { cwd: root, encoding: 'utf8' });
+      { cwd: root, encoding: 'utf8', env: { ...process.env, AGENT_DIR: path.join(root, '.agent') } });
     expect(created.status).toBe(0);
     expect(fs.existsSync(path.join(root, '.agent', 'commands', 'sample-run.mjs'))).toBe(true);
     const ran = spawnSync(process.execPath,
       [cli, 'sample-run', 'hello', '--json'],
-      { cwd: root, encoding: 'utf8' });
+      { cwd: root, encoding: 'utf8', env: { ...process.env, AGENT_DIR: path.join(root, '.agent') } });
     expect(ran.status).toBe(7);
     expect(JSON.parse(ran.stdout)).toEqual({ ok: false, exit_code: 7, result: { args: ['hello'] } });
   });
@@ -65,7 +65,7 @@ describe('plugin command generation', () => {
     fs.mkdirSync(brain, { recursive: true });
     fs.writeFileSync(path.join(brain, 'SKILL.md'), '# Test brain\n');
     const cli = path.resolve('bin/total-recall.mjs');
-    const env = { ...process.env, TR_COMMAND_NO_COMPILE: '1' };
+    const env = { ...process.env, AGENT_DIR: path.join(root, '.agent'), TR_COMMAND_NO_COMPILE: '1' };
     const installed = spawnSync(process.execPath, [cli, 'plugin', 'install', plugin], { cwd: root, encoding: 'utf8', env });
     expect(installed.status).toBe(0);
     expect(installed.stdout).toContain('Commands: total-recall sample-run');

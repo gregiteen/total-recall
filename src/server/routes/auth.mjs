@@ -1,6 +1,8 @@
 import express from 'express';
 import {
   requireAuth,
+  requireScope,
+  authRateLimiter,
   isLocalRequest,
   loadSecurityConfig,
   loginHandler,
@@ -10,12 +12,13 @@ import {
 import { logger } from '../../core/logger.mjs';
 
 export const authRouter = express.Router();
+authRouter.use('/auth', authRateLimiter());
 
 // ─── Consolidated Auth Routes ──────────────────────────────────────────────────
 
 authRouter.post('/auth/login', loginHandler);
 authRouter.post('/auth/logout', logoutHandler);
-authRouter.post('/auth/change-password', requireAuth, changePasswordHandler);
+authRouter.post('/auth/change-password', requireAuth, requireScope('config:write'), changePasswordHandler);
 authRouter.get('/auth/me', requireAuth, (req, res) => res.json({ authenticated: true }));
 
 authRouter.get("/auth/status", (req, res) => {
@@ -58,6 +61,18 @@ authRouter.post("/auth/setup", async (req, res) => {
         + 'On a headless host, set the password with the CLI instead: '
         + 'npx total-recall reset-password',
     });
+  }
+  // A malicious web page can POST to loopback or use DNS rebinding. The
+  // browser's Origin must identify loopback or an explicit operator allowlist.
+  const origin = req.headers.origin;
+  if (origin || req.headers['sec-fetch-site'] === 'cross-site') {
+    let allowed = false;
+    try {
+      const url = new URL(origin);
+      allowed = ['http:', 'https:'].includes(url.protocol) &&
+        (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || (config.network?.allowed_origins || []).includes(origin));
+    } catch { /* absent, opaque or malformed browser origin */ }
+    if (!allowed) return res.status(403).json({ error: 'First-run setup requires a trusted browser origin' });
   }
   return changePasswordHandler(req, res);
 });

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getGlobalBrainDir, resolveBrainDir } from './agent-dir.mjs';
 import { startupHealth } from '../core/startup-health.mjs';
+import { queryHarnessUsage } from '../core/meta-harness.mjs';
 
 export async function inspectStartup(options = {}) {
   const globalBrain = getGlobalBrainDir();
@@ -34,8 +35,14 @@ export default async function startup(args = []) {
   const report = await inspectStartup(options);
   if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else {
-    console.log(`Startup: server ${report.server.status}; brain ${report.brain.status}; daemon ${report.daemon.status}; SSSS tooling ${report.ssss.status}; app ${report.app.status}`);
-    for (const action of report.actions) console.log(`Action: ${action.component} ${action.action} (${action.accepted === true ? 'accepted; see observed readiness' : action.reason || 'failed'})`);
+    console.log(`Startup: server ${report.server?.status || 'unknown'}; brain ${report.brain?.status || 'unknown'}; daemon ${report.daemon?.status || 'unknown'}; SSSS tooling ${report.ssss?.status || 'unknown'}; app ${report.app?.status || 'unknown'}`);
+    const harnesses = await queryHarnessUsage().catch(() => []);
+    const availH = harnesses.filter(h => h.available);
+    const readyH = availH.filter(h => h.authed);
+    if (availH.length) {
+      console.log(`Harnesses: ${readyH.length}/${availH.length} ready (${readyH.map(h => `${h.id}: 5h ${h.rolling5hRemainingPct}`).join(', ')})`);
+    }
+    for (const action of (report.actions || [])) console.log(`Action: ${action.component} ${action.action} (${action.accepted === true ? 'accepted; see observed readiness' : action.reason || 'failed'})`);
   }
   if (!report.ready) process.exitCode = 1;
 }

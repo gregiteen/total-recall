@@ -6,7 +6,7 @@ import yaml from 'yaml';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
-import { watchdog } from '../core/watchdog.mjs';
+import { authGuard as watchdog } from '../core/auth-guard.mjs';
 import { findValidKeyByToken, keyHasAnyScope, recordKeyUsage } from './keys.mjs';
 import { logger } from '../core/logger.mjs';
 
@@ -70,6 +70,14 @@ export function apiRateLimiter() {
     legacyHeaders: false,
     validate: false,
   });
+}
+
+/** Public password endpoints must bound expensive bcrypt work independently. */
+export function authRateLimiter() {
+  const configured = loadSecurityConfig().rate_limits?.auth_requests_per_minute;
+  const limit = Number.isInteger(configured) && configured > 0 ? Math.min(configured, 1000) : 20;
+  return rateLimit({ windowMs: 60 * 1000, max: limit, standardHeaders: true, legacyHeaders: false,
+    message: { error: 'Too many authentication requests' }, validate: false });
 }
 
 /**
@@ -245,8 +253,8 @@ export function requireHttps(req, res, next) {
   // Socket address only — never trust forwarded headers for this exemption.
   if (isMeshIp(req.socket?.remoteAddress) && forwardedClientIps(req).length === 0) return next();
 
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-  if (req.secure || forwardedProto === 'https') return next();
+  // Express derives secure only through its configured trusted proxy boundary.
+  if (req.secure) return next();
 
   return res.status(426).json({
     error: 'HTTPS is required. Access this brain through its configured TLS endpoint.'
@@ -408,8 +416,8 @@ export async function loginHandler(req, res) {
     return res.status(403).json({ error: 'IP blocked due to too many failed auth attempts.' });
   }
 
-  const { password } = req.body;
-  if (!password) {
+  const { password } = req.body || {};
+  if (typeof password !== 'string' || !password || password.length > 4096) {
     return res.status(400).json({ error: 'Password is required' });
   }
   
@@ -439,8 +447,8 @@ export async function loginHandler(req, res) {
 }
 
 export async function changePasswordHandler(req, res) {
-  const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 8) {
+  const { newPassword } = req.body || {};
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 4096) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
@@ -455,7 +463,7 @@ export async function changePasswordHandler(req, res) {
 
   // Dynamically update the backup secrets.enc file to preserve the password hash
   try {
-    const { loadSecrets, saveSecrets } = await import('../core/secrets-store.mjs');
+    const { loadSecrets, saveSecrets } = await import('../core/secrets-gateway.mjs');
     let secretsObj = await loadSecrets(agentDir);
     secretsObj.dashboard_password_hash = hash;
     await saveSecrets(agentDir, secretsObj);

@@ -8,7 +8,7 @@ repo_scoped: false
 
 # Harness management
 
-Resolve installed commands, authenticated accounts, permissions and recorded mesh access before execution. Dispatch or spawn agents only when authorized and supported by verified adapters. Read the selected CLI/process/mesh procedure; do not load every harness example.
+Resolve installed commands, version currency against upstream registries, authenticated accounts, 5-hour rolling and weekly quota remaining percentages, permissions and recorded mesh access before execution. Dispatch or spawn agents only when authorized and supported by verified adapters. Read the selected CLI/process/mesh procedure; do not load every harness example.
 
 Track owned processes, await work, inspect real results and clean up. A catalog entry is not proof of an available integration. Use validated memory operations and preserve repository boundaries.
 

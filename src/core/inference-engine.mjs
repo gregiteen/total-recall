@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import crypto from 'crypto';
 import { callLocalRuntime, cleanAndParseJSON } from './runtime.mjs';
 import { atomicWrite, safeStringify, writeNode } from './vault.mjs';

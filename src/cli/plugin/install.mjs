@@ -1,4 +1,4 @@
-import { installPlugin as install } from '../../core/plugin-store.mjs';
+import { installPlugin as install } from '../../core/plugin-distribution.mjs';
 import { syncPluginCommands } from '../command.mjs';
 
 export async function installPlugin(args = []) {

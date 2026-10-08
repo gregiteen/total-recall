@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
+import matter from '../core/frontmatter.mjs';
 import { resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
 import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
 import { isSafeVaultName } from '../core/vault.mjs';
@@ -191,16 +191,15 @@ export default async function edit(args) {
   console.log(`  ✅ Updated ${layerLabel} ${relPath} (${changed.join(', ')})`);
 
   if (parsed.noCompile) return;
-  console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
   try {
-    const { spawn } = await import('node:child_process');
-    const child = spawn(process.argv[0], [process.argv[1], 'compile', `--${found.layer}`], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-    console.log('  ✅ Background compilation started.');
+    const { compileSurface } = await import('../core/surface.mjs');
+    const brainDir = path.dirname(found.vaultDir);
+    const agentDir = path.dirname(path.dirname(brainDir));
+    await compileSurface({ vaultDir: found.vaultDir, skillsDir: path.join(agentDir, 'skills'),
+      derivedDir: path.join(brainDir, 'memory-derived'), instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'), semantic: false });
+    console.log('  ✅ Local memory indexes and instruction surfaces updated.');
   } catch (err) {
-    console.warn(`  ⚠️  Node updated, but background recompilation spawn failed: ${err.message}`);
+    console.error(`  ❌ Memory saved, but local compilation failed: ${err.message}`);
+    process.exitCode = 1;
   }
 }

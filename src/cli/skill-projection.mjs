@@ -77,6 +77,34 @@ export const IDE_SKILLS = [
     global:  { dir: ['.codex', 'skills'], markers: ['.codex'] }
   },
   {
+    id: 'grok',
+    label: 'Grok Build',
+    clients: ['grok'],
+    project: { dir: ['.agents', 'skills'], markers: ['.grok', 'AGENTS.md'], env: ['GROK', 'XAI_GROK'] },
+    global:  { dir: ['.grok', 'skills'], markers: ['.grok'] }
+  },
+  {
+    id: 'cursor',
+    label: 'Cursor',
+    clients: ['cursor'],
+    project: { dir: ['.cursor', 'skills'], markers: ['.cursor', '.cursorrules'], env: ['CURSOR'] },
+    global:  { dir: ['.cursor', 'skills'], markers: ['.cursor'] }
+  },
+  {
+    id: 'replit',
+    label: 'Replit Agent',
+    clients: ['replit'],
+    project: { dir: ['.agent', 'skills'], markers: ['.replit', 'replit.md'], env: ['REPLIT'] },
+    global:  null
+  },
+  {
+    id: 'windsurf',
+    label: 'Windsurf / Devin Desktop',
+    clients: ['windsurf', 'devin'],
+    project: { dir: ['.windsurf', 'skills'], markers: ['.windsurf', '.devin', '.windsurfrules'], env: ['WINDSURF', 'DEVIN'] },
+    global:  { dir: ['.windsurf', 'skills'], markers: ['.windsurf', '.devin'] }
+  },
+  {
     id: 'hermes',
     label: 'Hermes Agent',
     clients: ['hermes', 'hermes-agent'],

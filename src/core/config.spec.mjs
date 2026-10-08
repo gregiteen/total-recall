@@ -67,6 +67,8 @@ describe('config module', () => {
     const { global: g, project } = mod.getActiveBrains();
     expect(g.layer).toBe('global');
     expect(project).toBeNull();
+    expect(g.agentDir).toBe('/tmp/test-agent');
+    expect(g.brainDir).toBe('/tmp/test-agent/skills/total-recall');
   });
 
   it('resolveBrainLayer("global") always returns global layer', async () => {

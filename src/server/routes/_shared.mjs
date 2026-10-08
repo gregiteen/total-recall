@@ -10,7 +10,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { agentDir, brainDir } from '../../core/config.mjs';
+import { agentDir, brainDir, globalBrainDir } from '../../core/config.mjs';
 import { logger } from '../../core/logger.mjs';
 
 export const AGENT_DIR    = process.env.AGENT_DIR || agentDir;
@@ -57,7 +57,6 @@ export function resolveVaultFromQuery(req, { strict = false } = {}) {
 
   if (brainId.startsWith('project:')) {
     const projectName = brainId.slice('project:'.length);
-    const globalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
     const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
 
     if (!fs.existsSync(registryPath)) {
@@ -95,7 +94,7 @@ export function resolveVaultFromQuery(req, { strict = false } = {}) {
   return VAULT_DIR;
 }
 
-export function resolveAllVaultsFromQuery(req) {
+export function resolveAllVaultsFromQuery(req, { strict = false } = {}) {
   const rawBrainId = req.query?.brain || req.body?.brainId || req.headers?.['x-total-recall-brain'];
   if (!rawBrainId) return [VAULT_DIR];
 
@@ -104,7 +103,7 @@ export function resolveAllVaultsFromQuery(req) {
 
   for (const id of ids) {
     // We can reuse resolveVaultFromQuery by mocking the req object
-    const vault = resolveVaultFromQuery({ query: { brain: id } });
+    const vault = resolveVaultFromQuery({ query: { brain: id } }, { strict });
     if (vault) {
       vaults.push(vault);
     }

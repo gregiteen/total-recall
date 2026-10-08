@@ -73,6 +73,11 @@ export async function run(argv = []) {
   const command = args[0];
   const rest = args.slice(1);
 
+  if (rest.includes('--help') || rest.includes('-h')) {
+    printHelp();
+    return;
+  }
+
   if (command === 'available' || command === 'bundled') {
     await listAvailable(rest);
     return;

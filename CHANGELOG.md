@@ -1,3 +1,22 @@
+## 3.39.0 — 2026-10-08
+ 
+- Preserve the compatible dashboard/plugin scaffold and add an explicit portable
+  memory runtime with verified installed plugin lifecycle operations.
+- Show “Preview features” when the installed version exceeds the npm public
+  release; distinguish host updates from registered consumer upgrades.
+- Isolate plugin UI in opaque browser frames with a bounded declared-command
+  bridge; require scoped password changes and bound public authentication work.
+- Replace executable frontmatter parsing with safe data-only YAML/JSON and
+  repair dependency advisories in both package lockfiles and clean consumers.
+- Honor explicit initialization roots, preserve active credential stores across
+  reinitialization and concurrent writes, and isolate native fixtures from HOME.
+- Extend universal IDE instruction surfaces across Cursor, Grok, Replit, Lovable,
+  Windsurf/Devin Desktop, Trae, Goose, Aider, OpenHands, Zed, and Roo Code.
+- Implement live harness version currency detection and remaining quota tracking
+  (5-hour rolling session window and weekly compute allocations) across
+  `total-recall brief`, `total-recall startup check`, and `total-recall harness usage`.
+- Synchronize scaffold skills for new installations with strict personal-data exclusion.
+
 ## 3.35.0 — 2026-10-01
 
 - Emit a compact CLI budget-failure diagnostic instead of repeatedly loading

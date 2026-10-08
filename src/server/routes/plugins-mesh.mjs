@@ -7,7 +7,7 @@
 import { Router } from "express";
 import { requireMeshSyncAuth } from "../../core/mesh-auth.mjs";
 import { getMeshHostname } from "../../core/mesh.mjs";
-import { listInstalledPlugins, listSharedPlugins, packSharedPlugin, packPublicPlugin } from "../../core/plugin-store.mjs";
+import { listInstalledPlugins, listSharedPlugins, packSharedPlugin, packPublicPlugin } from "../../core/plugin-distribution.mjs";
 import { serverError } from "./_shared.mjs";
 
 const router = Router();

@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import matter from 'gray-matter';
+import matter from '../core/frontmatter.mjs';
 import { protectIDEInstructions } from '../core/protect-instructions.mjs';
 import { totalRecallToken } from '../core/config.mjs';
 

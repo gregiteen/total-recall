@@ -11,7 +11,7 @@ repo_scoped: false
 
 Use the installed CLI or repository launcher. Run `startup-check ensure --json` (native `startup ensure --json` fallback), then `brief`. These start only missing configured managed services; brief is read-only. The bounded `scripts/start-session.mjs` wrapper implements this sequence.
 
-Report transport health, authenticated brain access, daemon identity, SSSS tooling and app readiness separately. Unknown app configuration stays unknown. Never guess service commands, change credentials, restart a live process to hide a timeout or start sibling repos.
+Report transport health, authenticated brain access, daemon identity, SSSS tooling, integrated harness quota readiness (5-hour rolling session and weekly remaining percentages), version currency, and app readiness separately. Unknown app configuration stays unknown. Never guess service commands, change credentials, restart a live process to hide a timeout or start sibling repos.
 
 Follow a verified repo-owned start skill once. A shared copy of this workflow is not another startup step. Read the repo expert/entry page only when needed for the requested work. Report branch, active work, dirty state, freshness and material warnings briefly; fix a warning only when it blocks requested work. Load runtime diagnostics references only on failures.
 

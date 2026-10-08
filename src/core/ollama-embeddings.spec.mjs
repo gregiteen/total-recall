@@ -207,6 +207,18 @@ describe('resolveOllamaEndpoint — no hardcoded hosts', () => {
   it('returns null when nothing answers, so hosted providers still run', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
     expect(await resolveOllamaEndpoint()).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe('http://127.0.0.1:11434/api/tags');
+  });
+
+  it('uses discovery only when explicitly supplied by a capability owner', async () => {
+    const discoverEndpoints = vi.fn(async () => ['http://embedding-host:11434']);
+    vi.stubGlobal('fetch', vi.fn(async url => {
+      if (String(url).includes('127.0.0.1')) throw new Error('ECONNREFUSED');
+      return { ok: true, json: async () => ({ models: [{ name: 'embedding-model' }] }) };
+    }));
+    expect(await resolveOllamaEndpoint({ discoverEndpoints })).toBe('http://embedding-host:11434');
+    expect(discoverEndpoints).toHaveBeenCalledTimes(1);
   });
 
   it('treats a non-Ollama HTTP responder as not an endpoint', async () => {

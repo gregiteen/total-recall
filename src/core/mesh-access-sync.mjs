@@ -16,7 +16,7 @@
  * Portability (open source): no hostname, account or path is hardcoded.
  */
 
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 
 const DOC_MARKER = '@@TR-MESH-NODE-DOC@@';
 

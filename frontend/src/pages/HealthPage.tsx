@@ -50,7 +50,7 @@ export default function HealthPage() {
       const data = await checkUpdate()
       setUpdateInfo(data)
       if (!data.updateAvailable) {
-        setCheckMessage('System is up to date!')
+        setCheckMessage(data.previewFeatures ? 'Preview features — running ahead of the public release.' : data.latestVersion ? 'Host package is up to date.' : 'Public release status unavailable.')
         setTimeout(() => setCheckMessage(''), 3000)
       }
     } catch (e) {
@@ -181,7 +181,7 @@ export default function HealthPage() {
           }}>
             <h3 style={{ marginBottom: 12, color: 'var(--text-primary)' }}>Confirm Core Self-Update</h3>
             <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: 14, lineHeight: 1.5 }}>
-              This will pull the latest version of Total Recall ({updateInfo?.latestVersion}) from the git repository, reinstall dependencies, rebuild frontend bundles, and reboot the system kernel.
+              Install Total Recall {updateInfo?.latestVersion} where an update is needed. Newer preview versions are retained.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button 
@@ -280,7 +280,9 @@ export default function HealthPage() {
             </div>
             <div className="stat-card">
               <div className="value" style={{ color: 'var(--accent)' }}>
-                {health.version} {updateInfo && !updateInfo.updateAvailable && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>(Latest)</span>}
+                {health.version} {updateInfo?.previewFeatures
+                  ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>(Preview features)</span>
+                  : updateInfo?.latestVersion && !updateInfo.updateAvailable && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>(Latest)</span>}
               </div>
               <div className="label">Version</div>
             </div>

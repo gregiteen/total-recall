@@ -1,4 +1,4 @@
-import { uninstallPlugin, setPluginShared } from '../../core/plugin-store.mjs';
+import { uninstallPlugin, setPluginShared } from '../../core/plugin-distribution.mjs';
 import { removePluginCommands } from '../command.mjs';
 import { publicPluginShareUrl } from '../../core/plugin-public.mjs';
 

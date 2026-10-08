@@ -149,6 +149,8 @@ const domain = { providers, integrations, automations, launchers, npm_scripts: s
 
 const { inspectStartup } = await import('./startup.mjs');
 const runtime = await inspectStartup().catch(() => ({ ready: false, status: 'unknown' }));
+const { queryHarnessUsage } = await import('../core/meta-harness.mjs');
+const harnesses = await queryHarnessUsage().catch(() => []);
 const warnings = [];
 if (!runtime.ready) warnings.push('Shared runtime readiness failed or unknown: total-recall startup check --json.');
 if (!project?.project_id) warnings.push('No project brain here (total-recall init) — memory, secrets and rules are global-only.');
@@ -159,12 +161,28 @@ if (rules && (now - new Date(rules.compiled)) > 7 * 86400000) warnings.push(`Ins
 for (const w of openwiki) if (w.updated && (now - new Date(w.updated)) > 30 * 86400000) warnings.push(`OpenWiki ${w.dir} last updated ${w.updated.slice(0, 10)} — may be stale.`);
 if (meshStatus && meshStatus.configured === false) warnings.push(`Mesh not configured: ${meshStatus.reason || 'unknown'}.`);
 for (const [name, r] of Object.entries({ project_id: pid, catalog, tasks, mesh })) if (r?.timedOut) warnings.push(`${name} check timed out.`);
+for (const h of harnesses) {
+  if (h.available && !h.authed && h.authRoute?.includes('expired')) {
+    warnings.push(`Harness ${h.name} (${h.id}) credentials expired; re-authenticate.`);
+  }
+}
 
 const brief = {
   generated: { local: now.toString(), utc: now.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
   project: project ? { id: project.project_id, name: project.name, groups } : null,
   repo, rules, skills, repo_start_skill: startSkill ? rel(startSkill) : null, openwiki, trackers,
   domain, runtime,
+  harnesses: harnesses.map((h) => ({
+    id: h.id,
+    name: h.name,
+    version: h.version,
+    latestVersion: h.latestVersion,
+    isCurrent: h.isCurrent,
+    authRoute: h.authRoute,
+    rolling5hRemainingPct: h.rolling5hRemainingPct,
+    weeklyRemainingPct: h.weeklyRemainingPct,
+    status: h.status
+  })),
   commands: cmdList.map((c) => ({ name: c.name, scope: c.scope, risk: c.risk })),
   secrets, tasks: taskCounts,
   mesh: { configured: meshStatus?.configured ?? null, ping: pingData },
@@ -189,6 +207,15 @@ L.push(`Providers with keys (${providers.length}): ${providers.join(', ') || 'no
 L.push(`Integrations: ${integrations.join(', ') || 'none'}  | automations: ${automations.join(', ') || 'none'}`);
 L.push(`Entry points: launchers ${launchers.map((f) => './' + f).join(' ') || 'none'}; npm scripts ${scripts.length}${scripts.length ? ` (${scripts.slice(0, 12).join(', ')}${scripts.length > 12 ? ', …' : ''})` : ''}`);
 L.push(`Runtime: server ${runtime.server?.status || 'unknown'}; brain ${runtime.brain?.status || 'unknown'}; daemon ${runtime.daemon?.status || 'unknown'}; SSSS ${runtime.ssss?.status || 'unknown'}; app ${runtime.app?.status || 'unknown'}`);
+const availableHarnesses = harnesses.filter((h) => h.available);
+const authedHarnesses = availableHarnesses.filter((h) => h.authed);
+if (availableHarnesses.length) {
+  const hDesc = availableHarnesses.map((h) => {
+    const verTag = h.isCurrent ? `v${h.version}` : `v${h.version} (update: v${h.latestVersion})`;
+    return `${h.id} [${verTag}, 5h: ${h.rolling5hRemainingPct}, week: ${h.weeklyRemainingPct}]`;
+  }).join('; ');
+  L.push(`Harnesses (${authedHarnesses.length}/${availableHarnesses.length} authed): ${hDesc}`);
+}
 L.push(`Tasks: ${taskCounts.pending} pending, ${taskCounts.in_progress} in progress`);
 L.push(`Mesh: ${meshStatus?.configured ? 'configured' : 'not configured'}${pingData ? ` — ping: ${JSON.stringify(pingData).slice(0, 300)}` : ' (add --mesh to ping nodes)'}`);
 L.push(`Trackers in progress: ${trackers.in_progress.join(', ') || 'none'}${trackers.planned.length ? `  | planned: ${trackers.planned.join(', ')}` : ''}`);

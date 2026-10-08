@@ -56,14 +56,14 @@ Wire an IDE editor or client application to your remote brain.
   ```bash
   npx total-recall connect <client> [options]
   ```
-- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `aider`, `pi`, `hermes`, `dsh`, `openclaw`, `http-api`, `obsidian`, `generic`
+- **Clients**: `claude-code`, `cursor`, `codex`, `antigravity`, `gemini`, `grok`, `replit`, `lovable`, `windsurf`, `devin`, `trae`, `goose`, `aider`, `pi`, `hermes`, `dsh`, `openclaw`, `http-api`, `obsidian`, `generic`
 - **Options**:
   - `--brain <url>`: remote brain API base URL.
   - `--token <pat>`: Personal Access Token to embed in generated config targets.
   - `--vault <path>`: Obsidian vault target directory path.
   - `--force`: Overwrite existing projection and rules files.
 
-*Symlink clients (`claude-code`, `codex`, `antigravity`, `gemini`, `pi`, `dsh`, `openclaw`) create a platform symlink linking editor shims (like `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md`) to the compiled rules. File-based clients (`cursor`, `cline`, `hermes`, `aider`) write standard rule and memory files directly.*
+*Symlink clients (`claude-code`, `codex`, `antigravity`, `gemini`, `grok`, `replit`, `lovable`, `windsurf`, `devin`, `pi`, `dsh`, `openclaw`) create a platform symlink linking editor shims (such as `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, or `replit.md`) to the compiled rules. File-based clients (`cursor`, `cline`, `hermes`, `aider`) write standard rule and memory files directly.*
 
 ---
 
@@ -334,8 +334,9 @@ Meta-Harness orchestration across connected external IDEs, CLI tools, and local 
   npx total-recall harness <command> [options]
   ```
 - **Commands**:
-  - `list`: Inspect all supported developer harnesses (`agy`, `claude`, `codex`, `gemini`, `ollama`) with availability and binary locations.
-  - `dispatch <id> [--node <node>] "<task>"`: Headlessly invoke a specific harness with task instructions. Supports cross-mesh execution via `--node` and non-interactive `pipe_stdin` for Ollama models (e.g. `gemma4:latest`).
+  - `list`: Inspect all supported developer harnesses (`agy`, `claude`, `codex`, `grok`, `gemini`, `ollama`) with availability, versions, currency, and authentication status.
+  - `usage [--json]`: Query harness account APIs for remaining 5-hour rolling session window and weekly quota percentages, version currency against upstream registries, and authentication freshness.
+  - `dispatch <id> [--node <node>] "<task>"`: Headlessly invoke a specific harness with task instructions. Supports cross-mesh execution via `--node` and non-interactive `pipe_stdin` for Ollama models (such as `gemma4:latest`).
   - `council "<task>"`: Execute multi-harness consensus deliberations concurrently across all available engines and compare responses.
 
 ---

@@ -132,7 +132,7 @@ async function printHelp() {
 
   Core (default product path):
     init [--project]    Bootstrap global or project brain + openwiki
-    connect <client>    Wire IDE / Obsidian / http-api host
+    connect <client>    Wire IDE surface (Cursor, Claude, Codex, Grok, Replit, Lovable)
     remember / forget / edit   Write-path memory (SSSS vault)
     recall              Read-path hybrid search
     compile             Rebuild instruction surfaces
@@ -144,10 +144,11 @@ async function printHelp() {
     plugin <cmd>        Plugin manager: list, install, search, remove, info
     secret <cmd>        Secrets store + usage (not the vault)
     mesh <cmd>          Control-server mesh: nodes, ACL policy, Tailscale SSH
-    harness <cmd>       Meta-harness orchestration & council across IDEs & local LLMs
+    harness <cmd>       Meta-harness manager: list, usage (5h/weekly quotas), dispatch, council
     agent <cmd>         Process controller: spawn, list, logs, kill across mesh
     brain <cmd>         Register / ensure any project brain
     status / doctor     Health and diagnostics
+    brief               Session-start brief: state, runtime, rules, harnesses, trackers
     startup check|ensure Readiness checks / missing managed local runtime start
 ${pluginsSection}
   Optional:
@@ -280,26 +281,16 @@ async function main() {
       }
 
       // Check installed plugins for custom CLI commands declared in manifest
-      const { discoverPlugins, PACKAGE_ROOT } = await import('../src/core/plugin-loader.mjs');
+      const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
       const plugins = discoverPlugins(process.cwd());
       for (const p of plugins) {
         if (p.valid && p.manifest.cli?.command === command) {
           const handlerRel = p.manifest.cli.handler;
           if (handlerRel) {
-            const absHandler = path.resolve(p.dir, handlerRel);
-            if (fs.existsSync(absHandler)) {
-              // Match the host context supplied to dashboard/daemon handlers.
-              process.env.TR_PACKAGE_ROOT = PACKAGE_ROOT;
-              process.env.TR_PLUGIN_ID = p.id;
-              process.env.TR_PLUGIN_DIR = p.dir;
-              const handler = await import(absHandler);
-              if (handler.run) {
-                await handler.run(process.argv);
-              } else if (handler.default) {
-                await handler.default(process.argv.slice(3));
-              }
-              process.exit(process.exitCode ?? 0);
-            }
+            const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');
+            const result = await runPluginCommand(p, { args: args.slice(1), stdin: 'inherit' });
+            if (result.output) process.stdout.write(result.output);
+            process.exit(result.ok ? 0 : (result.exitCode || 1));
           }
         }
       }

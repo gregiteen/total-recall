@@ -36,6 +36,10 @@ immutable: true
 timestamp: "2026-05-25T22:36:21.376Z"
 ---
 
-# Web-Search the Cutoff Gap
+# Always Perform Web Search for Cutoff Gap
 
-For anything within or past the knowledge cutoff (library versions, pricing, service features, API changes), web-search current facts before recommending; never rely on pretraining or assume cloud/PaaS tiers.
+When encountering any technical topic, library version, pricing structure, service features, or API changes that are obviously within or past the knowledge cutoff gap (2025/2026+), the agent MUST:
+
+1. **Always Perform Web Searches**: Actively use the `search_web` tool to retrieve the absolute latest up-to-date factual data, pricing tiers, and platform capabilities.
+2. **Never Guess or Assume**: Do not rely on pre-cutoff weights or make assumptions about active cloud services, PaaS tiers, or local-first setups.
+3. **Verify Before Recommending**: Retrieve fresh information before presenting recommendations or trade-offs to the user.

@@ -6,6 +6,10 @@ export interface UpdateCheckResult {
   currentVersion: string
   latestVersion: string
   updateAvailable: boolean
+  versionStatus?: 'preview_features' | 'current' | 'update_available' | 'unknown' | 'not_installed'
+  previewFeatures?: boolean
+  consumerUpdatesAvailable?: boolean
+  consumersBehind?: number
 }
 
 export async function checkUpdate(): Promise<UpdateCheckResult> {
@@ -19,6 +23,10 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
     currentVersion,
     latestVersion,
     updateAvailable: Boolean(data.updateAvailable ?? data.update_available),
+    versionStatus: data.versionStatus ?? data.version_status,
+    previewFeatures: Boolean(data.previewFeatures ?? (data.version_status === 'preview_features')),
+    consumerUpdatesAvailable: Boolean(data.consumerUpdatesAvailable ?? (data.consumers_behind > 0)),
+    consumersBehind: Number(data.consumers_behind || 0),
   }
 }
 
