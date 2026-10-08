@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useCallback, type CSSProperties, type ReactNode } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties, type ReactNode } from "react"
 import { useSearchParams } from "react-router-dom"
 import {
   fetchPlugins,
+  fetchPlugin,
   fetchBundledPlugins,
   fetchPeerPlugins,
   installPlugin,
@@ -18,7 +19,8 @@ import {
   type PeerNode
 } from "../api"
 import { renderMarkdown } from "../components/MarkdownUtils"
-import { getPreviewComponent, PreviewFallback } from "../components/plugins/previews"
+import { PluginPanel, pluginElements } from "../components/plugins/PluginPanel"
+import { PluginSettings } from "../components/plugins/PluginSettings"
 
 interface PluginsPageProps {
   activeBrainId?: string | null
@@ -118,6 +120,212 @@ function Empty({ title, children }: { title: string; children?: ReactNode }) {
   )
 }
 
+function PluginCardCapabilities({
+  p,
+  onRunSubcommand,
+  onOpenSettings,
+  onOpenPreview
+}: {
+  p: PluginInfo;
+  onRunSubcommand: (subcommand: string) => void;
+  onOpenSettings: () => void;
+  onOpenPreview: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const subcommands = p.cli?.subcommands || []
+  const tasks = p.tasks || []
+  const secrets = p.secrets || []
+  const uiElements = p.ui?.elements || []
+  const categories = p.categories || []
+  const deploy = (p.manifest?.deploy as Record<string, unknown> | undefined) || {}
+  const accessGrants = (deploy.access_grants as string[] | undefined) || []
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+      {/* Quick Capability Badges */}
+      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", fontSize: "11px" }}>
+        {p.cli && (
+          <span className="badge" style={{ background: "rgba(20, 184, 166, 0.15)", color: "#14b8a6", borderColor: "rgba(20, 184, 166, 0.3)" }}>
+            ⚡ CLI: {p.cli.command || p.id} ({subcommands.length} verbs)
+          </span>
+        )}
+        {tasks.length > 0 && (
+          <span className="badge" style={{ background: "rgba(99, 102, 241, 0.15)", color: "#818cf8", borderColor: "rgba(99, 102, 241, 0.3)" }}>
+            ⏱️ {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+          </span>
+        )}
+        {secrets.length > 0 && (
+          <span className="badge" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#f59e0b", borderColor: "rgba(245, 158, 11, 0.3)" }}>
+            🔑 {secrets.length} {secrets.length === 1 ? "secret" : "secrets"}
+          </span>
+        )}
+        {uiElements.length > 0 && (
+          <span className="badge" style={{ background: "rgba(236, 72, 153, 0.15)", color: "#f472b6", borderColor: "rgba(236, 72, 153, 0.3)" }}>
+            🖥️ {uiElements.length} UI {uiElements.length === 1 ? "component" : "components"}
+          </span>
+        )}
+        {categories.length > 0 && (
+          <span className="badge" style={{ background: "rgba(139, 92, 246, 0.15)", color: "#a78bfa", borderColor: "rgba(139, 92, 246, 0.3)" }}>
+            🗂️ {categories.length} {categories.length === 1 ? "category" : "categories"}
+          </span>
+        )}
+      </div>
+
+      {/* Clickable Subcommand Chips */}
+      {subcommands.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-tertiary)", fontWeight: 600 }}>ACTIONS &amp; CLIS:</div>
+          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+            {subcommands.slice(0, expanded ? undefined : 4).map((sub) => (
+              <button
+                key={sub.name}
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => onRunSubcommand(sub.name)}
+                title={sub.description || `Run ${p.cli?.command} ${sub.name}`}
+                style={{
+                  padding: "2px 8px",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  background: "var(--bg-tertiary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "4px"
+                }}
+              >
+                ${p.cli?.command ? ` ${p.cli.command}` : ""} {sub.name}
+              </button>
+            ))}
+            {subcommands.length > 4 && !expanded && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setExpanded(true)}
+                style={{ padding: "2px 6px", fontSize: "10px", color: "var(--text-secondary)" }}
+              >
+                +{subcommands.length - 4} more
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Expandable Deep Capabilities Drawer */}
+      {expanded && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "6px", padding: "10px", background: "rgba(0,0,0,0.2)", borderRadius: "6px", border: "1px solid var(--border)" }}>
+          {/* Workflows / Tasks */}
+          {tasks.length > 0 && (
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-tertiary)", marginBottom: "4px" }}>SCHEDULED WORKFLOWS:</div>
+              {tasks.map((t, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", padding: "3px 0" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", color: "#818cf8" }}>{t.schedule}</span>
+                  <span style={{ color: "var(--text-secondary)", flex: 1, marginLeft: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.intent}>
+                    {t.intent}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => onRunSubcommand(t.command)}
+                    style={{ padding: "1px 6px", fontSize: "10px" }}
+                  >
+                    ▶ Run
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Secrets & Config */}
+          {secrets.length > 0 && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-tertiary)" }}>CONFIGS &amp; CREDENTIALS:</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={onOpenSettings}
+                  style={{ padding: "1px 6px", fontSize: "10px" }}
+                >
+                  ⚙️ Configure
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                {secrets.map((s) => (
+                  <span
+                    key={s.key}
+                    className="badge"
+                    style={{
+                      fontSize: "10px",
+                      fontFamily: "var(--font-mono)",
+                      background: s.required ? "rgba(239, 68, 68, 0.1)" : "rgba(255, 255, 255, 0.05)",
+                      color: s.required ? "#f87171" : "var(--text-secondary)",
+                      borderColor: s.required ? "rgba(239, 68, 68, 0.2)" : "var(--border)"
+                    }}
+                    title={s.description || s.key}
+                  >
+                    {s.key} {s.required ? "(required)" : "(optional)"}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Access Grants & Workspaces */}
+          {accessGrants.length > 0 && (
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-tertiary)", marginBottom: "4px" }}>SSSS ACCESS GRANTS:</div>
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                {accessGrants.map((grant: string) => (
+                  <span key={grant} className="badge" style={{ fontSize: "10px", fontFamily: "var(--font-mono)" }}>
+                    {grant}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* UI Custom Elements */}
+          {uiElements.length > 0 && (
+            <div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-tertiary)", marginBottom: "4px" }}>UI CUSTOM ELEMENTS:</div>
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                {uiElements.map((el) => (
+                  <button
+                    key={el.id}
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={onOpenPreview}
+                    style={{ fontSize: "10px", fontFamily: "var(--font-mono)", padding: "2px 6px" }}
+                    title={`Open <${el.tag}> (${el.kind})`}
+                  >
+                    &lt;{el.tag}&gt;
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Toggle Expand / Collapse */}
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          alignSelf: "flex-start",
+          padding: "2px 6px",
+          fontSize: "11px",
+          color: "var(--text-secondary)",
+          marginTop: "2px"
+        }}
+      >
+        {expanded ? "▴ Collapse details" : "▾ Expand capabilities & configs"}
+      </button>
+    </div>
+  )
+}
+
 export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>("installed")
@@ -149,6 +357,42 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   const [brandingIcon, setBrandingIcon] = useState("")
   const [brandingColor, setBrandingColor] = useState("#3b82f6")
   const [brandingBadge, setBrandingBadge] = useState("")
+
+  // Touch & Context Menu state (right-click & long-press)
+  const [contextMenu, setContextMenu] = useState<{ plugin: PluginInfo; x: number; y: number } | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleTouchStart = (p: PluginInfo, e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+    const touch = e.touches[0]
+    const clientX = touch.clientX
+    const clientY = touch.clientY
+    longPressTimerRef.current = setTimeout(() => {
+      if ("vibrate" in navigator) {
+        try { navigator.vibrate(50) } catch {}
+      }
+      setContextMenu({ plugin: p, x: clientX, y: clientY })
+    }, 500)
+  }
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleContextMenu = (p: PluginInfo, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ plugin: p, x: e.clientX, y: e.clientY })
+  }
+
+  useEffect(() => {
+    const onPointerDown = () => setContextMenu(null)
+    window.addEventListener("pointerdown", onPointerDown)
+    return () => window.removeEventListener("pointerdown", onPointerDown)
+  }, [])
 
   const loadLocal = useCallback(async () => {
     setLoading(true)
@@ -302,9 +546,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   }
 
   const openDetail = async (p: PluginInfo, targetTab: DetailTab = "preview") => {
-    setDetail(p)
-    const hasPreview = !!getPreviewComponent(p.id)
-    setDetailTab(hasPreview ? targetTab : (p.cli ? "run" : "details"))
+    setDetail(await fetchPlugin(p.id) || p)
+    setDetailTab(targetTab)
     setSubcommand(p.cli?.subcommands?.[0]?.name || "")
     setArgs("")
     setOutput(null)
@@ -362,7 +605,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   )
 
   return (
-    <div className="page" style={{ maxWidth: "1200px", margin: "0 auto", width: "100%" }}>
+    <div className="page" style={{ maxWidth: "100%", padding: "0 20px", margin: "0 auto", width: "100%" }}>
       <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
         <div>
           <h1>Plugins</h1>
@@ -407,19 +650,25 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
             {!installed.length && <>Start with a <button className="btn btn-ghost btn-sm" onClick={() => setTab("bundled")}>bundled plugin</button> or see what your peers share.</>}
           </Empty>
         ) : (
-          <div className="card-grid">
+          <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: "18px" }}>
             {filteredInstalled.map((p) => {
               const branding = resolvePluginBranding(p)
               return (
                 <div
                   key={`${p.scope}:${p.id}`}
                   className="card"
+                  onContextMenu={(e) => handleContextMenu(p, e)}
+                  onTouchStart={(e) => handleTouchStart(p, e)}
+                  onTouchEnd={cancelLongPress}
+                  onTouchMove={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
                   style={{
                     display: "flex",
                     flexDirection: "column",
                     gap: "12px",
                     borderTop: `3px solid ${branding.color}`,
-                    position: "relative"
+                    position: "relative",
+                    touchAction: "manipulation"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
@@ -473,7 +722,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                         </div>
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: "4px" }}>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                       {p.locked ? (
                         <span className="badge" style={{ background: "#2e1065", color: "#c084fc", borderColor: "#7e22ce" }} title="Editing locked">
                           🔒 Locked
@@ -483,6 +732,20 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                           🔓 Editable
                         </span>
                       )}
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding: "4px 8px", fontSize: "16px", lineHeight: 1, minHeight: "30px", minWidth: "30px" }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setContextMenu({ plugin: p, x: Math.min(rect.left, window.innerWidth - 260), y: rect.bottom + 4 })
+                        }}
+                        aria-label={`Actions menu for ${p.name}`}
+                        title="Plugin actions & context menu"
+                      >
+                        ⋮
+                      </button>
                     </div>
                   </div>
 
@@ -502,14 +765,25 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                     sha256 {shortHash(p.sha256)}
                   </div>
 
+                  {/* Capabilities, Subcommands, Tasks & Configs */}
+                  <PluginCardCapabilities
+                    p={p}
+                    onRunSubcommand={(cmd) => {
+                      setSubcommand(cmd)
+                      openDetail(p, "run")
+                    }}
+                    onOpenSettings={() => openDetail(p, "details")}
+                    onOpenPreview={() => openDetail(p, "preview")}
+                  />
+
                   {/* Common Config Controls & Action Toolbar */}
                   <div style={{ display: "flex", gap: "6px", marginTop: "auto", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid var(--border)" }}>
                     <button
                       className="btn btn-primary btn-sm"
                       onClick={() => openDetail(p, "preview")}
-                      title="Open interactive component preview"
+                      title={`Open ${p.name}`}
                     >
-                      Preview
+                      Open
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
@@ -520,43 +794,10 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
-                      onClick={() => openBrandingModal(p)}
-                      disabled={p.locked}
-                      title={p.locked ? "Plugin is locked" : "Customize icon and branding"}
+                      onClick={() => openDetail(p, "details")}
+                      title={`Configure ${p.name}`}
                     >
-                      🎨 Brand
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => doToggleLock(p)}
-                      disabled={busy === p.id}
-                      title={p.locked ? "Unlock editing" : "Lock editing when complete"}
-                    >
-                      {p.locked ? "🔓 Unlock" : "🔒 Lock"}
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => doDeployStore(p)}
-                      disabled={busy === p.id || !p.valid}
-                      title="Publish and deploy to the plugin store"
-                    >
-                      {p.store_deployed ? "✓ Store" : "🚀 Store"}
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      disabled={busy === p.id || (!p.valid && !p.shared)}
-                      onClick={() => doShare(p, !p.shared)}
-                      title="Share over mesh or direct link"
-                    >
-                      {p.shared ? "Unshare" : "Share"}
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      disabled={busy === p.id}
-                      onClick={() => doRemove(p)}
-                      title="Uninstall plugin"
-                    >
-                      Remove
+                      Settings
                     </button>
                   </div>
                 </div>
@@ -824,7 +1065,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
             {/* Drawer Header */}
             {(() => {
               const branding = resolvePluginBranding(detail)
-              const PreviewComponent = getPreviewComponent(detail.id)
+              const hasPanel = pluginElements(detail).length > 0
               return (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
@@ -869,14 +1110,14 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
 
                   {/* Drawer Navigation Tabs */}
                   <div role="tablist" style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--border)", paddingBottom: "10px" }}>
-                    {PreviewComponent && (
+                    {hasPanel && (
                       <button
                         role="tab"
                         aria-selected={detailTab === "preview"}
                         className={`btn btn-sm ${detailTab === "preview" ? "btn-primary" : "btn-ghost"}`}
                         onClick={() => setDetailTab("preview")}
                       >
-                        Interactive Preview
+                        Open {detail.name}
                       </button>
                     )}
                     {detail.cli && (
@@ -895,7 +1136,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                       className={`btn btn-sm ${detailTab === "details" ? "btn-primary" : "btn-ghost"}`}
                       onClick={() => setDetailTab("details")}
                     >
-                      Details & Config
+                      Settings
                     </button>
                     <button
                       role="tab"
@@ -907,14 +1148,10 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                     </button>
                   </div>
 
-                  {/* Tab 1: 100% Functional Interactive Preview */}
+                  {/* Plugin-owned interface */}
                   {detailTab === "preview" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      {PreviewComponent ? (
-                        <PreviewComponent />
-                      ) : (
-                        <PreviewFallback pluginId={detail.id} />
-                      )}
+                      <PluginPanel plugin={detail} />
                     </div>
                   )}
 
@@ -947,6 +1184,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                   {/* Tab 3: Plugin Facts & Config Controls */}
                   {detailTab === "details" && (
                     <div>
+                      <PluginSettings plugin={detail} />
                       <Fact label="Scope">{detail.scope}{detail.linked ? " (linked folder)" : ""}</Fact>
                       <Fact label="Source">{sourceLabel(detail)} — <span style={mono}>{detail.source.ref}</span></Fact>
                       <Fact label="Installed">{detail.installed_at ? new Date(detail.installed_at).toLocaleString() : "no install record"}</Fact>
@@ -1027,6 +1265,145 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               )
             })()}
           </div>
+        </div>
+      )}
+
+      {/* Floating Touch & Right-Click Context Menu */}
+      {contextMenu && (
+        <div
+          role="menu"
+          aria-label="Plugin actions menu"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed",
+            left: Math.max(12, Math.min(contextMenu.x, window.innerWidth - 264)),
+            top: Math.max(12, Math.min(contextMenu.y, window.innerHeight - 380)),
+            zIndex: 2000,
+            width: "250px",
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border)",
+            borderRadius: "10px",
+            boxShadow: "0 12px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.08)",
+            padding: "6px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "2px",
+            backdropFilter: "blur(12px)"
+          }}
+        >
+          <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "16px" }}>{resolvePluginBranding(contextMenu.plugin).icon}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {contextMenu.plugin.name}
+              </div>
+              <div style={{ ...mono, fontSize: "10px", color: "var(--text-tertiary)" }}>
+                {contextMenu.plugin.id} · v{contextMenu.plugin.version}
+              </div>
+            </div>
+          </div>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              openDetail(p, "preview")
+            }}
+          >
+            🖥️ Open UI component
+          </button>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              openDetail(p, "run")
+            }}
+          >
+            ⚡ Run CLI ({contextMenu.plugin.cli?.command || contextMenu.plugin.id})
+          </button>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              openDetail(p, "details")
+            }}
+          >
+            ⚙️ Configure &amp; Settings
+          </button>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              openDetail(p, "readme")
+            }}
+          >
+            📖 View README / Docs
+          </button>
+
+          <div style={{ height: "1px", background: "var(--border)", margin: "4px 0" }} />
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              doShare(p, !p.shared)
+            }}
+          >
+            🌐 {contextMenu.plugin.shared ? "Stop sharing on mesh" : "Share on mesh & link"}
+          </button>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              doToggleLock(p)
+            }}
+          >
+            🔒 {contextMenu.plugin.locked ? "Unlock editing" : "Lock for release"}
+          </button>
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              void navigator.clipboard?.writeText(`npx total-recall ${p.cli?.command || p.id}`)
+              setAlert({ type: "success", message: `Copied "npx total-recall ${p.cli?.command || p.id}" to clipboard` })
+            }}
+          >
+            📋 Copy CLI command
+          </button>
+
+          <div style={{ height: "1px", background: "var(--border)", margin: "4px 0" }} />
+
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ justifyContent: "flex-start", width: "100%", padding: "8px 10px", fontSize: "12px", color: "var(--color-error, #f87171)", minHeight: "36px" }}
+            onClick={() => {
+              const p = contextMenu.plugin
+              setContextMenu(null)
+              doRemove(p)
+            }}
+          >
+            🗑️ Uninstall plugin
+          </button>
         </div>
       )}
     </div>
