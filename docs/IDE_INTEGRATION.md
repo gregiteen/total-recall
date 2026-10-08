@@ -1,5 +1,32 @@
 # Total Recall — IDE & Agent Integration Guide
 
+## Codex web skill discovery (verified 2026-10-08)
+
+Enabled skills appear in the web composer's slash list. Creating files in a
+remote checkout does not install or enable a web plugin. Standalone local
+skills are documented for desktop, CLI and IDE; web distribution uses plugins.
+For an existing cloud brain, package instruction routers without exporting
+its vault or credentials:
+
+```sh
+total-recall scaffold codex-plugin repo-workflows --repo /path/to/repo --output /path/to/new-package
+```
+
+The package requires its owning repository at the original path. It preserves
+relative resource resolution by loading each original skill. Install and enable
+it through the host's supported plugin source. Packaging is not installation,
+and a local marketplace does not prove web availability. Do not modify an
+unrelated Total Recall plugin schema to make an OpenAI package.
+
+For local Codex, repository discovery scans `.agents/skills` from CWD upward,
+not child repositories. User skills use `~/.agents/skills`. Symlinks are supported.
+`/skills` and `$name` are documented CLI/IDE selectors; the web slash list must
+be checked separately. A `command` frontmatter field alone is not registration.
+
+Sources: [slash commands](https://learn.chatgpt.com/docs/reference/slash-commands),
+[build skills](https://learn.chatgpt.com/docs/build-skills),
+[plugin packaging](https://developers.openai.com/plugins/build/plugins).
+
 Total Recall serves as the core memory kernel. **Claude Code**, **Cursor**, **Codex CLI**, **Antigravity CLI**, **Aider**, and **VS Code Copilot** act as specialized interfaces on top of it. This guide details how to seamlessly wire each client to the brain.
 
 ---
