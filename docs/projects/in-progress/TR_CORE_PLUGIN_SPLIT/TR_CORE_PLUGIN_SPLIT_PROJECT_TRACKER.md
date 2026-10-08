@@ -22,11 +22,11 @@ One reduced project replaces 13 active projects and the old split plan. Archived
 ## Active acceptance checklist
 
 - [x] TR-001: validate the reduced consolidation, all source dispositions, archived custody, links and single active project before publication.
-- [ ] TR-002 delivery: after retained implementation and TR-006 verification, tag/push/publish and independently verify the final npm artifact; preserve healthy cloud hold.
-- [ ] TR-003: prove the real memory/instruction workflow offline and authenticated with feature plugins disabled; qualify selected-project identity.
-- [ ] TR-004: prove one selected existing capability through the smallest reused plugin seam, including denied access, failure, disable and state preservation.
-- [ ] TR-005: finish the feature import/state audit and reuse/extract/remove decisions; remove domain implementations and false readiness/trust surfaces from core.
-- [ ] TR-006: verify the final memory-only package and selected capability migration/rollback with sanctioned source/artifact checks and truthful support evidence.
+- [x] TR-002 delivery: after retained implementation and TR-006 verification, tag/push/publish and independently verify the final npm artifact; preserve healthy cloud hold.
+- [x] TR-003: prove the real memory/instruction workflow offline and authenticated with feature plugins disabled; qualify selected-project identity.
+- [x] TR-004: prove one selected existing capability through the smallest reused plugin seam, including denied access, failure, disable and state preservation.
+- [x] TR-005: finish the feature import/state audit and reuse/extract/remove decisions; remove domain implementations and false readiness/trust surfaces from core.
+- [x] TR-006: verify the final memory-only package and selected capability migration/rollback with sanctioned source/artifact checks and truthful support evidence.
 - [ ] TR-002 production: provide a safe staged rollout/traffic switch/rollback before applying new cloud source and verify the serving version.
 
 ## Scope decisions
