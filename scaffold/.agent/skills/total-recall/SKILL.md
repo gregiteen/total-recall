@@ -43,3 +43,7 @@ Read the applicable local test, quality and push skills before those actions.
 Run suites and gates in background on the configured sanctioned test node;
 never leave owned jobs running after finishing. Preserve authored instruction
 blocks, repository boundaries and canonical data during regeneration.
+
+For requested upstream changes to `gregiteen/total-recall`, follow
+[the contribution procedure](references/contributing.md). Verify the push and
+PR before claiming publication; preserve and remember blocked work.

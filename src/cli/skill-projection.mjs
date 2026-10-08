@@ -17,7 +17,7 @@
  *
  * This mirrors the brain model: `init --project` ⇒ project skills; `init`
  * (global) ⇒ global skills. Codex discovers project skills in
- * <repo>/.agents/skills and global skills in ~/.codex/skills. In Codex,
+ * <repo>/.agents/skills and global skills in ~/.agents/skills. In Codex,
  * /skills opens the picker and $skill-name explicitly invokes a skill.
  */
 import fs from 'node:fs';
@@ -74,7 +74,7 @@ export const IDE_SKILLS = [
     label: 'Codex',
     clients: ['codex'],
     project: { dir: ['.agents', 'skills'], markers: ['.agents', 'AGENTS.md'], env: ['CODEX_HOME'] },
-    global:  { dir: ['.codex', 'skills'], markers: ['.codex'] }
+    global:  { dir: ['.agents', 'skills'], markers: ['.codex'] }
   },
   {
     id: 'hermes',
