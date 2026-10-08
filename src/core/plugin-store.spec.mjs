@@ -14,7 +14,7 @@ import {
   packSharedPlugin,
   packPublicPlugin,
   patchPluginRecord
-} from './plugin-store.mjs';
+} from './plugin-distribution.mjs';
 import { projectPluginsDir, globalPluginsDir, listBundledPlugins } from './plugin-loader.mjs';
 
 const FORBIDDEN = /rating|review|install_?count|download|verified|stars?\b/i;

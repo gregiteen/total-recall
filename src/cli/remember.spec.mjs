@@ -41,7 +41,7 @@ describe('remember and recall CLI commands', () => {
     vi.restoreAllMocks();
   });
 
-  it('correctly appends rules to invariant.md and runs compilation', async () => {
+  it('writes canonical invariant memory without changing the authored legacy sheet', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     // Mock fetch for semantic embeddings build
@@ -56,13 +56,14 @@ describe('remember and recall CLI commands', () => {
     const rulePath = path.join(tmpAgentDir, 'skills', 'total-recall', 'rules', 'invariants.md');
     const content = fs.readFileSync(rulePath, 'utf8');
     expect(content).toContain('- Existing invariant rule');
-    expect(content).toContain('- Never run tsc directly.');
+    expect(content).not.toContain('Never run tsc directly.');
+    expect(fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault', 'invariants', fs.readdirSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault', 'invariants'))[0]), 'utf8')).toContain('Never run tsc directly.');
 
     global.fetch = origFetch;
     consoleSpy.mockRestore();
   });
 
-  it('correctly appends rules to preference.md', async () => {
+  it('writes canonical preference memory without changing the authored legacy sheet', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const origFetch = global.fetch;
@@ -76,7 +77,8 @@ describe('remember and recall CLI commands', () => {
     const rulePath = path.join(tmpAgentDir, 'skills', 'total-recall', 'rules', 'preferences.md');
     const content = fs.readFileSync(rulePath, 'utf8');
     expect(content).toContain('- Existing preference rule');
-    expect(content).toContain('- Always use double quotes.');
+    expect(content).not.toContain('Always use double quotes.');
+    expect(fs.readFileSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault', 'preferences', fs.readdirSync(path.join(tmpAgentDir, 'skills', 'total-recall', 'memory-vault', 'preferences'))[0]), 'utf8')).toContain('Always use double quotes.');
 
     global.fetch = origFetch;
     consoleSpy.mockRestore();

@@ -152,13 +152,13 @@ export default async function lint(args) {
 
   let matter;
   try {
-    matter = (await import('gray-matter')).default;
+    matter = (await import('../core/frontmatter.mjs')).default;
   } catch {
     console.error('  ❌ gray-matter not installed. Run: npm install gray-matter');
     process.exit(1);
   }
 
-  const { MemoryNodeSchema, TaskSchema, ConflictRecordSchema } = await import('../core/schema.mjs');
+  const { MemoryNodeSchema } = await import('../core/memory-schema.mjs');
   const { walkMd } = await import('../core/vault.mjs');
 
   const files = walkMd(vaultDir);
@@ -168,8 +168,6 @@ export default async function lint(args) {
 
   const schemaMap = {
     memory: MemoryNodeSchema,
-    task: TaskSchema,
-    conflict: ConflictRecordSchema,
   };
 
   for (const file of files) {
@@ -188,17 +186,12 @@ export default async function lint(args) {
         continue;
       }
 
-      if (data.type === 'query') {
-        valid++;
-        continue;
-      }
-
       const schema = schemaMap[data.type];
       if (!schema) {
         if (opts.json) {
-          console.log(JSON.stringify({ file: rel, level: 'warning', message: `Unknown type: ${data.type}` }));
+          console.log(JSON.stringify({ file: rel, level: 'warning', message: `Type '${data.type}' requires validation by its owner; portable lint validates memory only` }));
         } else {
-          console.error(`  ⚠️  ${rel}: Unknown type '${data.type}' — no schema to validate against`);
+          console.error(`  ⚠️  ${rel}: Type '${data.type}' requires validation by its owner; portable lint validates memory only`);
         }
         warnings++;
         continue;

@@ -1,0 +1,31 @@
+### Result
+{"passed":true,"parentDOMBlocked":true,"storageBlocked":true,"directFetchBlocked":true,"externalNavigationBlocked":true,"declaredCommandWorked":true,"draftPreserved":true}
+### Ran Playwright code
+```js
+await (async (page) => {
+ await page.goto('http://127.0.0.1:19539/plugins');
+ await page.evaluate(()=>localStorage.setItem('tr-onboarding-complete','1'));
+ await page.goto('http://127.0.0.1:19539/plugins');
+ await page.evaluate(()=>localStorage.setItem('fixture-secret','synthetic-only'));
+ await page.getByRole('button',{name:'Audit fixture',exact:true}).click();
+ const panel=page.frameLocator('iframe[title="Audit fixture interface"]');
+ await panel.getByRole('button',{name:'Run status'}).click();
+ const proof=JSON.parse(await panel.locator('#proof').textContent());
+ if(proof.parentDOM!==false||proof.storage!==false||proof.fetch!==false||proof.command?.status!=='working')throw new Error('UI isolation failure: '+JSON.stringify(proof));
+ if(await panel.getByLabel('Draft').inputValue()!=='keep')throw new Error('Draft state lost');
+ const iframe=page.frames().find(f=>f!==page.mainFrame());
+ await iframe.evaluate(()=>location.href='http://127.0.0.1:19540/escape');
+ await page.waitForTimeout(250);
+ const requests=await page.evaluate(()=>fetch('/proof').then(r=>r.json()));
+ if(requests.forbidden!==0||requests.external!==0||requests.ran!==1)throw new Error('Unexpected request: '+JSON.stringify(requests));
+ console.log(JSON.stringify({passed:true,parentDOMBlocked:true,storageBlocked:true,directFetchBlocked:true,externalNavigationBlocked:true,declaredCommandWorked:true,draftPreserved:true}));
+ await page.screenshot({path:'/tmp/tr-release-security-browser.png',fullPage:true});
+ return {passed:true,parentDOMBlocked:true,storageBlocked:true,directFetchBlocked:true,externalNavigationBlocked:true,declaredCommandWorked:true,draftPreserved:true};
+})(page);
+```
+### Page
+- Page URL: http://127.0.0.1:19539/plugins
+- Page Title: Total Recall — Portable Memory
+- Console: 8 errors, 0 warnings
+### Events
+- New console entries: .playwright-cli/console-2026-10-08T02-05-47-038Z.log#L3-L15

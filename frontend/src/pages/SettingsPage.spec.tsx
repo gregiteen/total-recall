@@ -55,6 +55,20 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/Config JSON API error: 500/i)).toBeInTheDocument();
   }, 10000);
 
+  it('labels a host ahead of public npm as preview while offering consumer upgrades separately', async () => {
+    vi.mocked(api.fetchConfigJson).mockResolvedValue({
+      security: { bind: {}, network: {}, rate_limits: {}, sandbox: {}, dashboard: {}, api: {} },
+      budget: { budget: {} }, brain: {}, secrets: {},
+    } as never);
+    vi.mocked(api.fetchHealth).mockResolvedValue({ status: 'healthy', version: '3.38.0' } as never);
+    vi.mocked(api.checkUpdate).mockResolvedValue({ updateAvailable: false, previewFeatures: true,
+      consumerUpdatesAvailable: true, consumersBehind: 2, currentVersion: '3.38.0', latestVersion: '3.37.0' });
+    await act(async () => { render(<SettingsPage />); });
+    expect(await screen.findByText('Preview features')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update Registered Projects' })).toBeInTheDocument();
+    expect(screen.queryByText(/Update available \(latest/)).not.toBeInTheDocument();
+  });
+
   it('restarts the server from the UI and reports the outcome', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(api.fetchConfigJson).mockResolvedValue({

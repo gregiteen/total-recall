@@ -21,6 +21,9 @@ export default defineConfig({
     testTimeout: 20000,
   },
   server: {
+    headers: {
+      'Content-Security-Policy': "frame-src 'self'; object-src 'none'; base-uri 'self'",
+    },
     port: 5173,
     proxy: {
       '/v1': {

@@ -26,7 +26,7 @@ All former active/planned projects are historical source records. They are archi
 - PIC-001–023, PIC-030–049 and PIC-050–053 retain their identifiers. Repeated occurrences point to one canonical work package; a fix and its acceptance evidence close all mapped occurrences together.
 - Host-owned operational previews, fabricated popularity/trust, blanket feature prerequisites and a duplicate Jev skill are superseded approaches. Preserve useful contracts and real implementations through their plugin owners.
 - External app feature catalogs are outside active core scope and remain with their existing owners. Consolidation does not make them new Total Recall code tasks or authorize work in another repository.
-- Current 3.38.0 publication and the eventual split release use the same release work package with distinct artifact evidence. Publishing current fixes does not complete the extraction.
+- Release delivery follows completion and verification of the retained core/plugin implementation. No separate publication of the current fixes precedes that work.
 
 ## Current source verification
 

@@ -20,7 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 export function globalBrainDirFor(env = process.env) {
-  const agentDir = env.AGENT_DIR || path.join(os.homedir(), '.agent');
+  const agentDir = env.AGENT_DIR || env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
   return path.join(agentDir, 'skills', 'total-recall');
 }
 

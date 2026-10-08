@@ -7,7 +7,7 @@ vi.mock('../../core/mesh-auth.mjs', () => ({
     req.headers.authorization === 'Bearer ok' ? next() : res.status(401).json({ error: 'Invalid mesh sync credential' }),
 }));
 vi.mock('../../core/mesh.mjs', () => ({ getMeshHostname: () => 'node-a' }));
-vi.mock('../../core/plugin-store.mjs', () => ({
+vi.mock('../../core/plugin-distribution.mjs', () => ({
   listInstalledPlugins: () => [{ id: 'example', name: 'Example', valid: true, tasks: [{ command: 'refresh', schedule: '0 6 * * *' }] }],
   listSharedPlugins: () => [{ id: 'git-sentinel', name: 'Git Sentinel', sha256: 'a'.repeat(64), _plugin: { dir: '/secret/path' } }],
   packSharedPlugin: (id) => (id === 'git-sentinel' ? { format: 'tr-plugin-bundle/1', id, files: [] } : null),

@@ -14,6 +14,7 @@ import {
   isPackageAutoUpdateEnabled,
 } from '../../core/package-auto-update.mjs';
 import { packageVersionOnDisk, requestSelfRestart } from '../../core/server-restart.mjs';
+import { packageVersionStatus } from '../../core/package-version.mjs';
 
 const router = Router();
 
@@ -65,13 +66,14 @@ router.get('/api/update/check', requireAuth, async (_req, res) => {
         declared: info.declared,
         installed: info.installed,
         is_source_tree: info.isSourceTree,
+        version_status: packageVersionStatus(info.installed, latest),
         update_available: !info.isSourceTree && needsUpdate(info.installed, latest),
       };
     });
 
     const consumersBehind = projects.filter((p) => p.update_available).length;
-    const updateAvailable =
-      Boolean(latest && current && needsUpdate(current, latest)) || consumersBehind > 0;
+    const versionStatus = packageVersionStatus(current, latest);
+    const updateAvailable = versionStatus === 'update_available';
 
     res.json({
       package: PACKAGE_NAME,
@@ -82,6 +84,10 @@ router.get('/api/update/check', requireAuth, async (_req, res) => {
       // snake + camel for dashboard clients
       update_available: updateAvailable,
       updateAvailable,
+      versionStatus,
+      version_status: versionStatus,
+      previewFeatures: versionStatus === 'preview_features',
+      consumerUpdatesAvailable: consumersBehind > 0,
       auto_update_enabled: isPackageAutoUpdateEnabled(),
       projects,
       consumers_behind: consumersBehind,
@@ -130,6 +136,7 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
     const failed = Number(summary?.failed || 0);
     const updated = Number(summary?.updated || 0);
     const upToDate = Number(summary?.up_to_date || 0);
+    const previews = Number(summary?.preview_features || 0);
     const skipped = Number(
       (summary?.results || []).filter((r) => String(r.status || '').startsWith('skipped')).length,
     );
@@ -137,6 +144,7 @@ router.post('/api/update/run', requireAuth, requireScope('config:write'), async 
     const parts = [];
     if (updated) parts.push(`${updated} updated`);
     if (upToDate) parts.push(`${upToDate} already current`);
+    if (previews) parts.push(`${previews} using preview features`);
     if (skipped) parts.push(`${skipped} skipped`);
     if (failed) parts.push(`${failed} failed`);
     const detail = parts.length ? parts.join(', ') : 'no projects checked';

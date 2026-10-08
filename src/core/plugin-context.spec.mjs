@@ -93,8 +93,8 @@ describe('Plugin Evolving Context Injections', () => {
     expect(context).toContain('## Evolving Plugin Context Surfaces');
     expect(context).toContain('### Active Plugin: Scientific Frontiers Engine');
     expect(context).toContain('Local Test Lab');
-    expect(context).toContain('two_qubit_gate_fidelity');
-    expect(context).toContain('99.99 %');
+    expect(context).toContain('Quantum Gate Fidelity');
+    expect(context).not.toContain('99.99 %');
     expect(context).toContain('Room-Temperature Superconductivity Test');
   });
 
@@ -104,5 +104,47 @@ describe('Plugin Evolving Context Injections', () => {
       nodes: []
     });
     expect(context).toBe('');
+  });
+
+  it('does not execute invalid, escaped or project-root replacement generators', async () => {
+    const pluginsRoot = path.join(fixtureRoot, '.agent', 'skills', 'total-recall', 'plugins');
+    const outside = path.join(fixtureRoot, 'replacement.mjs');
+    fs.writeFileSync(outside, 'export function generateContext() { return "ESCAPED_GENERATOR"; }');
+    const variants = [
+      ['invalid-context', { id: 'INVALID', compile: { generator: './replacement.mjs' } }],
+      ['symlink-context', { compile: { generator: './replacement.mjs' } }],
+      ['missing-context', { compile: { generator: './replacement.mjs' } }],
+    ];
+    try {
+      for (const [id, extra] of variants) {
+        const dir = path.join(pluginsRoot, id);
+        fs.mkdirSync(dir);
+        fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({
+          id, name: id, version: '1.0.0', description: 'Generator confinement test', ...extra,
+        }));
+        if (id !== 'missing-context') fs.symlinkSync(outside, path.join(dir, 'replacement.mjs'));
+      }
+      const context = await assemblePluginContexts({ projectRoot: fixtureRoot });
+      expect(context).not.toContain('ESCAPED_GENERATOR');
+      expect(context).not.toContain('invalid-context');
+    } finally {
+      for (const [id] of variants) fs.rmSync(path.join(pluginsRoot, id), { recursive: true, force: true });
+      fs.rmSync(outside);
+    }
+  });
+
+  it('does not read another plugin or shared derived context through a symlink', async () => {
+    const dir = path.join(fixtureRoot, '.agent', 'skills', 'total-recall', 'plugins', 'scientific-frontiers');
+    const derivedDir = path.join(fixtureRoot, 'derived');
+    fs.mkdirSync(derivedDir);
+    fs.writeFileSync(path.join(derivedDir, 'evolving-context.md'), 'UNOWNED_CONTEXT');
+    fs.symlinkSync(path.join(derivedDir, 'evolving-context.md'), path.join(dir, 'context.md'));
+    try {
+      const context = await assemblePluginContexts({ projectRoot: fixtureRoot, derivedDir });
+      expect(context).not.toContain('UNOWNED_CONTEXT');
+    } finally {
+      fs.rmSync(path.join(dir, 'context.md'));
+      fs.rmSync(derivedDir, { recursive: true });
+    }
   });
 });

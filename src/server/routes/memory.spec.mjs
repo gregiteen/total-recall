@@ -1,18 +1,20 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 
 const mocks = vi.hoisted(() => ({
   getNodes: vi.fn(),
   semanticSearch: vi.fn(),
+  writeNode: vi.fn(),
+  invalidate: vi.fn(),
 }));
 
 vi.mock('../auth.mjs', () => ({
   requireAuth: (req, _res, next) => { req.user = { id: 'test' }; next(); },
   requireScope: () => (_req, _res, next) => next(),
 }));
-vi.mock('../../core/vault-cache.mjs', () => ({ getNodes: mocks.getNodes, invalidate: vi.fn() }));
+vi.mock('../../core/vault-cache.mjs', () => ({ getNodes: mocks.getNodes, invalidate: mocks.invalidate }));
 vi.mock('../../core/search.mjs', () => ({ semanticSearch: mocks.semanticSearch }));
 vi.mock('../../core/surface.mjs', () => ({ compileSurface: vi.fn() }));
 vi.mock('../../core/embeddings.mjs', () => ({
@@ -20,14 +22,53 @@ vi.mock('../../core/embeddings.mjs', () => ({
   buildSessionEmbeddingsIndex: vi.fn(),
 }));
 vi.mock('../../core/conflict-detector.mjs', () => ({ detectAndResolve: vi.fn() }));
-vi.mock('../../core/validated-write.mjs', () => ({ writeNodeValidatedAsync: vi.fn() }));
+vi.mock('../../core/validated-write.mjs', () => ({ writeNodeValidatedAsync: mocks.writeNode }));
 vi.mock('../../core/research-queue.mjs', () => ({ listQueue: vi.fn(), updateQueueItem: vi.fn() }));
 
 import { memoryRouter } from './memory.mjs';
+import { VAULT_DIR } from './_shared.mjs';
 
 const app = express();
 app.use(express.json());
 app.use(memoryRouter);
+
+describe('memory mutations and selected brain isolation', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    mocks.getNodes.mockReturnValue([]);
+    mocks.writeNode.mockReset().mockResolvedValue({ success: true });
+    mocks.invalidate.mockClear();
+  });
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it('returns a successful replacement after persisting and invalidating the same vault', async () => {
+    const res = await request(app).put('/api/memory/replaced').send({
+      title: 'Replacement', category: 'facts', content: 'The new content',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ slug: 'replaced', content: 'The new content' });
+    expect(mocks.writeNode).toHaveBeenCalledWith(expect.objectContaining({ slug: 'replaced' }), VAULT_DIR);
+    expect(mocks.invalidate).toHaveBeenCalledWith(VAULT_DIR);
+  });
+
+  it.each(['post', 'put', 'patch', 'delete'])('rejects %s on an unavailable brain before any write', async (method) => {
+    const url = method === 'post' ? '/api/memory' : '/api/memory/replaced';
+    const res = await request(app)[method](`${url}?brain=project:__missing_isolation_fixture__`).send({
+      slug: 'replaced', title: 'Replacement', category: 'facts', content: 'Must not persist',
+    });
+    expect(res.status).toBe(404);
+    expect(mocks.writeNode).not.toHaveBeenCalled();
+    expect(mocks.invalidate).not.toHaveBeenCalled();
+  });
+
+  it.each(['/api/memory', '/api/memory/stats', '/api/memory/replaced'])('rejects unavailable selected brains for %s', async (url) => {
+    const res = await request(app).get(`${url}?brain=global,project:__missing_isolation_fixture__`);
+    expect(res.status).toBe(404);
+  });
+});
 
 describe('GET /api/memory sort', () => {
   beforeEach(() => {

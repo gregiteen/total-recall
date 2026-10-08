@@ -1,0 +1,38 @@
+{
+  "version": "3.39.0",
+  "published": false,
+  "source_sha256": "264051237637364d9b27d2297e596e2483ae448220da70701d494cd47a45f60a",
+  "quality": {
+    "exit_code": 0,
+    "checks": 7,
+    "test_files": 380,
+    "tests": 2391
+  },
+  "native_source_health": {
+    "exit_code": 0,
+    "status": "healthy",
+    "version": "3.39.0",
+    "runtime": "memory"
+  },
+  "native_installed_health": {
+    "exit_code": 0,
+    "status": "healthy",
+    "version": "3.39.0",
+    "runtime": "memory"
+  },
+  "installed_lifecycle_exit_code": 0,
+  "npm_publish_dry_run_exit_code": 0,
+  "artifact": {
+    "id": "total-recall-brain@3.39.0",
+    "integrity": "sha512-c5YY37dVuSzh6GdteZXo0vWZ9NhWfRErsf4RIVsK2AcJvy4+fryCGK1HgOlJomM/8XMYvkk15cNiYphdLckCnw==",
+    "shasum": "38a97d38ec3c608c3b1875538814f307faf2d0ce",
+    "size": 3118774,
+    "unpackedSize": 9913423,
+    "entryCount": 576
+  },
+  "test_host_compressed_integrity": "sha512-XeEusSuTJ0jhIVm3A4M+inm3ep7b2qKcOCmabX7WBvEHDoRGEI3UjtjhB8/yc/z7+jsDHszukJ6yQ/Fs6yvgaA==",
+  "publishing_and_test_host_content_identical": true,
+  "uncompressed_tar_sha256": "1caf3d347743e53faee38672ad99fc0f74394bf5f6d5765f4a209afdf4140ab7",
+  "compression_note": "Different compressed bytes, identical uncompressed tar and all 576 file paths/modes/sizes/content digests. Publishing-host pack integrity matches publish dry-run.",
+  "pending": "Added dynamic plugin-card generation scope requires resolution before publication."
+}

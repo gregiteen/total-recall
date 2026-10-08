@@ -10,7 +10,7 @@ import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import YAML from 'yaml';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { ensureFullProjectBrain } from './project-brain.mjs';
 import { checkSkillLayerContract } from './skill-config.mjs';
 

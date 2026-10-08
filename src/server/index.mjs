@@ -120,6 +120,8 @@ let tunnelProcess = null;
 
 const app = express();
 app.disable('x-powered-by');
+// Keep embedded owner code from navigating its frame to an external origin.
+app.use((_req, res, next) => { res.setHeader('Content-Security-Policy', "frame-src 'self'; object-src 'none'; base-uri 'self'"); next(); });
 app.set('trust proxy', 'loopback');
 app.use(requireHttps);
 

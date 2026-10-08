@@ -1,7 +1,7 @@
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
+import matter from "../../core/frontmatter.mjs";
 import { requireAuth, requireScope } from "../auth.mjs";
 import { getPluginById } from "../../core/plugin-loader.mjs";
 import {
@@ -14,12 +14,14 @@ import {
   setPluginBranding,
   setPluginLocked,
   deployPluginToStore
-} from "../../core/plugin-store.mjs";
+} from "../../core/plugin-distribution.mjs";
 import { listPeerPlugins } from "../../core/plugin-peers.mjs";
 import { runPluginCommand } from "../../core/plugin-runner.mjs";
+import { readPluginRecord, patchPluginRecord, emit, vaultFor } from '../../core/plugin-store.mjs';
+import { configurationValues } from '../../core/plugin-contracts/configuration.mjs';
 import { writeNodeValidatedAsync } from "../../core/validated-write.mjs";
 import { walkMd } from "../../core/vault.mjs";
-import { serverError, badRequest, VAULT_DIR, sanitizeNode } from "./_shared.mjs";
+import { serverError, badRequest, VAULT_DIR, BRAIN_DIR, sanitizeNode } from "./_shared.mjs";
 
 const router = Router();
 
@@ -27,6 +29,25 @@ const router = Router();
 // a caller-supplied `root`, which let a request point discovery — and the
 // runner — at any directory on disk.
 const projectRoot = () => process.cwd();
+
+router.get('/api/plugins/:id/configuration', requireAuth, requireScope('config:read'), (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin?.valid) return res.status(404).json({ error: 'Plugin unavailable' });
+    res.json({ fields: plugin.manifest.configuration?.fields || [], values: readPluginRecord(plugin)?.configuration || {} });
+  } catch (err) { serverError(res, err); }
+});
+
+router.put('/api/plugins/:id/configuration', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin?.valid) return res.status(404).json({ error: 'Plugin unavailable' });
+    const values = configurationValues(plugin.manifest.configuration || { fields: [] }, req.body?.values);
+    await patchPluginRecord(plugin, { configuration: values });
+    await emit(vaultFor(plugin), plugin.id, 'configured', { fields: Object.keys(values) });
+    res.json({ values });
+  } catch (err) { badRequest(res, err.message); }
+});
 
 /** Serve only modules declared by an installed plugin's UI manifest. */
 router.get('/api/plugins/:id/ui/:element', requireAuth, requireScope('config:read'), (req, res) => {
@@ -217,7 +238,7 @@ router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), a
     if (!plugin.valid) return badRequest(res, `Plugin ${plugin.id} has an invalid manifest: ${plugin.errors.join("; ")}`);
     if (!plugin.manifest?.cli?.handler) return badRequest(res, `Plugin ${plugin.id} does not declare a CLI handler`);
 
-    const result = await runPluginCommand(plugin, { subcommand, args, cwd: projectRoot() });
+    const result = await runPluginCommand(plugin, { subcommand, args, cwd: projectRoot(), secretsBrainDir: process.env.TR_SECRETS_BRAIN || BRAIN_DIR });
     res.json({ success: result.ok, pluginId: plugin.id, ...result });
   } catch (err) {
     badRequest(res, err.message);

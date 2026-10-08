@@ -30,7 +30,7 @@ export function parseLayerFlag(args) {
 
 /** Global agent directory — always at ~/.agent/ */
 export function getGlobalAgentDir() {
-  return process.env.AGENT_DIR || path.join(os.homedir(), '.agent');
+  return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
 }
 
 /** Global brain directory — ~/.agent/skills/total-recall/ */
@@ -72,8 +72,8 @@ export function detectProjectBrain(startDir = process.cwd()) {
  * @param {'global' | 'project' | 'auto'} [layer='auto']
  */
 export function resolveAgentDir(layer = 'auto', targetPath = process.cwd()) {
-  if (process.env.AGENT_DIR) {
-    return process.env.AGENT_DIR;
+  if (process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR) {
+    return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR;
   }
   if (layer === 'global') return getGlobalAgentDir();
   if (layer === 'project') {
@@ -92,8 +92,8 @@ export function resolveAgentDir(layer = 'auto', targetPath = process.cwd()) {
  */
 export function resolveBrainDir(layer = 'auto', targetPath = process.cwd()) {
   // Match resolveAgentDir: AGENT_DIR override pins the agent root → brain under it.
-  if (process.env.AGENT_DIR) {
-    return path.join(process.env.AGENT_DIR, 'skills', 'total-recall');
+  if (process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR) {
+    return path.join(process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR, 'skills', 'total-recall');
   }
   if (layer === 'global') return getGlobalBrainDir();
   if (layer === 'project') {

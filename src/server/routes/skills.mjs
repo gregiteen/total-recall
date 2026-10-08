@@ -627,7 +627,7 @@ skillsRouter.post('/api/skills/toggle', requireAuth, requireScope('ssss:write'),
   }
 });
 
-import matter from 'gray-matter';
+import matter from '../../core/frontmatter.mjs';
 
 skillsRouter.post('/api/skills/preview', requireAuth, requireScope('ssss:read'), async (req, res) => {
   try {

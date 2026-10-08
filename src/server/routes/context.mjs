@@ -49,7 +49,7 @@ router.post('/api/context', requireAuth, requireScope('memory:read'), async (req
 router.get('/api/context/preview', requireAuth, requireScope('memory:read'), async (req, res) => {
   try {
     const { previewContext } = await import('../../core/context-compiler.mjs');
-    const vaultDir = resolveVaultFromQuery(req);
+    const vaultDir = resolveVaultFromQuery(req, { strict: true });
     const result = previewContext({ vaultDir });
     res.json(result);
   } catch (err) {
@@ -62,7 +62,7 @@ router.post('/api/context/stream', requireAuth, requireScope('memory:read'), asy
     const { streamParallelContext } = await import('../../core/parallel-context.mjs');
     const { query, budget_tokens, batch_size, concurrency, min_score } = req.body || {};
     if (!query) return badRequest(res, 'query is required');
-    const vaultDir = resolveVaultFromQuery(req);
+    const vaultDir = resolveVaultFromQuery(req, { strict: true });
     const result = await streamParallelContext({
       query,
       vaultDir,

@@ -1,158 +1,71 @@
 # Total Recall
 
-[![Version](https://img.shields.io/badge/version-3.32.4-indigo.svg)](package.json)
-[![License](https://img.shields.io/badge/license-MIT-emerald.svg)](LICENSE)
+**Portable personal memory for any IDE** — open source, with canonical SSSS Markdown and disposable search indexes.
 
-**Portable personal memory for any IDE** — filesystem-native, database-free, open source.
+Total Recall stores rules, preferences, facts and project knowledge. The portable runtime provides validated memory operations, local retrieval, task context and instruction surfaces. Optional capabilities run through explicitly installed plugins. Initialization creates an empty brain.
 
-Plugin status (September 30, 2026): the tree contains five bundled plugins; standalone plugin repos retain their own documents. Current review found incomplete operations, fabricated preview data and unsupported readiness claims. The [audit](docs/projects/archived/consolidated-into-tr-core-plugin-split/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_AUDIT.md) and [correction tracker](docs/projects/archived/consolidated-into-tr-core-plugin-split/PLUGIN_IMPLEMENTATION_CORRECTIONS/PLUGIN_IMPLEMENTATION_CORRECTIONS_PROJECT_TRACKER.md) record evidence, owners and acceptance. Findings remain open. The version badge reflects the local manifest, not publication verification.
+## Memory CLI
 
-Total Recall stores your rules, preferences, facts, and project knowledge as plain Markdown (SSSS). It compiles them into IDE instruction surfaces, runs a dream consolidation cycle, and lets agents enqueue background tasks. Host apps and product repos are equal implementations: **nothing is hard-coded to a specific codebase.**
-
-```text
-write   →  remember / session ingest
-sleep   →  dream  (consolidate, conflict, compile, prune)
-read    →  recall + compiled surfaces
-async   →  daemon task queue (agents may enqueue anything under policy)
+```sh
+npm install total-recall-brain
+npx total-recall-memory init --project
+npx total-recall-memory remember preference "Prefer clear, short answers." --project
+npx total-recall-memory recall "short answers" --local --project
+npx total-recall-memory context "Implement a memory change" --action edit,test --project
+npx total-recall-memory compile --project
 ```
 
-```text
-your brain  =  ~/.agent/skills/total-recall/
-your project  =  <repo>/.agent/skills/total-recall/
+The package preserves the `total-recall` executable, dashboard and plugin scaffold during migration. The isolated memory CLI is available as `total-recall-memory`. Use `npx --package total-recall-brain total-recall-memory <command>` without a local installation.
+
+`context` includes required rules before ranked knowledge. Check `ready: true`; exit 2 means the required rules exceed the selected budget. Increase the explicit budget or curate applicability before continuing.
+
+Project memory lives at `<repo>/.agent/skills/total-recall/`; global memory lives at `<home>/.agent/skills/total-recall/`. `--project` and `--global` select the layer. `AGENT_DIR` explicitly pins all layer operations to one agent root. Canonical memory remains separate between roots.
+
+Local retrieval needs no server or embedding provider. Set `TR_EMBEDDINGS_DISABLED=1` for provider-free operation. Semantic search requires a configured provider. Compilation preserves existing embeddings; mutation commands await local indexing.
+
+Run `total-recall --help` for the current commands. `import` preserves authored rule files and imports validated memory. `lint` validates memory and can validate installed manifests with `--plugins`; feature records require their owning validator.
+
+## Optional capabilities
+
+```sh
+total-recall plugin install /path/to/capability --global
+total-recall plugin list
+total-recall plugin info capability-id
+total-recall capability-command --help
+total-recall plugin remove capability-id --global
 ```
 
----
+Local directories and Git sources use the same manifest validation, canonical installation records and artifact digest. Installed `cli` and `commands` declarations use an isolated child process with bounded output and timeout. Removal disables dispatch and preserves memory and recorded installation history; reinstalling the same artifact restores its digest.
 
-## Quick start (IDE memory, ~2 minutes)
+Plugins are trusted code with the operator's OS permissions. A child process protects the host from handler exits and output interference; it provides no OS sandbox. Background jobs, services, interfaces, distribution and feature-specific validation belong to the capability owner.
 
-No always-on LLM and no research daemon required.
+Dashboard plugin interfaces run in scripts-only frames with an opaque origin. They cannot access dashboard DOM/storage or fetch services directly. Self-contained owner modules receive themed variables and a `host.run(subcommand, args)` bridge restricted to manifest-declared commands and server authorization. Native command handlers retain the trust boundary described above. Never embed secret values in generated interface code.
 
-```bash
-cd /path/to/any-project
-npx total-recall init --project    # project brain + openwiki scaffold
-npx total-recall connect claude-code   # or: cursor | codex | gemini | aider | obsidian | http-api
-npx total-recall remember preference "Prefer clear, short answers."
-npx total-recall recall "short answers"
-npx total-recall compile           # rebuild INSTRUCTIONS.md inject blocks
+## Memory HTTP service
+
+After installing the package locally:
+
+```sh
+AGENT_DIR=/path/to/agent TR_EMBEDDINGS_DISABLED=1 total-recall-memory init
+AGENT_DIR=/path/to/agent HOST=127.0.0.1 PORT=3900 node node_modules/total-recall-brain/src/server/memory-server.mjs
 ```
 
-Injected rules sit only between:
+In the source checkout, `npm run start:memory` selects the memory server. `npm start` preserves the existing dashboard service.
 
-```text
-<!-- BEGIN INJECTED MEMORY: do not edit by hand; rebuilt by total-recall surface -->
-…
-<!-- END INJECTED MEMORY -->
-```
+The service exposes memory, context, instructions, rules, scoped keys and authentication. `/health` reports initialization, node count, runtime and package version. Health requires authentication except direct local access. `/.well-known/total-recall.json` lists available memory endpoints. Configure a scoped credential with `total-recall key --help` or `generate-pat --help` before remote use.
 
-Existing local rules outside those markers are never clobbered.
+The `total-recall-brain/memory` export provides `createMemoryApp()`. Existing package and secret-store exports remain available for installed consumers.
 
----
+## Source and migration
 
-## Core workflows
+The source checkout and this compatible npm release retain existing product implementations during migration, including the dashboard, update command and plugin creation scaffold. The package gate verifies the complete memory file inventory alongside these compatibility surfaces and excludes private brain state. The isolated memory entrypoint does not load the product worker or dashboard. A default memory-only package requires a breaking release and completed capability migration.
 
-| Workflow | Commands |
-|----------|----------|
-| **Remember / recall** | `remember`, `forget`, `recall` |
-| **Dream (sleep)** | `dream` — or daemon system dream on empty queue |
-| **Defer work** | `task add "<intent>"` then `daemon start` |
-| **Skills across repos** | `skill track <path>`, `skill deploy`, `skill sync` |
-| **Secrets (not vault)** | `secret set\|list\|rotate\|usage\|check-surfaces` |
-| **Connect an IDE** | `connect <client>` |
+Versions ahead of the public npm release display **Preview features**. Host updates and older registered projects are reported separately; updating projects never downgrades a preview installation.
 
-### Multi-repo skills (any path you choose)
+The [prior product README](docs/reference/legacy-product-readme.md) preserves the original documentation. The [active core/plugin project](docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) records implementation and verification; its unfinished acceptance items are not release claims.
 
-```bash
-npx total-recall skill track /path/to/any-app
-npx total-recall skill sync --repo /path/a --repo /path/b
-# or: export TR_SYNC_REPOS="/path/a:/path/b"
-```
+## Development
 
-Roots come only from: project registry, install map, `TR_SYNC_REPOS`, CLI `--repo`, and cwd when it looks like a project.
+The source uses Node ESM and Vitest. Run the repository's configured background gates on its sanctioned test host. `npm run check:package` inspects npm's actual file inventory; `npm run check:ssss-registry` verifies the composed registry lock. Clean installed-artifact and native service checks complement the source suite.
 
-### Secrets
-
-```bash
-npx total-recall secret set some_api_key "$KEY" --provider example
-npx total-recall secret list                 # metadata only
-npx total-recall secret check-surfaces       # fail if values leaked into surfaces
-```
-
-Optional AES: `TR_SECRETS_PASSWORD`. Values never belong in vault markdown or openwiki.
-
-### Optional background daemon
-
-```bash
-npx total-recall daemon start    # idle invent OFF unless TR_IDLE_TASKS=1
-npx total-recall task add "Extract decisions from last session" --cap vault:write
-```
-
----
-
-## Dual-layer brain
-
-```text
-GLOBAL   ~/.agent/skills/total-recall/     identity, shared preferences
-PROJECT  <repo>/.agent/skills/total-recall/  repo facts, decisions, openwiki
-```
-
-CLI flags: `--global` / `--project`. Project wins on slug conflicts when both apply.
-
----
-
-## CLI inventory
-
-Commands are classified as **core** (default product path), **optional** (power features), or **legacy** (still shipped, not the focus).
-
-Full table: [`docs/reference/CLI_INVENTORY.md`](docs/reference/CLI_INVENTORY.md)
-
-| Tier | Examples |
-|------|----------|
-| **Core** | `init`, `connect`, `remember`, `forget`, `recall`, `compile`, `dream`, `task`, `daemon`, `skill`, `secret`, `brain`, `status`, `doctor` |
-| **Optional** | `research`, `relay`, `deploy`, `setup`, `backup`/`restore`, `chat`, `map`, `export`/`import`, `ingest` |
-| **Legacy / niche** | `collab`, `friction`, `upgrade`, `migrate`, `snapshot`, `command` |
-
-Default install story: **init → connect → remember/recall → dream**. No LLM required.
-
----
-
-## Optional full server
-
-For a local REST API + dashboard (not required for IDE memory):
-
-```bash
-npx total-recall start
-# or: npm start
-```
-
-Deploy/tunnels are optional (`deploy`, `setup`). Configure only what you need.
-
----
-
-## Architecture sketch
-
-- **SSSS vault** — Markdown + YAML frontmatter (filesystem SSOT)
-- **Openwiki** — human/agent long-form docs (ships with init)
-- **Surfaces** — compiled inject blocks for IDEs
-- **Dream** — consolidation cycle (deterministic first)
-- **Daemon tasks** — open envelope + capability policy
-- **Secrets** — separate store from vault
-
-Host apps consume TR the same way: PAT + brain URL (`connect http-api`) or local files.
-
----
-
-## Uninstall
-
-```bash
-npx total-recall uninstall
-```
-
-Project brains inside git repos are preserved when possible so you do not lose custom rules and memories.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-*Portable memory. Your files. Any IDE.*
+MIT license. See [LICENSE](LICENSE).

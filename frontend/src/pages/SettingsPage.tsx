@@ -50,6 +50,9 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
     updateAvailable: boolean;
     latestVersion?: string;
     currentVersion?: string;
+    previewFeatures?: boolean;
+    consumerUpdatesAvailable?: boolean;
+    consumersBehind?: number;
   } | null>(null);
   const [updating, setUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -129,6 +132,9 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
           updateAvailable: !!u.updateAvailable,
           latestVersion: u.latestVersion,
           currentVersion: u.currentVersion,
+          previewFeatures: u.previewFeatures,
+          consumerUpdatesAvailable: u.consumerUpdatesAvailable,
+          consumersBehind: u.consumersBehind,
         }),
       )
       .catch(console.error);
@@ -205,6 +211,9 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
           updateAvailable: !!refreshed.updateAvailable,
           latestVersion: refreshed.latestVersion,
           currentVersion: refreshed.currentVersion,
+          previewFeatures: refreshed.previewFeatures,
+          consumerUpdatesAvailable: refreshed.consumerUpdatesAvailable,
+          consumersBehind: refreshed.consumersBehind,
         });
       }
     } catch (err: unknown) {
@@ -1031,15 +1040,17 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, padding: '16px 20px', background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)', gap: 16, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                {updateInfo?.updateAvailable
+                {updateInfo?.previewFeatures
+                  ? 'Preview features'
+                  : updateInfo?.updateAvailable
                   ? `Update available (latest v${updateInfo.latestVersion || '?'})`
-                  : 'Host package is up to date'}
+                  : updateInfo?.latestVersion ? 'Host package is up to date' : 'Public release status unavailable'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
                 Running v{updateInfo?.currentVersion || health?.version || '—'}
                 {updateInfo?.latestVersion ? ` · npm latest v${updateInfo.latestVersion}` : ''}
-                {updateInfo?.updateAvailable
-                  ? ' · registered projects or host package can be upgraded'
+                {updateInfo?.consumerUpdatesAvailable
+                  ? ` · ${updateInfo.consumersBehind || ''} registered projects can be upgraded`
                   : ''}
               </div>
               {updateMessage && (
@@ -1071,9 +1082,9 @@ export default function SettingsPage({ activeBrainId }: { activeBrainId?: string
                 className="btn-primary"
                 onClick={handleRunUpdate}
                 disabled={updating}
-                style={{ background: updateInfo?.updateAvailable ? '#3fb950' : undefined, border: 'none' }}
+                style={{ background: updateInfo?.updateAvailable || updateInfo?.consumerUpdatesAvailable ? '#3fb950' : undefined, border: 'none' }}
               >
-                {updating ? 'Updating…' : updateInfo?.updateAvailable ? 'Apply Updates' : 'Check & Sync Projects'}
+                {updating ? 'Updating…' : updateInfo?.updateAvailable ? 'Apply Updates' : updateInfo?.consumerUpdatesAvailable ? 'Update Registered Projects' : 'Check & Sync Projects'}
               </button>
             </div>
           </div>

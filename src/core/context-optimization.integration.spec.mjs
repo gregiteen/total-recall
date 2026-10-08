@@ -32,9 +32,9 @@ describe('context optimization populated synthetic walkthrough', () => {
    fs.symlinkSync(derivedDir,path.join(brain,'memory-derived'));
    const cliPath=new URL('../../bin/total-recall.mjs',import.meta.url);
    const cliStart=performance.now();
-   const cli=spawnSync(process.execPath,[cliPath.pathname,'recall','bodyunique9999','--project','--local','--timings','--format','json'],{cwd:project,env:{...process.env,HOME:root,AGENT_DIR:'',TR_SECRETS_NO_KEYCHAIN:'1'},encoding:'utf8'});
+   const cli=spawnSync(process.execPath,[cliPath.pathname,'recall','bodyunique9999','--project','--local','--timings','--format','json'],{cwd:project,env:{...process.env,HOME:root,AGENT_DIR:path.join(project,'.agent'),TR_SECRETS_NO_KEYCHAIN:'1'},encoding:'utf8'});
    const cliMs=performance.now()-cliStart;
-   expect(cli.status).toBe(0);
+   expect(cli.status,cli.stderr).toBe(0);
    expect(JSON.parse(cli.stdout)[0].slug).toBe('fixture-9999');
    console.log(JSON.stringify({cli_first_output_and_exit_ms:cliMs}));
    expect(cliMs).toBeLessThan(500);

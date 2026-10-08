@@ -160,6 +160,35 @@ describe('server auth request locality', () => {
   });
 });
 
+describe('production TLS trust boundary', () => {
+  it('rejects a spoofed forwarding header and accepts Express verified TLS', async () => {
+    const previous = process.env.NODE_ENV;
+    const previousAgent = process.env.AGENT_DIR;
+    const isolated = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-tls-boundary-'));
+    process.env.AGENT_DIR = isolated;
+    process.env.NODE_ENV = 'production';
+    vi.resetModules();
+    try {
+      const productionAuth = await import('./auth.mjs');
+      const request = req({ 'x-forwarded-proto': 'https' }, '203.0.113.10', '203.0.113.10');
+      const response = res();
+      const next = vi.fn();
+      productionAuth.requireHttps({ ...request, secure: false }, response, next);
+      expect(response.statusCode).toBe(426);
+      expect(next).not.toHaveBeenCalled();
+      productionAuth.requireHttps({ ...request, secure: true }, res(), next);
+      expect(next).toHaveBeenCalledOnce();
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+      if (previousAgent === undefined) delete process.env.AGENT_DIR;
+      else process.env.AGENT_DIR = previousAgent;
+      fs.rmSync(isolated, { recursive: true, force: true });
+      vi.resetModules();
+    }
+  });
+});
+
 describe('session cookie Secure flag', () => {
   let tmpDir;
   let prevAgentDir;

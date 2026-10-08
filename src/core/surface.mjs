@@ -4,15 +4,13 @@ import os from 'os';
 import crypto from 'crypto';
 import { loadSkills, atomicWrite, walkMd } from './vault.mjs';
 import { getNodes } from './vault-cache.mjs';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { logger } from './logger.mjs';
 import {
   buildMemoryLayerIndex,
   inferMemoryLayer,
 } from './memory-layers.mjs';
 import { assemblePluginContexts } from './plugin-context.mjs';
-import { selectResearchBriefs, formatResearchBriefs } from './research-surface.mjs';
-import { loadQueue } from './research-queue.mjs';
 import yaml from 'yaml';
 import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
 import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
@@ -302,25 +300,6 @@ async function compactNode(node, derivedDir, force = false) {
   // Fallback default
   let compacted = heuristicCompact(node);
 
-  // If LLM compacting is requested
-  if (process.env.TR_LLM_COMPACT === 'true') {
-    try {
-      const { callLocalRuntime, loadRuntimeConfig } = await import('./runtime.mjs');
-      const runtimeConfig = loadRuntimeConfig();
-      
-      const systemPrompt = "You are a Rule Compactor. Your task is to compress a system instruction or preference rule into a single, dense, highly actionable sentence. Preserve all key constraints, file paths, model names, or terminal commands verbatim. Return only the compacted sentence and nothing else.";
-      const userPrompt = `Rule Title: ${title}\nRule Body: ${body}`;
-      
-      const response = await callLocalRuntime(userPrompt, systemPrompt, runtimeConfig);
-      const cleanResponse = response.trim().replace(/\s+/g, ' ');
-      if (cleanResponse && cleanResponse.length > 0 && cleanResponse.length < 250) {
-        compacted = cleanResponse;
-      }
-    } catch (err) {
-      // Graceful fallback to heuristic
-    }
-  }
-
   // Save to cache — always merge into existing cache (OKF non-destructive augmentation).
   // When force=true we skipped cache loading above, so reload it now before writing
   // to avoid blowing away other nodes' cached compactions.
@@ -337,26 +316,6 @@ async function compactNode(node, derivedDir, force = false) {
   }
 
   return compacted;
-}
-
-/**
- * Finished background research for the current project, plus research the user
- * asked for recently, as a compact brief section (see research-surface.mjs).
- * Reports live in the global brain, so nodes are looked up there when the
- * caller's node set (e.g. a project vault) does not contain them.
- */
-export function buildResearchSection(nodes = [], { projectRoot, queueItems, researchNodes, now } = {}) {
-  try {
-    const items = queueItems || loadQueue();
-    if (!items.some((i) => i.status === 'done' && i.node_slug)) return '';
-    const project = path.basename(projectRoot || process.cwd());
-    const pool = researchNodes || [...nodes, ...getNodes(path.join(globalBrainDir, 'memory-vault'))];
-    const section = formatResearchBriefs(selectResearchBriefs({ queueItems: items, nodes: pool, project, now }));
-    return section ? `\n\n${section}` : '';
-  } catch (err) {
-    logger.debug('surface', `Research section skipped: ${err.message}`);
-    return '';
-  }
 }
 
 const DEFAULT_RULE_BUDGET = { invariants: 9000, preferences: 4000, corrections: 8000 };
@@ -433,7 +392,6 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
       for (const skill of loadSkills(skillsDir)) contributions.push({ id: `skill:${skill.name}`,
         text: `Skill ${skill.name}: ${String(skill.description || '').slice(0, 200)} (${path.relative(root, skill.filepath)})` });
     }
-    contributions.push({ id: 'research', text: buildResearchSection(nodes, { projectRoot: root }) });
     contributions.push({ id: 'commands', text: buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir))) });
     const plugin = await assemblePluginContexts({ projectRoot: root, vaultDir, nodes, derivedDir });
     contributions.push({ id: 'plugins', text: plugin });
@@ -471,7 +429,10 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
   const shimDir = path.dirname(shimPath);
   const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir, bootstrap: true });
   const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
-  const fullContent = `${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
+  const mdcHeader = shimPath.endsWith('.mdc')
+    ? '---\ndescription: "Total Recall — Auto-generated behavioral memory surface."\nglobs:\nalwaysApply: true\n---\n\n'
+    : '';
+  const fullContent = `${mdcHeader}${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
   try {
     if (fs.existsSync(shimPath)) {
@@ -509,13 +470,25 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
  * Map of client names → shim file paths they require.
  */
 const CLIENT_SHIMS = {
-  cursor:             ['.cursorrules'],
+  cursor:             ['.cursor/rules/total-recall.mdc', '.cursorrules'],
   claude:             ['CLAUDE.md'],
   'claude-code':      ['CLAUDE.md'],
   cline:              ['.clinerules/total-recall.md'],
+  roo:                ['.roo/rules/total-recall.md', '.clinerules/total-recall.md'],
+  'roo-code':         ['.roo/rules/total-recall.md', '.clinerules/total-recall.md'],
   antigravity:        ['AGENTS.md', '.agents/rules/AGENTS.md'],
   gemini:             ['GEMINI.md', '.agents/rules/GEMINI.md'],
   codex:              ['AGENTS.md'],
+  grok:               ['AGENTS.md'],
+  replit:             ['replit.md'],
+  lovable:            ['AGENTS.md'],
+  openhands:          ['AGENTS.md'],
+  zed:                ['AGENTS.md'],
+  trae:               ['.trae/rules/total-recall.md', '.traerules'],
+  goose:              ['.goosehints'],
+  aider:              ['.aider.rules.md'],
+  windsurf:           ['.windsurf/rules/total-recall.md', '.devin/rules/total-recall.md', '.windsurfrules'],
+  devin:              ['.devin/rules/total-recall.md'],
   vscode:             ['.github/copilot-instructions.md', '.vscode/copilot-instructions.md'],
   githubCopilot:      ['.github/copilot-instructions.md'],
   pi:                 ['AGENTS.md'],
@@ -612,15 +585,11 @@ function globalVaultFor(vaultDir) {
   return path.resolve(globalVault) === path.resolve(vaultDir) ? null : globalVault;
 }
 
-export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force = false }) {
+export async function compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force = false, semantic = true }) {
   if (isSurfaceCodeStale()) {
     logger.warn('surface', 'Surface compile skipped: this process runs an outdated copy of surface.mjs. Restart it (server/daemon) so instruction files are built with the current code.');
     return { nodesProcessed: 0, skillsInjected: 0, semanticIndexed: 0, semanticUnavailable: false, skipped: true, reason: 'stale-surface-code' };
   }
-  try {
-    const { syncAllPluginRecords } = await import('./plugin-store.mjs');
-    await syncAllPluginRecords();
-  } catch {}
   const nodes = getNodes(vaultDir);
   const globalVault = globalVaultFor(vaultDir);
   const ruleNodes = globalVault && fs.existsSync(globalVault)
@@ -696,7 +665,9 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   // Awaiting is cheap in steady state: buildEmbeddingsIndex skips nodes whose
   // content hash is unchanged, so only genuinely new or edited nodes cost a call.
   let semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true };
-  try {
+  if (!semantic || process.env.TR_EMBEDDINGS_DISABLED === '1') {
+    logger.info('surface', 'Semantic embeddings explicitly disabled; local indexes updated.', { derivedDir });
+  } else try {
     const { buildEmbeddingsIndex } = await import('./embeddings.mjs');
     const built = await buildEmbeddingsIndex(nodes, derivedDir);
     semanticResult = {

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { loadNodes, writeNode, atomicWrite } from './vault.mjs';
 import { updateNodeInPlace } from './validated-write.mjs';
 import { proposalKey } from './optimizer.mjs';

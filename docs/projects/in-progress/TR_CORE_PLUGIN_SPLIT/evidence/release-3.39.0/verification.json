@@ -1,0 +1,289 @@
+{
+  "version": "3.39.0",
+  "published": false,
+  "source_sha256": "72abfdd410ebdc9fae6bda227a8fd05745e415b988b24331979cc43c10d56207",
+  "status": "Current candidate security checks passed; release remains unpublished",
+  "quality": {
+    "exit_code": 0,
+    "checks": 9,
+    "test_files": 383,
+    "tests": 2405,
+    "report": "security-quality-report.json"
+  },
+  "dependency_audits": {
+    "root": 0,
+    "frontend": 0,
+    "clean_consumer": 0,
+    "meaning": "exit codes; zero published advisories"
+  },
+  "native_source_health": {
+    "passed": true,
+    "health": {
+      "status": "healthy",
+      "version": "3.39.0",
+      "runtime": "memory",
+      "memory": {
+        "initialized": true,
+        "nodes": 0
+      }
+    }
+  },
+  "native_installed_health": {
+    "passed": true,
+    "health": {
+      "status": "healthy",
+      "version": "3.39.0",
+      "runtime": "memory",
+      "memory": {
+        "initialized": true,
+        "nodes": 0
+      }
+    }
+  },
+  "installed_lifecycle": {
+    "ok": true,
+    "plugin": {
+      "id": "git-sentinel",
+      "version": "1.1.0",
+      "sha256": "7e3451e2da91ea013f4ac9c7abc163312c16aba799031563bef0735a178969b3"
+    },
+    "offline": true,
+    "required_rules": 1,
+    "capsule_tokens": 92,
+    "overflow_rejected": true,
+    "memory_preserved_on_remove": true,
+    "artifact_restored": true,
+    "installed_plugin_failure_propagated": true,
+    "invalid_plugin_rejected": true,
+    "imported_rules_immediately_recalled": true,
+    "declared_command_exit_and_data_preserved": true,
+    "custom_identity_preserved": true,
+    "commands": [
+      {
+        "command": "init",
+        "exit": 0
+      },
+      {
+        "command": "init",
+        "exit": 0
+      },
+      {
+        "command": "remember",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "init",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "init",
+        "exit": 0
+      },
+      {
+        "command": "remember",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "remember",
+        "exit": 0
+      },
+      {
+        "command": "context",
+        "exit": 0
+      },
+      {
+        "command": "context",
+        "exit": 2
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "git-sentinel",
+        "exit": 1
+      },
+      {
+        "command": "plugin",
+        "exit": 1
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "git-sentinel",
+        "exit": 0
+      },
+      {
+        "command": "git-sentinel",
+        "exit": 0
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "--help",
+        "exit": 0
+      },
+      {
+        "command": "declared-verb",
+        "exit": 0
+      },
+      {
+        "command": "declared-verb",
+        "exit": 7
+      },
+      {
+        "command": "declared-verb",
+        "exit": 1
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "declared-verb",
+        "exit": 1
+      },
+      {
+        "command": "git-sentinel",
+        "exit": 1
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "git-sentinel",
+        "exit": 0
+      },
+      {
+        "command": "plugin",
+        "exit": 0
+      },
+      {
+        "command": "edit",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "forget",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "import",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "import",
+        "exit": 0
+      },
+      {
+        "command": "recall",
+        "exit": 0
+      },
+      {
+        "command": "lint",
+        "exit": 0
+      }
+    ]
+  },
+  "browser_security": {
+    "passed": true,
+    "proof": "browser-security-proof.log",
+    "parent_dom_blocked": true,
+    "parent_storage_blocked": true,
+    "direct_fetch_blocked": true,
+    "external_navigation_blocked": true,
+    "declared_command_worked": true,
+    "draft_preserved": true
+  },
+  "development_policy": {
+    "passed": true,
+    "development_server_policy": "frame-src 'self'; object-src 'none'; base-uri 'self'",
+    "no_backend_requests": true
+  },
+  "npm_publish_dry_run_exit_code": 0,
+  "artifact": {
+    "id": "total-recall-brain@3.39.0",
+    "integrity": "sha512-11RejTZwv6XNjlXWM7fi/l9cZDCYkFkLDLRpxjY5jAAReJhA1FGD9fDON/RpKlqO2EUKxCXWMsKgGPKL9VuNFw==",
+    "shasum": "b1344310df57f29e71c6e6ed62ff8b8028f8e74a",
+    "size": 3121965,
+    "unpackedSize": 9921183,
+    "entryCount": 579
+  },
+  "test_host_compressed_integrity": "sha512-y1OYCocpebemeoZx8X9Y87Nyu0BNcpaPgaudoKj64FxqBo67urwFE9YtZM+zUOjyJtyfyZdJEqSshkiFDpYaEw==",
+  "publishing_and_test_host_content_identical": true,
+  "uncompressed_tar_sha256": "b619651bb43af9725a29ace3e8c025299989f157f15d7fb9f065b82d051b4ad0",
+  "credential_scan": {
+    "pattern_matches": [],
+    "private_credential_paths": []
+  },
+  "pending": "Model-generated card faces are not implemented or certified by this audit; no live runtime restart or publication.",
+  "test_host_recovery": {
+    "configuration_restored_exact_preincident_snapshot_bytes": true,
+    "snapshot": "com.apple.TimeMachine.2026-10-07-194329.local",
+    "recorded_credential_mutations_between_snapshot_and_incident": 0,
+    "quarantined_new_non_vault_files": 16,
+    "quarantined_unchanged_scaffold_skill_files": 47,
+    "removed_owned_ide_links": 12,
+    "scaffold_vault_records_preexisting_unchanged": 4,
+    "canonical_vault_rolled_back": false,
+    "derived_rebuild": {
+      "exit_code": 0,
+      "nodes": 60,
+      "drift": 0,
+      "semantic_provider_calls": false,
+      "embeddings_preserved": true
+    },
+    "snapshot_unmounted": true,
+    "credential_file_mode": "0600",
+    "ssh_decryption_verified": false,
+    "protected_forensic_backup_retained_same_host": true
+  }
+}

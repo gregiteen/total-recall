@@ -19,22 +19,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
-import { writeFileSecure } from './secure-file.mjs';
+import { VAULT_CATEGORIES, writeBrainIdentity, registerProjectBrain } from './memory-brain.mjs';
+export { VAULT_CATEGORIES, writeBrainIdentity, registerProjectBrain } from './memory-brain.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
-
-export const VAULT_CATEGORIES = Object.freeze([
-  'invariants',
-  'patterns',
-  'anti-patterns',
-  'preferences',
-  'decisions',
-  'concepts',
-  'facts',
-  'corrections',
-  'lore',
-]);
 
 /**
  * @param {string} repoRoot
@@ -141,32 +130,6 @@ npx total-recall dream
 /**
  * Write/update brain.json identity for a project brain.
  */
-export function writeBrainIdentity(brainDir, { name, role = 'project', tags = [] } = {}) {
-  const configDir = path.join(brainDir, 'config');
-  ensureDir(configDir);
-  const brainJsonPath = path.join(configDir, 'brain.json');
-  let current = {};
-  if (fs.existsSync(brainJsonPath)) {
-    try {
-      current = JSON.parse(fs.readFileSync(brainJsonPath, 'utf8')) || {};
-    } catch {
-      current = {};
-    }
-  }
-  const next = {
-    ...current,
-    name: name || current.name || path.basename(path.resolve(brainDir, '../../..')),
-    role: 'project',
-    layer: 'project',
-    full_brain: true,
-    tags: [...new Set([...(current.tags || []), ...tags, 'project-brain'])],
-    updated_at: new Date().toISOString(),
-    created_at: current.created_at || new Date().toISOString(),
-  };
-  writeFileSecure(brainJsonPath, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
-  return next;
-}
-
 /**
  * Ensure a full project brain under repoRoot/.agent/skills/total-recall/.
  *
@@ -253,39 +216,6 @@ export function ensureFullProjectBrain(repoRoot, opts = {}) {
 /**
  * Register (or update) a project brain in global config/project-registry.json.
  */
-export function registerProjectBrain(globalBrainDir, entry) {
-  const registryPath = path.join(globalBrainDir, 'config', 'project-registry.json');
-  ensureDir(path.dirname(registryPath));
-  let list = [];
-  if (fs.existsSync(registryPath)) {
-    try {
-      list = JSON.parse(fs.readFileSync(registryPath, 'utf8')) || [];
-    } catch {
-      list = [];
-    }
-  }
-  if (!Array.isArray(list)) list = [];
-
-  const abs = path.resolve(entry.path);
-  const idx = list.findIndex((p) => path.resolve(p.path || '') === abs);
-  const now = new Date().toISOString();
-  const row = {
-    name: entry.name,
-    path: abs,
-    brainDir: entry.brainDir,
-    full_brain: true,
-    layer: 'project',
-    tags: entry.tags || ['project-brain'],
-    registered_at: idx >= 0 ? list[idx].registered_at || now : now,
-    last_compiled: entry.last_compiled || list[idx]?.last_compiled || null,
-    updated_at: now,
-  };
-  if (idx >= 0) list[idx] = { ...list[idx], ...row };
-  else list.push(row);
-  fs.writeFileSync(registryPath, JSON.stringify(list, null, 2));
-  return row;
-}
-
 /**
  * Ensure a path is a full project brain and register it.
  * Requires an explicit repoRoot — no hardcoded product repos (open-source safe).

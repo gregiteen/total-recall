@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { atomicWrite, isSafeVaultName } from './vault.mjs';
 
 const caches = new Map();

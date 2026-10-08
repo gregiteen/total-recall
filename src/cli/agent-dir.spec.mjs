@@ -75,4 +75,21 @@ describe('agent-dir.mjs', () => {
       else process.env.AGENT_DIR = prev;
     }
   });
+
+  it('pins all resolver paths to the test root when AGENT_DIR is absent', () => {
+    const prevAgent = process.env.AGENT_DIR;
+    const prevTest = process.env._TR_TEST_AGENT_DIR;
+    try {
+      delete process.env.AGENT_DIR;
+      process.env._TR_TEST_AGENT_DIR = path.join(os.tmpdir(), 'tr-isolated-agent');
+      expect(getGlobalAgentDir()).toBe(process.env._TR_TEST_AGENT_DIR);
+      for (const layer of ['global', 'project', 'auto']) {
+        expect(resolveAgentDir(layer)).toBe(process.env._TR_TEST_AGENT_DIR);
+        expect(resolveBrainDir(layer)).toBe(path.join(process.env._TR_TEST_AGENT_DIR, 'skills', 'total-recall'));
+      }
+    } finally {
+      if (prevAgent === undefined) delete process.env.AGENT_DIR; else process.env.AGENT_DIR = prevAgent;
+      if (prevTest === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = prevTest;
+    }
+  });
 });

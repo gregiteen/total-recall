@@ -33,6 +33,8 @@ import { exec, spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { projectSkillsForScope, detectActiveSkillTargets } from './skill-projection.mjs';
 import { ensureRepoExpert } from './repo-expert-generate.mjs';
+import { getGlobalAgentDir } from './agent-dir.mjs';
+import { restoreLegacyInitSecrets } from '../core/legacy-init-secrets.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -201,13 +203,13 @@ export default async function init(args) {
   if (opts.help) { printHelp(); return; }
 
   const cwd = process.cwd();
-  const globalAgentDir = path.join(os.homedir(), '.agent');
+  const globalAgentDir = getGlobalAgentDir();
   const globalBrainDir = path.join(globalAgentDir, 'skills', 'total-recall');
 
   // Determine target based on --project flag
   const isProject = opts.project;
-  const agentDir = isProject ? path.join(cwd, '.agent') : globalAgentDir;
-  const brainDir = isProject ? path.join(agentDir, 'skills', 'total-recall') : globalBrainDir;
+  const agentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || (isProject ? path.join(cwd, '.agent') : globalAgentDir);
+  const brainDir = path.join(agentDir, 'skills', 'total-recall');
   const layerLabel = isProject ? 'PROJECT' : 'GLOBAL';
   const targetPath = isProject ? cwd : os.homedir();
   let passwordMessage = "";
@@ -360,29 +362,13 @@ export default async function init(args) {
   // ── Restore credentials from backup if present ──
   let restoredPasswordHash = null;
   if (!opts.dryRun) {
-    const backupSecretsPath = path.join(agentDir, 'secrets.enc');
-    if (fs.existsSync(backupSecretsPath)) {
-      try {
-        const configDir = path.join(brainDir, 'config');
-        fs.mkdirSync(configDir, { recursive: true });
-        
-        // Copy secrets.enc to brainDir/config/secrets.enc
-        const destSecretsPath = path.join(configDir, 'secrets.enc');
-        fs.copyFileSync(backupSecretsPath, destSecretsPath);
-        
-        // Read to see if password hash is present
-        const secretsObj = JSON.parse(fs.readFileSync(destSecretsPath, 'utf8') || '{}');
-        if (secretsObj.dashboard_password_hash) {
-          restoredPasswordHash = secretsObj.dashboard_password_hash;
-          // Strip password hash from the copied secrets.enc to keep secrets.enc clean
-          delete secretsObj.dashboard_password_hash;
-          const { saveSecrets } = await import('../core/secrets-store.mjs');
-          await saveSecrets(path.join(agentDir, 'skills', 'total-recall'), secretsObj);
-        }
-        logOk('Restored saved API keys and credentials from persistent backup!');
-      } catch (err) {
-        logWarn(`Failed to restore credentials from backup: ${err.message}`);
-      }
+    try {
+      const restored = await restoreLegacyInitSecrets(agentDir, brainDir);
+      restoredPasswordHash = restored.dashboardPasswordHash || null;
+      if (restored.restored) logOk('Restored encrypted credentials from the legacy carrier');
+      else if (restored.reason === 'active-store-exists') logSkip('Active credential store preserved');
+    } catch {
+      logWarn('Legacy credentials were not restored. Configure the secret-store password before retrying.');
     }
   }
 

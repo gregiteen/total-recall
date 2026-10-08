@@ -78,6 +78,42 @@ try {
     }
   }
 
+  // ── Step 3: Sync all other shipped scaffold skills ──
+  const EXTRA_SCAFFOLD_SKILLS = [
+    'start',
+    'meta-harness',
+    'decision',
+    'plugins',
+    'project-management'
+  ];
+
+  for (const skill of EXTRA_SCAFFOLD_SKILLS) {
+    const sSrc = path.join(ROOT, '.agent', 'skills', skill) + '/';
+    const sDst = path.join(ROOT, 'scaffold', '.agent', 'skills', skill) + '/';
+    if (fs.existsSync(sSrc)) {
+      execSync(`mkdir -p '${sDst}'`, { encoding: 'utf8', cwd: ROOT });
+      execSync(`rsync -av --delete '${sSrc}' '${sDst}'`, { encoding: 'utf8', cwd: ROOT });
+      console.log(`   ✓ Synced skill: ${skill}`);
+    }
+  }
+
+  // ── Step 4: Strict Personal Information Audit ──
+  // Ensure no user emails, local user home paths, or private credentials exist in scaffold.
+  const auditRes = execSync(`grep -rniE "(Users/[a-zA-Z0-9_-]+|@[a-zA-Z0-9.-]+\\.(com|org|net)|xai-[a-zA-Z0-9]+|sk-ant-[a-zA-Z0-9]+|sk-proj-[a-zA-Z0-9]+)" '${path.join(ROOT, 'scaffold')}' || true`, { encoding: 'utf8' }).trim();
+  const leakedLines = auditRes.split('\n').filter(Boolean).filter((l) => {
+    // Whitelist public package URLs and documentation examples
+    if (l.includes('github.com') || l.includes('schema.json') || l.includes('Users/<name>')) return false;
+    return true;
+  });
+
+  if (leakedLines.length > 0) {
+    console.error('❌ Personal information or credential pattern detected in scaffold:');
+    for (const l of leakedLines) console.error(`   ${l}`);
+    process.exit(1);
+  } else {
+    console.log('✅ Personal info audit clean: zero leaked identities or credentials in scaffold.');
+  }
+
   // The manifest must travel with sync-repo.mjs: that script runs inside a
   // brain, where src/core is not importable. Copied after the rsync so the
   // canonical version wins over the live brain's copy.

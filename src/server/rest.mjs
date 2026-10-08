@@ -50,7 +50,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import matter from 'gray-matter';
+import matter from '../core/frontmatter.mjs';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 import { loadRuntimeConfig } from '../core/runtime.mjs';

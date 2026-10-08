@@ -106,6 +106,7 @@ export default async function update(args = []) {
     skipThrottle: opts.apply || opts.force,
     save: true,
   });
+  if (summary.failed > 0 || summary.reason === 'npm-view-failed') process.exitCode = 1;
 
   if (summary.skipped) {
     console.log(`\n  Skipped: ${summary.reason}`);
@@ -130,6 +131,8 @@ export default async function update(args = []) {
         ? '↑'
         : r.status === 'up_to_date'
           ? '✓'
+          : r.status === 'preview_features'
+            ? '◇'
           : r.status === 'failed'
             ? '✗'
             : '·';

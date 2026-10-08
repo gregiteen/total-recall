@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { safeStringify } from './vault.mjs';
 import { writeNodeValidatedAsync } from './validated-write.mjs';
 import { getNodes } from './vault-cache.mjs';

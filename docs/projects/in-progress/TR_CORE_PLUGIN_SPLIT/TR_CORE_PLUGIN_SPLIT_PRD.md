@@ -9,6 +9,8 @@ Greg's current direction is a Total Recall memory core with every other feature 
 
 ## Requirements
 
+Greg's subsequent functional-plugin instruction supersedes selected-plugin delivery acceptance. Every installed plugin needs its own repository containing UI, adapters, configuration, CLI and tests. Every supported integration feature must have an explicit coverage entry and working operation; a generic command launcher or fake successful preview is insufficient. Secure credential entry and all supported settings belong on each plugin. Phone provides real calls and call controls; Text provides real conversation threads, composition, media and delivery states. Remain in progress until the expanded batch is verified.
+
 | ID | Requirement | Acceptance |
 | --- | --- | --- |
 | R-01 | One active project and ordered tracker | Every prior checklist item has one canonical owner; original wording/logs remain archived; no competing active/planned trackers |
@@ -30,7 +32,7 @@ Feature-specific source remaining in the core is migration work. Its current loc
 
 ## Delivery boundaries
 
-The current 3.38.0 batch contains the existing rules/daemon/kernel/Claude-hook changes and this consolidation. Publishing that batch does not close the master extraction project. Finish and validate this reduced plan before publishing; then verify the final package source/artifact. Cloud rollout has its own safety gate and live version proof.
+The unpublished 3.38.0 candidate contains existing rules/daemon/kernel/Claude-hook fixes. Complete the retained memory/plugin implementation and validate its final source/artifact before any tag, push or publication. Cloud rollout has its own safety gate and live version proof.
 
 External plugin repositories keep their own implementation history and tests. Require their acceptance only for capabilities selected in this migration. Their complete roadmaps do not block memory-core delivery.
 
@@ -43,3 +45,19 @@ The fresh Dabber native total-context reduction acceptance belongs to that app/s
 ## Success
 
 The core package contains memory plus demonstrated minimal host contracts. Every retained capability runs from its separately owned plugin; unused feature code can be removed after its imports and state obligations are audited. Disabling all features leaves memory usable. Current-core and selected-plugin checks pass on the Mac mini, clean installs work, state survives upgrade/rollback, and supported operational claims have evidence. The project remains In Progress until those outcomes hold.
+
+## Current release acceptance — 3.39.0
+
+Publish the recent source and plugin scaffold as a compatible npm artifact. Expose the isolated memory runtime explicitly, preserve existing public entrypoints and secure consumer imports, show Preview features above public npm latest, and prevent preview downgrades. Release evidence does not close the ongoing feature extraction or external integration acceptance.
+
+## Dynamic plugin card face acceptance — added request
+
+The card face should be generated as working code from the actual plugin capabilities, available state and allocated space. It must efficiently expose the relevant credentials, accounts, actions, analytics and notifications without fabricated data or unsupported controls. Generate credential input/status controls; existing secret values never enter model prompts or generated code. Live data should update without discarding in-progress input or repeatedly rewriting the layout. Details and provenance remain accessible outside the primary face. Generation ownership and inclusion in the current release require resolution before delivery claims.
+
+## Security boundary refresh — 2026-10-08
+
+Pre-launch security acceptance includes read-only PAT password rejection, trusted first-run browser origins, public auth work limits, production TLS proxy trust, non-executable Markdown metadata, isolated owner UI with functioning declared-command/draft behavior, and zero published dependency advisories. Native plugins remain explicit trusted-code installs. Generation acceptance still requires actual owner generator and live data contracts; browser attack fixtures do not certify these future features.
+
+## Verified pre-launch security candidate — 2026-10-08 UTC
+
+The current candidate security checks pass for exact source `72abfdd410ebdc9fae6bda227a8fd05745e415b988b24331979cc43c10d56207`: nine gates, 383 test files and 2,405 tests, native source/installed health, clean consumer dependency audit and 43 installed lifecycle operations. Both lockfiles have zero reported advisories. Publishing dry run passes; all 579 package files match between test/publishing hosts, with zero credential-pattern/private-credential-path matches. Initialization preserves existing and concurrent credentials. Test-host configuration was restored byte-exact from the pre-incident snapshot, canonical memory preserved, owned additions quarantined, local indexes rebuilt with zero drift and snapshot unmounted. SSH cannot unlock the restored store, so live decryption remains unverified. Detailed evidence: [security audit](evidence/release-3.39.0/security-audit.md). Model-generated card faces remain unimplemented and unaudited; the project stays In Progress. No publication or live runtime upgrade.

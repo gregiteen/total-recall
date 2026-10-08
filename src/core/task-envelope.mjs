@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { atomicWrite, safeStringify } from './vault.mjs';
 
 /** Soft kinds — labels only; executor resolution uses `executor` then `category` then kind. */

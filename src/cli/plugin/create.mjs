@@ -38,7 +38,7 @@ async function readStdin() {
 // TODO(plugin author): call a cheap authenticated endpoint here and return
 // { valid: true } or { valid: false, message }. Never save a key that fails it.
 async function verifyToken(_value) {
-  return { valid: true };
+  return { valid: false, message: "Credential verification must be implemented for this service." };
 }
 
 async function tokenCommand(args) {

@@ -1,4 +1,4 @@
-import { SSSS_SCHEMAS } from './schema.mjs';
+import { MemoryNodeSchema } from './memory-schema.mjs';
 
 /**
  * Validates a memory node against the SSSS standard, enforcing
@@ -11,7 +11,7 @@ export function validateMemoryNode(fmData) {
   const errors = [];
   
   // 1. Base schema validation (types, bounds, basic required fields)
-  const r = SSSS_SCHEMAS['memory'].safeParse(fmData);
+  const r = MemoryNodeSchema.safeParse(fmData);
   if (!r.success) {
     r.error.issues.forEach(i => errors.push(`${i.path.join('.')}: ${i.message}`));
   }

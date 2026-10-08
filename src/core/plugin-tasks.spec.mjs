@@ -5,6 +5,7 @@ import path from 'node:path';
 import { parseCron, cronMatches, latestDueSlot, minuteSlot, runDuePluginTasks, taskRunsOnNode } from './plugin-tasks.mjs';
 import { projectPluginsDir, getPlugin } from './plugin-loader.mjs';
 import { patchPluginRecord } from './plugin-store.mjs';
+import matter from 'gray-matter';
 
 describe('cron parsing', () => {
   it('matches steps, ranges and lists', () => {
@@ -104,7 +105,7 @@ describe('runDuePluginTasks', () => {
     // A selected-node task fails closed until the SSSS plugin record is configured.
     expect(taskRunsOnNode(manifest.tasks[0], { task_nodes: { tick: 'box' } }, other)).toBe(false);
     expect(taskRunsOnNode(manifest.tasks[0], { task_nodes: { tick: 'box' } }, selected)).toBe(true);
-    expect(fs.readFileSync(recordPath, 'utf8')).not.toMatch(/task_runs:/);
+    expect(matter(fs.readFileSync(recordPath, 'utf8')).data.task_runs || {}).toEqual({});
     await patchPluginRecord(getPlugin('ticker', root), { task_nodes: { tick: 'box' } });
     expect(await runDuePluginTasks({ projectRoot: root, now: first, runner, selfNode: selected })).toEqual([]);
     expect(await runDuePluginTasks({ projectRoot: root, now: new Date(2026, 8, 22, 12, 12), runner, selfNode: other })).toEqual([]);

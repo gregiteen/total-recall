@@ -1,0 +1,93 @@
+{
+  "schema": 3,
+  "toolchain": "javascript",
+  "repoRoot": "/private/tmp/tr-release-3.39.0-candidate",
+  "tier": "remote",
+  "ranChecks": [
+    "memory-package",
+    "dist-freshness",
+    "open-source-paths",
+    "shipped-package-paths",
+    "scaffold-brain-state",
+    "ssss-registry",
+    "security-dependencies",
+    "security-frontend-dependencies",
+    "test"
+  ],
+  "skippedChecks": [],
+  "startedAt": "2026-10-08T02:49:47.563Z",
+  "finishedAt": "2026-10-08T02:53:03.880Z",
+  "durationMs": 196317,
+  "gitHead": "d023560a9030ac4859397e374dced438fe0078b2",
+  "sourceFileCount": 738,
+  "checks": [
+    {
+      "id": "memory-package",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 1335
+    },
+    {
+      "id": "dist-freshness",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 162
+    },
+    {
+      "id": "open-source-paths",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "scanned": 363
+    },
+    {
+      "id": "shipped-package-paths",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 0,
+      "scanned": 215
+    },
+    {
+      "id": "scaffold-brain-state",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 51
+    },
+    {
+      "id": "ssss-registry",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 394
+    },
+    {
+      "id": "security-dependencies",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 474
+    },
+    {
+      "id": "security-frontend-dependencies",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 428
+    },
+    {
+      "id": "test",
+      "ok": true,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 193399
+    }
+  ],
+  "infrastructureFailure": false,
+  "totalFindings": 0,
+  "findings": []
+}

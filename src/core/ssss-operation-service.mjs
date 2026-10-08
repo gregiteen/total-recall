@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import matter from 'gray-matter';
+import matter from './frontmatter.mjs';
 import { JsonlEventStore } from '@ssss/cli/events';
 import { processOperationAsync } from './operation-validator.mjs';
 import { invalidate } from './vault-cache.mjs';

@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { serverError, ROOT, BRAIN_DIR, VAULT_DIR, SKILLS_DIR, INSTRUCTIONS, TASKS_DIR, badRequest } from './_shared.mjs';
 import { logger } from '../../core/logger.mjs';
-import matter from 'gray-matter';
+import matter from '../../core/frontmatter.mjs';
 import { safeStringify } from '../../core/vault.mjs';
 
 const router = Router();

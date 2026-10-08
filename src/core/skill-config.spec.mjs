@@ -56,7 +56,7 @@ export function detect({ repoRoot }) {
 `;
 
 function cli(cwd, ...args) {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } });
+  const result = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8', env: { ...process.env, AGENT_DIR: path.join(cwd, '.agent'), NO_COLOR: '1' } });
   let json = null;
   try { json = JSON.parse(result.stdout.trim().split('\n').at(-1)); } catch { /* text output */ }
   return { ...result, json };

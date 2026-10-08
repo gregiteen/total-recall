@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import matter from 'gray-matter';
 import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
@@ -14,9 +13,9 @@ function printHelp() {
   Usage: total-recall remember <category> "<content>" [options]
 
   Categories:
-    invariant     - Mandatory behavioral directive (appends to rules/invariants.md & writes to vault)
-    preference    - User style preference (appends to rules/preferences.md & writes to vault)
-    correction    - Learned correction (appends to rules/corrections.md & writes to vault)
+    invariant     - Mandatory behavioral directive in the canonical vault
+    preference    - User style preference in the canonical vault
+    correction    - Learned correction in the canonical vault
     fact          - Factual memory node
     concept       - Domain concept node
     pattern       - Positive design/behavior pattern
@@ -133,7 +132,6 @@ export default async function remember(args) {
   let object = 'brain';
   let related = [];
   let expiresAt = null;
-  let noDedup = false;
   let allowLong = false;
 
   for (let i = 2; i < layerArgs.length; i++) {
@@ -213,7 +211,7 @@ export default async function remember(args) {
         i++;
       }
     } else if (arg === '--no-dedup') {
-      noDedup = true;
+      // Accepted for compatibility; remember never archives another node.
     } else if (arg === '--allow-long') {
       allowLong = true;
     }
@@ -236,26 +234,6 @@ export default async function remember(args) {
   const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
   const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
   const layerLabel = layer === 'project' ? '[project]' : '[global]';
-
-  // Rule sheet mapping (for push rules projection)
-  const ruleFiles = {
-    invariant:  { file: 'invariants.md' },
-    preference: { file: 'preferences.md' },
-    correction: { file: 'corrections.md' }
-  };
-
-  const ruleConfig = ruleFiles[type.toLowerCase()];
-
-  if (ruleConfig) {
-    const rulePath = path.join(skillsDir, 'total-recall', 'rules', ruleConfig.file);
-    if (fs.existsSync(rulePath)) {
-      let fileContent = fs.readFileSync(rulePath, 'utf8').trimEnd();
-      const normalizedBody = bodyContent.startsWith('-') ? bodyContent : `- ${bodyContent}`;
-      fileContent += `\n${normalizedBody}\n`;
-      fs.writeFileSync(rulePath, fileContent, 'utf8');
-      console.log(`  ✅ Rule successfully appended to rules sheet: ${ruleConfig.file}`);
-    }
-  }
 
   // Create individual SSSS v2 node in the vault
   const contentHash = crypto.createHash('md5').update(bodyContent).digest('hex').slice(0, 8);
@@ -316,51 +294,7 @@ export default async function remember(args) {
     node.immutable = true;
   }
 
-  // --- START AUTOMATIC DEDUPLICATION ---
-  if (!noDedup) {
-    try {
-      const catDir = path.join(vaultDir, category);
-      if (fs.existsSync(catDir)) {
-        const files = fs.readdirSync(catDir).filter(f => f.endsWith('.md'));
-        for (const f of files) {
-          const p = path.join(catDir, f);
-          const raw = fs.readFileSync(p, 'utf8');
-          const { data, content: oldContent } = matter(raw);
-          
-          if (data.status === 'active' && data.slug !== finalSlug) {
-            const oldTitle = (data.title || '').trim().toLowerCase();
-            const newTitle = finalTitle.trim().toLowerCase();
-            
-            // Word tokens for Jaccard similarity (must be real \b/\w, not double-escaped literals)
-            const words1 = new Set(bodyContent.toLowerCase().match(/\b\w+\b/g) || []);
-            const words2 = new Set((oldContent || '').toLowerCase().match(/\b\w+\b/g) || []);
-            const intersection = new Set([...words1].filter(x => words2.has(x)));
-            const union = new Set([...words1, ...words2]);
-            const similarity = union.size === 0 ? 0 : intersection.size / union.size;
-            
-            if (oldTitle === newTitle || similarity > 0.9) {
-              console.log(`  ⚠️  AUTO-ARCHIVING duplicate node: ${data.slug}`);
-              console.log(`      Similarity: ${Math.round(similarity * 100)}%`);
-              console.log(`      OLD rule: "${(oldContent || '').trim().substring(0, 200)}"`);
-              console.log(`      NEW rule: "${bodyContent.substring(0, 200)}"`);
-              data.status = 'archived';
-              data.x_archived_reason = 'superseded_by_duplicate';
-              data.superseded_by = finalSlug;
-              data.updated = now;
-              node.supersedes = [...(node.supersedes || []), data.slug];
-
-              // Use gray-matter so nested objects/arrays stay valid YAML
-              const bodyOut = (oldContent || '').trim();
-              fs.writeFileSync(p, matter.stringify(bodyOut ? `${bodyOut}\n` : '', data), 'utf8');
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn(`  ⚠️  Deduplication check failed: ${err.message}`);
-    }
-  }
-  // --- END AUTOMATIC DEDUPLICATION ---
+  // Saving memory never optimizes or archives other canonical documents.
 
   const vaultResult = await writeNodeValidatedAsync(node, vaultDir);
   if (!vaultResult.success) {
@@ -375,20 +309,15 @@ export default async function remember(args) {
   }
   console.log(`  ✅ Permanent SSSS memory node created ${layerLabel} in vault: memory-vault/${category}/${finalSlug}.md`);
 
-  // Recompile active memory surfaces and indexes in the background to avoid blocking the CLI call.
-  console.log('  ⏳ Recompiling active memory surfaces and indexes in the background...');
+  // The next local recall must see this write. Provider indexing is explicitly
+  // selected by `compile`; a memory write never spawns an unowned worker.
   try {
-    const { spawn } = await import('node:child_process');
-    const compileArgs = [process.argv[1], 'compile'];
-    if (layer === 'project') compileArgs.push('--project');
-    else if (layer === 'global') compileArgs.push('--global');
-    const child = spawn(process.argv[0], compileArgs, {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
-    console.log('  ✅ Background compilation started.');
+    const { invalidate } = await import('../core/vault-cache.mjs');
+    invalidate(vaultDir);
+    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, semantic: false });
+    console.log('  ✅ Local memory indexes and instruction surfaces updated.');
   } catch (err) {
-    console.warn(`  ⚠️  Memory saved, but background recompilation spawn failed: ${err.message}`);
+    console.error(`  ❌ Memory saved, but local compilation failed: ${err.message}`);
+    process.exitCode = 1;
   }
 }

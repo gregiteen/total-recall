@@ -1,0 +1,50 @@
+# Pre-launch security audit — Total Recall 3.39.0
+
+Status: current candidate security checks passed; launch remains unpublished. No publication, tag or push. This audit covers the current Total Recall candidate and generic plugin UI host, not an unimplemented model generator or live provider security. Future generated UI also requires explicit read/action capability selection and user approval for sensitive mutations; the existing trusted-owner command bridge alone does not establish that policy.
+
+## Confirmed findings and repairs
+
+| Finding | Impact | Repair / evidence |
+| --- | --- | --- |
+| Missing password-write scope | A read-only PAT could replace the administrator password | Require `config:write`; real authenticated HTTP regression rejects read-only mutation without creating security configuration |
+| Plugin UI ran in dashboard origin | Owner UI code could access dashboard DOM, browser storage and authenticated fetch | Scripts-only opaque iframe; restrictive CSP and matching packaged/development host navigation policy; exact frame/channel/source validation; only manifest-declared commands; size/concurrency limits |
+| Executable JavaScript frontmatter | Untrusted Markdown could execute code during metadata parsing | One shared data-only YAML/JSON parser replaces the production gray-matter dependency; every production parser imports it; executable metadata, date/line-ending and round-trip regressions |
+| Untrusted forwarded TLS header | A caller could bypass the production HTTPS requirement | Rely on Express `req.secure` through configured proxy trust; spoofed-header regression |
+| Public auth work and first-run browser origin | Unbounded password work and hostile browser claim attempts | Dedicated auth limiter; password type/size bounds; setup accepts loopback or explicitly allowed Origin only |
+| Dependency advisories | Production critical/moderate and development high/moderate dependencies | Pin proxy-addr 2.0.8, remove gray-matter from production and unused development openwiki, update root/frontend dependency resolutions including Vitest/coverage 4.1.11; separate required audits for both lockfiles |
+
+## Evidence and failures
+
+- Initial production audit: one critical and four moderate findings. Wider audit: eleven development findings. Repaired root dependency audit reports zero advisories, exit 0. The independent frontend lockfile subsequently exposed nine findings (seven high, one moderate, one low); compatible updates and a separate required gate resolve them; both lockfiles now audit clean.
+- Seven focused security/API suites: 55 tests, exit 0. This includes production TLS spoofing, actual PAT permissions, public rate limiting, setup Origin handling, parser attacks and command bridge validation.
+- Real Chromium test against the actual dashboard bundle: plugin code could not read parent DOM/storage, directly fetch host APIs, or navigate outside the host. A declared command succeeded and a typed draft survived. Synthetic fixture only; no real secrets or provider actions.
+- Earlier full run failed because ignored install scripts left required native SQLite bindings absent. Rebuilt native dependencies on the sanctioned test host. Next run exposed missing auth-limiter exports in two API test mocks; corrected the fixtures. These failures remain recorded rather than counted as passes. Installing both independent lockfiles exposed duplicate React instances in root-run dashboard tests (132 frontend failures); the test configuration now deduplicates React/React DOM and applies the same resolution to dashboard dependencies. Initial deduplication left two QR component tests failing; inlining the independent dashboard dependencies resolved both and all seven focused dashboard tests passed. The next full run found router chunks still loading a second runtime (22 frontend failures and two unhandled errors); sharing/inlining both router packages fixed all nine affected suites, 35 tests, exit 0. No backend tests failed in that run.
+- Source credential-pattern scan found no matches. `.env.example` was the sole filename flag; inspection confirmed placeholder/comment-only content. Packed artifact inventory excludes private brain state and credential files. Final publishing/test-host package contents match across all 578 files. Credential-pattern scan and private credential-path scan each found zero matches. Publishing dry run passed.
+
+- A clean consumer install proved root overrides do not propagate: five moderate findings remained through the old production parser. Removed that dependency from production rather than accepting the root-only audit result. New parser regression caught a default-schema date change; restored existing safe timestamp/scalar semantics. First local source invocation also caught older installed parser export compatibility; fixed it without using unsafe legacy load functions. The repaired clean consumer audit now reports zero advisories and native health is healthy 3.39.0. Its lifecycle fixture accidentally invoked the compatibility CLI although it requires empty memory initialization; corrected to the explicit memory CLI, and all 43 installed memory/plugin lifecycle operations passed, exit 0.
+
+- A real Vite development-server HTTP probe confirms the same iframe policy as the packaged server. It made no backend requests and stopped its owned server.
+
+## Historical candidate verification
+
+Exact source SHA-256: `2b2b2d1299c397473497aa0eb0c7fec1727c38d76f3b9f8454adb77e4bc1ec54`. Nine required gates passed (exit 0); 382 test files and 2,399 tests passed. Rebuilt dashboard, real-browser attack checks, development-policy probe, source/installed native health, clean-consumer dependency audit, 43 installed lifecycle operations, and publishing dry run all passed. See [verification.json](verification.json) and [quality report](security-quality-report.json). The package has identical content on test/publishing hosts; compressed archive identities are recorded separately.
+
+No source service/global CLI was restarted or upgraded, and no npm publication, tag, Git push or cloud deployment occurred. These are candidate fixes, not evidence that an already running older service has loaded them.
+
+## Trust boundary and launch limits
+
+Installed native plugins are trusted same-user code. Child-process isolation protects the server process from crashes and leaked handles; it is not an OS sandbox and does not restrict that user's filesystem authority. Model-written UI code must stay in the browser frame; it must never be automatically promoted to a native plugin.
+
+The declared-command bridge retains the operator's server permissions. It does not make arbitrary native handlers safe. Secret values must remain outside model prompts/generated source and UI telemetry; only owner-approved masked metadata belongs in card faces. Live account/action/provider behavior, credential rotation, cloud exposure, historical Git secrets, and future generated-card services were not certified by this audit.
+
+## Primary references
+
+[iframe sandbox](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe), [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage), [CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy), [proxy-addr advisory](https://github.com/advisories/GHSA-jqcg-44mw-7w3h), [sprintf-js advisory](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), [npm override scope](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/#overrides), [js-yaml API](https://github.com/nodeca/js-yaml), [Vitest advisory](https://github.com/advisories/GHSA-82fw-gwwq-j7x9).
+
+## Legacy init incident — repair and recovery
+
+A wrong compatibility-CLI fixture invocation reached the test host global brain because legacy init ignored AGENT_DIR. Init also replaced its active encrypted store from the old carrier and rewrote wizard/security configuration. The caller should have pinned HOME as well. This invalidated the earlier cleanup-complete claim. At discovery, no pre-incident copy had been located; the subsequent read-only snapshot recovery below provides byte-level restoration evidence. The original passing candidate records remain historical.
+
+The corrected initialization uses the shared explicit-root resolver. Existing credential stores are preserved, including stores created during asynchronous encryption/validation; missing stores are published atomically without replacement. The lifecycle fixture pins both HOME and AGENT_DIR. Nine focused tests pass, including actual global/project compatibility initialization and a deterministic concurrent credential writer.
+
+Recovery retained a protected post-incident backup on the same host and restored secrets/security/wizard configuration byte-exact from the pre-incident read-only Time Machine snapshot. No recorded credential mutations occurred between snapshot and incident. Quarantined 16 proven new non-vault files and 47 unchanged scaffold skill files; removed 12 exclusively owned IDE links. Four scaffold memory records pre-existed unchanged; no canonical vault rollback occurred. CLI regenerated local derived surfaces from 60 canonical nodes with zero drift, preserving embeddings and disabling semantic provider calls. The owned snapshot was unmounted. SSH cannot unlock the restored store, so decryption is not certified. Final source SHA-256 is `72abfdd410ebdc9fae6bda227a8fd05745e415b988b24331979cc43c10d56207`; source-exact nine gates pass, including 383 files and 2,405 tests. Clean installed consumer audit reports zero advisories; source/installed native health and 43 lifecycle operations pass. Publishing dry run passes, all 579 package files match the tested artifact and both credential scans report zero matches. All owned checker/browser/health/recovery jobs have stopped. The earlier browser/development-policy proof applies to the unchanged dashboard/policy code; final changes concern CLI credential initialization.

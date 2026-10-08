@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { validateAppCliSpec } from './app-deploy/runtime-cli.mjs';
-import { validateUiSpec } from './app-deploy/ui-elements.mjs';
+import { validateAppCliSpec } from './plugin-contracts/app-cli.mjs';
+import { validateUiSpec } from './plugin-contracts/ui.mjs';
+import { validateConfigurationSpec } from './plugin-contracts/configuration.mjs';
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -61,9 +62,23 @@ export function isSafeRelativePath(p) {
   if (typeof p !== 'string' || !p.trim()) return false;
   if (p.includes('\0')) return false;
   if (path.isAbsolute(p) || p.startsWith('/') || p.startsWith('\\')) return false;
+  if (p.split(/[\\/]/).includes('..')) return false;
   const normalized = path.normalize(p);
   if (normalized === '..' || normalized.startsWith('..' + path.sep) || normalized.includes(path.sep + '..' + path.sep) || normalized.endsWith(path.sep + '..')) return false;
   return true;
+}
+
+/** Resolve an existing plugin-owned file without following a symlink outside its root. */
+export function resolvePluginFile(pluginDir, relativePath) {
+  if (!isSafeRelativePath(relativePath)) throw new Error('Plugin path is unsafe or outside the plugin directory');
+  const root = fs.realpathSync(pluginDir);
+  const target = fs.realpathSync(path.resolve(root, relativePath));
+  const relative = path.relative(root, target);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error('Plugin file resolves outside the plugin directory');
+  }
+  if (!fs.statSync(target).isFile()) throw new Error('Plugin path must resolve to a file');
+  return target;
 }
 
 /**
@@ -77,6 +92,7 @@ export function validatePluginManifest(manifest) {
   if (!manifest || typeof manifest !== 'object') {
     return { valid: false, errors: ['Manifest must be a non-null object'] };
   }
+  if (manifest.configuration !== undefined) errors.push(...validateConfigurationSpec(manifest.configuration));
 
   if (!manifest.id || typeof manifest.id !== 'string') {
     errors.push("Missing required field 'id'");

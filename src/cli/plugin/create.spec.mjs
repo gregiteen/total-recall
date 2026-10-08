@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { createPlugin } from './create.mjs';
 import { generateUiElements } from '../../core/app-deploy/ui-elements.mjs';
 
@@ -113,6 +115,13 @@ Instructions here.
     expect(cli).toContain('"secret", "set", TOKEN_KEY, "--stdin"');
     expect(cli).toContain('IMPLEMENTED.token = tokenCommand');
     expect(cli).not.toMatch(/argv.*TOKEN/);
+    const handlerUrl = pathToFileURL(path.join(dir, 'cli.mjs')).href;
+    const rejected = spawnSync(process.execPath, ['--input-type=module', '--eval', `const { run } = await import(${JSON.stringify(handlerUrl)}); await run(['node', 'total-recall', 'acme-sync', 'token', 'set', '--stdin']);`], {
+      encoding: 'utf8', input: 'fixture-key-must-not-be-saved', env: { ...process.env, TOTAL_RECALL_BIN: '/nonexistent/fixture-tr' },
+    });
+    expect(rejected.status).toBe(1);
+    expect(rejected.stderr).toContain('verification must be implemented');
+    expect(rejected.stdout).not.toContain('saved');
     expect(generateUiElements(manifest, { pluginDir: dir, target: 'web-components' }).files.some((file) => file.path === 'elements/panel.js')).toBe(true);
   });
 

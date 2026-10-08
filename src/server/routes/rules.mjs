@@ -2,6 +2,7 @@ import express from 'express';
 import { getNodes } from '../../core/vault-cache.mjs';
 import { logger } from '../../core/logger.mjs';
 import { resolveAllVaultsFromQuery, VAULT_DIR } from './_shared.mjs';
+import { requireAuth, requireScope } from '../auth.mjs';
 
 import path from 'node:path';
 
@@ -32,12 +33,12 @@ function serializeRule(node, scope) {
   };
 }
 
-rulesRouter.get('/api/rules', (req, res) => {
+rulesRouter.get('/api/rules', requireAuth, requireScope('memory:read'), (req, res) => {
   try {
     // Scoped by req.query.brain / x-total-recall-brain header, same as memory/graph —
     // this used to always merge the global vault with getBothBrains()'s cwd-detected
     // project brain, ignoring whichever brain the user had selected in the UI.
-    const vaultDirs = resolveAllVaultsFromQuery(req);
+    const vaultDirs = resolveAllVaultsFromQuery(req, { strict: true });
     const globalVaultKey = path.resolve(VAULT_DIR);
     const rules = [];
     const seenVaults = new Set();
@@ -65,6 +66,7 @@ rulesRouter.get('/api/rules', (req, res) => {
 
     res.json({ rules, count: rules.length });
   } catch (err) {
+    if (err.status === 404) return res.status(404).json({ error: 'Selected brain is unavailable' });
     logger.error('rules', 'GET /api/rules failed', { error: err.message, stack: err.stack });
     res.status(500).json({ error: 'Failed to load agent rules', message: err.message });
   }

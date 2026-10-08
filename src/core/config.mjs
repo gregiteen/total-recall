@@ -109,11 +109,11 @@ const configSchema = z.object({
 
 // Resolve brainDir paths
 const resolvedAgentDir = process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || path.join(os.homedir(), '.agent');
-const tempGlobalBrainDir = path.join(os.homedir(), '.agent', 'skills', 'total-recall');
+const tempGlobalBrainDir = path.join(resolvedAgentDir, 'skills', 'total-recall');
 
 // Auto-detect project brain if any
 let projectBrainDir = null;
-if (!process.env._TR_TEST_AGENT_DIR) {
+if (!process.env._TR_TEST_AGENT_DIR && !process.env.AGENT_DIR) {
   let dir = process.cwd();
   const homeDir = os.homedir();
   while (dir !== path.dirname(dir)) {
@@ -132,7 +132,9 @@ let secrets = {};
 try {
   const pathsToCheck = [];
   // 1. Prioritize workspace-local root secrets
-  pathsToCheck.push(path.join(process.cwd(), '.agent', 'secrets.enc'));
+  if (!process.env.AGENT_DIR && !process.env._TR_TEST_AGENT_DIR) {
+    pathsToCheck.push(path.join(process.cwd(), '.agent', 'secrets.enc'));
+  }
   if (resolvedAgentDir) {
     pathsToCheck.push(path.join(resolvedAgentDir, 'secrets.enc'));
   }
@@ -145,7 +147,7 @@ try {
   for (const p of pathsToCheck) {
     if (fs.existsSync(p)) {
       try {
-        const { loadSecretsSync } = await import('./secrets-store.mjs');
+        const { loadSecretsSync } = await import('./secrets-gateway.mjs');
         // Actually, loadSecretsSync expects brainDir (e.g. /config/secrets.enc -> parent of config)
         // Let's pass the exact brainDir derived from p.
         // p is something like <brainDir>/config/secrets.enc or <brainDir>/secrets.enc
@@ -263,7 +265,7 @@ export function getEnvVar(name) {
  * Global brain — always at ~/.agent/skills/total-recall/
  * Holds identity: universal preferences, invariants, corrections, coding principles.
  */
-export const globalAgentDir = path.join(os.homedir(), '.agent');
+export const globalAgentDir = resolvedAgentDir;
 export const globalBrainDir = path.join(globalAgentDir, 'skills', 'total-recall');
 
 /**
@@ -275,7 +277,7 @@ export const globalBrainDir = path.join(globalAgentDir, 'skills', 'total-recall'
  */
 export function detectProjectBrain(startDir = process.cwd()) {
   // In test mode, skip project detection
-  if (process.env._TR_TEST_AGENT_DIR) return null;
+  if (process.env._TR_TEST_AGENT_DIR || process.env.AGENT_DIR) return null;
 
   let dir = startDir;
   const homeDir = os.homedir();
@@ -327,6 +329,9 @@ export function resolveBrainLayer(layer = 'auto', category, targetPath = process
 
   if (layer === 'global') return global;
   if (layer === 'project') {
+    // The explicit root pins CLI operations, matching cli/agent-dir.mjs.
+    // Never discover another workspace or silently use the home brain.
+    if (process.env.AGENT_DIR) return { ...global, layer: 'project' };
     if (!project) {
       throw new Error('No project brain found. Run `npx total-recall init --project` to create one.');
     }

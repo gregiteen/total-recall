@@ -6,7 +6,7 @@
  * Two properties here are load-bearing:
  *
  *   1. No hardcoded host. The endpoint comes from explicit config, then the
- *      loopback default, then live mesh discovery. A machine name baked into
+ *      loopback default, then loopback. Optional discovery is supplied by its capability owner. A machine name baked into
  *      product code would leak one operator's topology into every install.
  *
  *   2. No hardcoded model. The model is selected from what the server actually
@@ -59,27 +59,6 @@ function configuredBaseUrls() {
     .filter(Boolean);
 }
 
-/**
- * Online mesh peers, as endpoint candidates. Discovery, not configuration —
- * this is how a laptop finds the box that actually holds the models without
- * anyone writing an address into the repo.
- */
-async function meshCandidateUrls() {
-  try {
-    const { readTailscaleStatus } = await import('./mesh-enroll.mjs');
-    const status = readTailscaleStatus();
-    if (!status) return [];
-    const peers = Object.values(status.Peer || {});
-    return peers
-      .filter((p) => p?.Online)
-      .flatMap((p) => (p.TailscaleIPs || []).filter((ip) => !ip.includes(':')))
-      .map((ip) => normalizeBaseUrl(`${ip}:${OLLAMA_DEFAULT_PORT}`))
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
 /** @returns {Promise<Array<object>|null>} the server's model list, or null when it is not an Ollama endpoint. */
 export async function listOllamaModels(baseUrl) {
   try {
@@ -96,11 +75,11 @@ export async function listOllamaModels(baseUrl) {
 let endpointCache = null;
 
 /**
- * Resolve a reachable Ollama endpoint: configured → loopback → mesh peers.
+ * Resolve a reachable Ollama endpoint: configured → loopback → explicitly supplied candidates.
  * @param {{force?: boolean}} [opts]
  * @returns {Promise<string|null>}
  */
-export async function resolveOllamaEndpoint({ force = false } = {}) {
+export async function resolveOllamaEndpoint({ force = false, discoverEndpoints } = {}) {
   if (!force && endpointCache && Date.now() - endpointCache.at < DISCOVERY_TTL_MS) {
     return endpointCache.url;
   }
@@ -109,9 +88,7 @@ export async function resolveOllamaEndpoint({ force = false } = {}) {
   const candidates = [
     ...configured,
     normalizeBaseUrl(`127.0.0.1:${OLLAMA_DEFAULT_PORT}`),
-    // Mesh discovery is last and only consulted when nothing local answers, so
-    // the common case costs one loopback probe rather than a network sweep.
-    ...(configured.length ? [] : await meshCandidateUrls()),
+    ...(configured.length || !discoverEndpoints ? [] : (await discoverEndpoints()).map(normalizeBaseUrl)),
   ];
 
   const seen = new Set();
@@ -312,7 +289,7 @@ export async function getOllamaProviderStatus({ dims, preferred = null } = {}) {
       preferred,
       dims,
       candidates: [],
-      reason: 'No Ollama endpoint answered on this host or any online mesh peer.',
+      reason: 'No Ollama endpoint answered at the configured URL or loopback.',
     };
   }
 
