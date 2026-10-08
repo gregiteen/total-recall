@@ -55,6 +55,7 @@ export interface PluginInfo {
   store_deployed?: boolean
   secrets?: Array<{ key: string; description?: string; required?: boolean }>
   manifest?: Record<string, unknown>
+  ui?: { elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
 }
 
 export interface BundledPlugin {
