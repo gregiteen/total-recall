@@ -377,7 +377,21 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
   const rules = selectRules(curatedRules(nodes), { actions, projectRoot: root, bootstrap });
   const contributions = [];
   const counts = category => rules.filter(n => n.category === category).length;
-  const header = bootstrap ? `## Total Recall task routing\n\nBefore taking action, run \`total-recall context "task description" --action <actions>\` using the installed CLI (in a source checkout: \`node bin/total-recall.mjs context ...\`). Read the complete returned capsule and require ready:true. Unknown rule applicability is conservatively required. If it exits 2, stop: the required set exceeds its budget; inspect overflow and explicitly raise the budget or curate applicability before action.\n\nRefresh at every changed task, action or project, and after a memory/skill edit. Do not infer applicability from semantic similarity. CLI retrieval is local and works without the server. Skills have compact entrypoints; load only relevant references. Canonical vault writes use the validated CLI.\n\nDo not act from this bootstrap alone.\n` :
+  const header = bootstrap ? `# 🔴 MANDATORY FIRST STEP: TOTAL RECALL CLI & TASK ROUTING
+
+1. RUN TOTAL RECALL CLI HELP FIRST:
+\`total-recall --help\`
+(or in a source checkout: \`node bin/total-recall.mjs --help\`)
+Inspect all core capabilities, installed plugins, and commands.
+
+2. RUN TOTAL RECALL CONTEXT BEFORE ACTING:
+\`total-recall context "task description" --action <actions>\`
+Read the complete returned capsule and require ready:true. Unknown rule applicability is conservatively required. If it exits 2, stop: the required set exceeds its budget; inspect overflow and explicitly raise the budget or curate applicability before action.
+
+Total Recall is the agent's working memory, toolset, and single source of truth across all decisions. Refresh at every changed task, action or project, and after a memory/skill edit. Do not infer applicability from semantic similarity. CLI retrieval is local and works without the server. Skills have compact entrypoints; load only relevant references. Canonical vault writes use the validated CLI.
+
+DO NOT SKIP THIS. Run Total Recall CLI help and context first before doing anything else.
+` :
     `## Active Rules: ${counts('invariants')} invariants, ${counts('preferences')} preferences, ${counts('anti-patterns')} corrections`;
   contributions.push({ id: 'routing', text: header, required: true });
   for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
@@ -414,8 +428,8 @@ function injectDirectives(fileContent, rulesBlock) {
   }
   
   let content = fileContent.trimEnd();
-  const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.';
-  if (!content.includes('SKILL.md')) {
+  const baseline = '# 🔴 MANDATORY FIRST STEP ON EVERY TURN: TOTAL RECALL FIRST\n1. Run `total-recall --help` (or `node bin/total-recall.mjs --help`) to discover all tools, plugins, and commands.\n2. Read and follow .agent/skills/total-recall/SKILL.md before doing ANYTHING.\n3. Run `total-recall context "<task>"` and `total-recall recall "<topic>" --local` before any decision or action.\nTotal Recall is the mandatory working memory and toolset across all tasks and harnesses. Never skip this.';
+  if (!content.includes('total-recall/SKILL.md')) {
     content = baseline + '\n\n' + content;
   }
   
@@ -428,7 +442,7 @@ function injectDirectives(fileContent, rulesBlock) {
 async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const shimDir = path.dirname(shimPath);
   const rulesBlock = await buildRulesBlock(skillsDir, nodes, { vaultDir, derivedDir, bootstrap: true });
-  const baseline = 'Read and follow .agent/skills/total-recall/SKILL.md on every turn.\n';
+  const baseline = '# 🔴 MANDATORY FIRST STEP ON EVERY TURN: TOTAL RECALL FIRST\n1. Run `total-recall --help` (or `node bin/total-recall.mjs --help`) to discover all tools, plugins, and commands.\n2. Read and follow .agent/skills/total-recall/SKILL.md before doing ANYTHING.\n3. Run `total-recall context "<task>"` and `total-recall recall "<topic>" --local` before any decision or action.\nTotal Recall is the mandatory working memory and toolset across all tasks and harnesses. Never skip this.\n';
   const mdcHeader = shimPath.endsWith('.mdc')
     ? '---\ndescription: "Total Recall — Auto-generated behavioral memory surface."\nglobs:\nalwaysApply: true\n---\n\n'
     : '';

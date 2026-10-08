@@ -44,6 +44,8 @@ x_temporal_context: 2026-05-26T23:05:06.525Z
 
 # Total Recall Operating Protocol
 
+MANDATORY: Every agent across all harnesses MUST execute the Total Recall skill (.agent/skills/total-recall/SKILL.md) and run `total-recall context` before doing anything. Total Recall is the single source of truth and working memory for all operations. Never skip this.
+
 Use the total-recall CLI for all memory work; never hand-edit vault files (reading .agent/skills SKILL.md is fine).
 
 - Search: `total-recall recall "<query>"`.
