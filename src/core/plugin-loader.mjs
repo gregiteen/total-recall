@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { validateAppCliSpec } from './plugin-contracts/app-cli.mjs';
 import { validateUiSpec } from './plugin-contracts/ui.mjs';
 import { validateConfigurationSpec } from './plugin-contracts/configuration.mjs';
+import { validateCardContract } from './plugin-contracts/card.mjs';
 
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
@@ -93,6 +94,8 @@ export function validatePluginManifest(manifest) {
     return { valid: false, errors: ['Manifest must be a non-null object'] };
   }
   if (manifest.configuration !== undefined) errors.push(...validateConfigurationSpec(manifest.configuration));
+  const cardContract = validateCardContract(manifest);
+  errors.push(...cardContract.errors);
 
   if (!manifest.id || typeof manifest.id !== 'string') {
     errors.push("Missing required field 'id'");
@@ -308,7 +311,8 @@ export function validatePluginManifest(manifest) {
 
   return {
     valid: errors.length === 0,
-    errors
+    errors,
+    warnings: cardContract.warnings
   };
 }
 
