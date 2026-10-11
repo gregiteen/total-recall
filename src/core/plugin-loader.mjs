@@ -347,7 +347,8 @@ export function readPluginsDir(dir, scope) {
         scope,
         linked: entry.isSymbolicLink(),
         valid: validation.valid,
-        errors: validation.errors
+        errors: validation.errors,
+        warnings: validation.warnings || []
       });
     } catch (err) {
       out.push({

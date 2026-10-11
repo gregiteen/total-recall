@@ -172,6 +172,7 @@ export function describePlugin(plugin) {
     use_cases: Array.isArray(m.use_cases) ? m.use_cases : [],
     valid: plugin.valid,
     errors: plugin.errors,
+    warnings: plugin.warnings || [],
     scope: plugin.scope,
     linked: !!plugin.linked,
     dir: plugin.dir,
