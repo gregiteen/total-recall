@@ -135,6 +135,20 @@ function validateBranding(branding, errors, warnings) {
   for (const key of ['color', 'accent']) {
     if (branding[key] !== undefined && !HEX.test(branding[key])) errors.push(`branding.${key} must be a #rrggbb color`);
   }
+  if (branding.logo !== undefined) {
+    const logo = branding.logo;
+    if (typeof logo !== 'string' || !/^[A-Za-z0-9._\/-]{1,200}\.(svg|png)$/.test(logo) || logo.startsWith('/') || logo.split('/').includes('..')) {
+      errors.push('branding.logo must be a relative .svg or .png path inside the plugin');
+    }
+  }
+  if (branding.provider !== undefined) {
+    const p = branding.provider;
+    if (!plain(p) || typeof p.name !== 'string' || !p.name.trim()) errors.push('branding.provider needs a name');
+    else if (p.url !== undefined && !/^https:\/\/[^\s]+$/.test(p.url)) errors.push('branding.provider.url must be an https URL');
+  }
+  if (branding.icon !== undefined) {
+    warnings.push('branding.icon is deprecated: show the real logo with branding.logo instead of an emoji or generic icon');
+  }
   const enums = { font: CARD_FONTS, density: CARD_DENSITIES, radius: CARD_RADII, header: CARD_HEADERS };
   for (const [key, allowed] of Object.entries(enums)) {
     const value = branding[key];

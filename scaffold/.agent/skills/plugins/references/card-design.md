@@ -26,6 +26,15 @@ The host runs one engine for behavior: actions with typed forms, settings, crede
 ```
 Always include `settings` and `credentials` (or let the engine append them) so every setting and credential is visible.
 
+## Name, logo and brand
+- **A wrapper of someone else's API keeps that provider's brand.** Name it for the provider (`Stripe`, `Google Maps`, `Telnyx Voice`) and set `branding.provider`. Do not invent a brand for a wrapper.
+- **First-party plugins** use a plain descriptive name.
+- **Monetized, operated services** (you run the instance or hold the provider accounts) have their own brand and logo, distinct from the software and providers behind them. Credit the underlying software in the about text.
+- **Real logos only.** `branding.logo` is an `.svg` or `.png` shipped in the plugin. A provider's logo comes from the provider's brand kit and is used only to identify the integration; record its source in `ui/LOGO.md`. First-party and monetized plugins ship an original mark. Never use an emoji or a generic icon as the brand. `branding.icon` is deprecated and warns.
+
+## Drawer
+The card face stays compact: logo, real status, and the two or three primary actions. The host's slide-out drawer carries Settings, Credentials, Usage and Projects (see [distribution](distribution.md)); declare `configuration`, `secrets` and a `status` command and the drawer fills itself. Do not build your own settings or usage screens.
+
 ## Brand tokens
 ```json
 "branding": { "color": "#635bff", "accent": "#0a2540", "font": "ibm-plex",
@@ -43,4 +52,4 @@ Choose tokens from the plugin's function and audience, not from a default: a pay
 4. Compare against other plugins' cards. If it looks like another plugin's, change the template, widget order or tokens.
 
 ## Anti-patterns the validator or review rejects
-Fixed metrics; sample data; decorative canvas or CSS animation; emoji as icons; hardware-skin imitations; raw hex colors in plugin code; one template used for every plugin; hiding settings or credentials; showing a secret value; claiming "connected" without a returned status.
+Fixed metrics; sample data; a made-up brand on a wrapper; an emoji or generic icon in place of a logo; decorative canvas or CSS animation; emoji as icons; hardware-skin imitations; raw hex colors in plugin code; one template used for every plugin; hiding settings or credentials; showing a secret value; claiming "connected" without a returned status.

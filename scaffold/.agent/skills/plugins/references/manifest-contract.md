@@ -64,7 +64,10 @@ States are `ok`, `warn`, `error`, `unknown`. Do not use `card_face.metrics`: fix
 Field names are camelCase and may not contain password, secret, apiKey or token; those belong in `secrets` with uppercase keys. Declare every setting and credential the plugin really reads, so the card shows all of them.
 
 ## Layout and branding
-See [card design](card-design.md) for `card_layout` and `branding`.
+See [card design](card-design.md) for `card_layout` and `branding`. Branding also carries the real logo and, for wrappers, the provider:
+```json
+"branding": { "logo": "ui/logo.svg", "provider": { "name": "Stripe", "url": "https://stripe.com" }, "color": "#635bff" }
+```
 
 ## Monetization (optional)
 ```json
