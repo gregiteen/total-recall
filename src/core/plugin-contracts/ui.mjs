@@ -1,6 +1,6 @@
 /** Pure plugin UI manifest validation; rendering belongs to capability owners. */
 import path from 'node:path';
-export const UI_ELEMENT_KINDS = ['panel', 'form', 'list', 'detail', 'settings', 'widget'];
+export const UI_ELEMENT_KINDS = ['panel', 'form', 'list', 'detail', 'settings', 'widget', 'card', 'card-face'];
 const PROP_TYPES = ['string', 'number', 'boolean', 'object', 'array'];
 const ELEMENT_ID = /^[a-z][a-z0-9-]{0,63}$/;
 // Custom element names: lowercase, start with a letter, contain a hyphen.
