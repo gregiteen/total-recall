@@ -171,6 +171,7 @@ export async function run(argv = []) {
     if (d.share_url) console.log(`   Share link:  ${d.share_url}`);
     console.log(`   Valid:       ${d.valid ? '✅ Yes' : '❌ No'}`);
     for (const e of d.errors) console.log(`     - ${e}`);
+    for (const w of d.warnings || []) console.log(`   ⚠️  ${w}`);
 
     if (plugin.manifest?.monetization) {
       const mon = getPluginMonetization(plugin);
