@@ -63,6 +63,25 @@ router.get('/api/plugins/:id/ui/:element', requireAuth, requireScope('config:rea
   } catch (err) { serverError(res, err); }
 });
 
+/** Serve only the logo a plugin declares in branding.logo, never an arbitrary file. */
+router.get('/api/plugins/:id/logo', requireAuth, requireScope('config:read'), (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    const logo = plugin?.valid ? plugin.manifest?.branding?.logo : undefined;
+    if (typeof logo !== 'string') return res.status(404).json({ error: 'Logo unavailable' });
+    const root = fs.realpathSync(plugin.dir);
+    const file = fs.realpathSync(path.resolve(root, logo));
+    if (!file.startsWith(root + path.sep)) return res.status(400).json({ error: 'Invalid logo path' });
+    const svg = file.endsWith('.svg');
+    if (!svg && !file.endsWith('.png')) return res.status(400).json({ error: 'Invalid logo type' });
+    res.type(svg ? 'image/svg+xml' : 'image/png')
+      .set('X-Content-Type-Options', 'nosniff')
+      .set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+      .set('Cache-Control', 'private, max-age=300')
+      .send(fs.readFileSync(file));
+  } catch (err) { serverError(res, err); }
+});
+
 /**
  * GET /api/plugins
  * Installed plugins (project + global): manifest facts, provenance, content

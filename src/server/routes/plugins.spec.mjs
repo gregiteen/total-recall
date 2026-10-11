@@ -32,8 +32,20 @@ const plugin = {
 };
 
 // Find git-sentinel with conformance data, no-cli without, and phone for review tests
+const logoDir = vi.hoisted(() => {
+  const path = require('path');
+  const os = require('os');
+  return path.join(os.tmpdir(), `plugin-logo-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+});
+const logoPlugin = (logo) => ({ id: 'logo-plugin', dir: logoDir, valid: true, errors: [], manifest: { id: 'logo-plugin', name: 'Logo', branding: { logo } } });
+
 const getPluginByIdMock = vi.fn((id) => {
   if (id === 'git-sentinel') return plugin;
+  if (id === 'logo-ok') return logoPlugin('ui/logo.svg');
+  if (id === 'logo-png') return logoPlugin('ui/logo.png');
+  if (id === 'logo-escape') return logoPlugin('../outside.svg');
+  if (id === 'logo-type') return logoPlugin('ui/notes.txt');
+  if (id === 'logo-none') return { ...logoPlugin(undefined) };
   if (id === 'no-cli') return { ...plugin, id: 'no-cli', manifest: { name: 'No CLI' } };
   if (id === 'unverified-plugin') return {
     ...plugin,
@@ -243,6 +255,29 @@ describe('plugins router', () => {
     const res = await request(app).delete('/api/plugins/git-sentinel?global=true');
     expect(res.status).toBe(200);
     expect(store.uninstallPlugin).toHaveBeenCalledWith('git-sentinel', { projectRoot: process.cwd(), global: true });
+  });
+
+  it('GET /api/plugins/:id/logo serves only the declared logo, locked down', async () => {
+    fs.mkdirSync(path.join(logoDir, 'ui'), { recursive: true });
+    fs.writeFileSync(path.join(logoDir, 'ui', 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    fs.writeFileSync(path.join(logoDir, 'ui', 'logo.png'), Buffer.from([137, 80, 78, 71]));
+    fs.writeFileSync(path.join(logoDir, 'ui', 'notes.txt'), 'x');
+    fs.writeFileSync(path.join(path.dirname(logoDir), 'outside.svg'), '<svg/>');
+    try {
+      const svg = await request(app).get('/api/plugins/logo-ok/logo');
+      expect(svg.status).toBe(200);
+      expect(svg.headers['content-type']).toContain('image/svg+xml');
+      expect(svg.headers['x-content-type-options']).toBe('nosniff');
+      expect(svg.headers['content-security-policy']).toContain("default-src 'none'");
+      expect((await request(app).get('/api/plugins/logo-png/logo')).headers['content-type']).toContain('image/png');
+      expect((await request(app).get('/api/plugins/logo-escape/logo')).status).toBe(400);
+      expect((await request(app).get('/api/plugins/logo-type/logo')).status).toBe(400);
+      expect((await request(app).get('/api/plugins/logo-none/logo')).status).toBe(404);
+      expect((await request(app).get('/api/plugins/nonexistent/logo')).status).toBe(404);
+    } finally {
+      fs.rmSync(logoDir, { recursive: true, force: true });
+      fs.rmSync(path.join(path.dirname(logoDir), 'outside.svg'), { force: true });
+    }
   });
 
   it('GET /api/plugins/:id returns 404 for an unknown plugin', async () => {

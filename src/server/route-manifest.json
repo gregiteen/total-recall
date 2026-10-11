@@ -513,6 +513,10 @@
   },
   {
     "method": "GET",
+    "path": "/api/plugins/:id/logo"
+  },
+  {
+    "method": "GET",
     "path": "/api/plugins/available"
   },
   {
