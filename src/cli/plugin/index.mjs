@@ -3,6 +3,7 @@ import { installPlugin } from './install.mjs';
 import { removePlugin, sharePlugin } from './remove.mjs';
 import { listAvailable, listPeers, searchPlugins } from './search.mjs';
 import { createPlugin } from './create.mjs';
+import { vendorPlugin, listProjectBricks } from './vendor.mjs';
 import { managePluginLicense } from './monetization.mjs';
 import { getPlugin, getPluginMonetization } from '../../core/plugin-loader.mjs';
 import { describePlugin } from '../../core/plugin-store.mjs';
@@ -39,7 +40,10 @@ Commands:
   remove <id>               Uninstall (--global for the machine-wide copy)
   license <id> [cmd]        Check or activate plugin license (status, activate, verify)
   info <id>                 Manifest, provenance, hash and task history
-  create <id>               Scaffold a new plugin
+  vendor <source> [dir]     Add a plugin to this project as a brick (default bricks/<id>); the
+                            project then owns the code. <source>: bundled id, git URL or path
+  bricks [--json]           List this project's bricks and whether each was modified locally
+  create <id>               Create a new empty plugin
                               --name <name>         Human-readable plugin name
                               --description <desc>  What it is for
                               --use-case <use>      Use case it serves (repeatable)
@@ -102,6 +106,16 @@ export async function run(argv = []) {
 
   if (command === 'create' || command === 'new' || command === 'init' || command === 'scaffold') {
     await createPlugin(rest);
+    return;
+  }
+
+  if (command === 'bricks') {
+    listProjectBricks(rest);
+    return;
+  }
+
+  if (command === 'vendor' || command === 'add-brick') {
+    await vendorPlugin(rest);
     return;
   }
 
