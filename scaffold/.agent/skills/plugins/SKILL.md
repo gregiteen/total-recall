@@ -1,209 +1,57 @@
 ---
 name: plugins
-description: Standards, authoring guide, and CLI workflows for Total Recall plugins.
+description: Create, scaffold, design, test and distribute Total Recall plugins that load correctly and render a functional, uniquely designed card. Use when an agent builds, changes or reviews a tr-plugin-*.
 repo_scoped: false
 ---
 
-# Total Recall Plugin Standard & Authoring Guide
+# Total Recall plugins
 
-Total Recall capabilities beyond portable memory belong in standalone plugins. This specification details the executable plugin contract, step-by-step authoring procedures, and CLI workflows ensuring any user-authored plugin remains completely compatible across the Total Recall ecosystem.
+Run `total-recall plugin --help` first. A plugin is a standalone repository (`tr-plugin-<id>`) with a `plugin.json`, a CLI handler, tests, and optionally a live panel. Core Total Recall holds portable memory and generic loading; every capability lives in a plugin.
 
-## Core Architectural Invariants
+## Decide how the plugin will be used
 
-1. **Portable Memory Separation**: Core Total Recall maintains only portable memory, the SSSS vault, and instruction compilers. Auxiliary tools, domain features, telephony, specialized analyzers, and user interfaces must exist as independent plugins.
-2. **Standard Manifest (`plugin.json`)**: Every plugin defines an authoritative `plugin.json` adhering to `metadata.plugin.schema.json`.
-3. **Canonical State via SSSS**: Plugins must never perform unmanaged raw filesystem writes. Persistent records, configuration overlays, and event telemetry must use SSSS VFS operations.
-4. **Token-Driven UI Elements**: Plugin interface components must avoid hardcoded color values. Visual styling must reference standard design tokens from `DESIGN.md`.
-5. **No AI Slop & Clean Copy**: Plugin documentation and user-facing text must avoid trite terms such as "sovereign", "synergy", or "leverage", and must never conclude any sentence with a preposition.
+1. **Brick in a project (default for apps).** `total-recall plugin vendor <id | git-url | path> [dir]` copies the source into `bricks/<id>` and records it in `tr-bricks.json`. The project owns the copy and ships with no runtime dependency on the plugin or Total Recall. Plugins exist so nobody starts from zero.
+2. **Direct use.** `total-recall plugin install <source>` then `total-recall <id> ...` for your own machines and workflow.
+3. **New project.** Prefer adding bricks to starting from an empty folder. Run `total-recall plugin bricks` to see what a project already has.
 
----
+Declare how yours is distributed: `distribution: { "tier": "core|official|personal|community", "license": "open|closed" }`. Closed means an operated service behind a thin client; see [distribution](references/distribution.md). Never rely on a local license check for protection.
 
-## The Plugin Manifest Contract (`plugin.json`)
+## Build order
 
-A valid plugin contains `plugin.json` at its root:
+1. `total-recall plugin create <id> --name "<neutral name>" --description "<one concrete sentence>" --with-cli`.
+2. Write the CLI first. Every subcommand prints JSON with `--json` and returns a non-zero exit on failure. Required subcommands where relevant: `status --json`, `config get|set --json`, `secrets status --json`. Details: [manifest contract](references/manifest-contract.md).
+3. Declare every command in `plugin.json` with typed arguments and an effect (`read`, `write`, `destructive`, `send`). The card builds its forms from these, so an undeclared command is invisible to users and agents.
+4. Declare `configuration.fields` for every setting and `secrets[]` for every credential. Credentials go through `total-recall auth secret`, never ambient environment variables, argv, files or logs.
+5. Design the card: pick a template and widgets that fit the function, set brand tokens, write `ui/DESIGN.md`. Details: [card design](references/card-design.md).
+6. Test (see below), then run the validator: `total-recall plugin info <id>` must report no errors.
 
-```json
-{
-  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
-  "id": "my-plugin",
-  "name": "My Plugin",
-  "version": "1.0.0",
-  "description": "Concrete explanation of the exact job this plugin performs.",
-  "author": "Author Name",
-  "license": "MIT",
-  "use_cases": ["developer-tools"],
-  "cli": {
-    "command": "my-tool",
-    "handler": "./cli.mjs",
-    "subcommands": [
-      { "name": "status", "description": "Display runtime status" },
-      { "name": "run", "description": "Execute main capability" }
-    ]
-  },
-  "runtime": {
-    "jobs": [
-      {
-        "id": "periodic-check",
-        "schedule": "0 * * * *",
-        "command": "status",
-        "description": "Hourly status verification"
-      }
-    ],
-    "daemons": [],
-    "startup": []
-  },
-  "deploy": {
-    "targets": ["ssss-app", "nextjs", "react", "flask"],
-    "required_ssss_version": ">=0.9.3",
-    "access_grants": ["ssss:vault:read", "ssss:vault:write"]
-  }
-}
-```
+## Rules that make a plugin compatible
 
-### Manifest Specifications
+- **Real data only.** A value appears on the card only if a command or the host returned it. Never hard-code metrics such as "ONLINE" or sample numbers. If a source fails, show the failure and the time of the last attempt.
+- **Functional first.** The card must show what the plugin can do (all declared commands), all of its settings, all of its credentials, and its real status. Decoration comes after, never instead.
+- **Unique design per plugin.** Layout and brand follow the plugin's function. Two plugins with different jobs must not look alike. No decorative animation, no emoji as icons, no skins that imitate hardware.
+- **Neutral, descriptive name.** No invented brand. The name says what the plugin does.
+- **Tokens only.** No hard-coded colors in plugin UI code; use the brand tokens and the design tokens in `ui/DESIGN.md`.
+- **Accessible and touch ready.** Controls are at least 44 px, keyboard reachable, with visible focus, contrast-checked state colors, and reduced motion respected.
+- **Secrets stay secret.** Set from the card over stdin for declared secret arguments only. Show present or missing, never the value.
+- **State through the vault contracts.** No unmanaged raw file writes for records; use SSSS operations.
+- **Fail closed.** Missing credentials, failed providers and unavailable peers produce explicit errors, never a success badge.
+- **Copy.** No filler words, and no sentence ends with a preposition.
 
-- **`id`** *(required)*: Lowercase kebab-case string (`^[a-z][a-z0-9-]{1,63}$`). Must match the repository or folder identifier.
-- **`name`** *(required)*: Human-readable display label.
-- **`version`** *(required)*: Semantic version string (`x.y.z`).
-- **`description`** *(required)*: Clear, functional explanation (minimum 5 characters).
-- **`use_cases`** *(optional)*: Array of kebab-case tags used for catalog indexing and search filters.
-- **`cli`** *(optional)*: Declares the CLI command name, the relative ES module handler (`cli.mjs`), and an array of subcommands.
-- **`runtime`** *(optional)*:
-  - **`jobs`**: Scheduled background cron routines (`schedule`, `command`, `timeout_seconds`, `secrets`).
-  - **`daemons`**: Continuously running background services (`handler`, `restart`, `stop_signal`).
-  - **`startup`**: Lifecycle initialization hooks executed when the host begins execution.
-- **`deploy`** *(optional)*: Target application hosts and required SSSS permission scopes.
-- **`ui`** *(optional)*: Declares reusable custom web component elements (`elements[]`), property interfaces, and required design tokens.
+## Test before you share
 
----
+- Unit tests for each subcommand, including failure paths and `--json` shape.
+- A manifest test that loads `plugin.json` with the validator and checks that every `card_layout` source command and every `status.command` is a declared subcommand.
+- A secrets test proving no secret value appears in argv, stdout, logs or the card state.
+- Run suites in the background on the configured test node and read the real exit status. A passing health probe is not a test result.
 
-## Step-by-Step Plugin Creation Workflow
+## Distribution
 
-### Step 1: Scaffold the Plugin
-Initialize a new plugin structure through the CLI:
-```bash
-total-recall plugin create my-plugin --name "My Plugin" --description "Handles custom workflows" --use-case automation --with-cli
-```
-This scaffolds a standard directory containing `plugin.json`, `cli.mjs`, and documentation.
+- Open plugins are vendorable and can be shared with `plugin share`. Closed service-backed plugins list price and usage in the manifest `monetization` block. See [distribution](references/distribution.md).
+- Third parties publish with the same manifest and conformance tests. The store lists signed, immutable versions and never runs plugin code.
 
-### Step 2: Implement the Command Handler (`cli.mjs`)
-The handler module must export a callable function:
-```javascript
-/**
- * CLI Handler for my-plugin
- * @param {string[]} argv - Command-line arguments passed after the command name
- */
-export async function run(argv) {
-  const [subcommand, ...args] = argv.slice(2);
-  
-  if (subcommand === "status") {
-    console.log("My Plugin is fully operational.");
-    return;
-  }
-  
-  if (subcommand === "run") {
-    console.log("Executing capability with arguments:", args);
-    return;
-  }
+## References
 
-  console.log("Usage: total-recall my-tool <status|run>");
-}
-
-export default run;
-```
-
-### Step 3: Add SSSS Memory Categories (Optional)
-If your plugin defines new structured memory types, declare them inside `plugin.json`:
-```json
-"ssss_schemas": {
-  "categories": [
-    {
-      "name": "custom-audit",
-      "description": "Structured records for compliance tracking",
-      "node_type": "memory",
-      "template": "./templates/audit.md"
-    }
-  ]
-}
-```
-
-### Step 4: Validate the Plugin
-Run validation before publishing or deploying:
-```bash
-total-recall plugin info my-plugin
-```
-Ensure the validator returns zero schema errors.
-
----
-
-## Operating Plugins Through the Total Recall CLI
-
-The Total Recall CLI provides complete lifecycle management for plugins:
-
-### 1. Discover and Search
-- **List installed plugins**:
-  ```bash
-  total-recall plugin list
-  ```
-- **List available bundled plugins**:
-  ```bash
-  total-recall plugin available
-  ```
-- **Search plugins by keyword or use case**:
-  ```bash
-  total-recall plugin search telemetry --use-case monitoring
-  ```
-
-### 2. Install and Link
-- **Install from a local directory (symlink during active development)**:
-  ```bash
-  total-recall plugin install /path/to/my-plugin --link
-  ```
-- **Install globally for all workspaces across the machine**:
-  ```bash
-  total-recall plugin install /path/to/my-plugin --global
-  ```
-- **Install from a remote git repository**:
-  ```bash
-  total-recall plugin install https://github.com/org/plugin-repo.git
-  ```
-- **Install from a mesh peer node**:
-  ```bash
-  total-recall plugin install peer:mac-mini/code-quality
-  ```
-
-### 3. Inspect and Execute
-- **Inspect detailed plugin metadata, hashes, and scheduled task logs**:
-  ```bash
-  total-recall plugin info my-plugin
-  ```
-- **Execute installed plugin commands directly**:
-  ```bash
-  total-recall my-tool status
-  ```
-
-### 4. Share and Distribute
-- **Share a plugin via a verified hash-pinned link**:
-  ```bash
-  total-recall plugin share my-plugin
-  ```
-- **Revoke sharing access**:
-  ```bash
-  total-recall plugin unshare my-plugin
-  ```
-- **Remove or uninstall a plugin**:
-  ```bash
-  total-recall plugin remove my-plugin
-  ```
-
----
-
-## Authoring Standards Checklist
-
-Before distributing any plugin, confirm each requirement:
-- [ ] `plugin.json` passes validation against `metadata.plugin.schema.json`.
-- [ ] CLI commands exit with code `0` on success and non-zero on failure.
-- [ ] No private secrets, personal user paths, or session tokens exist in the repository.
-- [ ] SSSS data modifications use validated operations rather than raw disk writes.
-- [ ] User interface components utilize design tokens without hardcoded colors.
-- [ ] All written documentation avoids forbidden words and concludes every sentence without a preposition.
+- [Manifest contract](references/manifest-contract.md): every field, with a complete example.
+- [Card design](references/card-design.md): templates, widgets, brand tokens, the design process, anti-patterns.
+- [Distribution](references/distribution.md): bricks, tiers, license class, monetization, store, third-party authoring.
