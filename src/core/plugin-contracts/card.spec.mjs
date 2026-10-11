@@ -77,4 +77,18 @@ describe('card contract', () => {
     m.distribution = { tier: 'vip', license: 'secret' };
     expect(validateCardContract(m).errors.length).toBe(2);
   });
+
+  it('validates logo and provider branding and warns on emoji icons', () => {
+    const m = base();
+    m.branding.logo = 'ui/logo.svg';
+    m.branding.provider = { name: 'Stripe', url: 'https://stripe.com' };
+    expect(validateCardContract(m).errors).toEqual([]);
+    m.branding.logo = '../escape.svg';
+    m.branding.provider = { url: 'http://insecure' };
+    m.branding.icon = '⚡';
+    const result = validateCardContract(m);
+    expect(result.errors.join('\n')).toMatch(/branding.logo must be a relative/);
+    expect(result.errors.join('\n')).toMatch(/provider needs a name/);
+    expect(result.warnings.join('\n')).toMatch(/icon is deprecated/);
+  });
 });
