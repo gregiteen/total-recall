@@ -619,7 +619,28 @@
         },
         "icon": {
           "type": "string",
-          "description": "Identifier for the plugin icon (e.g. phone, globe, shield, terminal, or emoji)"
+          "description": "DEPRECATED: an emoji or generic icon. Show the real vector logo with 'logo' instead."
+        },
+        "logo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+\\.(svg|png)$",
+          "description": "Relative path inside the plugin to its real logo mark (.svg or .png)"
+        },
+        "font": {
+          "type": "string",
+          "enum": [
+            "system",
+            "inter",
+            "ibm-plex",
+            "space-grotesk",
+            "jetbrains-mono",
+            "dm-sans",
+            "outfit",
+            "fraunces",
+            "newsreader",
+            "chivo-mono"
+          ],
+          "description": "Canonical brand font token; a raw CSS font stack is rejected with a warning"
         },
         "color": {
           "type": "string",
@@ -715,7 +736,7 @@
         },
         "metrics": {
           "type": "array",
-          "description": "Key stats or live telemetry metrics displayed on the card face",
+          "description": "DEPRECATED: fixed text cannot reflect real state. Declare a 'status' command (top-level 'status' field) so the card reads the plugin's real state instead.",
           "items": {
             "type": "object",
             "required": [
