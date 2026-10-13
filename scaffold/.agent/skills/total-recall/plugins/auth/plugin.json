@@ -14,7 +14,7 @@
     "name": "Auth & Secrets",
     "color": "#10b981",
     "badge": "FIDO2 Vault",
-    "font": "'Chivo Mono', monospace"
+    "font": "chivo-mono"
   },
   "card_face": {
     "skin": "winamp-classic",
@@ -50,8 +50,7 @@
         "subcommand": "probe",
         "label": "CHECK ENDPOINT"
       }
-    ],
-    "metrics": []
+    ]
   },
   "secrets": [
     {
@@ -81,43 +80,53 @@
     "subcommands": [
       {
         "name": "status",
-        "description": "Display auth system status and active providers"
+        "description": "Display auth system status and active providers",
+        "effect": "read"
       },
       {
         "name": "audit",
-        "description": "Audit permissions, session secrets, and credential integrity"
+        "description": "Audit permissions, session secrets, and credential integrity",
+        "effect": "read"
       },
       {
         "name": "rotate",
-        "description": "Generate and securely rotate SESSION_SECRET in store"
+        "description": "Generate and securely rotate SESSION_SECRET in store",
+        "effect": "destructive"
       },
       {
         "name": "passkey",
-        "description": "Manage FIDO2 WebAuthn passkeys"
+        "description": "Manage FIDO2 WebAuthn passkeys",
+        "effect": "write"
       },
       {
         "name": "google",
-        "description": "Check Google OAuth2 status and authorization URL"
+        "description": "Check Google OAuth2 status and authorization URL",
+        "effect": "read"
       },
       {
         "name": "probe",
-        "description": "Run HTTP 200 health verification probe"
+        "description": "Run HTTP 200 health verification probe",
+        "effect": "read"
       },
       {
         "name": "session",
-        "description": "Inspect active session tokens"
+        "description": "Inspect active session tokens",
+        "effect": "read"
       },
       {
         "name": "secret",
-        "description": "Manage and inspect auth secrets in the Total Recall store"
+        "description": "Manage and inspect auth secrets in the Total Recall store",
+        "effect": "write"
       },
       {
         "name": "password",
-        "description": "Set dashboard password through encrypted auth store: set --stdin [--force-reset]"
+        "description": "Set dashboard password through encrypted auth store: set --stdin [--force-reset]",
+        "effect": "write"
       },
       {
         "name": "migrate-credentials",
-        "description": "Explicit verified legacy import: --legacy-brain path [--remove-legacy]; never a runtime fallback"
+        "description": "Explicit verified legacy import: --legacy-brain path [--remove-legacy]; never a runtime fallback",
+        "effect": "write"
       }
     ]
   },
@@ -234,5 +243,9 @@
     "routers": [
       "src/routes/secrets-runtime.mjs"
     ]
+  },
+  "status": {
+    "command": "status",
+    "refresh_seconds": 60
   }
 }
