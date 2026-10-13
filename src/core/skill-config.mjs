@@ -37,10 +37,22 @@ function regularFile(file) {
   return fs.existsSync(file) && !fs.lstatSync(file).isSymbolicLink() && fs.statSync(file).isFile();
 }
 
+// A plugin can own the core (contract, detector) instead of a copy deployed in
+// the repo; the repo directory then holds only its config and reports.
+const pluginCores = new Map();
+export function useCoreDir(skillDir, coreDir) {
+  if (coreDir) pluginCores.set(path.resolve(skillDir), path.resolve(coreDir));
+}
+export function coreDirOf(skillDir) {
+  return pluginCores.get(path.resolve(skillDir)) || path.join(skillDir, 'core');
+}
+
 /** Locate a deployed layered skill inside a repository. */
-export function resolveSkillDir(repoRoot, skillId) {
+export function resolveSkillDir(repoRoot, skillId, { coreDir } = {}) {
   if (!SKILL_ID.test(skillId || '')) throw new SkillConfigError('Skill id must be lowercase kebab-case');
   const skillDir = path.join(path.resolve(repoRoot), '.agent', 'skills', skillId);
+  if (coreDir && !fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true });
+  useCoreDir(skillDir, coreDir);
   if (!fs.existsSync(skillDir)) throw new SkillConfigError(`Skill '${skillId}' is not deployed in ${repoRoot}`, { exitCode: 1 });
   if (fs.lstatSync(skillDir).isSymbolicLink()) throw new SkillConfigError(`Refusing symlinked skill directory: ${skillDir}`, { exitCode: 1 });
   return skillDir;
@@ -48,7 +60,7 @@ export function resolveSkillDir(repoRoot, skillId) {
 
 /** Load and compile the core-owned layer contract. */
 export function loadConfigSchema(skillDir) {
-  const coreDir = path.join(skillDir, 'core');
+  const coreDir = coreDirOf(skillDir);
   if (fs.existsSync(coreDir) && fs.lstatSync(coreDir).isSymbolicLink()) {
     throw new SkillConfigError(`Refusing symlinked skill core: ${coreDir}`, { exitCode: 1 });
   }
@@ -259,7 +271,7 @@ export function removeCollectionItem(config, collection, key) {
 
 /** Run the core's detector. It proposes a config; nothing is written here. */
 export async function detectSkillConfig(skillDir, repoRoot) {
-  const detector = path.join(skillDir, 'core', 'detect.mjs');
+  const detector = path.join(coreDirOf(skillDir), 'detect.mjs');
   if (!regularFile(detector)) throw new SkillConfigError('Skill core has no detector (expected core/detect.mjs)', { exitCode: 1 });
   const mod = await import(`${pathToFileURL(detector).href}?t=${fs.statSync(detector).mtimeMs}`);
   const detect = mod.detect || mod.default;

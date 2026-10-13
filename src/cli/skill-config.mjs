@@ -29,6 +29,7 @@ import {
   detectSkillConfig,
   missingRequired,
   checkSkillLayerContract,
+  coreDirOf,
 } from '../core/skill-config.mjs';
 
 function usage(prefix, collections) {
@@ -81,7 +82,7 @@ async function promptMissing(schema, config, keys) {
  * @param {string[]} args   verb and arguments, e.g. ['config', 'set', 'tier', 'fast']
  * @param {{ repoRoot: string, prefix?: string }} opts
  */
-export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-recall skill config ${skillId}` } = {}) {
+export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-recall skill config ${skillId}`, coreDir } = {}) {
   const json = args.includes('--json');
   const flags = new Set(args.filter((arg) => arg.startsWith('--')));
   const positional = args.filter((arg) => !arg.startsWith('--'));
@@ -92,7 +93,7 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
   };
 
   try {
-    const skillDir = resolveSkillDir(repoRoot, skillId);
+    const skillDir = resolveSkillDir(repoRoot, skillId, { coreDir });
     const contract = loadConfigSchema(skillDir);
     const collections = listCollections(contract.schema);
     const [verb, action, ...rest] = positional;
@@ -188,7 +189,7 @@ export async function runSkillConfig(skillId, args, { repoRoot, prefix = `total-
         throw new SkillConfigError(`A config already exists; change it with '${prefix} config set' or pass --force`, { exitCode: 1 });
       }
       let config = topLevelDefaults(contract.schema);
-      if (fs.existsSync(path.join(skillDir, 'core', 'detect.mjs'))) config = { ...config, ...(await detectSkillConfig(skillDir, repoRoot)) };
+      if (fs.existsSync(path.join(coreDirOf(skillDir), 'detect.mjs'))) config = { ...config, ...(await detectSkillConfig(skillDir, repoRoot)) };
       const missing = missingRequired(contract.schema, config);
       if (missing.length) {
         if (flags.has('--yes') || json || !process.stdin.isTTY) {
