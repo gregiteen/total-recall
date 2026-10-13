@@ -13,6 +13,8 @@ import {
   resolveCommand,
   collectCommandValues,
   checkSkillLayerContract,
+  resolveSkillDir,
+  coreDirOf,
 } from './skill-config.mjs';
 import { emptyRegistry, saveRegistry, skillStatus } from './skills-registry.mjs';
 import { verifyApplication } from './app-deploy/verify.mjs';
@@ -328,5 +330,25 @@ describe('layered skill repo-layer config', () => {
     await expect(writeSkillConfig(skillDir, contract, { language: 'node' })).rejects.toThrow(/gates/);
     expect(fs.existsSync(recordFile)).toBe(false);
     expect(fs.existsSync(configFile)).toBe(false);
+  });
+});
+
+describe('plugin-owned core', () => {
+  it('loads the contract from the plugin while the repo directory holds only state', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-core-'));
+    try {
+      const pluginCore = path.join(tmp, 'plugin', 'core');
+      fs.mkdirSync(pluginCore, { recursive: true });
+      fs.writeFileSync(path.join(pluginCore, 'config.schema.json'), JSON.stringify(SCHEMA));
+      const repo = path.join(tmp, 'repo');
+      fs.mkdirSync(repo);
+      const skillDir = resolveSkillDir(repo, 'demo', { coreDir: pluginCore });
+      expect(fs.readdirSync(skillDir)).toEqual([]);
+      expect(coreDirOf(skillDir)).toBe(path.resolve(pluginCore));
+      expect(loadConfigSchema(skillDir).schema.required).toEqual(['language', 'gates']);
+      expect(() => resolveSkillDir(repo, 'other')).toThrow(/not deployed/);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

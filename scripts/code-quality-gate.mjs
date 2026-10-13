@@ -2,9 +2,9 @@
 /**
  * Pre-push quality gate.
  *
- * Delegates to the code-quality skill's one-shot runner. Which gates exist is
- * the skill's business, not this file's — read
- * .agent/skills/code-quality/config.json to see them. Naming individual
+ * Delegates to the code-quality plugin's one-shot runner. Which gates exist is
+ * the plugin's business, not this file's — read
+ * `total-recall code-quality gate list` to see them. Naming individual
  * checker scripts here is what broke this hook when the checker was rebuilt:
  * it went on invoking start-here-lint.mjs / start-here-ts.mjs long after those
  * were deleted, so every push failed with MODULE_NOT_FOUND.
@@ -40,7 +40,7 @@ if (remoteNode) {
     console.error('❌ Remote source does not match this working tree. Refresh the sanctioned snapshot before pushing.');
     process.exit(1);
   }
-  const run = mesh(prefix + 'sh -c \'node .agent/skills/code-quality/scripts/check.mjs --tier fast > /tmp/tr-prepush-gate.log 2>&1 & gate_pid=$!; wait "$gate_pid"; gate_rc=$?; cat /tmp/tr-prepush-gate.log; exit "$gate_rc"\'');
+  const run = mesh(prefix + 'sh -c \'node .agent/skills/total-recall/plugins/code-quality/core/check.mjs --tier fast > /tmp/tr-prepush-gate.log 2>&1 & gate_pid=$!; wait "$gate_pid"; gate_rc=$?; cat /tmp/tr-prepush-gate.log; exit "$gate_rc"\'');
   process.stdout.write(run.stdout || '');
   process.stderr.write(run.stderr || '');
   if (run.error || run.status !== 0) {
@@ -53,7 +53,7 @@ if (remoteNode) {
 
 const run = spawnSync(
   process.execPath,
-  ['.agent/skills/code-quality/scripts/check.mjs'],
+  [resolve(root, 'bin/total-recall.mjs'), 'code-quality-check'],
   { cwd: root, stdio: 'inherit' }
 );
 
@@ -70,8 +70,8 @@ if (run.status === 0) {
 console.error(
   run.status === 2
     ? '❌ A quality gate failed to run. This is not a clean result — see:\n' +
-      '   node .agent/skills/code-quality/scripts/report.mjs'
+      '   total-recall code-quality report'
     : '❌ Quality gate found blocking errors. Inspect them with:\n' +
-      '   node .agent/skills/code-quality/scripts/report.mjs'
+      '   total-recall code-quality report'
 );
 process.exit(1);
