@@ -8,7 +8,9 @@ import { syncScaffoldPlugins } from '../src/core/scaffold-plugins.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'scripts', 'scaffold-plugins.json'), 'utf8'));
-const ids = [...new Set(Object.keys(lock).map((k) => k.split('/')[0]))];
+// Core imports these plugins at load, so every scaffold must carry them.
+const REQUIRED = ['auth', 'mesh'];
+const ids = [...new Set([...REQUIRED, ...Object.keys(lock).map((k) => k.split('/')[0])])];
 const check = process.argv.includes('--check');
 const { changes, files } = syncScaffoldPlugins({ root, ids, write: !check });
 for (const c of changes) console.log(`${c.change.padEnd(8)} ${c.file}`);

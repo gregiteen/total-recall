@@ -1,0 +1,276 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "mesh",
+  "name": "Headscale",
+  "version": "0.2.0",
+  "description": "Control-server mesh administration, Tailscale SSH, and peer node discovery.",
+  "license": "MIT",
+  "branding": {
+    "name": "Headscale",
+    "color": "#818cf8",
+    "badge": "Mesh Topology",
+    "font": "space-grotesk",
+    "logo": "ui/logo.svg",
+    "provider": {
+      "name": "Headscale",
+      "url": "https://headscale.net"
+    }
+  },
+  "card_face": {
+    "skin": "winamp-classic",
+    "theme": "vibrant",
+    "headline": "Mesh Control Deck",
+    "quick_actions": [
+      {
+        "subcommand": "status",
+        "label": "STATUS"
+      },
+      {
+        "subcommand": "nodes",
+        "label": "NODES"
+      },
+      {
+        "subcommand": "enroll",
+        "label": "ENROLL"
+      },
+      {
+        "subcommand": "probe",
+        "label": "200 PROBE"
+      }
+    ],
+    "touch_layout": "comfortable",
+    "interactive": true
+  },
+  "ssss_schemas": {
+    "categories": [
+      {
+        "name": "mesh-nodes",
+        "description": "Custom mesh-nodes memory nodes for Mesh",
+        "node_type": "memory"
+      },
+      {
+        "name": "mesh-events",
+        "description": "SSSS event logs and telemetry for Mesh",
+        "node_type": "memory"
+      }
+    ]
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "secrets": [
+    {
+      "key": "HEADSCALE_API_KEY",
+      "description": "Mesh service API key (paste it in the plugin UI)",
+      "required": true
+    }
+  ],
+  "cli": {
+    "command": "mesh",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "status",
+        "description": "Inspect live mesh state",
+        "effect": "read"
+      },
+      {
+        "name": "view",
+        "description": "Inspect live mesh state",
+        "effect": "read"
+      },
+      {
+        "name": "nodes",
+        "description": "Mesh nodes operation",
+        "effect": "read"
+      },
+      {
+        "name": "doctor",
+        "description": "Mesh doctor operation",
+        "effect": "read"
+      },
+      {
+        "name": "ssh",
+        "description": "Mesh ssh operation",
+        "effect": "write"
+      },
+      {
+        "name": "exec",
+        "description": "Mesh exec operation",
+        "effect": "write"
+      },
+      {
+        "name": "access",
+        "description": "Mesh access operation",
+        "effect": "write"
+      },
+      {
+        "name": "ping",
+        "description": "Mesh ping operation",
+        "effect": "read"
+      },
+      {
+        "name": "leader",
+        "description": "Mesh leader operation",
+        "effect": "read"
+      },
+      {
+        "name": "enroll",
+        "description": "Mesh enroll operation",
+        "effect": "write"
+      },
+      {
+        "name": "preauthkey",
+        "description": "Mesh preauthkey operation",
+        "effect": "write"
+      },
+      {
+        "name": "policy",
+        "description": "Mesh policy operation",
+        "effect": "write"
+      },
+      {
+        "name": "probe",
+        "description": "Mesh probe operation",
+        "effect": "read"
+      },
+      {
+        "name": "token",
+        "description": "Mesh token operation",
+        "effect": "write"
+      },
+      {
+        "name": "presence",
+        "description": "Mesh presence operation",
+        "effect": "read"
+      },
+      {
+        "name": "dispatch",
+        "description": "Mesh dispatch operation",
+        "effect": "send"
+      },
+      {
+        "name": "server",
+        "description": "Provision, update and inspect your own Headscale control server on a host you deploy to",
+        "effect": "write"
+      },
+      {
+        "name": "grants",
+        "description": "List, add or remove which enrolled machines may read which secret keys",
+        "effect": "write"
+      }
+    ]
+  },
+  "ui": {
+    "design_tokens": "ui/DESIGN.md",
+    "elements": [
+      {
+        "id": "panel",
+        "kind": "panel",
+        "tag": "mesh-panel",
+        "module": "ui/panel.js",
+        "description": "Mesh panel",
+        "events": [
+          "save-token"
+        ],
+        "tokens": [
+          "color-text",
+          "color-surface",
+          "color-border",
+          "spacing-md",
+          "radius-md"
+        ],
+        "optional_tokens": [],
+        "props": {
+          "view": {
+            "type": "object",
+            "description": "Printed by `total-recall mesh token status --json`: { present, secretKey }"
+          }
+        }
+      },
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-mesh-card",
+        "module": "ui/card.js",
+        "description": "Meshlink Card Face"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "runtime": {
+    "modules": {
+      "mesh": "src/core/mesh.mjs",
+      "mesh-access": "src/core/mesh-access.mjs",
+      "mesh-access-sync": "src/core/mesh-access-sync.mjs",
+      "mesh-auth": "src/core/mesh-auth.mjs",
+      "mesh-identity": "src/core/mesh-identity.mjs",
+      "mesh-activity": "src/core/mesh-activity.mjs",
+      "mesh-discover": "src/core/mesh-discover.mjs",
+      "mesh-enroll": "src/core/mesh-enroll.mjs",
+      "mesh-late-bind": "src/core/mesh-late-bind.mjs",
+      "tailscale-cli": "src/core/tailscale-cli.mjs",
+      "headscale-client": "src/core/headscale-client.mjs",
+      "leader-election": "src/core/leader-election.mjs",
+      "network-interfaces": "src/core/network-interfaces.mjs",
+      "lan-discovery": "src/core/lan-discovery.mjs",
+      "device-io": "src/core/device-io.mjs",
+      "registration-watch": "src/core/registration-watch.mjs",
+      "plugin-peers": "src/core/plugin-peers.mjs",
+      "cli": "src/cli/mesh.mjs",
+      "route-mesh": "src/server/routes/mesh.mjs",
+      "route-mesh-presence": "src/server/routes/mesh-presence.mjs",
+      "route-headscale": "src/server/routes/headscale.mjs",
+      "route-plugins-mesh": "src/server/routes/plugins-mesh.mjs",
+      "status": "src/core/status.mjs",
+      "credentials": "src/core/credentials.mjs",
+      "presence": "src/core/presence.mjs"
+    },
+    "routers": [
+      "src/server/routes/mesh.mjs",
+      "src/server/routes/mesh-presence.mjs",
+      "src/server/routes/headscale.mjs",
+      "src/server/routes/plugins-mesh.mjs"
+    ]
+  },
+  "configuration": {
+    "fields": [
+      {
+        "name": "controlUrl",
+        "label": "Control server URL",
+        "type": "string",
+        "required": false
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "intent": "Keep the Headscale control server current",
+      "schedule": "17 4 * * *",
+      "command": "server update --if-provisioned"
+    }
+  ],
+  "status": {
+    "command": "status",
+    "refresh_seconds": 15
+  }
+}
