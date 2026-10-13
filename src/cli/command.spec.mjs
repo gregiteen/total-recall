@@ -56,7 +56,7 @@ describe('plugin command generation', () => {
     const ran = spawnSync(process.execPath,
       [cli, 'sample-run', 'hello', '--json'],
       { cwd: root, encoding: 'utf8', env: { ...process.env, AGENT_DIR: path.join(root, '.agent') } });
-    expect(ran.status).toBe(7);
+    expect(ran.status, ran.stderr).toBe(7);
     expect(JSON.parse(ran.stdout)).toEqual({ ok: false, exit_code: 7, result: { args: ['hello'] } });
   });
 
@@ -67,7 +67,7 @@ describe('plugin command generation', () => {
     const cli = path.resolve('bin/total-recall.mjs');
     const env = { ...process.env, AGENT_DIR: path.join(root, '.agent'), TR_COMMAND_NO_COMPILE: '1' };
     const installed = spawnSync(process.execPath, [cli, 'plugin', 'install', plugin], { cwd: root, encoding: 'utf8', env });
-    expect(installed.status).toBe(0);
+    expect(installed.status, installed.stderr).toBe(0);
     expect(installed.stdout).toContain('Commands: total-recall sample-run');
     const file = path.join(root, '.agent', 'commands', 'sample-run.mjs');
     expect(fs.existsSync(file)).toBe(true);

@@ -1,0 +1,23 @@
+
+> tr-plugin-deploy@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.155041ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.15125ms)
+✔ writes use stdin and require exact auth readback (0.110417ms)
+▶ Zero-Downtime Deploy Engine & Provider Orchestration
+  ✔ initializes default blue/green slot architecture (1.426375ms)
+  ✔ stages a release to alternate slot without altering active traffic (0.367458ms)
+  ✔ probes health and verifies HTTP 200 on staged slot (0.307625ms)
+  ✔ switches traffic smoothly to newly staged slot and preserves old on standby (0.365708ms)
+  ✔ executes instant zero-downtime rollback to previous known-good release (0.3825ms)
+  ✔ CLI status and help commands output clean JSON and formatted logs (0.337042ms)
+✔ Zero-Downtime Deploy Engine & Provider Orchestration (3.738875ms)
+ℹ tests 9
+ℹ suites 1
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 71.187625

@@ -1,0 +1,58 @@
+
+  🔍 Local search results for "openwiki-auth" (merged):
+
+  [1] Vault Match (100%) [project] - Category: facts [SHOULD]
+      Title:      Auth and secrets ownership
+      Slug:       openwiki-auth
+      Importance: ⭐⭐⭐☆☆ (conf: 100%)
+      Tags:       openwiki, architecture, documentation
+      Body:
+        │ # Auth and secrets ownership
+        │ 
+        │ Auth is being shipped with the Total Recall scaffold. Core secret implementation files and legacy CLI/API handlers have been moved into the auth owner. Consumers use required generic runtime exports. The migration removes silent store merging and legacy core execution fallback; failures must propagate.
+        │ 
+        │ Auth CLI baseline on sanctioned Mac mini: 10 tests passed, actual exit 0, 2026-10-10. That baseline preceded migration and does not certify current edited source. Missing extracted CLI imports and the generic credential UI's unmounted auth endpoint were confirmed and are under repair. Full owner/bootstrap/package/API checks are required before completion.
+        │ 
+        │ The plugin audit found direct core imports in mesh, image-generator, phone, text, signing and skill-manager, plus independent environment credential paths in other plugins. Tickets had a hardcoded signing-secret default. These remain explicit findings until source and tests prove correction. No secret values, carrier passwords or production credentials belong in this hub.
+        │ 
+        │ [Auth procedure](../.agent/skills/total-recall/references/auth.md). [Audit](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_AUDIT.md).
+        │ 
+        │ ## Session and credential extraction — 2026-10-10
+        │ 
+        │ Auth now owns server authentication middleware and OAuth/passkey route factories, dashboard/collaboration password operations, HS256 session signing, passkey storage, and PAT hashing/scope/lifecycle. Core exposes required-plugin adapters. SESSION_SECRET is absent from core configuration. Missing/weak signing keys, wrong-purpose tokens, locked stores and plaintext runtime stores fail. Dashboard password updates commit the encrypted hash plus signing-key rotation together. Collaboration metadata no longer stores newly generated password hashes.
+        │ 
+        │ Explicit `auth migrate-credentials --legacy-brain <source> --remove-legacy` verifies legacy hash/signing imports before source cleanup and rejects conflicts. Core startup no longer silently encrypts or visits other stores. Auth-owned uninstall preservation verifies ciphertext and refuses teardown on conflicts, corruption, lock failure or legacy credentials. Generic config rejects credential reads/writes and object-parent reads.
+        │ 
+        │ The scaffold includes the owning source and required runtime declarations. Fresh initialization wires compatible declared dependencies from the installed host packages; unsupported or unavailable packages fail explicitly. Auth card scanner animation, fabricated hardware-ready badges and automatic-rotation schedule claims were removed. The panel now performs browser credential creation and server verification before reporting success. Configuration, endpoint reachability and physical authenticator/provider verification are separate evidence.
+        │ 
+        │ Latest intermediate owner result: 10 Node tests plus 150 Vitest tests passed, exit 0; later route/bootstrap changes require final verification. Whole-project gates and all-plugin credential routing are still in progress. No live credentials, device policy, release or deployment changed.
+        │ 
+        │ 
+        │ 2026-10-10T18:35:44.132567+00:00: Full core integration passes 336 files / 2,025 tests, actual exit 0. Updated auth owner passes 11 Node + 154 Vitest tests, exit 0; final strengthened isolation fixture verification pending. Auth CLI get now reads only the selected store and supports structured missing results; it never retries a global store. Service-plugin ambient credential paths are being replaced with required auth reads and verified stdin write/readback. Those owner suites remain in progress; full core success does not certify them.
+
+  [2] Vault Match (80%) [project] - Category: facts [DESCRIPTIVE] [LOW]
+      Title:      Auth and secrets ownership
+      Slug:       repo-total-recall-openwiki-auth
+      Importance: ⭐⭐☆☆☆ (conf: 90%)
+      Tags:       repo-sync, auto-ingested, total-recall
+      Body:
+        │ # Auth and secrets ownership
+        │ 
+        │ Auth is being shipped with the Total Recall scaffold. Core secret implementation files and legacy CLI/API handlers have been moved into the auth owner. Consumers use required generic runtime exports. The migration removes silent store merging and legacy core execution fallback; failures must propagate.
+        │ 
+        │ Auth CLI baseline on sanctioned Mac mini: 10 tests passed, actual exit 0, 2026-10-10. That baseline preceded migration and does not certify current edited source. Missing extracted CLI imports and the generic credential UI's unmounted auth endpoint were confirmed and are under repair. Full owner/bootstrap/package/API checks are required before completion.
+        │ 
+        │ The plugin audit found direct core imports in mesh, image-generator, phone, text, signing and skill-manager, plus independent environment credential paths in other plugins. Tickets had a hardcoded signing-secret default. These remain explicit findings until source and tests prove correction. No secret values, carrier passwords or production credentials belong in this hub.
+        │ 
+        │ [Auth procedure](../.agent/skills/total-recall/references/auth.md). [Audit](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_AUDIT.md).
+        │ 
+        │ ## Session and credential extraction — 2026-10-10
+        │ 
+        │ Auth now owns server authentication middleware and OAuth/passkey route factories, dashboard/collaboration password operations, HS256 session signing, passkey storage, and PAT hashing/scope/lifecycle. Core exposes required-plugin adapters. SESSION_SECRET is absent from core configuration. Missing/weak signing keys, wrong-purpose tokens, locked stores and plaintext runtime stores fail. Dashboard password updates commit the encrypted hash plus signing-key rotation together. Collaboration metadata no longer stores newly generated password hashes.
+        │ 
+        │ Explicit `auth migrate-credentials --legacy-brain <source> --remove-legacy` verifies legacy hash/signing imports before source cleanup and rejects conflicts. Core startup no longer silently encrypts or visits other stores. Auth-owned uninstall preservation verifies ciphertext and refuses teardown on conflicts, corruption, lock failure or legacy credentials. Generic config rejects credential reads/writes and object-parent reads.
+        │ 
+        │ The scaffold includes the owning source and required runtime declarations. Fresh initialization wires compatible declared dependencies from the installed host packages; unsupported or unavailable packages fail explicitly. Auth card scanner animation, fabricated hardware-ready badges and automatic-rotation schedule claims were removed. The panel now performs browser credential creation and server verification before reporting success. Configuration, endpoint reachability and physical authenticator/provider verification are separate evidence.
+        │ 
+        │ Latest intermediate owner result: 10 Node tests plus 150 Vitest tests passed, exit 0; later route/bootstrap changes require final verification. Whole-project gates and all-plugin credential routing are still in progress. No live credentials, device policy, release or deployment changed.
+

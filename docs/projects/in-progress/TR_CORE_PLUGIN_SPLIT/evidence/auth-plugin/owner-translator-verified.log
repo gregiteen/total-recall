@@ -1,0 +1,17 @@
+
+> tr-plugin-translator@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.145708ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.150625ms)
+✔ writes use stdin and require exact auth readback (0.110291ms)
+✔ manifest identifies the plugin (0.591792ms)
+✔ every file the manifest references exists (0.124542ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64.499708

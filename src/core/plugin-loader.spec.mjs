@@ -13,7 +13,8 @@ import {
   bundledPluginsDir,
   PACKAGE_ROOT,
   listBundledPlugins,
-  getPluginMonetization
+  getPluginMonetization,
+  readPluginsDir
 } from './plugin-loader.mjs';
 
 describe('Plugin Loader & Schema Validation', () => {
@@ -272,6 +273,26 @@ describe('Plugin Loader & Schema Validation', () => {
     it('collects watch paths for compiler', () => {
       const watchPaths = getPluginWatchPaths(fixtureRoot);
       expect(watchPaths.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('broken installs', () => {
+    it('reports a link whose target is missing as an invalid, removable plugin and still ignores plain folders', () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'plugins-broken-'));
+      try {
+        fs.symlinkSync(path.join(dir, 'gone-target'), path.join(dir, 'gone'));
+        fs.mkdirSync(path.join(dir, 'not-a-plugin'));
+        fs.mkdirSync(path.join(dir, 'ok'));
+        fs.writeFileSync(path.join(dir, 'ok', 'plugin.json'), JSON.stringify({ id: 'ok', name: 'Ok', version: '1.0.0', description: 'x', author: 'x' }));
+        const found = readPluginsDir(dir, 'project');
+        const broken = found.find((p) => p.id === 'gone');
+        expect(broken).toMatchObject({ broken: true, linked: true, valid: false });
+        expect(broken.errors[0]).toMatch(/Linked plugin target is missing: .*gone-target.*plugin remove gone/);
+        expect(found.some((p) => p.id === 'not-a-plugin')).toBe(false);
+        expect(found.find((p) => p.id === 'ok')).toBeTruthy();
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

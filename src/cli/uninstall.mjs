@@ -30,7 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 import backup from './backup.mjs';
-import { writeFileSecure } from '../core/secure-file.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  FORBIDDEN FLAGS — These patterns must NEVER be accepted as arguments  ║
@@ -181,6 +181,15 @@ export default async function uninstall(args = []) {
       logWarn('Teardown aborted to protect your data. Resolve backup issues and try again.');
       return;
     }
+  }
+
+  // Auth must verify credential preservation before any destructive teardown.
+  const { preserveCredentials } = await loadPluginModule('auth', 'credential-preservation');
+  for (const agentDir of new Set([globalAgentDir, localAgentDir])) {
+    const brainDir = path.join(agentDir, 'skills', 'total-recall');
+    if (!fs.existsSync(brainDir)) continue;
+    const result = preserveCredentials({ brainDir, destination: path.join(agentDir, 'secrets.enc') });
+    if (result.preserved) logOk('Auth verified encrypted credential preservation');
   }
 
   // ── Step 1: Stop and disable background services ──
@@ -504,46 +513,6 @@ export default async function uninstall(args = []) {
   //   .agent/                      — always stays
   //   .agent/skills/               — always stays (user may have other skills)
   //   .agent/skills/<other>/       — other user skills, never ours to delete
-
-  // ── Preserve credentials before purge ──
-  for (const agentDir of [globalAgentDir, localAgentDir]) {
-    if (!fs.existsSync(agentDir)) continue;
-    try {
-      const brainPath = path.join(agentDir, 'skills', 'total-recall');
-      const secretsPath = path.join(brainPath, 'config', 'secrets.enc');
-      const securityPath = path.join(brainPath, 'config', 'security.yml');
-      
-      let secretsObj = {};
-      if (fs.existsSync(secretsPath)) {
-        try {
-          secretsObj = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}');
-        } catch {}
-      }
-      
-      if (fs.existsSync(securityPath)) {
-        try {
-          const { default: yaml } = await import('yaml');
-          const securityObj = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
-          if (securityObj.dashboard?.password_hash) {
-            secretsObj.dashboard_password_hash = securityObj.dashboard.password_hash;
-          }
-        } catch {}
-      }
-      
-      if (Object.keys(secretsObj).length > 0) {
-        fs.mkdirSync(agentDir, { recursive: true });
-        writeFileSecure(
-          path.join(agentDir, 'secrets.enc'),
-          JSON.stringify(secretsObj, null, 2),
-          { encoding: 'utf8', mode: 0o600 }
-        );
-        const label = agentDir === globalAgentDir ? 'Global' : 'Local';
-        logOk(`${label}: Preserved credentials to ${path.relative(process.cwd(), path.join(agentDir, 'secrets.enc'))}`);
-      }
-    } catch (err) {
-      logWarn(`Failed to preserve credentials for ${agentDir}: ${err.message}`);
-    }
-  }
 
   for (const agentDir of [globalAgentDir, localAgentDir]) {
     if (!fs.existsSync(agentDir)) {

@@ -23,6 +23,7 @@ export const CARD_DENSITIES = ['compact', 'comfortable', 'spacious'];
 export const CARD_RADII = ['none', 'sm', 'md', 'lg', 'pill'];
 export const CARD_HEADERS = ['plain', 'ledger-rule', 'band', 'tab-strip', 'badge-left'];
 export const CELL_FORMATS = ['text', 'number', 'money', 'date', 'datetime', 'bytes', 'percent', 'status'];
+export const WORKSPACE_PERMISSIONS = ['microphone', 'camera', 'notifications'];
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 function validateArg(arg, where, errors) {
@@ -30,12 +31,13 @@ function validateArg(arg, where, errors) {
   if (typeof arg.name !== 'string' || !ARG_NAME.test(arg.name)) errors.push(`${where}.name must be camelCase`);
   if (!ARG_TYPES.includes(arg.type)) errors.push(`${where}.type must be one of: ${ARG_TYPES.join(', ')}`);
   if (arg.flag !== undefined && !FLAG.test(arg.flag)) errors.push(`${where}.flag must look like --flag-name`);
-  if (arg.flag === undefined && arg.positional !== true) errors.push(`${where} needs a flag or positional: true`);
+  if (arg.flag === undefined && arg.positional !== true && arg.secret !== true) errors.push(`${where} needs a flag or positional: true`);
   if (typeof arg.label !== 'string' || !arg.label.trim()) errors.push(`${where}.label is required`);
   if (arg.type === 'choice' && (!Array.isArray(arg.options) || arg.options.length === 0)) errors.push(`${where}.options is required for a choice`);
   if (arg.required !== undefined && typeof arg.required !== 'boolean') errors.push(`${where}.required must be a boolean`);
   if (arg.secret !== undefined && typeof arg.secret !== 'boolean') errors.push(`${where}.secret must be a boolean`);
   if (arg.secret === true && arg.flag !== undefined) errors.push(`${where}: a secret argument is passed on stdin, not as a flag`);
+  if (arg.secret === true && arg.type !== 'string') errors.push(`${where}: a secret stdin argument must be a string`);
 }
 
 export function validateCardContract(manifest) {
@@ -61,6 +63,7 @@ export function validateCardContract(manifest) {
             if (plain(arg) && seen.has(arg.name)) errors.push(`${where}.args[${j}]: duplicate argument '${arg.name}'`);
             if (plain(arg)) seen.add(arg.name);
           });
+          if (sub.args.filter(arg => plain(arg) && arg.secret === true).length > 1) errors.push(`${where}: only one secret stdin argument is supported`);
         }
       }
     });
@@ -86,6 +89,7 @@ export function validateCardContract(manifest) {
   }
   validateLayout(manifest, names, errors);
   validateBranding(manifest.branding, errors, warnings);
+  validateWorkspace(manifest.workspace, errors);
   if (Array.isArray(manifest.secrets)) {
     manifest.secrets.forEach((s, i) => {
       if (!plain(s) || typeof s.key !== 'string' || !/^[A-Z][A-Z0-9_]{0,63}$/.test(s.key)) errors.push(`secrets[${i}].key must be an uppercase identifier`);
@@ -159,5 +163,23 @@ function validateBranding(branding, errors, warnings) {
       continue;
     }
     errors.push(`branding.${key} must be one of: ${allowed.join(', ')}`);
+  }
+}
+
+function validateWorkspace(workspace, errors) {
+  if (workspace === undefined) return;
+  if (!plain(workspace)) { errors.push("'workspace' must be an object"); return; }
+  if (workspace.component !== undefined && (typeof workspace.component !== 'string' || !workspace.component.trim())) {
+    errors.push("'workspace.component' must be a non-empty string");
+  }
+  if (workspace.tabs !== undefined) {
+    if (!Array.isArray(workspace.tabs) || workspace.tabs.some((t) => typeof t !== 'string' || !t.trim())) {
+      errors.push("'workspace.tabs' must be an array of non-empty strings");
+    }
+  }
+  if (workspace.permissions !== undefined) {
+    if (!Array.isArray(workspace.permissions) || workspace.permissions.some((p) => !WORKSPACE_PERMISSIONS.includes(p))) {
+      errors.push(`'workspace.permissions' must be an array of permission strings from: ${WORKSPACE_PERMISSIONS.join(', ')}`);
+    }
   }
 }

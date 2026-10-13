@@ -1,0 +1,16 @@
+[
+  {
+    "group": "crm-settings-cli",
+    "files": 10,
+    "sha256": "8a57aa0819e7bc71820afc08a7d73cf0b893e6cf2376a4a92174c5fd6f3b3a4e",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "crm-native-auth",
+    "files": 9,
+    "sha256": "13845e58fde6159fcdb73edd073b93fc677d86aa01478361a66b259c625de45a",
+    "matched": true,
+    "differences": []
+  }
+]

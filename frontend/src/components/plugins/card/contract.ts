@@ -15,10 +15,16 @@ export interface CardBranding {
   radius: 'none' | 'sm' | 'md' | 'lg' | 'pill'; header: 'plain' | 'ledger-rule' | 'band' | 'tab-strip' | 'badge-left'
   badge?: string; logo?: string; provider?: { name: string; url?: string }
 }
+export interface CardWorkspace {
+  component?: string;
+  tabs?: string[];
+  permissions?: string[];
+}
 export interface Card {
   id: string; title: string; description: string; template: Template; regions: CardRegion[]
   commands: Map<string, CardCommand>; branding: CardBranding; status?: { command: string; refreshSeconds: number }
   distribution?: { tier: string; license: string }
+  workspace?: CardWorkspace
 }
 
 const TEMPLATES: Template[] = ['console', 'ledger', 'monitor', 'inbox', 'dashboard', 'workbench', 'vault']
@@ -28,9 +34,6 @@ const HEX = /^#[0-9a-fA-F]{6}$/
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Loose = any
 const obj = (v: unknown): Record<string, Loose> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, Loose> : {})
-
-/** Inferred when a plugin declares nothing: a read command is a safe action, a write command is not. */
-const inferEffect = (name: string): Effect => /^(status|list|get|show|view|info|check|read|search|history|stats|verify|config)/.test(name) ? 'read' : 'write'
 
 function normalizeArg(raw: unknown): CardArg | null {
   const a = obj(raw)
@@ -47,7 +50,8 @@ export function normalizeCard(plugin: PluginInfo): Card {
     commands.set(sub.name, {
       name: sub.name, description: sub.description,
       args: (Array.isArray(declared.args) ? declared.args : []).map(normalizeArg).filter(Boolean) as CardArg[],
-      effect: ['read', 'write', 'destructive', 'send'].includes(declared.effect) ? declared.effect : inferEffect(sub.name),
+      // A grouped command such as `config set` may write. Only explicit read declarations are safe.
+      effect: ['read', 'write', 'destructive', 'send'].includes(declared.effect) ? declared.effect : 'write',
       output: declared.output === 'text' ? 'text' : 'json',
       timeoutMs: Number.isFinite(declared.timeout_ms) ? declared.timeout_ms : undefined,
     })
@@ -76,9 +80,16 @@ export function normalizeCard(plugin: PluginInfo): Card {
     if (statusCommand) regions.push({ widget: 'status', title: 'Status' })
     regions.push({ widget: 'actions', title: 'Commands' }, { widget: 'activity', title: 'Recent activity' })
   }
+  const ws = obj(manifest.workspace)
+  const workspace: CardWorkspace | undefined = ws && (ws.component || Array.isArray(ws.tabs)) ? {
+    component: typeof ws.component === 'string' ? ws.component : undefined,
+    tabs: Array.isArray(ws.tabs) ? ws.tabs.filter((t: unknown) => typeof t === 'string') : undefined,
+    permissions: Array.isArray(ws.permissions) ? ws.permissions.filter((p: unknown) => typeof p === 'string') : undefined,
+  } : undefined
   return {
     id: plugin.id, title: branding.name, description: plugin.description, template, regions, commands, branding,
     status: statusCommand ? { command: statusCommand, refreshSeconds: Number.isInteger(status.refresh_seconds) ? Math.min(86400, Math.max(5, status.refresh_seconds)) : 30 } : undefined,
     distribution: obj(manifest.distribution).tier ? { tier: manifest.distribution.tier, license: manifest.distribution.license } : undefined,
+    workspace,
   }
 }

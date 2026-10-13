@@ -1,0 +1,22 @@
+
+> tr-plugin-deploy@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.224541ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.161875ms)
+✔ writes use stdin and require exact auth readback (0.114125ms)
+✔ empty installation invents no providers, ports or active version (2.010083ms)
+✔ missing execution adapter rejects mutations and leaves state unchanged (0.836167ms)
+✔ health failures and mismatched release identity cannot switch traffic (1.853334ms)
+✔ verified adapter receipts and matching real response contract support switch and rollback (1.616708ms)
+✔ unverified execution receipts cannot change active state (1.058334ms)
+✔ corrupt and legacy synthetic deployment state is rejected (0.526292ms)
+✔ deployment UI starts unknown, renders recorded releases and clears stale success after failure (13.374708ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 558.623375

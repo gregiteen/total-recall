@@ -1,0 +1,640 @@
+{
+  "sourceOnly": true,
+  "count": 29,
+  "runtimeVerified": false,
+  "plugins": [
+    {
+      "id": "auth",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "cli.mjs",
+          "line": 23,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "cli.mjs",
+          "line": 28,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/cli-secret.mjs",
+          "line": 702,
+          "rule": "ambient-credential-bypass-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/credential-migration.mjs",
+          "line": 32,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/credential-preservation.mjs",
+          "line": 15,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/secrets-gateway.mjs",
+          "line": 287,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/secrets-rotate.mjs",
+          "line": 39,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/secrets-rotate.mjs",
+          "line": 44,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/session-credentials.mjs",
+          "line": 20,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/session-credentials.mjs",
+          "line": 53,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "code-quality",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "skills/code-quality/core/check.mjs",
+          "line": 426,
+          "rule": "dynamic-credential-source-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "composable-cli",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "creative-search",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "config.mjs",
+          "line": 38,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "crm",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "runtime/cli_api.py",
+          "line": 180,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/cli_api.py",
+          "line": 181,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/crm_service.py",
+          "line": 6401,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/crm_service.py",
+          "line": 6561,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/crm_service.py",
+          "line": 7119,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/cron_service.py",
+          "line": 458,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 303,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 320,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 326,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 340,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 456,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 517,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 523,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 550,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 551,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/local_config.py",
+          "line": 564,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/market_collector.py",
+          "line": 1021,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/market_collector.py",
+          "line": 1026,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/market_collector.py",
+          "line": 1031,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/newsletter_service.py",
+          "line": 135,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/newsletter_service.py",
+          "line": 2675,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/signedgi.py",
+          "line": 71,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 2438,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 2439,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 3164,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 3167,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 4328,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 4329,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/static/crm.js",
+          "line": 4331,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/telnyx_service.py",
+          "line": 61,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/telnyx_service.py",
+          "line": 62,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/telnyx_voice.py",
+          "line": 29,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/telnyx_voice.py",
+          "line": 30,
+          "rule": "python-ambient-credential-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/tests/browser-walkthrough.mjs",
+          "line": 377,
+          "rule": "code-evaluation",
+          "severity": "CRITICAL",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/tests/test_crm_service.py",
+          "line": 9456,
+          "rule": "embedded-credential",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "runtime/tests/test_two_factor.py",
+          "line": 13,
+          "rule": "embedded-credential",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "scripts/walkthrough.mjs",
+          "line": 21,
+          "rule": "embedded-credential",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/bootstrap.mjs",
+          "line": 7,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/settings.mjs",
+          "line": 26,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/settings.mjs",
+          "line": 48,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "decision",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "deploy",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "design",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "domains",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "ui/domains-console.js",
+          "line": 103,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "dsh",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "git-sentinel",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "image-generator",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "maps",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "mesh",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "src/core/credentials.mjs",
+          "line": 9,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/core/credentials.mjs",
+          "line": 27,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "okf",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "openwiki",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "operator-alerts",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "phone",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "src/host.mjs",
+          "line": 12,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "phone-companion",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "security",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "cli.mjs",
+          "line": 26,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "cli.mjs",
+          "line": 255,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "cli.mjs",
+          "line": 806,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "cli.mjs",
+          "line": 830,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/scanner.mjs",
+          "line": 27,
+          "rule": "synthetic-provider-or-signing-default",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/scanner.mjs",
+          "line": 35,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "signing",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "cli.mjs",
+          "line": 47,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/admin-api.mjs",
+          "line": 89,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "skill-manager",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "route.mjs",
+          "line": 15,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "stripe",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "system-monitor",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "text",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "src/host.mjs",
+          "line": 10,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "tickets",
+      "authDeclared": true,
+      "findings": [
+        {
+          "file": "src/tickets-engine.mjs",
+          "line": 9,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        },
+        {
+          "file": "src/tickets-engine.mjs",
+          "line": 10,
+          "rule": "credential-default-review",
+          "severity": "HIGH",
+          "detail": "Review owning source; matched content withheld"
+        }
+      ]
+    },
+    {
+      "id": "tr-transcribe",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "translator",
+      "authDeclared": true,
+      "findings": []
+    },
+    {
+      "id": "user-automations",
+      "authDeclared": true,
+      "findings": []
+    }
+  ]
+}

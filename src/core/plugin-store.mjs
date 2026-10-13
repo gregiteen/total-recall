@@ -191,7 +191,7 @@ export function describePlugin(plugin) {
     openwiki_hubs: m.openwiki_hubs || [],
     cli: m.cli ? { command: m.cli.command || null, subcommands: m.cli.subcommands || [] } : null,
     has_generator: !!m.compile?.generator,
-    branding: record?.branding || m.branding || { icon: null, image: null, color: null, badge: null },
+    branding: { ...(m.branding || {}), ...(record?.branding || {}) },
     locked: record?.locked === true || m.locked === true,
     store_deployed: record?.store_deployed === true,
     secrets: m.secrets || [],

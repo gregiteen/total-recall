@@ -41,7 +41,8 @@ Commands:
   license <id> [cmd]        Check or activate plugin license (status, activate, verify)
   info <id>                 Manifest, provenance, hash and task history
   vendor <source> [dir]     Add a plugin to this project as a brick (default bricks/<id>); the
-                            project then owns the code. <source>: bundled id, git URL or path
+                            project then owns the code. <source>: bundled id, git URL or path.
+                            --with-requires also adds missing bundled required bricks
   bricks [--json]           List this project's bricks and whether each was modified locally
   create <id>               Create a new empty plugin
                               --name <name>         Human-readable plugin name
@@ -78,6 +79,11 @@ export async function run(argv = []) {
 
   const command = args[0];
   const rest = args.slice(1);
+
+  if (command === 'card' || command === 'card-face' || command === 'skin') {
+    await managePluginCard(rest);
+    return;
+  }
 
   if (rest.includes('--help') || rest.includes('-h')) {
     printHelp();

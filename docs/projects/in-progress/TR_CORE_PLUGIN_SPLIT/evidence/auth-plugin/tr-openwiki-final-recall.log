@@ -1,0 +1,74 @@
+
+  🔍 Local search results for "openwiki-security" (merged):
+
+  [1] Vault Match (100%) [project] - Category: facts [SHOULD]
+      Title:      Machine, network and fleet security
+      Slug:       openwiki-security
+      Importance: ⭐⭐⭐☆☆ (conf: 100%)
+      Tags:       openwiki, architecture, documentation
+      Body:
+        │ # Machine, network and fleet security
+        │ 
+        │ Security plugin 0.3.0 source adds `machine`, `network` and `fleet` assessment. Security owns collectors, findings and remediation; mesh owns discovered targets and authenticated remote execution; auth owns every credential. No machine policy was automatically changed during implementation.
+        │ 
+        │ Machine reports cover firewall state, root disk-protection observations, effective SSH policy, visible TCP/UDP bindings and local SSH metadata. macOS also reports Gatekeeper, System Integrity Protection and update scheduling. Linux inspects UFW and root encryption ancestry; other firewall backends, patch currency, external reachability and connection-specific SSH Match rules require additional review. Unsupported tools or privileges remain unavailable. Windows now has a read-only PowerShell adapter for active firewall profiles, built-in antivirus, system-volume encryption, Secure Boot and listeners. Patch currency, firewall rules and alternate antivirus remain unverified or require review; recovery keys are never queried.
+        │ 
+        │ `security fleet --json` assesses discovered peers; `--target <hostname>` selects one. Offline machines and stale/malformed reports reduce coverage. Each remote peer must already have security installed. `secure-all` now performs the assessment rather than declaring machines secured after file or manifest changes.
+        │ 
+        │ `security harden --json` produces a plan with zero applied changes. `security machine --apply-permissions --json` repairs recognized locally owned SSH metadata and verifies modes. Firewall, SSH daemon and disk-encryption findings include access/rollback prerequisites. Generated recommendations are never presented as applied protection.
+        │ 
+        │ The fabricated HTTP 200 probe and UI hardened badge were removed. `security probe --url https://authorized-site --json` checks an actual response and header presence. The UI renders actual findings, coverage and failures. Source scanners emit locations/rule IDs without matched secret values. Manifest auth declarations remain metadata evidence; plugin audits no longer rewrite manifests as supposed hardening.
+        │ 
+        │ Signing/encryption no longer accept embedded default keys or provider environment bypass. Auth supplies SECURITY_MASTER_KEY; plaintext encryption uses stdin. Machine audits require no master key. Remote challenge credentials are separately declared.
+        │ 
+        │ Validation: the full owner suite ran in an isolated sanctioned test-node snapshot: 20 tests passed, zero failed, actual exit 0. Tests include macOS/Linux collectors, missing privilege, offline/stale/identity-invalid reports, permission/symlink handling, secret redaction, auth failure and UI failure/escaping. A local read-only machine audit returned real risks and incomplete SSH coverage, exit 1. Four dashboard bridge tests also passed, covering failed-report preservation and bounded owner timeouts. No deployment or fleet-wide protection certification occurred. The wider core/auth extraction still has unresolved integration verification.
+        │ 
+        │ Source: installed security plugin `src/machines.mjs`, `src/scanner.mjs`, `cli.mjs`, `ui/card.js`, and `skills/security/SKILL.md`. [Active project](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md).
+        │ 
+        │ ## Cross-platform devices
+        │ 
+        │ `security platforms --json` lists measured versus guided coverage. `security device --platform ios|ipados|android|chromeos|chromeos-flex|windows --device <label> --json` returns a device-specific guide; UI Review device exposes the same checks and Evaluate review submits only changed status/time observations. Reviews include OS support/updates, authentication, app permissions, management, recovery and network access. iPhone includes sharing-safety guidance; iPad does not assume iPhone-only features. ChromeOS Flex uses separate boot protection guidance. ChromeOS container scans never establish host security.
+        │ 
+        │ `security android --serial <existing-authorized-serial> --json` reads four fixed boot/encryption/patch properties. It requires an already authorized ADB device; it never connects, enables debugging, roots, flashes or relocks. Property evidence is not hardware attestation and full coverage remains incomplete. Known mobile/ChromeOS mesh peers without a posture collector are explicitly unavailable with a guided-review route; no phone SSH scan or local substitution occurs.
+        │ 
+        │ Guided observations accept only status and ISO UTC observation time. Old (>24-hour), unknown or missing answers stay unverified. Even a fully reviewed device remains user-attested with zero automatic coverage and coverage.complete:false, never automatically passed. Credentials and freeform notes are rejected. Native Windows/Android adapters have fixture evidence only; no live hardware verification, device-management enrollment or Verified Access connection is established. Router firmware, wireless encryption and inbound rules require a separate authorized router assessment.
+        │ 
+        │ Final cross-platform owner suite passed 26/26 on the sanctioned Mac mini, actual exit 0. Local and tested plugin fingerprints match: eb6918b76c58d7e3dd2cc9c1e427e85d0cf175d5ecab7c1befc8693acb0c6c02. Actual installed CLI returned all eight platform entries and the initial iPhone review with nine unverified checks and exit 1 as required. The UI tests verify manual answer timestamps, no invented untouched answers, risk visibility and reset when platform changes. No live Windows/Android device or router was inspected. Official source contracts are linked in the owning security plugin README and each guide check.
+        │ 
+        │ 
+        │ Scanner coverage now includes JavaScript/TypeScript, Python and shell/PowerShell source. Dynamic credential reads, synthetic provider/signing defaults and linked uninspected source produce redacted review findings. Coverage limits fail explicitly; source review does not establish runtime enforcement. `security --help` lists actual commands. Latest scanner/device suite: 28 tests passed on sanctioned node, exit 0. All-plugin audit remains failed while CRM credential paths are unresolved.
+
+  [2] Vault Match (80%) [project] - Category: facts [DESCRIPTIVE] [LOW]
+      Title:      Machine, network and fleet security
+      Slug:       repo-total-recall-openwiki-security
+      Importance: ⭐⭐☆☆☆ (conf: 90%)
+      Tags:       repo-sync, auto-ingested, total-recall
+      Body:
+        │ # Machine, network and fleet security
+        │ 
+        │ Security plugin 0.3.0 source adds `machine`, `network` and `fleet` assessment. Security owns collectors, findings and remediation; mesh owns discovered targets and authenticated remote execution; auth owns every credential. No machine policy was automatically changed during implementation.
+        │ 
+        │ Machine reports cover firewall state, root disk-protection observations, effective SSH policy, visible TCP/UDP bindings and local SSH metadata. macOS also reports Gatekeeper, System Integrity Protection and update scheduling. Linux inspects UFW and root encryption ancestry; other firewall backends, patch currency, external reachability and connection-specific SSH Match rules require additional review. Unsupported tools or privileges remain unavailable. Windows now has a read-only PowerShell adapter for active firewall profiles, built-in antivirus, system-volume encryption, Secure Boot and listeners. Patch currency, firewall rules and alternate antivirus remain unverified or require review; recovery keys are never queried.
+        │ 
+        │ `security fleet --json` assesses discovered peers; `--target <hostname>` selects one. Offline machines and stale/malformed reports reduce coverage. Each remote peer must already have security installed. `secure-all` now performs the assessment rather than declaring machines secured after file or manifest changes.
+        │ 
+        │ `security harden --json` produces a plan with zero applied changes. `security machine --apply-permissions --json` repairs recognized locally owned SSH metadata and verifies modes. Firewall, SSH daemon and disk-encryption findings include access/rollback prerequisites. Generated recommendations are never presented as applied protection.
+        │ 
+        │ The fabricated HTTP 200 probe and UI hardened badge were removed. `security probe --url https://authorized-site --json` checks an actual response and header presence. The UI renders actual findings, coverage and failures. Source scanners emit locations/rule IDs without matched secret values. Manifest auth declarations remain metadata evidence; plugin audits no longer rewrite manifests as supposed hardening.
+        │ 
+        │ Signing/encryption no longer accept embedded default keys or provider environment bypass. Auth supplies SECURITY_MASTER_KEY; plaintext encryption uses stdin. Machine audits require no master key. Remote challenge credentials are separately declared.
+        │ 
+        │ Validation: the full owner suite ran in an isolated sanctioned test-node snapshot: 20 tests passed, zero failed, actual exit 0. Tests include macOS/Linux collectors, missing privilege, offline/stale/identity-invalid reports, permission/symlink handling, secret redaction, auth failure and UI failure/escaping. A local read-only machine audit returned real risks and incomplete SSH coverage, exit 1. Four dashboard bridge tests also passed, covering failed-report preservation and bounded owner timeouts. No deployment or fleet-wide protection certification occurred. The wider core/auth extraction still has unresolved integration verification.
+        │ 
+        │ Source: installed security plugin `src/machines.mjs`, `src/scanner.mjs`, `cli.mjs`, `ui/card.js`, and `skills/security/SKILL.md`. [Active project](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md).
+        │ 
+        │ ## Cross-platform devices
+        │ 
+        │ `security platforms --json` lists measured versus guided coverage. `security device --platform ios|ipados|android|chromeos|chromeos-flex|windows --device <label> --json` returns a device-specific guide; UI Review device exposes the same checks and Evaluate review submits only changed status/time observations. Reviews include OS support/updates, authentication, app permissions, management, recovery and network access. iPhone includes sharing-safety guidance; iPad does not assume iPhone-only features. ChromeOS Flex uses separate boot protection guidance. ChromeOS container scans never establish host security.
+        │ 
+        │ `security android --serial <existing-authorized-serial> --json` reads four fixed boot/encryption/patch properties. It requires an already authorized ADB device; it never connects, enables debugging, roots, flashes or relocks. Property evidence is not hardware attestation and full coverage remains incomplete. Known mobile/ChromeOS mesh peers without a posture collector are explicitly unavailable with a guided-review route; no phone SSH scan or local substitution occurs.
+        │ 
+        │ Guided observations accept only status and ISO UTC observation time. Old (>24-hour), unknown or missing answers stay unverified. Even a fully reviewed device remains user-attested with zero automatic coverage and coverage.complete:false, never automatically passed. Credentials and freeform notes are rejected. Native Windows/Android adapters have fixture evidence only; no live hardware verification, device-management enrollment or Verified Access connection is established. Router firmware, wireless encryption and inbound rules require a separate authorized router assessment.
+        │ 
+        │ Final cross-platform owner suite passed 26/26 on the sanctioned Mac mini, actual exit 0. Local and tested plugin fingerprints match: eb6918b76c58d7e3dd2cc9c1e427e85d0cf175d5ecab7c1befc8693acb0c6c02. Actual installed CLI returned all eight platform entries and the initial iPhone review with nine unverified checks and exit 1 as required. The UI tests verify manual answer timestamps, no invented untouched answers, risk visibility and reset when platform changes. No live Windows/Android device or router was inspected. Official source contracts are linked in the owning security plugin README and each guide check.
+

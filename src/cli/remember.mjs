@@ -214,6 +214,10 @@ export default async function remember(args) {
       // Accepted for compatibility; remember never archives another node.
     } else if (arg === '--allow-long') {
       allowLong = true;
+    } else if (arg === '--universal') {
+      if (!tags.includes('context:universal')) {
+        tags.push('context:universal');
+      }
     }
   }
 
@@ -243,6 +247,9 @@ export default async function remember(args) {
   const finalTags = Array.isArray(tags) ? [...tags] : [];
   if (!finalTags.includes('self-captured') && !title) {
     finalTags.push('self-captured');
+  }
+  if ((type.toLowerCase() === 'invariant' || priority === 'absolute' || finalTags.includes('universal')) && !finalTags.includes('context:universal')) {
+    finalTags.push('context:universal');
   }
 
   const now = new Date().toISOString();
@@ -309,15 +316,10 @@ export default async function remember(args) {
   }
   console.log(`  ✅ Permanent SSSS memory node created ${layerLabel} in vault: memory-vault/${category}/${finalSlug}.md`);
 
-  // The next local recall must see this write. Provider indexing is explicitly
-  // selected by `compile`; a memory write never spawns an unowned worker.
-  try {
-    const { invalidate } = await import('../core/vault-cache.mjs');
-    invalidate(vaultDir);
-    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, semantic: false });
-    console.log('  ✅ Local memory indexes and instruction surfaces updated.');
-  } catch (err) {
-    console.error(`  ❌ Memory saved, but local compilation failed: ${err.message}`);
+  // Automatically recompile surfaces and local indexes
+  const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+  const compiled = await autoCompileSurfaces({ layer, semantic: false, force: true });
+  if (!compiled) {
     process.exitCode = 1;
   }
 }

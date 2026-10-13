@@ -1,8 +1,8 @@
-process.env.GOOGLE_API_KEY = 'mock-google-key';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+vi.mock('../core/config.mjs', async importOriginal => ({ ...await importOriginal(), googleApiKey: 'auth-fixture-key' }));
 import remember from './remember.mjs';
 import recall from './recall.mjs';
 import { saveEmbeddingToIndex } from '../core/embeddings.mjs';

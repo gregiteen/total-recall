@@ -48,12 +48,22 @@ describe('compatibility initialization explicit root isolation', () => {
         execFileSync(process.execPath, [fileURLToPath(new URL('../../bin/total-recall.mjs', import.meta.url)), 'init', '--yes', ...(layer === 'project' ? ['--project'] : [])], {
           cwd, timeout: 20000, stdio: 'pipe', env: { ...process.env, HOME: home,
             AGENT_DIR: selected, _TR_TEST_AGENT_DIR: selected, TR_SECRETS_NO_KEYCHAIN: '1',
+            TR_SECRETS_BRAIN: path.join(selected, 'skills', 'total-recall'),
             TR_ENV_FILE: path.join(fixture, 'missing.env'), TR_SECRETS_PASSWORD: '', TR_MASTER_PASSWORD: '',
             OPENROUTER_API_KEY: '', OPENAI_API_KEY: '', GOOGLE_API_KEY: '', ANTHROPIC_API_KEY: '',
             TR_EMBEDDINGS_DISABLED: '1', DISABLE_DAEMON: 'true' },
         });
         expect(fs.existsSync(path.join(selected, 'skills', 'total-recall', 'config', 'brain.json'))).toBe(true);
         expect(fs.existsSync(path.join(home, '.agent'))).toBe(false);
+        const result = execFileSync(process.execPath, [fileURLToPath(new URL('../../bin/total-recall.mjs', import.meta.url)), 'auth', 'password', 'set', '--stdin', '--json'], {
+          cwd, timeout: 20000, encoding: 'utf8', input: 'fixture-password-only\n',
+          env: { ...process.env, HOME: home, AGENT_DIR: selected, _TR_TEST_AGENT_DIR: selected,
+            TR_SECRETS_BRAIN: path.join(selected, 'skills/total-recall'), TR_SECRETS_PASSWORD: 'fixture-master-only',
+            TR_SECRETS_NO_KEYCHAIN: '1', TR_ENV_FILE: path.join(fixture, 'missing.env') },
+        });
+        expect(JSON.parse(result).updated).toBe(true);
+        const bytes = fs.readFileSync(path.join(selected, 'skills/total-recall/config/secrets.enc'));
+        expect(bytes.includes(Buffer.from('fixture-password-only'))).toBe(false);
         // Project init also creates the repository-owned expert skill.
         expect(fs.existsSync(path.join(cwd, '.agent', 'skills', 'total-recall', 'config', 'brain.json'))).toBe(false);
         expect(fs.existsSync(path.join(cwd, '.agent', 'skills', 'total-recall', 'config', 'secrets.enc'))).toBe(false);

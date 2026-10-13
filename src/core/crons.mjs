@@ -1,7 +1,8 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import { logger } from './logger.mjs';
 import { runGitHubSync, getGitHubSyncStatus } from './github-sync.mjs';
 import { watchObsidianDirectory } from './obsidian-sync.mjs';
-import { getSecret } from './secrets-store.mjs';
+const { getSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
 import { runPackageAutoUpdate } from './package-auto-update.mjs';
 
 /**

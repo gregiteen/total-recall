@@ -1,0 +1,40 @@
+
+> tr-plugin-security@0.3.0 test
+> node --test test/*.test.mjs
+
+✔ every guided platform starts unverified and even full manual answers never pass automatic coverage (4.080792ms)
+✔ forged automatic evidence, arbitrary notes, unknown checks and invalid answers are rejected (0.284334ms)
+✔ Windows native checks collect bounded posture and keep patch/rule coverage honest (0.7125ms)
+✔ Android requires an explicitly authorized device and never upgrades properties to full posture (0.3215ms)
+✔ mobile mesh peers remain missing fleet coverage and receive a device review route (0.194417ms)
+✔ CLI exposes guides and rejects fake proof without returning secrets (119.986375ms)
+✔ clean Mac collector reports actual checks and localhost listener scope (3.359708ms)
+✔ disabled firewall, wildcard listener and missing privilege are not a clean bill (1.00775ms)
+✔ Linux collector identifies effective unsafe SSH and wildcard TCP binds (1.334917ms)
+✔ unsupported platform is incomplete (0.987584ms)
+✔ permission hardening verifies modes and leaves symlink targets untouched (1.458333ms)
+✔ symlink SSH directory is refused (0.495708ms)
+✔ fleet includes offline and forged reports in missing coverage (0.332333ms)
+✔ fleet accepts a fresh risk report with exit one and rejects stale report (0.178375ms)
+✔ scanner reports unsafe source without leaking matched secrets and fails missing targets (2.377792ms)
+✔ scanner flags dynamic credential bypasses and uninspected linked source (1.175334ms)
+✔ scanner covers Python and shell credential paths without exposing contents (0.79325ms)
+✔ manifest identifies the plugin (0.61ms)
+✔ every file the manifest references exists (0.133125ms)
+✔ status lists machine and fleet functionality without credential or health claims (1.295875ms)
+✔ authenticated encryption rejects tampering and wrong passphrases (104.113583ms)
+✔ probe requires an actual target and cannot fabricate HTTP 200 (0.243625ms)
+✔ probe checks actual HTTPS response and missing headers (18.841375ms)
+✔ plugin audit inspects explicit installed fixture and refuses manifest pseudo hardening (2.95275ms)
+✔ missing scan target and unsafe credential argv fail closed (0.189458ms)
+✔ ambient master key cannot bypass an unavailable auth plugin (0.643584ms)
+✔ signing uses auth owner, binds CSRF to a session and rejects tampered challenges (1.710416ms)
+✔ UI renders real risk reports, escapes finding text and shows unavailable runtime (78.928875ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 563.388042

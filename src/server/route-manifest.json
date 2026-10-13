@@ -468,6 +468,10 @@
     "path": "/api/plugins/:id/branding"
   },
   {
+    "method": "PATCH",
+    "path": "/api/plugins/:id/card-face"
+  },
+  {
     "method": "GET",
     "path": "/api/plugins/:id/configuration"
   },
@@ -481,11 +485,19 @@
   },
   {
     "method": "POST",
+    "path": "/api/plugins/:id/credentials"
+  },
+  {
+    "method": "POST",
     "path": "/api/plugins/:id/deploy-store"
   },
   {
     "method": "POST",
     "path": "/api/plugins/:id/lock"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/:id/logo"
   },
   {
     "method": "GET",
@@ -510,10 +522,6 @@
   {
     "method": "GET",
     "path": "/api/plugins/:id/ui/:element"
-  },
-  {
-    "method": "GET",
-    "path": "/api/plugins/:id/logo"
   },
   {
     "method": "GET",
@@ -650,6 +658,14 @@
   {
     "method": "GET",
     "path": "/api/secrets/list"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/mesh"
+  },
+  {
+    "method": "GET",
+    "path": "/api/secrets/mesh/:key"
   },
   {
     "method": "POST",
@@ -968,6 +984,14 @@
     "path": "/auth/change-password"
   },
   {
+    "method": "GET",
+    "path": "/auth/google"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/google/callback"
+  },
+  {
     "method": "POST",
     "path": "/auth/login"
   },
@@ -978,6 +1002,18 @@
   {
     "method": "GET",
     "path": "/auth/me"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/options"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/passkey/verify"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/providers"
   },
   {
     "method": "POST",

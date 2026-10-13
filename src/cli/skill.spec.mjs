@@ -6,7 +6,7 @@ import path from 'node:path';
 import { parseInstalls, parseFindOutput } from '../../scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/find-skills.mjs';
 import { scanFile, runScan } from '../../scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/scan-skill.mjs';
 import { installSkill, validateSkillSource, inferSkillName } from '../../scaffold/.agent/skills/total-recall/modules/skill-deploy/scripts/install-skill.mjs';
-import { resolveSkillScriptPath } from './skill.mjs';
+import { resolveSkillScriptPath, scaffoldSkill } from './skill.mjs';
 
 describe('Skill Manager', () => {
   let tempDir;
@@ -160,6 +160,27 @@ jiulingyun/openclaw-cn@github 21 installs
       const agentDir = path.join(tempDir, 'empty-agent');
       const scriptPath = resolveSkillScriptPath('find-skills.mjs', { agentDir, root: process.cwd() });
       expect(scriptPath).toContain(path.join('scaffold', '.agent', 'skills', 'total-recall', 'modules', 'skill-deploy', 'scripts', 'find-skills.mjs'));
+    });
+  });
+
+  describe('Skill Scaffold (skill create)', () => {
+    it('generates a skill with mandatory online docs check as the first directive', () => {
+      const { skillDir, skillMdContent } = scaffoldSkill('weather-probe', { skillsDir: tempDir });
+      expect(fs.existsSync(path.join(skillDir, 'SKILL.md'))).toBe(true);
+      expect(skillMdContent).toContain('1. Check current official documentation online before executing non-trivial actions (do not rely on outdated training memory).');
+
+      const evalsPath = path.join(skillDir, 'evals', 'evals.json');
+      expect(fs.existsSync(evalsPath)).toBe(true);
+      const evals = JSON.parse(fs.readFileSync(evalsPath, 'utf8'));
+      expect(evals.some(e => e.name === 'core-directives-starts-with-online-docs-check')).toBe(true);
+    });
+
+    it('attaches docs-url to references when provided', () => {
+      const { skillMdContent } = scaffoldSkill('api-client', {
+        skillsDir: tempDir,
+        docsUrl: 'https://docs.example.com/v2/api'
+      });
+      expect(skillMdContent).toContain('https://docs.example.com/v2/api');
     });
   });
 });

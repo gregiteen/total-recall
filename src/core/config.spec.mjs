@@ -50,11 +50,9 @@ describe('config module', () => {
     expect(typeof mod.globalAgentDir).toBe('string');
   });
 
-  it('getEnvVar returns process.env value', async () => {
-    process.env._TEST_GETENV_VAR = 'hello-test';
+  it('does not export an ambient credential accessor', async () => {
     const mod = await import('./config.mjs');
-    expect(mod.getEnvVar('_TEST_GETENV_VAR')).toBe('hello-test');
-    delete process.env._TEST_GETENV_VAR;
+    expect(mod.getEnvVar).toBeUndefined();
   });
 
   it('detectProjectBrain returns null in test mode', async () => {

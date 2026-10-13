@@ -1,0 +1,73 @@
+
+> tr-plugin-phone@0.1.0 test
+> node --test test/*.test.mjs
+
+▶ HostAdapter
+  ✔ base class throws for unimplemented methods (1.502458ms)
+  ✔ health() detects drift from declared jobs (0.211541ms)
+✔ HostAdapter (2.220083ms)
+▶ ProcessManagerAdapter
+  ✔ runJob can execute a trivial handler with exit code 0 (45.289417ms)
+  ✔ runJob captures non-zero exit code (45.175833ms)
+  ✔ name returns process-manager (0.116959ms)
+  ✔ available returns true on any Node host (0.04875ms)
+✔ ProcessManagerAdapter (90.762875ms)
+▶ job_run events
+  ✔ recordJobRun writes NDJSON to state dir (1.273166ms)
+  ✔ queryJobRunEvents returns empty for non-existent job (0.206167ms)
+  ✔ getLastRun returns null when no events exist (0.379167ms)
+✔ job_run events (1.94375ms)
+▶ cronToMinutes
+  ✔ */15 * * * * → 15 (0.064ms)
+✔ cronToMinutes (0.093875ms)
+▶ Runtime schema
+  ✔ schema.json is valid JSON (0.122ms)
+  ✔ matches declarations in plugin.json (0.151875ms)
+✔ Runtime schema (0.308333ms)
+✔ engine implements the canonical Operation Contract (spec §6) (15.572625ms)
+✔ isolated fixture exports, validates, and round-trips as a sale bundle (spec §16/§17) (5.151666ms)
+✔ normalizeE164 handles NANP, explicit country codes, and rejects junk (0.847416ms)
+✔ normalizeE164 does not silently dial a non-NANP number without a country code (0.053ms)
+✔ sanitizeNumber, isValidE164, and isNanpNumber classify correctly (0.085333ms)
+✔ normalizeNumber throws typed errors for invalid and non-NANP numbers (0.253583ms)
+✔ readPhoneNumber reads both Telnyx key spellings (0.048166ms)
+✔ buildNumberSearchParams maps options onto Telnyx filters (0.761083ms)
+✔ buildNumberSearchParams rejects malformed area codes without hitting the network (0.054ms)
+✔ searchNumbers builds the request and normalises results (0.611708ms)
+✔ searchNumbers tolerates a missing data array (0.108625ms)
+✔ searchNumbers surfaces API errors as typed TelnyxError (0.246791ms)
+✔ orderNumber posts a normalised number order and returns the order shape (0.233333ms)
+✔ orderNumber accepts per-call overrides and the `number` alias (0.080375ms)
+✔ orderNumber validates the number and never hits the network on failure (0.076708ms)
+✔ orderNumber tolerates an order with no phone_numbers array (0.07775ms)
+✔ orderNumber surfaces API errors (0.0755ms)
+✔ createCall originates a call and normalises the Call Control response (0.151792ms)
+✔ createCall base64 encodes an object client_state and forwards overrides (0.131375ms)
+✔ createCall validates to/from/connection before hitting the network (0.123333ms)
+✔ createCall honours requireNanp (0.107834ms)
+✔ hangupCall posts to the Call Control hangup action (0.094084ms)
+✔ hangupCall forwards custom headers and handles a 204 empty response (0.060083ms)
+✔ hangupCall requires an id and can ignore a missing call (0.118916ms)
+✔ verifyWebhook accepts a genuine Telnyx signature (raw base64 public key) (2.474375ms)
+✔ verifyWebhook also accepts a base64 SPKI/DER public key (0.227708ms)
+✔ verifyWebhook accepts a Buffer body and reads the env public key (0.216291ms)
+✔ verifyWebhook rejects a tampered body, a wrong signature, and junk (0.302583ms)
+✔ verifyWebhook rejects a different key and a non-numeric timestamp (0.236333ms)
+✔ verifyWebhook enforces a timestamp tolerance window (replay protection) (0.298666ms)
+✔ ed25519PublicKey and webhookSignatureFromHeaders are usable independently (17.676666ms)
+✔ client.verifyWebhook resolves the public key from config, secret store, then env (0.460083ms)
+✔ constructor validates its dependencies (0.107917ms)
+✔ nonsecret configuration uses environment while credentials require a resolver (0.102125ms)
+✔ resolveApiKey accepts injected keys and auth resolver, rejects ambient keys and aliases (0.122625ms)
+✔ transport failures, timeouts, and bad JSON are normalised (4.733917ms)
+✔ module-level searchNumbers/orderNumber/createCall/hangupCall accept inline config (0.246209ms)
+✔ module-level functions also accept a pre-built client (0.066292ms)
+✔ response shapers tolerate missing and oddly-shaped payloads (0.0615ms)
+ℹ tests 51
+ℹ suites 5
+ℹ pass 51
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 158.998167

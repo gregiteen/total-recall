@@ -213,17 +213,21 @@ export default async function doctor() {
     warnings++;
   }
 
-  const googleKey = process.env.GOOGLE_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  
-  if (googleKey) {
-    logOk('GOOGLE_API_KEY environment variable is configured (Primary Embeddings)');
-  } else if (openaiKey) {
-    logOk('OPENAI_API_KEY environment variable is configured (Fallback Embeddings)');
-  } else {
-    logWarn('Neither GOOGLE_API_KEY nor OPENAI_API_KEY is configured in the environment.');
-    log('     Tip: Configure GOOGLE_API_KEY to use gemini-embedding-2 (free tier).');
-    warnings++;
+  try {
+    const { loadPluginModule } = await import('../core/plugin-runtime.mjs');
+    const { runtimeCredentials } = await loadPluginModule('auth', 'runtime-credentials');
+    const { defaultBrainDir } = await loadPluginModule('auth', 'secrets-store');
+    const credentials = runtimeCredentials({ brainDir: defaultBrainDir() });
+    const configured = ['google_api_key', 'openai_api_key'].filter(key => credentials[key]);
+    if (configured.length) {
+      logOk(`Embedding credentials configured in auth: ${configured.join(', ')} (provider connectivity unverified)`);
+    } else {
+      logWarn('No embedding credential is configured in the selected auth store.');
+      warnings++;
+    }
+  } catch {
+    logFail('Selected auth store could not be read; embedding credentials are unverified.');
+    failures++;
   }
 
   // ── Step 5: Privilege & Workspace Environment ──

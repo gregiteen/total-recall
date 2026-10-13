@@ -1,0 +1,39 @@
+
+  🔍 Local search results for "openwiki-crm" (merged):
+
+  [1] Vault Match (100%) [project] - Category: facts [SHOULD]
+      Title:      CRM integration and portability
+      Slug:       openwiki-crm
+      Importance: ⭐⭐⭐☆☆ (conf: 100%)
+      Tags:       openwiki, architecture, documentation
+      Body:
+        │ # CRM integration and portability
+        │ 
+        │ The white-label CRM plugin is locally linked and owns its implementation, authenticated CLI/catalog, settings, instance runtime and portable business vault. It has not been published or deployed by this work. Discover selected instance status and the authenticated menu before operations.
+        │ 
+        │ `crm client` executes catalog commands. Instance authentication/provider credentials are excluded from portable vault exports; auth owns shared provider secret resolution. Preserve company → brand/alias → location → buyer hierarchy. Restore only into a new destination, review dry run before commit, initialize new authentication and leave schedules disabled until verified.
+        │ 
+        │ [CRM procedure](../.agent/skills/total-recall/references/crm.md) links the owning plugin skill. [Current project evidence](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) distinguishes local implementation from provider/live validation.
+        │ 
+        │ 
+        │ 2026-10-10T18:59:01.594783+00:00 — Codex continuation verification: full current core 336 files / 2,025 tests passed, actual exit 0 (core-auth-final2). Auth 11 Node + 156 Vitest tests passed, exit 0; eight fast gates passed, exit 0. All 15 earlier service-owner suites passed, exit 0; later Alerts auth cutover passes 10 tests, exit 0. Mesh selected-host runtime suite passes 25 files / 249 tests, exit 0; manifest/host rejection checks pass 3 tests, exit 0. Security expanded-language scanner passes 28 tests, exit 0. Deploy execution/health contract passes 9 tests; UI regression rerun pending. No live provider, credential, machine setting, deployment or release changed.
+        │ 
+        │ All 29 installed manifests declare auth, but the source audit returns exit 1, not all-plugin certification. Expanded Python/shell coverage confirms CRM local_config.py, user_secrets.py, google_auth.py and cli_client/crm_client.py still contain plaintext credential persistence, local/in-memory or ambient fallbacks and legacy CLI selection. These are active required repairs. Regex review also flags authorized auth unlock/store selection and nonsecret checker interpolation; findings require source classification. Source tests cannot certify live hardware, providers, operational deployment adapters or comprehensive UI acceptance.
+        │ 
+        │ 
+        │ CRM user_secrets.py now routes user and operator values through runtime/auth_credentials.py: one explicit absolute selected brain and instance, scoped keys, structured get, stdin-only writes, exact readback and verified deletion. The production in-memory flag and stale metadata cache are removed; ten isolated Python transport tests pass. Other local config, session/hash, OAuth and standalone client credential paths remain unresolved; whole CRM runtime tests and native/provider validation are still required. Do not claim this partial migration is secure or release-ready.
+
+  [2] Vault Match (80%) [project] - Category: facts [DESCRIPTIVE] [LOW]
+      Title:      CRM integration and portability
+      Slug:       repo-total-recall-openwiki-crm
+      Importance: ⭐⭐☆☆☆ (conf: 90%)
+      Tags:       repo-sync, auto-ingested, total-recall
+      Body:
+        │ # CRM integration and portability
+        │ 
+        │ The white-label CRM plugin is locally linked and owns its implementation, authenticated CLI/catalog, settings, instance runtime and portable business vault. It has not been published or deployed by this work. Discover selected instance status and the authenticated menu before operations.
+        │ 
+        │ `crm client` executes catalog commands. Instance authentication/provider credentials are excluded from portable vault exports; auth owns shared provider secret resolution. Preserve company → brand/alias → location → buyer hierarchy. Restore only into a new destination, review dry run before commit, initialize new authentication and leave schedules disabled until verified.
+        │ 
+        │ [CRM procedure](../.agent/skills/total-recall/references/crm.md) links the owning plugin skill. [Current project evidence](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) distinguishes local implementation from provider/live validation.
+

@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../core/plugin-runtime.mjs';
 /**
  * total-recall setup
  *
@@ -21,7 +22,7 @@ import path from 'node:path';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { resolveAgentDir, resolveBrainDir } from './agent-dir.mjs';
-import { loadSecrets, saveSecrets } from '../core/secrets-store.mjs';
+const { loadSecrets, saveSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -12,6 +12,20 @@ import { brainDir } from './config.mjs';
 const cacheMap = new Map();   // vaultDir → { nodes, watcher }
 
 /**
+ * Files the runtime regenerates itself (OKF bundle manifest and changelog, the
+ * canvas, the event journal). They are not memory nodes, so a change to one
+ * must never invalidate the node cache: doing so made every recompile trigger
+ * a full reload, which rewrote the files again.
+ */
+const GENERATED_VAULT_FILES = new Set(['index.md', 'log.md']);
+
+export function isGeneratedVaultPath(relPath) {
+  const normalized = String(relPath).split(path.sep).join('/');
+  if (GENERATED_VAULT_FILES.has(normalized)) return true;
+  return normalized.split('/').some((part) => part.startsWith('.'));
+}
+
+/**
  * Retrieves memory nodes from the in-memory cache if fresh, otherwise loads them from disk.
  * Automatically wires a file watcher on first load to track external changes.
  * Supports multiple vault directories simultaneously (global + project).
@@ -26,7 +40,7 @@ export function getNodes(vaultDir) {
     logger.debug('Vault cache hit', { vaultDir: resolvedDir });
     return entry.nodes;
   }
-  logger.info('Vault cache miss, loading nodes from disk', { vaultDir: resolvedDir });
+  logger.debug('Vault cache miss, loading nodes from disk', { vaultDir: resolvedDir });
   const nodes = loadNodes(resolvedDir);
   if (entry) {
     entry.nodes = nodes;
@@ -49,11 +63,11 @@ export function invalidate(vaultDir) {
     const resolvedDir = vaultDir || path.join(brainDir, 'memory-vault');
     const entry = cacheMap.get(resolvedDir);
     if (entry) {
-      logger.info('Vault cache invalidated', { vaultDir: resolvedDir });
+      logger.debug('Vault cache invalidated', { vaultDir: resolvedDir });
       entry.nodes = null;
     }
   } else {
-    logger.info('Vault cache invalidated (all)');
+    logger.debug('Vault cache invalidated (all)');
     for (const entry of cacheMap.values()) {
       entry.nodes = null;
     }
@@ -152,8 +166,8 @@ function startWatcher(vaultDir) {
   logger.info('Starting filesystem watcher for vault cache', { vaultDir: resolvedDir });
   try {
     entry.watcher = watchTree(resolvedDir, (eventType, filename) => {
-      if (filename && filename.endsWith('.md')) {
-        logger.info(`Vault filesystem change detected (${eventType}: ${filename}), invalidating cache`);
+      if (filename && filename.endsWith('.md') && !isGeneratedVaultPath(filename)) {
+        logger.debug(`Vault filesystem change detected (${eventType}: ${filename}), invalidating cache`);
         invalidate(resolvedDir);
       }
     });

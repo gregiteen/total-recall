@@ -10,7 +10,10 @@ vi.mock('../auth.mjs', () => ({
   requireScope: () => (_req, _res, next) => next(),
   authRateLimiter: () => (_req, _res, next) => next(),
   isLocalRequest: () => state.local,
-  loadSecurityConfig: () => (state.configured ? { dashboard: { password_hash: 'x' } } : {}),
+  loadSecurityConfig: () => ({}),
+  dashboardAuthState: () => ({ configured: state.configured }),
+  signSessionToken: () => 'fixture-session',
+  sessionCookieOptions: () => ({}),
   loginHandler: (_req, res) => res.json({ success: true }),
   logoutHandler: (_req, res) => res.json({ success: true }),
   changePasswordHandler: (_req, res) => {

@@ -190,6 +190,8 @@ describe('production TLS trust boundary', () => {
 });
 
 describe('session cookie Secure flag', () => {
+  const savedPassword = process.env.TR_SECRETS_PASSWORD;
+  afterEach(() => { if (savedPassword === undefined) delete process.env.TR_SECRETS_PASSWORD; else process.env.TR_SECRETS_PASSWORD = savedPassword; });
   let tmpDir;
   let prevAgentDir;
   let authMod;
@@ -209,11 +211,12 @@ describe('session cookie Secure flag', () => {
     // brainDir is <AGENT_DIR>/skills/total-recall — security.yml lives under that.
     const configDir = path.join(tmpDir, 'skills', 'total-recall', 'config');
     fs.mkdirSync(configDir, { recursive: true });
-    const bcrypt = (await import('bcrypt')).default;
-    const hash = await bcrypt.hash('correct-horse-battery', 10);
+    const { loadPluginModule } = await import('../core/plugin-runtime.mjs');
+    const { createSessionCredentials } = await loadPluginModule('auth', 'session-credentials');
+    process.env.TR_SECRETS_PASSWORD = 'consumer-fixture-password';
+    await createSessionCredentials({ brainDir: path.dirname(configDir) }).setDashboardPassword('correct-horse-battery');
     fs.writeFileSync(path.join(configDir, 'security.yml'), [
       'dashboard:',
-      `  password_hash: "${hash}"`,
       'network:',
       `  require_https: ${requireHttps}`,
       '',
@@ -274,10 +277,10 @@ describe('loadSecurityConfig defaults', () => {
     // in resolveServerHost(), so every install without a security.yml bound
     // loopback only -- permanently, with no warning, while the pairing card
     // went on recommending a mesh URL nothing was listening on.
+    const { loadSecurityConfig } = await import('./auth.mjs');
     const fsMod = await import('node:fs');
     const spy = vi.spyOn(fsMod.default, 'existsSync').mockReturnValue(false);
     try {
-      const { loadSecurityConfig } = await import('./auth.mjs');
       const cfg = loadSecurityConfig();
       expect(cfg.bind).toBeDefined();
       expect(cfg.bind.host).toBeUndefined();

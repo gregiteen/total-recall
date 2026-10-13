@@ -88,7 +88,12 @@ export function DataWidget({ region }: { region: CardRegion }) {
   if (widget === 'log') return <pre className="card-pre">{result.text || JSON.stringify(result.data, null, 2)}</pre>
   if (widget === 'gauge') {
     const d = result.data || {}
-    const value = Number(d.value ?? d.used ?? d.percent ?? 0), max = Number(d.max ?? d.total ?? (d.percent !== undefined ? 100 : 100))
+    const observedValue = d.value ?? d.used ?? d.percent
+    const observedMax = d.max ?? d.total ?? (d.percent !== undefined ? 100 : undefined)
+    const value = Number(observedValue), max = Number(observedMax)
+    if (observedValue == null || observedMax == null || !Number.isFinite(value) || !Number.isFinite(max) || max <= 0 || value < 0 || value > max) {
+      return <p role="status" className="card-muted">No valid usage measurement is available.</p>
+    }
     const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
     return <div><div className="card-gauge" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}><span style={{ width: `${pct}%` }} /></div><p className="card-muted">{formatCell(value, 'number')} of {formatCell(max, 'number')}</p></div>
   }
@@ -107,6 +112,6 @@ export function SettingsWidget({ plugin }: { plugin: PluginInfo }) {
 
 export function ActivityWidget() {
   const { activity } = useRunner()
-  if (activity.length === 0) return <p className="card-muted">Nothing run from this card in this session. Agent runs appear under Usage.</p>
+  if (activity.length === 0) return <p className="card-muted">No commands have run from this card in this session.</p>
   return <ul className="card-list">{activity.slice(0, 20).map((a, i) => <li key={i}><Pill tone={a.ok ? 'ok' : 'error'}>{a.ok ? 'ok' : 'failed'}</Pill> {a.command} · {a.ms} ms · {new Date(a.at).toLocaleTimeString()}</li>)}</ul>
 }

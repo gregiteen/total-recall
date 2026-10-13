@@ -50,6 +50,16 @@ export async function post<T = unknown>(path: string, body: unknown): Promise<T>
   return res.json();
 }
 
+export async function patch<T = unknown>(path: string, body: unknown): Promise<T> {
+  const res = await apiFetch(API_BASE + path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`PATCH ${path} failed: ${res.status}`);
+  return res.json();
+}
+
 export async function del<T = unknown>(path: string): Promise<T> {
   const res = await apiFetch(API_BASE + path, {
     method: 'DELETE'

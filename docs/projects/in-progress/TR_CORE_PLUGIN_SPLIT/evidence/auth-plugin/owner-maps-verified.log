@@ -1,0 +1,23 @@
+
+> tr-plugin-maps@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.161833ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.150333ms)
+✔ writes use stdin and require exact auth readback (0.105833ms)
+✔ maps CLI status returns implemented commands (47.403417ms)
+✔ maps CLI probe reports HTTP 200 health verification (44.487125ms)
+✔ maps CLI geocode returns provider fixture for address query (45.04425ms)
+✔ maps CLI places returns provider place search records (45.20075ms)
+✔ maps CLI route returns provider trip metrics (43.708209ms)
+✔ probe fails for denied credentials and does not invent HTTP success (43.031458ms)
+✔ manifest identifies the plugin (0.594792ms)
+✔ every file the manifest references exists (0.120167ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 335.138792

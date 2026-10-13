@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PluginInfo } from '../../api/plugins'
 import { runPluginCommand } from '../../api/plugins'
 import { apiFetch, API_BASE } from '../../api/_base'
-import { pluginFrameDocument, allowedFrameCommand } from './plugin-frame'
+import { pluginFrameDocument, allowedFrameCommand, pluginCommandTimeouts } from './plugin-frame'
 
 export interface PluginElement {
   id: string
@@ -17,8 +17,8 @@ export function pluginElements(plugin: PluginInfo): PluginElement[] {
 }
 
 /** Loads owner code; no plugin identities or provider behavior belong here. */
-export function PluginPanel({ plugin }: { plugin: PluginInfo }) {
-  const elements = pluginElements(plugin).filter(element => element.kind !== 'settings')
+export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: PluginInfo; elementId?: string; readOnly?: boolean }) {
+  const elements = pluginElements(plugin).filter(element => element.kind !== 'settings' && (!elementId || element.id === elementId))
   const [selected, setSelected] = useState(elements[0]?.id || '')
   const [error, setError] = useState('')
   const frame = useRef<HTMLIFrameElement>(null)
@@ -30,7 +30,13 @@ export function PluginPanel({ plugin }: { plugin: PluginInfo }) {
     setError('')
     setDocument('')
     const channel = crypto.randomUUID()
-    const allowed = new Set(plugin.cli?.subcommands.map(command => command.name) || [])
+    const commands = plugin.manifest?.cli as { subcommands?: Array<{ name: string; effect?: string; args?: Array<{ secret?: boolean; type?: string; flag?: string }> }> } | undefined
+    const readCommands = new Set((commands?.subcommands || []).filter(command => command.effect === 'read').map(command => command.name))
+    const allowed = new Set((plugin.cli?.subcommands || []).filter(command => !readOnly || readCommands.has(command.name)).map(command => command.name))
+    const secretCommands = new Set((commands?.subcommands || []).filter(command => {
+      const secrets = command.args?.filter(arg => arg.secret === true) || []
+      return secrets.length === 1 && secrets[0].type === 'string' && secrets[0].flag === undefined
+    }).map(command => command.name))
     let active = 0
     const message = async (event: MessageEvent) => {
       if (disposed || event.source !== frame.current?.contentWindow || event.origin !== 'null' || event.data?.channel !== channel) return
@@ -40,17 +46,19 @@ export function PluginPanel({ plugin }: { plugin: PluginInfo }) {
       if (data.type !== 'run') return
       const target = event.source as Window
       const reply = (result?: unknown, error?: string) => { if (!disposed) target.postMessage({ channel, type: 'result', requestId: data.requestId, result, error }, '*') }
-      if (!allowedFrameCommand(data, allowed) || active >= 4) { reply(undefined, 'Operation is not available'); return }
+      if (!allowedFrameCommand(data, allowed, secretCommands) || active >= 4) { reply(undefined, 'Operation is not available'); return }
       active++
       try {
-        const result = await runPluginCommand(plugin.id, data.subcommand, [...data.args, '--json'])
-        if (!result.success) throw new Error('Operation failed')
-        reply(JSON.parse(result.output || '{}'))
+        const result = data.stdin !== undefined
+          ? await runPluginCommand(plugin.id, data.subcommand, [...data.args, '--json'], { stdin: data.stdin })
+          : await runPluginCommand(plugin.id, data.subcommand, [...data.args, '--json'])
+        if (!result.success) { reply(undefined, data.stdin !== undefined ? 'Credential operation failed' : result.output || result.error || 'Operation failed'); return }
+        reply(data.stdin !== undefined ? { ok: true } : JSON.parse(result.output || '{}'))
       } catch { reply(undefined, 'Operation failed') }
       finally { active-- }
     }
     window.addEventListener('message', message)
-    const element = elements.find(item => item.id === selected)
+    const element = elements.find(item => item.id === selected) || elements[0]
     if (!element) return () => { disposed = true; window.removeEventListener('message', message) }
     const load = async () => {
       const response = await apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(plugin.id)}/ui/${encodeURIComponent(element.id)}`)
@@ -61,11 +69,11 @@ export function PluginPanel({ plugin }: { plugin: PluginInfo }) {
       const styles = getComputedStyle(window.document.documentElement)
       const theme: Record<string, string> = {}
       for (const name of ['--text-primary', '--text-secondary', '--text-tertiary', '--bg-primary', '--bg-secondary', '--border', '--accent', '--font-sans', '--color-text', '--color-surface', '--color-border', '--spacing-md', '--radius-md']) theme[name] = styles.getPropertyValue(name)
-      setDocument(pluginFrameDocument(source, element.tag, channel, theme, plugin.id))
+      setDocument(pluginFrameDocument(source, element.tag, channel, theme, plugin.id, pluginCommandTimeouts(plugin.manifest)))
     }
     load().catch(err => { if (!disposed) setError(err.message) })
     return () => { disposed = true; window.removeEventListener('message', message) }
-  }, [plugin.id, selected, plugin.sha256])
+  }, [plugin.id, selected, plugin.sha256, elementId, readOnly])
 
   return <section>
     {elements.length > 1 && <nav style={{ display: 'flex', gap: 8 }}>

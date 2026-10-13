@@ -90,7 +90,11 @@ export function startDaemon() {
   const logFd = fs.openSync(LOG_FILE, 'a');
   
   // Use spawn to launch in a detached background state
-  const child = spawn(process.execPath, [dreamScript], {
+  // Cap the V8 heap so a leak or reload storm is restarted by the watchdog
+  // instead of growing into swap. TR_DAEMON_MAX_HEAP_MB overrides; 0 disables.
+  const heapMb = Number(process.env.TR_DAEMON_MAX_HEAP_MB ?? 768);
+  const heapFlags = Number.isFinite(heapMb) && heapMb > 0 ? [`--max-old-space-size=${Math.floor(heapMb)}`] : [];
+  const child = spawn(process.execPath, [...heapFlags, dreamScript], {
     detached: true,
     stdio: ['ignore', logFd, logFd],
     cwd: ROOT,

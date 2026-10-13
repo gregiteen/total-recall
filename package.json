@@ -41,13 +41,15 @@
     "./fixtures/*": "./fixtures/*",
     "./src/core/*": "./src/core/*",
     "./memory": "./src/server/memory-app.mjs",
-    "./src/core/secrets-store.mjs": "./src/core/secrets-store.mjs"
+    "./src/server/*": "./src/server/*",
+    "./src/cli/agent-dir.mjs": "./src/cli/agent-dir.mjs"
   },
   "scripts": {
     "dev": "node src/server/index.mjs",
     "start": "node src/server/index.mjs",
     "test": "vitest run",
     "routes:manifest": "node scripts/generate-route-manifest.mjs",
+    "sync:scaffold-plugins": "node scripts/sync-scaffold-plugins.mjs",
     "clean": "rm -rf scratch/* .remember/* *.log",
     "check:dist": "node scripts/check-dist-freshness.mjs",
     "prepublishOnly": "npm run check:package && npm run check:dist && npm run check:ssss-registry && node scripts/check-scaffold-state.mjs",

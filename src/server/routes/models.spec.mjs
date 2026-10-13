@@ -3,6 +3,15 @@ import request from 'supertest';
 import express from 'express';
 import fs from 'node:fs';
 
+vi.mock('../../core/plugin-runtime.mjs', () => ({
+  loadPluginModule: async (id, module) => {
+    if (id !== 'auth') throw new Error('Unexpected credential owner');
+    if (module === 'configuration') return { runtimeConfiguration: () => ({}) };
+    if (module === 'runtime-credentials') return { runtimeCredentials: () => ({}) };
+    throw new Error('Unexpected auth runtime module');
+  },
+}));
+
 // Mock dependencies
 vi.mock('../auth.mjs', () => ({
   requireAuth: (req, res, next) => { req.user = { id: 'test' }; next(); },
@@ -112,10 +121,11 @@ describe('Models Router', () => {
   });
 
   describe('GET /api/openai-models', () => {
-    it('returns empty list when no OPENAI_API_KEY', async () => {
-      delete process.env.OPENAI_API_KEY;
+    it('ignores ambient OPENAI_API_KEY when the selected auth store has no key', async () => {
+      process.env.OPENAI_API_KEY = 'ambient-must-not-be-used';
 
       const res = await request(app).get('/api/openai-models');
+      delete process.env.OPENAI_API_KEY;
       expect(res.status).toBe(200);
       expect(res.body.source).toBe('missing_key');
       expect(res.body.models).toEqual([]);

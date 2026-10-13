@@ -16,12 +16,12 @@ import {
   deployPluginToStore
 } from "../../core/plugin-distribution.mjs";
 import { listPeerPlugins } from "../../core/plugin-peers.mjs";
-import { runPluginCommand } from "../../core/plugin-runner.mjs";
+import { runPluginCommand, validatePluginSecretInput } from "../../core/plugin-runner.mjs";
 import { readPluginRecord, patchPluginRecord, emit, vaultFor } from '../../core/plugin-store.mjs';
 import { configurationValues } from '../../core/plugin-contracts/configuration.mjs';
 import { writeNodeValidatedAsync } from "../../core/validated-write.mjs";
 import { walkMd } from "../../core/vault.mjs";
-import { serverError, badRequest, VAULT_DIR, BRAIN_DIR, sanitizeNode } from "./_shared.mjs";
+import { serverError, badRequest, VAULT_DIR, BRAIN_DIR, globalBrainDir, sanitizeNode } from "./_shared.mjs";
 
 const router = Router();
 
@@ -29,6 +29,22 @@ const router = Router();
 // a caller-supplied `root`, which let a request point discovery — and the
 // runner — at any directory on disk.
 const projectRoot = () => process.cwd();
+
+router.post('/api/plugins/:id/credentials', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin) return res.status(404).json({ error: 'Plugin not installed' });
+    const { key, value } = req.body || {};
+    if (typeof key !== 'string' || typeof value !== 'string' || value.length > 16384 || !plugin.manifest.secrets?.some(secret => secret.key === key)) return badRequest(res, 'Invalid declared credential');
+    const { loadPluginModule } = await import('../../core/plugin-runtime.mjs');
+    const owner = await loadPluginModule(plugin.id, 'credentials');
+    const result = await owner.saveCredential({ key, value, configuration: readPluginRecord(plugin)?.configuration || {}, brainDir: process.env.TR_SECRETS_BRAIN || globalBrainDir || BRAIN_DIR });
+    res.json(result);
+  } catch (error) {
+    // Never return provider bodies or errors which could contain credential values.
+    res.status(400).json({ error: 'Credential could not be verified and saved. Check the connection settings and credential.' });
+  }
+});
 
 router.get('/api/plugins/:id/configuration', requireAuth, requireScope('config:read'), (req, res) => {
   try {
@@ -242,13 +258,34 @@ router.get("/api/plugins/:id", requireAuth, requireScope("config:read"), (req, r
 });
 
 /**
+ * PATCH /api/plugins/:id/card-face
+ * Customizes card face skin, theme, colors, headline, quick actions, and metrics.
+ */
+router.patch("/api/plugins/:id/card-face", requireAuth, requireScope("config:write"), (req, res) => {
+  try {
+    const plugin = getPluginById(req.params.id, projectRoot());
+    if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
+    const manifestPath = path.join(plugin.dir, "plugin.json");
+    if (!fs.existsSync(manifestPath)) return res.status(404).json({ success: false, error: "Manifest not found" });
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    const { card_face = {}, branding = {} } = req.body || {};
+    manifest.card_face = { ...(manifest.card_face || {}), ...card_face };
+    manifest.branding = { ...(manifest.branding || {}), ...branding };
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+    res.json({ success: true, card_face: manifest.card_face, branding: manifest.branding });
+  } catch (err) {
+    serverError(res, err);
+  }
+});
+
+/**
  * POST /api/plugins/:id/run  body: { subcommand?, args? }
  * Runs the plugin's CLI handler in a child process. Executing plugin code is a
  * write-level action.
  */
 router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), async (req, res) => {
   try {
-    const { subcommand = "", args = [] } = req.body || {};
+    const { subcommand = "", args = [], stdin } = req.body || {};
     if (typeof subcommand !== "string" || !Array.isArray(args) || args.some((a) => typeof a !== "string")) {
       return badRequest(res, "subcommand must be a string and args an array of strings");
     }
@@ -256,8 +293,9 @@ router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), a
     if (!plugin) return res.status(404).json({ success: false, error: `Plugin ${req.params.id} not found` });
     if (!plugin.valid) return badRequest(res, `Plugin ${plugin.id} has an invalid manifest: ${plugin.errors.join("; ")}`);
     if (!plugin.manifest?.cli?.handler) return badRequest(res, `Plugin ${plugin.id} does not declare a CLI handler`);
+    validatePluginSecretInput(plugin, subcommand, stdin);
 
-    const result = await runPluginCommand(plugin, { subcommand, args, cwd: projectRoot(), secretsBrainDir: process.env.TR_SECRETS_BRAIN || BRAIN_DIR });
+    const result = await runPluginCommand(plugin, { subcommand, args, ...(stdin !== undefined ? { stdinText: stdin } : {}), cwd: projectRoot(), secretsBrainDir: process.env.TR_SECRETS_BRAIN || globalBrainDir || BRAIN_DIR });
     res.json({ success: result.ok, pluginId: plugin.id, ...result });
   } catch (err) {
     badRequest(res, err.message);

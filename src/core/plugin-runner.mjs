@@ -14,6 +14,20 @@ import { readPluginRecord } from './plugin-store.mjs';
 const CHILD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plugin-runner-child.mjs');
 export const DEFAULT_TIMEOUT_MS = 30_000;
 export const MAX_OUTPUT_BYTES = 256 * 1024;
+export const MAX_INPUT_BYTES = 64 * 1024;
+
+/** A credential is one declared string on stdin, never a command-line value. */
+export function validatePluginSecretInput(plugin, subcommand, input) {
+  if (input === undefined) return;
+  if (typeof input !== 'string' || !input.length || Buffer.byteLength(input, 'utf8') > MAX_INPUT_BYTES) {
+    throw new Error('Secret input must be a non-empty string of at most 65536 bytes');
+  }
+  const command = plugin?.manifest?.cli?.subcommands?.find(item => item.name === subcommand);
+  const secrets = command?.args?.filter(arg => arg.secret === true) || [];
+  if (secrets.length !== 1 || secrets[0].type !== 'string' || secrets[0].flag !== undefined) {
+    throw new Error('Secret input requires exactly one declared stdin string argument');
+  }
+}
 
 /**
  * @param {object} plugin  A discovered plugin ({ id, dir, manifest }).
@@ -21,7 +35,13 @@ export const MAX_OUTPUT_BYTES = 256 * 1024;
  * @returns {Promise<{ ok: boolean, exitCode: number|null, signal: string|null, timedOut: boolean, truncated: boolean, output: string, durationMs: number }>}
  */
 export function runPluginCommand(plugin, options = {}) {
-  const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs = DEFAULT_TIMEOUT_MS, stdin = 'ignore', composable = false, secretsBrainDir } = options;
+  const { subcommand = '', args = [], cwd = process.cwd(), timeoutMs: requestedTimeoutMs, stdin = 'ignore', stdinText, composable = false, secretsBrainDir } = options;
+  try { validatePluginSecretInput(plugin, subcommand, stdinText); }
+  catch (err) { return Promise.reject(err); }
+  const operation = subcommand || args[0];
+  const declaredTimeout = plugin?.manifest?.cli?.subcommands?.find(item => item.name === operation)?.timeout_ms;
+  const timeoutMs = requestedTimeoutMs ?? declaredTimeout ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) return Promise.reject(new Error('Plugin timeout must be 1..600000 ms'));
   const handlerRel = plugin?.manifest?.cli?.handler;
   if (!handlerRel) return Promise.reject(new Error(`Plugin ${plugin?.id} does not declare a CLI handler`));
 
@@ -31,6 +51,7 @@ export function runPluginCommand(plugin, options = {}) {
 
   const command = plugin.manifest.cli.command || plugin.id;
   const safeArgs = (Array.isArray(args) ? args : []).map(String);
+  if (stdinText !== undefined && !safeArgs.includes('--stdin')) safeArgs.push('--stdin');
   const childArgv = [CHILD, handler, command, ...(subcommand ? [String(subcommand)] : []), ...safeArgs];
 
   return new Promise((resolve) => {
@@ -43,6 +64,7 @@ export function runPluginCommand(plugin, options = {}) {
 
     const child = spawn(process.execPath, childArgv, {
       cwd,
+      detached: process.platform !== 'win32',
       env: {
         ...process.env,
         TR_PACKAGE_ROOT: PACKAGE_ROOT,
@@ -55,10 +77,12 @@ export function runPluginCommand(plugin, options = {}) {
         FORCE_COLOR: '0',
         NO_COLOR: '1'
       },
-      stdio: [stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
+      stdio: [stdinText !== undefined ? 'pipe' : stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
     });
 
     const collect = (buf) => {
+      // Even a faulty owner that echoes stdin cannot return credential material.
+      if (stdinText !== undefined) return;
       if (truncated) return;
       if (bytes + buf.length > MAX_OUTPUT_BYTES) {
         chunks.push(buf.subarray(0, MAX_OUTPUT_BYTES - bytes));
@@ -71,10 +95,15 @@ export function runPluginCommand(plugin, options = {}) {
     };
     child.stdout.on('data', collect);
     child.stderr.on('data', collect);
+    if (stdinText !== undefined) {
+      // A handler may exit without reading; EPIPE must not crash the server.
+      child.stdin.on('error', () => {});
+      child.stdin.end(stdinText);
+    }
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGKILL');
+      try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL'); else child.kill('SIGKILL'); } catch { /* process already exited */ }
     }, timeoutMs);
 
     const finish = (exitCode, signal, spawnError) => {

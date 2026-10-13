@@ -112,7 +112,9 @@ Instructions here.
     expect(panel).toContain("type = 'password'");
     expect(panel).toContain('save-token');
     const cli = fs.readFileSync(path.join(dir, 'cli.mjs'), 'utf8');
-    expect(cli).toContain('"secret", "set", TOKEN_KEY, "--stdin"');
+    expect(cli).toContain('authRun(["set", TOKEN_KEY, "--stdin"]');
+    expect(cli).toContain("'auth', 'secret'");
+    expect(cli).not.toContain('process.env[TOKEN_KEY]');
     expect(cli).toContain('IMPLEMENTED.token = tokenCommand');
     expect(cli).not.toMatch(/argv.*TOKEN/);
     const handlerUrl = pathToFileURL(path.join(dir, 'cli.mjs')).href;

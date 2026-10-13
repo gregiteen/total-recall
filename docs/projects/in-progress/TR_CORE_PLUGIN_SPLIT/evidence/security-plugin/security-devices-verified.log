@@ -1,0 +1,34 @@
+✔ every guided platform starts unverified and even full manual answers never pass automatic coverage (2.786292ms)
+✔ forged automatic evidence, arbitrary notes, unknown checks and invalid answers are rejected (0.264875ms)
+✔ Windows native checks collect bounded posture and keep patch/rule coverage honest (0.679041ms)
+✔ Android requires an explicitly authorized device and never upgrades properties to full posture (0.31825ms)
+✔ mobile mesh peers remain missing fleet coverage and receive a device review route (0.186875ms)
+✔ CLI exposes guides and rejects fake proof without returning secrets (119.26275ms)
+✔ clean Mac collector reports actual checks and localhost listener scope (2.939875ms)
+✔ disabled firewall, wildcard listener and missing privilege are not a clean bill (2.25925ms)
+✔ Linux collector identifies effective unsafe SSH and wildcard TCP binds (0.95375ms)
+✔ unsupported platform is incomplete (0.549459ms)
+✔ permission hardening verifies modes and leaves symlink targets untouched (2.031791ms)
+✔ symlink SSH directory is refused (0.589708ms)
+✔ fleet includes offline and forged reports in missing coverage (0.392625ms)
+✔ fleet accepts a fresh risk report with exit one and rejects stale report (0.19175ms)
+✔ scanner reports unsafe source without leaking matched secrets and fails missing targets (2.313291ms)
+✔ manifest identifies the plugin (0.635792ms)
+✔ every file the manifest references exists (0.142417ms)
+✔ status lists machine and fleet functionality without credential or health claims (1.755917ms)
+✔ authenticated encryption rejects tampering and wrong passphrases (103.415ms)
+✔ probe requires an actual target and cannot fabricate HTTP 200 (0.233834ms)
+✔ probe checks actual HTTPS response and missing headers (19.1695ms)
+✔ plugin audit inspects explicit installed fixture and refuses manifest pseudo hardening (2.802125ms)
+✔ missing scan target and unsafe credential argv fail closed (0.198834ms)
+✔ ambient master key cannot bypass an unavailable auth plugin (0.653667ms)
+✔ signing uses auth owner, binds CSRF to a session and rejects tampered challenges (1.57325ms)
+✔ UI renders real risk reports, escapes finding text and shows unavailable runtime (77.532417ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 551.577667

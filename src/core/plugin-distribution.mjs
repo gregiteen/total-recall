@@ -1,7 +1,6 @@
 /** Optional plugin distribution/branding. The portable host does not import this module. */
 import { discoverPlugins, validatePluginManifest } from './plugin-loader.mjs';
 import { hashPluginDir, packPlugin, decodeBundle } from './plugin-bundle.mjs';
-import { parsePeerSource, fetchPeerBundle } from './plugin-peers.mjs';
 import { parsePublicPluginSource, fetchPublicBundle, publicPluginShareUrl } from './plugin-public.mjs';
 import { installPlugin as installLocal, readPluginRecord, patchPluginRecord, describePlugin,
   findInstalled, emit, vaultFor } from './plugin-store.mjs';
@@ -14,7 +13,9 @@ function describePluginWithShare(plugin) {
 }
 
 async function resolveBundle(source, { peerDeps, publicDeps } = {}) {
-  const peer = parsePeerSource(source);
+  const peerModule = typeof source === 'string' && source.startsWith('peer:')
+    ? await import('./plugin-peers.mjs') : null;
+  const peer = peerModule?.parsePeerSource(source);
   const publicSource = parsePublicPluginSource(source);
   if (!peer && !publicSource) return null;
   let bundle, sha256, sourceRecord, expectedId;
@@ -23,7 +24,7 @@ async function resolveBundle(source, { peerDeps, publicDeps } = {}) {
     sourceRecord = { kind: 'public', ref: source };
     expectedId = publicSource.id;
   } else {
-    const received = await fetchPeerBundle(peer.hostname, peer.id, peerDeps);
+    const received = await peerModule.fetchPeerBundle(peer.hostname, peer.id, peerDeps);
     bundle = received.bundle;
     sha256 = received.advertised.sha256;
     sourceRecord = { kind: 'peer', ref: `peer:${received.peer.hostname}/${peer.id}`, peer_hostname: received.peer.hostname };

@@ -1,0 +1,23 @@
+
+> tr-plugin-stripe@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.206125ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.158959ms)
+✔ writes use stdin and require exact auth readback (0.110625ms)
+✔ manifest identifies the plugin (0.59525ms)
+✔ every file the manifest references exists (0.120208ms)
+✔ stripe CLI status returns active payment tools (90.025584ms)
+✔ stripe checkout creates session with line items and currency (44.985834ms)
+✔ stripe payment-intent creates intent payload (43.03725ms)
+✔ stripe webhook signature verification validates genuine events (0.411417ms)
+✔ stripe probe returns HTTP 200 health check (44.460083ms)
+✔ probe fails for denied credentials and does not invent HTTP success (44.488833ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 338.08425

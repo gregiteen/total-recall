@@ -1,0 +1,19 @@
+
+> tr-plugin-phone-companion@0.2.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.137583ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.150917ms)
+✔ writes use stdin and require exact auth readback (0.105458ms)
+✔ manifest identifies the plugin (0.594875ms)
+✔ every file the manifest references exists (0.111833ms)
+✔ cli status runs successfully (0.088791ms)
+✔ cli notify runs and returns notification result (478.678209ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 543.270875

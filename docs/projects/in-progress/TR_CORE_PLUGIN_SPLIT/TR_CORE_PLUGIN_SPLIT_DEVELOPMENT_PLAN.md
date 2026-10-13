@@ -1,14 +1,29 @@
 # TR_CORE_PLUGIN_SPLIT — Development Plan
 
-## Expanded functional-plugin acceptance
+## Canonical Plugin Architecture & Functional Acceptance (2026-10-09)
 
-- [ ] Inventory all fourteen installed plugins against owner repositories and current official integration documentation; record every supported feature and actual coverage.
-- [ ] Replace hardcoded preview dispatch with authenticated manifest-declared owner modules and scoped operations.
-- [ ] Supply actual settings and encrypted credential entry on every plugin; validate configuration through owner contracts and SSSS operations.
-- [ ] Implement real Phone registration, outbound/inbound calls, state-driven controls, audio devices and complete supported account/call features in its repository.
-- [ ] Implement Text threads, SMS/MMS composition, sender configuration, schedules, receipt/inbound processing and compliance through its real adapter and validated records.
-- [ ] Replace remaining fake panels and complete each owning integration's coverage; verify exact owner/host snapshots on the Mac mini.
-- [ ] Finish all requested work and final gates before the one authorized delivery batch.
+- [x] Strict Core Repository Boundary:
+  - Purged all hardcoded preview components (`frontend/src/components/plugins/previews/`) from Total Recall core.
+  - Purged hardcoded brand dictionaries (`plugin-brands.tsx`) and hardcoded CLI card generators (`src/cli/plugin/card.mjs`).
+  - Total Recall core contains zero hardcoded plugin code, cards, or mockups. Every plugin is an independent repository (`/Users/greg/Github/tr-plugin-*`).
+- [x] Generic Frameless Host Envelope:
+  - `PluginCardFace.tsx` acts purely as a generic container loading the plugin's registered Web Component from `ui/card.js` full-bleed inside a sandboxed iframe.
+  - Eliminated duplicate outer brand headers; the plugin's own bespoke animated JavaScript interface serves as the single card face.
+  - Integrated touch-first host actions (KEYS, CFG, OPEN) with minimum 44px tap targets.
+- [x] Total Recall Secrets Vault Resolution:
+  - Wired `secretsBrainDir` in `src/server/routes/plugins.mjs` directly to `globalBrainDir` (`/Users/greg/.agent/skills/total-recall`).
+  - All plugin CLI handlers resolve credentials from the encrypted secrets store.
+- [ ] Production Cloud & Droplet Deployment via `tr-plugin-deploy`:
+  - Manage droplet targets and zero-downtime blue/green staging through the dedicated deployment plugin (`tr-plugin-deploy`).
+  - Route droplet infrastructure credentials (`DEPLOY_PROVIDER_TOKEN`, `DEPLOY_SSH_KEY`) through the Total Recall secrets vault.
+- [ ] White-Label CRM via `tr-plugin-crm`:
+  - Operate Kinship CRM platform with pipeline tracking, customer directories, and portable business vaults.
+  - Expose authenticated commands (`client`, `vault`, `menu`) and the dashboard panel without hardcoding CRM logic in core.
+- [ ] Bespoke Animated JavaScript Card Faces Across All 29 Plugins:
+  - Ensure every plugin repository maintains its own bespoke animated JavaScript card face in `ui/card.js` with zero emojis, authentic commercial brand identities, and touch-first ergonomics.
+- [ ] Complete Verification Gates:
+  - Verify full test suite, lint gates, and TypeScript gates before publication.
+
 
 > **Project Prefix**: `TR_CORE_PLUGIN_SPLIT`
 > **Kanban State**: In Progress
@@ -125,3 +140,138 @@ The current candidate security checks pass for exact source `72abfdd410ebdc9fae6
 ## Additional blocker: compatibility init isolation — 2026-10-08 UTC
 
 The incorrectly selected native fixture reached the test host global brain at 02:17 UTC. Compatibility init now honors the shared explicit-root resolver; legacy-store restoration refuses existing stores and atomically preserves concurrent writers. Every native lifecycle fixture also pins HOME. Configuration was restored byte-exact from the read-only 01:43 Time Machine snapshot after a same-host protected backup. No credential mutations were recorded between snapshot and incident. Removed/quarantined 16 owned new files, 47 unchanged scaffold skill files and 12 owned IDE links; four scaffold vault records pre-existed unchanged. CLI rebuild processed 60 canonical nodes with zero drift; embeddings preserved. Snapshot unmounted. SSH could not unlock the store; decryption is not certified. Nine focused initialization/credential tests pass. Final source-exact nine gates pass: 383 files and 2,405 tests; native artifact/lifecycle/dependency proofs pass.
+
+## Mesh ownership repair — 2026-10-10
+
+1. Baseline and audit: 34 core tests + 2 plugin manifest tests pass on isolated Mac mini snapshot.
+2. Extract mesh runtime/CLI/routes into plugin; remove built-in command and feature route mounting.
+3. Repair status/live topology, verified credential setup and peer presence/delivery.
+4. Add owner/host boundary and functional failure regression coverage; run source-matched Mac mini checks.
+5. Record exact outcomes and clean owned jobs; no production deployment.
+
+### Active auth migration
+
+1. Repair extracted auth module closure and establish required runtime exports.
+2. Move remaining core credential modules/routes/tests into auth; change callers to required generic plugin loading and delete old modules.
+3. Ship the auth artifact with scaffold and install it during init without overwriting existing plugin or credential state.
+4. Repair plugin credential bypasses and add an enforceable ownership gate.
+5. Complete mesh repairs, synchronize skill sources/scaffold, verify source identity and full suites on Mac mini.
+
+
+### Security machines and network
+
+In progress: add testable macOS/Linux machine/network collector and fleet aggregation; truthful permission hardening and HTTP probe; remove security credential defaults/bypass; replace simulated UI states with actual reports. Validate malicious/clean fixtures and missing-tool/partial-fleet behavior plus full plugin suite on sanctioned Mac mini. Document commands and remaining coverage via OpenWiki.
+
+
+### Windows and mobile platform coverage
+
+In progress: implement Windows native collector with strict JSON typing; Android runtime/explicit attached-device observations; guided profiles and UI for ChromeOS/iOS/iPadOS/Android/Windows; fleet coverage guidance for platforms without a remote collector. Test safe/unsafe/partial Windows and Android fixtures, missing tools, stale/spoofed/manual evidence and UI interactions on sanctioned Mac mini; retain live-device limitations. Update plugin skill, TR reference, scaffold and OpenWiki; verify ingestion and retrieval.
+
+
+2026-10-10T07:39:00Z — Codex: Cross-platform source, UI, CLI, manifest and guides implemented. Repeat full owner suite after final strict timestamp validation and source/UI consistency changes; retain matching source fingerprints and raw exit/log. Update and ingest OpenWiki; verify retrieval. Live Windows/Android and managed-device posture integration remain explicit unverified work within the in-progress project, not completed certification.
+
+
+2026-10-10T07:40:00Z — Codex: final cross-platform security suite passed 26/26 on sanctioned Mac mini, actual exit 0; matching local/tested-source SHA-256 eb6918b76c58d7e3dd2cc9c1e427e85d0cf175d5ecab7c1befc8693acb0c6c02 (CLI, manifests, README, src, tests, UI, skills, scripts). Actual installed CLI platforms returned eight supported modes, exit 0; initial iPhone review returned nine unverified checks, automatic:0, complete:false and exit 1. Final tests cover Windows/Android fixtures, authorization, evidence spoofing/redaction/staleness, mobile fleet missing coverage and UI manual answer/reset semantics. Raw logs retained under evidence/security-plugin. No native Windows/Android hardware verification, management connection, live settings mutation, release or deployment; wider split remains in progress.
+
+
+2026-10-10T17:48:38.043211+00:00 — Codex: Implement auth token/password services and required core adapter; remove OAuth environment bypass and collaboration signing-file fallback. Repair isolated owner-test paths/fixtures, rerun full auth suite plus affected consumer specs on sanctioned mini. Update scaffold and OpenWiki with exact source/results and remaining credential-owner gaps. Do not deploy while batch verification remains incomplete.
+
+### Auth continuation integration (2026-10-10 — in progress)
+
+Implemented owner session/password service, middleware and route factories, PAT/passkey ownership, explicit migration and encrypted uninstall preservation; closed config/password/deploy writers and environment/file signing bypasses. Auth scaffold and procedure sources synchronized. Validate final owner suite, fresh-init stdin password operation, affected host consumers, dependency failures, package/quality gates and exact source identity; then ingest updated OpenWiki hubs. Broader ecosystem migration remains active until all installed plugin runtime paths and end-to-end surfaces are verified.
+
+
+2026-10-10T18:26:25.985393+00:00 — Codex: Finish source-exact full core rerun, current fast gates and scaffold negative tests; preserve raw results. Then continue all-installed-plugin credential audit and repair remaining ambient/store/default bypasses with an enforceable gate and owner tests. Keep project In Progress until all required work is verified.
+
+
+2026-10-10T18:35:44.132567+00:00 — Codex: Full core suite now passes 336 files / 2,025 tests, actual exit 0 (core-full-auth-verified.log). Auth owner passes 11 Node + 154 Vitest tests, actual exit 0; strengthened global-store isolation fixture still needs final rerun. Fast gates prior to final auth CLI source update passed all eight. Auth secret get no longer selects a second store, honors TR_SECRETS_BRAIN, and supports structured found/value JSON for internal consumers. Continued all-plugin bypass remediation across service owners, with auth-only client transport tests. Initial owner runs expose stale environment/fake-result assertions and missing snapshot dependency/runtime files; repairing both. Maps generated results and Maps/Stripe fabricated probes confirmed and removed in edited source. No all-plugin clean result, release or deployment claimed.
+
+
+2026-10-10T18:38:09.122266+00:00 — Codex: Security scanner strengthened to report dynamic credential environment access and uninspected linked source, without matched contents. Added negative fixture. Service owner tests now use explicit auth fixtures rather than ambient credentials; Phone/Text and Signing tests reject removed fallbacks. Maps/Stripe denial probes covered. Owner snapshot initially omitted Phone runtime package and Skill Manager root specs, and lacked SSSS package; repairing selected source/dependency snapshot without copying any brain/vault. All changes remain unshipped; final owner/security reruns pending.
+
+
+Continuation acceptance: Doctor must ignore ambient provider credentials and report auth failures. Refresh bundled auth and hash pins, run exact-source full core/auth and fast gates. Replace mesh host selection and synthetic deploy receipts with selected-host/verified execution contracts; validate negative paths. Keep status in progress.
+
+
+2026-10-10T18:59:01.594783+00:00 — Codex continuation verification: full current core 336 files / 2,025 tests passed, actual exit 0 (core-auth-final2). Auth 11 Node + 156 Vitest tests passed, exit 0; eight fast gates passed, exit 0. All 15 earlier service-owner suites passed, exit 0; later Alerts auth cutover passes 10 tests, exit 0. Mesh selected-host runtime suite passes 25 files / 249 tests, exit 0; manifest/host rejection checks pass 3 tests, exit 0. Security expanded-language scanner passes 28 tests, exit 0. Deploy execution/health/UI contract passes 10 tests, actual exit 0. No live provider, credential, machine setting, deployment or release changed.
+
+All 29 installed manifests declare auth, but the source audit returns exit 1, not all-plugin certification. Expanded Python/shell coverage confirms unresolved CRM local_config.py, session/hash, google_auth.py and cli_client/crm_client.py credential storage. User/operator secret transport has since moved to auth; other paths remain active migration work. These are active required repairs. Regex review also flags authorized auth unlock/store selection and nonsecret checker interpolation; findings require source classification. Source tests cannot certify live hardware, providers, operational deployment adapters or comprehensive UI acceptance.
+
+Current CRM cutover batch: implement strict Python auth transport and route user/rep credentials through it; validate nonzero/invalid JSON, existing-key stale readback, ambient key ignored, instance isolation, stdin-only writes and unavailable selected host. Then migrate local settings/session password/OAuth/client storage and validate native runtime without touching the live CRM.
+
+
+2026-10-10T23:58:50.683704+00:00 — Codex: Implement auth-backed config, corrupt/legacy rejection, validated updates, secret-free sync, strict required password/session settings, and explicit migration. Run isolated native Python tests in background on mini and compare source identity. Update skills/scaffold and ingest/retrieve OpenWiki. Continue OAuth/session/client; no release.
+
+
+2026-10-11T00:04:35.943935+00:00 — Codex: Local settings and OAuth client credential slice passes focused negative and CLI transport checks. Continue auth migration of Google OAuth token files, session/password/hash records, standalone CLI credential files and remaining runtime consumers. Full CRM runtime/owner gate remains required; no release readiness claim.
+
+
+2026-10-11T00:05:46.779874+00:00 — Codex found CRM remote-check.sh copies the whole owner checkout with insufficient exclusions: local_config/OAuth credential files and .env are not excluded. It has not been invoked in this work. Repair source-only transfer before use; never copy live vault/private credentials to test host.
+
+
+2026-10-11T00:09:04.778444+00:00 — Codex verification: final native CRM auth/settings scope passes 29 Python tests, exit 0; CLI migration and real source-transfer archive tests pass 2 Node tests, exit 0. SHA256 identity matches all 18 selected files across native and CLI snapshots. Five-file project audit passes, exit 0. Refreshed 29-plugin source audit still exits 1; no clean ecosystem claim. OpenWiki ingestion imported 6 hubs, errors 0, exit 0; CRM retrieval is being checked. Native suites used isolated fixture ports, not live credentials, accounts, services or settings.
+
+
+2026-10-11T00:13:26.919269+00:00 — Codex closed generated API transport ambient CRM/DABBER key bypass and local-daemon startup side effect. Expanded focused suite passes 31 tests, actual exit 0. Initial new test run had two harness errors because extracted function annotations omitted the original deferred-annotation flag; harness corrected and rerun passes. Full CRM runtime/OAuth tokens/session hashes/standalone client/provider paths remain required work. Source identity now includes 19 files; refresh audit after this repair.
+
+## Plugin ecosystem, bricks and monetization — plan added 2026-10-11
+Order matters: each phase ends with Mac mini gates and real logs.
+
+1. **PE-A Bricks and `new` (TR-007).** Finish `plugin vendor`/`plugin bricks` (done on `feat/plugin-vendor`); add `requires` resolution, `total-recall new <name> --with …`, SSSS project files via the ssss CLI, and a clean-machine test that creates a project and runs its gates.
+2. **PE-B Tiers and shipping (TR-007).** Add `distribution.tier` and `license` to the manifest, schema and loader; decide the core set; make the package carry or fetch core plugins; keep the `card` UI kind accepted (blocks every plugin today); commit the dirty plugin repos; give `auth`, `deploy`, `phone-companion` remotes; neutralize official plugin names; split operator-specific variants into `personal`.
+3. **PE-C New official plugins (TR-007).** Build in this order, each as an open plugin with tests and README, proven by a real product: `identity`, `tenancy`, `credits`, `ai-gateway` (needed by Gro), then `google`, `email`, `agent-sandbox`, `skills-pack`, `app-shell`, `enrichment`.
+4. **PE-D Service-backed monetization (TR-009).** Define the hosted-service contract (license check, metering, credits, error codes); implement it first for one plugin (telephony or domains/email) end to end; replace the unavailable `license verify` with a real verification call; show price and usage in the card.
+5. **PE-E Third-party authoring (TR-009).** Publish the manifest and contract docs, `plugin test` conformance kit, `plugin from-openapi`, and generate a first batch of open API wrappers.
+6. **PE-F Store (TR-009).** Publisher accounts and signing, immutable signed versions, hash-pinned install, security review gate, search, payouts to `recipient`; `plugin install <id>` resolves from the store.
+7. **PE-G Rules and docs.** Keep the skill, plugins reference and memory rule (`plugins-scaffold-or-direct`) in step with each change.
+
+Out of scope until needed: ratings and reviews, a community marketing site, P2P expansion.
+
+## Functional cards — plan added 2026-10-11 (TR-010)
+1. **FC-A Contract.** Extend the manifest schema and validator (`args`, `effect`, `output`, `status`), remove `card_face.metrics`, document the standard subcommands.
+2. **FC-B Bridge.** Add `stdin` to `host.run` with the secret-only rule; remove plugin-specific tags and events from `plugin-frame.ts`.
+3. **FC-C Engine and templates.** Build the shared engine, the seven layout templates and the widget set in the dashboard, with brand-token theming; reuse `PluginSettings` logic; specs; then verify each plugin visually at phone, tablet and desktop widths. Two plugins of different function must render with visibly different layouts.
+4. **FC-D Per-plugin design and manifest enrichment.** For each plugin write a `DESIGN.md` brief (function, layout choice, brand), declare `card_layout`, branding tokens, For each of the 30 plugins read its CLI and declare real arguments, effects, status command and settings; implement `status --json`, `config`, `secrets` where missing; delete decorative `ui/card.js` code or reduce it to the Live view.
+5. **FC-E Verification.** Per-plugin spec that the manifest validates and every declared command is runnable in `--help`/dry mode; Mac mini gates for core frontend; screenshot review of every card.
+
+## Brand, logos, drawer and tracking — plan added 2026-10-11
+1. **FC-F Names and brands.** Correct wrapper names to provider brands (done for eight plugins on 2026-10-11 in the local plugin repos); decide product names for monetized services (owner); keep first-party names descriptive.
+2. **FC-G Logos.** Add `branding.logo` and `branding.provider` to the contract (done in the validator on `feat/plugin-vendor`); source provider logos (needs the owner's approval to download from the official brand kits or Simple Icons, with the license note recorded in `ui/LOGO.md`); design original marks for first-party and monetized plugins; sanitize SVGs on serve; render in the card and plugin list; warn on emoji icons.
+3. **FC-H Drawer.** Build the slide-out drawer (Settings, Credentials, Usage, Projects) in the dashboard.
+4. **FC-I Ledgers.** Installation records from `plugin vendor` and `new`; the per-brick `usage` helper and `.tr/usage` JSONL; dashboard aggregation across registered projects; server-side per-project metering for closed services; documented opt-in for any reporting; specs proving no payload or secret is ever written.
+
+
+## Hello Phone workspace and contact stores — 2026-10-11
+
+1. Define `workspace` in the manifest contract and validator; drawer hosts it; `microphone` permission handled by the host.
+2. Add `host.subscribe` events to the bridge; wire incoming call and message events from the phone service.
+3. Hello Phone CLI parity: call, message, contact, note, transcript, number, settings, agent commands with args, effects and JSON output.
+4. Per-number state layout, derived index, export.
+5. Contact-store interface, local provider, vCard/CSV import, `tr-plugin-crm` provider (read/write), first read-only adapter.
+6. WebRTC softphone component (answer, place, mute, hold, transfer) and agent configuration screens for inbound and outbound Telnyx assistants.
+7. Consent, do-not-call, quiet-hours and daily-limit enforcement in the CLI, with tests.
+8. Mac mini verification: CLI parity specs, drawer specs, and a live test call on an owner-provided number.
+
+
+## Full plugin completion — 2026-10-12
+
+Execution order: use PLUGIN_COMPLETION_CHECKLIST.md as the complete scope; first close declared-command, explicit-read and bounded stdin gaps with negative tests, then complete per-owner manifests/workspaces, branded services, bricks/distribution, new blocks, monetization/store and final release. Preserve all existing staged/unstaged work. Focused baseline on sanctioned mini is 48 tests, actual exit 0. Required scope remains In Progress.
+
+
+2026-10-12T07:11:15Z — Codex: Runtime-path inspection found PluginsPage still mounts the older PluginCardFace, so the shared CardEngine is test-only. Wire the installed grid to the configuration/observation engine and verify the page behavior; retain owner Live panels through declared regions and preview. Source manifest inventory records 30 plugins/241 commands, only six explicit effects. The default face must stay honest about missing contract declarations. Full core suite is running on the isolated mini source snapshot; no serving source changed.
+
+2026-10-12T07:20:59Z — Codex: Full mini run reports 2064 passed / 2 failed (actual rc 1), both model-catalog discovery/alias assertions. Both model routers ignore the explicit TR_ROOT fixture; align the configured root. Frontend build rc 0. Source identity exposed ignored scaffold derived/embeddings.db; preserve it outside the scaffold, classify legacy derived state canonically, synchronize the shipped manifest and add a rejecting regression before delivery. Whole project remains In Progress.
+
+2026-10-12T07:24:48.187050+00:00 — Codex: Catalog regressions now pass; full3 reports 2065 pass/1 fail because the isolated snapshot retained an empty legacy derived directory. New guard correctly rejects it. Remove that empty test-copy directory, then rerun. Eight fast gates ran, scaffold gate correctly failed (checker rc 2); preserve raw report. Additional card audit: gauge invents zero/100 when observations are missing, Usage implies unavailable agent history, and modal lacks focus containment. Correct these shared UI behaviors and test missing-data, keyboard trapping and focus restoration. OpenWiki ingestion completed: 6 imported/0 errors, actual rc 0; retrieval includes the updated plugin hub.
+
+2026-10-12T07:26:34.592095+00:00 — Codex: Brick source review found vendor destination containment checks lexical paths only, allowing an in-project symlink parent to write outside the project. Resolve the nearest existing parent against the real project root before mutation; add a regression proving the external directory stays untouched. Existing vendor functionality is present in the working tree; requires/new and standalone-consumer acceptance remain incomplete.
+
+2026-10-12T07:30:05.595797+00:00 — Codex: Phone owner-source audit found the extracted CliPhoneDataSource expects an obsolete exit/output envelope while the generic bridge returns parsed data, invents host/extension SIP credentials, and hides contact lookup failures. Current browserSession returns a login token, which is not an Asterisk SIP credential. Official browser SDK reference https://developers.telnyx.com/docs/development/webrtc/js-sdk/tutorials/make-your-first-call requires authenticated readiness and actual call state events. Add native owner regressions, verify failure on the mini, then correct adapter transport and reject unsupported sessions explicitly; this does not certify audio or finish the operated Hello Phone product.
+
+2026-10-12T07:31:54.303102+00:00 — Codex: Phone adapter native regression baseline failed 4/4 (rc 1); after repair all four pass (rc 0) on the mini. CliPhoneDataSource now consumes decoded host responses, preserves actual explicit credentials, rejects token-only/incomplete browser sessions without fabricated defaults, and propagates lookup failures. Owner test added. This fixes the extracted adapter boundary only; current provider-token session still needs a compatible real dialer transport, and live audio remains unverified. Full4 core passed 340 files/2068 tests, build/type rc 0 and eight fast gates passed; expanded lint found one new render-time ref error (rc 1), repaired before full5. Nineteen existing lint warnings remain in expanded scope.
+
+2026-10-12T07:32:50.289576+00:00 — Codex: Final full5 passes 340 files/2069 tests, actual rc 0; frontend build5 rc 0; all eight configured fast gates pass, checker rc 0; expanded lint5 rc 0 (19 warnings, zero errors); type check4 rc 0. Current source identity5 matches all 1047 hashed files, actual rc 0; phone adapter hash matches and four native regressions pass rc 0. Raw failures and successes preserved in private scratch evidence and the isolated mini directory. Built frontend artifact copied back after source verification. Project audit checker and diff whitespace pass. PLUGIN_COMMAND_COMPLETION_INVENTORY.md lists all 241 commands/30 plugins, with 235 missing effects. No commit, push, publication or deployment; remaining owner/service/store/security/live scope stays required and In Progress.
+
+## Phase: developer-owned Headscale
+
+1. Confirm `headscale --help` flags on the installed version (API keys, preauth). 2. Mesh `server` command group with injectable runner and specs. 3. `new` calls it after init/connect and reports readiness honestly. 4. Mac mini proof in an isolated HOME using a container or a throwaway host; real remote-host proof needs an owner-authorized machine. 5. Docs, skill and OpenWiki updates.

@@ -17,6 +17,8 @@ vi.mock('node:fs', () => ({
   mkdirSync: vi.fn(),
 }));
 
+vi.mock('./validated-write.mjs', () => ({ writeNodeValidatedAsync: vi.fn() }));
+
 vi.mock('./logger.mjs', () => ({
   logger: {
     info: vi.fn(),

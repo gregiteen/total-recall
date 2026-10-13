@@ -1,0 +1,98 @@
+
+> tr-plugin-auth@1.0.0 test
+> node --test test/auth.test.mjs && vitest run --exclude '**/auth.test.mjs'
+
+▶ Auth Plugin Contract & Manifest
+  ✔ has a valid plugin.json with card_face configuration (0.525084ms)
+  ✔ exposes executable ui/card.js and ui/panel.js (1.633667ms)
+✔ Auth Plugin Contract & Manifest (2.66825ms)
+▶ Auth CLI Operations
+  ✔ runs auth --help successfully (53.487292ms)
+  ✔ runs auth status --json successfully (86.523208ms)
+  ✔ runs auth passkey list --json successfully (52.034542ms)
+  ✔ runs auth session --json successfully (56.691542ms)
+  ✔ returns exit code 2 when Google OAuth is unconfigured without secrets (68.775875ms)
+  ✔ refuses ambient Google credentials as an alternate store (70.8745ms)
+  ✔ runs auth audit --json and returns security baseline findings (71.789042ms)
+  ✔ runs auth rotate --json to cycle session credentials safely (217.732208ms)
+✔ Auth CLI Operations (678.595208ms)
+▶ Explicit selected-store CLI reads
+  ✔ returns missing without consulting the global store and propagates corruption (325.822292ms)
+✔ Explicit selected-store CLI reads (325.898459ms)
+ℹ tests 11
+ℹ suites 3
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1077.037708
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.3 [39m[90m/private/tmp/tr-mesh-repair-20261010/auth[39m
+
+ [32m✓[39m test/secrets-store.spec.mjs [2m([22m[2m13 tests[22m[2m)[22m[33m 4612[2mms[22m[39m
+   [32m✓[39m secrets-store [2m(13)[22m
+     [33m[2m✓[22m[39m rotates and deletes[33m 717[2mms[22m[39m
+     [33m[2m✓[22m[39m allows binding one credential to several repos[33m 619[2mms[22m[39m
+     [33m[2m✓[22m[39m does not flag multi-repo bindings as errors[33m 438[2mms[22m[39m
+     [33m[2m✓[22m[39m reports a value shared across repos/apps as information, not an error[33m 692[2mms[22m[39m
+     [33m[2m✓[22m[39m shared values stay healthy with or without shared_value_ok[33m 886[2mms[22m[39m
+     [33m[2m✓[22m[39m validates before atomically replacing the encrypted store[33m 319[2mms[22m[39m
+ [32m✓[39m test/secrets-rekey-keychain.spec.mjs [2m([22m[2m6 tests[22m[2m)[22m[33m 3056[2mms[22m[39m
+   [32m✓[39m rekey with a Keychain carrier [2m(6)[22m
+     [33m[2m✓[22m[39m moves the Keychain to the new password alongside the store[33m 630[2mms[22m[39m
+     [33m[2m✓[22m[39m counts as a persistent carrier on its own[33m 521[2mms[22m[39m
+     [33m[2m✓[22m[39m rolls the store back when the Keychain write fails[33m 647[2mms[22m[39m
+     [33m[2m✓[22m[39m restores the previous Keychain value when a later carrier fails[33m 625[2mms[22m[39m
+     [33m[2m✓[22m[39m names entries it could not restore, without losing the original error[33m 522[2mms[22m[39m
+ [32m✓[39m test/core-crypto.spec.mjs [2m([22m[2m17 tests[22m[2m)[22m[33m 2838[2mms[22m[39m
+   [32m✓[39m crypto module [2m(17)[22m
+     [32m✓[39m derived-key cache [2m(5)[22m
+       [33m[2m✓[22m[39m still decrypts correctly once clearDerivedKeyCache() has dropped the entry[33m 301[2mms[22m[39m
+       [33m[2m✓[22m[39m rejects the retired password after a re-encrypt, cache warm[33m 500[2mms[22m[39m
+ [32m✓[39m test/session-credentials.spec.mjs [2m([22m[2m7 tests[22m[2m)[22m[33m 2417[2mms[22m[39m
+   [32m✓[39m auth-owned sessions and passwords [2m(7)[22m
+     [33m[2m✓[22m[39m preserves verified ciphertext, refuses conflicts and legacy data before teardown[33m 322[2mms[22m[39m
+     [33m[2m✓[22m[39m collaboration passwords stay in auth and never use a legacy or ambient hash[33m 853[2mms[22m[39m
+     [33m[2m✓[22m[39m password changes use one encrypted auth commit, preserve keys and invalidate sessions[33m 1031[2mms[22m[39m
+ [32m✓[39m test/secrets-rekey.spec.mjs [2m([22m[2m5 tests[22m[2m)[22m[33m 2388[2mms[22m[39m
+   [32m✓[39m secrets rekey [2m(5)[22m
+     [33m[2m✓[22m[39m atomically re-encrypts encrypted and plaintext stores and retires the old password[33m 1266[2mms[22m[39m
+     [33m[2m✓[22m[39m validates every carrier before mutating any target[33m 400[2mms[22m[39m
+     [33m[2m✓[22m[39m can finish rekeying an orphan store after its persistent carrier was already updated[33m 715[2mms[22m[39m
+ [32m✓[39m test/core-provider-account-sync.spec.mjs [2m([22m[2m7 tests[22m[2m)[22m[33m 2291[2mms[22m[39m
+   [32m✓[39m provider-account-sync [2m(7)[22m
+     [33m[2m✓[22m[39m OpenRouter probe marks tracking ok and persists meta[33m 457[2mms[22m[39m
+     [33m[2m✓[22m[39m OpenAI project key without admin costs is ERROR under strict mode[33m 435[2mms[22m[39m
+     [33m[2m✓[22m[39m tracking_exempt yields exempt status[33m 399[2mms[22m[39m
+     [33m[2m✓[22m[39m self-hosted mailcow is auto-ok at $0[33m 402[2mms[22m[39m
+     [33m[2m✓[22m[39m syncAllSecretAccounts reports unhealthy when errors remain[33m 394[2mms[22m[39m
+ [32m✓[39m test/secrets-rotate.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[33m 1059[2mms[22m[39m
+   [32m✓[39m secrets-rotate [2m(4)[22m
+     [33m[2m✓[22m[39m lists overdue keys and enqueues assist tasks without values[33m 422[2mms[22m[39m
+     [33m[2m✓[22m[39m rotateSecretAndExport updates store and writes .env to bound project path[33m 435[2mms[22m[39m
+ [32m✓[39m test/secrets-env-export.spec.mjs [2m([22m[2m9 tests[22m[2m)[22m[33m 813[2mms[22m[39m
+ [32m✓[39m test/core-legacy-init-secrets.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[33m 313[2mms[22m[39m
+ [32m✓[39m test/secrets-routes.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m test/access-keys.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/core-env-import.spec.mjs [2m([22m[2m8 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m test/secrets-password.spec.mjs [2m([22m[2m13 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m test/auth-panel.spec.mjs [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m test/core-rotation-capability.spec.mjs [2m([22m[2m17 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m test/core-secret-integration-research.spec.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m test/secrets-keychain.spec.mjs [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m test/secrets-sync.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m test/core-browser-session.spec.mjs [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m test/core-provider-rotation-recipes.spec.mjs [2m([22m[2m3 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m test/secrets-env-diff.spec.mjs [2m([22m[2m7 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m test/core-provider-catalog.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m test/secrets-remote-deploy.spec.mjs [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m23 passed[39m[22m[90m (23)[39m
+[2m      Tests [22m [1m[32m154 passed[39m[22m[90m (154)[39m
+[2m   Start at [22m 12:28:05
+[2m   Duration [22m 22.61s[2m (tests 96%, import 2%, transform 1%)[22m
+
+[2m    Isolate [22m [33m23 workers spawned[39m[2m · ~79ms startup each (spawn + environment, per file)[22m
+[2m            [22m [2mat least ~1.75s faster with [22m[33misolate: false[39m[2m — reuses workers across files instead of one per file[22m
+

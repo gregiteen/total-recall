@@ -4,7 +4,7 @@
 // plugin came from, its content hash, whether it is shared, and — for peers —
 // whether that peer answered. There are no ratings, reviews or install counts.
 
-import { apiFetch, API_BASE } from "./_base"
+import { apiFetch, API_BASE, patch } from "./_base"
 
 export type PluginSourceKind = "bundled" | "public" | "peer" | "git" | "local" | "link"
 
@@ -19,6 +19,31 @@ export interface PluginTask {
   schedule: string
   command: string
   last_run: string | null
+}
+
+export interface CardFaceAction {
+  subcommand: string
+  label: string
+  icon?: string
+  color?: string
+}
+
+export interface CardFaceMetric {
+  label: string
+  value: string
+}
+
+export interface CardFaceConfig {
+  skin?: string
+  theme?: string
+  headline?: string
+  primary_color?: string
+  secondary_color?: string
+  accent_color?: string
+  touch_layout?: string
+  quick_actions?: CardFaceAction[]
+  metrics?: CardFaceMetric[]
+  interactive?: boolean
 }
 
 export interface PluginInfo {
@@ -50,7 +75,8 @@ export interface PluginInfo {
   openwiki_hubs: Array<{ title?: string; path: string }>
   cli: { command: string | null; subcommands: Array<{ name: string; description?: string }> } | null
   has_generator: boolean
-  branding?: { icon?: string | null; image?: string | null; color?: string | null; badge?: string | null }
+  branding?: { icon?: string | null; image?: string | null; color?: string | null; badge?: string | null; name?: string; wordmark?: string; accent?: string; background?: string }
+  card_face?: CardFaceConfig
   locked?: boolean
   store_deployed?: boolean
   secrets?: Array<{ key: string; description?: string; required?: boolean }>
@@ -68,7 +94,7 @@ export interface BundledPlugin {
   tasks: Array<{ intent: string; schedule: string; command: string }>
   cli: { command: string; subcommands: Array<{ name: string; description?: string }> } | null
   installed: boolean
-  branding?: { icon?: string | null; color?: string | null; badge?: string | null }
+  branding?: { icon?: string | null; color?: string | null; badge?: string | null; name?: string; wordmark?: string; accent?: string; background?: string }
   locked?: boolean
 }
 
@@ -188,6 +214,13 @@ export function updatePluginBranding(id: string, branding: { icon?: string; imag
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/branding`, { branding })
 }
 
+export function updatePluginCardFace(
+  id: string,
+  updates: { card_face?: CardFaceConfig; branding?: Record<string, unknown> }
+): Promise<Result & { card_face?: CardFaceConfig; branding?: Record<string, unknown> }> {
+  return patch(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/card-face`, updates)
+}
+
 export function setPluginLocked(id: string, locked: boolean): Promise<Result> {
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/lock`, { locked })
 }
@@ -199,9 +232,10 @@ export function deployPluginToStore(id: string, autoLock = true): Promise<Result
 export async function runPluginCommand(
   id: string,
   subcommand = "",
-  args: string[] = []
+  args: string[] = [],
+  options?: { stdin: string }
 ): Promise<{ success: boolean; output?: string; error?: string; exitCode?: number | null; timedOut?: boolean }> {
-  const res = await post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/run`, { subcommand, args })
+  const res = await post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/run`, { subcommand, args, ...(options ? { stdin: options.stdin } : {}) })
   if (res.error) return { success: false, error: res.error }
   return { success: !!res.ok, output: res.output || "", exitCode: res.exitCode, timedOut: res.timedOut }
 }

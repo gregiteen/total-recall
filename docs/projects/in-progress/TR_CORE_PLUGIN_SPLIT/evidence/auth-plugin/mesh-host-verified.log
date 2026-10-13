@@ -1,0 +1,41 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/private/tmp/tr-mesh-repair-20261010/plugin[39m
+
+ [32m✓[39m src/server/routes/mesh-presence.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/core/registration-watch.spec.mjs [2m([22m[2m11 tests[22m[2m)[22m[33m 7883[2mms[22m[39m
+     [33m[2m✓[22m[39m ignores ids already in the log when it arms [33m 2608[2mms[22m[39m
+     [33m[2m✓[22m[39m approves a NEW id and reports the node [33m 2622[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps watching when an approve fails rather than giving up [33m 2621[2mms[22m[39m
+ [32m✓[39m src/core/mesh-late-bind.spec.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 276[2mms[22m[39m
+ [32m✓[39m src/server/routes/mesh.spec.mjs [2m([22m[2m22 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m src/core/mesh-access-sync.spec.mjs [2m([22m[2m7 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m src/cli/mesh.spec.mjs [2m([22m[2m7 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/core/plugin-peers.spec.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/server/routes/headscale.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m src/server/routes/plugins-mesh.spec.mjs [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m src/core/leader-election.spec.mjs [2m([22m[2m20 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/core/mesh-enroll.spec.mjs [2m([22m[2m30 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/core/network-interfaces.spec.mjs [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/core/mesh-discover.spec.mjs [2m([22m[2m11 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/core/headscale-client.spec.mjs [2m([22m[2m22 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/core/mesh-self-entity.spec.mjs [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+[90mstderr[2m | src/core/mesh.spec.mjs[2m > [22m[2mmesh status[2m > [22m[2mreturns unavailable when the client is missing
+[22m[39m{"timestamp":"2026-10-10T18:57:02.952Z","level":"info","subsystem":"mesh","message":"Could not read mesh status: no output"}
+{"timestamp":"2026-10-10T18:57:02.954Z","level":"info","subsystem":"mesh","message":"Could not read mesh status: no output"}
+
+ [32m✓[39m src/core/mesh.spec.mjs [2m([22m[2m10 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/core/headscale-policy.spec.mjs [2m([22m[2m10 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/core/lan-discovery.spec.mjs [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/core/mesh-access.spec.mjs [2m([22m[2m30 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/core/mesh-auth.spec.mjs [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/core/mesh-ssh-enroll.spec.mjs [2m([22m[2m11 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/core/device-io.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/core/mesh-entities.spec.mjs [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/core/mesh-activity.spec.mjs [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/core/tailscale-cli.spec.mjs [2m([22m[2m4 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m25 passed[39m[22m[90m (25)[39m
+[2m      Tests [22m [1m[32m249 passed[39m[22m[90m (249)[39m
+[2m   Start at [22m 12:56:52
+[2m   Duration [22m 11.64s[2m (transform 240ms, setup 103ms, import 991ms, tests 8.41s, environment 1ms)[22m
+

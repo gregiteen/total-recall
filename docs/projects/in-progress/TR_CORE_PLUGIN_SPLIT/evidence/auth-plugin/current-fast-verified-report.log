@@ -1,0 +1,8 @@
+fatal: not a git repository (or any of the parent directories): .git
+
+📊 code-quality — javascript — 0 finding(s)
+   ran memory-package, dist-freshness, open-source-paths, shipped-package-paths, scaffold-brain-state, ssss-registry, security-dependencies, security-frontend-dependencies at tier=fast in 3.1s, 0min ago
+   ⚠️  NOT run: test(remote) — this is partial coverage.
+   ❓ Could not read git — cannot tell whether this report matches your tree.
+
+✅ No findings.

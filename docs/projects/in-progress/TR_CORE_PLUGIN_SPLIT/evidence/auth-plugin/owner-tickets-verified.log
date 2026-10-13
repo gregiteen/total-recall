@@ -1,0 +1,26 @@
+
+> tr-plugin-tickets@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.238167ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.168208ms)
+✔ writes use stdin and require exact auth readback (0.124958ms)
+▶ Ticketing Engine & Box Office System
+  ✔ creates tier and enforces inventory capacity (3.975625ms)
+  ✔ creates reservation holds with TTL and releases them (1.109083ms)
+  ✔ issues ticket with signed QR token (0.874667ms)
+  ✔ scans ticket and prevents double-entry check-in (0.436875ms)
+  ✔ rejects tampered QR signature (0.293916ms)
+  ✔ transfers ticket to new recipient with re-signature (0.297375ms)
+  ✔ generates Apple Wallet pass JSON payload (0.256917ms)
+  ✔ calculates accurate sales summary and revenue metrics (0.372833ms)
+  ✔ executes CLI status and help commands cleanly (60.621083ms)
+✔ Ticketing Engine & Box Office System (68.920834ms)
+ℹ tests 12
+ℹ suites 1
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 145.239167

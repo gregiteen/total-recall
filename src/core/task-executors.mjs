@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 /**
  * Executor registry for daemon tasks.
  *
@@ -571,12 +572,12 @@ function findLatestResearchDraftSlug(inboxDir, topic) {
 // ─── Registry ───────────────────────────────────────────────────────────────────
 
 async function runSecretsRotationCheck(task, ctx) {
-  const { runSecretsRotationCheck: run } = await import('./secrets-rotate.mjs');
+  const { runSecretsRotationCheck: run } = await __loadOwnedPlugin('auth', 'secrets-rotate');
   return run(ctx);
 }
 
 async function runSecretsExportEnv(task, ctx) {
-  const { runSecretsExportAll } = await import('./secrets-rotate.mjs');
+  const { runSecretsExportAll } = await __loadOwnedPlugin('auth', 'secrets-rotate');
   return runSecretsExportAll(ctx);
 }
 
@@ -586,7 +587,7 @@ async function runSecretsRotationAssist(task, ctx) {
   if (!key) {
     return { success: false, error: 'missing secret_key', executor: 'secrets-rotation-assist' };
   }
-  const { getBrowserRotateAssist } = await import('./secrets-rotate.mjs');
+  const { getBrowserRotateAssist } = await __loadOwnedPlugin('auth', 'secrets-rotate');
   const assist = await getBrowserRotateAssist(ctx.brainDir, key);
   return {
     success: true,

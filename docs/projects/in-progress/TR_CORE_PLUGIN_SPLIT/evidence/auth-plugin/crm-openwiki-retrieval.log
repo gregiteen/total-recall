@@ -1,0 +1,29 @@
+
+  🔍 Local search results for "CRM integration and portability" (merged):
+
+  [1] Vault Match (100%) [project] - Category: facts [SHOULD]
+      Title:      CRM integration and portability
+      Slug:       openwiki-crm
+      Importance: ⭐⭐⭐☆☆ (conf: 100%)
+      Tags:       openwiki, architecture, documentation
+      Body:
+        │ # CRM integration and portability
+        │ 
+        │ The white-label CRM plugin is locally linked and owns its implementation, authenticated CLI/catalog, settings, instance runtime and portable business vault. It has not been published or deployed by this work. Discover selected instance status and the authenticated menu before operations.
+        │ 
+        │ `crm client` executes catalog commands. Instance authentication/provider credentials are excluded from portable vault exports; auth owns shared provider secret resolution. Preserve company → brand/alias → location → buyer hierarchy. Restore only into a new destination, review dry run before commit, initialize new authentication and leave schedules disabled until verified.
+        │ 
+        │ [CRM procedure](../.agent/skills/total-recall/references/crm.md) links the owning plugin skill. [Current project evidence](../docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) distinguishes local implementation from provider/live validation.
+        │ 
+        │ CRM credential routing now requires an explicit absolute selected auth brain and CRM instance. User/operator secrets use structured auth get, stdin writes, exact readback and verified deletion; ambient CRM_API_KEY/DABBER_API_KEY, automatic privileged key issuance, production isolated-memory storage and stale-cache success are removed.
+        │ 
+        │ Local integration settings now route credential fields through instance-scoped CONFIG_<FIELD> auth refs. The settings file and CRM peer sync carry no credential values. Corrupt/nested settings and normal reads of legacy plaintext credentials fail explicitly. Run `total-recall crm credentials migrate-local` only for explicit local_config migration: preflight conflicts, verify every readback, retain original source on errors, refuse cleanup if the source changes, then atomically replace the file. This does not migrate OAuth token files, CLI credential files or vault session/password records.
+        │ 
+        │ Session signing/shared password reads require configured auth values; normal startup generates nothing. Explicit `crm init` asks auth to provision its signing credential and validates readback without printing it. OAuth client ID/secret reads/writes use auth-backed settings; no OAuth client file or legacy-token client fallback. The integration summary reports Google linkage unchecked until its owning flow verifies it, never from file existence.
+        │ 
+        │ Verification: 31 isolated Python tests and one Node→Python→auth-port CLI migration test passed on the sanctioned mini, actual exit 0. OAuth client tests execute the actual function definitions without importing the whole Google/runtime stack. Full CRM runtime, OAuth token/session/client migration and native/provider acceptance remain required; no release or deployment certification.
+        │ 
+        │ The CRM remote-check transfer now uses an explicit tracked/new-source allowlist, excluding vault/private/credential files and symlinks. The final Node suite passes both CLI migration and archive sentinel tests (2 tests, exit 0); all 19 selected source files match the mini snapshot. This does not certify the whole remote-check pipeline or whole CRM runtime.
+        │ 
+        │ Generated CRM API transport now uses auth_headers exclusively, ignores ambient CRM/DABBER API keys, and never starts a local daemon. Its two actual-function boundary tests are included in the 31-test result.
+

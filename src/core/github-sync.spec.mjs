@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 /**
  * Tests for github-sync.mjs
  */
@@ -11,9 +12,10 @@ vi.mock('child_process', () => ({
   execFileSync: vi.fn(),
 }));
 
-vi.mock('./secrets-store.mjs', () => ({
-  getSecret: vi.fn(),
-}));
+vi.mock('./plugin-runtime.mjs', () => {
+  const getSecret = vi.fn();
+  return { loadPluginModule: async () => ({ getSecret }) };
+});
 
 vi.mock('./logger.mjs', () => ({
   logger: {
@@ -33,7 +35,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFileSync } from 'child_process';
-import { getSecret } from './secrets-store.mjs';
+const { getSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
 import { addTask } from './task-envelope.mjs';
 import { getGitHubSyncStatus, runGitHubSync, initGitHubSync } from './github-sync.mjs';
 

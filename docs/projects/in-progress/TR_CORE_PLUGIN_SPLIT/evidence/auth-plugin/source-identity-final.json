@@ -1,0 +1,142 @@
+[
+  {
+    "group": "core",
+    "files": 1053,
+    "sha256": "682cbcc4a6fe54791375c43396a1b17ef1baf726718a3f2ea795173526ad47c2",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "auth",
+    "files": 81,
+    "sha256": "a22bdd9694452dbd7386cd21f3caf831e02fe02c26c7fd36aa183f33cab70aeb",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "decision",
+    "files": 18,
+    "sha256": "15ba7e3f3ac60b2106674253a4e20f0dff84a6c31eb642b22b8b9f077e36a311",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "image-generator",
+    "files": 8,
+    "sha256": "24a07d2ae17332c398c7e59a5d6e8bfac8c26fcad6d227ee7858bb066519791e",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "maps",
+    "files": 11,
+    "sha256": "211bc082e5507b4bd446f4db8b9795bf5f9597cf8c6eae9d6996547d47e527af",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "stripe",
+    "files": 11,
+    "sha256": "c43df37764496873b16bed4789a5769c018feebb247aa76727398eb2314f530c",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "translator",
+    "files": 9,
+    "sha256": "d65137052f2b11569bc791cb35e44550abfd29e9a826f95ff911830f3647d8d5",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "design",
+    "files": 13,
+    "sha256": "8b7e61deb4bcf43d68fdca76160a6df5b8bc5d40baf3267ac29ff8a5fee15849",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "domains",
+    "files": 20,
+    "sha256": "c50e29973349c44f82aab5d8e4a64b8d059e15eb5765556a02766831baf3542c",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "deploy",
+    "files": 12,
+    "sha256": "e353c821c166ce5f73b4f8dda967376c7940c90ad39a481658b6025ed3b74505",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "phone-companion",
+    "files": 8,
+    "sha256": "479b6c64882abdb240df27d5cd90f8fc50567f34c7a55d7638eef128617deaca",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "signing",
+    "files": 19,
+    "sha256": "e14c9efb1514f4f6b55a25e4fa548c5e5500095727e430630b4458f96e1f3c9c",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "tickets",
+    "files": 13,
+    "sha256": "3f5c7379b74ef2bc52bd7ff8ba7e9316454c8ecc653d0aaf722df54db4fa9ad2",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "skill-manager",
+    "files": 10,
+    "sha256": "08b129bfba2c0e60ab3728ef4cfe4f74053c84ce8409ad319bd4fd47fee459cb",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "phone",
+    "files": 27,
+    "sha256": "bd4988cc7eacb0a2fcd7e6b76771f380bd2f31c65b0fe81c55b6a769f2131040",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "text",
+    "files": 17,
+    "sha256": "0195bd4466c6ba8b2d13d2e42aad926c6c90ed57492d8e511316e1ce77f0ad28",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "security",
+    "files": 17,
+    "sha256": "799112a7f4981a3b199b8cde888fc3a86c74464fd6ad7fb81e4fdf63ece4f3e5",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "operator-alerts",
+    "files": 9,
+    "sha256": "b8d0484e6e6d70eaf9bb61808a82852cd363389b3493f8e5662a0cc7b4406807",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "mesh",
+    "files": 72,
+    "sha256": "6c51213551e8c0224dfa0c54f75d86abe52e183a1325c2e01f0d0a608190e9c6",
+    "matched": true,
+    "differences": []
+  },
+  {
+    "group": "crm-auth-transport",
+    "files": 4,
+    "sha256": "a754766df1f2c25514f67f33939972fd19bf38af2c940b338113383489d56bb1",
+    "matched": true,
+    "differences": []
+  }
+]

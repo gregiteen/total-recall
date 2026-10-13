@@ -1,0 +1,19 @@
+ℹ️  [code-quality] tier=fast: skipping 1 higher-tier check(s): test(remote)
+🔍 [code-quality] javascript — 8 check(s) in /private/tmp/tr-mesh-repair-20261010/core
+   → memory-package: npm run check:package
+     ✅ 0 error(s), exit 0 (1.7s)
+   → dist-freshness: npm run check:dist
+     ✅ 0 error(s), exit 0 (0.1s)
+   → open-source-paths: grep-forbid (4 pattern(s))
+     ✅ 0 error(s), exit 0 (0.0s)
+   → shipped-package-paths: grep-forbid (4 pattern(s))
+     ✅ 0 error(s), exit 0 (0.0s)
+   → scaffold-brain-state: node scripts/check-scaffold-state.mjs
+     ✅ 0 error(s), exit 0 (0.1s)
+   → ssss-registry: npm run check:ssss-registry
+     ✅ 0 error(s), exit 0 (0.4s)
+   → security-dependencies: npm audit
+     ✅ 0 error(s), exit 0 (0.4s)
+   → security-frontend-dependencies: npm audit --prefix frontend
+     ✅ 0 error(s), exit 0 (0.4s)
+📊 [code-quality] 0 finding(s) in 3.1s — read with: node .agents/skills/code-quality/core/report.mjs

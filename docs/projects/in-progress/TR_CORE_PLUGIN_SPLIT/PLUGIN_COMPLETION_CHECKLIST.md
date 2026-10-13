@@ -1,0 +1,173 @@
+# Plugin completion checklist
+
+Status: In Progress. Owner: Codex. Requested by Greg on October 11, 2026 (Denver).
+
+This consolidates TR-007–TR-011 and the unfinished security/release acceptance in the master tracker. Checked implementation history is not fresh release or live-provider verification. Complete the whole scope before the final deployment; do not retire unfinished work.
+
+1. Shared card and workspace contracts
+   - [ ] Finish typed arguments, effects, outputs, status and distribution validation.
+   - [x] Reject undeclared bridge commands, including plugins with an empty command list.
+   - [x] Implement bounded secret-only stdin transport; never put credentials in argv or return echoed credentials.
+   - [ ] Remove plugin-specific code from the generic frame after moving each behavior into its owner.
+   - [x] Require explicit read effects for card execution; mixed command groups cannot be inferred safe by name.
+   - [ ] Finish workspace declarations, device permissions and subscription lifecycle without weakening frame isolation.
+   - [x] Remove phone implementation and identity checks from the generic host; mount owner-provided workspaces.
+2. All installed plugin cards
+   - Source detail: [per-plugin inventory](PLUGIN_MANIFEST_INVENTORY.md) and [all 241 commands](PLUGIN_COMMAND_COMPLETION_INVENTORY.md).
+   - [ ] Inventory every actual CLI operation and declare arguments, effects, status, settings and credentials.
+   - [ ] Implement missing JSON status/configuration/credential status operations in their owner repositories.
+   - [ ] Replace fixed metrics and decorative status with real observations, timestamps and visible failures.
+   - [ ] Complete distinct functional layouts, brand tokens, original marks and provider-logo provenance.
+   - [ ] Complete Settings, Credentials, Usage and Projects drawer surfaces.
+   - [ ] Review every card at phone, tablet and desktop widths; test keyboard, focus and reduced motion.
+3. Hello Phone
+   - [ ] Combine phone, text, shared numbers/lines and compliance under the chosen Hello Phone brand; retain open carrier wrappers.
+   - [ ] Adopt the selected dialpad mark and white/blue/yellow palette.
+   - [ ] Integrate the extracted festech dialer, incoming calls, audio session and ringtone controls behind the real data-source interface.
+   - [ ] Complete dialer, calls, messages, contacts, agents and settings tabs.
+   - [ ] Expose full CLI parity for calling/answering, messages, credentials, numbers, voicemail, agents and settings.
+   - [ ] Implement per-number threads, contacts, notes, transcripts, index and export.
+   - [ ] Implement local contact storage, vCard/CSV import, our CRM read/write and third-party read-only adapters.
+   - [ ] Complete inbound/outbound AI agent configuration and runtime integration.
+   - [ ] Enforce consent, do-not-call, quiet hours and limits in the CLI.
+   - [ ] Verify real call/message behavior and audio on an authorized number; fixture tests alone do not certify calls.
+   - [ ] Coordinate festech adoption of the owned brick without changing that project incidentally.
+4. Mad Domains & Email
+   - [ ] Adopt the selected envelope-crown mark and yellow/black/red palette.
+   - [ ] Combine domain registration/DNS, mailboxes and outbound email behind one operated-service plugin.
+   - [ ] Implement drip campaigns, newsletters, list import and CRM synchronization.
+   - [ ] Expose every supported setting and action through CLI, with an observation/configuration drawer.
+   - [ ] Verify provider errors, authorization, delivery evidence, DNS readback and billing boundaries.
+5. Creative Search
+   - [ ] Adopt the selected constellation-lens mark and product brand.
+   - [ ] Complete operated metasearch, agentic search, long-tail browsing, scraping and enrichment.
+   - [ ] Expose configuration, credentials, results and real usage through CLI and drawer.
+   - [ ] Verify upstream errors, browsing/scraping evidence and enrichment provenance.
+6. Bricks and new projects
+   - [ ] Reconcile the implemented vendor/bricks branch with the current working tree without losing existing edits.
+   - [x] Add dependency (`requires`) resolution and missing/conflicting dependency errors (`--with-requires` adds missing bundled bricks; non-bundled sources must be added first).
+   - [/] `total-recall new <name> --with …` implemented (src/cli/new.mjs: canonical `ssss new --with-total-recall`, `init --project`, `connect`, then bricks with requires); orchestration unit-tested with an injected runner. Real run on the mini passed (2026-10-12): scaffold, init, connect and `--with mesh` vendoring, rc 0. Fresh-project proof is partial, see log.
+   - [/] Fresh-project independence: proven for self-contained bricks (`git-sentinel`, 9/9 tests, total-recall absent from PATH). `mesh` is host-integrated, not standalone: 18 files import Total Recall modules via TR_PACKAGE_ROOT. Open: decide how host-integrated plugins are marked or refused as bricks.
+   - [ ] Record installations and per-project brick usage without payloads or credentials.
+7. Distribution and repositories
+   - [ ] Enforce tier/license declarations consistently in schema, loader, authoring and shipping.
+   - [ ] Select and ship the required core plugin set; verify clean-machine installation.
+   - [ ] Reconcile neutral first-party names, provider wrapper brands and personal variants using the latest decisions.
+   - [ ] Give auth, deploy and phone-companion their missing remotes and preserve repository ownership/privacy.
+   - [ ] Commit and publish the tested owner-repository changes in a coordinated batch.
+8. New official building blocks
+   - [ ] Identity.
+   - [ ] Tenancy.
+   - [ ] Credits.
+   - [ ] AI gateway.
+   - [ ] Google integration.
+   - [ ] Agent sandbox.
+   - [ ] Skills pack.
+   - [ ] App shell.
+   - [ ] Enrichment.
+   - [ ] Fold the previously planned email plugin into Mad Domains & Email.
+   - [ ] Prove each block in a real consuming product, with tests and authoring documentation.
+9. Hosted services and monetization
+   - [ ] Implement a common per-project key, allowance, credit, meter, price-list and error contract for all three operated products.
+   - [ ] Replace unavailable/local-only license verification with real service-side verification.
+   - [ ] Complete one paid-service path end to end before applying it to the others.
+   - [ ] Show actual usage and prices; keep local tracking private and require opt-in for external reporting.
+10. Authoring and store
+   - [ ] Finish compatible authoring skill and reference examples.
+   - [ ] Implement `plugin test` conformance tooling and `plugin from-openapi`.
+   - [ ] Produce and verify the first open API wrappers.
+   - [ ] Implement publisher accounts, signing, immutable versions, hash-pinned installation and review gates.
+   - [ ] Implement store search/install resolution and recipient payouts.
+11. Auth and security completion
+   - [ ] Finish CRM OAuth token, session/password/hash and standalone-client credential migration.
+   - [ ] Classify and repair remaining ecosystem credential audit findings; enforce auth ownership in real runtime paths.
+   - [ ] Verify machine/fleet/platform behavior where real hardware evidence is still missing.
+   - [ ] Verify every credential setup and failure surface; no synthetic provider success.
+12. Final verification and delivery
+   - [ ] Run exact-source core/frontend and affected owner suites on the Mac mini; preserve failures and actual exit status.
+   - [ ] Complete package, scaffold, registry, dependency, artifact and clean-install checks.
+   - [ ] Update the five master documents, skills and OpenWiki; prove ingestion and retrieval.
+   - [ ] Stage one zero-downtime deployment after the requested batch passes, with verified traffic switch and rollback.
+   - [ ] Verify serving versions and live behavior separately from unit tests and package publication.
+
+13. Developer-owned Headscale
+   - [x] Confirm current Headscale CLI/config on the installed version: v0.29.4 darwin binary on the mini; checksum, configtest on the patched example, users/apikeys/preauthkeys JSON confirmed on a throwaway loopback server.
+   - [x] `mesh server init|update|status` in tr-plugin-mesh (src/core/headscale-server.mjs, src/cli/server.mjs): preflight, checksum-verified DEB install, config patched from the shipped example, configtest, start, user, API key via the credential store, pre-auth key by file. No `stop` (not requested). Verified on a real Debian 12 arm64 systemd container on the mini through install, checksum, config patch, configtest and systemctl start (service active, v0.29.4, listening on 443). HTTPS health, Let's Encrypt, SSH transport and enrolment with a real tailscale client are not verified.
+   - [x] Deployment gate in `new`: discover providers via the deploy plugin; requirements unmet means no mesh and no output; one provider is used, several need `--mesh-on <provider>`; a provider-list error fails `new`.
+   - [x] `mesh server update`: staged, trialled on a database copy, switched when healthy, automatic rollback; scheduled daily via plugin.json task `server update --if-provisioned`. Control-plane pause of a few seconds at the switch is inherent. Run for real on the same container (older v0.29.3 to v0.29.4): stage, database-copy trial, switch and rollback executed and the host ended on v0.29.3 active with its user intact. The post-switch health check could not pass without public DNS/TLS, so the success path through health verification is unverified.
+   - [x] Provision onto the chosen deployment over plain SSH, any provider (deploy `providers add` stores host/user/port/domain, no secrets); local-container default withdrawn. Real-host run partly done (see above); a public-domain run is open.
+   - [ ] `total-recall new` runs it and reports honest readiness (loopback-only warned, never claimed reachable).
+   - [ ] Generated output contains no owner hostnames, keys or addresses (rejecting test).
+   - [ ] Verify on the Mac mini; remote-host proof needs an owner-authorized machine.
+
+   - [x] `new --no-mesh` skips deployment lookup, the mesh brick and provisioning (Gro does not need the mesh).
+   - [ ] Extract the mesh brick's Total Recall host coupling so it can be reused by other apps.
+   - [ ] Decide relay approach (built-in relay with `derp.urls: []`, UDP 3478) before any paid managed tier; get Tailscale's answer on public relay use.
+
+14. Stacking bricks and developer-owned infrastructure
+   - [x] Decision (2026-10-12): developer's own DigitalOcean account, DigitalOcean brand, no reselling (PRD Amendment 6). Open: the domains plugin's resale markup setting.
+   - [ ] DigitalOcean basics in the deploy plugin: token via auth secrets, create/list/delete droplet, register as deployment with SSH and domain fields. Read DigitalOcean's current API reference before coding (terms already read).
+   - [ ] Counsel-drafted terms: software only, no operation of developer servers, developer responsible for provider account and charges.
+   - [ ] Named stacks: a registry of bundles (workspace = deploy + domains + mesh), `new --stack <name>` and `plugin vendor --stack <name>` for existing projects.
+   - [ ] `plugin bricks diff <id>` against upstream and a clear upgrade path (copy remains project-owned).
+   - [ ] Installation records and per-project usage records (FC-13/FC-14), local-only.
+   - [ ] Brick quality gate: `plugin test` conformance includes a standalone check (no host runtime, runs its own tests with total-recall absent).
+   - [ ] Extract the mesh brick's host coupling first (prerequisite for the above).
+
+15. Mesh console, identity and secrets
+   - [x] Headplane console: install, loopback-only binding, SSH-tunnel `mesh server console`, clipboard login key, update with restore. 40 specs; real install verified on a Debian 12 host (Docker installed, image pulled by digest, login page 200 on loopback, refused from outside, config and cookie secret 0600).
+   - [ ] Verify console-to-Headscale health (/admin/healthz) on a real public domain (blocked by the same TLS limit as the control server test).
+   - [x] tsidp tested against Headscale: joins, then fails on the Tailscale HTTPS certificate requirement. Not shipped.
+   - [x] Mesh identity verified on Headscale: WhoIs from one node identified another (node and user).
+   - [x] Mesh secrets service built (Antigravity) and proven end to end with the production secrets runtime across real enrolled nodes.
+   - [ ] Owner authorization to switch live nodes to `TR_SECRETS_SYNC_MODE=mesh-identity`, then retire `TR_MESH_SYNC_TOKEN` and `/api/secrets/sync`.
+   - [x] Skill references (mesh, auth) document server, console, grants and mesh sync; scaffold copies mirrored and included by `npm pack` (git ignores both copies through the existing `.agent/` rule).
+   - [x] `mesh --help` lists `server` and `grants`.
+
+## Action Log
+
+- 2026-10-12T06:57:20Z — Codex: Consolidated the master scope from tracker/plan and current source. Shared bridge baseline: 48 tests across five files passed on isolated Mac mini snapshot, actual exit 0. Initial run failed because the snapshot omitted bundled auth; added auth source only and reran. Four touched-source hashes matched. No live credentials, deployment or provider mutation.
+
+- 2026-10-12T07:25:20Z — Codex: Shared transport and explicit-read/owner-workspace changes implemented; focused earlier run passed 79 tests/9 files (rc 0). Full2 passed 2064 with two catalog failures; full3 passed 2065 with one empty snapshot-directory failure. Both causes repaired. Full4/build/gates/types/lint now run on the mini; final outcomes pending. Source identity3 matched all 1047 files before latest card accessibility/measurement edits; refresh required. OpenWiki six documents imported, zero errors, rc 0, updated plugin hub retrieved. No deployment or publication.
+
+2026-10-12T07:32:50.289576+00:00 — Codex: Final full5 passes 340 files/2069 tests, actual rc 0; frontend build5 rc 0; all eight configured fast gates pass, checker rc 0; expanded lint5 rc 0 (19 warnings, zero errors); type check4 rc 0. Current source identity5 matches all 1047 hashed files, actual rc 0; phone adapter hash matches and four native regressions pass rc 0. Raw failures and successes preserved in private scratch evidence and the isolated mini directory. Built frontend artifact copied back after source verification. Project audit checker and diff whitespace pass. PLUGIN_COMMAND_COMPLETION_INVENTORY.md lists all 241 commands/30 plugins, with 235 missing effects. No commit, push, publication or deployment; remaining owner/service/store/security/live scope stays required and In Progress.
+
+- 2026-10-12T21:20:00+00:00 — Claude Sonnet 5.5: Implemented brick `requires` resolution in src/core/plugin-vendor.mjs (string or {id,version} entries; '*', exact, ^ and >= ranges; missing, conflicting, circular and malformed errors that write nothing; `--with-requires` in `plugin vendor` adds missing bundled bricks recursively). Seven new specs. Mini snapshot ~/tr-checks/plugin-completion-20261012 received only the changed files (vendor hash 7e2e6c3a… matched); vendor spec 11/11 rc 0, then plugin vendor + src/cli 89 files/287 tests rc 0; temp logs removed. Limits: automatic resolution tested only for the not-found failure path, no bundled dependency fixture; full suite and lint not rerun for this change; nothing committed or deployed.
+
+- 2026-10-12T21:30:00+00:00 — Claude Sonnet 5.5: Added `total-recall new` (src/cli/new.mjs, registered in bin/total-recall.mjs and help). Nine specs cover argument parsing, step order, vendoring with requires, failure stop and non-empty target. Mini snapshot: src/cli + bin 90 files/285 tests rc 0; logs removed. Not verified: a real end-to-end run (network `npx @gregiteen/ssss-cli`, init, connect) or that the result needs no Total Recall at runtime; full suite/lint not rerun; nothing committed.
+
+- 2026-10-12T21:40:00+00:00 — Claude Sonnet 5.5: Real `new` run on the mini in an isolated dir with HOME and TR_ROOT pinned to a temp root (no global brain touched). First attempt `--with demo` failed after scaffold/init/connect with 'No bundled plugin' (correct; demo is not bundled; it left a half-built project, which I removed). Second attempt `--with mesh` rc 0: tr-bricks.json lists mesh 0.2.0 sha256 12057d33…, bricks/mesh present. Findings: project package.json has total-recall-brain only as a devDependency; bricks/mesh imports no Total Recall code and its own deps are express; it does reference the vault path convention and CLI names in strings. Not done: installing deps and running the project/brick tests offline, which the fresh-project proof still needs. Cleaned the project and temp root on the mini.
+
+- 2026-10-12T21:55:00+00:00 — Claude Sonnet 5.5: Greg directed that every developer project scaffold with Total Recall and SSSS; `new` already always does (no opt-out). Independence proof on the mini, isolated HOME/TR_ROOT: (1) `new demo-app --with mesh` rc 0; brick specs with total-recall off PATH failed 14/25 files: 'Explicit valid Total Recall host runtime required' (src/host-runtime.mjs needs TR_PACKAGE_ROOT; 18 files) — mesh is host-integrated; supertest failures were my error (installed --omit=dev; it is a declared devDependency). (2) `new demo2 --with <local tr-plugin-git-sentinel>` rc 0 (source kind local); brick suite 1 file/9 tests rc 0 with total-recall absent from PATH. Scan of local tr-plugin-* repos (grep-based, indicative): zero host references in dsh, git-sentinel, image-generator, maps, okf, operator-alerts, phone-companion, stripe, system-monitor, tr-transcribe, translator; most others reference the host. Temp project and root removed on the mini. Nothing committed; full suite not rerun.
+
+- 2026-10-12T22:10:00+00:00 — Claude Sonnet 5.5: Greg: `new` must set up the developer's own Headscale server. Saved invariant (vault node invariants-e223ff7f). Researched official Headscale docs (see AUDIT) and recorded requirement, design and plan in the five documents plus checklist section 13. No code written. Docs gaps: API-key flags unconfirmed; local-vs-remote default open.
+
+- 2026-10-12T22:25:00+00:00 — Claude Sonnet 5.5: Greg: Headscale integrates with the user's deployments; no deployments, no Headscale. Withdrew the local-container default in PRD/architecture/checklist. Found deploy plugin interface: `deploy providers --json` (name/type/region/status); on this laptop it errors 'Unverified deployment state', so errors must be surfaced, not treated as empty.
+
+- 2026-10-12T22:35:00+00:00 — Claude Sonnet 5.5: Greg: unmet requirements mean no mesh, nothing else. Amended PRD (Amendment 2) and the gate item; implementing the gate in src/cli/new.mjs next.
+
+- 2026-10-12T23:00:00+00:00 — Claude Sonnet 5.5: Greg: keep Headscale updated, zero downtime. Recorded Amendment 3 (PRD) and update path (architecture), including the single-process control-plane gap. Verified on the mini with the real v0.29.4 darwin binary: checksum matches, patched example passes configtest, throwaway loopback server returned expected JSON for users/apikeys/preauthkeys; server and data removed (a throwaway API key was printed in tool output; it belonged to that deleted server). Not verified: DEB install, systemd, Let's Encrypt, SSH path on a real Linux host.
+
+- 2026-10-12T23:45:00+00:00 — Claude Sonnet 5.5: Implemented developer-owned Headscale. tr-plugin-mesh: headscale-server.mjs (provision, update with stage/trial/switch/rollback), cli/server.mjs, `server` subcommand, daily update task; 26 specs pass on the mini (rc 0). tr-plugin-deploy: `providers add` with validation, 7/7 node tests pass. Core: `new` filters deployments to those with SSH host/user/domain, fails before scaffolding on a provider-list error, adds the mesh brick and runs `mesh server init` only when requirements are met; src/cli + bin 90 files/293 tests rc 0. Fixed my own bug (must() signature) and a slow-test wait found by the specs. Verification limits: never run against a real Debian/Ubuntu host over SSH, so DEB install, systemd, Let's Encrypt, DNS check, enrollment with a real tailscale client and the update switch/rollback are unverified; plugin repos have uncommitted changes (pre-existing and mine); nothing committed; full core suite and lint not rerun. Cleanup: removed temp dirs on the mini.
+
+- 2026-10-13T00:10:00+00:00 — Claude Sonnet 5.5: Corrected my earlier claim that no Linux host was available: the mini runs Colima/Docker. Built a Debian 12 arm64 systemd container (removed afterwards, with image and temp files). Real runs found two bugs the scripted specs had hidden: (1) preflight misread an absent headscale as present because `command -v` prints nothing (fixed with labelled KEY=value probe lines); (2) update staging ran `apt-get install sqlite3` without `apt-get update` and left the staging directory behind (fixed, with cleanup). Also made the post-failure message distinguish failed rollback commands from a completed restore with the public health check down. After fixes: provisioning reached systemctl start with the service active; update ran stage/trial/switch/rollback end to end and restored v0.29.3. Mesh specs 31/31 on the mini (rc 0; repo's own host-dependent mesh.spec.mjs excluded). OpenWiki: my earlier 'Unknown command' came from running it outside the repo root; from the root `openwiki ingest docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT --project` imported 24 files, 0 errors. Retrieval not yet validated. Nothing committed.
+
+- 2026-10-13T00:40:00+00:00 — Claude Sonnet 5.5: Footprint measurement for one-server-per-customer hosting. Ten Headscale v0.29.4 instances (darwin arm64 on the mini, idle, zero nodes, own ports/SQLite each): about 51 MB resident each (517 MB total), ~0% CPU (0.18 s CPU each after minutes), 388 KB data each, 47 MB shared binary, three loopback ports each, /health 200. Not measured: any enrolled nodes or load, Linux numbers, or the shared reverse-proxy design for many tenants on one IP (proposed, untested). Two measurement mistakes: stray processes from an interrupted first run, and a sed that changed only the first port per line; I measured the first-run instances and killed everything and removed the temp directory afterward.
+
+- 2026-10-13T01:20:00+00:00 — Claude Sonnet 5.5: Decisions this turn. Greg: mesh is a developer tool; keep the full brick for building other apps; Gro does not need it. I briefly removed the mesh brick from `new` on my own recommendation, then restored it when Greg said to keep it; final behavior: requirements met means brick vendored plus provisioning, `--no-mesh` skips both, `--mesh-on <provider>` picks among several. Added specs; src/cli + bin 90 files/295 tests rc 0 on the mini. Research (read-only): Tailscale Terms (updated 2026-08-25) never mention DERP or self-hosted control servers; 2.3 bars reselling 'the Services'; 2.1 ties client software use to the Tailscale Solution; AUP silent on relays; DERP page gives no eligibility or fair-use limits; Headscale docs warn that dropping Tailscale's relays leaves one relay as a single point of failure; release config comment confirms embedded DERP needs https server_url and stun_listen_addr. Footprint: ten idle instances about 51 MB each (measurement details above). Nothing contacted outside reading docs; nothing committed; full suite and lint not rerun.
+
+- 2026-10-13T01:40:00+00:00 — Claude Sonnet 5.5: Greg: developer thing; developers get their own deploy and domain; white-label DigitalOcean through our deploy plugin to start, white-label domains or bring your own; make stacking bricks attractive. Recorded PRD Amendment 5 and checklist section 14. Withdrew the hosted-mesh tier work (nothing had been built). Found the PRD rule that provider-brand applies with the user's own account and owner brand applies to owner-operated resale; domains plugin has a resale markup setting. No code written this entry.
+
+- 2026-10-13T02:05:00+00:00 — Claude Sonnet 5.5: Greg: keep DigitalOcean basic; terms so DigitalOcean bears the responsibility. Read DigitalOcean Terms of Service (updated 2026-08-22) and Acceptable Use Policy (2026-03-20). Finding: they put responsibility on the account holder and require indemnity, and the license is non-sublicensable, so wording in our terms cannot shift responsibility to DigitalOcean; bring-your-own-account structure keeps it off us. Recorded PRD Amendment 6; no code. Not legal advice; counsel review needed.
+
+- 2026-10-13T00:05:00+00:00 — Claude Sonnet 5.5 (session model now Opus 5.5): Greg asked to add Headplane, test tsidp and explain secrets versus tsidp. Read Headplane config/native docs and source (MIT confirmed; docs say Node 22.16 but v0.7.1 package.json requires Node 24.2+; healthz returns 200 only when Headscale is reachable). Read tsidp source (BSD-3; identity via WhoIs; listener needs ListenTLS; tsnet honors TS_CONTROL_URL). On the mini: built tsidp for linux/arm64, ran it against a throwaway Headscale 0.29.4 (checksum OK): node registered, then 'you must enable HTTPS'. Two official Tailscale 1.104.1 clients joined; WhoIs returned node beta, user owner. Headplane 0.7.1 against that Headscale: valid API key 302 to /admin/machines with cookie, wrong key refused, machines page listed all three nodes. Implemented installConsole/updateConsole and `mesh server console`; specs 40/40 rc 0. Real install on a Debian 12 systemd host: first attempt failed on disk space (nested Docker used vfs on a 92%-full shared Colima disk, mostly other projects' images, which I did not touch); second with a dedicated volume succeeded. Switched health checks from the login page to /admin/healthz after reading its source. My mistakes: /tmp bind mounts (Colima shares only home), a nonexistent command named in an error message, and a shadowed test helper; all fixed. Cleaned every test container, network, image, volume and directory; removed the earlier Headplane image. Saved the Colima lessons through `total-recall remember`. Nothing committed.
+
+- 2026-10-13T02:35:00+00:00 — Claude Opus 5.5: Resumed after the usage limit. Found Antigravity had built mesh secrets (my previous reply wrongly said it was not built). Ran its first open item: full end-to-end on the mini. Setup: current source rsynced (13 MB), Linux dependencies installed in the test image, Headscale 0.29.4 (checksum OK), leader/beta/gamma enrolled with Tailscale 1.104.1 in kernel mode. Leader built through the production `secrets-runtime` (core server auth and shared helpers), real encrypted stores with distinct passwords. Results: beta synced exactly GRANTED_A and GRANTED_B with matching values; gamma got none; beta's direct NOT_GRANTED read, gamma's GRANTED_A read and an off-mesh caller all got 403; revoking GRANTED_B removed it from beta on the next sync; with the leader process killed (connection refused) beta's sync failed and its store kept GRANTED_A; audit recorded every read and refusal as mesh:beta or mesh:gamma. My harness mistakes, all fixed and rerun: plain SSH lacked Homebrew on PATH; scripts outside the dependency folder; the routes module exports a factory; the first outage check was invalid because the container had no pkill (audit showed the leader still answering), redone with a real kill. Updated mesh help text, skill references and scaffold mirror. Cleaned all containers, network, images and directories on the mini. Not done: switching live nodes or retiring the shared token (needs owner authorization); mesh owner suite not rerun after the help-text edit; nothing committed.
+
+- 2026-10-13T03:05:00+00:00 — Claude Opus 5.5: Greg: do the live switch myself (skip Jev), always improve the product (saved as invariant invariants-791019ac). Facts found with the product: mini runs published v3.37.0 (no mesh-identity code); its audit shows only TR_MESH_SYNC_TOKEN use; the laptop server (pid 571, started 2026-10-11 23:52) predates the mesh routes, and my earlier '200 from the leader' was the dashboard page served for unknown paths, so the routes are not live. Switching therefore needs a passing full suite, a leader restart and new code on followers. Jev not configured (no model, no DECISION_MODEL_API_KEY); verified current slug typesafe/jev-1.13 from OpenRouter docs; abandoned per Greg.
+- INCIDENT 2026-10-13T03:05:00+00:00 — Claude Opus 5.5: My hand-rolled rsync for test copies included private files. (1) mesh-e2e copy (~/tr-checks/mesh-e2e on the mini) included the repo-root .env (about 20 live credentials: DigitalOcean, Stripe, GitHub, npm, Supabase and others), bind-mounted into short-lived test containers; directory, containers and images were deleted after that test. (2) full-20261013 copy included the brain folder (browser-profile with cookies, encrypted secrets store, logs) and .env; deleted on the mini and locally within minutes, and verified no .env remains under ~/tr-checks. Everything stayed on Greg's machines over the encrypted mesh; no value appeared in any transcript. Rotation is Greg's decision. Root cause: no product command for test snapshots; fixed below.
+- 2026-10-13T03:05:00+00:00 — Claude Opus 5.5: Product fixes. (a) core plugin-loader: a plugin link whose target is missing is now reported as invalid with a removal hint instead of skipped; used it to remove the dangling secrets-manager link (target never existed in any repo or doc). New spec. (b) auth: `secret set --stdin` read stdin with readFileSync(0), which throws EAGAIN on a non-blocking inherited pipe when the producer is slow (reproduced with `secret get | secret set` against a throwaway store: EAGAIN); new src/stdin.mjs waits on EAGAIN with a 1 MB cap. Real pipeline then passed 3/3 with the copied value verified. The new unit spec covers late, immediate, empty and oversized input but does NOT reproduce EAGAIN synthetically (old code also passes it); the real-pipeline check is the evidence. (c) code-quality plugin: new `snapshot --node <name>` builds the copy from git file lists (core plus each linked plugin repo) plus the npm package file list, refuses secret-looking files, writes a SHA-256 manifest, copies over recorded mesh access with --delete; 7 tests pass on the mini; real snapshot verified on the mini (0 private files, manifest check passes). (d) mesh help lists server and grants. (e) route-manifest regenerated (+2/-0: the two mesh secrets routes).
+- 2026-10-13T03:05:00+00:00 — Claude Opus 5.5: Full suite on the mini from the git-only snapshot: 2039 passed / 52 failed in 9 files (rc 1); frontend build rc 0. Causes found: the snapshot lacked the git-ignored but shipped scaffold auth plugin (most failures: 'Required plugin auth is missing'), fixed by adding the npm package list; and the stale route manifest. My run mistakes: a separate `npm ci` in the frontend workspace wiped the root dev dependencies (frontend is an npm workspace); an unproven NODE_ENV theory, withdrawn; zsh nomatch aborted a cleanup; --delete removed my run script from the snapshot. Rerun in progress. Leader restart and the live switch stay blocked until the suite is green.
+
+- 2026-10-13T03:00:00+00:00 — Claude Opus 5.5: Green gates on exact source (code-quality snapshot manifest a9df3710…, 3701 files, 0 private files): core 342 files/2096 tests rc 0; frontend build rc 0; auth owner 11 + 179 rc 0; mesh 309 rc 0; code-quality 18 rc 0; deploy 11 rc 0. Interim fixes this round: scaffold auth copy was stale (11 changes incl. mesh secrets and stdin fix) and its pin wrongly listed .gitignore, which npm never ships; new `npm run sync:scaffold-plugins [--check]` (src/core/scaffold-plugins.mjs + spec) regenerates the copy and pin from the plugin's npm package minus tests plus lockfile; removed an extraneous node_modules/total-recall-brain -> .. self-link npm reported as extraneous (scaffold gate now passes 3/3 locally); route manifest regenerated (+2/-0). Owner-suite failures were environmental (plugins test against their own installed devDependencies by design); installed them in the snapshot and reran green. Proved the earlier auth test failure was not from my stdin change by rerunning with only that change reverted.
+- 2026-10-13T03:00:00+00:00 — Claude Opus 5.5: Restarted the laptop leader (launchd com.totalrecall.brain kickstart at 02:49:34Z; new pid 90072 up at 02:49:37; health status 'degraded' both before and after, not yet diagnosed). Live proof over the real mesh: the mini got {\"keys\":[]} JSON from /api/secrets/mesh and 403 for a direct key; the leader's global audit recorded mesh_denied DEVELOPER_OPENROUTER_API_KEY as mesh:macmini. Findings: leader server uses AGENT_DIR=~/.agent (global store) while CLI from the repo selects the project store, so grants must be written with AGENT_DIR=~/.agent (verified path ~/.agent/skills/total-recall/config/mesh-secrets-policy.json, empty); global brain holds a stale real copy of the mesh plugin lacking `grants`. Mini: secrets audit shows no reads beyond the sync token, so its evidence-based grant set is empty; it runs 3.37.0 code from a git checkout (~/github/total-recall at cff8686, Oct 1) with auto-pull every 5 min blocked since then by an uncommitted change to tracked `knowledge-catalog`; its daemon runs from a separate pinned runtime install. Deploying the mesh sync to the mini therefore needs: commit and push to main (laptop is 6 commits ahead of origin plus 271 uncommitted files), clearing the mini's auto-pull block, and updating the daemon runtime. Stopped for Greg's authorization before committing or pushing.

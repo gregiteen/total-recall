@@ -191,15 +191,9 @@ export default async function edit(args) {
   console.log(`  ✅ Updated ${layerLabel} ${relPath} (${changed.join(', ')})`);
 
   if (parsed.noCompile) return;
-  try {
-    const { compileSurface } = await import('../core/surface.mjs');
-    const brainDir = path.dirname(found.vaultDir);
-    const agentDir = path.dirname(path.dirname(brainDir));
-    await compileSurface({ vaultDir: found.vaultDir, skillsDir: path.join(agentDir, 'skills'),
-      derivedDir: path.join(brainDir, 'memory-derived'), instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'), semantic: false });
-    console.log('  ✅ Local memory indexes and instruction surfaces updated.');
-  } catch (err) {
-    console.error(`  ❌ Memory saved, but local compilation failed: ${err.message}`);
+  const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+  const compiled = await autoCompileSurfaces({ layer: found.layer, semantic: false, force: true });
+  if (!compiled) {
     process.exitCode = 1;
   }
 }

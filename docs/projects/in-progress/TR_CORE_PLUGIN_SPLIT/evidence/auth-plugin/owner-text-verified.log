@@ -1,0 +1,61 @@
+
+> tr-plugin-text@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ isOptOut detects STOP, UNSUBSCRIBE, and CANCEL (0.637ms)
+✔ isOptOut accepts custom keywords (0.052083ms)
+✔ isHelpRequest detects HELP and INFO (0.058333ms)
+✔ OptOutRegistry tracks numbers with add, remove, and query (0.072375ms)
+✔ OptOutRegistry handles empty and invalid inputs (0.557833ms)
+✔ OptOutRegistry.list and clear work (0.069375ms)
+✔ OptOutRegistry accepts a pre-existing Set as storage (0.04275ms)
+✔ createOptOutRegistry is a factory function (0.041042ms)
+✔ engine implements the canonical Operation Contract (spec §6) (16.256ms)
+✔ isolated fixture exports, validates, and round-trips as a sale bundle (spec §16/§17) (5.120916ms)
+✔ sanitizeNumber strips formatting and rejects alphabetic input (0.73075ms)
+✔ normalizeE164 handles NANP, explicit country codes, and rejects junk (0.107709ms)
+✔ isValidE164 and isNanpNumber classify numbers correctly (0.073166ms)
+✔ normalizeNumber throws typed errors for invalid and non-NANP numbers (0.221916ms)
+✔ readPhoneNumber and normalizeMediaUrls normalise inputs (0.662167ms)
+✔ normalizeSendResponse produces a stable shape (0.106833ms)
+✔ NumberPool rotates, de-duplicates, and rejects invalid numbers (0.108084ms)
+✔ constructor validates its dependencies (0.622708ms)
+✔ resolveApiKey accepts injected keys and resolver, rejects ambient keys (0.243916ms)
+✔ sendMessage posts a normalised SMS payload (0.513708ms)
+✔ sendMessage supports multiple recipients, media, and per-send overrides (0.171334ms)
+✔ sendMms requires media and is an alias of sendMessage (0.135167ms)
+✔ sendMessage validates recipients, sender, and message content (0.187458ms)
+✔ client enforces NANP destinations when configured (0.112417ms)
+✔ a number pool supplies rotating senders (0.102083ms)
+✔ API errors surface as TelnyxError with code, status, and detail (0.147833ms)
+✔ transport failures, timeouts, and bad JSON are normalised (6.415ms)
+✔ getMessage fetches a message by id (0.112833ms)
+✔ requests are skipped when the timeout is disabled (0.05625ms)
+✔ optional Telnyx field fallbacks are handled (0.040625ms)
+✔ API errors fall back to the title when no detail is present (0.068333ms)
+✔ an empty per-send from falls back to the configured sender (0.043292ms)
+✔ buildSignedPayload and toBodyString produce the Telnyx signing input (1.362333ms)
+✔ timestampToSeconds accepts seconds and milliseconds (0.085792ms)
+✔ isTimestampFresh enforces the tolerance window symmetrically (0.081959ms)
+✔ ed25519PublicKey decodes every supported representation (0.5715ms)
+✔ verifyEd25519Signature accepts valid signatures and rejects tampering (0.830375ms)
+✔ WebhookVerifier accepts a valid, fresh request (0.796125ms)
+✔ WebhookVerifier rejects stale, replayed, and malformed requests (0.225292ms)
+✔ WebhookVerifier honours a custom tolerance window (0.174625ms)
+✔ WebhookVerifier enforces a maximum body size (0.216042ms)
+✔ getHeader and extractSignatureHeaders read plain and Headers objects (18.135416ms)
+✔ verifyHeaders and assertHeaders accept Headers objects (0.457875ms)
+✔ WebhookVerifier.assert throws on rejection and requires a key (0.10375ms)
+✔ parseWebhookEvent parses strings, buffers, and objects (0.1735ms)
+✔ readPhoneNumber and normalizeMessageEvent map inbound payloads (0.130375ms)
+✔ ed25519PublicKey rejects malformed PEM and DER keys (0.272ms)
+✔ verifyEd25519Signature returns false when the key, signature, or verifier misbehaves (0.1395ms)
+✔ WebhookVerifier accepts a fixed numeric clock (0.115958ms)
+ℹ tests 49
+ℹ suites 0
+ℹ pass 49
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96.20825

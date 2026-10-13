@@ -1,0 +1,13 @@
+fatal: not a git repository (or any of the parent directories): .git
+
+📊 code-quality — javascript — 1 finding(s) (1 error)
+   ran memory-package, dist-freshness, open-source-paths, shipped-package-paths, scaffold-brain-state, ssss-registry, security-dependencies, security-frontend-dependencies at tier=fast in 3.1s, 0min ago
+   ⚠️  NOT run: test(remote) — this is partial coverage.
+   ❓ Could not read git — cannot tell whether this report matches your tree.
+
+── worst files (1–1 of 1) ──
+
+📂 .agents/skills/code-quality/config.json (1)
+  .agents/skills/code-quality/config.json:1:1  DIST-FRESHNESS-FAIL  dist-freshness exited 1 with no parsed findings. Inspect: node .agents/skills/code-quality/core/report.mjs raw dist-freshness
+      ↳    which is how 3.23.0 and 3.23.1 shipped without their own mesh access UI.    Rebuild (on a build host, not the laptop), then publish:      npm --prefix fronte
+

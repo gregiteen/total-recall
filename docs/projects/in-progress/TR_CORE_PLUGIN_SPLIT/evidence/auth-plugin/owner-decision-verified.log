@@ -1,0 +1,44 @@
+
+> tr-plugin-decision@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.1975ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.156792ms)
+✔ writes use stdin and require exact auth readback (0.115834ms)
+✔ Decision accessors extract typed values correctly (0.654375ms)
+✔ requestDecision returns Decision on valid mock response (0.371583ms)
+✔ requestDecision returns null on HTTP error without throwing (0.077291ms)
+✔ requestDecision retries on fallback endpoint when primary fails with 404 (0.1025ms)
+✔ requestDecision returns null when missing required parameters (0.055208ms)
+✔ applyGates validates confidence against thresholds (0.092875ms)
+✔ validateQuestionSet rejects non-object (0.736667ms)
+✔ validateQuestionSet catches all missing required fields (0.128ms)
+✔ validateQuestionSet enforces type marker (0.052209ms)
+✔ validateQuestionSet requires valid id format (0.109291ms)
+✔ validateQuestionSet validates each question shape (0.089292ms)
+✔ validateQuestionSet validates gate thresholds (0.060958ms)
+✔ validateQuestionSet accepts optional record_state (0.056958ms)
+✔ validateQuestionSet validates fallback and owner types (0.053875ms)
+✔ serializeQuestionSet and parseQuestionSet round-trip all three question types (0.768458ms)
+✔ parseQuestionSet rejects malformed SSSS document format (0.111792ms)
+✔ hashState produces deterministic SHA-256 (0.303083ms)
+✔ readDecisionEvents returns empty array when no event file (0.574208ms)
+✔ recordDecisionEvent and readDecisionEvents integration (1.912083ms)
+✔ recordDecisionEvent throws on missing required fields (0.3865ms)
+✔ CLI status --json returns valid JSON (48.188083ms)
+✔ CLI sets list with empty vault returns gracefully (0.637584ms)
+✔ CLI sets validate catches invalid set (0.500292ms)
+✔ CLI sets show returns error for unknown set (0.121292ms)
+✔ engine implements the canonical Operation Contract (spec §6) (15.654541ms)
+✔ isolated fixture exports, validates, and round-trips as a sale bundle (spec §16/§17) (5.123125ms)
+✔ validateQuestionSet catches missing fields (1.188875ms)
+✔ serializeQuestionSet and parseQuestionSet round-trip cleanly (0.204625ms)
+✔ recordDecisionEvent appends immutable jsonl audit records (1.618584ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 131.15

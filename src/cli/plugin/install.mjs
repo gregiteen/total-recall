@@ -22,6 +22,8 @@ export async function installPlugin(args = []) {
     if (cmds.created.length) console.log(`   Commands: ${cmds.created.map((c) => `total-recall ${c}`).join(', ')}`);
     for (const c of cmds.skipped) console.log(`   Skipped command '${c.name}': ${c.reason}`);
     console.log('');
+    const { autoCompileSurfaces } = await import('../../core/auto-compile.mjs');
+    await autoCompileSurfaces({ layer: isGlobal ? 'global' : 'project', semantic: false, force: true });
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);

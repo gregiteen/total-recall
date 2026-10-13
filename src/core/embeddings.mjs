@@ -25,7 +25,7 @@ import {
   getVssLoadablePath,
 } from 'sqlite-vss';
 
-import { googleApiKey, openRouterApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
+import { googleApiKey, openAiApiKey, openRouterApiKey, embedModel, brainDir as defaultBrainDir } from './config.mjs';
 import { logger } from './logger.mjs';
 import {
   resolveOllamaEndpoint,
@@ -42,17 +42,17 @@ const DEFAULT_EMBED_MODEL = embedModel;
  */
 export const EMBEDDING_DIMS = 768;
 
-/** Resolve API keys at call time so tests can set env after import. */
+/** Provider configuration is projected by the required auth owner. */
 function resolveGoogleApiKey() {
-  return googleApiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || null;
+  return googleApiKey || null;
 }
 
 function resolveOpenAiApiKey() {
-  return process.env.OPENAI_API_KEY || null;
+  return openAiApiKey || null;
 }
 
 function resolveOpenRouterApiKey() {
-  return openRouterApiKey || process.env.OPENROUTER_API_KEY || null;
+  return openRouterApiKey || null;
 }
 
 let dbInstance = null;

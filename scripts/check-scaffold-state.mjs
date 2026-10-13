@@ -17,7 +17,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findBrainState, BRAIN_STATE_MANIFEST } from '../src/core/brain-state.mjs';
+import crypto from 'node:crypto';
+import { findBrainState, isBrainState, BRAIN_STATE_MANIFEST } from '../src/core/brain-state.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCAFFOLD_BRAIN = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall');
@@ -25,13 +26,34 @@ const SHIPPED_MANIFEST = path.join(SCAFFOLD_BRAIN, 'scripts', 'brain-state.json'
 
 let failed = 0;
 
+// Bundled owner source is a pinned release artifact, not an installed brain's
+// plugin directory. Installed plugins remain protected by the state manifest.
+const pluginRoot = path.join(SCAFFOLD_BRAIN, 'plugins');
+const pluginLock = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/scaffold-plugins.json'), 'utf8'));
+let pinnedPluginsValid = true;
+const seen = new Set();
+function checkPluginSource(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const absolute = path.join(dir, entry.name);
+    const relative = path.relative(pluginRoot, absolute).split(path.sep).join('/');
+    if (entry.isSymbolicLink() || isBrainState(relative)) { pinnedPluginsValid = false; continue; }
+    if (entry.isDirectory()) { checkPluginSource(absolute); continue; }
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(absolute)).digest('hex');
+    seen.add(relative);
+    if (pluginLock[relative] !== digest) pinnedPluginsValid = false;
+  }
+}
+if (fs.existsSync(pluginRoot)) checkPluginSource(pluginRoot);
+if (Object.keys(pluginLock).some(file => !seen.has(file))) pinnedPluginsValid = false;
+if (!pinnedPluginsValid) { console.error('❌ scaffold plugin source differs from its explicit release allowlist or contains state'); failed = 1; }
+
 // 1. Nothing state-like may ship.
 const found = findBrainState(SCAFFOLD_BRAIN).filter((rel) => {
   // memory-vault is the one deliberate exception: a small curated set of seed
   // nodes ships so a new brain starts with the operating rules. It is allowed
   // ONLY because sync-scaffold copies an explicit allowlist into it rather
   // than syncing the directory.
-  return !rel.startsWith('memory-vault');
+  return !rel.startsWith('memory-vault') && !(rel === 'plugins' && pinnedPluginsValid);
 });
 
 if (found.length) {

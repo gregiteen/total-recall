@@ -167,7 +167,7 @@ export async function streamParallelContext({
     };
   }
 
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || googleApiKey;
+  const apiKey = googleApiKey;
   if (!apiKey) throw new Error('No Gemini API key available for Flash streaming');
 
   // ── Tier 0: Invariants (instant, no LLM) ──
@@ -263,7 +263,7 @@ export async function streamParallelContext({
  * Quick health check — verify Flash API connectivity.
  */
 export async function checkFlashHealth() {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || googleApiKey;
+  const apiKey = googleApiKey;
   if (!apiKey) return { status: 'unhealthy', error: 'No API key' };
 
   const url = `${FLASH_API_URL}/${FLASH_MODEL}:generateContent?key=${apiKey}`;

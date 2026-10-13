@@ -1,0 +1,28 @@
+✔ clean Mac collector reports actual checks and localhost listener scope (2.87725ms)
+✔ disabled firewall, wildcard listener and missing privilege are not a clean bill (0.523708ms)
+✔ Linux collector identifies effective unsafe SSH and wildcard TCP binds (0.746167ms)
+✔ unsupported platform is incomplete (1.127666ms)
+✔ permission hardening verifies modes and leaves symlink targets untouched (1.580792ms)
+✔ symlink SSH directory is refused (1.674375ms)
+✔ fleet includes offline and forged reports in missing coverage (0.312334ms)
+✔ fleet accepts a fresh risk report with exit one and rejects stale report (0.155166ms)
+✔ scanner reports unsafe source without leaking matched secrets and fails missing targets (2.051875ms)
+✔ manifest identifies the plugin (0.71025ms)
+✔ every file the manifest references exists (0.149417ms)
+✔ status lists machine and fleet functionality without credential or health claims (0.775708ms)
+✔ authenticated encryption rejects tampering and wrong passphrases (99.195125ms)
+✔ probe requires an actual target and cannot fabricate HTTP 200 (0.207709ms)
+✔ probe checks actual HTTPS response and missing headers (18.851375ms)
+✔ plugin audit inspects explicit installed fixture and refuses manifest pseudo hardening (2.934334ms)
+✔ missing scan target and unsafe credential argv fail closed (0.174917ms)
+✔ ambient master key cannot bypass an unavailable auth plugin (0.623375ms)
+✔ signing uses auth owner, binds CSRF to a session and rejects tampered challenges (1.495291ms)
+✔ UI renders real risk reports, escapes finding text and shows unavailable runtime (65.426583ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 502.203542

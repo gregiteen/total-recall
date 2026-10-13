@@ -70,4 +70,20 @@ describe('LoginPage', () => {
       expect(onAuth).toHaveBeenCalled();
     });
   });
+
+  it('renders Passkey and Google login buttons when providers are active', async () => {
+    vi.mocked(api.getAuthStatus).mockResolvedValue({ configured: true });
+    vi.mocked(api.getAuthProviders).mockResolvedValue({
+      password: { configured: true },
+      passkey: { enabled: true, has_passkeys: true, count: 1 },
+      google: { configured: true, client_id: 'test-google' },
+    });
+
+    render(<LoginPage onAuthenticated={() => {}} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sign in with Passkey/i)).toBeInTheDocument();
+      expect(screen.getByText(/Sign in with Google/i)).toBeInTheDocument();
+    });
+  });
 });

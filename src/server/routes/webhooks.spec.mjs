@@ -1,9 +1,10 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../../core/plugin-runtime.mjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import crypto from 'node:crypto';
 import webhooksRouter from './webhooks.mjs';
-import * as secretsStore from '../../core/secrets-store.mjs';
+const secretsStore = await __loadOwnedPlugin('auth', 'secrets-store');
 import * as operations from '../../core/ssss-operation-service.mjs';
 import * as vfs from '../../core/vfs-documents.mjs';
 
@@ -11,7 +12,14 @@ vi.mock('../auth.mjs', () => ({
   requireAuth: (req, _res, next) => { req.auth = { scopes: ['*'] }; next(); },
   requireScope: () => (_req, _res, next) => next(),
 }));
-vi.mock('../../core/secrets-store.mjs', () => ({ getSecret: vi.fn(), setSecret: vi.fn() }));
+vi.mock('../../core/plugin-runtime.mjs', () => {
+  const store = { getSecret: vi.fn(), setSecret: vi.fn() };
+  return { loadPluginModule: async (id, name) => {
+    if (id === 'auth' && name === 'configuration') return { runtimeConfiguration: () => ({}) };
+    if (id !== 'auth' || name !== 'secrets-store') throw new Error('Unexpected plugin dependency');
+    return store;
+  } };
+});
 vi.mock('../../core/vfs-documents.mjs', () => ({
   listVfsDocumentsUnder: vi.fn(),
   findVfsDocumentByPath: vi.fn(),

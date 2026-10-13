@@ -1,0 +1,55 @@
+
+> tr-plugin-design@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.686125ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.167958ms)
+✔ writes use stdin and require exact auth readback (0.122166ms)
+✔ buildSystemPrompt contains a role section and exact token values (0.786042ms)
+✔ buildSystemPrompt mentions the requested output format (0.092708ms)
+✔ buildSystemPrompt with empty tokens still produces a valid prompt (0.044666ms)
+✔ buildMessages returns a system message and a user message (0.089917ms)
+✔ buildMessages injects history when provided (0.067292ms)
+✔ buildMessages injects systemExtra when provided (0.049834ms)
+✔ resolveApiKey reads auth and ignores ambient keys (104.697166ms)
+✔ callDesignLlm makes a real fetch (mock) and parses the response (48.114291ms)
+✔ callDesignLlm throws on HTTP error (43.994917ms)
+✔ callDesignLlm throws when response has no choices (43.604792ms)
+✔ generateDesign is the end-to-end convenience wrapper (44.343209ms)
+✔ DEFAULTS are frozen and carry reasonable defaults (0.058833ms)
+✔ engine implements the canonical Operation Contract (spec §6) (20.138917ms)
+✔ isolated fixture exports, validates, and round-trips as a sale bundle (spec §16/§17) (7.317458ms)
+✔ parseDesignTokens separates frontmatter from markdown prose (3.094917ms)
+✔ color tokens normalize to a kebab-case map and CSS custom properties (0.2895ms)
+✔ typography tokens cover families, scale, and weights (0.197291ms)
+✔ spacing tokens normalize to --space-* custom properties (1.359166ms)
+✔ radius tokens normalize to --radius-* custom properties (0.2ms)
+✔ extra structured sections are tokenized but metadata assets are excluded (0.159375ms)
+✔ css output is a valid :root block (0.187ms)
+✔ toCssVariables honours a custom selector and raw property maps (0.134708ms)
+✔ tailwind theme maps canonical groups to Tailwind keys (0.134458ms)
+✔ json output is a detached, serializable copy of the token map (0.282166ms)
+✔ bare YAML (no frontmatter) is parsed directly, keeping unquoted hex colors (0.152916ms)
+✔ trailing inline comments are stripped without harming quoted values (0.099459ms)
+✔ flow-style font stacks and nested color groups are supported (0.1595ms)
+✔ top-level verbatim key aliases (fonts / radius) still resolve (0.490833ms)
+✔ object input is normalized the same way as YAML input (0.051167ms)
+✔ empty input yields an empty but well-formed result (0.036792ms)
+✔ malformed mapping entries throw a DesignTokenError (0.174042ms)
+✔ a non-object frontmatter document throws a DesignTokenError (0.085583ms)
+✔ unsupported input types throw a DesignTokenError (0.05275ms)
+✔ extractFrontmatter handles missing frontmatter and opening-only blocks (0.050333ms)
+✔ parseYaml handles nested maps, lists, and typed scalars (0.063834ms)
+✔ normalizeDesignTokens returns {} for nullish input and throws on scalars (0.034208ms)
+✔ toCustomProperties and toTailwindTheme are defensive against bad input (0.023583ms)
+✔ readDesignTokens reads and parses a DESIGN.md from disk (0.952958ms)
+✔ readDesignTokens requires a path (0.046834ms)
+✔ camelToKebab normalizes token keys (0.038042ms)
+ℹ tests 43
+ℹ suites 0
+ℹ pass 43
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 356.914583

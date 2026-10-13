@@ -1,0 +1,15 @@
+
+  Importing OpenWiki from: /Users/greg/Github/total-recall/openwiki
+  Target Brain: project
+  Imported: openwiki-architecture
+  Imported: openwiki-auth
+  Imported: openwiki-changes
+  Imported: openwiki-crm
+  Imported: openwiki-plugins
+  Imported: openwiki-security
+
+  Import Summary:
+  Imported: 6 files
+  Errors:   0 files
+
+  OpenWiki knowledge graph successfully indexed into Total Recall.

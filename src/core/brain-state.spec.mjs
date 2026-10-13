@@ -16,6 +16,8 @@ describe('isBrainState', () => {
     expect(isBrainState('research-queue.jsonl')).toBe(true); // 3.25.2: shipped queued topics
     expect(isBrainState('config/secrets.enc')).toBe(true);
     expect(isBrainState('memory-vault/facts/x.md')).toBe(true);
+    expect(isBrainState('derived/embeddings.db')).toBe(true); // legacy scaffold state
+    expect(isBrainState('embeddings.db')).toBe(true);
   });
 
   it('treats real templates as templates', () => {
@@ -82,11 +84,11 @@ describe('findBrainState', () => {
 
 describe('the shipped scaffold', () => {
   it('carries no per-brain state (the release gate, asserted in-suite)', () => {
-    const scaffold = path.join(REPO, 'scaffold', '.agent', 'skills', 'total-recall');
-    // memory-vault is the one deliberate exception: an explicit allowlist of
-    // seed nodes ships so a new brain starts with the operating rules.
-    const offenders = findBrainState(scaffold).filter((r) => !r.startsWith('memory-vault'));
-    expect(offenders).toEqual([]);
+    // The gate checks curated seeds and hash-pinned bundled owner source.
+    // Installed plugins remain per-brain state and must never be overwritten.
+    expect(isBrainState('plugins/installed/config/secrets.enc')).toBe(true);
+    const output = execFileSync(process.execPath, [path.join(REPO, 'scripts/check-scaffold-state.mjs')], { cwd: REPO, encoding: 'utf8' });
+    expect(output).toContain('carries no per-brain state');
   });
 
   it('ships a brain-state manifest identical to the canonical one', () => {
@@ -101,16 +103,32 @@ describe('the shipped scaffold', () => {
   });
 
   it('the gate script exits non-zero when state is present', () => {
-    // A gate that cannot fail is decoration.
     const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-gate-'));
-    fs.writeFileSync(path.join(fake, 'research-queue.jsonl'), '{"topic":"leak"}');
-    expect(findBrainState(fake)).toContain('research-queue.jsonl');
-    fs.rmSync(fake, { recursive: true, force: true });
-
-    // and passes on the real tree
-    const out = execFileSync('node', [path.join(REPO, 'scripts/check-scaffold-state.mjs')], {
-      cwd: REPO, encoding: 'utf8',
-    });
-    expect(out).toMatch(/carries no per-brain state/);
+    try {
+      for (const relative of ['scripts/check-scaffold-state.mjs', 'scripts/scaffold-plugins.json', 'src/core/brain-state.mjs', 'src/core/brain-state.json', 'package.json']) {
+        const destination = path.join(fake, relative);
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.copyFileSync(path.join(REPO, relative), destination);
+      }
+      const brain = path.join(fake, 'scaffold/.agent/skills/total-recall');
+      fs.mkdirSync(path.join(brain, 'scripts'), { recursive: true });
+      fs.copyFileSync(path.join(REPO, 'src/core/brain-state.json'), path.join(brain, 'scripts/brain-state.json'));
+      fs.cpSync(path.join(REPO, 'scaffold/.agent/skills/total-recall/plugins'), path.join(brain, 'plugins'), { recursive: true });
+      const run = () => execFileSync(process.execPath, [path.join(fake, 'scripts/check-scaffold-state.mjs')], { cwd: fake, encoding: 'utf8', stdio: 'pipe' });
+      expect(run()).toContain('carries no per-brain state');
+      fs.mkdirSync(path.join(brain, 'derived'));
+      fs.writeFileSync(path.join(brain, 'derived/embeddings.db'), 'fixture');
+      expect(run).toThrow();
+      fs.rmSync(path.join(brain, 'derived'), { recursive: true });
+      const source = path.join(brain, 'plugins/auth/plugin.json');
+      const original = fs.readFileSync(source);
+      fs.appendFileSync(source, '\n');
+      expect(run).toThrow();
+      fs.writeFileSync(source, original);
+      fs.writeFileSync(path.join(brain, 'plugins/auth/leaked.enc'), 'fixture');
+      expect(run).toThrow();
+    } finally {
+      fs.rmSync(fake, { recursive: true, force: true });
+    }
   });
 });

@@ -1,0 +1,7 @@
+
+> total-recall-brain@3.39.1 routes:manifest
+> node scripts/generate-route-manifest.mjs
+
+  + POST /api/plugins/:id/credentials
+
+Wrote 254 routes to route-manifest.json (+1/-0). Commit it with the route change.

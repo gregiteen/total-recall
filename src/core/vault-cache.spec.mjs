@@ -9,7 +9,7 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import * as vault from './vault.mjs';
-import { getNodes, invalidate } from './vault-cache.mjs';
+import { getNodes, invalidate, isGeneratedVaultPath } from './vault-cache.mjs';
 
 describe('Vault Cache', () => {
   let tempDir;
@@ -100,5 +100,29 @@ describe('Vault Cache', () => {
     });
     expect(result.error).toBeUndefined();
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  it('treats regenerated bundle files and hidden paths as non-nodes', () => {
+    expect(isGeneratedVaultPath('index.md')).toBe(true);
+    expect(isGeneratedVaultPath('log.md')).toBe(true);
+    expect(isGeneratedVaultPath(path.join('.events', 'audit.md'))).toBe(true);
+    expect(isGeneratedVaultPath(path.join('facts', 'real-node.md'))).toBe(false);
+    expect(isGeneratedVaultPath(path.join('facts', 'index.md'))).toBe(false);
+  });
+
+  it('keeps the cache when only index.md or log.md are rewritten', async () => {
+    fs.mkdirSync(path.join(tempDir, 'facts'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, 'facts', 'n.md'), '---\nslug: n\ntitle: N\ncategory: facts\n---\nbody');
+    const spy = vi.spyOn(vault, 'loadNodes');
+    getNodes(tempDir);
+    // Let the watcher drain events for the node written above, then settle.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    getNodes(tempDir);
+    const settled = spy.mock.calls.length;
+    fs.writeFileSync(path.join(tempDir, 'index.md'), '# generated\n');
+    fs.writeFileSync(path.join(tempDir, 'log.md'), '# generated\n');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    getNodes(tempDir);
+    expect(spy.mock.calls.length).toBe(settled);
   });
 });

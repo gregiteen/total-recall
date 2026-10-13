@@ -6,9 +6,7 @@ import { writeFileSecure } from '../core/secure-file.mjs';
 
 // Pre-defined mapping of known settings
 const KEY_MAP = {
-  'password_hash': { file: 'security', path: 'dashboard.password_hash', type: 'string' },
   'session_ttl_hours': { file: 'security', path: 'dashboard.session_ttl_hours', type: 'number' },
-  'force_password_reset': { file: 'security', path: 'dashboard.force_password_reset', type: 'boolean' },
   'api_requests_per_minute': { file: 'security', path: 'rate_limits.api_requests_per_minute', type: 'number' },
   'sandbox_requests_per_minute': { file: 'security', path: 'rate_limits.sandbox_requests_per_minute', type: 'number' },
   'ingest_requests_per_minute': { file: 'security', path: 'rate_limits.ingest_requests_per_minute', type: 'number' },
@@ -30,6 +28,9 @@ const KEY_MAP = {
 };
 
 function resolveKeyInfo(key) {
+  if (/(?:^|[._-])(?:password|secret|token|pats?|credential|force_password_reset)(?:$|[._-])/i.test(key) || key.split('.').some(part => ['__proto__', 'constructor', 'prototype'].includes(part))) {
+    throw new Error('Credential configuration belongs to the auth plugin; use total-recall auth --help');
+  }
   if (KEY_MAP[key]) return KEY_MAP[key];
 
   for (const info of Object.values(KEY_MAP)) {
@@ -185,6 +186,7 @@ export default async function configCommand(args) {
       const info = resolveKeyInfo(key);
       const targetObj = objFor(info.file);
       const value = getNestedProp(targetObj, info.path);
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) throw new Error('Read an individual non-credential setting');
       
       if (args.includes('--json') || args.includes('-j')) {
         console.log(JSON.stringify({ key, value }));

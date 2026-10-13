@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
@@ -277,62 +278,14 @@ function resolveAgent(config) {
  * @param {object} config - Runtime config from loadRuntimeConfig()
  * @returns {string} The agent's text response
  */
-/**
- * Merge every secrets layer the runtime can see.
- *
- * Precedence, lowest first (each later layer overrides the earlier ones):
- *   1. <agentRoot>/secrets.enc                                   legacy flat store
- *   2. <cwd>/.agent/secrets.enc                                  legacy flat store
- *   3. ~/.agent/skills/total-recall/config/secrets.enc           global brain
- *   4. <agentRoot>/skills/total-recall/config/secrets.enc        project brain
- *
- * Project-over-global matches `resolveBrainDir('auto')`, which every other TR
- * component already uses: the project store is the more specific answer. The
- * legacy flat stores are leftovers from older installs — they may still hold
- * keys nothing else has, but they must never mask a canonical brain store.
- *
- * The previous implementation took the first path that held ANY keys and
- * stopped, in legacy-first order. A stale 12-key <cwd>/.agent/secrets.enc
- * therefore shadowed the 100-key brain store completely, and its dead
- * `google_api_key` (AIza…, HTTP 400 from generativelanguage) overrode the
- * working one — so every spawned agent received a key that cannot call Gemini
- * while the good key sat unreachable one layer down.
- *
- * Exported for tests; callers use the defaults.
- *
- * @param {{ cwd?: string, agentRoot?: string, home?: string }} [opts]
+/** Resolve provider credentials only from the explicitly selected auth store.
+ * Missing, locked or invalid stores fail through the owning plugin.
+ * @param {{ brainDir?: string, agentRoot?: string }} [opts]
  * @returns {Promise<Record<string, string>>}
  */
 export async function loadDynamicSecrets(opts = {}) {
-  const cwd = opts.cwd ?? process.cwd();
-  const agentRoot = opts.agentRoot ?? agentDir;
-  const home = opts.home ?? os.homedir();
-
-  const { loadSecretsSync } = await import('./secrets-store.mjs');
-  const layers = [
-    path.join(agentRoot, 'secrets.enc'),
-    path.join(cwd, '.agent', 'secrets.enc'),
-    path.join(home, '.agent', 'skills', 'total-recall', 'config', 'secrets.enc'),
-    path.join(agentRoot, 'skills', 'total-recall', 'config', 'secrets.enc'),
-  ];
-
-  const merged = {};
-  for (const p of layers) {
-    if (!fs.existsSync(p)) continue;
-    try {
-      const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
-      const dir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
-      const loaded = loadSecretsSync(dir);
-      for (const [k, v] of Object.entries(loaded)) {
-        if (k === '__tr_secrets_meta') continue;
-        if (v) merged[k] = v;
-      }
-    } catch {
-      // An unreadable or undecryptable layer must not break dispatch; the
-      // remaining layers still apply.
-    }
-  }
-  return merged;
+  const { runtimeCredentials } = await __loadOwnedPlugin('auth', 'runtime-credentials');
+  return runtimeCredentials({ brainDir: opts.brainDir || process.env.TR_SECRETS_BRAIN || path.join(opts.agentRoot || agentDir, 'skills', 'total-recall') });
 }
 
 export async function callLocalRuntime(prompt, system, config) {
@@ -352,6 +305,7 @@ export async function callLocalRuntime(prompt, system, config) {
 
   // Loaded on every dispatch so a store edit takes effect without a restart.
   const dynamicSecrets = await loadDynamicSecrets();
+  const { sanitizeRuntimeEnvironment } = await __loadOwnedPlugin('auth', 'runtime-credentials');
 
   // Try agents in priority order, never re-trying one that already failed.
   //
@@ -441,8 +395,6 @@ export async function callLocalRuntime(prompt, system, config) {
     validateCommand(cmd, { argvSpawn: true });
 
     const xaiKey =
-      process.env.XAI_API_KEY ||
-      process.env.GROK_API_KEY ||
       dynamicSecrets.XAI_API_KEY ||
       dynamicSecrets.xai_api_key ||
       dynamicSecrets.GROK_API_KEY ||
@@ -450,24 +402,26 @@ export async function callLocalRuntime(prompt, system, config) {
       '';
 
     const spawnEnv = {
-      ...process.env,
+      ...sanitizeRuntimeEnvironment(process.env),
       // Ensure common CLI install dirs are visible (e.g. ~/.local/bin/grok)
       PATH: [
         path.join(os.homedir(), '.local', 'bin'),
         path.join(os.homedir(), '.grok', 'bin'),
         process.env.PATH || '',
       ].filter(Boolean).join(path.delimiter),
-      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
-      GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || dynamicSecrets.google_api_key || googleApiKey,
-      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || dynamicSecrets.anthropic_api_key,
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || dynamicSecrets.openai_api_key,
-      XAI_API_KEY: xaiKey || process.env.XAI_API_KEY,
-      GROK_API_KEY: xaiKey || process.env.GROK_API_KEY,
-      TAVILY_API_KEY: process.env.TAVILY_API_KEY || dynamicSecrets.tavily_api_key || tavilyApiKey,
-      BRAVE_API_KEY: process.env.BRAVE_API_KEY || dynamicSecrets.brave_api_key || braveApiKey,
-      EXA_API_KEY: process.env.EXA_API_KEY || dynamicSecrets.exa_api_key || exaApiKey,
-      SERPER_API_KEY: process.env.SERPER_API_KEY || dynamicSecrets.serper_api_key || serperApiKey,
-      GITHUB_TOKEN: process.env.GITHUB_TOKEN || dynamicSecrets.github_token || githubToken,
+      GOOGLE_API_KEY: dynamicSecrets.google_api_key || dynamicSecrets.gemini_api_key,
+      GEMINI_API_KEY: dynamicSecrets.gemini_api_key || dynamicSecrets.google_api_key,
+      ANTHROPIC_API_KEY: dynamicSecrets.anthropic_api_key,
+      OPENAI_API_KEY: dynamicSecrets.openai_api_key,
+      XAI_API_KEY: xaiKey,
+      GROK_API_KEY: xaiKey,
+      TAVILY_API_KEY: dynamicSecrets.tavily_api_key,
+      BRAVE_API_KEY: dynamicSecrets.brave_api_key,
+      EXA_API_KEY: dynamicSecrets.exa_api_key,
+      SERPER_API_KEY: dynamicSecrets.serper_api_key,
+      GITHUB_TOKEN: dynamicSecrets.github_token,
+      OPENROUTER_API_KEY: dynamicSecrets.openrouter_api_key,
+      BRAVE_SEARCH_API_KEY: dynamicSecrets.brave_search_api_key,
     };
 
     logger.info('api', 'SPAWN_ENV GOOGLE_API_KEY length: ' + (spawnEnv.GOOGLE_API_KEY ? spawnEnv.GOOGLE_API_KEY.length : 0));

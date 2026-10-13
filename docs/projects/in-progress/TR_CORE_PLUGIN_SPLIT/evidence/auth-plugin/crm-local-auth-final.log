@@ -1,0 +1,36 @@
+test_generated_api_transport_uses_auth_even_with_ambient_key (test_auth_credentials.ApiTransportBoundaryTests) ... ok
+test_missing_auth_does_not_request_or_start_local_daemon (test_auth_credentials.ApiTransportBoundaryTests) ... ok
+test_delete_requires_verified_absence (test_auth_credentials.AuthTransportTests) ... ok
+test_existing_key_or_metadata_cannot_certify_failed_readback (test_auth_credentials.AuthTransportTests) ... ok
+test_explicit_missing_is_not_ambient (test_auth_credentials.AuthTransportTests) ... ok
+test_explicit_provision_preserves_existing_and_propagates_auth_error (test_auth_credentials.AuthTransportTests) ... ok
+test_explicit_provision_uses_auth_generation_and_validates_readback (test_auth_credentials.AuthTransportTests) ... ok
+test_failed_or_malformed_response_never_returns_missing_or_leaks_output (test_auth_credentials.AuthTransportTests) ... ok
+test_instance_scoping_is_distinct_and_requires_absolute_instance (test_auth_credentials.AuthTransportTests) ... ok
+test_isolated_flag_cannot_replace_auth_store (test_auth_credentials.AuthTransportTests) ... ok
+test_selected_store_required_without_home_fallback (test_auth_credentials.AuthTransportTests) ... ok
+test_unavailable_selected_command_has_no_binary_retry (test_auth_credentials.AuthTransportTests) ... ok
+test_user_load_errors_propagate_without_cached_answer (test_auth_credentials.AuthTransportTests) ... ok
+test_verified_stdin_write_waits_for_readback (test_auth_credentials.AuthTransportTests) ... ok
+test_cli_has_no_auto_issue_or_refresh_fallback (test_auth_credentials.OperatorBoundaryTests) ... ok
+test_cli_uses_auth_and_ignores_ambient_key (test_auth_credentials.OperatorBoundaryTests) ... ok
+test_actual_oauth_client_functions_use_auth_config_without_legacy_file_access (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_auth_errors_never_become_missing_or_false_success (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_conflict_preflight_preserves_source_and_writes_nothing (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_corrupt_or_nonobject_settings_fail_without_replacement (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_credentials_never_enter_peer_payload (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_dynamic_secret_fields_are_auth_backed_and_update_validates_first (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_explicit_migration_verifies_and_removes_plaintext_and_sync_stamp (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_legacy_read_rejects_without_printing_or_modifying_values (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_migration_failure_or_mismatch_preserves_plaintext_source (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_migration_refuses_cleanup_when_source_changes (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_missing_credentials_ignore_ambient_and_do_not_generate (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_nested_setting_cannot_hide_a_credential (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_no_ambient_import_or_oauth_client_file_or_file_based_linked_success (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_projection_clears_ambient_and_ignores_supplied_secret (test_local_config_auth.LocalConfigAuthTests) ... ok
+test_save_routes_credentials_and_retains_nonsecret_settings (test_local_config_auth.LocalConfigAuthTests) ... ok
+
+----------------------------------------------------------------------
+Ran 31 tests in 0.098s
+
+OK

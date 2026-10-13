@@ -18,6 +18,8 @@ export async function removePlugin(args = []) {
     console.log(`\n✅ Removed plugin '${id}' (${result.scope}) from ${result.dir}`);
     if (removed.length) console.log(`   Removed commands: ${removed.join(', ')}`);
     console.log('');
+    const { autoCompileSurfaces } = await import('../../core/auto-compile.mjs');
+    await autoCompileSurfaces({ layer: result.scope === 'global' ? 'global' : 'project', semantic: false, force: true });
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);
