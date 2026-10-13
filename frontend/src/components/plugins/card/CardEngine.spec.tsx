@@ -11,6 +11,7 @@ import { brandStyle, contrast, inkOn } from './theme'
 vi.mock('../../../api/plugins', () => ({ runPluginCommand: vi.fn(async () => ({ success: true, output: '{"state":"ok","lines":2}' })) }))
 vi.mock('../../../api/_base', () => ({ API_BASE: '', apiFetch: vi.fn(async () => ({ ok: false })) }))
 vi.mock('../PluginSettings', () => ({ PluginSettings: () => <div>settings-form</div> }))
+vi.mock('../PluginPanel', async (original) => ({ ...await original<typeof import('../PluginPanel')>(), PluginPanel: ({ plugin }: { plugin: PluginInfo }) => <div>{plugin.id} owner interface</div> }))
 
 const plugin = {
   id: 'demo', name: 'Demo', description: 'Demo plugin', cli: { command: 'demo', subcommands: [{ name: 'status' }, { name: 'send', description: 'Send one' }, { name: 'lookup' }] },
@@ -34,9 +35,10 @@ describe('card contract', () => {
     expect(card.commands.get('send')!.effect).toBe('send')
     expect(card.status).toEqual({ command: 'status', refreshSeconds: 30 })
   })
-  it('infers read for lookups and falls back from unknown branding', () => {
-    const bare = normalizeCard({ id: 'x', name: 'X', description: '', cli: { command: 'x', subcommands: [{ name: 'list' }, { name: 'purge' }] }, manifest: { branding: { color: 'red', font: "'Syne', sans-serif" } } } as unknown as PluginInfo)
-    expect(bare.commands.get('list')!.effect).toBe('read')
+  it('requires explicit read effects even for list/config groups and falls back from unknown branding', () => {
+    const bare = normalizeCard({ id: 'x', name: 'X', description: '', cli: { command: 'x', subcommands: [{ name: 'list' }, { name: 'config' }, { name: 'purge' }] }, manifest: { branding: { color: 'red', font: "'Syne', sans-serif" } } } as unknown as PluginInfo)
+    expect(bare.commands.get('list')!.effect).toBe('write')
+    expect(bare.commands.get('config')!.effect).toBe('write')
     expect(bare.commands.get('purge')!.effect).toBe('write')
     expect(bare.branding.color).toBe('#475569'); expect(bare.branding.font).toBe('system')
   })
@@ -56,6 +58,11 @@ describe('theme', () => {
 })
 
 describe('card engine', () => {
+  it('mounts the owner interface for a live region rather than substituting command forms', () => {
+    render(<CardEngine plugin={{ ...plugin, manifest: { ...plugin.manifest, card_layout: { template: 'workbench', regions: [{ widget: 'live' }] } } }} />)
+    expect(screen.getByText('demo owner interface')).toBeTruthy()
+    expect(screen.queryByText('total-recall demo send <to> --json')).toBeNull()
+  })
   it('shows real status, the CLI line for every command, and credits the provider', async () => {
     render(<CardEngine plugin={plugin} />)
     await waitFor(() => expect(screen.getAllByText('ok').length).toBeGreaterThan(0))
@@ -79,5 +86,39 @@ describe('card engine', () => {
     expect(screen.getByRole('dialog')).toBeTruthy(); expect(screen.getByText('settings-form')).toBeTruthy()
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+  it('contains keyboard focus in the drawer and restores the opener', async () => {
+    render(<CardEngine plugin={plugin} />)
+    const opener = screen.getByText('Settings & usage')
+    opener.focus()
+    fireEvent.click(opener)
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Session activity' }))
+    fireEvent.keyDown(document.activeElement!, { key: 'Tab' })
+    expect(document.activeElement).toBe(close)
+    fireEvent.keyDown(close, { key: 'Escape' })
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+  })
+  it('does not invent a zero usage meter when the source has no measurements', async () => {
+    render(<CardEngine plugin={{ ...plugin, manifest: { ...plugin.manifest, card_layout: { template: 'monitor', regions: [{ widget: 'gauge', source: { command: 'status' } }] } } }} />)
+    await waitFor(() => expect(screen.getByText('No valid usage measurement is available.')).toBeTruthy())
+    expect(screen.queryByRole('meter')).toBeNull()
+  })
+  it('shows Open workspace and mounts workspace tab for plugins with workspace', async () => {
+    const phonePlugin = {
+      ...plugin,
+      id: 'phone',
+      manifest: {
+        ...plugin.manifest,
+        workspace: { component: 'PhoneDialer', tabs: ['dialer', 'calls'], permissions: ['microphone'] }
+      }
+    } as unknown as PluginInfo
+    render(<CardEngine plugin={phonePlugin} />)
+    await waitFor(() => expect(screen.getByText('Open workspace')).toBeTruthy())
+    fireEvent.click(screen.getByText('Open workspace'))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
+    expect(screen.getByRole('tab', { name: 'Workspace' })).toBeTruthy()
   })
 })

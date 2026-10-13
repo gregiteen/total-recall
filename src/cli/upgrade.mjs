@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../core/plugin-runtime.mjs';
 /**
  * total-recall upgrade
  *
@@ -15,7 +16,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { verifySignature } from '../core/crypto.mjs';
+const { verifySignature } = await __loadOwnedPlugin('auth', 'crypto');
 import { runMigration } from '../core/migrate.mjs';
 
 const AGENT_DIR = path.join(os.homedir(), '.agent');

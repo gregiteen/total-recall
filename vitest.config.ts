@@ -1,6 +1,13 @@
 import { fileURLToPath } from 'node:url'
+import fs from 'node:fs'
+import { discoverPlugins } from './src/core/plugin-loader.mjs'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+
+// Owner repositories are installed ESM packages, outside the host module graph.
+const pluginPackages = discoverPlugins(fileURLToPath(new URL('.', import.meta.url)))
+  .filter(plugin => plugin.valid)
+  .map(plugin => new RegExp('^' + fs.realpathSync(plugin.dir).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/'))
 
 export default defineConfig({
   plugins: [react()],
@@ -9,7 +16,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     // Apply React deduplication to separately installed dashboard dependencies too.
-    server: { deps: { inline: [/frontend[\/]node_modules/, 'react-router', 'react-router-dom'] } },
+    server: { deps: { external: pluginPackages, inline: [/frontend[\/]node_modules/, 'react-router', 'react-router-dom'] } },
     globals: true,
     // Default 5000ms is too tight for CPU-bound work (scrypt key derivation, module
     // imports doing real init) under contention from the rest of the suite running

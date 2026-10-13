@@ -5,15 +5,16 @@ export async function vendorPlugin(args = []) {
   const [source, dest] = positional;
   if (!source) {
     console.error('❌ Error: Missing plugin source.');
-    console.error('   Usage: total-recall plugin vendor <bundled-id | git-url | path> [directory]');
+    console.error('   Usage: total-recall plugin vendor <bundled-id | git-url | path> [directory] [--with-requires]');
     console.error('   Adds the plugin to this project as a brick (default: bricks/<id>), recorded in tr-bricks.json.');
     console.error('   The project then owns the code and does not depend on the plugin or Total Recall at runtime.\n');
     process.exit(1);
   }
   try {
-    const result = await vendor(source, dest, { projectRoot: process.cwd() });
+    const result = await vendor(source, dest, { projectRoot: process.cwd(), resolveRequires: args.includes('--with-requires') });
     console.log(`\n✅ Added brick '${result.id}' v${result.version} (${result.files} files) at ${result.dest}`);
     console.log(`   sha256: ${result.sha256}`);
+    if (result.resolved.length) console.log(`   Also added required bricks: ${result.resolved.join(', ')}`);
     const deps = Object.entries(result.dependencies).map(([k, v]) => `${k}@${v}`);
     if (deps.length) console.log(`   Dependencies to add to your project: ${deps.join(', ')}`);
     console.log('   Add its tests to your gates. Run `total-recall plugin bricks` to list bricks.\n');

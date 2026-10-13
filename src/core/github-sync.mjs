@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 /**
  * GitHub Sync — pushes memory-vault/ to a remote git repository.
  *
@@ -10,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import { getSecret } from './secrets-store.mjs';
+const { getSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
 import { logger } from './logger.mjs';
 import { addTask, resolveQueueDir } from './task-envelope.mjs';
 

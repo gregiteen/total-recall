@@ -1,5 +1,4 @@
 import { listAvailableBundled } from '../../core/plugin-store.mjs';
-import { listPeerPlugins } from '../../core/plugin-peers.mjs';
 
 function parseArgs(args) {
   const isJson = args.includes('--json');
@@ -54,6 +53,7 @@ export async function listAvailable(args = []) {
 /** `plugin peers` — plugins shared by mesh peers, asked live. */
 export async function listPeers(args = []) {
   const { isJson, useCase, query } = parseArgs(args);
+  const { listPeerPlugins } = await import('../../core/plugin-peers.mjs');
   const result = await listPeerPlugins();
   for (const peer of result.peers) {
     peer.plugins = peer.plugins.filter((p) => matches(p, query, useCase));
@@ -93,6 +93,7 @@ export async function listPeers(args = []) {
 export async function searchPlugins(args = []) {
   const { isJson, useCase, query } = parseArgs(args);
   const bundled = listAvailableBundled(process.cwd()).filter((p) => matches(p, query, useCase));
+  const { listPeerPlugins } = await import('../../core/plugin-peers.mjs');
   const peers = await listPeerPlugins();
   const shared = [];
   for (const peer of peers.peers) {

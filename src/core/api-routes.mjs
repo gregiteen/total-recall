@@ -2,11 +2,7 @@
  * Route table of the Total Recall HTTP API, read from the Express routers
  * themselves so a CLI verb exists for every route without a hand-kept list.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROUTES_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../server/routes');
+import { extractRoutes } from '../server/route-inventory.mjs';
 
 /** Drop structured info log lines emitted by the modules the routes import, so CLI output stays parseable. */
 export function silenceInfoLogs() {
@@ -17,10 +13,6 @@ export function silenceInfoLogs() {
         ? true
         : write(chunk, ...rest);
   }
-}
-
-function isRouter(x) {
-  return typeof x === 'function' && Array.isArray(x.stack);
 }
 
 /** Verb name for a route: the static path after /api/<group>, params dropped. */
@@ -38,48 +30,21 @@ export function actionFor(method, routePath, group) {
  */
 export async function loadApiRoutes() {
   silenceInfoLogs();
+  // Read the same mounted stack the server uses, including installed plugins.
+  // Import failures are errors: an incomplete inventory must not look complete.
+  const { default: router } = await import('../server/rest.mjs');
+  const seen = new Set();
   const out = [];
-  const files = fs
-    .readdirSync(ROUTES_DIR)
-    .filter((f) => f.endsWith('.mjs') && !f.endsWith('.spec.mjs') && !f.startsWith('_'))
-    .sort();
-  for (const file of files) {
-    const group = file.replace(/\.mjs$/, '');
-    let mod;
-    // Route modules log startup lines on import; keep CLI output clean.
-    const { log, info } = console;
-    console.log = console.info = () => {};
-    try {
-      mod = await import(path.join(ROUTES_DIR, file));
-    } catch {
-      continue;
-    } finally {
-      console.log = log;
-      console.info = info;
-    }
-    const routers = Object.values(mod).filter(isRouter);
-    const seen = new Set();
-    for (const router of routers) {
-      for (const layer of router.stack) {
-        if (!layer.route) continue;
-        const paths = Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path];
-        for (const p of paths) {
-          if (typeof p !== 'string') continue;
-          for (const method of Object.keys(layer.route.methods).map((m) => m.toUpperCase())) {
-            const key = `${method} ${p}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            out.push({
-              group,
-              method,
-              path: p,
-              action: actionFor(method, p, group),
-              params: [...p.matchAll(/:([A-Za-z0-9_]+)/g)].map((m) => m[1]),
-            });
-          }
-        }
-      }
-    }
+  for (const { method, path: routePath } of extractRoutes(router)) {
+    if (typeof routePath !== 'string') continue;
+    const key = `${method} ${routePath}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const group = routePath.replace(/^\/api\//, '').split('/').filter(Boolean)[0] || 'root';
+    out.push({ group, method, path: routePath,
+      action: actionFor(method, routePath, group),
+      params: [...routePath.matchAll(/:([A-Za-z0-9_]+)/g)].map(match => match[1]),
+    });
   }
   // Make (group, action) unique: suffix the method on collisions.
   const count = new Map();

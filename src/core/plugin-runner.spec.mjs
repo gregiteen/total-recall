@@ -58,4 +58,28 @@ describe('plugin-runner', () => {
     p.manifest.cli.handler = '../echo/cli.mjs';
     await expect(runPluginCommand(p, { cwd: root })).rejects.toThrow(/outside the plugin directory/);
   });
+
+  it('delivers a declared secret through stdin, excludes it from argv and suppresses echoed output', async () => {
+    const p = makePlugin(root, 'secret-input', `import fs from 'node:fs';
+      export async function run(argv) {
+        const input = fs.readFileSync(0, 'utf8');
+        if (input !== 'private-value' || argv.includes(input) || !argv.includes('--stdin')) process.exit(7);
+        console.log(input); console.error(input);
+      }`);
+    p.manifest.cli.subcommands = [{ name: 'save', args: [{ name: 'key', type: 'string', secret: true }] }];
+    const result = await runPluginCommand(p, { subcommand: 'save', stdinText: 'private-value', cwd: root });
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('');
+  });
+
+  it('rejects undeclared, ambiguous, invalid and oversized stdin before executing', async () => {
+    const p = makePlugin(root, 'bad-input', 'export async function run() { process.exit(99); }');
+    await expect(runPluginCommand(p, { subcommand: 'save', stdinText: 'private', cwd: root })).rejects.toThrow(/declared stdin/);
+    p.manifest.cli.subcommands = [{ name: 'save', args: [{ name: 'key', type: 'string', secret: true }] }];
+    for (const stdinText of [null, '', '😀'.repeat(16385)]) {
+      await expect(runPluginCommand(p, { subcommand: 'save', stdinText, cwd: root })).rejects.toThrow(/65536 bytes/);
+    }
+    p.manifest.cli.subcommands[0].args.push({ name: 'other', type: 'string', secret: true });
+    await expect(runPluginCommand(p, { subcommand: 'save', stdinText: 'private', cwd: root })).rejects.toThrow(/exactly one/);
+  });
 });

@@ -1,5 +1,7 @@
 # SSSS v2 Memory Specification & Lifecycle
 
+> Validate current envelopes and registries through the installed SSSS CLI/kernel. This conceptual reference is not a replacement for the current registry lock or conformance fixtures.
+
 Total Recall relies on the **Structured Semantic Syntax System (SSSS) v2** to model all agent knowledge. SSSS is database-free, human-readable, and version-controlled.
 
 ---

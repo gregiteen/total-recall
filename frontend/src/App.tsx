@@ -9,16 +9,13 @@ import MemoryPage from './pages/MemoryPage'
 import SettingsPage from './pages/SettingsPage'
 import NetworkPage from './pages/NetworkPage'
 import TasksPage from './pages/TasksPage'
-import SecretsPage from './pages/SecretsPage'
 import IntegrationsPage from './pages/IntegrationsPage'
-import { MeshPage } from './pages/MeshPage'
 import { WebhooksPage } from './pages/WebhooksPage'
 import BrainSelector from './components/BrainSelector'
 import SkillsPage from './pages/SkillsPage'
 import RulesPage from './pages/RulesPage'
 import HelpPage from './pages/HelpPage'
 import GraphPage from './pages/GraphPage'
-import OpenWikiPage from './pages/OpenWikiPage'
 import PluginsPage from './pages/PluginsPage'
 import OnboardingPage from './pages/OnboardingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
@@ -156,13 +153,6 @@ function Sidebar({ onLogout, health, activeBrainId, onBrainChange }: SidebarProp
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
           Skills
-        </NavLink>
-        <NavLink to="/openwiki" className={getNavLinkClass} id="nav-openwiki">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
-            <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
-          </svg>
-          OpenWiki
         </NavLink>
         <NavLink to="/plugins" className={getNavLinkClass} id="nav-plugins">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -401,7 +391,7 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
       {(!isChat || floatingChat) && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <Routes>
-            <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/openwiki' : '/onboarding'} replace />} />
+            <Route path="/" element={<Navigate to={isOnboardingComplete() ? '/memory' : '/onboarding'} replace />} />
             <Route path="/chat" element={<ChatPage activeBrainId={activeBrainId} />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/memory" element={<MemoryPage activeBrainId={activeBrainId} />} />
@@ -409,15 +399,15 @@ function MainContent({ activeBrainId, onBrainChange }: { activeBrainId: string; 
             <Route path="/graph" element={<GraphPage activeBrainId={activeBrainId} />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/skills" element={<SkillsPage activeBrainId={activeBrainId} />} />
-            <Route path="/openwiki" element={<OpenWikiPage activeBrainId={activeBrainId} />} />
+            <Route path="/openwiki" element={<Navigate to="/plugins?id=openwiki" replace />} />
             <Route path="/plugins" element={<PluginsPage activeBrainId={activeBrainId} />} />
             <Route path="/integrations" element={<IntegrationsPage activeBrainId={activeBrainId} />} />
             <Route path="/keys" element={<Navigate to="/secrets" replace />} />
             <Route path="/settings" element={<SettingsPage activeBrainId={activeBrainId} />} />
             <Route path="/network" element={<NetworkPage />} />
-            <Route path="/mesh" element={<MeshPage />} />
+            <Route path="/mesh" element={<Navigate to="/plugins?id=mesh" replace />} />
             <Route path="/webhooks" element={<WebhooksPage />} />
-            <Route path="/secrets" element={<SecretsPage />} />
+            <Route path="/secrets" element={<Navigate to="/plugins?id=auth" replace />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/help" element={<HelpPage />} />
             {/* Legacy OS-control-plane routes → core product */}

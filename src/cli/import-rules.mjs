@@ -79,12 +79,8 @@ export async function run(argv = []) {
   }
 
   if (result.imported.length > 0) {
-    const { compileSurface } = await import('../core/surface.mjs');
-    const agentDir = path.resolve(brainDir, '../..');
-    await compileSurface({ vaultDir, skillsDir: path.join(agentDir, 'skills'),
-      derivedDir: path.join(brainDir, 'memory-derived'),
-      instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'), semantic: false });
-    console.log('\nLocal memory indexes and instruction surfaces updated.\n');
+    const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+    await autoCompileSurfaces({ layer, semantic: false, force: true });
   }
 }
 

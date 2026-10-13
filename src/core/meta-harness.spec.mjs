@@ -107,18 +107,15 @@ describe('resolveHarnessEnv', () => {
     expect(env.PATH).toBe('/bin');
   });
 
-  it('never overrides a token the caller already supplied', async () => {
-    const env = await resolveHarnessEnv(claude, { CLAUDE_CODE_OAUTH_TOKEN: 'mine' }, {
-      readSecret: async () => { throw new Error('must not be asked'); },
-    });
-    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('mine');
+  it('replaces ambient tokens with the selected auth credential', async () => {
+    const env = await resolveHarnessEnv(claude, { CLAUDE_CODE_OAUTH_TOKEN: 'ambient', TR_SECRETS_PASSWORD: 'master-fixture' }, { readSecret: async () => 'owner-fixture' });
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('owner-fixture');
+    expect(env).not.toHaveProperty('TR_SECRETS_PASSWORD');
   });
 
-  it('falls back to the harness login when the store is locked or empty', async () => {
-    const locked = await resolveHarnessEnv(claude, {}, { readSecret: async () => { throw new Error('locked'); } });
-    expect(locked).not.toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN');
-    const empty = await resolveHarnessEnv(claude, {}, { readSecret: async () => null });
-    expect(empty).not.toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN');
+  it('aborts dispatch when the auth store is locked or the declared credential is missing', async () => {
+    await expect(resolveHarnessEnv(claude, {}, { readSecret: async () => { throw new Error('locked'); } })).rejects.toThrow('locked');
+    await expect(resolveHarnessEnv(claude, {}, { readSecret: async () => null })).rejects.toThrow('through auth');
   });
 
   it('asks nothing for harnesses without declared auth secrets', async () => {

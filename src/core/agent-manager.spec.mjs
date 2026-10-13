@@ -4,6 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+const authSecret = vi.hoisted(() => vi.fn(async () => ({ found: true, value: 'auth-fixture-token' })));
+vi.mock('./plugin-runtime.mjs', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, loadPluginModule: async (owner, module) => module === 'secrets-store' ? { getSecret: authSecret, defaultBrainDir: () => '/fixture/auth' } : actual.loadPluginModule(owner, module) };
+});
 const meshCalls = [];
 vi.mock('./mesh.mjs', () => ({
   findMeshNode: (name) => ({ hostname: name, ip: '100.64.0.99' }),
@@ -67,7 +72,7 @@ describe('Agent Process Manager', () => {
 describe('local spawn', () => {
   it('runs Claude Code with its tools, in the requested directory, with the OAuth token', async () => {
     installFakeClaude();
-    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'tok';
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = 'ambient-must-be-ignored';
     const work = fs.realpathSync(fs.mkdtempSync(path.join(tmp, 'work-')));
     const res = await spawnAgent('claude', 'search the web', { detach: false, cwd: work });
     expect(res.status).toBe('completed');

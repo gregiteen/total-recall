@@ -3,6 +3,7 @@ node_modules/
 *.db-wal
 *.db-shm
 .DS_Store
+.data/
 
 # Secrets — NEVER commit
 .env
@@ -156,3 +157,4 @@ WINDSURF.md
 .cursor/
 .windsurf/
 HANDOFF.md
+.deploy-state.json

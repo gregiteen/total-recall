@@ -82,8 +82,18 @@ export default async function ingest(args) {
   }
 
   if (args[0] === 'openwiki') {
-    const { runOpenWikiIngest } = await import('./ingest-openwiki.mjs');
-    await runOpenWikiIngest(args.slice(1));
+    const { discoverPlugins } = await import('../core/plugin-loader.mjs');
+    const { runPluginCommand } = await import('../core/plugin-runner.mjs');
+    const plugins = discoverPlugins(process.cwd());
+    const openwikiPlugin = plugins.find((p) => p.id === 'openwiki');
+    if (openwikiPlugin) {
+      const result = await runPluginCommand(openwikiPlugin, { subcommand: 'ingest', args: args.slice(1), stdin: 'inherit' });
+      if (result.output) process.stdout.write(result.output);
+      process.exit(result.ok ? 0 : (result.exitCode || 1));
+      return;
+    }
+    console.error('Error: OpenWiki plugin is not installed.');
+    process.exit(1);
     return;
   }
 

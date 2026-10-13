@@ -51,6 +51,16 @@ The command must be declared and must be a `read` command. It prints:
 ```
 States are `ok`, `warn`, `error`, `unknown`. Do not use `card_face.metrics`: fixed text cannot reflect state, and the validator warns about it.
 
+Only an explicit `effect: "read"` permits execution from a card. Missing effects default to reference-only; names such as `config`, `list` or `check` do not establish that a command is read-only. Grouped commands that accept a write action must not be labeled read.
+
+## Secret input through the owner interface
+
+Declare exactly one argument with `type: "string"`, `secret: true` and no `flag`. A secret does not require positional metadata. The isolated owner interface can call `host.run('save-key', [], { stdin: value })`. The host authenticates and checks write scope, the server validates the manifest declaration and the 65,536-byte UTF-8 limit, and the child receives the value through stdin with `--stdin`. Empty, undeclared and ambiguous secret input is rejected. Child stdout/stderr is suppressed for this operation, and the owner interface receives only success or failure. Re-read nonsecret credential status through a separate command; never echo the submitted value.
+
+## Workspaces
+
+`workspace.component` identifies an owner-supplied `ui.elements` id or tag. The host mounts that interface through the same isolated panel boundary; core contains no plugin-specific workspace implementation. `workspace.permissions` may list `microphone`, `camera` or `notifications`, but a declaration does not grant device access. Device-backed workspaces remain explicitly unavailable until a safe host capability bridge exists. Never add `allow-same-origin` to the scripts-only iframe to bypass this limitation.
+
 ## Settings and credentials
 ```json
 "configuration": { "fields": [

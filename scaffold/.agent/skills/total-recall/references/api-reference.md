@@ -1,5 +1,7 @@
 # Total Recall REST API Reference
 
+> Product API routes, including secrets, belong to their plugin owners. Inspect the current route manifest and owning plugin; auth secret management uses `/api/plugins/auth/secrets`. Historical examples below are not a guarantee of current availability.
+
 LLM agents securely communicate with the memory kernel using standard HTTP calls via shell execution (e.g. `curl`).
 
 ---

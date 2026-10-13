@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import fs from 'fs';
 import path from 'path';
 import { atomicWrite } from './vault.mjs';
@@ -142,7 +143,7 @@ export const USAGE_PROVIDERS = {
  * before inference-key names.
  */
 async function resolveKey(brainDir, names) {
-  const { getSecret } = await import('./secrets-store.mjs');
+  const { getSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
   for (const name of names) {
     try {
       const result = await getSecret(brainDir, name, { action: 'usage-fetch', actor: 'usage-fetcher' });

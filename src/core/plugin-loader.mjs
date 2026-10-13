@@ -267,6 +267,18 @@ export function validatePluginManifest(manifest) {
     errors.push(...validateUiSpec(manifest.ui));
   }
 
+  if (manifest.runtime !== undefined) {
+    const runtime = manifest.runtime;
+    if (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)) errors.push('runtime must be an object');
+    else {
+      if (runtime.modules !== undefined && (!runtime.modules || typeof runtime.modules !== 'object' || Array.isArray(runtime.modules))) errors.push('runtime.modules must be an object');
+      else for (const [name, file] of Object.entries(runtime.modules || {})) {
+        if (!/^[a-z][a-z0-9-]*$/.test(name) || !isSafeRelativePath(file)) errors.push(`Invalid runtime module ${name}`);
+      }
+      if (runtime.routers !== undefined && (!Array.isArray(runtime.routers) || runtime.routers.some(file => !isSafeRelativePath(file)))) errors.push('runtime.routers must contain safe relative paths');
+    }
+  }
+
   if (manifest.app_cli !== undefined) {
     errors.push(...validateAppCliSpec(manifest.app_cli));
   }
@@ -333,7 +345,29 @@ export function readPluginsDir(dir, scope) {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const pluginDir = path.join(dir, entry.name);
     const manifestPath = path.join(pluginDir, 'plugin.json');
-    if (!fs.existsSync(manifestPath)) continue;
+    if (!fs.existsSync(manifestPath)) {
+      // A link whose target is gone is a broken install, not "nothing here": report it so
+      // `plugin list` shows it and `plugin remove` can clear it. Plain folders without a
+      // manifest are still ignored.
+      if (entry.isSymbolicLink() && !fs.existsSync(pluginDir)) {
+        let target = '';
+        try { target = fs.readlinkSync(pluginDir); } catch { /* unreadable link */ }
+        out.push({
+          id: entry.name,
+          manifest: {},
+          dir: pluginDir,
+          pluginsDir: dir,
+          manifestPath,
+          scope,
+          linked: true,
+          broken: true,
+          valid: false,
+          errors: [`Linked plugin target is missing${target ? `: ${target}` : ''}. Remove it with: total-recall plugin remove ${entry.name}`],
+          warnings: []
+        });
+      }
+      continue;
+    }
 
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -377,7 +411,8 @@ export function discoverPlugins(projectRoot = process.cwd()) {
   const plugins = [];
   const sources = [
     [projectPluginsDir(projectRoot), 'project'],
-    [globalPluginsDir(), 'global']
+    [globalPluginsDir(), 'global'],
+    [path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins'), 'scaffold']
   ];
   const visited = new Set();
   for (const [dir, scope] of sources) {

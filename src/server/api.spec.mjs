@@ -12,6 +12,7 @@ import path from 'node:path';
 const callLocalRuntimeRawSpy = vi.fn();
 const TEST_AGENT_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'total-recall-api-'));
 const OLD_AGENT_DIR = process.env.AGENT_DIR;
+const OLD_TR_ROOT = process.env.TR_ROOT;
 process.env.AGENT_DIR = TEST_AGENT_DIR;
 process.env.TR_ROOT = TEST_AGENT_DIR;
 
@@ -31,6 +32,13 @@ vi.mock('../core/runtime.mjs', () => ({
 }));
 
 vi.mock('./auth.mjs', () => ({
+  isLocalRequest: () => true,
+  dashboardAuthState: () => ({ configured: false }),
+  signSessionToken: () => 'fixture-token',
+  sessionCookieOptions: () => ({}),
+  mintStepUpToken: () => 'fixture-step-up',
+  verifyStepUpToken: () => ({ ok: false }),
+  verifyDashboardPassword: async () => false,
   requireAuth: (req, _res, next) => next(),
   requireScope: () => (req, _res, next) => next(),
   requireAuthOrLocal: (req, _res, next) => next(),
@@ -74,6 +82,8 @@ describe('API Proxy', () => {
   afterAll(() => {
     if (OLD_AGENT_DIR === undefined) delete process.env.AGENT_DIR;
     else process.env.AGENT_DIR = OLD_AGENT_DIR;
+    if (OLD_TR_ROOT === undefined) delete process.env.TR_ROOT;
+    else process.env.TR_ROOT = OLD_TR_ROOT;
     fs.rmSync(TEST_AGENT_DIR, { recursive: true, force: true });
   });
 

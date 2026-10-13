@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { agentDir, brainDir, globalBrainDir } from '../../core/config.mjs';
 import { logger } from '../../core/logger.mjs';
 
+export { globalBrainDir };
 export const AGENT_DIR    = process.env.AGENT_DIR || agentDir;
 export const BRAIN_DIR    = process.env.TR_BRAIN || path.join(AGENT_DIR, 'skills', 'total-recall');
 export const VAULT_DIR    = path.join(BRAIN_DIR, 'memory-vault');
@@ -24,7 +25,7 @@ export const FILES_DIR    = path.join(BRAIN_DIR, 'files');
 export const TASKS_DIR    = path.join(BRAIN_DIR, 'scheduler', 'queue');
 export const CONFIG_DIR   = path.join(BRAIN_DIR, 'config');
 
-export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+export const ROOT = process.env.TR_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
 
 /**

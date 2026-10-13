@@ -35,6 +35,7 @@ app.use(systemRouter);
 
 describe('System Router', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 

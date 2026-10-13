@@ -1,3 +1,4 @@
+vi.mock('./config.mjs', async importOriginal => ({ ...await importOriginal(), googleApiKey: 'auth-fixture-key', openAiApiKey: undefined }));
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('./logger.mjs', () => ({
@@ -35,12 +36,10 @@ const tempDir = path.join(process.cwd(), '.agent/memory-derived-test');
 describe('embeddings module (sqlite-vss)', () => {
   beforeEach(() => {
     fs.mkdirSync(tempDir, { recursive: true });
-    process.env.GOOGLE_API_KEY = 'test';
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.GOOGLE_API_KEY;
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

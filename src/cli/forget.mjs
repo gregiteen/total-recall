@@ -131,11 +131,9 @@ export default async function forget(args) {
 
   // Recompile unless --no-compile
   if (!noCompile) {
-    try {
-      await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, semantic: false });
-      console.log('  ✅ Local memory indexes and instruction surfaces updated.');
-    } catch (err) {
-      console.error(`  ❌ Memory deleted, but local compilation failed: ${err.message}`);
+    const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+    const compiled = await autoCompileSurfaces({ layer, semantic: false, force: true });
+    if (!compiled) {
       process.exitCode = 1;
     }
   }

@@ -9,6 +9,7 @@ import net from 'node:net';
 import child_process from 'node:child_process';
 import * as startupHealth from '../core/startup-health.mjs';
 import doctor, { isOwnedServerPort } from './doctor.mjs';
+vi.mock('../core/plugin-runtime.mjs', () => ({ loadPluginModule: vi.fn(async (_owner, module) => module === 'configuration' ? { runtimeConfiguration: () => ({}) } : module === 'runtime-credentials' ? { runtimeCredentials: () => ({ google_api_key: 'auth-fixture' }) } : { defaultBrainDir: () => '/fixture/auth' }) }));
 
 describe('doctor command', () => {
   let logSpy, errorSpy;
@@ -66,6 +67,8 @@ describe('doctor command', () => {
     expect(logs).toContain('HARDWARE COMPATIBILITY DIAGNOSTICS');
     expect(logs).toContain('SOFTWARE DEPENDENCY CHECK');
     expect(logs).toContain('NETWORKING PORT AVAILABILITY');
+    expect(logs).toContain('Embedding credentials configured in auth: google_api_key');
+    expect(logs).not.toContain('environment variable is configured');
     expect(logs).toContain('🎉 Diagnostics Passed! System is perfectly healthy.');
   });
 

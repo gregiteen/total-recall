@@ -30,7 +30,7 @@ const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
 const FILES_DIR = path.join(BRAIN_DIR, 'files');
 const TASKS_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
 const CONFIG_DIR = path.join(BRAIN_DIR, 'config');
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ROOT = process.env.TR_ROOT || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MODEL_CATALOG_DIR = path.join(ROOT, 'models', 'catalog', 'total-recall');
 
 /**

@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { validatePluginManifest } from "../../core/plugin-loader.mjs";
 import { installPlugin } from "../../core/plugin-store.mjs";
-import { parseCron } from "../../core/plugin-tasks.mjs";
+import { parseCron } from "../../core/plugin-cron.mjs";
 import { generateUiElements } from "../../core/app-deploy/ui-elements.mjs";
 
 function toTitleCase(kebab) {
@@ -21,12 +21,17 @@ function tokenCliBlock(apiKeys) {
 const TOKEN_KEY = ${JSON.stringify(apiKeys[0])};
 const TR = process.env.TOTAL_RECALL_BIN || "total-recall";
 
+function authRun(args, options = {}) {
+  const script = TR.endsWith('.mjs');
+  const result = spawnSync(script ? process.execPath : TR, [...(script ? [TR] : []), 'auth', 'secret', ...args], { encoding: 'utf8', timeout: 30000, ...options });
+  if (result.error || result.status !== 0) throw new Error('Auth operation failed; check the selected store');
+  return result;
+}
 function tokenValue() {
-  if (process.env[TOKEN_KEY]) return process.env[TOKEN_KEY].trim();
-  const run = spawnSync(TR, ["secret", "get", TOKEN_KEY], { encoding: "utf8" });
-  if (run.status !== 0) return "";
-  const lines = String(run.stdout || "").split("\\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("{"));
-  return lines.length ? lines[lines.length - 1] : "";
+  const result = JSON.parse(authRun(['get', TOKEN_KEY, '--json']).stdout);
+  if (result.found === false) return '';
+  if (result.found !== true || typeof result.value !== 'string') throw new Error('Invalid auth response');
+  return result.value;
 }
 
 async function readStdin() {
@@ -55,8 +60,8 @@ async function tokenCommand(args) {
     if (!value) { console.error("No key received on stdin."); process.exitCode = 2; return; }
     const check = await verifyToken(value);
     if (!check.valid) { console.error(\`Key rejected, not saved: \${check.message || "verification failed"}\`); process.exitCode = 1; return; }
-    const saved = spawnSync(TR, ["secret", "set", TOKEN_KEY, "--stdin"], { input: value, encoding: "utf8" });
-    if (saved.status !== 0) { console.error("Could not save the key to the secrets store."); process.exitCode = 1; return; }
+    const saved = authRun(["set", TOKEN_KEY, "--stdin"], { input: value });
+    if (tokenValue() !== value) throw new Error('Auth readback failed');
     console.log(json ? JSON.stringify({ saved: true, valid: true }) : "API key verified and saved.");
     return;
   }

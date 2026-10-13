@@ -62,10 +62,6 @@ describe('config CLI command', () => {
   it('correctly retrieves individual keys', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Flat key force_password_reset
-    await configCommand(['get', 'force_password_reset']);
-    expect(consoleSpy).toHaveBeenLastCalledWith('undefined');
-
     // Dotted key dashboard.session_ttl_hours
     await configCommand(['get', 'dashboard.session_ttl_hours']);
     expect(consoleSpy).toHaveBeenLastCalledWith(24);
@@ -84,12 +80,11 @@ describe('config CLI command', () => {
   it('correctly sets individual keys and preserves types', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    // Set force_password_reset to true (casts to boolean)
-    await configCommand(['set', 'force_password_reset', 'true']);
+    await configCommand(['set', 'session_ttl_hours', '12']);
     
     const securityFilePath = path.join(tmpAgentDir, 'skills', 'total-recall', 'config', 'security.yml');
     let securityData = yaml.parse(fs.readFileSync(securityFilePath, 'utf8'));
-    expect(securityData.dashboard.force_password_reset).toBe(true);
+    expect(securityData.dashboard.session_ttl_hours).toBe(12);
 
     // Set daily_cap_usd to 15.5 (casts to number, goes to budget.yml)
     await configCommand(['set', 'daily_cap_usd', '15.5']);
@@ -126,10 +121,21 @@ describe('config CLI command', () => {
 
     await configCommand(['get']);
     const allLogs = consoleSpy.mock.calls.flat().join('\n');
-    expect(allLogs).toContain('force_password_reset');
+    expect(allLogs).not.toContain('password_hash');
     expect(allLogs).toContain('daily_cap_usd');
     expect(allLogs).toContain('allowed_origins');
 
     consoleSpy.mockRestore();
+  });
+
+  it('rejects credential reads, writes, parent reads and prototype paths without changing files', async () => {
+    const file = path.join(tmpAgentDir, 'skills/total-recall/config/security.yml');
+    const before = fs.readFileSync(file, 'utf8');
+    for (const key of ['password_hash', 'dashboard.password_hash', 'force_password_reset', 'api.pats', 'SESSION_SECRET', '__proto__.polluted']) {
+      await expect(configCommand(['get', key])).rejects.toThrow('auth plugin');
+      await expect(configCommand(['set', key, 'fixture'])).rejects.toThrow('auth plugin');
+    }
+    await expect(configCommand(['get', 'dashboard'])).rejects.toThrow('individual');
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
   });
 });

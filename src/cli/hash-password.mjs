@@ -1,22 +1,11 @@
-import bcrypt from 'bcrypt';
-import { BCRYPT_COST } from '../server/auth.mjs';
-
+/** Compatibility command delegates password setup to its required auth owner. */
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 export default async function hashPassword(args) {
-  if (args.includes('--help') || args.includes('-h') || args.length === 0) {
-    console.log(`
-  total-recall hash-password "new dashboard password"
-
-  Prints a bcrypt hash for ~/.agent/config/security.yml dashboard.password_hash.
-`);
+  if (!args.length || args.includes('--help') || args.includes('-h')) {
+    console.log('Use total-recall auth password set --stdin. Passwords and hashes are managed by auth.');
     return;
   }
-
-  const password = args.join(' ');
-  if (password.length < 12) {
-    console.error('Password must be at least 12 characters.');
-    process.exit(1);
-  }
-
-  console.log(await bcrypt.hash(password, BCRYPT_COST));
+  if (args.some(arg => !['--stdin', '--json'].includes(arg)) || !args.includes('--stdin')) throw new Error('Password arguments are refused. Use auth password set --stdin.');
+  const owner = await loadPluginModule('auth', 'commands');
+  return owner.run(['password', 'set', ...args]);
 }
-

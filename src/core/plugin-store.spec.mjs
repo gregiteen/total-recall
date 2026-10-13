@@ -182,7 +182,7 @@ describe('plugin-store', () => {
   it('installs globally and removes cleanly with its record', async () => {
     await installPlugin('git-sentinel', { projectRoot: projA, global: true });
     expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(true);
-    expect(listInstalledPlugins(projB).map(p => [p.id, p.scope])).toEqual([['git-sentinel', 'global']]);
+    expect(listInstalledPlugins(projB).filter(p => p.id === 'git-sentinel').map(p => [p.id, p.scope])).toEqual([['git-sentinel', 'global']]);
 
     await uninstallPlugin('git-sentinel', { projectRoot: projB, global: true });
     expect(fs.existsSync(path.join(globalPluginsDir(), 'git-sentinel'))).toBe(false);

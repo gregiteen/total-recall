@@ -21,6 +21,7 @@
   "dirs": [
     "memory-vault",
     "memory-derived",
+    "derived",
     "memory-inbox",
     "sessions",
     "logs",
@@ -36,6 +37,7 @@
   ],
   "files": [
     "research-queue.jsonl",
+    "embeddings.db",
     "daemon.pid",
     ".extension-connected",
     "graph.canvas"

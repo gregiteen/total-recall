@@ -185,6 +185,22 @@ describe('daemon-control', () => {
       expect(fs.writeFileSync).not.toHaveBeenCalledWith(PID_FILE, expect.anything(), expect.anything());
     });
 
+    it('caps the daemon heap by default and honours TR_DAEMON_MAX_HEAP_MB', async () => {
+      fs.existsSync.mockImplementation((p) => typeof p === 'string' && p.includes('daemon-loop.mjs'));
+      child_process.spawn.mockReturnValue({ pid: 2, unref: vi.fn() });
+      await startDaemon();
+      expect(child_process.spawn.mock.calls[0][1][0]).toBe('--max-old-space-size=768');
+
+      child_process.spawn.mockClear();
+      process.env.TR_DAEMON_MAX_HEAP_MB = '0';
+      try {
+        await startDaemon();
+        expect(child_process.spawn.mock.calls[0][1].some((a) => String(a).startsWith('--max-old-space-size'))).toBe(false);
+      } finally {
+        delete process.env.TR_DAEMON_MAX_HEAP_MB;
+      }
+    });
+
     it('returns existing pid without re-spawning if daemon is already running', async () => {
       // Make readPid return a live pid
       fs.existsSync.mockReturnValue(true);

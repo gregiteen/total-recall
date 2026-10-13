@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../../core/plugin-runtime.mjs';
 /**
  * Models routes — OpenAI-compatible and provider-specific model list endpoints.
  *
@@ -19,6 +20,7 @@ import { requireAuth, requireAuthOrLocal } from '../auth.mjs';
 import { loadRuntimeConfig } from '../../core/runtime.mjs';
 import {
   AGENT_DIR,
+  BRAIN_DIR,
   ROOT,
   MODEL_CATALOG_DIR,
   CONFIG_DIR,
@@ -205,7 +207,7 @@ router.get('/api/gemini-models', requireAuthOrLocal, async (req, res) => {
     let apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       try {
-        const { loadSecrets } = await import('../../core/secrets-store.mjs');
+        const { loadSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
         const secrets = await loadSecrets(AGENT_DIR) || {};
         apiKey = secrets.gemini_api_key || secrets.google_api_key;
       } catch {}
@@ -265,14 +267,8 @@ router.get('/api/gemini-models', requireAuthOrLocal, async (req, res) => {
  */
 router.get('/api/claude-models', requireAuthOrLocal, async (req, res) => {
   try {
-    let apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      try {
-        const { loadSecrets } = await import('../../core/secrets-store.mjs');
-        const secrets = await loadSecrets(AGENT_DIR) || {};
-        apiKey = secrets.anthropic_api_key;
-      } catch {}
-    }
+    const { runtimeCredentials } = await __loadOwnedPlugin('auth', 'runtime-credentials');
+    const apiKey = runtimeCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || BRAIN_DIR }).anthropic_api_key;
 
     if (!apiKey) return res.json({ models: [], source: 'missing_key' });
 
@@ -315,14 +311,8 @@ router.get('/api/claude-models', requireAuthOrLocal, async (req, res) => {
  */
 router.get('/api/openai-models', requireAuthOrLocal, async (req, res) => {
   try {
-    let apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      try {
-        const { loadSecrets } = await import('../../core/secrets-store.mjs');
-        const secrets = await loadSecrets(AGENT_DIR) || {};
-        apiKey = secrets.openai_api_key || secrets.open_ai_api_key;
-      } catch {}
-    }
+    const { runtimeCredentials } = await __loadOwnedPlugin('auth', 'runtime-credentials');
+    const apiKey = runtimeCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || BRAIN_DIR }).openai_api_key;
 
     if (!apiKey) return res.json({ models: [], source: 'missing_key' });
 

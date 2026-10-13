@@ -59,6 +59,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Live streaming / LLM / v1 endpoints should bypass the cache completely
+  if (url.pathname.startsWith('/v1/')) {
+    return;
+  }
+
   // API routes: stale-while-revalidate (with vault-hash tracking)
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(staleWhileRevalidate(event.request));
@@ -83,8 +88,8 @@ async function staleWhileRevalidate(request) {
 
   const fetchPromise = fetch(request)
     .then((response) => {
-      if (response.ok) {
-        cache.put(request, response.clone());
+      if (response && response.ok && response.status === 200 && response.type === 'basic') {
+        cache.put(request, response.clone()).catch(() => {});
 
         // Track vault_hash from /api/vault/status responses
         const url = new URL(request.url);
@@ -122,9 +127,9 @@ async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  if (response.ok) {
+  if (response && response.ok && response.status === 200) {
     const cache = await caches.open(CACHE_NAME);
-    cache.put(request, response.clone());
+    cache.put(request, response.clone()).catch(() => {});
   }
   return response;
 }
@@ -134,9 +139,9 @@ async function cacheFirst(request) {
 async function networkFirst(request) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    if (response && response.ok && response.status === 200) {
       const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
+      cache.put(request, response.clone()).catch(() => {});
     }
     return response;
   } catch {

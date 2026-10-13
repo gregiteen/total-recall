@@ -1,11 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import bcrypt from 'bcrypt';
-import yaml from 'yaml';
-import { BCRYPT_COST } from '../server/auth.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 import { brainDir } from '../core/config.mjs';
-import { writeFileSecure } from '../core/secure-file.mjs';
 
 /**
  * Read a password without echoing it, and without it ever becoming an argv
@@ -90,52 +87,15 @@ export default async function resetPassword(args) {
     }
   }
 
-  const configDir = path.join(brainDir, 'config');
-  const securityPath = path.join(configDir, 'security.yml');
-
-  // Enforce directories exist
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  let config = {};
-  if (fs.existsSync(securityPath)) {
-    try {
-      config = yaml.parse(fs.readFileSync(securityPath, 'utf8')) || {};
-    } catch (e) {
-      console.warn('Warning: Could not parse existing security.yml, starting fresh.');
-    }
-  }
-
-  // Ensure default structures are present
-  if (!config.dashboard) {
-    config.dashboard = {};
-  }
-  if (!config.api) {
-    config.api = { pats: [], allow_static_pats: false };
-  }
-  if (!config.network) {
-    config.network = { require_https: true, public_health: false, allowed_origins: [] };
-  }
-  if (!config.bind) {
-    config.bind = { host: '127.0.0.1', port: 3000, allow_public_bind: false };
-  }
-
-  console.log('Hashing password...');
-  const hash = await bcrypt.hash(password, BCRYPT_COST);
-
-
-  config.dashboard.password_hash = hash;
+  const { createSessionCredentials } = await loadPluginModule('auth', 'session-credentials');
   const isDefault = password === 'totalrecall';
-  config.dashboard.force_password_reset = isDefault;
-
-  writeFileSecure(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+  await createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || brainDir }).setDashboardPassword(password, { forcePasswordReset: isDefault });
 
   // Never echo the password back. The operator just typed it; repeating it to
   // stdout puts it into scrollback, into any log capturing this command, and
   // into the transcript of any agent that ran it.
   console.log(`\n  ✅ Success! Dashboard admin password reset.`);
-  console.log(`  📍 Saved to: ${securityPath}`);
+  console.log('  Saved in the encrypted auth store; existing sessions invalidated.');
   if (isDefault) {
     console.log(`  ⚠️  You set the well-known default password.`);
     console.log(`  👉 Sign in with it once; you will be forced to change it immediately.\n`);

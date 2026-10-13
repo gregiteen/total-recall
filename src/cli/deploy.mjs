@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../core/plugin-runtime.mjs';
 /**
  * total-recall deploy
  *
@@ -40,9 +41,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
-import bcrypt from 'bcrypt';
 import crypto from 'node:crypto';
-import { BCRYPT_COST } from '../server/auth.mjs';
+import { loadPluginModule } from '../core/plugin-runtime.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
 
 
@@ -362,7 +362,7 @@ function isIpAddress(value) {
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(value || '') || /^\[[0-9a-f:]+\]$/i.test(value || '') || /^[0-9a-f:]{3,}$/i.test(value || '');
 }
 
-function hardenSecurityConfig(dryRun, dashboardPassword = null) {
+async function hardenSecurityConfig(dryRun, dashboardPassword = null) {
   logStep('7.5/12', 'Hardening security defaults');
   const securityPath = path.join(BRAIN_DIR, 'config', 'security.yml');
   if (dryRun) {
@@ -402,9 +402,11 @@ function hardenSecurityConfig(dryRun, dashboardPassword = null) {
   if (dashboardPassword) {
     const isDefault = dashboardPassword === 'totalrecall';
     log(`  🔑 Enforcing admin dashboard password (force reset: ${isDefault})`);
-    config.dashboard.password_hash = bcrypt.hashSync(dashboardPassword, BCRYPT_COST);
-    config.dashboard.force_password_reset = isDefault;
-  } else if (!config.dashboard.password_hash) {
+    const { createSessionCredentials } = await loadPluginModule('auth', 'session-credentials');
+    await createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || BRAIN_DIR }).setDashboardPassword(dashboardPassword, { forcePasswordReset: isDefault });
+    delete config.dashboard.password_hash;
+    delete config.dashboard.force_password_reset;
+  } else {
     log('  🔑 Dashboard credentials left unconfigured. You will set your admin password on first dashboard access.');
   }
 
@@ -494,8 +496,8 @@ export default async function deploy(args) {
         // Deploy full secrets store (SSOT) + .env projection to remote TR brain
         try {
           log('🔒 Syncing Total Recall secrets store to remote host...');
-          const { defaultBrainDir, resolveSecretsPath } = await import('../core/secrets-store.mjs');
-          const { buildDeploySecretsPayload } = await import('../core/secrets-env-export.mjs');
+          const { defaultBrainDir, resolveSecretsPath } = await __loadOwnedPlugin('auth', 'secrets-store');
+          const { buildDeploySecretsPayload } = await __loadOwnedPlugin('auth', 'secrets-env-export');
           const localBrain = process.env.TR_BRAIN || defaultBrainDir();
           const secretsPath = resolveSecretsPath(localBrain);
           const remoteConfig = '.agent/skills/total-recall/config';
@@ -994,8 +996,8 @@ export default async function deploy(args) {
         // Full secrets SSOT + .env projection (not a 2-key stub)
         try {
           log('🔒 Syncing Total Recall secrets store to remote VM...');
-          const { defaultBrainDir, resolveSecretsPath } = await import('../core/secrets-store.mjs');
-          const { buildDeploySecretsPayload } = await import('../core/secrets-env-export.mjs');
+          const { defaultBrainDir, resolveSecretsPath } = await __loadOwnedPlugin('auth', 'secrets-store');
+          const { buildDeploySecretsPayload } = await __loadOwnedPlugin('auth', 'secrets-env-export');
           const localBrain = process.env.TR_BRAIN || defaultBrainDir();
           const secretsPath = resolveSecretsPath(localBrain);
           const remoteConfig = '/root/.agent/skills/total-recall/config';
@@ -1283,7 +1285,7 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
 
   // ── Step 7: Copy default config ──
   copyDefaultConfig(opts.dryRun);
-  hardenSecurityConfig(opts.dryRun, opts.dashboardPassword);
+  await hardenSecurityConfig(opts.dryRun, opts.dashboardPassword);
 
   // ── Step 7: Install Reverse Proxy / Tunnel ──
   if (opts.cloudflareToken || opts.cloudflareQuick) {

@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 /**
  * Total Recall Active Intelligence Daemon Loop — v3
  *
@@ -406,7 +407,7 @@ async function main() {
 
     // Phase 4C: Startup Sync (follower only)
     try {
-      const { syncLoop } = await import('./secrets-sync.mjs');
+      const { syncLoop } = await __loadOwnedPlugin('auth', 'secrets-sync');
       // Wait for leader to stabilize
       logger.info({ subsystem: 'daemon-loop', message: 'Waiting 3000ms for leader to stabilize before secrets sync...' });
       await new Promise(r => setTimeout(r, 3000));
@@ -445,7 +446,7 @@ async function main() {
           // 60000 / TASK_SLEEP_MS (10000) = 6
           if (taskCount > 0 && taskCount % 6 === 0) {
             try {
-              const { syncLoop } = await import('./secrets-sync.mjs');
+              const { syncLoop } = await __loadOwnedPlugin('auth', 'secrets-sync');
               await syncLoop();
             } catch (err) {
               logger.info({ subsystem: 'daemon-loop', message: `Secrets sync heartbeat failed: ${err.message}` });

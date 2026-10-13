@@ -55,7 +55,8 @@ const getPluginByIdMock = vi.fn((id) => {
   return null;
 });
 
-vi.mock('../../core/plugin-loader.mjs', () => ({
+vi.mock('../../core/plugin-loader.mjs', async (original) => ({
+  ...await original(),
   getPluginById: vi.fn((id) => getPluginByIdMock(id)),
 }));
 
@@ -90,7 +91,7 @@ vi.mock('../../core/plugin-peers.mjs', () => ({
 const runner = vi.hoisted(() => ({
   runPluginCommand: vi.fn(async () => ({ ok: true, exitCode: 0, output: 'hello', timedOut: false, truncated: false, durationMs: 5 })),
 }));
-vi.mock('../../core/plugin-runner.mjs', () => runner);
+vi.mock('../../core/plugin-runner.mjs', async (original) => ({ ...await original(), ...runner }));
 
 // Mock writeNodeValidatedAsync
 vi.mock('../../core/validated-write.mjs', () => ({
@@ -110,6 +111,7 @@ vi.mock('./_shared.mjs', () => {
     VAULT_DIR: vaultPath,
     AGENT_DIR: path.join(require('os').homedir(), '.agent'),
     BRAIN_DIR: path.join(require('os').homedir(), '.agent', 'skills', 'total-recall'),
+    globalBrainDir: path.join(require('os').homedir(), '.agent', 'skills', 'total-recall'),
     ROOT: process.cwd(),
     MODEL_CATALOG_DIR: path.resolve(process.cwd(), 'models', 'catalog', 'total-recall'),
     resolveVaultFromQuery: () => vaultPath,
@@ -298,6 +300,20 @@ describe('plugins router', () => {
     const noCli = await request(app).post('/api/plugins/no-cli/run').send({});
     expect(noCli.status).toBe(400);
     expect(noCli.body.error).toContain('does not declare a CLI handler');
+  });
+
+  it('accepts stdin only for a declared secret operation and passes it separately from argv', async () => {
+    const secretPlugin = { ...plugin, manifest: { ...plugin.manifest, cli: { ...plugin.manifest.cli,
+      subcommands: [{ name: 'save-key', args: [{ name: 'key', type: 'string', secret: true }] }] } } };
+    getPluginByIdMock.mockReturnValueOnce(secretPlugin);
+    const response = await request(app).post('/api/plugins/git-sentinel/run').send({ subcommand: 'save-key', args: [], stdin: 'private-fixture' });
+    expect(response.status).toBe(200);
+    expect(runner.runPluginCommand).toHaveBeenLastCalledWith(secretPlugin, expect.objectContaining({ args: [], stdinText: 'private-fixture' }));
+    runner.runPluginCommand.mockClear();
+    const denied = await request(app).post('/api/plugins/git-sentinel/run').send({ subcommand: 'audit', stdin: 'private-fixture' });
+    expect(denied.status).toBe(400);
+    expect(runner.runPluginCommand).not.toHaveBeenCalled();
+    expect(JSON.stringify(denied.body)).not.toContain('private-fixture');
   });
 
   // ── Review Endpoints ──────────────────────────────────────────────────────

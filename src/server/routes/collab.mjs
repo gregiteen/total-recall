@@ -2,11 +2,10 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { loadPluginModule } from '../../core/plugin-runtime.mjs';
 import { WebSocket } from 'ws';
 import { brainDir as configBrainDir } from '../../core/config.mjs';
-import { chmodSecure, writeFileSecure } from '../../core/secure-file.mjs';
+import { writeFileSecure } from '../../core/secure-file.mjs';
 
 // Setup database paths in brainDir
 const DATA_DIR = path.join(configBrainDir, 'collab');
@@ -14,25 +13,8 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Signing secret: JWT_SECRET from the environment, otherwise a random secret
-// generated once and persisted beside the collab store. There is deliberately no
-// hardcoded fallback — a secret that ships in public source lets anyone forge a
-// token for any username.
-const JWT_SECRET_FILE = path.join(DATA_DIR, '.jwt-secret');
-export function resolveJwtSecret(env = process.env, secretFile = JWT_SECRET_FILE) {
-  if (env.JWT_SECRET) return env.JWT_SECRET;
-  try {
-    const existing = fs.readFileSync(secretFile, 'utf8').trim();
-    if (existing.length >= 32) {
-      chmodSecure(secretFile);
-      return existing;
-    }
-  } catch { /* not created yet */ }
-  const generated = crypto.randomBytes(48).toString('base64url');
-  writeFileSecure(secretFile, generated, { encoding: 'utf8' });
-  return generated;
-}
-const JWT_SECRET = resolveJwtSecret();
+const { createSessionCredentials } = await loadPluginModule('auth', 'session-credentials');
+const credentials = createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || configBrainDir });
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const GROUPS_FILE = path.join(DATA_DIR, 'groups.json');
@@ -57,10 +39,10 @@ function saveUsers(users) { writeJsonFile(USERS_FILE, users); }
 function getUser(username) {
   return loadUsers().find(u => u.username.toLowerCase() === username.toLowerCase());
 }
-function createUser(username, passwordHash) {
+function createUser(username) {
   const users = loadUsers();
   if (getUser(username)) throw new Error('User already exists');
-  const user = { username, passwordHash, created_at: new Date().toISOString() };
+  const user = { username, created_at: new Date().toISOString() };
   users.push(user);
   saveUsers(users);
   return user;
@@ -128,7 +110,7 @@ function requireCollabAuth(req, res, next) {
   }
   const token = authHeader.split(' ')[1];
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = credentials.verifyToken('collaboration', token);
     req.user = payload;
     next();
   } catch (err) {
@@ -139,32 +121,33 @@ function requireCollabAuth(req, res, next) {
 // ─── Router ──────────────────────────────────────────────────────────────────
 export const collabRouter = express.Router();
 
-collabRouter.post('/api/collab/auth/register', (req, res) => {
+collabRouter.post('/api/collab/auth/register', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
   try {
-    const passwordHash = bcrypt.hashSync(password, 10);
-    const user = createUser(username, passwordHash);
+    const token = credentials.signToken('collaboration', { username }, { ttlSeconds: 604800 });
+    if (getUser(username)) throw new Error('User already exists');
+    await credentials.registerCollaborationPassword(username, password);
+    const user = createUser(username);
     const group = createGroup(`${username}'s Workspace`, username);
-    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, username: user.username, defaultGroupCode: group.code });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-collabRouter.post('/api/collab/auth/login', (req, res) => {
+collabRouter.post('/api/collab/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
   const user = getUser(username);
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+  if (!user || !await credentials.verifyCollaborationPassword(username, password)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+  const token = credentials.signToken('collaboration', { username: user.username }, { ttlSeconds: 604800 });
   res.json({ token, username: user.username });
 });
 
@@ -243,7 +226,7 @@ export function handleCollabUpgrade(request, socket, head, wss) {
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = credentials.verifyToken('collaboration', token);
     wss.handleUpgrade(request, socket, head, (ws) => {
       clients.set(ws, { username: payload.username, currentUrl: null });
       

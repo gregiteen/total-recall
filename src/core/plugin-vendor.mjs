@@ -40,6 +40,20 @@ function assertEmptyDestination(dest) {
   }
 }
 
+function assertProjectDestination(projectRoot, target) {
+  const root = fs.realpathSync(projectRoot);
+  let parent = target;
+  while (!fs.existsSync(parent)) {
+    const next = path.dirname(parent);
+    if (next === parent) throw new Error('Destination must be inside the project');
+    parent = next;
+  }
+  const resolved = fs.realpathSync(parent);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    throw new Error('Destination must be inside the project; symlink parent escapes it');
+  }
+}
+
 function bricksPath(projectRoot) {
   return path.join(projectRoot, BRICKS_FILE);
 }
@@ -65,6 +79,34 @@ export function listBricks(projectRoot = process.cwd()) {
   });
 }
 
+function parseVersion(v) {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v || ''));
+  return m ? m.slice(1).map(Number) : null;
+}
+
+/** Supports '*', exact 'x.y.z', '^x.y.z' (same major, at least) and '>=x.y.z'. */
+export function satisfiesRange(version, range) {
+  if (!range || range === '*') return true;
+  const have = parseVersion(version);
+  const m = /^(\^|>=)?\s*(\d+\.\d+\.\d+)$/.exec(String(range).trim());
+  if (!have || !m) return false;
+  const want = parseVersion(m[2]);
+  const cmp = have[0] - want[0] || have[1] - want[1] || have[2] - want[2];
+  if (m[1] === '>=') return cmp >= 0;
+  if (m[1] === '^') return have[0] === want[0] && cmp >= 0;
+  return cmp === 0;
+}
+
+function parseRequires(manifest) {
+  if (manifest.requires === undefined) return [];
+  if (!Array.isArray(manifest.requires)) throw new Error("plugin.json 'requires' must be an array");
+  return manifest.requires.map((r) => {
+    const entry = typeof r === 'string' ? { id: r } : r;
+    if (!entry || !ID_PATTERN.test(entry.id || '')) throw new Error(`plugin.json 'requires' has an invalid entry: ${JSON.stringify(r)}`);
+    return { id: entry.id, range: entry.version || '*' };
+  });
+}
+
 function dependencyHints(dir) {
   const file = path.join(dir, 'package.json');
   if (!fs.existsSync(file)) return {};
@@ -82,7 +124,7 @@ function dependencyHints(dir) {
  * @param {string} [dest] directory inside the project; defaults to bricks/<id>
  */
 export async function vendorPlugin(source, dest, options = {}) {
-  const { projectRoot = process.cwd() } = options;
+  const { projectRoot = process.cwd(), resolveRequires = false, chain = [] } = options;
   if (!source || typeof source !== 'string') throw new Error('Missing plugin source');
 
   let srcDir;
@@ -118,11 +160,35 @@ export async function vendorPlugin(source, dest, options = {}) {
     if (target !== projectRoot && !target.startsWith(path.resolve(projectRoot) + path.sep)) {
       throw new Error('Destination must be inside the project');
     }
+    assertProjectDestination(projectRoot, target);
     const registry = readBricks(projectRoot);
     if (registry.bricks.some((b) => b.id === manifest.id)) {
       throw new Error(`Brick '${manifest.id}' is already in this project. Remove it from ${BRICKS_FILE} and its directory first.`);
     }
     assertEmptyDestination(target);
+
+    const required = parseRequires(manifest);
+    if (chain.includes(manifest.id)) throw new Error(`Circular requires: ${[...chain, manifest.id].join(' -> ')}`);
+    const installed = (id) => readBricks(projectRoot).bricks.find((b) => b.id === id);
+    const conflicts = required.filter((r) => installed(r.id) && !satisfiesRange(installed(r.id).version, r.range));
+    if (conflicts.length) {
+      throw new Error(`Conflicting required bricks: ${conflicts.map((r) => `${r.id} needs ${r.range} but ${installed(r.id).version} is installed`).join('; ')}`);
+    }
+    const missing = required.filter((r) => !installed(r.id));
+    if (missing.length && !resolveRequires) {
+      throw new Error(`Missing required bricks: ${missing.map((r) => `${r.id}@${r.range}`).join(', ')}. Add them first or resolve them automatically.`);
+    }
+    const resolved = [];
+    for (const r of missing) {
+      const dep = await vendorPlugin(r.id, undefined, { projectRoot, resolveRequires, chain: [...chain, manifest.id] });
+      if (!satisfiesRange(dep.version, r.range)) {
+        throw new Error(`Required brick ${r.id} resolved to ${dep.version}, which does not satisfy ${r.range}`);
+      }
+      resolved.push(dep.id);
+    }
+    if (registry.bricks.some((b) => b.id === manifest.id)) {
+      throw new Error(`Brick '${manifest.id}' is already in this project.`);
+    }
 
     const files = listPluginFiles(srcDir);
     const sha256 = hashPluginDir(srcDir).sha256;
@@ -143,13 +209,15 @@ export async function vendorPlugin(source, dest, options = {}) {
       note: 'This project owns this copy. Record upstream comparisons here; do not expect automatic updates.'
     };
     fs.writeFileSync(path.join(target, PROVENANCE_FILE), `${JSON.stringify(provenance, null, 2)}\n`);
+    registry.bricks = readBricks(projectRoot).bricks;
     registry.bricks.push({
       id: manifest.id,
       version: manifest.version,
       dir: path.relative(projectRoot, target).split(path.sep).join('/'),
       source: sourceRecord,
       sha256,
-      added_at: vendoredAt
+      added_at: vendoredAt,
+      ...(required.length ? { requires: required } : {})
     });
     fs.writeFileSync(bricksPath(projectRoot), `${JSON.stringify(registry, null, 2)}\n`);
     return {
@@ -159,7 +227,9 @@ export async function vendorPlugin(source, dest, options = {}) {
       files: files.length,
       sha256,
       source: sourceRecord,
-      dependencies: dependencyHints(target)
+      dependencies: dependencyHints(target),
+      requires: required,
+      resolved
     };
   } finally {
     if (cleanup) fs.rmSync(cleanup, { recursive: true, force: true });

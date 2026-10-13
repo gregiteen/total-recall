@@ -5,7 +5,7 @@ vi.mock('./logger.mjs', () => ({
 }));
 
 const getSecret = vi.fn();
-vi.mock('./secrets-store.mjs', () => ({ getSecret: (...a) => getSecret(...a) }));
+vi.mock('./plugin-runtime.mjs', () => ({ loadPluginModule: async () => ({ getSecret: (...a) => getSecret(...a) }) }));
 
 import fs from 'fs';
 import os from 'os';

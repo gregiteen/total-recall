@@ -35,7 +35,6 @@ vi.mock('./components/BrainSelector', () => ({ default: () => <div data-testid="
 vi.mock('./pages/SkillsPage', () => ({ default: () => <div data-testid="skills-page" /> }));
 vi.mock('./pages/HelpPage', () => ({ default: () => <div data-testid="help-page" /> }));
 vi.mock('./pages/GraphPage', () => ({ default: () => <div data-testid="graph-page" /> }));
-vi.mock('./pages/OpenWikiPage', () => ({ default: () => <div data-testid="openwiki-page" /> }));
 vi.mock('./pages/OnboardingPage', () => ({ default: () => <div data-testid="onboarding-page" /> }));
 
 describe('App', () => {

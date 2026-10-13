@@ -47,6 +47,14 @@ describe('card contract', () => {
     m.cli.subcommands[1].args.push({ name: 'apiKey', flag: '--key', label: 'Key', type: 'string', secret: true });
     expect(validateCardContract(m).errors.join('\n')).toMatch(/stdin, not as a flag/);
   });
+  it('accepts one stdin string without positional/flag metadata and rejects ambiguity', () => {
+    const m = base();
+    m.cli.subcommands[1].args = [{ name: 'key', label: 'Key', type: 'string', secret: true }];
+    expect(validateCardContract(m).errors).toEqual([]);
+    m.cli.subcommands[1].args.push({ name: 'other', label: 'Other', type: 'number', secret: true });
+    expect(validateCardContract(m).errors.join('\n')).toMatch(/must be a string/);
+    expect(validateCardContract(m).errors.join('\n')).toMatch(/only one secret/);
+  });
   it('requires layout regions to bind to declared commands', () => {
     const m = base();
     m.card_layout.regions[1].source.command = 'nope';
@@ -90,5 +98,23 @@ describe('card contract', () => {
     expect(result.errors.join('\n')).toMatch(/branding.logo must be a relative/);
     expect(result.errors.join('\n')).toMatch(/provider needs a name/);
     expect(result.warnings.join('\n')).toMatch(/icon is deprecated/);
+  });
+
+  it('validates workspace property when present', () => {
+    const m = base();
+    m.workspace = {
+      component: 'PhoneDialer',
+      tabs: ['Dialer', 'Calls', 'Messages', 'Contacts', 'Agents', 'Settings'],
+      permissions: ['microphone']
+    };
+    expect(validateCardContract(m).errors).toEqual([]);
+
+    m.workspace.tabs = [''];
+    m.workspace.permissions = [123];
+    const result = validateCardContract(m);
+    expect(result.errors.join('\n')).toMatch(/workspace.tabs' must be an array of non-empty strings/);
+    expect(result.errors.join('\n')).toMatch(/workspace.permissions' must be an array of permission strings/);
+    m.workspace.permissions = ['filesystem'];
+    expect(validateCardContract(m).errors.join('\n')).toMatch(/workspace.permissions/);
   });
 });

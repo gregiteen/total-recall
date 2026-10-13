@@ -1,8 +1,9 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../../core/plugin-runtime.mjs';
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { requireAuth, requireScope } from '../auth.mjs';
 import { BRAIN_DIR } from './_shared.mjs';
-import { getSecret, setSecret } from '../../core/secrets-store.mjs';
+const { getSecret, setSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
 import { findVfsDocumentByPath, listVfsDocumentsUnder } from '../../core/vfs-documents.mjs';
 import {
   appendVfsEvent,

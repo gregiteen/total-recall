@@ -88,6 +88,19 @@ describe('logger', () => {
     expect(parsed.timestamp).toBeDefined();
   });
 
+  it('does not write debug entries unless TR_LOG_LEVEL=debug', () => {
+    const appendSpy = vi.spyOn(fsMock, 'appendFileSync');
+    logger.log('t', 'debug', 'quiet');
+    expect(appendSpy).not.toHaveBeenCalled();
+    process.env.TR_LOG_LEVEL = 'debug';
+    try {
+      logger.log('t', 'debug', 'loud');
+      expect(appendSpy).toHaveBeenCalledOnce();
+    } finally {
+      delete process.env.TR_LOG_LEVEL;
+    }
+  });
+
   it('logger.info calls logger.log with level=info', () => {
     const logSpy = vi.spyOn(logger, 'log');
     logger.info('sys', 'info message');

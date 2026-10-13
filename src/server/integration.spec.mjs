@@ -27,6 +27,13 @@ vi.mock('../core/runtime.mjs', () => ({
   checkRuntimeHealth: vi.fn(async () => ({ status: 'healthy' }))
 }));
 vi.mock('./auth.mjs', () => ({
+  isLocalRequest: () => true,
+  dashboardAuthState: () => ({ configured: false }),
+  signSessionToken: () => 'fixture-token',
+  sessionCookieOptions: () => ({}),
+  mintStepUpToken: () => 'fixture-step-up',
+  verifyStepUpToken: () => ({ ok: false }),
+  verifyDashboardPassword: async () => false,
   requireAuth: (_req, _res, next) => next(),
   requireScope: () => (_req, _res, next) => next(),
   requireAuthOrLocal: (_req, _res, next) => next(),

@@ -8,6 +8,8 @@ import {
   ssssNodeToOkfConcept,
   importBundle,
   exportBundle,
+  generateLiveIndex,
+  generateLiveLog,
   DEFAULT_OKF_TYPE_MAP
 } from './okf-adapter.mjs';
 import { validateMemoryNode } from './total-recall-memory-validator.mjs';
@@ -429,6 +431,26 @@ describe('OKF Adapter Core Logic', () => {
       expect(report.warnings.length).toBe(0);
       expect(report.errors.length).toBe(1);
       expect(report.errors[0].message).toContain('Missing or empty tags');
+    });
+  });
+
+  describe('generated bundle files', () => {
+    it('does not rewrite index.md or log.md when their content is unchanged', async () => {
+      const dir = path.join(os.tmpdir(), `total-recall-live-${crypto.randomUUID()}`);
+      fs.mkdirSync(dir, { recursive: true });
+      try {
+        await importBundle('fixtures/okf-bundles/full', dir);
+        generateLiveIndex(dir);
+        generateLiveLog(dir);
+        const before = ['index.md', 'log.md'].map((f) => fs.statSync(path.join(dir, f)).mtimeMs);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        generateLiveIndex(dir);
+        generateLiveLog(dir);
+        const after = ['index.md', 'log.md'].map((f) => fs.statSync(path.join(dir, f)).mtimeMs);
+        expect(after).toEqual(before);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

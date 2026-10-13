@@ -1,8 +1,9 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
 import { safeFetch as throttledSafeFetch } from './throttled-fetch.mjs';
-import { loadSecretsSync } from './secrets-store.mjs';
+const { loadSecretsSync } = await __loadOwnedPlugin('auth', 'secrets-store');
 import {
   brainDir,
   braveApiKey as defaultBraveKey,

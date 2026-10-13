@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../core/plugin-runtime.mjs';
 /**
  * deploy-ui.mjs
  *
@@ -17,10 +18,8 @@ import fs, { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
-import bcrypt from 'bcrypt';
 import yaml from 'yaml';
 import { writeFileSecure } from '../core/secure-file.mjs';
-import { BCRYPT_COST } from '../server/auth.mjs';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -148,7 +147,7 @@ export function startDeployUI(port = 3001) {
               if (opts.openaiApiKey) {
                 secrets.openai_api_key = opts.openaiApiKey.trim();
               }
-              const { saveSecrets } = await import('../core/secrets-store.mjs');
+              const { saveSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
               await saveSecrets(configDir.replace(/\/config$/, ''), secrets);
             } catch (e) {
               console.error('Failed to save API keys to secrets.enc:', e);
@@ -1104,7 +1103,7 @@ export function startDeployUI(port = 3001) {
               try { secrets = JSON.parse(fs.readFileSync(secretsPath, 'utf8') || '{}'); } catch {}
             }
             secrets.github_token = token;
-            const { saveSecrets } = await import('../core/secrets-store.mjs');
+            const { saveSecrets } = await __loadOwnedPlugin('auth', 'secrets-store');
             await saveSecrets(configDir.replace(/\/config$/, ''), secrets);
 
             // Persist to wizard-config.json
@@ -1612,90 +1611,20 @@ export async function provisionVastAI(apiKey, instanceId = null, dashboardPasswo
     if (dashboardPassword) {
       emitProgress('log', '🔒 Configuring remote admin dashboard password...');
       try {
-        const hash = bcrypt.hashSync(dashboardPassword, BCRYPT_COST);
-        const forceReset = (!dashboardPassword || dashboardPassword === 'totalrecall');
-        // We run a remote node one-liner to update security.yml on the remote VM
-        const remoteScript = `
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-
-// Wait for config dir and security.yml to exist if needed
-const securityFile = path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'config', 'security.yml');
-for (let i = 0; i < 15; i++) {
-  if (fs.existsSync(securityFile)) break;
-  require('child_process').spawnSync('sleep', ['1']);
-}
-
-if (!fs.existsSync(securityFile)) {
-  fs.mkdirSync(path.dirname(securityFile), { recursive: true });
-  fs.writeFileSync(securityFile, 'dashboard:\\n  password_hash: null\\n  force_password_reset: ${forceReset}\\n', 'utf8');
-}
-
-let content = fs.readFileSync(securityFile, 'utf8');
-if (content.includes('dashboard:')) {
-  const lines = content.split('\\n');
-  let inDashboard = false;
-  let hashSet = false;
-  let forceResetSet = false;
-  
-  for (let j = 0; j < lines.length; j++) {
-    const line = lines[j];
-    if (line.startsWith('dashboard:')) {
-      inDashboard = true;
-      continue;
-    }
-    if (inDashboard && (line.startsWith('privacy:') || line.startsWith('yolo_mode:') || line.startsWith('api:') || line.startsWith('rate_limits:') || line.startsWith('bind:') || line.startsWith('network:'))) {
-      inDashboard = false;
-    }
-    
-    if (inDashboard) {
-      if (line.includes('password_hash:')) {
-        lines[j] = '  password_hash: "${hash}"';
-        hashSet = true;
-      }
-      if (line.includes('force_password_reset:')) {
-        lines[j] = '  force_password_reset: ${forceReset}';
-        forceResetSet = true;
-      }
-    }
-  }
-  
-  // Find where dashboard starts to inject missing fields
-  const dbIndex = lines.findIndex(l => l.startsWith('dashboard:'));
-  if (dbIndex !== -1) {
-    if (!hashSet) {
-      lines.splice(dbIndex + 1, 0, '  password_hash: "${hash}"');
-    }
-    if (!forceResetSet) {
-      lines.splice(dbIndex + 1, 0, '  force_password_reset: ${forceReset}');
-    }
-  }
-  
-  fs.writeFileSync(securityFile, lines.join('\\n'), 'utf8');
-} else {
-  content += '\\ndashboard:\\n  password_hash: "${hash}"\\n  force_password_reset: ${forceReset}\\n';
-  fs.writeFileSync(securityFile, content, 'utf8');
-}
-console.log("REMOTE_PASS_OK");
-`;
-        
-        const res = spawnSync('ssh', [
-          '-p', String(instance.ssh_port),
-          '-o', 'StrictHostKeyChecking=no',
+        const forceReset = dashboardPassword === 'totalrecall';
+        // Credential material travels on SSH stdin, never embedded in command text.
+        const result = spawnSync('ssh', [
+          '-p', String(instance.ssh_port), '-o', 'StrictHostKeyChecking=yes',
           `root@${instance.ssh_host}`,
-          `node -e ${JSON.stringify(remoteScript)}`
-        ], { encoding: 'utf8', timeout: 15000 });
-        
-        console.log('[Remote Security Setup] stdout:', res.stdout);
-        console.log('[Remote Security Setup] stderr:', res.stderr);
-        if (res.stdout && res.stdout.includes('REMOTE_PASS_OK')) {
-          emitProgress('log', '🔒 Remote admin dashboard password configured successfully.');
-        } else {
-          emitProgress('log', '⚠️ Remote admin password setup command ran, but check remote logs.');
-        }
+          `total-recall auth password set --stdin --json${forceReset ? ' --force-reset' : ''}`,
+        ], { input: dashboardPassword, encoding: 'utf8', timeout: 30000, maxBuffer: 65536 });
+        if (result.error || result.status !== 0) throw new Error('Remote auth credential setup failed');
+        const report = JSON.parse(result.stdout);
+        if (report.updated !== true) throw new Error('Remote auth did not verify credential setup');
+        emitProgress('log', 'Remote admin dashboard password saved through auth.');
       } catch (err) {
-        emitProgress('log', `⚠️ Failed to configure remote password automatically: ${err.message}`);
+        emitProgress('error', 'Remote auth credential setup failed; deployment readiness is incomplete.');
+        return;
       }
     }
 

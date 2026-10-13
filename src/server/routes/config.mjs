@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from '../../core/plugin-runtime.mjs';
 /**
  * Config Routes
  *
@@ -104,7 +105,7 @@ router.get('/api/config-json', requireAuth, requireScope('config:read'), async (
     ];
     const safeSecrets = {};
     try {
-      const { listSecretsMeta } = await import('../../core/secrets-store.mjs');
+      const { listSecretsMeta } = await __loadOwnedPlugin('auth', 'secrets-store');
       const meta = await listSecretsMeta(BRAIN_DIR);
       for (const row of meta) {
         if (!allowedKeys.includes(row.key)) continue;
@@ -183,7 +184,7 @@ router.post('/api/config-json', requireAuth, requireScope('config:write'), async
         'serper_api_key',
         'github_token',
       ];
-      const { setSecret, deleteSecret } = await import('../../core/secrets-store.mjs');
+      const { setSecret, deleteSecret } = await __loadOwnedPlugin('auth', 'secrets-store');
       for (const key of allowedKeys) {
         if (secrets[key] === undefined) continue;
         const value = secrets[key];

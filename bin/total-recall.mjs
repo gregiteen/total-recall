@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from 'node:fs';
 
 /**
  * total-recall CLI
@@ -87,7 +88,6 @@ const COMMANDS = {
   relay:    'relay.mjs',
   uninstall: 'uninstall.mjs',
   map:      'map.mjs',
-  mesh:     'mesh.mjs',
   brain:    'brain.mjs',
   config:   'config.mjs',
   skill:    'skill.mjs',
@@ -96,8 +96,6 @@ const COMMANDS = {
   brief:    'brief.mjs',
   group:    'group.mjs',
   groups:   'group.mjs',
-  secret:   'secret.mjs',
-  secrets:  'secret.mjs',
   help:     'help.mjs',
   collab:   'collab.mjs',
   command:  'command.mjs',
@@ -106,6 +104,7 @@ const COMMANDS = {
   watch:    'rebuild.mjs',
   agent:    'agent.mjs',
   agents:   'agent.mjs',
+  new:      'new.mjs',
   plugin:   'plugin/index.mjs',
   plugins:  'plugin/index.mjs',
   scaffold: 'plugin/scaffold-cmd.mjs',
@@ -132,6 +131,7 @@ async function printHelp() {
 
   Core (default product path):
     init [--project]    Bootstrap global or project brain + openwiki
+    new <name> [--with ids]  Create a project (ssss new + Total Recall) with plugins as owned bricks
     connect <client>    Wire IDE surface (Cursor, Claude, Codex, Grok, Replit, Lovable)
     remember / forget / edit   Write-path memory (SSSS vault)
     recall              Read-path hybrid search
@@ -142,8 +142,6 @@ async function printHelp() {
     daemon <cmd>        Background worker (start|stop|status)
     skill <cmd>         Skills registry, deploy, multi-repo sync
     plugin <cmd>        Plugin manager: list, install, search, remove, info
-    secret <cmd>        Secrets store + usage (not the vault)
-    mesh <cmd>          Control-server mesh: nodes, ACL policy, Tailscale SSH
     harness <cmd>       Meta-harness manager: list, usage (5h/weekly quotas), dispatch, council
     agent <cmd>         Process controller: spawn, list, logs, kill across mesh
     brain <cmd>         Register / ensure any project brain
@@ -188,20 +186,42 @@ async function main() {
     process.exit(0);
   }
 
-  const handlerFile = COMMANDS[command];
-  if (!handlerFile) {
-    // Any HTTP API route group without a dedicated verb: `total-recall <group> <action> …`
+  // Core built-in memory and rules commands that always run from core
+  const CORE_BUILTINS = new Set([
+    'remember', 'forget', 'edit', 'recall', 'context', 'rules',
+    'compile', 'rebuild', 'dream', 'proposals', 'proposal', 'task',
+    'daemon', 'skill', 'plugin', 'plugins',
+    'harness', 'agent', 'agents', 'brain', 'status',
+    'doctor', 'brief', 'startup', 'init', 'connect', 'new'
+  ]);
+
+  // Check installed plugins first for any non-core commands (e.g. deploy, phone, text)
+  if (!CORE_BUILTINS.has(command)) {
     try {
-      const { loadApiRoutes } = await import('../src/core/api-routes.mjs');
-      if ((await loadApiRoutes()).some((r) => r.group === command)) {
-        const { default: apiCli } = await import('../src/cli/api.mjs');
-        await apiCli(args);
-        process.exit(process.exitCode ?? 0);
+      const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
+      const plugins = discoverPlugins(process.cwd());
+      for (const p of plugins) {
+        if (p.valid && (p.manifest.cli?.command === command || (p.id === 'auth' && (command === 'secret' || command === 'secrets')))) {
+          const handlerRel = p.manifest.cli.handler;
+          if (handlerRel) {
+            const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');
+            const pluginArgs = (command === 'secret' || command === 'secrets')
+              ? ['secret', ...args.slice(1)]
+              : args.slice(1);
+            const result = await runPluginCommand(p, { args: pluginArgs, stdin: 'inherit' });
+            if (result.output) process.stdout.write(result.output);
+            process.exit(result.ok ? 0 : (result.exitCode || 1));
+          }
+        }
       }
     } catch (err) {
-      console.error(`Error: ${err.message}`);
+      console.error(`Error executing plugin command: ${err.message}`);
       process.exit(1);
     }
+  }
+
+  const handlerFile = COMMANDS[command];
+  if (!handlerFile) {
 
     // Check if it is a dynamic integration command configured in the VFS
     try {
@@ -280,22 +300,21 @@ async function main() {
         process.exit(0);
       }
 
-      // Check installed plugins for custom CLI commands declared in manifest
-      const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
-      const plugins = discoverPlugins(process.cwd());
-      for (const p of plugins) {
-        if (p.valid && p.manifest.cli?.command === command) {
-          const handlerRel = p.manifest.cli.handler;
-          if (handlerRel) {
-            const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');
-            const result = await runPluginCommand(p, { args: args.slice(1), stdin: 'inherit' });
-            if (result.output) process.stdout.write(result.output);
-            process.exit(result.ok ? 0 : (result.exitCode || 1));
-          }
-        }
-      }
     } catch (err) {
       console.error(`Error executing dynamic command: ${err.message}`);
+      process.exit(1);
+    }
+
+    // Any HTTP API route group without a dedicated verb: `total-recall <group> <action> …`
+    try {
+      const { loadApiRoutes } = await import('../src/core/api-routes.mjs');
+      if ((await loadApiRoutes()).some((r) => r.group === command)) {
+        const { default: apiCli } = await import('../src/cli/api.mjs');
+        await apiCli(args);
+        process.exit(process.exitCode ?? 0);
+      }
+    } catch (err) {
+      console.error(`Error: ${err.message}`);
       process.exit(1);
     }
 
@@ -314,7 +333,7 @@ async function main() {
       await handler.default(process.argv.slice(3));
     }
   } catch (err) {
-    if (err.code === 'ERR_MODULE_NOT_FOUND') {
+    if (err.code === 'ERR_MODULE_NOT_FOUND' && !fs.existsSync(handlerPath)) {
       console.error(`Command '${command}' is not yet implemented.`);
       console.error(`Expected handler at: ${handlerPath}`);
       process.exit(1);

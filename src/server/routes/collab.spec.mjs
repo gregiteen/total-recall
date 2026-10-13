@@ -31,21 +31,9 @@ afterAll(() => {
 });
 
 describe('collab JWT secret', () => {
-  it('never falls back to the old hardcoded secret', async () => {
-    const secretFile = path.join(tmpBrain, 'collab', '.jwt-secret');
-    const secret = fs.readFileSync(secretFile, 'utf8');
-    expect(secret).not.toBe('total-recall-collab-secret-key-1234');
-    expect(secret.length).toBeGreaterThanOrEqual(32);
-    expect(fs.statSync(secretFile).mode & 0o777).toBe(0o600);
-  });
-
-  it('reuses the persisted secret and prefers JWT_SECRET from env', () => {
-    const file = path.join(tmpBrain, 'secret-reuse');
-    const first = collab.resolveJwtSecret({}, file);
-    fs.chmodSync(file, 0o644);
-    expect(collab.resolveJwtSecret({}, file)).toBe(first);
-    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
-    expect(collab.resolveJwtSecret({ JWT_SECRET: 'from-env' }, file)).toBe('from-env');
+  it('does not generate or persist a core signing file', () => {
+    expect(fs.existsSync(path.join(tmpBrain, 'collab', '.jwt-secret'))).toBe(false);
+    expect(collab.resolveJwtSecret).toBeUndefined();
   });
 
   it('rejects a token forged with the old default secret', async () => {

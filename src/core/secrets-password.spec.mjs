@@ -1,8 +1,9 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { secretsPassword, readTrEnvFilePassword } from './secrets-store.mjs';
+const { secretsPassword, readTrEnvFilePassword } = await __loadOwnedPlugin('auth', 'secrets-store');
 
 const noFile = () => null;
 

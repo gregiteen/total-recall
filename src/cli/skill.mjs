@@ -55,7 +55,7 @@ function printHelp() {
   Install / local:
     find <query>          Search skills.sh registry (sorted by installs)
     install <package>     Download skill, security scan, compile, auto-register (alias: load, add)
-    create <name>         Scaffold a new skill folder (alias: new)
+    create <name>         Scaffold a new skill folder (alias: new) [--docs-url <url>]
     edit <name>           Open local SKILL.md in $EDITOR
     scan <name>           Security audit on installed skill dir
     list                  List local brain skills with SKILL.md (alias: ls)
@@ -132,6 +132,84 @@ function parseFlagValue(args, flag) {
   return args[i + 1] || null;
 }
 
+export function scaffoldSkill(target, { skillsDir, docsUrl } = {}) {
+  if (!target) {
+    throw new Error('You must specify a skill name to create.');
+  }
+
+  if (!/^[a-z][a-z0-9-]{1,63}$/.test(target)) {
+    throw new Error('Invalid skill name. Must be lowercase kebab-case (e.g. my-awesome-skill).');
+  }
+
+  const newSkillDir = path.join(skillsDir, target);
+  if (fs.existsSync(newSkillDir)) {
+    throw new Error(`Skill directory already exists: ${newSkillDir}`);
+  }
+
+  fs.mkdirSync(newSkillDir, { recursive: true });
+
+  const folders = ['scripts', 'references', 'evals', 'subagents'];
+  for (const f of folders) {
+    fs.mkdirSync(path.join(newSkillDir, f), { recursive: true });
+    fs.writeFileSync(path.join(newSkillDir, f, '.gitkeep'), '', 'utf8');
+  }
+
+  const formattedTitle = target.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const docsRef = docsUrl ? `* Core specifications or API documentation: ${docsUrl}` : '* Core specifications or official API documentation';
+
+  // Write template SKILL.md
+  const skillMdContent = `---
+type: skill
+name: ${target}
+description: "Use this skill when [TRIGGER CONDITION]. MANDATORY: You MUST read the full SKILL.md file before executing."
+schema_version: 2
+---
+
+# ${formattedTitle} Skill
+
+Provide a high-level explanation of the skill's capabilities and context.
+
+## Core Directives
+
+1. Check current official documentation online before executing non-trivial actions (do not rely on outdated training memory).
+2. Step-by-step procedural instruction
+3. Concrete action rule
+4. Pitfalls to avoid
+
+## References
+
+${docsRef}
+`;
+  fs.writeFileSync(path.join(newSkillDir, 'SKILL.md'), skillMdContent, 'utf8');
+
+  // Write template evals.json
+  const evalsJsonContent = [
+    {
+      "name": "frontmatter-has-name",
+      "assertion": "SKILL.md YAML frontmatter contains a 'name' field",
+      "severity": "error"
+    },
+    {
+      "name": "description-is-trigger-optimized",
+      "assertion": "description field starts with 'Use this skill when'",
+      "severity": "warning"
+    },
+    {
+      "name": "core-directives-starts-with-online-docs-check",
+      "assertion": "First core directive requires checking current official documentation online",
+      "severity": "error"
+    },
+    {
+      "name": "no-empty-directories",
+      "assertion": "All required directories contain at least one non-.gitkeep file",
+      "severity": "error"
+    }
+  ];
+  fs.writeFileSync(path.join(newSkillDir, 'evals', 'evals.json'), JSON.stringify(evalsJsonContent, null, 2), 'utf8');
+
+  return { skillDir: newSkillDir, skillMdContent };
+}
+
 export default async function skillCli(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
   if (remainingArgs[0] === 'optimize') {
@@ -186,18 +264,18 @@ export default async function skillCli(args) {
     try {
       const { searchAndSort } = await importSkillScript('find-skills.mjs', { agentDir });
       const results = searchAndSort(query);
-      
+
       if (results.length === 0) {
         console.log('\nℹ️  No matching skills found on skills.sh.');
         return;
       }
 
       console.log('\n✨ --- SKILLS.SH REGISTRY SEARCH RESULTS (Sorted by Installs) --- ✨\n');
-      
+
       const nameHeader = 'SKILL PACKAGE';
       const installsHeader = 'INSTALLS';
       const urlHeader = 'REGISTRY URL';
-      
+
       let maxNameLen = nameHeader.length;
       let maxInstallsLen = installsHeader.length;
 
@@ -225,8 +303,8 @@ export default async function skillCli(args) {
       console.error('❌ Error executing search:', err.message);
       process.exit(1);
     }
-  } 
-  
+  }
+
   else if (command === 'install' || command === 'add' || command === 'load') {
     const pkg = remainingArgs[1];
     if (!pkg) {
@@ -256,7 +334,7 @@ export default async function skillCli(args) {
             source_type: 'registry',
           });
           console.log(`📇 Registered in catalog: ${entry.id} → ${resolveRegistryPath(brainDir)}`);
-          
+
           // Trigger universal sync
           console.log(`🌍 Triggering universal sync for ${entry.id}...`);
           const syncResult = syncSkillTwoWay(brainDir, entry.id, { prefer: 'registry' });
@@ -269,12 +347,14 @@ export default async function skillCli(args) {
       } catch (regErr) {
         console.warn(`⚠️  Installed but registry update/sync skipped: ${regErr.message}`);
       }
+      const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+      await autoCompileSurfaces({ layer, semantic: false, force: true });
     } catch (err) {
       console.error('❌ Loading skill failed:', err.message);
       process.exit(1);
     }
-  } 
-  
+  }
+
   else if (command === 'scan') {
     const target = remainingArgs[1];
     if (!target) {
@@ -293,8 +373,8 @@ export default async function skillCli(args) {
       console.error('❌ Audit execution failed:', err.message);
       process.exit(1);
     }
-  } 
-  
+  }
+
   else if (command === 'list' || command === 'ls') {
     if (!fs.existsSync(skillsDir)) {
       console.log('No skills registry directory initialized yet.');
@@ -320,8 +400,8 @@ export default async function skillCli(args) {
       console.log(` • ${d.padEnd(20)}${note}`);
     }
     console.log('------------------------------------------------------------\n');
-  } 
-  
+  }
+
   else if (command === 'remove' || command === 'rm') {
     const target = remainingArgs[1];
     if (!target) {
@@ -341,95 +421,32 @@ export default async function skillCli(args) {
     console.log('✅ Skill files deleted successfully.');
 
     // Hot-recompile shims to strip the removed rules
-    console.log('🔄 Hot-recompiling active shims to reflect changes...');
-    const child = spawnSync('npx', ['total-recall', 'compile'], { 
-      encoding: 'utf8',
-      cwd: process.cwd(),
-      env: { ...process.env, AGENT_DIR: agentDir },
-    });
+    const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+    await autoCompileSurfaces({ layer, semantic: false, force: true });
+  }
 
-    if (child.error || child.status !== 0) {
-      console.warn('⚠️  Shim hot-recompilation returned warning.');
-    } else {
-      console.log('🚀 Hot-recompilation successful. Skill is fully offline.');
-    }
-  } 
-  
   else if (command === 'create' || command === 'new') {
     const target = remainingArgs[1];
     if (!target) {
       console.error('❌ You must specify a skill name to create.');
-      console.error('Usage: npx total-recall skill create <skill-name>');
+      console.error('Usage: npx total-recall skill create <skill-name> [--docs-url <url>]');
       process.exit(1);
     }
 
-    if (!/^[a-z][a-z0-9-]{1,63}$/.test(target)) {
-      console.error('❌ Invalid skill name. Must be lowercase kebab-case (e.g. my-awesome-skill).');
-      process.exit(1);
-    }
-
-    const newSkillDir = path.join(skillsDir, target);
-    if (fs.existsSync(newSkillDir)) {
-      console.error(`❌ Skill directory already exists: ${newSkillDir}`);
-      process.exit(1);
-    }
+    const docsUrlIdx = remainingArgs.indexOf('--docs-url');
+    const docsUrl = docsUrlIdx !== -1 && remainingArgs[docsUrlIdx + 1] ? remainingArgs[docsUrlIdx + 1] : null;
 
     console.log(`📁 Scaffolding skill folder structure for "${target}"...`);
-    fs.mkdirSync(newSkillDir, { recursive: true });
-    
-    const folders = ['scripts', 'references', 'evals', 'subagents'];
-    for (const f of folders) {
-      fs.mkdirSync(path.join(newSkillDir, f), { recursive: true });
-      fs.writeFileSync(path.join(newSkillDir, f, '.gitkeep'), '', 'utf8');
+    try {
+      const { skillDir } = scaffoldSkill(target, { skillsDir, docsUrl });
+      console.log(`✨ Skill "${target}" successfully created and SSSS-scaffolded!`);
+      console.log(`📍 Path: ${skillDir}`);
+      console.log(`🌐 First step: Check current official documentation online before authoring directives.`);
+      console.log(`💡 Next steps: Edit SKILL.md with verified directives and add your automation scripts.`);
+    } catch (err) {
+      console.error(`❌ ${err.message}`);
+      process.exit(1);
     }
-
-    // Write template SKILL.md
-    const skillMdContent = `---
-type: skill
-name: ${target}
-description: "Use this skill when [TRIGGER CONDITION]. MANDATORY: You MUST read the full SKILL.md file before executing."
-schema_version: 2
----
-
-# ${target.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Skill
-
-Provide a high-level explanation of the skill's capabilities and context.
-
-## Core Directives
-
-1. Step-by-step procedural instruction
-2. Concrete action rule
-3. Pitfalls to avoid
-
-## References
-
-* Core specifications or API documentation
-`;
-    fs.writeFileSync(path.join(newSkillDir, 'SKILL.md'), skillMdContent, 'utf8');
-
-    // Write template evals.json
-    const evalsJsonContent = [
-      {
-        "name": "frontmatter-has-name",
-        "assertion": "SKILL.md YAML frontmatter contains a 'name' field",
-        "severity": "error"
-      },
-      {
-        "name": "description-is-trigger-optimized",
-        "assertion": "description field starts with 'Use this skill when'",
-        "severity": "warning"
-      },
-      {
-        "name": "no-empty-directories",
-        "assertion": "All required directories contain at least one non-.gitkeep file",
-        "severity": "error"
-      }
-    ];
-    fs.writeFileSync(path.join(newSkillDir, 'evals', 'evals.json'), JSON.stringify(evalsJsonContent, null, 2), 'utf8');
-
-    console.log(`✨ Skill "${target}" successfully created and SSSS-scaffolded!`);
-    console.log(`📍 Path: ${newSkillDir}`);
-    console.log(`💡 Next steps: edit the SKILL.md and add your automation scripts!`);
   }
 
   else if (command === 'edit') {
@@ -764,13 +781,13 @@ Provide a high-level explanation of the skill's capabilities and context.
       console.error('Usage: npx total-recall skill publish <skill-name>');
       process.exit(1);
     }
-    
+
     const targetDir = path.join(skillsDir, target);
     if (!fs.existsSync(targetDir)) {
       console.error(`❌ Skill "${target}" not found at ${targetDir}`);
       process.exit(1);
     }
-    
+
     console.log(`🚀 Preparing to publish "${target}" to the skills.sh open registry...`);
     console.log(`\nℹ️  The skills.sh registry relies on GitHub repositories.`);
     console.log(`To complete publication of this skill:`);

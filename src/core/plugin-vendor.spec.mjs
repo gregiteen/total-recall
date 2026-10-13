@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { vendorPlugin, listBricks, PROVENANCE_FILE, BRICKS_FILE } from './plugin-vendor.mjs';
+import { vendorPlugin, listBricks, satisfiesRange, PROVENANCE_FILE, BRICKS_FILE } from './plugin-vendor.mjs';
 
 let root;
 beforeEach(() => {
@@ -62,5 +62,70 @@ describe('vendorPlugin', () => {
 
   it('rejects a destination outside the project', async () => {
     await expect(vendorPlugin('tr-plugin-demo', '../escape', { projectRoot: root })).rejects.toThrow(/inside the project/);
+  });
+  it('rejects an in-project symlink that would write outside the project', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-outside-'));
+    try {
+      fs.symlinkSync(outside, path.join(root, 'linked'), 'junction');
+      await expect(vendorPlugin('tr-plugin-demo', 'linked/demo', { projectRoot: root })).rejects.toThrow(/symlink parent/);
+      expect(fs.readdirSync(outside)).toEqual([]);
+      expect(fs.existsSync(path.join(root, BRICKS_FILE))).toBe(false);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  describe('requires', () => {
+    function mk(name, manifest) {
+      const dir = path.join(root, `tr-plugin-${name}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ id: name, ...manifest }));
+    }
+    const opts = (extra = {}) => ({ projectRoot: root, ...extra });
+
+    it('matches version ranges', () => {
+      expect(satisfiesRange('1.2.3', '*')).toBe(true);
+      expect(satisfiesRange('1.4.0', '^1.2.0')).toBe(true);
+      expect(satisfiesRange('2.0.0', '^1.2.0')).toBe(false);
+      expect(satisfiesRange('1.1.0', '>=1.2.0')).toBe(false);
+      expect(satisfiesRange('1.2.3', '1.2.3')).toBe(true);
+      expect(satisfiesRange('1.2.3', 'garbage')).toBe(false);
+    });
+
+    it('fails with the missing list and writes nothing', async () => {
+      mk('base', { version: '1.0.0' });
+      mk('top', { version: '1.0.0', requires: ['base', { id: 'extra', version: '^2.0.0' }] });
+      await expect(vendorPlugin('tr-plugin-top', undefined, opts())).rejects.toThrow(/Missing required bricks: base@\*, extra@\^2\.0\.0/);
+      expect(fs.existsSync(path.join(root, BRICKS_FILE))).toBe(false);
+      expect(fs.existsSync(path.join(root, 'bricks'))).toBe(false);
+    });
+
+    it('accepts requirements that are already installed', async () => {
+      mk('base', { version: '1.3.0' });
+      mk('top', { version: '1.0.0', requires: [{ id: 'base', version: '^1.2.0' }] });
+      await vendorPlugin('tr-plugin-base', undefined, opts());
+      const r = await vendorPlugin('tr-plugin-top', undefined, opts());
+      expect(r.requires).toEqual([{ id: 'base', range: '^1.2.0' }]);
+      expect(listBricks(root).map((b) => b.id)).toEqual(['base', 'top']);
+    });
+
+    it('reports a version conflict with an installed brick', async () => {
+      mk('base', { version: '2.0.0' });
+      mk('top', { version: '1.0.0', requires: [{ id: 'base', version: '^1.0.0' }] });
+      await vendorPlugin('tr-plugin-base', undefined, opts());
+      await expect(vendorPlugin('tr-plugin-top', undefined, opts())).rejects.toThrow(/base needs \^1\.0\.0 but 2\.0\.0 is installed/);
+      expect(listBricks(root).map((b) => b.id)).toEqual(['base']);
+    });
+
+    it('fails when automatic resolution cannot find a required brick and writes nothing', async () => {
+      mk('top', { version: '1.0.0', requires: ['nowhere-to-be-found'] });
+      await expect(vendorPlugin('tr-plugin-top', undefined, opts({ resolveRequires: true }))).rejects.toThrow(/No bundled plugin/);
+      expect(fs.existsSync(path.join(root, BRICKS_FILE))).toBe(false);
+    });
+
+    it('rejects a malformed requires declaration', async () => {
+      mk('top', { version: '1.0.0', requires: 'base' });
+      await expect(vendorPlugin('tr-plugin-top', undefined, opts())).rejects.toThrow(/must be an array/);
+    });
   });
 });

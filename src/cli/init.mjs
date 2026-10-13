@@ -34,7 +34,6 @@ import { randomUUID } from 'node:crypto';
 import { projectSkillsForScope, detectActiveSkillTargets } from './skill-projection.mjs';
 import { ensureRepoExpert } from './repo-expert-generate.mjs';
 import { getGlobalAgentDir } from './agent-dir.mjs';
-import { restoreLegacyInitSecrets } from '../core/legacy-init-secrets.mjs';
 import { writeFileSecure } from '../core/secure-file.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -120,10 +119,13 @@ async function ensureOpenWiki(brainDir, isProject, dryRun) {
   // Auto-ingest into memory graph when project is initialized
   if (isProject && !dryRun) {
     try {
-      const { runOpenWikiIngest } = await import('./ingest-openwiki.mjs');
+      const { discoverPlugins } = await import('../core/plugin-loader.mjs');
+      const { runPluginCommand } = await import('../core/plugin-runner.mjs');
+      const plugins = discoverPlugins(process.cwd());
+      const openwikiPlugin = plugins.find((p) => p.id === 'openwiki');
       const targetWiki = path.join(process.cwd(), 'openwiki');
-      if (fs.existsSync(targetWiki)) {
-        await runOpenWikiIngest([targetWiki], { silent: true });
+      if (openwikiPlugin && fs.existsSync(targetWiki)) {
+        await runPluginCommand(openwikiPlugin, { subcommand: 'ingest', args: [targetWiki] });
         logOk('Ingested openwiki into semantic knowledge graph');
       }
     } catch {
@@ -241,6 +243,12 @@ export default async function init(args) {
   }
   logOk(`Base directory structure ready (${created} created, ${dirs.length - created} already existed)`);
 
+  // Auth is a required scaffold plugin. Existing installations are preserved.
+  const authSource = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins', 'auth');
+  const authTarget = path.join(brainDir, 'plugins', 'auth');
+  if (!fs.existsSync(path.join(authSource, 'plugin.json'))) throw new Error('Required auth scaffold is missing');
+  if (!fs.existsSync(authTarget) && !opts.dryRun) fs.cpSync(authSource, authTarget, { recursive: true, errorOnExist: true, force: false });
+
   // ── Step 2: Seed core skills ──
   logStep('2/4', 'Installing core skills into .agent/skills/');
 
@@ -296,6 +304,10 @@ export default async function init(args) {
   }
 
   // ── Step 2.5: Create data directories inside the meta-skill (brain dir) ──
+  if (!opts.dryRun) {
+    const { preparePluginDependencies } = await import('../core/plugin-dependencies.mjs');
+    preparePluginDependencies(path.join(brainDir, 'plugins', 'auth'));
+  }
   logStep('2.5/4', 'Creating user data directories inside meta-skill');
 
   const vaultCategories = [
@@ -359,56 +371,25 @@ export default async function init(args) {
     logSkip('onboarding-interview.md already in queue');
   }
 
-  // ── Restore credentials from backup if present ──
-  let restoredPasswordHash = null;
+  // Seed non-credential settings. Auth owns password and signing state.
   if (!opts.dryRun) {
-    try {
-      const restored = await restoreLegacyInitSecrets(agentDir, brainDir);
-      restoredPasswordHash = restored.dashboardPasswordHash || null;
-      if (restored.restored) logOk('Restored encrypted credentials from the legacy carrier');
-      else if (restored.reason === 'active-store-exists') logSkip('Active credential store preserved');
-    } catch {
-      logWarn('Legacy credentials were not restored. Configure the secret-store password before retrying.');
-    }
-  }
-
-  // ── Step 3.6: Ensure Default Dashboard Password ──
-  if (!opts.dryRun) {
-    const configDir = path.join(brainDir, "config");
-    const securityPath = path.join(configDir, "security.yml");
-    try {
-      fs.mkdirSync(configDir, { recursive: true });
-      const { default: bcrypt } = await import("bcrypt");
-      const { default: yaml } = await import("yaml");
-
-      let config = {};
-      if (fs.existsSync(securityPath)) {
-        try {
-          config = yaml.parse(fs.readFileSync(securityPath, "utf8")) || {};
-        } catch {
-          config = {};
-        }
-      }
-
-      config.dashboard ??= {};
-      config.api ??= { pats: [], allow_static_pats: false };
-      config.network ??= { require_https: true, public_health: false, allowed_origins: [] };
-      config.bind ??= { host: "127.0.0.1", port: 3000, allow_public_bind: false };
-
-      if (restoredPasswordHash && !config.dashboard.password_hash) {
-        config.dashboard.password_hash = restoredPasswordHash;
-      }
-
-      if (!config.dashboard.password_hash) {
-        writeFileSecure(securityPath, yaml.stringify(config), { encoding: "utf8", mode: 0o600 });
-        passwordMessage = "\n  🔑 Dashboard Access: Unconfigured\n     (You will be prompted to set your password upon first browser access)";
-      } else {
-        writeFileSecure(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
-        passwordMessage = '\n  🔑 Dashboard credentials preserved (custom password hash already configured)';
-      }
-    } catch (err) {
-      logWarn(`Failed to seed default dashboard credentials: ${err.message}`);
-    }
+    const configDir = path.join(brainDir, 'config');
+    const securityPath = path.join(configDir, 'security.yml');
+    const { default: yaml } = await import('yaml');
+    const config = fs.existsSync(securityPath) ? yaml.parse(fs.readFileSync(securityPath, 'utf8')) : {};
+    if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Invalid security configuration');
+    if (config.dashboard?.password_hash) throw new Error('Legacy dashboard credentials require auth migrate-credentials --remove-legacy');
+    const { loadPluginModule } = await import('../core/plugin-runtime.mjs');
+    const { createSessionCredentials } = await loadPluginModule('auth', 'session-credentials');
+    const state = createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || brainDir }).dashboardState();
+    config.dashboard ??= {};
+    config.network ??= { require_https: true, public_health: false, allowed_origins: [] };
+    config.bind ??= { host: '127.0.0.1', port: 3000, allow_public_bind: false };
+    fs.mkdirSync(configDir, { recursive: true });
+    writeFileSecure(securityPath, yaml.stringify(config), { encoding: 'utf8', mode: 0o600 });
+    passwordMessage = state.configured
+      ? '\n  Dashboard credentials configured in auth.'
+      : '\n  Dashboard access unconfigured. Set a password through auth or browser setup.';
   }
 
   // ── Step 3.7: Select UI Deploy Location ──

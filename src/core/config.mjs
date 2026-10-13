@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import { z } from 'zod';
 import path from 'path';
 import os from 'os';
@@ -48,6 +49,7 @@ const configSchema = z.object({
   cliModel: z.string().optional(),
   cliTimeout: z.preprocess((val) => val === undefined || val === '' ? 300 : parseInt(String(val), 10), z.number().int().default(300)),
   googleApiKey: z.string().optional(),
+  openAiApiKey: z.string().optional(),
   openRouterApiKey: z.string().optional(),
   embedModel: z.string().default('gemini-embedding-2'),
   searxngBaseUrl: z.string().optional(),
@@ -59,7 +61,6 @@ const configSchema = z.object({
   tavilyApiKey: z.string().optional(),
   dailySearchLimit: z.preprocess((val) => val === undefined || val === '' ? 50 : parseInt(String(val), 10), z.number().int().default(50)),
   researchCooldownMs: z.preprocess((val) => val === undefined || val === '' ? 3600000 : parseInt(String(val), 10), z.number().int().default(3600000)),
-  sessionSecret: z.string().optional(),
   nodeEnv: z.string().default('production'),
   port: z.preprocess((val) => val === undefined || val === '' ? 3000 : parseInt(String(val), 10), z.number().int().default(3000)),
   // No default: when HOST is unset, the server auto-binds to the mesh IP if
@@ -127,55 +128,9 @@ if (!process.env._TR_TEST_AGENT_DIR && !process.env.AGENT_DIR) {
   }
 }
 
-// Load secrets from project or global
-let secrets = {};
-try {
-  const pathsToCheck = [];
-  // 1. Prioritize workspace-local root secrets
-  if (!process.env.AGENT_DIR && !process.env._TR_TEST_AGENT_DIR) {
-    pathsToCheck.push(path.join(process.cwd(), '.agent', 'secrets.enc'));
-  }
-  if (resolvedAgentDir) {
-    pathsToCheck.push(path.join(resolvedAgentDir, 'secrets.enc'));
-  }
-  // 2. Fallbacks
-  if (projectBrainDir) {
-    pathsToCheck.push(path.join(projectBrainDir, 'config', 'secrets.enc'));
-  }
-  pathsToCheck.push(path.join(tempGlobalBrainDir, 'config', 'secrets.enc'));
-  pathsToCheck.push(path.join(resolvedAgentDir, 'skills', 'total-recall', 'config', 'secrets.enc'));
-  for (const p of pathsToCheck) {
-    if (fs.existsSync(p)) {
-      try {
-        const { loadSecretsSync } = await import('./secrets-gateway.mjs');
-        // Actually, loadSecretsSync expects brainDir (e.g. /config/secrets.enc -> parent of config)
-        // Let's pass the exact brainDir derived from p.
-        // p is something like <brainDir>/config/secrets.enc or <brainDir>/secrets.enc
-        const isConfigPath = p.includes(path.join('config', 'secrets.enc'));
-        const brainDir = isConfigPath ? path.dirname(path.dirname(p)) : path.dirname(p);
-        const parsed = loadSecretsSync(brainDir);
-        // Merge (don't stop at the first non-empty file): an earlier, sparser
-        // store (e.g. the global ~/.agent/secrets.enc root) was previously
-        // short-circuiting the search and silently hiding real secrets that
-        // only existed in a later, richer store (e.g. the total-recall
-        // skill's own config/secrets.enc). Earlier candidates still win on
-        // key collisions — this only fills in keys the earlier ones lack.
-        secrets = { ...parsed, ...secrets };
-      } catch {}
-    }
-  }
-} catch (e) {
-  // Ignore
-}
-
-// Optional remote-vault token from secrets store (generic key only)
-if (
-  !process.env.TR_REMOTE_VAULT_TOKEN &&
-  typeof secrets.remote_vault_token === 'string' &&
-  secrets.remote_vault_token
-) {
-  process.env.TR_REMOTE_VAULT_TOKEN = secrets.remote_vault_token;
-}
+// Runtime credential configuration is owned by the required auth plugin.
+const { runtimeConfiguration } = await __loadOwnedPlugin('auth', 'configuration');
+const credentialConfiguration = runtimeConfiguration({ brainDir: process.env.TR_SECRETS_BRAIN || tempGlobalBrainDir });
 
 // Capture raw configuration values from process.env and secrets.enc
 const rawConfig = {
@@ -183,26 +138,26 @@ const rawConfig = {
   cliAgent: process.env.TR_CLI_AGENT,
   cliModel: process.env.TR_CLI_MODEL,
   cliTimeout: process.env.TR_CLI_TIMEOUT,
-  googleApiKey: process.env.GOOGLE_API_KEY || secrets.google_api_key,
-  openRouterApiKey: process.env.OPENROUTER_API_KEY || secrets.openrouter_api_key || secrets.OPENROUTER_API_KEY,
+  googleApiKey: credentialConfiguration.googleApiKey,
+  openAiApiKey: credentialConfiguration.openAiApiKey,
+  openRouterApiKey: credentialConfiguration.openRouterApiKey,
   embedModel: process.env.TR_EMBED_MODEL,
   searxngBaseUrl: process.env.SEARXNG_BASE_URL,
-  braveApiKey: process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || secrets.brave_api_key,
-  braveSearchApiKey: process.env.BRAVE_SEARCH_API_KEY || secrets.brave_api_key,
-  exaApiKey: process.env.EXA_API_KEY || secrets.exa_api_key,
-  githubToken: process.env.GITHUB_TOKEN || secrets.github_token,
-  serperApiKey: process.env.SERPER_API_KEY || secrets.serper_api_key,
-  tavilyApiKey: process.env.TAVILY_API_KEY || secrets.tavily_api_key,
+  braveApiKey: credentialConfiguration.braveApiKey,
+  braveSearchApiKey: credentialConfiguration.braveSearchApiKey,
+  exaApiKey: credentialConfiguration.exaApiKey,
+  githubToken: credentialConfiguration.githubToken,
+  serperApiKey: credentialConfiguration.serperApiKey,
+  tavilyApiKey: credentialConfiguration.tavilyApiKey,
   dailySearchLimit: process.env.TR_DAILY_SEARCH_LIMIT,
   researchCooldownMs: process.env.RESEARCH_COOLDOWN_MS,
-  sessionSecret: process.env.SESSION_SECRET,
   nodeEnv: process.env.NODE_ENV,
   port: process.env.PORT,
   host: process.env.HOST,
   display: process.env.DISPLAY,
-  totalRecallToken: process.env.TOTAL_RECALL_TOKEN,
+  totalRecallToken: credentialConfiguration.totalRecallToken,
   trBrain: process.env.TR_BRAIN,
-  trPat: process.env.TR_PAT,
+  trPat: credentialConfiguration.trPat,
   xdgConfigHome: process.env.XDG_CONFIG_HOME
 };
 
@@ -232,6 +187,7 @@ export const {
   cliModel,
   cliTimeout,
   googleApiKey,
+  openAiApiKey,
   openRouterApiKey,
   embedModel,
   searxngBaseUrl,
@@ -243,7 +199,6 @@ export const {
   tavilyApiKey,
   dailySearchLimit,
   researchCooldownMs,
-  sessionSecret,
   nodeEnv,
   port,
   host,
@@ -254,10 +209,6 @@ export const {
   xdgConfigHome,
   remoteVaultSync,
 } = config;
-
-export function getEnvVar(name) {
-  return process.env[name];
-}
 
 // ─── Layered Brain Resolution ───────────────────────────────────────────────
 

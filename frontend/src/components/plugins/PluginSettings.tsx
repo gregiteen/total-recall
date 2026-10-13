@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { PluginInfo } from '../../api/plugins'
-import { listSecrets, addSecret } from '../../api/secrets'
 import { apiFetch, API_BASE } from '../../api/_base'
 
 interface Setting { name: string; label: string; type: 'string' | 'number' | 'boolean'; options?: Array<string | number>; required?: boolean; default?: string | number | boolean }
@@ -17,8 +16,13 @@ export function PluginSettings({ plugin }: { plugin: PluginInfo }) {
   useEffect(() => {
     let disposed = false
     setValues({}); setNotice(''); setError('')
-    listSecrets().then(entries => { if (!disposed) setStored(new Set(entries.map(entry => entry.key))) })
-      .catch(err => { if (!disposed) setError(err.message) })
+    apiFetch(`${API_BASE}/api/plugins/auth/secrets`).then(async res => {
+      if (!res.ok) return []
+      const entries = await res.json()
+      if (!disposed && Array.isArray(entries)) {
+        setStored(new Set(entries.map((entry: any) => entry.key)))
+      }
+    }).catch((err: any) => { if (!disposed) setError(err.message) })
     apiFetch(`${API_BASE}/api/plugins/${encodeURIComponent(plugin.id)}/configuration`).then(async response => {
       if (!response.ok) throw new Error('Could not load plugin settings')
       const data = await response.json()
@@ -26,13 +30,21 @@ export function PluginSettings({ plugin }: { plugin: PluginInfo }) {
         setFields(data.fields)
         setConfiguration(Object.fromEntries(data.fields.map((field: Setting) => [field.name, data.values[field.name] ?? field.default ?? (field.type === 'boolean' ? false : '')])))
       }
-    }).catch(err => { if (!disposed) setError(err.message) })
+    }).catch((err: any) => { if (!disposed) setError(err.message) })
     return () => { disposed = true }
   }, [plugin.id])
   async function save(key: string) {
     setSaving(key); setError(''); setNotice('')
     try {
-      await addSecret(key, values[key], { tags: [`plugin:${plugin.id}`] })
+      const res = await apiFetch(plugin.manifest?.runtime && (plugin.manifest.runtime as any).modules?.credentials ? `${API_BASE}/api/plugins/${encodeURIComponent(plugin.id)}/credentials` : `${API_BASE}/api/plugins/auth/secrets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: values[key], tags: [`plugin:${plugin.id}`] })
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to save secret')
+      }
       setValues(previous => ({ ...previous, [key]: '' }))
       setStored(previous => new Set([...previous, key]))
       setNotice('Credential saved. Open the plugin to verify the connection.')

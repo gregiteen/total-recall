@@ -463,6 +463,20 @@ export function lintOkfCompliance(vaultDir, options = {}) {
   };
 }
 
+/**
+ * Writes a generated file only when its content changed. Rewriting identical
+ * bytes still bumps mtime and fires every filesystem watcher.
+ */
+function writeIfChanged(file, content) {
+  try {
+    if (fs.readFileSync(file, 'utf8') === content) return false;
+  } catch {
+    // Missing or unreadable: write it.
+  }
+  fs.writeFileSync(file, content, 'utf8');
+  return true;
+}
+
 export function generateLiveIndex(vaultDir) {
   const nodes = getNodes(vaultDir);
   if (nodes.length === 0) return;
@@ -499,7 +513,7 @@ export function generateLiveIndex(vaultDir) {
     indexContent += '\n';
   }
   // ssss-raw-write: OKF bundle manifest, not a memory node (excluded from node walks).
-  fs.writeFileSync(path.join(vaultDir, 'index.md'), indexContent, 'utf8');
+  writeIfChanged(path.join(vaultDir, 'index.md'), indexContent);
 }
 
 export function generateLiveLog(vaultDir) {
@@ -540,6 +554,6 @@ export function generateLiveLog(vaultDir) {
     logContent += 'No update history available.\n';
   }
   // ssss-raw-write: OKF bundle changelog, not a memory node (excluded from node walks).
-  fs.writeFileSync(path.join(vaultDir, 'log.md'), logContent, 'utf8');
+  writeIfChanged(path.join(vaultDir, 'log.md'), logContent);
 }
 

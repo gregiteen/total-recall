@@ -21,6 +21,7 @@ import {
 import { renderMarkdown } from "../components/MarkdownUtils"
 import { PluginPanel, pluginElements } from "../components/plugins/PluginPanel"
 import { PluginSettings } from "../components/plugins/PluginSettings"
+import { CardEngine } from "../components/plugins/card/CardEngine"
 
 interface PluginsPageProps {
   activeBrainId?: string | null
@@ -42,30 +43,12 @@ const PEER_STATUS_LABEL: Record<PeerNode["status"], string> = {
 const mono: CSSProperties = { fontFamily: "var(--font-mono)", fontSize: "12px" }
 const muted: CSSProperties = { color: "var(--text-secondary)", fontSize: "13px", lineHeight: 1.5 }
 
-const DEFAULT_BRANDING: Record<string, { icon: string; color: string; badge: string }> = {
-  phone: { icon: "📞", color: "#10b981", badge: "Telephony" },
-  domains: { icon: "🌐", color: "#3b82f6", badge: "DNS" },
-  signing: { icon: "✍️", color: "#8b5cf6", badge: "Signing" },
-  "code-quality": { icon: "🛡️", color: "#06b6d4", badge: "Quality Gates" },
-  "composable-cli": { icon: "💻", color: "#14b8a6", badge: "CLI Engine" },
-  decision: { icon: "⚖️", color: "#a855f7", badge: "Decisions" },
-  design: { icon: "🎨", color: "#ec4899", badge: "Design System" },
-  text: { icon: "💬", color: "#22c55e", badge: "Messaging" },
-  "creative-search": { icon: "🔍", color: "#f59e0b", badge: "Search" },
-  "git-sentinel": { icon: "🌿", color: "#84cc16", badge: "Git Health" },
-  "system-monitor": { icon: "📊", color: "#6366f1", badge: "Telemetry" },
-  "operator-alerts": { icon: "🔔", color: "#ef4444", badge: "Alerts" },
-  dsh: { icon: "🐚", color: "#64748b", badge: "Remote Shell" },
-}
-
 function resolvePluginBranding(p: { id: string; branding?: { icon?: string | null; color?: string | null; badge?: string | null } }) {
   const custom = p.branding || {}
-  const shortId = p.id.replace(/^tr-plugin-/, "")
-  const fallback = DEFAULT_BRANDING[shortId] || DEFAULT_BRANDING[p.id] || { icon: "🧩", color: "#3b82f6", badge: "Capability" }
   return {
-    icon: custom.icon || fallback.icon,
-    color: custom.color || fallback.color,
-    badge: custom.badge || fallback.badge,
+    icon: custom.icon || "",
+    color: custom.color || "#3b82f6",
+    badge: custom.badge || "Plugin",
   }
 }
 
@@ -120,7 +103,7 @@ function Empty({ title, children }: { title: string; children?: ReactNode }) {
   )
 }
 
-function PluginCardCapabilities({
+export function PluginCardCapabilities({
   p,
   onRunSubcommand,
   onOpenSettings,
@@ -146,27 +129,27 @@ function PluginCardCapabilities({
       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", fontSize: "11px" }}>
         {p.cli && (
           <span className="badge" style={{ background: "rgba(20, 184, 166, 0.15)", color: "#14b8a6", borderColor: "rgba(20, 184, 166, 0.3)" }}>
-            ⚡ CLI: {p.cli.command || p.id} ({subcommands.length} verbs)
+            [CLI] {p.cli.command || p.id} ({subcommands.length} verbs)
           </span>
         )}
         {tasks.length > 0 && (
           <span className="badge" style={{ background: "rgba(99, 102, 241, 0.15)", color: "#818cf8", borderColor: "rgba(99, 102, 241, 0.3)" }}>
-            ⏱️ {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+            [CRON] {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
           </span>
         )}
         {secrets.length > 0 && (
           <span className="badge" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#f59e0b", borderColor: "rgba(245, 158, 11, 0.3)" }}>
-            🔑 {secrets.length} {secrets.length === 1 ? "secret" : "secrets"}
+            [KEY] {secrets.length} {secrets.length === 1 ? "secret" : "secrets"}
           </span>
         )}
         {uiElements.length > 0 && (
           <span className="badge" style={{ background: "rgba(236, 72, 153, 0.15)", color: "#f472b6", borderColor: "rgba(236, 72, 153, 0.3)" }}>
-            🖥️ {uiElements.length} UI {uiElements.length === 1 ? "component" : "components"}
+            [UI] {uiElements.length} {uiElements.length === 1 ? "component" : "components"}
           </span>
         )}
         {categories.length > 0 && (
           <span className="badge" style={{ background: "rgba(139, 92, 246, 0.15)", color: "#a78bfa", borderColor: "rgba(139, 92, 246, 0.3)" }}>
-            🗂️ {categories.length} {categories.length === 1 ? "category" : "categories"}
+            [CAT] {categories.length} {categories.length === 1 ? "category" : "categories"}
           </span>
         )}
       </div>
@@ -246,7 +229,7 @@ function PluginCardCapabilities({
                   onClick={onOpenSettings}
                   style={{ padding: "1px 6px", fontSize: "10px" }}
                 >
-                  ⚙️ Configure
+                  Configure
                 </button>
               </div>
               <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
@@ -650,155 +633,23 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
             {!installed.length && <>Start with a <button className="btn btn-ghost btn-sm" onClick={() => setTab("bundled")}>bundled plugin</button> or see what your peers share.</>}
           </Empty>
         ) : (
-          <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: "18px" }}>
+          <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 360px), 1fr))", gap: "22px" }}>
             {filteredInstalled.map((p) => {
-              const branding = resolvePluginBranding(p)
               return (
                 <div
                   key={`${p.scope}:${p.id}`}
-                  className="card"
                   onContextMenu={(e) => handleContextMenu(p, e)}
                   onTouchStart={(e) => handleTouchStart(p, e)}
                   onTouchEnd={cancelLongPress}
-                  onTouchMove={cancelLongPress}
-                  onTouchCancel={cancelLongPress}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "12px",
-                    borderTop: `3px solid ${branding.color}`,
-                    position: "relative",
-                    touchAction: "manipulation"
-                  }}
+                  style={{ display: "flex", flexDirection: "column", gap: "8px" }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                      <div
-                        style={{
-                          width: "36px",
-                          height: "36px",
-                          borderRadius: "8px",
-                          background: `${branding.color}20`,
-                          border: `1px solid ${branding.color}50`,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "18px",
-                          flexShrink: 0
-                        }}
-                      >
-                        {branding.icon}
-                      </div>
-                      <div>
-                        <button
-                          onClick={() => openDetail(p, "preview")}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            padding: 0,
-                            color: "var(--text-primary)",
-                            fontWeight: 600,
-                            fontSize: "15px",
-                            cursor: "pointer",
-                            textAlign: "left"
-                          }}
-                        >
-                          {p.name}
-                        </button>
-                        <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "2px" }}>
-                          <span style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</span>
-                          <span
-                            className="badge"
-                            style={{
-                              fontSize: "10px",
-                              background: `${branding.color}15`,
-                              color: branding.color,
-                              borderColor: `${branding.color}40`,
-                              padding: "1px 6px"
-                            }}
-                          >
-                            {branding.badge}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                      {p.locked ? (
-                        <span className="badge" style={{ background: "#2e1065", color: "#c084fc", borderColor: "#7e22ce" }} title="Editing locked">
-                          🔒 Locked
-                        </span>
-                      ) : (
-                        <span className="badge" style={{ background: "#064e3b", color: "#6ee7b7", borderColor: "#059669" }} title="Editing enabled">
-                          🔓 Editable
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        style={{ padding: "4px 8px", fontSize: "16px", lineHeight: 1, minHeight: "30px", minWidth: "30px" }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setContextMenu({ plugin: p, x: Math.min(rect.left, window.innerWidth - 260), y: rect.bottom + 4 })
-                        }}
-                        aria-label={`Actions menu for ${p.name}`}
-                        title="Plugin actions & context menu"
-                      >
-                        ⋮
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={muted}>{p.description}</div>
-                  <UseCaseChips useCases={p.use_cases} />
-
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", fontSize: "11px" }}>
+                  <CardEngine plugin={p} />
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "0 4px", fontSize: "11px", color: "var(--text-tertiary)" }}>
                     <span className="badge">{p.scope}</span>
                     <span className="badge">{sourceLabel(p)}</span>
                     {p.shared && <span className="badge badge-accent">shared</span>}
-                    {p.store_deployed && <span className="badge badge-success">🏪 in store</span>}
                     {!p.valid && <span className="badge badge-error">invalid manifest</span>}
                     {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
-                  </div>
-
-                  <div style={{ ...mono, color: "var(--text-tertiary)", fontSize: "11px" }} title={p.sha256 || undefined}>
-                    sha256 {shortHash(p.sha256)}
-                  </div>
-
-                  {/* Capabilities, Subcommands, Tasks & Configs */}
-                  <PluginCardCapabilities
-                    p={p}
-                    onRunSubcommand={(cmd) => {
-                      setSubcommand(cmd)
-                      openDetail(p, "run")
-                    }}
-                    onOpenSettings={() => openDetail(p, "details")}
-                    onOpenPreview={() => openDetail(p, "preview")}
-                  />
-
-                  {/* Common Config Controls & Action Toolbar */}
-                  <div style={{ display: "flex", gap: "6px", marginTop: "auto", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid var(--border)" }}>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => openDetail(p, "preview")}
-                      title={`Open ${p.name}`}
-                    >
-                      Open
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => openDetail(p, "run")}
-                      title="Run plugin CLI handler"
-                    >
-                      Run CLI
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => openDetail(p, "details")}
-                      title={`Configure ${p.name}`}
-                    >
-                      Settings
-                    </button>
                   </div>
                 </div>
               )
@@ -825,13 +676,16 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                             height: "32px",
                             borderRadius: "6px",
                             background: `${branding.color}20`,
+                            border: `1px solid ${branding.color}40`,
                             display: "flex",
                             alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: "16px"
+                            justifyContent: "center"
                           }}
                         >
-                          {branding.icon}
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={branding.color} strokeWidth="2">
+                            <rect x="3" y="3" width="18" height="18" rx="4" />
+                            <circle cx="12" cy="12" r="3" fill={branding.color} />
+                          </svg>
                         </div>
                         <div>
                           <span style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</span>
@@ -978,31 +832,31 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
 
             {brandingPlugin.locked && (
               <div className="alert alert-warning" style={{ fontSize: "12px" }}>
-                🔒 This plugin is marked complete and locked against editing. Unlock it to change branding.
+                [LOCKED] This plugin is marked complete and locked against editing. Unlock it to change branding.
               </div>
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Icon (Emoji or Symbol)</label>
+              <label style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Wordmark Glyph / Tag</label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <input
                   className="input"
                   value={brandingIcon}
                   onChange={(e) => setBrandingIcon(e.target.value)}
-                  style={{ width: "80px", textAlign: "center", fontSize: "18px" }}
+                  style={{ width: "90px", textAlign: "center", fontSize: "14px", fontFamily: "var(--font-mono)" }}
                   disabled={brandingPlugin.locked}
                 />
                 <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", alignItems: "center" }}>
-                  {["📞", "🌐", "✍️", "🛡️", "💻", "⚖️", "🎨", "💬", "🔍", "🌿", "📊", "🔔", "🐚"].map((emoji) => (
+                  {["[TEL]", "[DNS]", "[SIGN]", "[GATE]", "[CLI]", "[LAW]", "[UI]", "[SMS]", "[FIND]", "[GIT]", "[OPS]", "[WARN]", "[CORE]"].map((glyph) => (
                     <button
-                      key={emoji}
+                      key={glyph}
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      style={{ padding: "4px 8px", fontSize: "14px" }}
+                      style={{ padding: "4px 6px", fontSize: "11px", fontFamily: "var(--font-mono)" }}
                       disabled={brandingPlugin.locked}
-                      onClick={() => setBrandingIcon(emoji)}
+                      onClick={() => setBrandingIcon(glyph)}
                     >
-                      {emoji}
+                      {glyph}
                     </button>
                   ))}
                 </div>
@@ -1093,7 +947,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                           <span className="badge" style={{ background: `${branding.color}15`, color: branding.color, borderColor: `${branding.color}40`, fontSize: "11px" }}>
                             {branding.badge}
                           </span>
-                          {detail.locked && <span className="badge" style={{ background: "#2e1065", color: "#c084fc" }}>🔒 Locked</span>}
+                          {detail.locked && <span className="badge" style={{ background: "#2e1065", color: "#c084fc" }}>Locked</span>}
                         </div>
                       </div>
                     </div>
@@ -1192,8 +1046,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                       {detail.modified_since_install && <Fact label="At install"><span style={mono}>{detail.installed_sha256}</span></Fact>}
                       <Fact label="Files">{detail.file_count ?? "—"} · {formatBytes(detail.size_bytes)}</Fact>
                       <Fact label="Shared">{detail.shared ? "yes" : "no"}</Fact>
-                      <Fact label="Lock Status">{detail.locked ? "🔒 Locked (Completed)" : "🔓 Unlocked (Editable)"}</Fact>
-                      <Fact label="Store Status">{detail.store_deployed ? "🏪 Published in Plugin Store" : "Not yet deployed to store"}</Fact>
+                      <Fact label="Lock Status">{detail.locked ? "Locked (Completed)" : "Unlocked (Editable)"}</Fact>
+                      <Fact label="Store Status">{detail.store_deployed ? "Published in Plugin Store" : "Not yet deployed to store"}</Fact>
                       {detail.shared && <Fact label="Public link">{detail.share_url ? <input className="input" aria-label="Public plugin share link" readOnly value={detail.share_url} onFocus={(e) => e.currentTarget.select()} /> : "Set TR_PUBLIC_BASE_URL to your public HTTPS origin to create a link."}</Fact>}
                       <Fact label="Use cases">{detail.use_cases.join(", ") || "—"}</Fact>
                       {detail.author && <Fact label="Author">{detail.author}</Fact>}
@@ -1223,21 +1077,21 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
                           onClick={() => openBrandingModal(detail)}
                           disabled={detail.locked}
                         >
-                          🎨 Customize Branding
+                          Customize Branding
                         </button>
                         <button
                           className="btn btn-ghost btn-sm"
                           onClick={() => doToggleLock(detail)}
                           disabled={busy === detail.id}
                         >
-                          {detail.locked ? "🔓 Unlock Editing" : "🔒 Lock When Complete"}
+                          {detail.locked ? "Unlock Editing" : "Lock When Complete"}
                         </button>
                         <button
                           className="btn btn-primary btn-sm"
                           onClick={() => doDeployStore(detail)}
                           disabled={busy === detail.id || !detail.valid}
                         >
-                          {detail.store_deployed ? "✓ Deployed to Store" : "🚀 Deploy to Plugin Store"}
+                          {detail.store_deployed ? "✓ Deployed to Store" : "Deploy to Plugin Store"}
                         </button>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -1293,7 +1147,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
           }}
         >
           <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "16px" }}>{resolvePluginBranding(contextMenu.plugin).icon}</span>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: resolvePluginBranding(contextMenu.plugin).color }} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {contextMenu.plugin.name}
@@ -1313,7 +1167,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               openDetail(p, "preview")
             }}
           >
-            🖥️ Open UI component
+            Open UI Component
           </button>
 
           <button
@@ -1325,7 +1179,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               openDetail(p, "run")
             }}
           >
-            ⚡ Run CLI ({contextMenu.plugin.cli?.command || contextMenu.plugin.id})
+            Run CLI ({contextMenu.plugin.cli?.command || contextMenu.plugin.id})
           </button>
 
           <button
@@ -1337,7 +1191,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               openDetail(p, "details")
             }}
           >
-            ⚙️ Configure &amp; Settings
+            Configure &amp; Settings
           </button>
 
           <button
@@ -1349,7 +1203,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               openDetail(p, "readme")
             }}
           >
-            📖 View README / Docs
+            View Documentation
           </button>
 
           <div style={{ height: "1px", background: "var(--border)", margin: "4px 0" }} />
@@ -1363,7 +1217,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               doShare(p, !p.shared)
             }}
           >
-            🌐 {contextMenu.plugin.shared ? "Stop sharing on mesh" : "Share on mesh & link"}
+            {contextMenu.plugin.shared ? "Stop sharing on mesh" : "Share on mesh & link"}
           </button>
 
           <button
@@ -1375,7 +1229,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               doToggleLock(p)
             }}
           >
-            🔒 {contextMenu.plugin.locked ? "Unlock editing" : "Lock for release"}
+            {contextMenu.plugin.locked ? "Unlock editing" : "Lock for release"}
           </button>
 
           <button
@@ -1388,7 +1242,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               setAlert({ type: "success", message: `Copied "npx total-recall ${p.cli?.command || p.id}" to clipboard` })
             }}
           >
-            📋 Copy CLI command
+            Copy CLI command
           </button>
 
           <div style={{ height: "1px", background: "var(--border)", margin: "4px 0" }} />
@@ -1402,7 +1256,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               doRemove(p)
             }}
           >
-            🗑️ Uninstall plugin
+            Uninstall plugin
           </button>
         </div>
       )}

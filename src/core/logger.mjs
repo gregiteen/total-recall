@@ -16,11 +16,49 @@ const getLogFile = () => {
   return path.join(LOG_DIR, `system-${d.toISOString().split('T')[0]}.jsonl`);
 };
 
+const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
+
+/** Minimum level written. Debug is off unless TR_LOG_LEVEL=debug. */
+const minLevel = () => LEVELS[String(process.env.TR_LOG_LEVEL || 'info').toLowerCase()] ?? LEVELS.info;
+
+/** Days of daily system logs kept (TR_LOG_RETENTION_DAYS, default 7, 0 keeps all). */
+const retentionDays = () => {
+  const n = Number(process.env.TR_LOG_RETENTION_DAYS ?? 7);
+  return Number.isFinite(n) && n >= 0 ? n : 7;
+};
+
+/**
+ * Deletes system-YYYY-MM-DD.jsonl files older than the retention window.
+ * Runs at most once per calendar day per process; never throws.
+ */
+let lastPruneDay = '';
+export function pruneOldLogs(now = new Date()) {
+  const today = now.toISOString().split('T')[0];
+  if (lastPruneDay === today) return 0;
+  lastPruneDay = today;
+  const days = retentionDays();
+  if (days === 0) return 0;
+  const cutoff = now.getTime() - days * 86400000;
+  let removed = 0;
+  try {
+    for (const name of fs.readdirSync(LOG_DIR)) {
+      const m = /^system-(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(name);
+      if (!m) continue;
+      if (Date.parse(m[1] + 'T00:00:00Z') < cutoff) {
+        try { fs.unlinkSync(path.join(LOG_DIR, name)); removed++; } catch { /* in use or gone */ }
+      }
+    }
+  } catch { /* directory unreadable */ }
+  return removed;
+}
+
 export const logEvents = new EventEmitter();
 logEvents.setMaxListeners(50);
 
 export const logger = {
   log: (subsystemOrEntry, level, message, meta = {}) => {
+    const effective = level || (typeof subsystemOrEntry === 'object' && subsystemOrEntry?.level) || 'info';
+    if ((LEVELS[effective] ?? LEVELS.info) < minLevel()) return;
     let entry;
     if (typeof subsystemOrEntry === 'object' && subsystemOrEntry !== null) {
       entry = {
@@ -54,6 +92,7 @@ export const logger = {
     console.error(line.trim());
 
     try {
+      pruneOldLogs();
       fs.appendFileSync(getLogFile(), line);
     } catch (e) {
       // If we fail to write to log file, we still printed to stderr

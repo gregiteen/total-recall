@@ -1,3 +1,4 @@
+import { loadPluginModule as __loadOwnedPlugin } from './plugin-runtime.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -124,28 +125,19 @@ export function shellQuote(value) {
 }
 
 async function readStoreSecret(key) {
-  const { getSecret, defaultBrainDir } = await import('./secrets-store.mjs');
+  const { getSecret, defaultBrainDir } = await __loadOwnedPlugin('auth', 'secrets-store');
   const res = await getSecret(defaultBrainDir(), key, { actor: 'agent-harness', action: 'harness-auth' });
   return res.found ? res.value : null;
 }
 
-/**
- * Environment for a harness process. Headless auth secrets the harness declares
- * (for Claude Code, CLAUDE_CODE_OAUTH_TOKEN) are filled from the secret store
- * when the base environment lacks them, so a session without a login keychain
- * (SSH, launchd, cron) can still authenticate. A store that cannot be opened is
- * not fatal: the harness falls back to its own login. Values are never logged.
- */
+/** Project declared harness credentials from auth; failed reads abort dispatch. */
 export async function resolveHarnessEnv(spec, baseEnv = process.env, { readSecret = readStoreSecret } = {}) {
-  const env = { ...baseEnv };
+  const { sanitizeRuntimeEnvironment } = await __loadOwnedPlugin('auth', 'runtime-credentials');
+  const env = sanitizeRuntimeEnvironment(baseEnv);
   for (const key of spec.authSecrets || []) {
-    if (env[key]) continue;
-    try {
-      const value = await readSecret(key);
-      if (value) env[key] = value;
-    } catch {
-      // Store locked or missing; leave auth to the harness.
-    }
+    const value = await readSecret(key);
+    if (!value) throw new Error(`Configure ${key} through auth before dispatch`);
+    env[key] = value;
   }
   return env;
 }

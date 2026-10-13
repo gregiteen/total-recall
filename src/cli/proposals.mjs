@@ -137,6 +137,8 @@ export default async function proposals(args) {
       console.log(`    Kept:     ${result.canonical}`);
       console.log(`    Merged:   ${result.merged.join(', ')}`);
       console.log(`\n  Undo:  npx total-recall proposals revert ${id}\n`);
+      const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+      await autoCompileSurfaces({ layer, semantic: false, force: true });
       return;
     }
 
@@ -183,6 +185,8 @@ export default async function proposals(args) {
       try {
         const { reverted, deleted } = await revertProposal(vaultDir, id);
         console.log(`\n  ✓ Reverted ${id} — ${reverted} file(s) restored, ${deleted} removed.\n`);
+        const { autoCompileSurfaces } = await import('../core/auto-compile.mjs');
+        await autoCompileSurfaces({ layer, semantic: false, force: true });
       } catch (err) {
         console.error(`  ❌ ${err.message}`);
         process.exitCode = 1;

@@ -12,7 +12,7 @@ describe('api-routes', () => {
     const routes = await loadApiRoutes();
     expect(routes.length).toBeGreaterThan(100);
     const groups = new Set(routes.map((r) => r.group));
-    for (const g of ['rules', 'secrets', 'notifications', 'mesh', 'memory']) expect(groups.has(g)).toBe(true);
+    for (const g of ['rules', 'secrets', 'notifications', 'memory']) expect(groups.has(g)).toBe(true);
     const verbs = routes.map((r) => `${r.group} ${r.action}`);
     expect(new Set(verbs).size).toBe(verbs.length);
   });
