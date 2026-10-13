@@ -27,7 +27,13 @@ export async function autoCompileSurfaces({ layer = 'auto', semantic = false, fo
     invalidate(vaultDir);
     await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, semantic, force });
 
-    if (layer === 'global') {
+    // A global write compiles ONLY the global brain by default. Each project
+    // surface is regenerated from (global + project) rules the next time that
+    // project is used (resolveAgentDir prefers the project brain), so eagerly
+    // rebuilding every registered repo here only dirties their working trees and
+    // costs minutes. Opt in with TR_COMPILE_PROJECTS=1 to fan a global change out
+    // to every project surface immediately.
+    if (layer === 'global' && process.env.TR_COMPILE_PROJECTS === '1') {
       await compileRegisteredProjects();
     }
 

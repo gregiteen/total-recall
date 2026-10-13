@@ -40,8 +40,17 @@ export function recordPath(id) {
   return `system/plugins/${id}.md`;
 }
 
+/**
+ * Where a plugin's install record lives. Bundled scaffold plugins sit inside the
+ * shipped package, which must stay free of per-brain state, so their records
+ * belong to the active (global) brain instead.
+ */
+export function recordPluginsDir(plugin) {
+  return plugin.scope === 'scaffold' ? globalPluginsDir() : plugin.pluginsDir;
+}
+
 export function vaultFor(plugin) {
-  return vaultForPluginsDir(plugin.pluginsDir);
+  return vaultForPluginsDir(recordPluginsDir(plugin));
 }
 
 export function readPluginRecord(plugin) {
@@ -126,7 +135,7 @@ export async function ensurePluginRecord(plugin, options = {}) {
     id: plugin.id,
     manifest: plugin.manifest,
     scope: plugin.scope,
-    pluginsDir: plugin.pluginsDir,
+    pluginsDir: recordPluginsDir(plugin),
     source: existing?.source || { kind: plugin.linked ? 'link' : 'local', ref: plugin.dir },
     sha256: sha256 || existing?.sha256,
     shared: existing?.shared || false

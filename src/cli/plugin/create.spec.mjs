@@ -80,6 +80,17 @@ Instructions here.
     expect(manifest.skills[0].path).toBe('./skills/packaged-cap/SKILL.md');
     expect(manifest.cli.command).toBe('packaged-cap');
 
+    // The scaffold declares a real read status command and binds the card to it,
+    // so a new plugin is contract-conformant and shows live state (no fixed metrics).
+    const statusSub = manifest.cli.subcommands.find((s) => s.name === 'status');
+    expect(statusSub.effect).toBe('read');
+    expect(statusSub.output).toBe('json');
+    expect(manifest.status).toEqual({ command: 'status', refresh_seconds: 60 });
+    const { validatePluginManifest } = await import('../../core/plugin-loader.mjs');
+    const contract = validatePluginManifest(manifest);
+    expect(contract.errors).toEqual([]);
+    expect(contract.valid).toBe(true);
+
     // 2. Skill files were copied
     const destSkillDir = path.join(pluginDir, 'skills', 'packaged-cap');
     expect(fs.existsSync(path.join(destSkillDir, 'SKILL.md'))).toBe(true);

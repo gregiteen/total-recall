@@ -12,6 +12,8 @@ describe('update CLI', () => {
       installAutopull: false,
       port: null,
       noBuild: false,
+      allBrains: false,
+      json: false,
     });
   });
 
