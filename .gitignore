@@ -151,6 +151,8 @@ WINDSURF.md
 # IDE projections or session handoffs. Those belong to each user's installation
 # (a machine may have any of them locally; none are committed).
 .agent/
+# The scaffold is what new projects and git-updated hosts start from; its bundled plugins (auth is required) must be in git.
+!/scaffold/.agent/
 .agents/
 .claude/
 .codex/

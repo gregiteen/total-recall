@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "source_sha256": "511f8c11043679b032b85c4a6ceca921d8ac17fc59be1cdb87572346e7e425b7",
+  "entrypoint_sha256": "56abd1e41c0c93292c1ea5dc02d9eed280ec0b68e51c3a34e2ab060c66ba5a2f",
+  "sections": [
+    {
+      "path": "references/optimized/section-01.md",
+      "sha256": "3d0dd724287d7de88d1bacd069f1eb2925b1fe2f128a15ee0d8baaf605f61e79"
+    },
+    {
+      "path": "references/optimized/section-02.md",
+      "sha256": "febe972174b649547733fb8c22fd6eee42b61f0834a0d18e48794c928c2381e8"
+    },
+    {
+      "path": "references/optimized/section-03.md",
+      "sha256": "d11f85b987516543e03b8ad6ac5752ed1efbfcd0a0aa9dacecaeb9c31f91501f"
+    },
+    {
+      "path": "references/optimized/section-04.md",
+      "sha256": "b0781872c9046f04a7beed3cd12e055bf82db184a8e9fb4e64ecc9cc494b7d01"
+    },
+    {
+      "path": "references/optimized/section-05.md",
+      "sha256": "4b7acbdf1f56ceb2aa9d77677e2c6ddd18407c115a67e62dbcd7d4f4ebe0c674"
+    },
+    {
+      "path": "references/optimized/section-06.md",
+      "sha256": "d5581f9390c9f1164884166b35dd1a9a59b3b23c9a03c351b1382f36282e8aeb"
+    },
+    {
+      "path": "references/optimized/section-07.md",
+      "sha256": "a430fe3f87eb1e99fe33570202a6e7e016faef343f7d89ee901bbc31e13c1868"
+    },
+    {
+      "path": "references/optimized/section-08.md",
+      "sha256": "c0ac4ceacdcfce39a72c9c4cb0ae41d466ab94d9e340c034a229e3686c14f90c"
+    },
+    {
+      "path": "references/optimized/section-09.md",
+      "sha256": "fe60e1924afbdf5576715b3fbffbea90c752c037128cd6b51a11427649baeb15"
+    },
+    {
+      "path": "references/optimized/section-10.md",
+      "sha256": "5ed4c289daae2a5c04f3d2e8d96715403ce0988a56feb89e73d7f83ff7c56473"
+    },
+    {
+      "path": "references/optimized/section-11.md",
+      "sha256": "f46d6aaabb132430bfe52e20e48ab7d4f9bb20e4548adf7b8ab2f3a122a9b382"
+    },
+    {
+      "path": "references/optimized/section-12.md",
+      "sha256": "ea3166d7ed898c766dc4f9fcbccbc35e43a0c63d65a081f4c81e95b4f0af6c0b"
+    },
+    {
+      "path": "references/optimized/section-13.md",
+      "sha256": "8f5b2410330d1773a8a801b91e6b66d471adaa9609a06720e27b5feb3e4b272c"
+    },
+    {
+      "path": "references/optimized/section-14.md",
+      "sha256": "92d093b8c5583b2eff82ffaf73cec094b4d087791427be3aa2382222db4c0605"
+    },
+    {
+      "path": "references/optimized/section-15.md",
+      "sha256": "24b6f085e0fa09dc25ef5e9d5b9b49d21adbe8c58ea7a835a38d3d9ac7272760"
+    },
+    {
+      "path": "references/optimized/section-16.md",
+      "sha256": "264af7d981ecbbdf060dd0d087eaca0bb15a17210ae4882d07fdbb45dbaddab3"
+    },
+    {
+      "path": "references/optimized/index.md",
+      "sha256": "ce64a33aed9e5987e917c83945ff7d54f14aed8a8c079142b053fddfac3e960b"
+    },
+    {
+      "path": "references/optimized/original.md",
+      "sha256": "67099ffa56158d7b7c0be3f61c35164d6b56b49846b71908cd7402702e1975c6"
+    }
+  ]
+}

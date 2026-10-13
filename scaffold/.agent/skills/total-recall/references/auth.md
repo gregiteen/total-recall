@@ -1,0 +1,29 @@
+# Auth and secrets
+
+Auth is the credential owner and is shipped in Total Recall scaffold. Its source repository owns storage, encryption, provider catalog/account probes, rotation, rekey, exports, sync, CLI, API and UI. The generic runtime loader requests manifest-declared exports; core must never retain a second secret implementation. Missing or invalid auth fails. Secret operations must never fall through to a core handler or silently switch stores.
+
+Discover `total-recall auth --help` and `total-recall auth secret --help`. The compatibility command name `total-recall secret` routes to auth only; it is not another store. Use `auth secret set KEY --stdin` for values, never argv, chat, logs or vault content. `auth secret list` and `catalog` expose metadata. Avoid `get` in a tool transcript; consumers resolve through the auth runtime in-process. Auth API lives under `/api/plugins/auth/secrets`; any retained legacy HTTP route is implemented by auth, never core.
+
+Select the store explicitly with the supported brain/store configuration. Existing carrier paths and encrypted data are preserved; no migration may overwrite credentials. No implicit merging of project/global stores or environment credential fallback. Auth alone manages its unlock carriers. Failed unlock/decryption must propagate; never report the store empty after failure. Rekey changes the master carrier, not provider keys: read the current rekey CLI and runbook, update every selected carrier, verify fresh-shell reads and retired-password rejection without exposing either password.
+
+For provider key setup, verify against an authenticated provider operation before saving; format-only checks and timeouts are not verification. Require HTTPS except explicit loopback development, reject redirects containing credentials, and return safe errors. Rotation follows verify → store/project → deploy/verify → revoke, respecting the provider's supported recipe and user authorization. Manual provider steps remain manual. Exported environment files are deployment projections, not an alternate credential authority.
+
+Current migration remains in progress until package/bootstrap tests, all-plugin bypass checks, owner suites and end-to-end UI/API checks pass. Manifest `auth.plugin` declarations alone do not certify any of these properties.
+
+## Sessions, passwords and legacy data
+
+Auth owns dashboard/step-up/collaboration session signing, dashboard and collaboration password hashing, passkey storage and scoped PAT lifecycle. Core modules are required-plugin adapters. Runtime signing keys are never exported to core configuration. Tokens bind an algorithm allowlist, issuer, purpose audience and bounded expiry; missing/weak keys fail rather than generating a key or reading an old file.
+
+Use `auth password set --stdin` for password mutation; `auth rotate` for dashboard sessions or `auth rotate --collaboration` for collaboration sessions. Password setup makes one encrypted commit and invalidates dashboard sessions. Never write a password/hash through `config`, security.yml or deployment argv. Core compatibility commands delegate to auth.
+
+Migration is explicit: `auth migrate-credentials --legacy-brain <source> --remove-legacy` validates legacy dashboard/collaboration hashes and signing files, rejects target conflicts, verifies the encrypted import, then removes source fields/files. It never runs automatically at server startup or silently selects another brain. Existing legacy accounts require that migration; there is no legacy login path. Runtime reads and synchronization reject plaintext stores. Auth's explicit encryption migration helper is separate from normal reads.
+
+Before uninstall, auth decrypts/verifies the source and retains byte-identical encrypted ciphertext outside the brain. Locked/corrupt/plaintext stores, differing destination data, or unmigrated legacy credentials abort teardown. No plaintext recovery file is created.
+
+Auth card/panel results represent completed operations only. Passkey registration requires browser credential creation and successful server verification. HTTP reachability is not provider authentication or a security audit. Configuration is not an active rotation schedule. The scaffold installs auth and resolves declared dependencies to compatible installed host packages; missing/incompatible dependencies fail initialization.
+
+Internal CLI consumers may use `auth secret get KEY --json`: a missing key returns `{found:false}`; found values remain private to the consuming process. Unlock, parsing and decryption failures are errors. `TR_SECRETS_BRAIN` selects one store for the complete operation; no project-to-global retry is permitted. Consumer transports must parse structured results, propagate failures, use stdin for writes and verify readback. Never run a value-returning command into an agent transcript.
+
+## Mesh-identity secret sync
+
+`TR_SECRETS_SYNC_MODE=mesh-identity` makes a node fetch only the keys its mesh grant allows (`GET /api/secrets/mesh`, then each key) and merge them into its own encrypted store under its own master password; keys whose grant was removed are deleted only after a successful list, and an unreachable leader leaves the store untouched. Every read and refusal is audited as `mesh:<node>`. The default remains legacy whole-store sync behind `TR_MESH_SYNC_TOKEN`; switching a live node, and retiring that token and `/api/secrets/sync`, needs the owner's authorization. Verified end to end on a test mesh with the production secrets runtime: granted node got exactly its keys, ungranted and off-mesh callers got 403, revocation removed the key, and a stopped leader left the node's store intact.

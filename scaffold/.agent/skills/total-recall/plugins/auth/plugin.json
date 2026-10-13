@@ -1,0 +1,238 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "auth",
+  "name": "Auth & Secrets",
+  "version": "1.0.0",
+  "description": "Hardware WebAuthn biometric FIDO2 passkeys, OAuth session security, and access control.",
+  "author": "Total Recall contributors",
+  "license": "MIT",
+  "use_cases": [
+    "security",
+    "developer-tools"
+  ],
+  "branding": {
+    "name": "Auth & Secrets",
+    "color": "#10b981",
+    "badge": "FIDO2 Vault",
+    "font": "'Chivo Mono', monospace"
+  },
+  "card_face": {
+    "skin": "winamp-classic",
+    "theme": "vibrant",
+    "headline": "Passkey & Google OAuth2 Authentication Engine",
+    "primary_color": "#6366f1",
+    "secondary_color": "#312e81",
+    "accent_color": "#818cf8",
+    "touch_layout": "comfortable",
+    "interactive": true,
+    "quick_actions": [
+      {
+        "subcommand": "status",
+        "label": "STATUS"
+      },
+      {
+        "subcommand": "audit",
+        "label": "AUDIT"
+      },
+      {
+        "subcommand": "passkey",
+        "label": "PASSKEY"
+      },
+      {
+        "subcommand": "google",
+        "label": "GOOGLE"
+      },
+      {
+        "subcommand": "rotate",
+        "label": "ROTATE"
+      },
+      {
+        "subcommand": "probe",
+        "label": "CHECK ENDPOINT"
+      }
+    ],
+    "metrics": []
+  },
+  "secrets": [
+    {
+      "key": "GOOGLE_CLIENT_ID",
+      "description": "Google OAuth2 Client ID from Google Cloud Console",
+      "required": false
+    },
+    {
+      "key": "GOOGLE_CLIENT_SECRET",
+      "description": "Google OAuth2 Client Secret",
+      "required": false
+    },
+    {
+      "key": "SESSION_SECRET",
+      "description": "Auth-owned encrypted session signing key; explicit auth rotation or password setup required",
+      "required": false
+    },
+    {
+      "key": "COLLAB_SESSION_SECRET",
+      "required": false,
+      "description": "Auth-owned isolated collaboration token signing key"
+    }
+  ],
+  "cli": {
+    "command": "auth",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "status",
+        "description": "Display auth system status and active providers"
+      },
+      {
+        "name": "audit",
+        "description": "Audit permissions, session secrets, and credential integrity"
+      },
+      {
+        "name": "rotate",
+        "description": "Generate and securely rotate SESSION_SECRET in store"
+      },
+      {
+        "name": "passkey",
+        "description": "Manage FIDO2 WebAuthn passkeys"
+      },
+      {
+        "name": "google",
+        "description": "Check Google OAuth2 status and authorization URL"
+      },
+      {
+        "name": "probe",
+        "description": "Run HTTP 200 health verification probe"
+      },
+      {
+        "name": "session",
+        "description": "Inspect active session tokens"
+      },
+      {
+        "name": "secret",
+        "description": "Manage and inspect auth secrets in the Total Recall store"
+      },
+      {
+        "name": "password",
+        "description": "Set dashboard password through encrypted auth store: set --stdin [--force-reset]"
+      },
+      {
+        "name": "migrate-credentials",
+        "description": "Explicit verified legacy import: --legacy-brain path [--remove-legacy]; never a runtime fallback"
+      }
+    ]
+  },
+  "ui": {
+    "elements": [
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-auth-card",
+        "module": "ui/card.js",
+        "description": "Gatepass Card Face"
+      },
+      {
+        "id": "panel",
+        "kind": "panel",
+        "tag": "tr-auth-panel",
+        "module": "ui/panel.js",
+        "description": "Auth Management Panel"
+      }
+    ]
+  },
+  "configuration": {
+    "fields": [
+      {
+        "name": "googleCallbackUrl",
+        "label": "Google Redirect URI",
+        "type": "string",
+        "default": "/auth/google/callback"
+      },
+      {
+        "name": "passkeyRpName",
+        "label": "Relying Party Name",
+        "type": "string",
+        "default": "Total Recall"
+      },
+      {
+        "name": "sessionTtlHours",
+        "label": "Session Duration (Hours)",
+        "type": "number",
+        "default": 168
+      }
+    ]
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "ssss_schemas": {
+    "categories": [
+      {
+        "name": "auth-sessions",
+        "description": "Authenticated user sessions and biometric credentials",
+        "node_type": "memory"
+      },
+      {
+        "name": "auth-tokens",
+        "description": "OAuth2 and passkey authentication tokens",
+        "node_type": "memory"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "runtime": {
+    "modules": {
+      "secrets-store": "src/secrets-store.mjs",
+      "secrets-gateway": "src/secrets-gateway.mjs",
+      "secrets-keychain": "src/secrets-keychain.mjs",
+      "secrets-env-diff": "src/secrets-env-diff.mjs",
+      "secrets-env-export": "src/secrets-env-export.mjs",
+      "secrets-rotate": "src/secrets-rotate.mjs",
+      "secrets-rekey": "src/secrets-rekey.mjs",
+      "secrets-remote-deploy": "src/secrets-remote-deploy.mjs",
+      "secrets-sync": "src/secrets-sync.mjs",
+      "env-import": "src/env-import.mjs",
+      "crypto": "src/crypto.mjs",
+      "provider-catalog": "src/provider-catalog.mjs",
+      "provider-account-sync": "src/provider-account-sync.mjs",
+      "provider-rotation-recipes": "src/provider-rotation-recipes.mjs",
+      "rotation-capability": "src/rotation-capability.mjs",
+      "browser-session": "src/browser-session.mjs",
+      "secret-integration-research": "src/secret-integration-research.mjs",
+      "legacy-init-secrets": "src/legacy-init-secrets.mjs",
+      "configuration": "src/configuration.mjs",
+      "server-auth": "src/server-auth.mjs",
+      "session-credentials": "src/session-credentials.mjs",
+      "credential-migration": "src/credential-migration.mjs",
+      "commands": "cli.mjs",
+      "credential-preservation": "src/credential-preservation.mjs",
+      "access-keys": "src/access-keys.mjs",
+      "webauthn-store": "src/webauthn-store.mjs",
+      "auth-router": "src/routes/auth.mjs",
+      "webauthn-router": "src/routes/webauthn.mjs",
+      "secrets-router": "src/routes/secrets.mjs",
+      "runtime-credentials": "src/runtime-credentials.mjs"
+    },
+    "routers": [
+      "src/routes/secrets-runtime.mjs"
+    ]
+  }
+}
