@@ -130,8 +130,11 @@ build_frontend() {
   log "Building frontend (vite)..."
   (
     cd "$REPO_DIR/frontend"
-    [ -d node_modules ] || npm ci --no-audit --no-fund >> "$LOG_FILE" 2>&1
-    if "$NODE_BIN" ./node_modules/vite/bin/vite.js build >> "$LOG_FILE" 2>&1; then
+    # The frontend is an npm workspace: dependencies are installed once at the root and hoisted.
+    VITE_JS="$REPO_DIR/node_modules/vite/bin/vite.js"
+    [ -f "$VITE_JS" ] || [ -f ./node_modules/vite/bin/vite.js ] || (cd "$REPO_DIR" && npm ci --include=dev --no-audit --no-fund >> "$LOG_FILE" 2>&1)
+    [ -f "$VITE_JS" ] || VITE_JS=./node_modules/vite/bin/vite.js
+    if "$NODE_BIN" "$VITE_JS" build >> "$LOG_FILE" 2>&1; then
       log "✅ Frontend vite build complete."
     else
       log "⚠️ Frontend build failed — serving the previous dist if present."

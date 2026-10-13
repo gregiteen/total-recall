@@ -1,397 +1,399 @@
 # Plugin command completion inventory
 
-Source-only inventory, generated 2026-10-12T07:27:13.351Z. A declaration does not prove provider readiness or implementation. Missing effects are reference-only in cards. Each owner must verify and declare actual behavior; command names are not evidence of safety.
+Source-only inventory, generated 2026-10-13T08:09:42.237Z. A declaration does not prove provider readiness or implementation. Each owner must verify the declaration against the real command.
 
-30 valid installed plugins; 241 commands; 6 explicit effects; 235 missing effects.
+30 valid installed plugins; 244 commands; 244 explicit effects; 0 missing effects; 244 missing argument declarations; 244 missing output kinds.
 
 ## auth
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| audit | Missing | Missing | Missing |
-| rotate | Missing | Missing | Missing |
-| passkey | Missing | Missing | Missing |
-| google | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| session | Missing | Missing | Missing |
-| secret | Missing | Missing | Missing |
-| password | Missing | Missing | Missing |
-| migrate-credentials | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| audit | read | Missing | Missing |
+| rotate | destructive | Missing | Missing |
+| passkey | write | Missing | Missing |
+| google | read | Missing | Missing |
+| probe | read | Missing | Missing |
+| session | read | Missing | Missing |
+| secret | write | Missing | Missing |
+| password | write | Missing | Missing |
+| migrate-credentials | write | Missing | Missing |
 
 ## code-quality
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| report | Missing | Missing | Missing |
-| gate | Missing | Missing | Missing |
-| config | Missing | Missing | Missing |
-| detect | Missing | Missing | Missing |
-| init | Missing | Missing | Missing |
+| report | read | Missing | Missing |
+| snapshot | write | Missing | Missing |
+| gate | write | Missing | Missing |
+| config | write | Missing | Missing |
+| detect | write | Missing | Missing |
+| init | write | Missing | Missing |
 
 ## composable-cli
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| create | Missing | Missing | Missing |
-| read | Missing | Missing | Missing |
-| update | Missing | Missing | Missing |
-| remove | Missing | Missing | Missing |
-| list | Missing | Missing | Missing |
-| show | Missing | Missing | Missing |
-| history | Missing | Missing | Missing |
-| rollback | Missing | Missing | Missing |
-| upgrade | Missing | Missing | Missing |
-| test | Missing | Missing | Missing |
-| promote | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| create | write | Missing | Missing |
+| read | read | Missing | Missing |
+| update | write | Missing | Missing |
+| remove | destructive | Missing | Missing |
+| list | read | Missing | Missing |
+| show | read | Missing | Missing |
+| history | read | Missing | Missing |
+| rollback | write | Missing | Missing |
+| upgrade | write | Missing | Missing |
+| test | read | Missing | Missing |
+| promote | write | Missing | Missing |
 
 ## creative-search
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| config | Missing | Missing | Missing |
-| query | Missing | Missing | Missing |
-| health | Missing | Missing | Missing |
-| engines | Missing | Missing | Missing |
-| categories | Missing | Missing | Missing |
-| deep | Missing | Missing | Missing |
-| remember | Missing | Missing | Missing |
-| stats | Missing | Missing | Missing |
+| config | write | Missing | Missing |
+| query | read | Missing | Missing |
+| health | read | Missing | Missing |
+| engines | read | Missing | Missing |
+| categories | read | Missing | Missing |
+| deep | read | Missing | Missing |
+| remember | write | Missing | Missing |
+| stats | read | Missing | Missing |
 
 ## crm
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| settings | Missing | Missing | Missing |
-| menu | Missing | Missing | Missing |
-| client | Missing | Missing | Missing |
-| vault | Missing | Missing | Missing |
-| init | Missing | Missing | Missing |
-| credentials | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| settings | write | Missing | Missing |
+| menu | read | Missing | Missing |
+| client | write | Missing | Missing |
+| vault | write | Missing | Missing |
+| init | write | Missing | Missing |
+| credentials | write | Missing | Missing |
 
 ## decision
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| run | Missing | Missing | Missing |
-| sets | Missing | Missing | Missing |
-| log | Missing | Missing | Missing |
-| test | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| run | read | Missing | Missing |
+| sets | read | Missing | Missing |
+| log | read | Missing | Missing |
+| test | read | Missing | Missing |
 
 ## deploy
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| stage | Missing | Missing | Missing |
-| switch | Missing | Missing | Missing |
-| release | Missing | Missing | Missing |
-| rollback | Missing | Missing | Missing |
-| providers | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| stage | write | Missing | Missing |
+| switch | write | Missing | Missing |
+| release | write | Missing | Missing |
+| rollback | write | Missing | Missing |
+| providers | write | Missing | Missing |
+| probe | read | Missing | Missing |
+| token | write | Missing | Missing |
 
 ## design
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| tokens | Missing | Missing | Missing |
-| css | Missing | Missing | Missing |
-| tailwind | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| tokens | read | Missing | Missing |
+| css | read | Missing | Missing |
+| tailwind | read | Missing | Missing |
 
 ## domains
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| check | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
-| settings | Missing | Missing | Missing |
-| view | Missing | Missing | Missing |
-| set | Missing | Missing | Missing |
-| list | Missing | Missing | Missing |
-| info | Missing | Missing | Missing |
-| add | Missing | Missing | Missing |
-| update | Missing | Missing | Missing |
-| remove | Missing | Missing | Missing |
-| config | Missing | Missing | Missing |
-| verification | Missing | Missing | Missing |
-| claim | Missing | Missing | Missing |
-| apex-projects | Missing | Missing | Missing |
-| records | Missing | Missing | Missing |
-| record | Missing | Missing | Missing |
-| record-add | Missing | Missing | Missing |
-| record-update | Missing | Missing | Missing |
-| record-rm | Missing | Missing | Missing |
-| search | Missing | Missing | Missing |
-| availability | Missing | Missing | Missing |
-| availability-bulk | Missing | Missing | Missing |
-| price | Missing | Missing | Missing |
-| price-bulk | Missing | Missing | Missing |
-| buy | Missing | Missing | Missing |
-| buy-many | Missing | Missing | Missing |
-| renew | Missing | Missing | Missing |
-| transfer-in | Missing | Missing | Missing |
-| transfer-status | Missing | Missing | Missing |
-| auth-code | Missing | Missing | Missing |
-| auto-renew | Missing | Missing | Missing |
-| nameservers | Missing | Missing | Missing |
-| contact-schema | Missing | Missing | Missing |
-| contact-status | Missing | Missing | Missing |
-| order | Missing | Missing | Missing |
-| tlds | Missing | Missing | Missing |
-| tld | Missing | Missing | Missing |
-| tld-price | Missing | Missing | Missing |
-| project-list | Missing | Missing | Missing |
-| project-get | Missing | Missing | Missing |
-| project-add | Missing | Missing | Missing |
-| project-update | Missing | Missing | Missing |
-| project-remove | Missing | Missing | Missing |
-| project-verify | Missing | Missing | Missing |
-| project-move | Missing | Missing | Missing |
-| certs | Missing | Missing | Missing |
-| cert | Missing | Missing | Missing |
-| cert-issue | Missing | Missing | Missing |
-| cert-upload | Missing | Missing | Missing |
-| cert-rm | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| check | read | Missing | Missing |
+| token | write | Missing | Missing |
+| settings | write | Missing | Missing |
+| view | read | Missing | Missing |
+| set | write | Missing | Missing |
+| list | read | Missing | Missing |
+| info | read | Missing | Missing |
+| add | write | Missing | Missing |
+| update | write | Missing | Missing |
+| remove | destructive | Missing | Missing |
+| config | write | Missing | Missing |
+| verification | write | Missing | Missing |
+| claim | write | Missing | Missing |
+| apex-projects | read | Missing | Missing |
+| records | read | Missing | Missing |
+| record | read | Missing | Missing |
+| record-add | write | Missing | Missing |
+| record-update | write | Missing | Missing |
+| record-rm | destructive | Missing | Missing |
+| search | read | Missing | Missing |
+| availability | read | Missing | Missing |
+| availability-bulk | read | Missing | Missing |
+| price | read | Missing | Missing |
+| price-bulk | read | Missing | Missing |
+| buy | send | Missing | Missing |
+| buy-many | send | Missing | Missing |
+| renew | send | Missing | Missing |
+| transfer-in | send | Missing | Missing |
+| transfer-status | read | Missing | Missing |
+| auth-code | read | Missing | Missing |
+| auto-renew | write | Missing | Missing |
+| nameservers | write | Missing | Missing |
+| contact-schema | read | Missing | Missing |
+| contact-status | read | Missing | Missing |
+| order | read | Missing | Missing |
+| tlds | read | Missing | Missing |
+| tld | read | Missing | Missing |
+| tld-price | read | Missing | Missing |
+| project-list | read | Missing | Missing |
+| project-get | read | Missing | Missing |
+| project-add | write | Missing | Missing |
+| project-update | write | Missing | Missing |
+| project-remove | destructive | Missing | Missing |
+| project-verify | write | Missing | Missing |
+| project-move | write | Missing | Missing |
+| certs | read | Missing | Missing |
+| cert | read | Missing | Missing |
+| cert-issue | write | Missing | Missing |
+| cert-upload | write | Missing | Missing |
+| cert-rm | destructive | Missing | Missing |
 
 ## dsh
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| sessions | Missing | Missing | Missing |
-| tools | Missing | Missing | Missing |
-| models | Missing | Missing | Missing |
-| plugins | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| sessions | read | Missing | Missing |
+| tools | read | Missing | Missing |
+| models | read | Missing | Missing |
+| plugins | read | Missing | Missing |
 
 ## git-sentinel
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| audit | Missing | Missing | Missing |
-| diff | Missing | Missing | Missing |
+| audit | read | Missing | Missing |
+| diff | read | Missing | Missing |
 
 ## image-generator
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| generate | Missing | Missing | Missing |
-| models | Missing | Missing | Missing |
+| generate | send | Missing | Missing |
+| models | read | Missing | Missing |
 
 ## maps
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| geocode | Missing | Missing | Missing |
-| reverse | Missing | Missing | Missing |
-| places | Missing | Missing | Missing |
-| route | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| geocode | read | Missing | Missing |
+| reverse | read | Missing | Missing |
+| places | read | Missing | Missing |
+| route | read | Missing | Missing |
+| probe | read | Missing | Missing |
+| token | write | Missing | Missing |
 
 ## mesh
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| view | Missing | Missing | Missing |
-| nodes | Missing | Missing | Missing |
-| doctor | Missing | Missing | Missing |
-| ssh | Missing | Missing | Missing |
-| exec | Missing | Missing | Missing |
-| access | Missing | Missing | Missing |
-| ping | Missing | Missing | Missing |
-| leader | Missing | Missing | Missing |
-| enroll | Missing | Missing | Missing |
-| preauthkey | Missing | Missing | Missing |
-| policy | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
-| presence | Missing | Missing | Missing |
-| dispatch | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| view | read | Missing | Missing |
+| nodes | read | Missing | Missing |
+| doctor | read | Missing | Missing |
+| ssh | write | Missing | Missing |
+| exec | write | Missing | Missing |
+| access | write | Missing | Missing |
+| ping | read | Missing | Missing |
+| leader | read | Missing | Missing |
+| enroll | write | Missing | Missing |
+| preauthkey | write | Missing | Missing |
+| policy | write | Missing | Missing |
+| probe | read | Missing | Missing |
+| token | write | Missing | Missing |
+| presence | read | Missing | Missing |
+| dispatch | send | Missing | Missing |
+| server | write | Missing | Missing |
+| grants | write | Missing | Missing |
 
 ## okf
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| validate | Missing | Missing | Missing |
-| schemas | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| validate | read | Missing | Missing |
+| schemas | read | Missing | Missing |
+| probe | read | Missing | Missing |
 
 ## openwiki
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| hubs | Missing | Missing | Missing |
-| ingest | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| hubs | read | Missing | Missing |
+| ingest | write | Missing | Missing |
+| probe | read | Missing | Missing |
 
 ## operator-alerts
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| send | Missing | Missing | Missing |
-| test | Missing | Missing | Missing |
-| config | Missing | Missing | Missing |
-| log | Missing | Missing | Missing |
+| send | send | Missing | Missing |
+| test | read | Missing | Missing |
+| config | read | Missing | Missing |
+| log | read | Missing | Missing |
 
 ## phone
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| session | Missing | Missing | Missing |
-| numbers | Missing | Missing | Missing |
-| status | Missing | Missing | Missing |
-| jobs | Missing | Missing | Missing |
-| health | Missing | Missing | Missing |
-| run | Missing | Missing | Missing |
-| call | write | Missing | Missing |
-| message | write | Missing | Missing |
+| session | write | Missing | Missing |
+| numbers | read | Missing | Missing |
+| status | read | Missing | Missing |
+| jobs | read | Missing | Missing |
+| health | read | Missing | Missing |
+| run | write | Missing | Missing |
+| call | send | Missing | Missing |
+| message | send | Missing | Missing |
 | contact | write | Missing | Missing |
 | voicemail | write | Missing | Missing |
 | agent | write | Missing | Missing |
 | settings | write | Missing | Missing |
-| compliance | Missing | Missing | Missing |
+| compliance | read | Missing | Missing |
 
 ## phone-companion
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| notify | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| notify | send | Missing | Missing |
 
 ## security
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| platforms | Missing | Missing | Missing |
-| device | Missing | Missing | Missing |
-| android | Missing | Missing | Missing |
-| machine | Missing | Missing | Missing |
-| network | Missing | Missing | Missing |
-| fleet | Missing | Missing | Missing |
-| status | Missing | Missing | Missing |
-| audit | Missing | Missing | Missing |
-| scan | Missing | Missing | Missing |
-| harden | Missing | Missing | Missing |
-| plugins | Missing | Missing | Missing |
-| secure-all | Missing | Missing | Missing |
-| encrypt | Missing | Missing | Missing |
-| decrypt | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
-| challenge | Missing | Missing | Missing |
-| bot-mitigate | Missing | Missing | Missing |
-| site-audit | Missing | Missing | Missing |
-| site-shield | Missing | Missing | Missing |
+| platforms | read | Missing | Missing |
+| device | write | Missing | Missing |
+| android | read | Missing | Missing |
+| machine | write | Missing | Missing |
+| network | read | Missing | Missing |
+| fleet | read | Missing | Missing |
+| status | read | Missing | Missing |
+| audit | read | Missing | Missing |
+| scan | read | Missing | Missing |
+| harden | write | Missing | Missing |
+| plugins | read | Missing | Missing |
+| secure-all | write | Missing | Missing |
+| encrypt | write | Missing | Missing |
+| decrypt | read | Missing | Missing |
+| probe | read | Missing | Missing |
+| token | write | Missing | Missing |
+| challenge | write | Missing | Missing |
+| bot-mitigate | read | Missing | Missing |
+| site-audit | read | Missing | Missing |
+| site-shield | write | Missing | Missing |
 
 ## signing
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| admin-api | Missing | Missing | Missing |
-| account | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| admin-api | write | Missing | Missing |
+| account | write | Missing | Missing |
+| token | write | Missing | Missing |
 
 ## skill-manager
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| configure | Missing | Missing | Missing |
-| status | Missing | Missing | Missing |
-| audit | Missing | Missing | Missing |
-| optimize | Missing | Missing | Missing |
-| route | Missing | Missing | Missing |
+| configure | write | Missing | Missing |
+| status | read | Missing | Missing |
+| audit | read | Missing | Missing |
+| optimize | write | Missing | Missing |
+| route | read | Missing | Missing |
 
 ## sticker-generator
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| catalog | Missing | Missing | Missing |
-| generate | Missing | Missing | Missing |
-| upscale | Missing | Missing | Missing |
-| quote | Missing | Missing | Missing |
-| submit | Missing | Missing | Missing |
-| orders | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| catalog | read | Missing | Missing |
+| generate | send | Missing | Missing |
+| upscale | send | Missing | Missing |
+| quote | read | Missing | Missing |
+| submit | send | Missing | Missing |
+| orders | read | Missing | Missing |
 
 ## stripe
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| checkout | Missing | Missing | Missing |
-| payment-intent | Missing | Missing | Missing |
-| webhook | Missing | Missing | Missing |
-| refund | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| checkout | send | Missing | Missing |
+| payment-intent | send | Missing | Missing |
+| webhook | read | Missing | Missing |
+| refund | destructive | Missing | Missing |
+| probe | read | Missing | Missing |
+| token | write | Missing | Missing |
 
 ## system-monitor
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| sample | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| sample | read | Missing | Missing |
 
 ## text
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| threads | Missing | Missing | Missing |
-| get | Missing | Missing | Missing |
-| cancel | Missing | Missing | Missing |
-| numbers | Missing | Missing | Missing |
-| ingest | Missing | Missing | Missing |
-| status | Missing | Missing | Missing |
-| send | Missing | Missing | Missing |
-| history | Missing | Missing | Missing |
-| verify | Missing | Missing | Missing |
+| threads | read | Missing | Missing |
+| get | read | Missing | Missing |
+| cancel | destructive | Missing | Missing |
+| numbers | read | Missing | Missing |
+| ingest | write | Missing | Missing |
+| status | read | Missing | Missing |
+| send | send | Missing | Missing |
+| history | read | Missing | Missing |
+| verify | read | Missing | Missing |
 
 ## tickets
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| tiers | Missing | Missing | Missing |
-| list | Missing | Missing | Missing |
-| issue | Missing | Missing | Missing |
-| hold | Missing | Missing | Missing |
-| scan | Missing | Missing | Missing |
-| verify | Missing | Missing | Missing |
-| summary | Missing | Missing | Missing |
-| pass | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| tiers | write | Missing | Missing |
+| list | read | Missing | Missing |
+| issue | write | Missing | Missing |
+| hold | write | Missing | Missing |
+| scan | write | Missing | Missing |
+| verify | read | Missing | Missing |
+| summary | read | Missing | Missing |
+| pass | write | Missing | Missing |
 
 ## tr-transcribe
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| transcribe | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| transcribe | send | Missing | Missing |
 
 ## translator
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| status | Missing | Missing | Missing |
-| locales | Missing | Missing | Missing |
-| scan | Missing | Missing | Missing |
-| translate | Missing | Missing | Missing |
-| probe | Missing | Missing | Missing |
-| token | Missing | Missing | Missing |
+| status | read | Missing | Missing |
+| locales | read | Missing | Missing |
+| scan | read | Missing | Missing |
+| translate | send | Missing | Missing |
+| probe | read | Missing | Missing |
+| token | write | Missing | Missing |
 
 ## user-automations
 
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
-| list | Missing | Missing | Missing |
-
+| list | read | Missing | Missing |
