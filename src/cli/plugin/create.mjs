@@ -280,9 +280,12 @@ export async function createPlugin(args = []) {
       command: id,
       handler: "./cli.mjs",
       subcommands: [
-        { name: "status", description: `Show which ${pluginName} subcommands are implemented` }
+        { name: "status", description: `Show which ${pluginName} subcommands are implemented`, effect: "read", output: "json" }
       ]
     };
+    // The card contract reads the plugin's real state through a declared read
+    // command; a scaffold without this shows no live status.
+    manifest.status = { command: "status", refresh_seconds: 60 };
 
     const cliContent = `#!/usr/bin/env node
 /**

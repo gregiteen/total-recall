@@ -1,8 +1,50 @@
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
+import path from 'node:path'
 import { discoverPlugins } from './src/core/plugin-loader.mjs'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+
+// ── HARD GUARD: the suite is REMOTE ONLY ─────────────────────────────────────
+// 'npm test' / 'npx vitest' runs on the sanctioned test node (the Mac mini),
+// never on the laptop — a full local run once pinned this 8 GB machine at load
+// 600+. `.agent/skills/code-quality/config.json` is machine-local (git-ignored)
+// and declares remoteNode/remoteRepo for exactly the machines that must obey
+// this, so the guard is inert for anyone without that config. Escape hatch for a
+// deliberate, isolated run: TR_ALLOW_LOCAL_TESTS=1.
+{
+  const hostRoot = fileURLToPath(new URL('.', import.meta.url))
+  const configFile = path.join(hostRoot, '.agent/skills/code-quality/config.json')
+  let remoteNode = ''
+  let remoteRepo = ''
+  try {
+    const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'))
+    remoteNode = String(cfg.remoteNode || '')
+    remoteRepo = String(cfg.remoteRepo || '')
+  } catch {
+    // No machine-local gate config: this is not a gated host. Stay inert.
+  }
+
+  if (remoteNode && process.env.TR_ALLOW_LOCAL_TESTS !== '1') {
+    let onSanctionedNode = false
+    try {
+      onSanctionedNode = fs.realpathSync(hostRoot).startsWith(fs.realpathSync(remoteRepo))
+    } catch {
+      onSanctionedNode = false
+    }
+    if (!onSanctionedNode) {
+      console.error(
+        '\n❌ REFUSING to run the test suite on this machine.\n' +
+          "   'npm test' / 'npx vitest' is REMOTE ONLY — it runs on the sanctioned test\n" +
+          `   node ("${remoteNode}"), never on the laptop.\n` +
+          '   Run the gate instead:  node scripts/code-quality-gate.mjs   (drives the remote node)\n' +
+          `   …or run the suite inside the sanctioned snapshot: ${remoteRepo}\n` +
+          '   Deliberate local run:  TR_ALLOW_LOCAL_TESTS=1 npm test\n'
+      )
+      process.exit(1)
+    }
+  }
+}
 
 // Owner repositories are installed ESM packages, outside the host module graph.
 const pluginPackages = discoverPlugins(fileURLToPath(new URL('.', import.meta.url)))

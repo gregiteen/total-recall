@@ -15,6 +15,7 @@ import {
   packPublicPlugin,
   patchPluginRecord
 } from './plugin-distribution.mjs';
+import { ensurePluginRecord } from './plugin-store.mjs';
 import { projectPluginsDir, globalPluginsDir, listBundledPlugins } from './plugin-loader.mjs';
 
 const FORBIDDEN = /rating|review|install_?count|download|verified|stars?\b/i;
@@ -202,5 +203,16 @@ describe('plugin-store', () => {
 
   it('explains an unknown source instead of guessing', async () => {
     await expect(installPlugin('no-such-plugin', { projectRoot: projA })).rejects.toThrow(/No bundled plugin, share link, peer source, git URL or directory/);
+  });
+
+  it('keeps the record of a bundled scaffold plugin out of the shipped package', async () => {
+    const scaffoldDir = path.join(tmp, 'package', 'scaffold', '.agent', 'skills', 'total-recall', 'plugins');
+    fs.mkdirSync(path.join(scaffoldDir, 'bundled-one'), { recursive: true });
+    const manifest = { id: 'bundled-one', name: 'Bundled', version: '0.1.0', description: 'Bundled plugin' };
+    fs.writeFileSync(path.join(scaffoldDir, 'bundled-one', 'plugin.json'), JSON.stringify(manifest));
+    await ensurePluginRecord({ id: 'bundled-one', manifest, scope: 'scaffold', valid: true,
+      dir: path.join(scaffoldDir, 'bundled-one'), pluginsDir: scaffoldDir });
+    expect(fs.existsSync(path.join(tmp, 'package', 'scaffold', '.agent', 'skills', 'total-recall', 'memory-vault'))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, 'home-agent', 'skills', 'total-recall', 'memory-vault', 'system', 'plugins', 'bundled-one.md'))).toBe(true);
   });
 });

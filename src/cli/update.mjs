@@ -17,6 +17,7 @@ import {
 } from '../core/package-auto-update.mjs';
 import { brainDir } from '../core/config.mjs';
 import { installAutoPull } from '../core/autopull-install.mjs';
+import { updateAllBrains } from '../core/brain-updates.mjs';
 
 /** @param {string[]} args */
 export function parseArgs(args) {
@@ -29,6 +30,8 @@ export function parseArgs(args) {
     installAutopull: false,
     port: null,
     noBuild: false,
+    allBrains: false,
+    json: false,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -40,6 +43,8 @@ export function parseArgs(args) {
     else if (a === '--install-autopull') opts.installAutopull = true;
     else if (a === '--port' && args[i + 1]) opts.port = Number(args[++i]);
     else if (a === '--no-build') opts.noBuild = true;
+    else if (a === '--all-brains') opts.allBrains = true;
+    else if (a === '--json') opts.json = true;
   }
   return opts;
 }
@@ -55,6 +60,10 @@ function printHelp() {
     total-recall update --apply         npm install latest where behind
     total-recall update --apply --force Ignore throttle / disabled flag
     total-recall update --repo <path>   Include extra root (repeatable)
+    total-recall update --all-brains    Plan SSSS + Total Recall updates, including plugins/nested packages
+    total-recall update --all-brains --apply [--json]
+        Pin the same published versions, use npm/pnpm, replace shared dependency
+        links with independent local installs, and verify every resolved version.
 
   This brain's own checkout (git):
     total-recall update --install-autopull [--port N] [--no-build] [--dry-run]
@@ -78,6 +87,23 @@ export default async function update(args = []) {
   if (opts.help) {
     printHelp();
     return;
+  }
+
+  if (opts.allBrains) {
+    const summary = await updateAllBrains({ brainDir, roots: opts.repos,
+      dryRun: !opts.apply || opts.dryRun });
+    if (summary.failed) process.exitCode = 1;
+    if (opts.json) console.log(JSON.stringify(summary, null, 2));
+    else {
+      console.log(`\n  Uniform brain updates: ${summary.consumer_count || 0} consumers`);
+      if (summary.reason) console.log(`  ${summary.reason}`);
+      for (const row of summary.results) {
+        console.log(`  ${row.root}: ${row.status}`);
+        for (const pkg of row.packages || []) console.log(`    ${pkg.key}: ${pkg.installed || 'missing'} → ${pkg.latest}`);
+        if (row.error) console.log(`    ${row.error}`);
+      }
+    }
+    return summary;
   }
 
   if (opts.installAutopull) {

@@ -646,3 +646,13 @@ agents:
 
 ### `secrets.enc` (AES Encrypted Credentials)
 - Secure, GPG symmetrically password-encrypted binary container enclosing environment tokens (`google_api_key`, `github_token`, `openai_api_key`) with owner-only `0o600` access modes. Plaintext keys are never written to disk.
+
+### `update --all-brains`
+
+Plan a uniform SSSS and Total Recall release across registered brains, installed plugin owners and nested package consumers.
+
+- `total-recall update --all-brains`: read-only plan.
+- `total-recall update --all-brains --apply --json`: pin published releases, use npm/pnpm, replace shared node_modules links with local installations and verify actual versions.
+- `--repo <path>` (repeatable) and `TR_SYNC_REPOS` include extra roots.
+
+Import aliases and dependency sections are preserved. Failed installs restore changed manifests, owner lockfiles and detached links; verification failures produce a nonzero exit. Existing newer previews require explicit resolution rather than a silent downgrade. This command changes local dependencies only.

@@ -11,6 +11,14 @@ This audit supports project consolidation. It does not certify completion of the
 
 ## 1. Scope and method
 
+### Deployment optimization extension, 2026-10-13
+
+Greg requested `deploy optimize` to inspect runtime performance, extra processes and cached files. Source audit: `tr-plugin-deploy/cli.mjs` has no optimization operation; `src/deploy-engine.mjs` requires execution receipts for release changes but writes local legacy state; `ui/panel.js` still fabricates v1.0.0/ports and alerts that an unsaved credential was saved. Existing owner changes must be preserved. No scheduled optimization or production mutation is authorized by this feature request.
+
+Current official research: [Docker pruning](https://docs.docker.com/engine/manage-resources/pruning/) includes stopped resources and build caches, so blanket prune cannot establish deployment ownership; [Node filesystem API](https://nodejs.org/api/fs.html) supplies lstat/realpath/statfs for bounded observation and symlink rejection. Systemd documentation returned HTTP 403; no systemd integration contract is assumed. The first implementation measures OS memory/load, process CPU/RSS, filesystem space, endpoint response time and a dedicated disposable cache. It reports unknown processes for review rather than treating unfamiliar processes as unused. Cache cleanup requires an exact reviewed digest, unchanged file identity, explicit deployment root, and health verification; serving/rollback directories, volumes, databases, credentials and OS page caches are excluded. No persistent optimizer state is introduced.
+
+Findings: DEP-OPT-001 (P2, missing optimization operation, fix); DEP-OPT-002 (P1, fabricated panel state/credential save, fix); DEP-OPT-003 (P2, legacy deployment-state persistence, remains part of existing SSSS migration scope). Baseline: pending exact-source sanctioned-node owner suite before implementation. Tests must cover drift, symlinks, protected files, age limits, real local inspection, remote transport failures and truthful UI. Production performance and provider acceptance remain separate evidence.
+
 ### Functional plugin extension, 2026-10-07
 
 Greg expanded delivery acceptance to every installed plugin: a separate repository, working purpose-specific UI, full supported integration features, complete configuration and encrypted credentials. The earlier selected-plugin proof certifies a host seam only.

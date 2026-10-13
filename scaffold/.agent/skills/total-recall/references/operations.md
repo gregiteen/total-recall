@@ -11,3 +11,7 @@ Use the five project files plus source OpenWiki hubs throughout work. Append tim
 For research queues, discover `research --help`, select project/global scope explicitly, inspect actual unfinished items and cancel only requested items via CLI. Never edit queue storage. For skills, discover `skill --help`, preserve repository ownership, update entrypoints and relevant references, synchronize scaffold, validate links and command ownership, then refresh context. Never copy a personal memory vault into a scaffold/package or between local/cloud brains.
 
 Publication/deployment use the owning push/deploy procedures when authorized. Shared production services require staged health-checked zero-downtime switching and rollback. Do not use a generated restart command as permission to interrupt a serving process.
+
+## Uniform dependency updates
+
+Use `total-recall update --all-brains` to plan both SSSS and Total Recall updates across registered brains, installed plugin owners and nested consumers. Add `--apply` to pin the resolved published releases, refresh npm/pnpm locks and verify actual package resolution; `--json` returns per-consumer results and failures. Extra roots use repeatable `--repo` or `TR_SYNC_REPOS`. Every consumer owns a local installation: a shared node_modules link is detached without mutating its former target and restored on failure. Missing versions, unsupported managers, newer previews and verification mismatches fail explicitly. This updates local dependencies; it does not deploy services or merge brains.
