@@ -464,6 +464,10 @@
     "path": "/api/plugins/:id"
   },
   {
+    "method": "PUT",
+    "path": "/api/plugins/:id/activation"
+  },
+  {
     "method": "POST",
     "path": "/api/plugins/:id/branding"
   },
@@ -526,6 +530,10 @@
   {
     "method": "GET",
     "path": "/api/plugins/available"
+  },
+  {
+    "method": "GET",
+    "path": "/api/plugins/execution-targets"
   },
   {
     "method": "POST",

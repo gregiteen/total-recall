@@ -13,6 +13,22 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
 
 describe('plugin UI boundary', () => {
+  it('opens owner context menus only from the source-bound opaque frame', async () => {
+    const opened = vi.fn();
+    window.addEventListener('plugin-context-menu', opened);
+    try {
+      render(<PluginPanel plugin={plugin} />);
+      const frame = await screen.findByTitle('Audit fixture interface') as HTMLIFrameElement;
+      const channel = JSON.parse(/const channel=("[^"]+")/.exec(frame.srcdoc)![1]);
+      const data = { channel, type: 'contextmenu' };
+      window.dispatchEvent(new MessageEvent('message', { source: window, origin: 'null', data }));
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'https://untrusted.invalid', data }));
+      expect(opened).not.toHaveBeenCalled();
+      window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'null', data }));
+      expect(opened).toHaveBeenCalledOnce();
+      expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ pluginId: plugin.id });
+    } finally { window.removeEventListener('plugin-context-menu', opened); }
+  });
   it('loads owner code in a scripts-only opaque frame and rejects forged/undeclared requests', async () => {
     render(<PluginPanel plugin={plugin} />)
     const frame = await screen.findByTitle('Audit fixture interface') as HTMLIFrameElement

@@ -7,6 +7,8 @@ import { vendorPlugin, listProjectBricks } from './vendor.mjs';
 import { managePluginLicense } from './monetization.mjs';
 import { getPlugin, getPluginMonetization } from '../../core/plugin-loader.mjs';
 import { describePlugin } from '../../core/plugin-store.mjs';
+import { buildPluginCatalog } from '../../core/plugin-catalog.mjs';
+import { setPluginActive } from '../../core/plugin-activation.mjs';
 
 function printHelp() {
   console.log(`
@@ -22,6 +24,8 @@ Usage:
 
 Commands:
   list                      Installed plugins (project & global) with source and sharing
+  library [--plugin ID]      Installed CLI operation library (--json for agents)
+  on <id> / off <id>         Enable/disable host execution; compile catalogs and surfaces
   available [query]         Plugins bundled with this Total Recall package
   peers [query]             Plugins your mesh peers share (queried live)
   search <query>            Search bundled plugins and mesh peers
@@ -79,6 +83,12 @@ export async function run(argv = []) {
 
   const command = args[0];
   const rest = args.slice(1);
+  if (command === 'on' || command === 'off') {
+    const result = await setPluginActive(rest[0], command === 'on');
+    console.log(JSON.stringify(result));
+    if (!result.compilation.ok) process.exitCode = 1;
+    return;
+  }
 
   if (command === 'card' || command === 'card-face' || command === 'skin') {
     await managePluginCard(rest);
@@ -127,6 +137,20 @@ export async function run(argv = []) {
 
   if (!command || command === 'list') {
     await listPlugins(rest);
+    return;
+  }
+
+  if (command === 'library') {
+    const catalog = buildPluginCatalog(process.cwd());
+    const index = rest.indexOf('--plugin');
+    if (index >= 0) {
+      const id = rest[index + 1];
+      if (!id || !catalog.plugins.some(plugin => plugin.id === id)) throw new Error('Selected plugin is not installed');
+      catalog.plugins = catalog.plugins.filter(plugin => plugin.id === id);
+      catalog.commands = catalog.commands.filter(entry => entry.plugin === id);
+    }
+    if (rest.includes('--json')) console.log(JSON.stringify(catalog));
+    else for (const entry of catalog.commands) console.log(`${entry.command} [${entry.effect || 'undeclared effect'}] — ${entry.description}`);
     return;
   }
 

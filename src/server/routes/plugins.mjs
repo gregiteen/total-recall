@@ -18,6 +18,8 @@ import {
 import { listPeerPlugins } from "../../core/plugin-peers.mjs";
 import { runPluginCommand, validatePluginSecretInput } from "../../core/plugin-runner.mjs";
 import { readPluginRecord, patchPluginRecord, emit, vaultFor } from '../../core/plugin-store.mjs';
+import { setPluginActive } from '../../core/plugin-activation.mjs';
+import { pluginActivation } from '../../core/plugin-state.mjs';
 import { configurationValues } from '../../core/plugin-contracts/configuration.mjs';
 import { writeNodeValidatedAsync } from "../../core/validated-write.mjs";
 import { walkMd } from "../../core/vault.mjs";
@@ -29,6 +31,22 @@ const router = Router();
 // a caller-supplied `root`, which let a request point discovery — and the
 // runner — at any directory on disk.
 const projectRoot = () => process.cwd();
+
+router.get('/api/plugins/execution-targets', requireAuth, requireScope('config:read'), async (req, res) => {
+  try {
+    const { loadPluginModule } = await import('../../core/plugin-runtime.mjs');
+    const owner = await loadPluginModule('cli-agents', 'command-executor', { activeRequired: true });
+    const result = req.query.node ? await owner.inspectNode(String(req.query.node)) : await owner.listTargets();
+    res.json({ success: true, ...result });
+  } catch (err) { badRequest(res, err.message); }
+});
+
+router.put('/api/plugins/:id/activation', requireAuth, requireScope('config:write'), async (req, res) => {
+  try {
+    const result = await setPluginActive(req.params.id, req.body?.enabled, { projectRoot: projectRoot() });
+    res.status(result.compilation.ok ? 200 : 500).json({ success: result.compilation.ok, ...result });
+  } catch (err) { badRequest(res, err.message); }
+});
 
 router.post('/api/plugins/:id/credentials', requireAuth, requireScope('config:write'), async (req, res) => {
   try {
@@ -157,6 +175,10 @@ router.post("/api/plugins/install", requireAuth, requireScope("config:write"), a
       return badRequest(res, "Missing plugin source (bundled id, share link, peer:<host>/<id>, git URL, or path)");
     }
     const result = await installPlugin(source, { projectRoot: projectRoot(), link: !!link, global: !!isGlobal });
+    if (result.compilation?.ok === false) {
+      return res.status(500).json({ success: false, installed: true, ...result,
+        message: `Plugin installed, but inventory/surface compilation failed: ${result.compilation.error}. Run total-recall compile.` });
+    }
     res.json({
       success: true,
       message: `Installed ${result.plugin.name} ${result.plugin.version} (${result.source.kind})`,
@@ -238,6 +260,10 @@ router.delete("/api/plugins/:id", requireAuth, requireScope("config:write"), asy
       projectRoot: projectRoot(),
       global: req.query?.global === "true" ? true : undefined
     });
+    if (result.compilation?.ok === false) {
+      return res.status(500).json({ success: false, removed: true, ...result,
+        message: `Plugin removed, but inventory/surface compilation failed: ${result.compilation.error}. Run total-recall compile.` });
+    }
     res.json({ success: true, message: `Plugin ${result.id} removed`, ...result });
   } catch (err) {
     badRequest(res, err.message);
@@ -285,7 +311,7 @@ router.patch("/api/plugins/:id/card-face", requireAuth, requireScope("config:wri
  */
 router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), async (req, res) => {
   try {
-    const { subcommand = "", args = [], stdin } = req.body || {};
+    const { subcommand = "", args = [], stdin, execution } = req.body || {};
     if (typeof subcommand !== "string" || !Array.isArray(args) || args.some((a) => typeof a !== "string")) {
       return badRequest(res, "subcommand must be a string and args an array of strings");
     }
@@ -294,6 +320,15 @@ router.post("/api/plugins/:id/run", requireAuth, requireScope("config:write"), a
     if (!plugin.valid) return badRequest(res, `Plugin ${plugin.id} has an invalid manifest: ${plugin.errors.join("; ")}`);
     if (!plugin.manifest?.cli?.handler) return badRequest(res, `Plugin ${plugin.id} does not declare a CLI handler`);
     validatePluginSecretInput(plugin, subcommand, stdin);
+
+    if (execution) {
+      if (stdin !== undefined) return badRequest(res, 'Credential operations require direct local execution');
+      if (!pluginActivation(plugin).enabled && !['on', 'off', 'status', 'health', 'jobs', '--help', 'help'].includes(subcommand)) return badRequest(res, `Plugin ${plugin.id} is inactive`);
+      const { loadPluginModule } = await import('../../core/plugin-runtime.mjs');
+      const owner = await loadPluginModule('cli-agents', 'command-executor', { activeRequired: true });
+      const result = await owner.executeCommand({ plugin, subcommand, args, execution, projectRoot: projectRoot() });
+      return res.json({ success: result.ok, pluginId: plugin.id, ...result });
+    }
 
     const result = await runPluginCommand(plugin, { subcommand, args, ...(stdin !== undefined ? { stdinText: stdin } : {}), cwd: projectRoot(), secretsBrainDir: process.env.TR_SECRETS_BRAIN || globalBrainDir || BRAIN_DIR });
     res.json({ success: result.ok, pluginId: plugin.id, ...result });

@@ -6,8 +6,9 @@ import { CardRunner } from './runner'
 import { ActivityWidget, CommandsWidget, DataWidget, SettingsWidget, StatusWidget } from './widgets'
 import { brandStyle } from './theme'
 import { WorkspaceHost } from '../workspace/WorkspaceHost'
-import { PluginPanel } from '../PluginPanel'
+import { PluginPanel, pluginElements } from '../PluginPanel'
 import './card.css'
+import { CardScenes } from './CardScenes'
 
 /** The provider's logo comes from the plugin through a locked-down route; <img> never runs SVG script. */
 function useLogo(card: Card) {
@@ -47,7 +48,7 @@ function Header({ card, onOpenDrawer }: { card: Card; onOpenDrawer: () => void }
 function Region({ region, plugin }: { region: CardRegion; plugin: PluginInfo }) {
   switch (region.widget) {
     case 'status': return <StatusWidget />
-    case 'live': return <PluginPanel plugin={plugin} readOnly />
+    case 'live': return <PluginPanel plugin={plugin} elementId={pluginElements(plugin).find(element => element.kind === 'card')?.id} readOnly />
     case 'actions': case 'form': case 'keypad': return <CommandsWidget region={region.command ? { ...region, commands: [region.command] } : region} />
     case 'table': case 'detail': case 'list': case 'gauge': case 'log': return <DataWidget region={region} />
     case 'settings': case 'credentials': return <SettingsWidget plugin={plugin} />
@@ -97,16 +98,16 @@ function Drawer({ plugin, card, onClose }: { plugin: PluginInfo; card: Card; onC
 /** One engine for every plugin; the manifest supplies layout, brand and commands. */
 export function CardEngine({ plugin }: { plugin: PluginInfo }) {
   const card = useMemo(() => normalizeCard(plugin), [plugin])
+  const owned = pluginElements(plugin).some(element => element.kind === 'card' || element.kind === 'panel')
   const [drawer, setDrawer] = useState(false)
   return <CardRunner card={card}>
-    <section className={`card card-${card.template}`} style={brandStyle(card.branding)} data-density={card.branding.density} aria-label={`${card.title} card`}>
-      <Header card={card} onOpenDrawer={() => setDrawer(true)} />
-      <p className="card-muted card-description">{card.description}</p>
-      <div className="card-regions">
-        {card.regions.map((region, i) => <section key={i} className={`card-region card-region-${region.widget}`} style={region.span ? { gridColumn: `span ${Math.min(12, Math.max(1, region.span))}` } : undefined}>
+    <section className={`card card-${card.template}${owned ? ' card-owned' : ''}`} style={brandStyle(card.branding)} data-density={card.branding.density} aria-label={`${card.title} card`}>
+      {owned ? <button type="button" className="card-link" onClick={() => setDrawer(true)}>{card.workspace ? 'Open workspace' : 'Settings & usage'}</button> : <><Header card={card} onOpenDrawer={() => setDrawer(true)} /><p className="card-muted card-description">{card.description}</p></>}
+      <CardScenes plugin={plugin}><div className="card-regions">
+        {card.regions.filter(region => !['actions', 'form', 'keypad'].includes(region.widget)).map((region, i) => <section key={i} className={`card-region card-region-${region.widget}`} style={{ gridColumn: `span ${Math.min(12, Math.max(1, region.span || 12))}` }}>
           {region.title && <h3>{region.title}</h3>}<Region region={region} plugin={plugin} />
         </section>)}
-      </div>
+      </div></CardScenes>
       {card.branding.provider && <footer className="card-footer">{card.branding.provider.url ? <a href={card.branding.provider.url} target="_blank" rel="noreferrer noopener">{card.branding.provider.name}</a> : card.branding.provider.name} is a trademark of its owner. This plugin connects to the service with your own account.</footer>}
       {drawer && <Drawer plugin={plugin} card={card} onClose={() => setDrawer(false)} />}
     </section>

@@ -22,8 +22,13 @@ export async function installPlugin(args = []) {
     if (cmds.created.length) console.log(`   Commands: ${cmds.created.map((c) => `total-recall ${c}`).join(', ')}`);
     for (const c of cmds.skipped) console.log(`   Skipped command '${c.name}': ${c.reason}`);
     console.log('');
+    if (result.compilation?.ok === false) {
+      console.error(`Plugin installed, but inventory/surface compilation failed: ${result.compilation.error}. Run total-recall compile.`);
+      process.exitCode = 1;
+      return;
+    }
     const { autoCompileSurfaces } = await import('../../core/auto-compile.mjs');
-    await autoCompileSurfaces({ layer: isGlobal ? 'global' : 'project', semantic: false, force: true });
+    if (!await autoCompileSurfaces({ layer: isGlobal ? 'global' : 'project', semantic: false, force: true })) process.exitCode = 1;
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);

@@ -61,11 +61,11 @@ describe('PluginsPage', () => {
     expect(container.textContent).not.toMatch(/★|rating|reviews?\b|installs\b|downloads?|verified/i);
   });
 
-  it('mounts the observation/configuration engine and keeps undeclared effects reference-only', async () => {
+  it('offers command scenes without automatically executing an undeclared effect', async () => {
     renderPage();
     expect(await screen.findByText('total-recall git-sentinel audit --json')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings & usage' })).toBeInTheDocument();
-    expect(screen.queryByText('Try')).not.toBeInTheDocument();
+    expect(screen.getByText('Try')).toBeInTheDocument();
     expect(calls.some(call => call.url.endsWith('/api/plugins/git-sentinel/run'))).toBe(false);
   });
 

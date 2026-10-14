@@ -13,11 +13,13 @@ import {
 import { assemblePluginContexts } from './plugin-context.mjs';
 import yaml from 'yaml';
 import { brainDir as globalBrainDir, globalAgentDir } from './config.mjs';
-import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
+import { listSurfaceCommands, buildCommandsSection, surfaceInputsHash, commandScopeDirectories } from './command-surface.mjs';
 import { fileURLToPath } from 'url';
 import { buildLocalSearchIndex } from './fast-recall.mjs';
 import { selectRules, assembleContext, curatedRules } from './context-policy.mjs';
 import { discoverPlugins } from './plugin-loader.mjs';
+import { refreshPluginCatalog } from './plugin-catalog.mjs';
+import { pluginActivation } from './plugin-state.mjs';
 
 // Long-lived processes (server, daemon, vault watcher) import this module once.
 // If the rule builder is edited or upgraded after they start, their in-memory
@@ -34,9 +36,7 @@ export function isSurfaceCodeStale(file = SURFACE_SOURCE, loadedHash = LOADED_SU
 
 /** Scope dirs searched for composable commands, in dispatcher order (project, then global). */
 export function commandDirsFor(skillsDir) {
-  const dirs = [];
-  if (skillsDir) dirs.push({ scope: 'project', dir: path.join(path.dirname(skillsDir), 'commands') });
-  dirs.push({ scope: 'global', dir: path.join(globalAgentDir, 'commands') });
+  const dirs = skillsDir ? commandScopeDirectories(path.dirname(path.dirname(skillsDir)), globalAgentDir) : [{ scope: 'global', dir: path.join(globalAgentDir, 'commands') }];
   // Compiling the global brain itself: its commands are the global ones.
   if (dirs.length === 2 && path.resolve(dirs[0].dir) === path.resolve(dirs[1].dir)) dirs.shift();
   return dirs;
@@ -357,12 +357,14 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
     if (!plugins.length) return '';
     const lines = [
       '## Installed Plugins & Capabilities\n',
-      'The following plugins are installed and available via `total-recall <plugin> [command]`:\n'
+      'Use Total Recall and plugins first. Discover operations with `total-recall plugin library --json`, inspect the owner CLI help, then use its CLI.\n',
+      'Namespaces below run as `total-recall <namespace> [command]`; declarations do not prove provider readiness.\n'
     ];
+    if (plugins.some(plugin => plugin.id === 'composable-cli')) lines.push('Composed commands: `total-recall composable-cli library --json`.\n');
     for (const p of plugins) {
       const cmd = p.manifest.cli?.command || p.id;
-      const desc = p.manifest.description ? (p.manifest.description.length > 80 ? p.manifest.description.slice(0, 77) + '…' : p.manifest.description) : 'Plugin capability';
-      lines.push(`- **${p.id}** (v${p.manifest.version || '0.1.0'}): ${desc} (\`total-recall ${cmd}\`)`);
+      const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').slice(0, 30).trimEnd();
+      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p).state} · \`${cmd}\` · ${p.manifest.cli?.subcommands?.length || 0} operations: ${desc}`);
     }
     return lines.join('\n') + '\n';
   } catch {
@@ -400,13 +402,13 @@ DO NOT SKIP THIS. Run Total Recall CLI help and context first before doing anyth
   if (pluginsSummary) {
     contributions.push({ id: 'installed-plugins', text: pluginsSummary, required: true });
   }
+  contributions.push({ id: 'commands', text: buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir))) });
   if (!bootstrap) {
     if (skillsDir) {
       contributions.push(...legacyRuleContributions(skillsDir));
       for (const skill of loadSkills(skillsDir)) contributions.push({ id: `skill:${skill.name}`,
         text: `Skill ${skill.name}: ${String(skill.description || '').slice(0, 200)} (${path.relative(root, skill.filepath)})` });
     }
-    contributions.push({ id: 'commands', text: buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir))) });
     const plugin = await assemblePluginContexts({ projectRoot: root, vaultDir, nodes, derivedDir });
     contributions.push({ id: 'plugins', text: plugin });
   }
@@ -449,12 +451,18 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
   const fullContent = `${mdcHeader}${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
 
   try {
-    if (fs.existsSync(shimPath)) {
-      const stat = fs.lstatSync(shimPath);
+    const stat = fs.lstatSync(shimPath, { throwIfNoEntry: false });
+    if (stat) {
       if (stat.isSymbolicLink()) {
-        // If it's a symlink, DO NOT destroy it. It likely points to INSTRUCTIONS.md natively,
-        // and its content will update automatically when the target updates.
-        return false;
+        const target = fs.realpathSync(shimPath);
+        const root = fs.realpathSync(path.dirname(path.dirname(skillsDir)));
+        const relative = path.relative(root, target);
+        if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('Linked instruction target is outside the selected project');
+        if (!fs.statSync(target).isFile()) throw new Error('Linked instruction target must be a regular file');
+        // Preserve both the link and authored target text; replace only our block.
+        const raw = fs.readFileSync(target, 'utf8');
+        atomicWrite(target, injectDirectives(raw, rulesBlock));
+        return true;
       } else {
         const raw = fs.readFileSync(shimPath, 'utf8');
         let cleaned = raw;
@@ -475,8 +483,7 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
       return true;
     }
   } catch (err) {
-    // Ignore permission errors
-    return false;
+    throw new Error(`Cannot update instruction surface ${path.basename(shimPath)}: ${err.code || err.message}`);
   }
 }
 
@@ -605,6 +612,8 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     return { nodesProcessed: 0, skillsInjected: 0, semanticIndexed: 0, semanticUnavailable: false, skipped: true, reason: 'stale-surface-code' };
   }
   const nodes = getNodes(vaultDir);
+  const projectRoot = skillsDir ? path.dirname(path.dirname(skillsDir)) : path.resolve(vaultDir, '..', '..', '..', '..');
+  const catalog = refreshPluginCatalog(derivedDir, projectRoot);
   const globalVault = globalVaultFor(vaultDir);
   const ruleNodes = globalVault && fs.existsSync(globalVault)
     ? mergeGlobalRuleNodes(nodes, getNodes(globalVault))
@@ -620,7 +629,7 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
   // Commands and skills feed the surface too; a change to either must recompile
   // even when no memory node changed.
   const inputsHashFile = path.join(derivedDir, 'surface-inputs-hash.txt');
-  const inputsHash = sourceHash(SURFACE_SOURCE) + surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
+  const inputsHash = sourceHash(SURFACE_SOURCE) + catalog.fingerprint + surfaceInputsHash({ commandDirs: commandDirsFor(skillsDir), skillsDir });
 
   if (!force && fs.existsSync(hashFile)) {
     const storedHash = fs.readFileSync(hashFile, 'utf8').trim();

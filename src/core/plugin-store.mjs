@@ -108,6 +108,7 @@ async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, sh
     installed_at: now,
     branding: previous?.branding || manifest?.branding || null,
     configuration: previous?.configuration || {},
+    runtime_enabled: previous?.runtime_enabled !== false,
     task_runs: previous?.task_runs || {},
     locked: previous?.locked === true,
     secrets: manifest?.secrets || [],
@@ -198,14 +199,18 @@ export function describePlugin(plugin) {
     categories: m.ssss_schemas?.categories || [],
     tasks: (m.tasks || []).map((t) => ({ ...t, last_run: t.command ? taskRuns[t.command] || null : null })),
     openwiki_hubs: m.openwiki_hubs || [],
-    cli: m.cli ? { command: m.cli.command || null, subcommands: m.cli.subcommands || [] } : null,
+    cli: m.cli ? { command: m.cli.command || null, subcommands: [...(m.cli.subcommands || []).filter(command => !['on', 'off'].includes(command.name)),
+      ...['on', 'off'].map(name => ({ name, description: `${name === 'on' ? 'Enable' : 'Disable'} host execution and compile surfaces`, effect: 'write', output: 'json', args: [] }))] } : null,
     has_generator: !!m.compile?.generator,
     branding: { ...(m.branding || {}), ...(record?.branding || {}) },
     locked: record?.locked === true || m.locked === true,
     store_deployed: record?.store_deployed === true,
     secrets: m.secrets || [],
     ui: m.ui || null,
-    configuration: m.configuration || null
+    configuration: m.configuration || null,
+    manifest: m,
+    card_face: record?.card_face || m.card_face || null,
+    activation: { state: plugin.valid && record?.runtime_enabled !== false ? 'active' : 'inactive', enabled: plugin.valid && record?.runtime_enabled !== false }
   };
 }
 
@@ -257,23 +262,31 @@ export function isGitSource(source) {
   return /^(https:\/\/|http:\/\/|ssh:\/\/|git@)/.test(source) || source.endsWith('.git');
 }
 
-export async function recompileAfterPluginMutation(projectRoot = process.cwd(), isGlobal = false) {
+export async function recompileAfterPluginMutation(projectRoot = process.cwd(), isGlobal = false, dependencies = {}) {
   try {
-    const { compileSurface } = await import('./surface.mjs');
-    const { resolveAgentDir, resolveBrainDir } = await import('../cli/agent-dir.mjs');
-    const layer = isGlobal ? 'global' : 'project';
-    const agentDir = resolveAgentDir(layer, projectRoot);
-    const brainDir = resolveBrainDir(layer, projectRoot);
+    const { compileSurface } = dependencies.compileSurface ? dependencies : await import('./surface.mjs');
+    // Match the actual destination chosen by install/remove, not an ambient brain override.
+    const pluginsDir = isGlobal ? globalPluginsDir() : projectPluginsDir(projectRoot);
+    const brainDir = path.dirname(pluginsDir);
+    const agentDir = path.dirname(path.dirname(brainDir));
     const vaultDir = path.join(brainDir, 'memory-vault');
     const skillsDir = path.join(agentDir, 'skills');
     const derivedDir = path.join(brainDir, 'memory-derived');
     const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
-    await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false });
+    const result = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false });
+    if (result.skipped && result.reason === 'stale-surface-code') throw new Error('Instruction compiler is stale; restart the host or run total-recall compile');
+    if (isGlobal) {
+      const { compileRegisteredProjects } = dependencies.compileRegisteredProjects ? dependencies : await import('../cli/rebuild.mjs');
+      const failed = await compileRegisteredProjects();
+      if (failed) throw new Error(`${failed} registered project surface compilation(s) failed`);
+    }
+    return { ok: true, inventoryUpdated: true };
   } catch (err) {
     try {
       const { logger } = await import('./logger.mjs');
       logger.warn('plugin-store', `Automatic compilation after plugin change failed: ${err.message}`);
     } catch {}
+    return { ok: false, error: err.message };
   }
 }
 
@@ -350,7 +363,6 @@ export async function installPlugin(source, options = {}) {
   try {
     await writeRecord({ id: manifest.id, manifest, scope, pluginsDir, source: sourceRecord, sha256 });
     await emit(vaultRoot, manifest.id, 'installed', { version: manifest.version, scope, source: sourceRecord, sha256 });
-    await recompileAfterPluginMutation(projectRoot, isGlobal);
   } catch (err) {
     // A plugin on disk without its record would be installed but unaccounted
     // for. Undo the install rather than leave the two out of step.
@@ -360,10 +372,12 @@ export async function installPlugin(source, options = {}) {
     throw new Error(`Plugin files were written but its record could not be: ${err.message}`);
   }
 
+  const compilation = await recompileAfterPluginMutation(projectRoot, isGlobal);
   return {
     plugin: { id: manifest.id, name: manifest.name, version: manifest.version, dir: dest, scope },
     source: sourceRecord,
-    sha256
+    sha256,
+    compilation
   };
 }
 
@@ -388,6 +402,6 @@ export async function uninstallPlugin(id, options = {}) {
     await deleteVfsDocument(recordPath(id), { actorRole: 'system', intent: `Remove plugin record ${id}`, vaultRoot });
   }
   await emit(vaultRoot, id, 'removed', { scope: plugin.scope, linked: stat.isSymbolicLink() });
-  await recompileAfterPluginMutation(options.projectRoot || process.cwd(), plugin.scope === 'global');
-  return { id, dir: plugin.dir, scope: plugin.scope };
+  const compilation = await recompileAfterPluginMutation(options.projectRoot || process.cwd(), plugin.scope === 'global');
+  return { id, dir: plugin.dir, scope: plugin.scope, compilation };
 }

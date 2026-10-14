@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import matter from './frontmatter.mjs';
 
 /**
  * Composable commands as an instruction-surface projection.
@@ -13,6 +14,26 @@ import crypto from 'node:crypto';
 
 const NAME = /^[a-z][a-z0-9-]{0,63}$/;
 const MAX_DESCRIPTION = 180;
+
+/** Static scope metadata shared by catalogs and instruction projections. */
+export function commandScopeDirectories(projectRoot, agentDir) {
+  const dirs = [{ scope: 'project', dir: path.join(projectRoot, '.agent', 'commands') }];
+  let projectId;
+  try { projectId = JSON.parse(fs.readFileSync(path.join(projectRoot, '.agent/skills/total-recall/config/brain.json'), 'utf8')).project_id; } catch {}
+  const groups = path.join(agentDir, 'skills/total-recall/groups');
+  if (typeof projectId === 'string' && projectId) {
+    let files = [];
+    try { files = fs.readdirSync(groups).filter(file => file.endsWith('.md')).sort(); } catch {}
+    for (const file of files) {
+      const id = file.slice(0, -3);
+      if (!NAME.test(id)) continue;
+      const record = matter(fs.readFileSync(path.join(groups, file), 'utf8')).data;
+      if (Array.isArray(record.members) && record.members.includes(projectId)) dirs.push({ scope: 'group', dir: path.join(agentDir, 'commands/groups', id) });
+    }
+  }
+  dirs.push({ scope: 'global', dir: path.join(agentDir, 'commands') });
+  return dirs;
+}
 
 function firstSentence(text) {
   const clean = text.replace(/\s+/g, ' ').trim();

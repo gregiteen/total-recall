@@ -18,8 +18,13 @@ export async function removePlugin(args = []) {
     console.log(`\n✅ Removed plugin '${id}' (${result.scope}) from ${result.dir}`);
     if (removed.length) console.log(`   Removed commands: ${removed.join(', ')}`);
     console.log('');
+    if (result.compilation?.ok === false) {
+      console.error(`Plugin removed, but inventory/surface compilation failed: ${result.compilation.error}. Run total-recall compile.`);
+      process.exitCode = 1;
+      return;
+    }
     const { autoCompileSurfaces } = await import('../../core/auto-compile.mjs');
-    await autoCompileSurfaces({ layer: result.scope === 'global' ? 'global' : 'project', semantic: false, force: true });
+    if (!await autoCompileSurfaces({ layer: result.scope === 'global' ? 'global' : 'project', semantic: false, force: true })) process.exitCode = 1;
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);

@@ -75,6 +75,7 @@ export async function runDuePluginTasks(options = {}) {
 
     let record = readPluginRecord(plugin);
     if (!record) record = await ensurePluginRecord(plugin);
+    if (record?.runtime_enabled === false) continue;
     const runs = { ...(record?.task_runs || {}) };
     let changed = false;
 

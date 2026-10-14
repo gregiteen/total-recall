@@ -33,23 +33,31 @@ export function StatusWidget() {
 }
 
 function ReadForm({ command }: { command: CardCommand }) {
-  const { run } = useRunner()
+  const { run, busy } = useRunner()
   const args = visibleArgs(command)
   const [values, setValues] = useState<ArgValues>(() => Object.fromEntries(args.map(a => [a.name, defaultValue(a)])))
   const [result, setResult] = useState<RunResult | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [credential, setCredential] = useState('')
+  const secretArgs = command.args.filter(arg => arg.secret)
+  const stdinSupported = secretArgs.length === 1 && secretArgs[0].type === 'string' && !secretArgs[0].flag
+  const requiresConfirmation = command.effect !== 'read'
   const missing = missingRequired(command, values)
-  return <form className="card-form" onSubmit={async event => { event.preventDefault(); setResult(await run(command.name, values)) }}>
+  return <form className="card-form" onSubmit={async event => { event.preventDefault(); if (requiresConfirmation && !confirmed) return; const input = stdinSupported ? credential : undefined; setCredential(''); setResult(await run(command.name, values, [], input)); setConfirmed(false) }}>
     {args.map(arg => <label key={arg.name}>{arg.label}{arg.required ? ' *' : ''}
       {arg.type === 'choice' ? <select value={String(values[arg.name] ?? '')} onChange={e => setValues({ ...values, [arg.name]: e.target.value })}>{!arg.required && <option value="">Any</option>}{arg.options?.map(o => <option key={String(o)} value={String(o)}>{String(o)}</option>)}</select>
         : arg.type === 'boolean' ? <input type="checkbox" checked={!!values[arg.name]} onChange={e => setValues({ ...values, [arg.name]: e.target.checked })} />
         : <input type={arg.type === 'number' ? 'number' : 'text'} value={String(values[arg.name] ?? '')} onChange={e => setValues({ ...values, [arg.name]: arg.type === 'number' && e.target.value !== '' ? Number(e.target.value) : e.target.value })} />}
     </label>)}
-    <button className="card-button" disabled={missing.length > 0}>Look up</button>
+    {stdinSupported && <label>{secretArgs[0].label}<input type="password" autoComplete="new-password" value={credential} maxLength={65536} onChange={event => setCredential(event.target.value)} /></label>}
+    {secretArgs.length > 0 && !stdinSupported && <p className="card-muted">Use connection settings for this credential operation.</p>}
+    {requiresConfirmation && <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />Confirm {command.name}</label>}
+    <button className="card-button" disabled={missing.length > 0 || busy.has(command.name) || (requiresConfirmation && !confirmed) || (secretArgs.length > 0 && (!stdinSupported || !credential))}>{busy.has(command.name) ? 'Running…' : command.effect === 'read' ? 'Look up' : 'Run command'}</button>
     {result && (result.ok ? <pre className="card-pre">{result.data ? JSON.stringify(result.data, null, 2) : result.text}</pre> : <Failure result={result} />)}
   </form>
 }
 
-/** What the plugin can do, with the exact CLI line an agent runs. Only read commands can be tried here. */
+/** Every declared operation, with arguments, explicit mutation confirmation and secure stdin. */
 export function CommandsWidget({ region }: { region: CardRegion }) {
   const { card } = useRunner()
   const cliName = card.id
@@ -63,12 +71,12 @@ export function CommandsWidget({ region }: { region: CardRegion }) {
         <div className="card-row">
           <strong>{command.name}</strong>
           <Pill tone={command.effect === 'read' ? 'ok' : command.effect === 'write' ? 'neutral' : 'warn'}>{command.effect}</Pill>
-          {command.effect === 'read' && <button type="button" className="card-link" onClick={() => setOpen(open === command.name ? '' : command.name)}>{open === command.name ? 'Close' : 'Try'}</button>}
+          <button type="button" className="card-link" onClick={() => setOpen(open === command.name ? '' : command.name)}>{open === command.name ? 'Close' : 'Try'}</button>
         </div>
         {command.description && <p className="card-muted">{command.description}</p>}
         <div className="card-row"><code className="card-code">{line}</code>
           <button type="button" className="card-link" onClick={async () => { try { await navigator.clipboard.writeText(line); setCopied(command.name) } catch { setCopied('') } }}>{copied === command.name ? 'Copied' : 'Copy'}</button></div>
-        {open === command.name && command.effect === 'read' && <ReadForm command={command} />}
+        {open === command.name && <ReadForm command={command} />}
       </li>
     })}
     {names.length === 0 && <li className="card-muted">No commands declared.</li>}

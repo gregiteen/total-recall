@@ -77,6 +77,8 @@ export function normalizeCard(plugin: PluginInfo): Card {
   const template: Template = TEMPLATES.includes(layout.template) ? layout.template : 'console'
   if (regions.length === 0) {
     // No declared layout: show real state, every command with its arguments, then configuration.
+    const elements = plugin.ui?.elements || manifest.ui?.elements || []
+    if (elements.some((element: Loose) => element.kind === 'card' || element.kind === 'panel')) regions.push({ widget: 'live' })
     if (statusCommand) regions.push({ widget: 'status', title: 'Status' })
     regions.push({ widget: 'actions', title: 'Commands' }, { widget: 'activity', title: 'Recent activity' })
   }

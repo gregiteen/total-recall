@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describeCommandFile, listSurfaceCommands, buildCommandsSection, surfaceInputsHash } from './command-surface.mjs';
+import { describeCommandFile, listSurfaceCommands, buildCommandsSection, surfaceInputsHash, commandScopeDirectories } from './command-surface.mjs';
 
 let tmp;
 const write = (dir, name, body) => { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, `${name}.mjs`), body); };
@@ -37,6 +37,23 @@ describe('describeCommandFile', () => {
 });
 
 describe('listSurfaceCommands / buildCommandsSection', () => {
+  it('projects matching group commands between project and global scopes without executing them', () => {
+    const project = path.join(tmp, 'project'); const agent = path.join(tmp, 'global');
+    const config = path.join(project, '.agent/skills/total-recall/config'); fs.mkdirSync(config, { recursive: true });
+    fs.writeFileSync(path.join(config, 'brain.json'), JSON.stringify({ project_id: 'selected-id' }));
+    const groups = path.join(agent, 'skills/total-recall/groups'); fs.mkdirSync(groups, { recursive: true });
+    fs.writeFileSync(path.join(groups, 'selected-team.md'), '---\nmembers:\n  - selected-id\n---\n');
+    fs.writeFileSync(path.join(groups, 'other-team.md'), '---\nmembers: [selected-id-longer]\n---\n');
+    write(path.join(agent, 'commands/groups/selected-team'), 'team-check', '// @description Group check\nthrow new Error("must never execute");');
+    write(path.join(agent, 'commands/groups/other-team'), 'excluded', '// @description Other group');
+    const dirs = commandScopeDirectories(project, agent);
+    expect(dirs.map(item => item.scope)).toEqual(['project', 'group', 'global']);
+    expect(listSurfaceCommands(dirs)).toMatchObject([{ name: 'team-check', scope: 'group' }]);
+    expect(buildCommandsSection(listSurfaceCommands(dirs))).toContain('team-check');
+    const before = surfaceInputsHash({ commandDirs: dirs });
+    write(path.join(agent, 'commands/groups/selected-team'), 'team-check', '// @description Changed group check');
+    expect(surfaceInputsHash({ commandDirs: dirs })).not.toBe(before);
+  });
   it('lists project before global, reports shadowing, and never executes code', () => {
     const project = path.join(tmp, 'p'); const global = path.join(tmp, 'g');
     write(project, 'dup', '// @description project one\nthrow new Error("must not run");\n');
