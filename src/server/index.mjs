@@ -52,7 +52,9 @@ const PACKAGE_VERSION = (() => {
 // running indefinitely (no bound port, no work, never exiting) because nothing
 // handled the EADDRINUSE 'error' event. Fail fast instead, mirroring the daemon
 // loop's acquirePidLock/releasePidLock pattern.
-const SERVER_PID_FILE = path.join(configBrainDir, 'server.pid');
+// TR_SERVER_PID_FILE gives a staged (blue/green) release its own lock so it can
+// run beside the serving instance; the default stays one server per brain.
+const SERVER_PID_FILE = process.env.TR_SERVER_PID_FILE || path.join(configBrainDir, 'server.pid');
 
 function acquireServerPidLock() {
   try {
@@ -929,13 +931,22 @@ if (HOST !== '127.0.0.1' && HOST !== '0.0.0.0') {
     });
   });
 
-  const monitorServer = monitorApp.listen(9111, '127.0.0.1', () => {
-    logger.info("server", 'Live Agent Monitor listening on http://127.0.0.1:9111/stream');
+  // A staged release (blue/green) runs beside the serving one. The monitor port
+  // is configurable (TR_MONITOR_PORT; 0 disables it) and a busy port must not
+  // take the whole server down.
+  const monitorPort = Number.parseInt(process.env.TR_MONITOR_PORT ?? '9111', 10);
+  const monitorServer = monitorPort > 0
+    ? monitorApp.listen(monitorPort, '127.0.0.1', () => {
+        logger.info("server", `Live Agent Monitor listening on http://127.0.0.1:${monitorPort}/stream`);
+      })
+    : null;
+  monitorServer?.on('error', (err) => {
+    logger.warn('server', `Live Agent Monitor unavailable (${err.code || err.message}); continuing without it.`);
   });
 
   // Track monitorServer for graceful shutdown
   server.on("close", () => {
-    monitorServer.close();
+    monitorServer?.close();
   });
 
   // Unified Background Daemon Auto-Start & Watchdog
