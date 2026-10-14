@@ -1,3 +1,12 @@
+## 3.39.2 — 2026-10-14
+
+- Ship the plugin state and document stores that installed plugins import at
+  runtime: `src/core/plugin-state-store.mjs` and
+  `src/core/plugin-document-store.mjs`. The published 3.39.1 artifact predated
+  both files, so plugins that depend on them (`auth`, `operator-alerts`,
+  `decision`, `composable-cli`) could not run against a clean npm install.
+- No behavior changes to the host; this is a packaging/currency release.
+
 ## 3.39.1 — 2026-10-08
 
 - Enforce mandatory Total Recall first-step directives across IDE instruction
