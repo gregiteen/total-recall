@@ -258,3 +258,5 @@ Every card exposes host active/inactive state and on/off controls, command-runni
 Users select an installed harness and mesh node per command. A CLI-agents owner integrates Claude Code, Codex, Agy, Cursor, DSH, Grok, Muse, Pi and Hermes with current documented argv/auth/result contracts. Unavailable, unauthenticated, unsupported or failed executions must remain explicit. Do not copy brains, inject provider secrets into subscription agents, guess remote workspace paths, or claim an agent answer proves the requested CLI action ran.
 
 Permission controls expose strict boolean read/write/send/destructive command admission. Apply them before dispatch and preserve the vendor's approval/sandbox defaults. These command controls do not claim a complete OS or network policy. Project, matching-group and global composed commands all participate in derived libraries and surface freshness.
+
+Every standalone plugin development repository has an isolated, registered complete Total Recall project brain. Brain memory is local private state, excluded from published plugin code. SSSS owner-state coverage remains separately verified.

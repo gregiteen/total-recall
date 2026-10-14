@@ -146,7 +146,7 @@
   },
   "tr-plugin-cli-agents": {
     "state": "pushed",
-    "commit": "127b7d6316ba5451599c547d3040e1fbf658a4d5",
+    "commit": "a03fe9046a351d862422b2fc26c62a2f9561ce0d",
     "branch": "main"
   }
 }

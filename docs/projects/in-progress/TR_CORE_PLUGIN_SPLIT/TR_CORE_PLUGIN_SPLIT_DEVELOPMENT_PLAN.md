@@ -299,3 +299,5 @@ Current delivery evidence is consolidated in [plugin library progress](evidence/
 3. Add a standalone CLI-agents plugin with nine documented adapters, bounded process/auth/result tests and remote installed-agent discovery; preserve unknown states and explicit remote cwd selection.
 4. Connect per-command harness/node selection through the owning module, verify actual native/remote routing, and inspect rendered desktop/mobile cards.
 5. Synchronize skill/hub/tracker evidence, verify tested source hashes, run current gates and push completed work. All 29 original owner repositories now have verified private remote pushes. Publication/live daemon rollout remains separately evidenced.
+
+Complete all 30 owner development brain layouts through supported CLI, inspect each native layout, compile instruction surfaces, and prevent local memory from entering source commits. Audit owner persistence separately; do not interpret schemas as verified migration.

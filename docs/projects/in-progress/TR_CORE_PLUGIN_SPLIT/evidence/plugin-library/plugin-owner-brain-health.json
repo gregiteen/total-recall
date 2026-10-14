@@ -1,0 +1,152 @@
+[
+  {
+    "plugin": "tr-plugin-auth",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-cli-agents",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-code-quality",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-composable-cli",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-creative-search",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-decision",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-deploy",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-design",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-domains",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-dsh",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-git-sentinel",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-image-generator",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-maps",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-mesh",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-okf",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-openwiki",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-operator-alerts",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-phone",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-phone-companion",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-security",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-signing",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-skill-manager",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-sticker-generator",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-stripe",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-system-monitor",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-text",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-tickets",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-tr-transcribe",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-translator",
+    "complete": true,
+    "fullBrain": true
+  },
+  {
+    "plugin": "tr-plugin-user-automations",
+    "complete": true,
+    "fullBrain": true
+  }
+]
