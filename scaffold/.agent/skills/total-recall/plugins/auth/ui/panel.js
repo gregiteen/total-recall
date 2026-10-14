@@ -73,6 +73,52 @@ class AuthPanel extends HTMLElement {
     this.render();
   }
 
+  async googleAction(action) {
+    this.error = ''; this.info = '';
+    const id = this.shadowRoot.getElementById('google-account-id')?.value.trim();
+    try {
+      if (action !== 'accounts' && !id) throw new Error('Choose an account identifier');
+      const args = action === 'accounts' ? ['accounts', '--json'] : [action, id, '--json'];
+      let result;
+      if (this.host?.run) result = await this.host.run('google', args);
+      else {
+        const url = action === 'accounts' ? '/auth/google/accounts' : `/auth/google/accounts/${encodeURIComponent(id)}/${action}`;
+        const response = await fetch(url, { method: action === 'accounts' ? 'GET' : 'POST' });
+        if (!response.ok) throw new Error('Connection command failed');
+        result = await response.json();
+      }
+      if (result?.code && result.code !== 0) throw new Error('Connection command failed');
+      this.info = typeof result?.output === 'string' ? result.output : JSON.stringify(result, null, 2);
+    } catch (error) { this.error = error.message; }
+    this.render();
+  }
+
+  async keyAction(action) {
+    this.error = ''; this.info = '';
+    const value = id => this.shadowRoot.getElementById(id)?.value.trim();
+    try {
+      if (!this.host?.run) throw new Error('Use the connected CLI command surface for key management');
+      let args = [action];
+      if (action === 'issue') {
+        const scopes = [...this.shadowRoot.querySelectorAll('input[name="key-scope"]:checked')].map(input => input.value).join(',');
+        if (!value('key-name') || !scopes) throw new Error('Choose a name and explicit permissions');
+        args = ['issue', value('key-name'), '--scopes', scopes, '--kind', value('key-kind')];
+        if (value('key-role')) args.push('--role', value('key-role'));
+        if (value('key-expiry')) args.push('--expires', value('key-expiry'));
+      } else if (action === 'role-set') {
+        const scopes = [...this.shadowRoot.querySelectorAll('input[name="key-scope"]:checked')].map(input => input.value).join(',');
+        if (!value('key-role')) throw new Error('Choose a role name');
+        args = ['role-set', value('key-role'), '--scopes', scopes];
+      } else if (['revoke', 'usage'].includes(action)) {
+        if (!value('key-id')) throw new Error('Choose a key identifier'); args.push(value('key-id'));
+      }
+      const result = await this.host.run('key', [...args, '--json']);
+      if (result?.code && result.code !== 0) throw new Error('Key command failed');
+      this.info = typeof result?.output === 'string' ? result.output : JSON.stringify(result, null, 2);
+    } catch (error) { this.error = error.message; }
+    this.render();
+  }
+
   render() {
     const passkeyCount = this.status?.passkey?.count ?? this.status?.passkey?.registered_count ?? null;
     const googleReady = Boolean(this.status?.google?.configured || this.status?.google_oauth2?.configured);
@@ -186,6 +232,11 @@ class AuthPanel extends HTMLElement {
             <input readonly value="${esc(new URL('/auth/google/callback', location.origin).href)}">
           </label>
         </form>
+        <a href="/auth/google" target="_blank" rel="noopener">Connect account</a>
+        <label>Account identifier<input id="google-account-id" placeholder="Identifier from connections"></label>
+        <button id="google-accounts">List connections</button>
+        <button id="google-refresh">Refresh access</button>
+        <button id="google-disconnect">Disconnect account</button>
       </section>
 
       <section>
@@ -199,6 +250,8 @@ class AuthPanel extends HTMLElement {
             <select id="panel-secret-key" style="width:100%;padding:10px;border-radius:6px;border:1px solid #374151;background:#0b0e14;color:#fff;">
               <option value="GOOGLE_CLIENT_ID">GOOGLE_CLIENT_ID</option>
               <option value="GOOGLE_CLIENT_SECRET">GOOGLE_CLIENT_SECRET</option>
+              <option value="GOOGLE_REDIRECT_URI">GOOGLE_REDIRECT_URI</option>
+              <option value="GOOGLE_ALLOWED_EMAILS">GOOGLE_ALLOWED_EMAILS</option>
               <option value="SESSION_SECRET">SESSION_SECRET</option>
             </select>
           </label>
@@ -212,6 +265,20 @@ class AuthPanel extends HTMLElement {
         </form>
       </section>
 
+      <section>
+        <h3>Access keys and permissions</h3>
+        <label>Name<input id="key-name"></label>
+        <label>Key type<select id="key-kind"><option value="pat">Personal access token</option><option value="api_key">Application API key</option></select></label>
+        <label>Role ceiling<input id="key-role" placeholder="reader, operator, admin or configured role"></label>
+        <label>Expiry<input id="key-expiry" type="datetime-local"></label>
+        <fieldset><legend>Permissions</legend>
+          ${['*', 'chat:read', 'chat:write', 'models:read', 'instructions:read', 'ssss:read', 'ssss:write', 'memory:read', 'memory:write', 'memory:recompile', 'sandbox:run', 'tts:use', 'tasks:read', 'tasks:write', 'files:read', 'config:read', 'config:write', 'keys:read', 'keys:write', 'health:read'].map(scope => `<label><input type="checkbox" name="key-scope" value="${scope}">${scope}</label>`).join('')}
+        </fieldset>
+        <p>Issued tokens are shown once. Save the result securely.</p>
+        <label>Existing key identifier<input id="key-id"></label>
+        <button id="key-issue">Issue key</button><button id="key-list">List keys</button>
+        <button id="key-revoke">Revoke key</button><button id="key-usage">Usage history</button><button id="key-roles">Role policies</button><button id="key-role-set">Save role permissions</button>
+      </section>
       <section>
         <h3>Auth endpoint check</h3>
         <p style="color:#9ca3af;font-size:12px;margin:8px 0;">
@@ -231,6 +298,8 @@ class AuthPanel extends HTMLElement {
     });
     this.shadowRoot.getElementById('btn-register-passkey')?.addEventListener('click', () => this.registerPasskey());
     this.shadowRoot.getElementById('btn-probe')?.addEventListener('click', () => this.runProbe());
+    for (const action of ['accounts', 'refresh', 'disconnect']) this.shadowRoot.getElementById(`google-${action}`)?.addEventListener('click', () => this.googleAction(action));
+    for (const action of ['issue', 'list', 'revoke', 'usage', 'roles', 'role-set']) this.shadowRoot.getElementById(`key-${action}`)?.addEventListener('click', () => this.keyAction(action));
     this.shadowRoot.getElementById('secrets-form')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       const key = this.shadowRoot.getElementById('panel-secret-key')?.value;
@@ -241,7 +310,7 @@ class AuthPanel extends HTMLElement {
       this.render();
 
       try {
-        const res = await fetch('/api/plugins/auth/secrets', {
+        const res = await fetch('/api/secrets', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

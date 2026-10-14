@@ -1,8 +1,8 @@
 import express from 'express';
-import crypto from 'node:crypto';
+import { createGoogleOAuth } from '../google-oauth.mjs';
 import { listPasskeys, beginAuthentication, finishAuthentication } from '../webauthn-store.mjs';
 import { getSecret } from '../secrets-store.mjs';
-export function createAuthRouter({ auth, logger, BRAIN_DIR }) {
+export function createAuthRouter({ auth, logger, BRAIN_DIR, googleOAuth }) {
 const { requireAuth, requireScope, authRateLimiter, isLocalRequest, loadSecurityConfig,
   loginHandler, logoutHandler, changePasswordHandler, signSessionToken,
   dashboardAuthState, sessionCookieOptions } = auth;
@@ -10,8 +10,9 @@ function brainDir() {
   return process.env.TR_SECRETS_BRAIN || BRAIN_DIR;
 }
 
-/** In-memory store for Google OAuth2 state validation (10 min TTL) */
-const oauthStates = new Map();
+const google = googleOAuth || createGoogleOAuth({ brainDir: brainDir() });
+const browserCookie = 'tr_google_oauth';
+const browserCookieOptions = req => ({ httpOnly: true, secure: req.secure === true, sameSite: 'lax', path: '/auth/google', maxAge: 600000 });
 
 async function getGoogleCredentials() {
   const idResult = await getSecret(brainDir(), 'GOOGLE_CLIENT_ID');
@@ -107,127 +108,49 @@ authRouter.post('/auth/passkey/verify', async (req, res) => {
   }
 });
 
-/**
- * Initiate Google OAuth2 authorization flow.
- */
-authRouter.get('/auth/google', async (req, res) => {
+/** Browser initiation owns state/cookie custody; CLI opens this endpoint. */
+authRouter.get('/auth/google', (req, res) => {
   try {
-    const { clientId, clientSecret } = await getGoogleCredentials();
-    if (!clientId || !clientSecret) {
-      return res.status(400).json({
-        error: 'Google OAuth2 is not configured. Provide GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET secrets.',
-      });
-    }
-
-    const state = crypto.randomBytes(24).toString('hex');
-    oauthStates.set(state, Date.now() + 10 * 60 * 1000);
-
-    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
-    const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
-    const redirectUri = `${proto}://${host}/auth/google/callback`;
-
-    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.set('client_id', clientId);
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', 'openid email profile');
-    authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('access_type', 'offline');
-    authUrl.searchParams.set('prompt', 'select_account');
-
-    if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) {
-      return res.json({ url: authUrl.toString(), redirectUri });
-    }
-    res.redirect(authUrl.toString());
-  } catch (err) {
-    logger.warn('auth', `Google authorization redirect failed: ${err.message}`);
-    res.status(500).json({ error: 'Failed to initiate Google authentication' });
+    const attempt = google.begin();
+    res.set('Cache-Control', 'no-store');
+    res.cookie(browserCookie, attempt.browser, browserCookieOptions(req));
+    if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) return res.json({ url: attempt.url, redirectUri: attempt.redirectUri });
+    return res.redirect(attempt.url);
+  } catch {
+    return res.status(400).json({ error: 'Configure Google credentials and a trusted callback URI through auth' });
   }
 });
 
-/**
- * Google OAuth2 callback endpoint: exchange code, resolve profile, and mint session.
- */
 authRouter.get('/auth/google/callback', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const { maxAge, ...clearOptions } = browserCookieOptions(req);
+  res.clearCookie(browserCookie, clearOptions);
   try {
-    const { code, state, error } = req.query;
-    if (error) {
-      return res.status(400).json({ error: `Google authorization rejected: ${error}` });
-    }
-    if (!state || !oauthStates.has(state)) {
-      return res.status(400).json({ error: 'Invalid or expired state parameter' });
-    }
-    const stateExpiry = oauthStates.get(state);
-    oauthStates.delete(state);
-    if (Date.now() > stateExpiry) {
-      return res.status(400).json({ error: 'OAuth state has expired' });
-    }
-
-    const { clientId, clientSecret } = await getGoogleCredentials();
-    if (!clientId || !clientSecret) {
-      return res.status(500).json({ error: 'Google OAuth2 credentials missing' });
-    }
-
-    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
-    const host = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
-    const redirectUri = `${proto}://${host}/auth/google/callback`;
-
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code: String(code),
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errBody = await tokenResponse.text();
-      logger.warn('auth', `Google token exchange failed: ${errBody}`);
-      return res.status(401).json({ error: 'Failed to exchange authorization code with Google' });
-    }
-
-    const tokenData = await tokenResponse.json();
-    let userInfo = { email: 'google-user@domain.internal', name: 'Google User' };
-    if (tokenData.access_token) {
-      try {
-        const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${tokenData.access_token}` },
-        });
-        if (userRes.ok) {
-          userInfo = await userRes.json();
-        }
-      } catch (err) {
-        logger.warn('auth', `Unable to query Google user profile: ${err.message}`);
-      }
-    }
-
+    if (req.query.error) return res.status(400).json({ error: 'Google authorization was declined' });
+    const user = await google.complete({ code: req.query.code, state: req.query.state, browser: req.cookies?.[browserCookie] });
     const config = loadSecurityConfig();
     const ttlHours = config.dashboard?.session_ttl_hours || 24;
-    const sessionToken = signSessionToken(
-      {
-        user: userInfo.email || 'google-user',
-        auth_type: 'google_oauth2',
-        name: userInfo.name,
-        email: userInfo.email,
-      },
-      { ttlSeconds: ttlHours * 3600 },
-    );
-
-    res.cookie('session', sessionToken, sessionCookieOptions(req, ttlHours * 60 * 60 * 1000));
-    logger.info('auth', 'Google OAuth2 login successful', { email: userInfo.email });
-
-    if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) {
-      return res.json({ success: true, user: userInfo.email, method: 'google_oauth2' });
-    }
-    res.redirect('/');
-  } catch (err) {
-    logger.warn('auth', `Google OAuth2 callback error: ${err.message}`);
-    res.status(500).json({ error: err.message || 'Google OAuth2 authentication error' });
+    const token = signSessionToken({ user: user.email, google_sub: user.sub, auth_type: 'google_oauth2', name: user.name, email: user.email }, { ttlSeconds: ttlHours * 3600 });
+    res.cookie('session', token, sessionCookieOptions(req, ttlHours * 60 * 60 * 1000));
+    if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) return res.json({ success: true, user: user.email, method: 'google_oauth2' });
+    return res.redirect('/');
+  } catch {
+    logger.warn('auth', 'Google OAuth callback verification failed');
+    return res.status(401).json({ error: 'Google authentication failed; restart sign-in' });
   }
+});
+
+authRouter.get('/auth/google/accounts', requireAuth, requireScope('config:read'), (_req, res) => {
+  try { return res.json({ accounts: google.status() }); }
+  catch { return res.status(500).json({ error: 'Unable to read connection metadata' }); }
+});
+authRouter.post('/auth/google/accounts/:id/refresh', requireAuth, requireScope('config:write'), async (req, res) => {
+  try { await google.access(req.params.id); return res.json({ accounts: google.status() }); }
+  catch { return res.status(409).json({ error: 'Unable to refresh connection; inspect status or reconnect' }); }
+});
+authRouter.post('/auth/google/accounts/:id/disconnect', requireAuth, requireScope('config:write'), async (req, res) => {
+  try { return res.json(await google.disconnect(req.params.id)); }
+  catch { return res.status(409).json({ error: 'Unable to revoke connection; no disconnect confirmed' }); }
 });
 
 /**

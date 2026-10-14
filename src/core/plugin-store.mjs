@@ -31,6 +31,7 @@ import {
 } from './plugin-bundle.mjs';
 import { writeVfsDocument, patchVfsDocument, deleteVfsDocument, appendVfsEvent } from './ssss-operation-service.mjs';
 import { findVfsDocumentByPath } from './vfs-documents.mjs';
+import { readActivationRecord } from './plugin-state.mjs';
 
 const execFileAsync = promisify(execFile);
 const ID_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
@@ -54,11 +55,11 @@ export function vaultFor(plugin) {
 }
 
 export function readPluginRecord(plugin) {
-  try {
-    return findVfsDocumentByPath(recordPath(plugin.id), vaultFor(plugin));
-  } catch {
-    return null;
-  }
+  const file = path.join(vaultFor(plugin), recordPath(plugin.id));
+  if (!readActivationRecord(file, plugin.id)) return null;
+  const record = findVfsDocumentByPath(recordPath(plugin.id), vaultFor(plugin));
+  if (!record) throw new Error('Canonical plugin record could not be read');
+  return record;
 }
 
 export async function emit(vaultRoot, id, kind, payload) {
@@ -89,8 +90,10 @@ export function buildPluginDocumentBody(manifest, id) {
 
 async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, shared = false }) {
   const now = new Date().toISOString();
+  readActivationRecord(path.join(vaultForPluginsDir(pluginsDir), recordPath(id)), id);
   const previous = findVfsDocumentByPath(recordPath(id), vaultForPluginsDir(pluginsDir));
   const frontmatter = {
+    ...(previous?.frontmatter || {}),
     type: 'plugin_record',
     title: manifest?.name || id,
     description: manifest?.description || `Install record for plugin ${id}.`,
@@ -105,7 +108,7 @@ async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, sh
     public_shared: false,
     source,
     sha256: sha256 || null,
-    installed_at: now,
+    installed_at: previous?.installed_at || now,
     branding: previous?.branding || manifest?.branding || null,
     configuration: previous?.configuration || {},
     runtime_enabled: previous?.runtime_enabled !== false,
@@ -114,7 +117,7 @@ async function writeRecord({ id, manifest, scope, pluginsDir, source, sha256, sh
     secrets: manifest?.secrets || [],
     commands: manifest?.cli?.subcommands?.map((s) => s.name) || []
   };
-  const body = buildPluginDocumentBody(manifest, id);
+  const body = previous?.body ?? buildPluginDocumentBody(manifest, id);
   await writeVfsDocument(recordPath(id), frontmatter, body, {
     actorRole: 'system',
     intent: `Record install of plugin ${id}`,

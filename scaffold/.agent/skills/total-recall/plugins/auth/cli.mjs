@@ -28,21 +28,13 @@ function resolveBrainDir() {
   return process.env.TR_SECRETS_BRAIN || process.env.TR_BRAIN || path.join(process.env.HOME || '', '.agent', 'skills', 'total-recall');
 }
 
-function listStoredPasskeys() {
-  const brain = resolveBrainDir();
-  const filePath = path.join(brain, 'config', 'webauthn.json');
-  if (!fs.existsSync(filePath)) return [];
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (!Array.isArray(raw.credentials)) throw new Error('Invalid passkey registry');
-    return raw.credentials;
-  } catch {
-    throw new Error('Passkey registry is unreadable or invalid');
-  }
+async function listStoredPasskeys() {
+  const { listPasskeys } = await import('./src/webauthn-store.mjs');
+  return listPasskeys(resolveBrainDir());
 }
 
 async function handleStatus(json) {
-  const passkeys = listStoredPasskeys();
+  const passkeys = await listStoredPasskeys();
   const googleClientId = await resolveSecret('GOOGLE_CLIENT_ID');
   const googleClientSecret = await resolveSecret('GOOGLE_CLIENT_SECRET');
   const googleReady = Boolean(googleClientId && googleClientSecret);
@@ -95,7 +87,7 @@ async function handleStatus(json) {
 }
 
 async function handlePasskey(subArgs, json) {
-  const passkeys = listStoredPasskeys();
+  const passkeys = await listStoredPasskeys();
   const action = subArgs[0] || 'list';
 
   if (action === 'list') {
@@ -125,41 +117,25 @@ async function handlePasskey(subArgs, json) {
 }
 
 async function handleGoogle(subArgs, json) {
-  const clientId = await resolveSecret('GOOGLE_CLIENT_ID');
-  const clientSecret = await resolveSecret('GOOGLE_CLIENT_SECRET');
-  const configured = Boolean(clientId && clientSecret);
-
-  if (!configured) {
-    if (json) {
-      console.log(JSON.stringify({ configured: false, error: 'Google OAuth2 is not configured' }, null, 2));
-    } else {
-      console.error('Google OAuth2 is not configured. Provide GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.');
-    }
-    process.exitCode = 2;
+  const { createGoogleOAuth } = await import('./src/google-oauth.mjs');
+  const google = createGoogleOAuth({ brainDir: resolveBrainDir() });
+  const action = subArgs[0] || 'status';
+  if (action === 'accounts') { console.log(JSON.stringify({ accounts: google.status() })); return; }
+  if (action === 'refresh' || action === 'disconnect') {
+    if (!subArgs[1]) throw new Error('Google account identifier required');
+    if (action === 'refresh') { await google.access(subArgs[1]); console.log(JSON.stringify({ accounts: google.status() })); }
+    else console.log(JSON.stringify(await google.disconnect(subArgs[1])));
     return;
   }
-
-  const host = process.env.TR_HOST || 'http://localhost:3000';
-  const redirectUri = `${host}/auth/google/callback`;
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-    redirectUri,
-  )}&response_type=code&scope=openid%20email%20profile&access_type=offline&prompt=select_account`;
-
-  const out = {
-    configured: true,
-    client_id: clientId ? `${clientId.slice(0, 12)}…` : null,
-    redirect_uri: redirectUri,
-    auth_url: authUrl,
-  };
-
-  if (json) {
-    console.log(JSON.stringify(out, null, 2));
-  } else {
-    console.log('Google OAuth2 Configuration:');
-    console.log(`  Client ID    : ${clientId ? clientId.slice(0, 12) + '…' : 'None'}`);
-    console.log(`  Redirect URI : ${redirectUri}`);
-    console.log(`  Auth URL     : ${authUrl}`);
+  if (!['status', 'connect'].includes(action)) throw new Error('Use google status|connect|accounts|refresh|disconnect');
+  let cfg;
+  try { cfg = google.config(); } catch {
+    console.log(JSON.stringify({ configured: false, error: 'Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_REDIRECT_URI in auth' })); process.exitCode = 2; return;
   }
+  // Browser initiation sets its own HttpOnly state cookie; never manufacture a state-less consent URL in the CLI.
+  const authUrl = new URL('/auth/google', cfg.redirectUri).href;
+  const out = { configured: true, client_id: `${cfg.clientId.slice(0, 12)}…`, redirect_uri: cfg.redirectUri, auth_url: authUrl };
+  console.log(json ? JSON.stringify(out) : `Open sign-in: ${authUrl}`);
 }
 
 async function handleProbe(json) {
@@ -208,8 +184,7 @@ async function handleProbe(json) {
 
 async function handleSession(json) {
   const brain = resolveBrainDir();
-  const secretPath = path.join(brain, 'config', 'session-secret');
-  const secretExists = fs.existsSync(secretPath);
+  const secretExists = Boolean(await resolveSecret('SESSION_SECRET'));
 
   const payload = {
     session_secret_configured: secretExists,
@@ -346,20 +321,27 @@ export async function run(argv = []) {
     case 'rotate':
       await handleRotate(rest, isJson);
       break;
-    case 'migrate-credentials': {
-      const at = rest.indexOf('--legacy-brain');
-      if (at < 0 || !rest[at + 1] || rest[at + 1].startsWith('--')) throw new Error('Explicit legacy source required');
-      const { migrateLegacyCredentials } = await import('./src/credential-migration.mjs');
-      const result = migrateLegacyCredentials({ legacyBrainDir: rest[at + 1], brainDir: resolveBrainDir(), removeLegacy: rest.includes('--remove-legacy') });
-      console.log(JSON.stringify(result));
-      break;
-    }
     case 'password':
       await handlePassword(rest, isJson);
       break;
     case 'passkey':
       await handlePasskey(rest, isJson);
       break;
+    case 'key': {
+      const { createKeyStore } = await import('./src/access-keys.mjs');
+      const store = createKeyStore({ brainDir: resolveBrainDir() });
+      const [action = 'list', id] = rest;
+      const flag = name => { const at = rest.indexOf(name); return at < 0 ? undefined : rest[at + 1]; };
+      let result;
+      if (action === 'list') result = store.loadKeys().map(({ token_hash, ...key }) => key);
+      else if (action === 'issue') result = store.issueKey(id, { scopes: flag('--scopes')?.split(','), role: flag('--role'), kind: flag('--kind'), expires_at: flag('--expires') });
+      else if (action === 'revoke') result = store.revokeKey(id);
+      else if (action === 'usage') result = store.listKeyUsage(id);
+      else if (action === 'roles') result = store.loadRoles();
+      else if (action === 'role-set') result = store.setRole(id, flag('--scopes')?.split(','));
+      else throw new Error('Use auth key list|issue <name> --scopes <csv> [--role role] [--expires date]|revoke <id>|usage [id]|roles|role-set <name> --scopes <csv>');
+      console.log(JSON.stringify(result)); break;
+    }
     case 'google':
       await handleGoogle(rest, isJson);
       break;
@@ -382,12 +364,12 @@ export async function run(argv = []) {
       console.log('  audit    Audit permissions, session secrets, and credential integrity');
       console.log('  rotate   Generate and securely rotate SESSION_SECRET in store');
       console.log('  passkey  List or verify registered WebAuthn passkeys');
-      console.log('  google   Inspect Google OAuth2 status and authorization link');
+      console.log('  google status|connect|accounts|refresh <id>|disconnect <id>   Encrypted OAuth lifecycle');
       console.log('  probe    Execute HTTP 200 probe across auth endpoints');
       console.log('  session  Inspect session secret and security flags');
+      console.log('  key list|issue|revoke|usage|roles|role-set   Scoped tokens and role policies');
       console.log('  secret   Inspect and manage Total Recall secrets store keys');
       console.log('  password set --stdin [--force-reset]   Set encrypted dashboard credential');
-      console.log('  migrate-credentials --legacy-brain <path> [--remove-legacy]   Explicit verified import');
       break;
     default:
       console.error(`Unknown subcommand: ${command}. Run 'total-recall auth --help' for guidance.`);

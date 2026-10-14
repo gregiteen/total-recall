@@ -19,7 +19,6 @@ import { spawnSync } from 'node:child_process';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import {
   describeHeadscaleAvailability,
-  headscaleFetchWithLegacyFallback,
   createHeadscalePreAuthKey,
   getHeadscalePolicy,
   setHeadscalePolicy,
@@ -291,13 +290,12 @@ export default async function meshCli(argv = []) {
       // into a dead end whenever the secrets store is locked.
       let registry = null;
       try {
-        const data = await headscaleFetchWithLegacyFallback(
+        const data = await headscaleFetch(
           '/api/v1/node',
-          '/api/v1/machine',
           {},
           brainDir,
         );
-        registry = data?.nodes || data?.machines || [];
+        registry = data?.nodes || [];
       } catch (err) {
         console.error(`⚠️  Control server unavailable: ${err.message}`);
         console.error('   Falling back to local discovery.\n');
@@ -370,10 +368,10 @@ export default async function meshCli(argv = []) {
       if (!node) {
         let registry = null;
         try {
-          const data = await headscaleFetchWithLegacyFallback(
-            '/api/v1/node', '/api/v1/machine', {}, brainDir,
+          const data = await headscaleFetch(
+            '/api/v1/node', {}, brainDir,
           );
-          registry = data?.nodes || data?.machines || [];
+          registry = data?.nodes || [];
         } catch {}
         node = findMeshNode(target, vaultRoot, registry);
       }

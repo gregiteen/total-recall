@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import yaml from 'yaml';
 import { resolveSecretsPath, secretsPassword } from './secrets-gateway.mjs';
 import { decryptSecretsSync } from './crypto.mjs';
 
@@ -8,13 +7,6 @@ import { decryptSecretsSync } from './crypto.mjs';
 export function preserveCredentials({ brainDir, destination }) {
   if (!brainDir || !destination) throw new Error('Explicit credential source and destination required');
   const source = resolveSecretsPath(brainDir);
-  const security = path.join(brainDir, 'config/security.yml');
-  const usersFile = path.join(brainDir, 'collab/users.json');
-  const legacyUsers = fs.existsSync(usersFile) && JSON.parse(fs.readFileSync(usersFile, 'utf8')).some(user => user.passwordHash !== undefined);
-  if (legacyUsers || fs.existsSync(security) && yaml.parse(fs.readFileSync(security, 'utf8'))?.dashboard?.password_hash ||
-      fs.existsSync(path.join(brainDir, 'config/session-secret')) || fs.existsSync(path.join(brainDir, 'collab/.jwt-secret'))) {
-    throw new Error('Legacy credentials remain; run auth migrate-credentials --remove-legacy before uninstall');
-  }
   if (!fs.existsSync(source)) return { preserved: false, reason: 'no-store' };
   const stat = fs.lstatSync(source);
   if (!stat.isFile() || typeof process.getuid === 'function' && stat.uid !== process.getuid()) throw new Error('Unsafe credential source');

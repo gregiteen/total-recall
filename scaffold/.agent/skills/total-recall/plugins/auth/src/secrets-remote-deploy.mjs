@@ -19,6 +19,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { buildEnvProjection, mergeEnvManagedBlock, projectSlugFromPath } from './secrets-env-export.mjs';
 import { resolveSecretsPath } from './secrets-store.mjs';
+import { authState } from './metadata-state.mjs';
 
 /**
  * @param {string} brainDir
@@ -45,26 +46,17 @@ export function resolveRemoteTargetsPath(brainDir) {
 /** @param {string} brainDir @returns {RemoteTarget[]} */
 export function loadRemoteTargets(brainDir) {
   const p = resolveRemoteTargetsPath(brainDir);
-  if (!fs.existsSync(p)) return [];
-  try {
-    const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  const data = authState(p).read([]);
+  if (!Array.isArray(data)) throw new Error('Invalid auth deployment target registry');
+  return data;
 }
 
 /** @param {string} brainDir @param {RemoteTarget[]} targets */
 export function saveRemoteTargets(brainDir, targets) {
   const p = resolveRemoteTargetsPath(brainDir);
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, `${JSON.stringify(targets, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-  try {
-    fs.chmodSync(p, 0o600);
-  } catch {
-    /* windows / fs without chmod */
-  }
-  return p;
+  if (!Array.isArray(targets)) throw new Error('Invalid auth deployment target registry');
+  const store = authState(p); store.read([]); store.write(targets);
+  return store.documentPath;
 }
 
 /** @param {string} brainDir @param {RemoteTarget} target */

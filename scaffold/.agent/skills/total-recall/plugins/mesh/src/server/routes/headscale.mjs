@@ -4,7 +4,6 @@ import { BRAIN_DIR } from './_shared.mjs';
 import { logger } from '../../core/logger.mjs';
 import {
   headscaleFetch,
-  headscaleFetchWithLegacyFallback,
   getHeadscalePolicy,
   setHeadscalePolicy,
 } from '../../core/headscale-client.mjs';
@@ -15,7 +14,7 @@ router.use('/api/headscale', requireAuth);
 
 router.get('/api/headscale/node', requireScope('config:read'), async (req, res) => {
   try {
-    const data = await headscaleFetchWithLegacyFallback('/api/v1/node', '/api/v1/machine', {}, BRAIN_DIR);
+    const data = await headscaleFetch('/api/v1/node', {}, BRAIN_DIR);
     res.json(data);
   } catch (err) {
     logger.error('headscale', `GET /node failed: ${err.message}`);
@@ -26,9 +25,8 @@ router.get('/api/headscale/node', requireScope('config:read'), async (req, res) 
 router.delete('/api/headscale/node/:id', requireScope('config:write'), async (req, res) => {
   try {
     if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ error: 'Invalid node id' });
-    const data = await headscaleFetchWithLegacyFallback(
+    const data = await headscaleFetch(
       `/api/v1/node/${req.params.id}`,
-      `/api/v1/machine/${req.params.id}`,
       { method: 'DELETE' },
       BRAIN_DIR,
     );

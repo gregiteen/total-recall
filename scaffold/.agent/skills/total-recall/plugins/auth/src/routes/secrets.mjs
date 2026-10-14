@@ -3,7 +3,7 @@
  *
  * SSOT: secrets store. Repo/deploy .env files are projections via export-env.
  *
- * - GET/POST catalog, meta, rotate, usage, import-env (migrate-in only)
+ * - GET/POST catalog, meta, rotate, usage, import-env (explicit credential import)
  * - POST /api/secrets/export-env   write .env from store → path or all projects
  * - GET  /api/secrets/export-env   dry-run / preview keys for a path
  */
@@ -82,22 +82,6 @@ router.get('/api/secrets/checksum', requireMeshSyncAuth, async (req, res) => {
     const { getSecretsChecksum } = await import('../secrets-sync.mjs');
     const checksum = getSecretsChecksum();
     res.json({ checksum });
-  } catch (err) {
-    serverError(res, err);
-  }
-});
-
-router.get('/api/secrets/sync', requireMeshSyncAuth, async (req, res) => {
-  try {
-    const fs = await import('node:fs');
-    const { resolveSecretsPath } = await import('../secrets-store.mjs');
-    const SECRETS_FILE = resolveSecretsPath(BRAIN_DIR);
-    if (!fs.existsSync(SECRETS_FILE)) {
-      return res.status(404).json({ error: 'Secrets file not found' });
-    }
-    const blob = fs.readFileSync(SECRETS_FILE);
-    res.set('Content-Type', 'application/octet-stream');
-    res.send(blob);
   } catch (err) {
     serverError(res, err);
   }
@@ -227,7 +211,7 @@ router.post('/api/secrets/sync/trigger-pull', requireMeshSyncAuth, async (req, r
   async function runPull(response) {
     try {
       const { getLeaderInfo, isLeader } = await import('../leader-election.mjs');
-      const { pullSecretsFromLeader } = await import('../secrets-sync.mjs');
+      const { syncGrantedSecrets } = await import('../secrets-sync.mjs');
       
       if (await isLeader()) {
         return response.json({ success: true, message: 'Current node is leader, skip pull' });
@@ -238,9 +222,9 @@ router.post('/api/secrets/sync/trigger-pull', requireMeshSyncAuth, async (req, r
         return response.status(400).json({ error: 'Leader IP not found' });
       }
       
-      const ok = await pullSecretsFromLeader(leaderInfo.ip);
-      if (ok) {
-        response.json({ success: true });
+      const result = await syncGrantedSecrets(leaderInfo.ip);
+      if (result) {
+        response.json({ success: true, ...result });
       } else {
         response.status(500).json({ error: 'Failed to pull secrets from leader' });
       }

@@ -34,3 +34,5 @@ total-recall plugin vendor https://github.com/gregiteen/tr-plugin-mesh.git
 This copies the plugin's source, skills, tests and docs into `bricks/mesh` and records it in `tr-bricks.json`. Your project then owns that code: edit it, test it in your own gates, and ship it with no runtime dependency on this plugin or on Total Recall. Combine as many bricks as the project needs. List them with `total-recall plugin bricks`.
 
 **Use it directly with Total Recall (for your own machines and workflow).** Install it with `total-recall plugin install https://github.com/gregiteen/tr-plugin-mesh.git` and run `total-recall mesh`. Manage its credentials with `total-recall auth secret` and its skills with `total-recall skill`.
+
+Native-only state: new installations use validated SSSS records and the shared auth owner. Legacy imports and compatibility fallback formats are not supported.

@@ -3,9 +3,7 @@ import crypto from 'node:crypto';
 import { getLeaderInfo, isLeader } from './leader-election.mjs';
 import { logger } from './logger.mjs';
 import { brainDir } from './config.mjs';
-import { replaceSecretsBufferAtomic, resolveSecretsPath, loadSecrets, saveSecrets, ensureMeta, appendAudit, META_KEY } from './secrets-store.mjs';
-import { throttledFetch } from './throttled-fetch.mjs';
-import { getMeshSyncAuthorization } from './mesh-auth.mjs';
+import { resolveSecretsPath, loadSecrets, saveSecrets, ensureMeta, appendAudit, META_KEY } from './secrets-store.mjs';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -28,33 +26,9 @@ export function getSecretsChecksum() {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
-export async function pullSecretsFromLeader(leaderIp) {
-  try {
-    const headers = { Authorization: await getMeshSyncAuthorization() };
-    const response = await throttledFetch(meshUrl(leaderIp, '/api/secrets/sync'), { headers }, REQUEST_TIMEOUT_MS);
-    if (!response.ok) throw new Error(`Leader returned ${response.status}`);
-    const contentLength = Number(response.headers?.get?.('content-length') || 0);
-    if (contentLength > 5_000_000) throw new Error('Secrets payload exceeds 5 MB');
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length === 0 || buffer.length > 5_000_000) throw new Error('Invalid secrets payload size');
-    await replaceSecretsBufferAtomic(brainDir, buffer);
-    logger.info('secrets-sync', 'Pulled and atomically replaced encrypted secrets store');
-    return true;
-  } catch (err) {
-    logger.error('secrets-sync', 'Failed to pull encrypted secrets store', { error: err.message });
-    return false;
-  }
-}
-
-export async function fetchLeaderChecksum(leaderIp) {
-  const headers = { Authorization: await getMeshSyncAuthorization() };
-  const response = await throttledFetch(meshUrl(leaderIp, '/api/secrets/checksum'), { headers }, REQUEST_TIMEOUT_MS);
-  if (!response.ok) throw new Error(`Leader returned ${response.status}`);
-  return response.json();
-}
-
 export function secretsSyncMode(env = process.env) {
-  return env.TR_SECRETS_SYNC_MODE === 'mesh-identity' ? 'mesh-identity' : 'legacy';
+  if (env.TR_SECRETS_SYNC_MODE && env.TR_SECRETS_SYNC_MODE !== 'mesh-identity') throw new Error('Only explicit mesh identity grants are supported');
+  return 'mesh-identity';
 }
 
 /**
@@ -98,22 +72,10 @@ export async function syncGrantedSecrets(leaderIp, { dir = brainDir, fetchImpl =
 }
 
 export async function syncLoop() {
+  secretsSyncMode();
   if (await isLeader()) return;
   const leaderInfo = await getLeaderInfo();
   if (!leaderInfo?.ip) return;
-  if (secretsSyncMode() === 'mesh-identity') {
-    try {
-      await syncGrantedSecrets(leaderInfo.ip);
-    } catch (err) {
-      // Leader unreachable: keep serving the local store untouched.
-      logger.error('secrets-sync', 'Failed to sync granted secrets', { error: err.message });
-    }
-    return;
-  }
-  try {
-    const { checksum } = await fetchLeaderChecksum(leaderInfo.ip);
-    if (checksum && checksum !== getSecretsChecksum()) await pullSecretsFromLeader(leaderInfo.ip);
-  } catch (err) {
-    logger.error('secrets-sync', 'Failed to compare leader checksum', { error: err.message });
-  }
+  try { await syncGrantedSecrets(leaderInfo.ip); }
+  catch (err) { logger.error('secrets-sync', 'Failed to sync granted secrets', { error: err.message }); }
 }

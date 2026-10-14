@@ -19,7 +19,7 @@ function parseScopes(args) {
   if (idx !== -1 && args[idx + 1]) return args[idx + 1].split(',').map(scope => scope.trim());
   const scopesIdx = args.indexOf('--scopes');
   if (scopesIdx !== -1 && args[scopesIdx + 1]) return args[scopesIdx + 1].split(',').map(scope => scope.trim());
-  return ['*'];
+  return [];
 }
 
 function parseExpiresAt(args) {
@@ -46,7 +46,7 @@ export default async function generatePat(args) {
 
   Options:
     --name <name>       Human-readable key name
-    --scope <list>      Comma-separated scopes (default: *)
+    --scope <list>      Comma-separated scopes (default: no permissions)
     --scopes <list>     Alias for --scope
     --expires <date>    ISO date or relative days, e.g. 2026-06-01 or 30d
 `);

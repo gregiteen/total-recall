@@ -12,7 +12,7 @@
  * Default is deny: a node with no matching grant reads nothing.
  */
 
-import fs from 'node:fs';
+import { PluginStateStore } from '../ssss-store.mjs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { isMeshOrLoopbackAddress, normalizeRemoteAddress } from './mesh-auth.mjs';
@@ -93,14 +93,29 @@ export function policyPath(brainDir) {
   return path.join(brainDir, 'config', POLICY_FILE);
 }
 
-/** Missing or malformed policy is an empty policy, which grants nothing. */
+const policyStores = new Map();
+const POLICY_SNAPSHOT = Symbol('mesh policy snapshot');
+function policyResult(source, grants) {
+  const result = { ...source, grants };
+  if (source[POLICY_SNAPSHOT]) Object.defineProperty(result, POLICY_SNAPSHOT, { value: source[POLICY_SNAPSHOT] });
+  return result;
+}
+function storeFor(brainDir) {
+  const file = path.resolve(policyPath(brainDir));
+  if (!policyStores.has(file)) policyStores.set(file, new PluginStateStore(file, 'mesh'));
+  return policyStores.get(file);
+}
+function validatePolicy(policy) {
+  if (!policy || !Array.isArray(policy.grants) || policy.grants.some(grant => !grant || ['node', 'tag', 'user'].some(key => Object.hasOwn(grant, key) && (typeof grant[key] !== 'string' || !grant[key])) || !Array.isArray(grant.keys) || grant.keys.some(key => typeof key !== 'string' || !key))) throw new Error('Invalid mesh secret grant policy');
+  return true;
+}
+/** Missing policy grants nothing; corrupt or unimported policy fails explicitly. */
 export function loadPolicy(brainDir) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(policyPath(brainDir), 'utf8'));
-    return Array.isArray(parsed?.grants) ? parsed : { grants: [] };
-  } catch {
-    return { grants: [] };
-  }
+  const policy = storeFor(brainDir).read({ grants: [] });
+  validatePolicy(policy);
+  Object.defineProperty(policy, POLICY_SNAPSHOT, {
+    value: { file: path.resolve(policyPath(brainDir)), version: storeFor(brainDir).version } });
+  return policy;
 }
 
 function globMatch(pattern, value) {
@@ -139,11 +154,16 @@ export function allowedKeys(identity, allKeys, policy) {
 
 /** Write the policy atomically with owner-only permissions. */
 export function savePolicy(brainDir, policy) {
-  const file = policyPath(brainDir);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, `${JSON.stringify(policy, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(temp, file);
+  validatePolicy(policy);
+  const store = storeFor(brainDir), snapshot = policy[POLICY_SNAPSHOT];
+  if (snapshot) {
+    if (snapshot.file !== path.resolve(policyPath(brainDir))) throw new Error('Mesh policy snapshot belongs to another brain');
+    store.version = snapshot.version;
+  } else {
+    store.read({ grants: [] });
+    if (store.version !== null) throw new Error('Mesh policy writes require a loaded snapshot');
+  }
+  return store.write(policy);
 }
 
 function selectorOf({ node, tag, user }) {
@@ -171,7 +191,7 @@ export function grantKeys(policy, selectorInput, keys) {
   } else {
     grants.push({ ...selector, keys: wanted });
   }
-  return { grants };
+  return policyResult(policy, grants);
 }
 
 /** Remove keys from a selector's grant; with no keys, remove the whole grant. */
@@ -187,5 +207,5 @@ export function revokeKeys(policy, selectorInput, keys = []) {
     const remaining = (grant.keys || []).filter((key) => !keys.includes(key));
     if (remaining.length > 0) grants.push({ ...grant, keys: remaining });
   }
-  return { grants };
+  return policyResult(policy, grants);
 }

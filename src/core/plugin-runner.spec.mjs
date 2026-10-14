@@ -5,10 +5,11 @@ import path from 'node:path';
 import { runPluginCommand } from './plugin-runner.mjs';
 
 function makePlugin(root, id, source) {
-  const dir = path.join(root, id);
+  const pluginsDir = path.join(root, 'plugins');
+  const dir = path.join(pluginsDir, id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'cli.mjs'), source);
-  return { id, dir, manifest: { id, cli: { command: id, handler: './cli.mjs' } } };
+  return { id, dir, pluginsDir, manifest: { id, cli: { command: id, handler: './cli.mjs' } } };
 }
 
 describe('plugin-runner', () => {

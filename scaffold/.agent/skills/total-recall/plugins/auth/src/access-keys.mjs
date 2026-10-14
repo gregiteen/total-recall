@@ -1,21 +1,23 @@
 /**
  * API Key Lifecycle Manager
  *
- * Manages Personal Access Tokens (PATs) in `.agent/config/keys.jsonl`.
- * Each line is a JSON object representing a single API key with metadata.
+ * Manages Personal Access Tokens (PATs) in validated native SSSS records.
  *
  * Schema:
  *   { id, name, token_hash, token_prefix, scopes, expires_at, created_at, last_used_at, hit_count, revoked }
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { authState, assertNoSecretValues, appendAuthMetadata, authLedger } from './metadata-state.mjs';
 
 export function createKeyStore({ brainDir }) {
 if (!brainDir) throw new Error('Explicit auth key store required');
 const BRAIN_DIR = brainDir;
 const KEYS_FILE = path.join(BRAIN_DIR, 'config', 'keys.jsonl');
+const state = authState(KEYS_FILE);
+const roleState = authState(path.join(BRAIN_DIR, 'config/key-roles.json'));
+const usageFile = path.join(BRAIN_DIR, 'logs/key-usage.jsonl');
 
 const ALL_SCOPES = '*';
 
@@ -60,17 +62,7 @@ function normalizeKey(raw) {
   } else if (typeof key.name !== 'string' || !key.name.trim()) {
     key.name = key.name == null ? 'Unnamed Key' : String(key.name);
   }
-  if (key.token && typeof key.token === 'string') {
-    if (key.token === 'local') {
-      key.revoked = true;
-      key.token_prefix = 'local';
-      key.token_hash = hashToken(key.token);
-    } else if (!key.token_hash) {
-      key.token_hash = hashToken(key.token);
-      key.token_prefix = key.token.slice(0, 8);
-    }
-    delete key.token;
-  }
+  if (Object.hasOwn(key, 'token')) throw new Error('Raw credentials are not a native key record');
   key.scopes = normalizeScopes(key.scopes);
   key.expires_at = key.expires_at || null;
   key.hit_count = key.hit_count || 0;
@@ -79,12 +71,24 @@ function normalizeKey(raw) {
 }
 
 function normalizeScopes(scopes) {
-  if (!Array.isArray(scopes) || scopes.length === 0) return [ALL_SCOPES];
-  const normalized = scopes
-    .map(scope => String(scope || '').trim())
-    .filter(Boolean)
-    .filter(scope => scope === ALL_SCOPES || /^[a-z][a-z0-9-]*:(\*|[a-z][a-z0-9-]*)$/.test(scope));
-  return [...new Set(normalized)].length ? [...new Set(normalized)] : [ALL_SCOPES];
+  if (scopes == null) return [];
+  if (!Array.isArray(scopes) || scopes.some(scope => typeof scope !== 'string' || !(scope === ALL_SCOPES || /^[a-z][a-z0-9-]*:(\*|[a-z][a-z0-9-]*)$/.test(scope)))) throw new Error('Invalid scopes; no permissions granted');
+  return [...new Set(scopes)];
+}
+
+function loadRoles() {
+  const roles = roleState.read({ admin: ['*'], reader: KNOWN_SCOPES.filter(scope => scope.endsWith(':read')), operator: ['memory:read', 'memory:write', 'ssss:read', 'tasks:read', 'tasks:write'] });
+  if (!roles || typeof roles !== 'object' || Array.isArray(roles)) throw new Error('Invalid key role policy');
+  for (const [name, scopes] of Object.entries(roles)) { if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid role name'); normalizeScopes(scopes); }
+  return roles;
+}
+function setRole(name, scopes) {
+  const roles = loadRoles();
+  if (!/^[a-z][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid role name');
+  roles[name] = normalizeScopes(scopes); roleState.write(roles); return { name, scopes: roles[name] };
+}
+function scopeMatches(scopes, required) {
+  return scopes.includes('*') || scopes.includes(required) || scopes.includes(`${String(required).split(':')[0]}:*`);
 }
 
 function isExpiredKey(key, now = new Date()) {
@@ -95,12 +99,11 @@ function isExpiredKey(key, now = new Date()) {
 }
 
 function keyHasScope(key, requiredScope) {
+  if (!key || key.revoked || isExpiredKey(key)) return false;
   if (!requiredScope) return true;
   const scopes = normalizeScopes(key?.scopes);
-  if (scopes.includes(ALL_SCOPES)) return true;
-  if (scopes.includes(requiredScope)) return true;
-  const [namespace] = String(requiredScope).split(':');
-  return scopes.includes(`${namespace}:*`);
+  const role = key.role ? loadRoles()[key.role] : null;
+  return scopeMatches(scopes, requiredScope) && (!key.role || (Array.isArray(role) && scopeMatches(role, requiredScope)));
 }
 
 function keyHasAnyScope(key, requiredScopes = []) {
@@ -108,33 +111,20 @@ function keyHasAnyScope(key, requiredScopes = []) {
   return requiredScopes.some(scope => keyHasScope(key, scope));
 }
 
-function ensureKeysFile() {
-  const dir = path.dirname(KEYS_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  if (!fs.existsSync(KEYS_FILE)) fs.writeFileSync(KEYS_FILE, '', { encoding: 'utf8', mode: 0o600 });
-  try {
-    fs.chmodSync(KEYS_FILE, 0o600);
-  } catch {
-    // Best effort: chmod can fail on non-POSIX filesystems.
-  }
-}
-
 function loadKeys() {
-  ensureKeysFile();
-  const raw = fs.readFileSync(KEYS_FILE, 'utf8').trim();
-  if (!raw) return [];
-  const parsed = raw.split('\n').map(line => normalizeKey(JSON.parse(line)));
-  if (raw.includes('"token"')) saveKeys(parsed);
-  return parsed;
+  const keys = state.read([]);
+  if (!Array.isArray(keys)) throw new Error('Invalid PAT registry');
+  keys.forEach(assertNoSecretValues);
+  return keys.map(normalizeKey);
 }
 
 function saveKeys(keys) {
-  ensureKeysFile();
   const sanitized = keys.map((key) => {
     const { token, ...rest } = normalizeKey(key);
     return rest;
   });
-  fs.writeFileSync(KEYS_FILE, sanitized.map(k => JSON.stringify(k)).join('\n') + (sanitized.length ? '\n' : ''), { encoding: 'utf8', mode: 0o600 });
+  sanitized.forEach(assertNoSecretValues);
+  state.write(sanitized);
 }
 
 /**
@@ -151,12 +141,23 @@ function issueKey(nameOrOpts, options = {}) {
     opts = {
       scopes: nameOrOpts.scopes ?? options.scopes,
       expires_at: nameOrOpts.expires_at ?? nameOrOpts.expiresAt ?? options.expires_at ?? options.expiresAt,
+      role: nameOrOpts.role ?? options.role,
+      issuer: options.issuer,
+      kind: nameOrOpts.kind ?? options.kind,
     };
   }
   if (typeof name !== 'string' || !name.trim()) {
     name = 'Unnamed Key';
   }
 
+  const scopes = normalizeScopes(opts.scopes);
+  if (opts.role && !Object.hasOwn(loadRoles(), opts.role)) throw new Error('Unknown key role');
+  if (opts.kind && !['pat', 'api_key'].includes(opts.kind)) throw new Error('Invalid key kind');
+  const issuer = opts.issuer;
+  if (issuer && (!keyHasScope(issuer, 'keys:write') || scopes.some(scope => !keyHasScope(issuer, scope)))) throw new Error('Cannot issue privileges beyond the issuer');
+  const expiresAt = opts.expires_at || opts.expiresAt || null;
+  if (expiresAt && !Number.isFinite(Date.parse(expiresAt))) throw new Error('Invalid key expiry');
+  if (issuer?.expires_at && (!expiresAt || Date.parse(expiresAt) > Date.parse(issuer.expires_at))) throw new Error('Issued key cannot outlive its issuer');
   const keys = loadKeys();
   const token = `tr_${crypto.randomBytes(32).toString('base64url')}`;
   const key = {
@@ -164,8 +165,11 @@ function issueKey(nameOrOpts, options = {}) {
     name: name.trim(),
     token_hash: hashToken(token),
     token_prefix: token.slice(0, 8),
-    scopes: normalizeScopes(opts.scopes),
-    expires_at: opts.expires_at || opts.expiresAt || null,
+    scopes,
+    role: opts.role || null,
+    issued_by: issuer?.id || 'local-operator',
+    kind: opts.kind || 'pat',
+    expires_at: expiresAt,
     created_at: new Date().toISOString(),
     last_used_at: null,
     hit_count: 0,
@@ -185,7 +189,7 @@ function revokeKey(id) {
   return key;
 }
 
-function recordKeyUsage(token) {
+function recordKeyUsage(token, details = {}) {
   const keys = loadKeys();
   const tokenHash = hashToken(token);
   const key = keys.find(k => safeEqualHex(k.token_hash, tokenHash) && !k.revoked && !isExpiredKey(k));
@@ -193,7 +197,17 @@ function recordKeyUsage(token) {
   key.hit_count = (key.hit_count || 0) + 1;
   key.last_used_at = new Date().toISOString();
   saveKeys(keys);
+  appendAuthMetadata(usageFile, { key_id: key.id, timestamp: key.last_used_at, action: 'request',
+    ...(typeof details.method === 'string' ? { method: details.method } : {}),
+    ...(typeof details.path === 'string' ? { path: details.path.split('?')[0] } : {}),
+    ...(Number.isInteger(details.status) ? { status: details.status } : {}) });
   return true;
+}
+function listKeyUsage(id) { return authLedger(usageFile).filter(row => !id || row.key_id === id); }
+function recordKeyOutcome(id, { method, path: requestPath, status } = {}) {
+  if (typeof id !== 'string' || !Number.isInteger(status) || status < 100 || status > 599) throw new Error('Invalid request outcome');
+  appendAuthMetadata(usageFile, { action: 'request_outcome', key_id: id, timestamp: new Date().toISOString(),
+    method: typeof method === 'string' ? method : '', path: typeof requestPath === 'string' ? requestPath.split('?')[0] : '', status });
 }
 
 function isValidToken(token) {
@@ -207,5 +221,5 @@ function findValidKeyByToken(token) {
   return keys.find(k => safeEqualHex(k.token_hash, tokenHash) && !k.revoked && !isExpiredKey(k)) || null;
 }
 
-return { ALL_SCOPES, KNOWN_SCOPES, normalizeScopes, isExpiredKey, keyHasScope, keyHasAnyScope, loadKeys, issueKey, revokeKey, recordKeyUsage, isValidToken, findValidKeyByToken };
+return { ALL_SCOPES, KNOWN_SCOPES, normalizeScopes, isExpiredKey, keyHasScope, keyHasAnyScope, loadKeys, issueKey, revokeKey, recordKeyUsage, isValidToken, findValidKeyByToken, loadRoles, setRole, listKeyUsage, recordKeyOutcome };
 }

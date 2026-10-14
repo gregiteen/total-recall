@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { writeFileSecure } from './secure-file.mjs';
+import { authState } from './metadata-state.mjs';
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -31,34 +31,26 @@ export function resolveWebAuthnPath(brainDir) {
   return path.join(brainDir, 'config', 'webauthn.json');
 }
 
+const snapshots = new WeakMap();
 function loadStore(brainDir) {
   const filePath = resolveWebAuthnPath(brainDir);
-  if (!fs.existsSync(filePath)) {
-    return { version: 1, credentials: [] };
-  }
-  try {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const client = authState(filePath);
+    const data = client.read({ version: 1, credentials: [] });
     if (!data || !Array.isArray(data.credentials)) {
       throw new Error('Invalid passkey registry');
     }
-    return data;
-  } catch {
-    throw new Error('Passkey registry is unreadable or invalid');
-  }
+    snapshots.set(data, client); return data;
 }
 
 function saveStore(brainDir, store) {
-  const filePath = resolveWebAuthnPath(brainDir);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSecure(filePath, JSON.stringify(store, null, 2) + '\n', {
-    encoding: 'utf8',
-    mode: 0o600,
-  });
+  const client = snapshots.get(store);
+  if (!client || client.file !== path.resolve(resolveWebAuthnPath(brainDir))) throw new Error('Passkey writes require an owned read snapshot');
+  return client.write(store);
 }
 
 export function listPasskeys(brainDir) {
   const store = loadStore(brainDir);
-  return store.credentials.map((c) => ({
+  return store.credentials.map(c => ({
     id: c.id,
     created_at: c.created_at || null,
     transports: c.transports || [],
