@@ -146,39 +146,9 @@ function readMeshNodeDocs(vaultRoot) {
     .map((doc) => ({ ...doc, _vault_root: vaultRoot }));
 }
 
-/**
- * Read vault mesh_node entity documents (install-specific variables).
- *
- * Reads the mesh root and, when it differs, the active brain too, so access
- * recorded before entities moved to the global brain is still honoured. The
- * mesh root wins per field; the other layer only fills gaps in `access`.
- */
+/** Read only the explicitly selected mesh vault. */
 export function listMeshNodeEntities(vaultRoot = meshVaultRoot()) {
-  const primary = readMeshNodeDocs(vaultRoot);
-  const project = detectProjectBrain();
-  const legacyRoots = [
-    ...new Set(
-      [defaultVaultRoot(), project && path.join(project.brainDir, 'memory-vault')]
-        .filter(Boolean)
-        .map((root) => path.resolve(root)),
-    ),
-  ].filter((root) => root !== path.resolve(vaultRoot));
-  if (!legacyRoots.length) return primary;
-
-  const merged = [...primary];
-  for (const doc of legacyRoots.flatMap((root) => readMeshNodeDocs(root))) {
-    const match = merged.find(
-      (e) =>
-        meshNodeKey(e.hostname) === meshNodeKey(doc.hostname) ||
-        (e.ip && doc.ip && String(e.ip) === String(doc.ip)),
-    );
-    if (!match) {
-      merged.push(doc);
-    } else if (doc.access && typeof doc.access === 'object') {
-      match.access = { ...doc.access, ...(match.access || {}) };
-    }
-  }
-  return merged;
+  return readMeshNodeDocs(vaultRoot);
 }
 
 /**

@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { createSessionCredentials, BCRYPT_COST } from './session-credentials.mjs';
 
 export { BCRYPT_COST };
-export function createServerAuth({ brainDir, authBrainDir = brainDir, nodeEnv, watchdog, findValidKeyByToken, keyHasAnyScope, recordKeyUsage, logger }) {
+export function createServerAuth({ brainDir, authBrainDir = brainDir, nodeEnv, watchdog, findValidKeyByToken, keyHasAnyScope, recordKeyUsage, recordKeyOutcome, logger }) {
 const CONFIG_FILE = path.join(brainDir, 'config', 'security.yml');
 const credentials = createSessionCredentials({ brainDir: authBrainDir });
 const signSessionToken = (payload, options) => credentials.signToken('dashboard', payload, options);
@@ -295,12 +295,19 @@ function requireAuth(req, res, next) {
     // Check dynamic keys store first
     const key = findValidKeyByToken(token);
     if (key) {
-      recordKeyUsage(token);
+      recordKeyUsage(token, { method: req.method, path: req.path });
+      if (recordKeyOutcome && typeof res.once === 'function') res.once('finish', () => {
+        try { recordKeyOutcome(key.id, { method: req.method, path: req.path, status: res.statusCode }); }
+        catch { logger.error('auth', 'PAT request outcome could not be recorded', { key_id: key.id }); }
+      });
       req.auth = {
         type: 'pat',
         key_id: key.id,
         key_name: key.name,
-        scopes: key.scopes || ['*']
+        id: key.id,
+        role: key.role || null,
+        expires_at: key.expires_at,
+        scopes: key.scopes || []
       };
       return next();
     }
@@ -331,7 +338,7 @@ function requireScope(...requiredScopes) {
   return (req, res, next) => {
     if (!requiredScopes.length) return next();
     if (req.auth?.type === 'dashboard_session') return next();
-    if (keyHasAnyScope({ scopes: req.auth?.scopes || [] }, requiredScopes)) return next();
+    if (keyHasAnyScope(req.auth || { scopes: [] }, requiredScopes)) return next();
     return res.status(403).json({
       error: 'Insufficient token scope',
       required_scopes: requiredScopes

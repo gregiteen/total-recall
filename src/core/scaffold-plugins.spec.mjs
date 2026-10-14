@@ -36,6 +36,13 @@ describe('scaffold plugin release set', () => {
   it('fails loudly when npm pack fails', () => {
     expect(() => releaseFiles(source, () => ({ status: 1, stderr: 'boom' }))).toThrow(/npm pack --dry-run failed.*boom/);
   });
+  it('rejects packaged brain state, credentials and unsafe paths before copying', () => {
+    for (const file of ['.agent/skills/total-recall/config/brain.json', 'config/secrets.enc', 'memory-vault/private.md', '.ssss/auth/state.md', '../sibling.mjs']) {
+      expect(() => syncScaffoldPlugins({ root, ids: ['auth'], write: true, run: packed(['cli.mjs', file]) })).toThrow(/private brain state|unsafe path/);
+      expect(fs.readFileSync(path.join(root, 'scaffold/.agent/skills/total-recall/plugins/auth/cli.mjs'), 'utf8')).toBe('cli-v1');
+      expect(fs.existsSync(path.join(root, 'scripts/scaffold-plugins.json'))).toBe(false);
+    }
+  });
 });
 
 describe('syncScaffoldPlugins', () => {

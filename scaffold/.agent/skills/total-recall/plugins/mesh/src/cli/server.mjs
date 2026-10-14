@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { meshTargetOf, provisionHeadscale, updateHeadscale, updateConsole, sshExec } from '../core/headscale-server.mjs';
 import { saveCredential } from '../core/credentials.mjs';
 import { brainDir } from '../core/config.mjs';
+import { PluginStateStore } from '../ssss-store.mjs';
 
 const TARGET_FILE = 'mesh-server.json';
 
@@ -30,15 +31,18 @@ function targetPath(dir) {
 }
 
 export function saveTarget(target, dir = brainDir) {
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(targetPath(dir), `${JSON.stringify(target, null, 2)}\n`, { mode: 0o600 });
+  if (!meshTargetOf({ name: target?.name, ssh: { host: target?.host, user: target?.user, port: target?.port }, domain: target?.domain })) throw new Error('Invalid mesh server target');
+  const store = new PluginStateStore(path.resolve(targetPath(dir)), 'mesh');
+  store.read(null); store.write(target);
 }
 
 export function loadTarget(dir = brainDir) {
   const file = targetPath(dir);
-  if (!fs.existsSync(file)) return null;
-  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  return meshTargetOf({ name: saved.name, ssh: { host: saved.host, user: saved.user, port: saved.port }, domain: saved.domain });
+  const saved = new PluginStateStore(path.resolve(file), 'mesh').read(null);
+  if (!saved) return null;
+  const target = meshTargetOf({ name: saved.name, ssh: { host: saved.host, user: saved.user, port: saved.port }, domain: saved.domain });
+  if (!target) throw new Error('Invalid stored mesh server target');
+  return target;
 }
 
 /** Join this machine to the new mesh when the Tailscale client is present. */

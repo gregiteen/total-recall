@@ -236,7 +236,7 @@ function printHelp() {
       --filename .env     File to compare (default .env; server/<name> also checked)
       --strict            Exit 1 on any drift or unadopted key
       --layer project     Compare against the project-local store (default: global)
-    import-env            One-time migrate: scan local .env → store (not the steady-state path)
+    import-env            Import selected local .env credentials into auth
       --all / --file / --overwrite / --dry-run
     catalog               Full catalog: keys, providers, usage, rotation, cost, tracking
     providers             List provider registry (docs/schema/tiers)
@@ -270,7 +270,7 @@ function printHelp() {
     rotation-due          List keys overdue for rotation
       --enqueue           Create daemon tasks + browser-use prompts for each due key
     rotate-browser <key>  Drive the provider console in TR's browser and rotate
-      --print-only        Only print instructions (legacy behaviour)
+      --print-only        Only print instructions
       --headless          Allow headless for verified recipes
     rotate-auto <key>     Rotate by whatever method the key's class supports
     rotation-status       Rotation coverage for every key in the vault
@@ -716,15 +716,9 @@ export default async function secretCli(argv) {
         brainDir,
         ...Object.values(getActiveBrains()).map((brain) => brain?.brainDir),
       ].filter(Boolean);
-      const legacyAgentDirs = defaultBrainDirs
-        .filter(
-          (dir) =>
-            path.basename(dir) === 'total-recall' && path.basename(path.dirname(dir)) === 'skills',
-        )
-        .map((dir) => path.dirname(path.dirname(dir)));
       const storePaths = opts.storePaths.length
         ? opts.storePaths.map((storePath) => path.resolve(storePath))
-        : [...new Set([...defaultBrainDirs, ...legacyAgentDirs].map((dir) => resolveSecretsPath(dir)))].filter(
+        : [...new Set(defaultBrainDirs.map((dir) => resolveSecretsPath(dir)))].filter(
             (storePath) => fs.existsSync(storePath),
           );
       const newPassword = opts.value || generateSecretsMasterPassword();
@@ -1656,7 +1650,6 @@ export default async function secretCli(argv) {
         path.join(process.cwd(), 'INSTRUCTIONS.md'),
         path.join(process.cwd(), 'AGENTS.md'),
         path.join(agentRoot, 'INSTRUCTIONS.md'),
-        path.join(brainDir, 'INSTRUCTIONS.md'), // legacy
         path.join(brainDir, 'openwiki'),
       ];
       for (const c of candidates) {

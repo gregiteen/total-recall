@@ -72,6 +72,16 @@
       "key": "COLLAB_SESSION_SECRET",
       "required": false,
       "description": "Auth-owned isolated collaboration token signing key"
+    },
+    {
+      "key": "GOOGLE_REDIRECT_URI",
+      "description": "Trusted registered OAuth callback URI ending in /auth/google/callback",
+      "required": false
+    },
+    {
+      "key": "GOOGLE_ALLOWED_EMAILS",
+      "description": "Explicit dashboard Google account allowlist (comma-separated verified emails)",
+      "required": false
     }
   ],
   "cli": {
@@ -100,8 +110,8 @@
       },
       {
         "name": "google",
-        "description": "Check Google OAuth2 status and authorization URL",
-        "effect": "read"
+        "description": "Google OAuth status, connect, accounts, refresh and verified disconnect",
+        "effect": "write"
       },
       {
         "name": "probe",
@@ -124,9 +134,10 @@
         "effect": "write"
       },
       {
-        "name": "migrate-credentials",
-        "description": "Explicit verified legacy import: --legacy-brain path [--remove-legacy]; never a runtime fallback",
-        "effect": "write"
+        "name": "key",
+        "description": "Issue, list, revoke and audit scoped tokens; inspect and update role policy",
+        "effect": "write",
+        "sensitive_output": true
       }
     ]
   },
@@ -226,11 +237,9 @@
       "rotation-capability": "src/rotation-capability.mjs",
       "browser-session": "src/browser-session.mjs",
       "secret-integration-research": "src/secret-integration-research.mjs",
-      "legacy-init-secrets": "src/legacy-init-secrets.mjs",
       "configuration": "src/configuration.mjs",
       "server-auth": "src/server-auth.mjs",
       "session-credentials": "src/session-credentials.mjs",
-      "credential-migration": "src/credential-migration.mjs",
       "commands": "cli.mjs",
       "credential-preservation": "src/credential-preservation.mjs",
       "access-keys": "src/access-keys.mjs",
@@ -238,7 +247,9 @@
       "auth-router": "src/routes/auth.mjs",
       "webauthn-router": "src/routes/webauthn.mjs",
       "secrets-router": "src/routes/secrets.mjs",
-      "runtime-credentials": "src/runtime-credentials.mjs"
+      "runtime-credentials": "src/runtime-credentials.mjs",
+      "keys-router": "src/routes/keys.mjs",
+      "google-oauth": "src/google-oauth.mjs"
     },
     "routers": [
       "src/routes/secrets-runtime.mjs"

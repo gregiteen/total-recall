@@ -9,7 +9,7 @@
     "test:runtime": "vitest run"
   },
   "devDependencies": {
-    "total-recall-brain": "^3.35.0",
+    "total-recall-brain": "^3.39.1",
     "vitest": "^4.1.11",
     "supertest": "^7.2.2",
     "jsdom": "^29.1.1"

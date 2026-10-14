@@ -301,3 +301,15 @@ Current delivery evidence is consolidated in [plugin library progress](evidence/
 5. Synchronize skill/hub/tracker evidence, verify tested source hashes, run current gates and push completed work. All 29 original owner repositories now have verified private remote pushes. Publication/live daemon rollout remains separately evidenced.
 
 Complete all 30 owner development brain layouts through supported CLI, inspect each native layout, compile instruction surfaces, and prevent local memory from entering source commits. Audit owner persistence separately; do not interpret schemas as verified migration.
+
+1. Classify every plugin direct-write call site and indirect persistence helper. 2. Add and test native validated plugin-state/document transport and explicit legacy import. 3. Migrate deploy/tickets/domains/phone/mesh state, composable/signing document mutations, decision/alerts events and sticker metadata; preserve binary/cryptographic/OS-protocol adapters. 4. Run owner suites and SSSS conformance on the Mini, audit unknown metadata/replay/concurrency/path failures and source identity. 5. Refresh skills, inventory and compiled surfaces, push verified completed source, and report live migration separately.
+### Auth compliance verification slice
+
+1. Verify encrypted account-specific OAuth round trips and secret-free native SSSS metadata/events; reject wrong/expired/replayed browser state and unverified/unauthorized identity before issuing a session.
+2. Exercise omitted refresh-token retention, transient failures, invalid grants, concurrent refresh, revocation failure and disconnect/refresh races with controlled provider fixtures. Live provider consent is a separate gate.
+3. Verify scope validation/default denial, live role edits, delegated privilege/expiry refusal, one-time issue/list/revoke API behavior and usage/outcome recording without raw credentials or query strings.
+4. Refresh pinned native owner sources and test snapshot identity; run current owner/core suites and required release gates. Preserve failed/stale-source results as non-certifying evidence. Do not migrate existing credentials or report production deployment without separate verified execution.
+
+## Native-only plugin requirement (2026-10-14)
+
+Greg explicitly rejects legacy support for these new plugins. Native SSSS records and the shared auth owner are the sole product-state/auth contracts. Remove legacy state/credential migrations, old mesh-brain reads, obsolete control-server endpoint retries and whole-store credential replication. Scaffolds must contain the same native-only owner source. This supersedes prior migration acceptance; existing device files are outside source-cleanup scope. Verify native corruption, scope enforcement and independent-node grants instead of legacy import preservation.

@@ -4,8 +4,8 @@ import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import YAML from 'yaml';
-import { appendFileSecure } from './secure-file.mjs';
-import { resolveSecretsPath, resolveAuditPath, resolveUsagePath, secretsPassword, readTrEnvFilePassword, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets, migrateSecretsToEncryptedIfNeeded, validateSecretsBuffer, replaceSecretsBufferAtomic, ensureMeta, appendAudit, META_KEY } from './secrets-gateway.mjs';
+import { authLedger, appendAuthMetadata } from './metadata-state.mjs';
+import { resolveSecretsPath, resolveAuditPath, resolveUsagePath, secretsPassword, readTrEnvFilePassword, isPlainJsonStore, loadSecretsSync, saveSecretsSync, loadSecrets, saveSecrets, validateSecretsBuffer, replaceSecretsBufferAtomic, ensureMeta, appendAudit, META_KEY } from './secrets-gateway.mjs';
 export * from './secrets-gateway.mjs';
 
 /**
@@ -615,18 +615,7 @@ export async function rotateSecret(brainDir, key, newValue, opts = {}) {
  */
 export function readSecretAudit(brainDir, { limit = 50 } = {}) {
   const auditPath = resolveAuditPath(brainDir);
-  if (!fs.existsSync(auditPath)) return [];
-  const lines = fs.readFileSync(auditPath, 'utf8').split('\n').filter(Boolean);
-  return lines
-    .slice(-limit)
-    .map((l) => {
-      try {
-        return JSON.parse(l);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+  return authLedger(auditPath).slice(-limit);
 }
 
 /**
@@ -645,7 +634,7 @@ export function recordUsage(brainDir, event) {
     source: event.source || 'cli',
     key_ref: event.key_ref || null, // secret *name* only, never value
   };
-  appendFileSecure(usagePath, JSON.stringify(row) + '\n', { mode: 0o600 });
+  appendAuthMetadata(usagePath, row);
   return row;
 }
 
@@ -679,27 +668,18 @@ export const loadBudget = loadBudgetConfig;
  */
 export function summarizeUsage(brainDir, { days = 1 } = {}) {
   const usagePath = resolveUsagePath(brainDir);
-  if (!fs.existsSync(usagePath)) {
-    return { events: 0, cost_usd: 0, input_tokens: 0, output_tokens: 0, days };
-  }
   const cutoff = Date.now() - days * 86400000;
   let events = 0;
   let cost = 0;
   let input = 0;
   let output = 0;
-  for (const line of fs.readFileSync(usagePath, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const row = JSON.parse(line);
+  for (const row of authLedger(usagePath)) {
       const t = new Date(row.ts).getTime();
       if (t < cutoff) continue;
       events++;
       cost += Number(row.cost_usd) || 0;
       input += Number(row.input_tokens) || 0;
       output += Number(row.output_tokens) || 0;
-    } catch {
-      // skip
-    }
   }
   return { events, cost_usd: cost, input_tokens: input, output_tokens: output, days };
 }
@@ -711,14 +691,8 @@ export function summarizeUsageByKey(brainDir, { days = 30 } = {}) {
   const usagePath = resolveUsagePath(brainDir);
   const by_key = {};
   const by_provider = {};
-  if (!fs.existsSync(usagePath)) {
-    return { by_key, by_provider, days };
-  }
   const cutoff = Date.now() - days * 86400000;
-  for (const line of fs.readFileSync(usagePath, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const row = JSON.parse(line);
+  for (const row of authLedger(usagePath)) {
       const t = new Date(row.ts).getTime();
       if (t < cutoff) continue;
       const kref = row.key_ref || '_unattributed';
@@ -737,9 +711,6 @@ export function summarizeUsageByKey(brainDir, { days = 30 } = {}) {
       by_provider[prov].cost_usd += Number(row.cost_usd) || 0;
       by_provider[prov].input_tokens += Number(row.input_tokens) || 0;
       by_provider[prov].output_tokens += Number(row.output_tokens) || 0;
-    } catch {
-      // skip
-    }
   }
   return { by_key, by_provider, days };
 }
@@ -749,20 +720,13 @@ export function summarizeUsageByKey(brainDir, { days = 30 } = {}) {
  */
 export function listUsageEvents(brainDir, { limit = 100, key_ref = null, days = 30 } = {}) {
   const usagePath = resolveUsagePath(brainDir);
-  if (!fs.existsSync(usagePath)) return [];
   const cutoff = Date.now() - days * 86400000;
   const rows = [];
-  for (const line of fs.readFileSync(usagePath, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
-    try {
-      const row = JSON.parse(line);
+  for (const row of authLedger(usagePath)) {
       const t = new Date(row.ts).getTime();
       if (t < cutoff) continue;
       if (key_ref && row.key_ref !== key_ref) continue;
       rows.push(row);
-    } catch {
-      // skip
-    }
   }
   return rows.slice(-limit);
 }

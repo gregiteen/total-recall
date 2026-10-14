@@ -153,24 +153,9 @@ export async function headscaleFetch(path, options = {}, brainDir) {
 }
 
 /**
- * Headscale renamed `/machine` to `/node`; retry the legacy path on 404 so one
- * client works across control-server versions.
- */
-export async function headscaleFetchWithLegacyFallback(currentPath, legacyPath, options, brainDir) {
-  try {
-    return await headscaleFetch(currentPath, options, brainDir);
-  } catch (err) {
-    if (err.status !== 404 || !legacyPath) throw err;
-    return headscaleFetch(legacyPath, options, brainDir);
-  }
-}
-
-/**
  * Resolve a control-server user to both of its identifying forms.
  *
- * Headscale 0.26 made `/api/v1/preauthkey` take a numeric user **id** where
- * older releases took the user **name**, so callers need both to stay
- * version-agnostic. With no `requested` user, the first user is used.
+ * User-facing names resolve to the current API numeric ID.
  */
 export async function resolveHeadscaleUser(brainDir, requested) {
   const data = await headscaleFetch('/api/v1/user', {}, brainDir);
@@ -192,55 +177,20 @@ export async function resolveHeadscaleUser(brainDir, requested) {
   return { id: String(users[0].id), name: users[0].name };
 }
 
-/**
- * Mint a pre-auth key for unattended enrollment.
- *
- * Defaults are deliberately narrow: single-use, non-ephemeral, short-lived —
- * an enrollment key that leaks should expire before it is useful.
- *
- * The user field is tried as id first, then name: Headscale >=0.26 rejects the
- * name with 400, and older releases reject the id the same way, so one client
- * works against both without the operator pinning a version.
- */
+/** Mint using the current numeric-user API without older-version retries. */
 export async function createHeadscalePreAuthKey(options = {}, brainDir) {
   const ttlMinutes = Number.isFinite(options.ttlMinutes) ? options.ttlMinutes : 10;
-  const expiration =
-    options.expiration || new Date(Date.now() + ttlMinutes * 60_000).toISOString();
-
-  const ref = options.userRef || (await resolveHeadscaleUser(brainDir, options.user));
-  const attempts = [];
-  if (ref?.id) attempts.push(String(ref.id));
-  if (ref?.name && String(ref.name) !== String(ref.id)) attempts.push(String(ref.name));
-  if (!attempts.length) attempts.push(String(options.user || 'default'));
-
-  let lastError = null;
-  for (const user of attempts) {
-    try {
-      const data = await headscaleFetch(
-        '/api/v1/preauthkey',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            user,
-            reusable: options.reusable === true,
-            ephemeral: options.ephemeral === true,
-            expiration,
-            aclTags: options.aclTags || [],
-          }),
-        },
-        brainDir,
-      );
-
-      const key = data?.preAuthKey?.key || data?.preauthkey?.key || data?.key || null;
-      if (!key) throw new Error('Headscale did not return a pre-auth key');
-      return { key, expiration, user, raw: data };
-    } catch (err) {
-      lastError = err;
-      // Only the id-vs-name mismatch is worth retrying; anything else is real.
-      if (err.status !== 400) throw err;
-    }
-  }
-  throw lastError || new Error('Headscale did not return a pre-auth key');
+  const expiration = options.expiration || new Date(Date.now() + ttlMinutes * 60_000).toISOString();
+  const ref = options.userRef || await resolveHeadscaleUser(brainDir, options.user);
+  if (!ref?.id || !/^[0-9]+$/.test(String(ref.id))) throw new Error('Select a registered numeric control-server user');
+  const user = String(ref.id);
+  const data = await headscaleFetch('/api/v1/preauthkey', {
+    method: 'POST', body: JSON.stringify({ user, reusable: options.reusable === true,
+      ephemeral: options.ephemeral === true, expiration, aclTags: options.aclTags || [] }),
+  }, brainDir);
+  const key = data?.preAuthKey?.key;
+  if (typeof key !== 'string' || !key) throw new Error('Headscale did not return a pre-auth key');
+  return { key, expiration, user, raw: data };
 }
 
 /**

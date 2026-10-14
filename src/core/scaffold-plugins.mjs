@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { isBrainState } from './brain-state.mjs';
 
 export const TEST_PATTERNS = [/^test\//, /^tests\//, /(^|\/)[^/]+\.(spec|test)\.[cm]?[jt]sx?$/, /^vitest\.config\.[cm]?[jt]s$/];
 
@@ -26,6 +27,9 @@ export function releaseFiles(pluginDir, run = spawnSync) {
   const text = String(r.stdout || '');
   const packed = JSON.parse(text.slice(text.indexOf('[')))[0]?.files?.map((f) => f.path) || [];
   const files = new Set(packed.filter(isReleaseFile));
+  for (const file of files) {
+    if (path.isAbsolute(file) || file.split(/[\\/]/).some(part => ['..', '.agent', '.agents', '.ssss', '.tr'].includes(part)) || isBrainState(file)) throw new Error(`Plugin release contains private brain state or unsafe path: ${file}`);
+  }
   if (fs.existsSync(path.join(pluginDir, 'package-lock.json'))) files.add('package-lock.json');
   return [...files].sort();
 }
@@ -37,10 +41,14 @@ export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync 
   const scaffoldPlugins = path.join(root, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins');
   const lock = {};
   const changes = [];
-  for (const id of ids) {
+  // Validate every owner before copying any source or replacing the release pin.
+  const plans = ids.map(id => {
     const source = fs.realpathSync(path.join(root, '.agent', 'skills', 'total-recall', 'plugins', id));
-    const target = path.join(scaffoldPlugins, id);
     const files = releaseFiles(source, run);
+    return { id, source, files };
+  });
+  for (const { id, source, files } of plans) {
+    const target = path.join(scaffoldPlugins, id);
     for (const rel of files) {
       const from = path.join(source, rel);
       const to = path.join(target, rel);

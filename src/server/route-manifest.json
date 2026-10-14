@@ -241,6 +241,14 @@
   },
   {
     "method": "GET",
+    "path": "/api/key-roles"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/key-roles/:name"
+  },
+  {
+    "method": "GET",
     "path": "/api/keys"
   },
   {
@@ -250,6 +258,10 @@
   {
     "method": "DELETE",
     "path": "/api/keys/:id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/keys/:id/usage"
   },
   {
     "method": "GET",
@@ -701,10 +713,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/secrets/sync"
-  },
-  {
-    "method": "GET",
     "path": "/api/secrets/sync/status"
   },
   {
@@ -994,6 +1002,18 @@
   {
     "method": "GET",
     "path": "/auth/google"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/google/accounts"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/google/accounts/:id/disconnect"
+  },
+  {
+    "method": "POST",
+    "path": "/auth/google/accounts/:id/refresh"
   },
   {
     "method": "GET",

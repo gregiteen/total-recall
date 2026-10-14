@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { PluginStateStore } from '../core/plugin-state-store.mjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let oldAgentDir;
@@ -27,12 +28,12 @@ describe('PAT key store', () => {
   it('stores only token hashes and validates issued PATs', async () => {
     const { issueKey, isValidToken, loadKeys, recordKeyUsage } = await loadKeysModule();
 
-    const issued = issueKey('codex');
+    const issued = issueKey('codex', { scopes: ['*'] });
     expect(issued.token).toMatch(/^tr_/);
     expect(isValidToken(issued.token)).toBe(true);
     expect(isValidToken('local')).toBe(false);
 
-    const raw = fs.readFileSync(path.join(agentDir, 'skills', 'total-recall', 'config', 'keys.jsonl'), 'utf8');
+    const raw = fs.readFileSync(new PluginStateStore(path.join(agentDir, 'skills', 'total-recall', 'config', 'keys.jsonl'), 'auth').documentPath, 'utf8');
     expect(raw).not.toContain(issued.token);
     expect(raw).toContain('token_hash');
 
@@ -69,27 +70,5 @@ describe('PAT key store', () => {
     expect(findValidKeyByToken(issued.token)).toBeNull();
   });
 
-  it('migrates legacy plaintext keys without keeping the plaintext token', async () => {
-    const configDir = path.join(agentDir, 'skills', 'total-recall', 'config');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'keys.jsonl'),
-      JSON.stringify({
-        id: 'legacy-1',
-        name: 'legacy',
-        token: 'tr_legacy-token',
-        created_at: new Date().toISOString(),
-        revoked: false,
-      }) + '\n'
-    );
 
-    const { isValidToken, loadKeys } = await loadKeysModule();
-
-    expect(isValidToken('tr_legacy-token')).toBe(true);
-    expect(loadKeys()[0].token).toBeUndefined();
-    expect(loadKeys()[0].scopes).toEqual(['*']);
-    const raw = fs.readFileSync(path.join(configDir, 'keys.jsonl'), 'utf8');
-    expect(raw).not.toContain('tr_legacy-token');
-    expect(raw).toContain('token_hash');
-  });
 });

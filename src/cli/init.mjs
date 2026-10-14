@@ -378,7 +378,6 @@ export default async function init(args) {
     const { default: yaml } = await import('yaml');
     const config = fs.existsSync(securityPath) ? yaml.parse(fs.readFileSync(securityPath, 'utf8')) : {};
     if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Invalid security configuration');
-    if (config.dashboard?.password_hash) throw new Error('Legacy dashboard credentials require auth migrate-credentials --remove-legacy');
     const { loadPluginModule } = await import('../core/plugin-runtime.mjs');
     const { createSessionCredentials } = await loadPluginModule('auth', 'session-credentials');
     const state = createSessionCredentials({ brainDir: process.env.TR_SECRETS_BRAIN || brainDir }).dashboardState();

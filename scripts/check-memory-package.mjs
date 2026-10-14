@@ -38,5 +38,8 @@ for (const file of files) {
   assert(!/\/Users\/[a-zA-Z0-9._-]+\//.test(source), `Private path in packed source: ${file}`);
 }
 for (const required of ['src/core/plugin-runner-child.mjs', 'templates/memory/SKILL.md']) assert(files.has(required));
+const authRoot = 'scaffold/.agent/skills/total-recall/plugins/auth';
+for (const relative of ['plugin.json', 'src/server-auth.mjs', 'src/session-credentials.mjs', 'src/access-keys.mjs', 'src/google-oauth.mjs', 'src/routes/auth.mjs', 'src/routes/keys.mjs', 'src/secrets-gateway.mjs']) assert(files.has(`${authRoot}/${relative}`), `Missing bundled shared auth: ${relative}`);
+for (const file of files) assert(!/^scaffold\/\.agent\/skills\/total-recall\/plugins\/[^/]+\/(?:.*\/)?\.(?:agent|agents|ssss|tr)(?:\/|$)/.test(file), `Private plugin brain in package: ${file}`);
 for (const exported of Object.values(pkg.exports).filter(value => !value.includes('*'))) assert(files.has(exported.replace(/^\.\//, '')));
 console.log(JSON.stringify({ ok: true, version: pkg.version, files: files.size, memoryFiles: memoryFiles.length, compatiblePluginScaffold: true, unpackedBytes: inventory.unpackedSize }));

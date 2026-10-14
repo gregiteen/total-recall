@@ -13,6 +13,7 @@ import os from 'os';
 import { encryptSecrets, decryptSecrets, encryptSecretsSync, decryptSecretsSync } from './crypto.mjs';
 import { DEFAULT_KEYCHAIN_SERVICE, readKeychainPassword } from './secrets-keychain.mjs';
 import { writeFileSecure, appendFileSecure } from './secure-file.mjs';
+import { appendAuthMetadata } from './metadata-state.mjs';
 
 export const META_KEY = '__tr_secrets_meta';
 
@@ -117,18 +118,7 @@ function readTrKeychainPassword(env) {
   }
 }
 
-/**
- * Is this buffer the plaintext JSON form of the store, rather than ciphertext?
- *
- * The encrypted form opens with a random 16-byte salt, so its first byte is
- * `{` about once in every 256 stores — measured at 17 in 5000. Deciding the
- * format from that byte alone therefore misreads roughly one store in every
- * 256 as plain JSON. Reads survive it by falling back to decryption, but
- * `migrateSecretsToEncryptedIfNeeded` does not: it reports perfectly good
- * ciphertext as `not-json`, and its caller believes the store still needs
- * migrating. The first byte is a cheap way to reject the common case; only
- * parsing can settle the rest.
- */
+/** Reject actual plaintext JSON; a ciphertext salt may also begin with a brace. */
 export function isPlainJsonStore(buf) {
   if (!buf?.length || buf[0] !== 0x7b /* { */) return false;
   try {
@@ -150,7 +140,7 @@ export function loadSecretsSync(brainDir) {
   const password = secretsPassword();
 
   if (!password) throw new Error('Unlock auth to read the encrypted credential store');
-  if (isPlainJsonStore(buf)) throw new Error('Plaintext credential store refused; explicit auth encryption migration required');
+  if (isPlainJsonStore(buf)) throw new Error('Plaintext credential store refused; encrypted native auth store required');
   return decryptSecretsSync(buf, password);
 }
 
@@ -179,7 +169,7 @@ export async function loadSecrets(brainDir) {
   const password = secretsPassword();
 
   if (!password) throw new Error('Unlock auth to read the encrypted credential store');
-  if (isPlainJsonStore(buf)) throw new Error('Plaintext credential store refused; explicit auth encryption migration required');
+  if (isPlainJsonStore(buf)) throw new Error('Plaintext credential store refused; encrypted native auth store required');
   return decryptSecrets(buf, password);
 }
 
@@ -199,51 +189,11 @@ export async function saveSecrets(brainDir, secrets, { onlyIfMissing = false } =
   else writeFileSecure(filePath, buf, { mode: 0o600 });
 }
 
-/**
- * If secrets.enc is still legacy plain JSON and a password is configured,
- * re-encrypt in place. Safe no-op when already ciphertext or no password.
- *
- * @param {string} brainDir
- * @returns {Promise<{ migrated: boolean, path: string, reason?: string }>}
- */
-export async function migrateSecretsToEncryptedIfNeeded(brainDir) {
-  const filePath = resolveSecretsPath(brainDir);
-  if (!fs.existsSync(filePath)) {
-    return { migrated: false, path: filePath, reason: 'missing' };
-  }
-  const password = secretsPassword();
-  if (!password) {
-    return { migrated: false, path: filePath, reason: 'no-password' };
-  }
-  const buf = fs.readFileSync(filePath);
-  if (buf.length > 44 && !isPlainJsonStore(buf)) {
-    return { migrated: false, path: filePath, reason: 'already-encrypted' };
-  }
-  let obj;
-  try {
-    const text = buf.toString('utf8').trim();
-    if (!text) return { migrated: false, path: filePath, reason: 'empty' };
-    obj = JSON.parse(text);
-  } catch {
-    return { migrated: false, path: filePath, reason: 'not-json' };
-  }
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-    return { migrated: false, path: filePath, reason: 'invalid-payload' };
-  }
-  await saveSecrets(brainDir, obj);
-  appendAudit(brainDir, {
-    action: 'migrate_encrypt',
-    key: '(store)',
-    actor: 'system',
-  });
-  return { migrated: true, path: filePath };
-}
-
 export async function validateSecretsBuffer(buffer) {
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   const password = secretsPassword();
   if (!password) throw new Error('Unlock auth to validate encrypted credentials');
-  if (isPlainJsonStore(buf)) throw new Error('Plaintext credential import refused; explicit encryption migration required');
+  if (isPlainJsonStore(buf)) throw new Error('Plaintext credential import refused; encrypted native auth store required');
   const parsed = await decryptSecrets(buf, password);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid encrypted credential payload');
   return true;
@@ -294,10 +244,10 @@ export function ensureMeta(secrets) {
 export function appendAudit(brainDir, event) {
   const auditPath = resolveAuditPath(brainDir);
   fs.mkdirSync(path.dirname(auditPath), { recursive: true });
-  const line = JSON.stringify({
+  const row = {
     ts: new Date().toISOString(),
     ...event,
     // never include values
-  });
-  appendFileSecure(auditPath, line + '\n', { mode: 0o600 });
+  };
+  appendAuthMetadata(auditPath, row);
 }

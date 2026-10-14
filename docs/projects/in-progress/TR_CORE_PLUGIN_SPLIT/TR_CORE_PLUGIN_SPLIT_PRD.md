@@ -260,3 +260,15 @@ Users select an installed harness and mesh node per command. A CLI-agents owner 
 Permission controls expose strict boolean read/write/send/destructive command admission. Apply them before dispatch and preserve the vendor's approval/sandbox defaults. These command controls do not claim a complete OS or network policy. Project, matching-group and global composed commands all participate in derived libraries and surface freshness.
 
 Every standalone plugin development repository has an isolated, registered complete Total Recall project brain. Brain memory is local private state, excluded from published plugin code. SSSS owner-state coverage remains separately verified.
+
+Finish SSSS compliance of every supported plugin persistence path: validated Markdown canonical state and immutable kernel audit events, safe contained paths, preserved unknown metadata, deterministic schema validation, replay/conflict rejection and explicit non-destructive legacy migration. Classify binary assets, encrypted auth storage, disposable projections and host protocol files separately with executable evidence.
+### Auth compliance acceptance (Google + application access keys)
+
+- Google credentials remain encrypted and isolated by explicit auth brain/account subject; SSSS stores secret-free lifecycle records. Callback state is browser-bound, one-use and expired deterministically; PKCE and verified allowlisted identity are required. No profile fallback may grant a session.
+- OAuth access refresh preserves omitted refresh credentials, handles revoked grants with reconnect state, coalesces in-flight refresh and refuses resurrection after disconnect. Confirm revocation before reporting disconnection. Dashboard login expiry remains separate from API access refresh.
+- PAT/API keys require explicit scopes, live role ceilings, hashed persistence and one-time raw issuance. Missing/empty permissions grant nothing; invalid permissions fail. Delegation cannot exceed issuer scope or expiry. Role-policy writes require administrator authority.
+- Owner CLI, API and UI expose issuance/revocation, role permissions and usage. SSSS request/outcome ledgers contain no raw tokens, provider responses or request query values. Distinguish application API keys from external provider-issued credentials.
+
+## Native-only plugin requirement (2026-10-14)
+
+Greg explicitly rejects legacy support for these new plugins. Native SSSS records and the shared auth owner are the sole product-state/auth contracts. Remove legacy state/credential migrations, old mesh-brain reads, obsolete control-server endpoint retries and whole-store credential replication. Scaffolds must contain the same native-only owner source. This supersedes prior migration acceptance; existing device files are outside source-cleanup scope. Verify native corruption, scope enforcement and independent-node grants instead of legacy import preservation.

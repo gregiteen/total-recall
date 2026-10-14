@@ -17,7 +17,7 @@ function parseScopes(args) {
   if (idx !== -1 && args[idx + 1]) return args[idx + 1].split(',').map(scope => scope.trim());
   const scopesIdx = args.indexOf('--scopes');
   if (scopesIdx !== -1 && args[scopesIdx + 1]) return args[scopesIdx + 1].split(',').map(scope => scope.trim());
-  return ['*'];
+  return [];
 }
 
 function parseExpiresAt(args) {
@@ -46,7 +46,7 @@ function printHelp() {
     rotate <id>               Revoke old PAT and generate a new one with same name/scopes
 
   Options for 'create':
-    --scope <list>      Comma-separated scopes (default: *)
+    --scope <list>      Comma-separated scopes (default: no permissions)
     --expires <date>    ISO date or relative days, e.g. 2026-06-01 or 30d
 `);
 }
