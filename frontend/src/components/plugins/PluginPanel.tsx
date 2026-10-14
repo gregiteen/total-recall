@@ -41,6 +41,7 @@ export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: P
     const message = async (event: MessageEvent) => {
       if (disposed || event.source !== frame.current?.contentWindow || event.origin !== 'null' || event.data?.channel !== channel) return
       const data = event.data
+      if (data.type === 'contextmenu') window.dispatchEvent(new CustomEvent('plugin-context-menu', { detail: { pluginId: plugin.id } }))
       if (data.type === 'height' && Number.isFinite(data.height)) setHeight(Math.max(128, Math.min(1000, data.height)))
       if (data.type === 'error') setError('Could not open the plugin interface')
       if (data.type !== 'run') return
@@ -48,6 +49,7 @@ export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: P
       const reply = (result?: unknown, error?: string) => { if (!disposed) target.postMessage({ channel, type: 'result', requestId: data.requestId, result, error }, '*') }
       if (!allowedFrameCommand(data, allowed, secretCommands) || active >= 4) { reply(undefined, 'Operation is not available'); return }
       active++
+      window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: data.subcommand, running: true } }))
       try {
         const result = data.stdin !== undefined
           ? await runPluginCommand(plugin.id, data.subcommand, [...data.args, '--json'], { stdin: data.stdin })
@@ -55,7 +57,10 @@ export function PluginPanel({ plugin, elementId, readOnly = false }: { plugin: P
         if (!result.success) { reply(undefined, data.stdin !== undefined ? 'Credential operation failed' : result.output || result.error || 'Operation failed'); return }
         reply(data.stdin !== undefined ? { ok: true } : JSON.parse(result.output || '{}'))
       } catch { reply(undefined, 'Operation failed') }
-      finally { active-- }
+      finally {
+        active--
+        window.dispatchEvent(new CustomEvent('plugin-command-activity', { detail: { pluginId: plugin.id, requestId: data.requestId, command: data.subcommand, running: false } }))
+      }
     }
     window.addEventListener('message', message)
     const element = elements.find(item => item.id === selected) || elements[0]

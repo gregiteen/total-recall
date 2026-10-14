@@ -397,3 +397,7 @@ Source-only inventory, generated 2026-10-13T08:09:42.237Z. A declaration does no
 | Command | Effect | Argument declarations | Output |
 | --- | --- | --- | --- |
 | list | read | Missing | Missing |
+
+## Deploy owner extension — 2026-10-14
+
+The earlier inventory above remains its dated snapshot. Deploy adds two implemented operations, both with typed arguments, JSON output and explicit timeout: `optimize` (read) and `optimize-clean` (destructive). The new declarations pass host contract validation; the complete deploy owner suite passes 24/24 on the Mac mini. This is not a fresh fleet-wide inventory scan.

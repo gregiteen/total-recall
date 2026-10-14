@@ -1,10 +1,15 @@
 /** Generic in-process extension loading. Domain behavior stays with its owner. */
 import { pathToFileURL } from 'node:url';
 import { discoverPlugins, resolvePluginFile, PACKAGE_ROOT } from './plugin-loader.mjs';
+import { pluginActivation } from './plugin-state.mjs';
 
-export async function loadPluginModule(id, name, {} = {}) {
-  const plugin = discoverPlugins(process.cwd()).find(item => item.id === id);
+export async function loadPluginModule(id, name, { activeRequired = false, projectRoot = process.cwd() } = {}) {
+  const plugin = discoverPlugins(projectRoot).find(item => item.id === id);
   if (!plugin?.valid) throw new Error(`Required plugin ${id} is missing or invalid`);
+  if (activeRequired && !pluginActivation(plugin).enabled) throw new Error(`Plugin ${id} is inactive`);
+  // Pure bootstrap bindings remain importable so an inactive auth/config owner
+  // cannot prevent the management CLI from turning it back on. Execution is
+  // gated at the runner, scheduler and mounted router boundaries.
   const relative = plugin.manifest.runtime?.modules?.[name];
   if (!relative) {
     throw new Error(`Plugin ${id} does not provide runtime module ${name}`);
@@ -22,7 +27,15 @@ export async function loadPluginRouters() {
       const file = resolvePluginFile(plugin.dir, relative);
       const module = await import(process.platform === 'win32' ? pathToFileURL(file).href : file);
       if (typeof module.default !== 'function') throw new Error(`Plugin ${plugin.id} router must export middleware`);
-      routers.push(module.default);
+      const guarded = function router(req, res, next) {
+        const ownsPath = module.default.stack?.some(layer => layer.route && layer.match(req.path));
+        if (!pluginActivation(plugin).enabled && ownsPath) return res.status(503).json({ error: `Plugin ${plugin.id} is inactive` });
+        if (!pluginActivation(plugin).enabled) return next();
+        return module.default(req, res, next);
+      };
+      // Preserve the real mounted route stack for API/CLI discovery.
+      guarded.stack = module.default.stack;
+      routers.push(guarded);
     }
   }
   return routers;

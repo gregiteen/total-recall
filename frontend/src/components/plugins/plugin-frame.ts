@@ -13,6 +13,7 @@ export function pluginFrameDocument(source: string, tag: string, channel: string
 const channel=${inlineJson(channel)};
 const pending=new Map();let sequence=0;
 const send=(type,extra={})=>parent.postMessage({channel,type,...extra},'*');
+window.addEventListener('contextmenu',event=>{event.preventDefault();send('contextmenu');});
 for(const [name,value] of Object.entries(${inlineJson(theme)}))document.documentElement.style.setProperty(name,value);
 window.addEventListener('message',event=>{
  if(event.source!==parent||event.data?.channel!==channel||event.data?.type!=='result')return;

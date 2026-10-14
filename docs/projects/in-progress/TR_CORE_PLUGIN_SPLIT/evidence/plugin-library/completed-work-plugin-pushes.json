@@ -1,0 +1,152 @@
+{
+  "tr-plugin-auth": {
+    "state": "pushed",
+    "commit": "806975b38f126f959a9476f9c480a70160753160",
+    "branch": "main"
+  },
+  "tr-plugin-code-quality": {
+    "state": "pushed",
+    "commit": "15ec47b07b8d5fc5ac766054dd8c839a04a732ec",
+    "branch": "main"
+  },
+  "tr-plugin-composable-cli": {
+    "state": "pushed",
+    "commit": "4fc05d215ff87765bf241840e44cf18108b30b57",
+    "branch": "main"
+  },
+  "tr-plugin-creative-search": {
+    "state": "pushed",
+    "commit": "e1e613f82ce9581e20bdd899df9ea57d8fd432c0",
+    "branch": "main"
+  },
+  "tr-plugin-decision": {
+    "state": "pushed",
+    "commit": "786329206d0351ffd3cc151df20b90151e75f4a6",
+    "branch": "main"
+  },
+  "tr-plugin-deploy": {
+    "state": "pushed",
+    "commit": "74905f2d0c4cc891d25dd6cd5c1b12b9a65fc18f",
+    "branch": "main"
+  },
+  "tr-plugin-design": {
+    "state": "pushed",
+    "commit": "4065c3a8dc776c9e627f726282bc6b97e21a4af6",
+    "branch": "main"
+  },
+  "tr-plugin-domains": {
+    "state": "pushed",
+    "commit": "6320612a3a7111a41e446e84227765c4d276e94c",
+    "branch": "main"
+  },
+  "tr-plugin-dsh": {
+    "state": "pushed",
+    "commit": "d7a1bedae68ccf3296d66dbd8608f3a4277b6259",
+    "branch": "main"
+  },
+  "tr-plugin-git-sentinel": {
+    "state": "pushed",
+    "commit": "85c7f62badc67c5874744f71e4b424ffeeb081d0",
+    "branch": "main"
+  },
+  "tr-plugin-image-generator": {
+    "state": "pushed",
+    "commit": "b80f7d33cc1c5e77c1e8e36c22bab4b439945636",
+    "branch": "main"
+  },
+  "tr-plugin-maps": {
+    "state": "pushed",
+    "commit": "a2ee23f4c80d7e138bc8d0ec314573adc46510af",
+    "branch": "main"
+  },
+  "tr-plugin-mesh": {
+    "state": "pushed",
+    "commit": "5cb1373b259fc4a73c7161c1f51052f828e10994",
+    "branch": "main"
+  },
+  "tr-plugin-okf": {
+    "state": "pushed",
+    "commit": "093c4008a62050aa737548be26fc8a377625b8df",
+    "branch": "main"
+  },
+  "tr-plugin-openwiki": {
+    "state": "pushed",
+    "commit": "c4512cfee904a9df94d03c04dfe9da2d20bc929f",
+    "branch": "main"
+  },
+  "tr-plugin-operator-alerts": {
+    "state": "pushed",
+    "commit": "6981e86c4a98a230d915a3e7f120f646a3c6778a",
+    "branch": "main"
+  },
+  "tr-plugin-phone": {
+    "state": "pushed",
+    "commit": "1dce27f16babff7b69619e896bc92004ba6f70ee",
+    "branch": "main"
+  },
+  "tr-plugin-phone-companion": {
+    "state": "pushed",
+    "commit": "c8ac30013a6332accdcbba54940821224747ffcc",
+    "branch": "main"
+  },
+  "tr-plugin-security": {
+    "state": "pushed",
+    "commit": "729f119f551bfcd1b113370798c1d600b12543c3",
+    "branch": "main"
+  },
+  "tr-plugin-signing": {
+    "state": "pushed",
+    "commit": "ab8951f23a2d49de80f14eda9fb33da6670c91de",
+    "branch": "main"
+  },
+  "tr-plugin-skill-manager": {
+    "state": "pushed",
+    "commit": "9f2adad29eb4d96a158b9d41790f0da7725ca9b8",
+    "branch": "main"
+  },
+  "tr-plugin-sticker-generator": {
+    "state": "pushed",
+    "commit": "38bbb38828dd487bf2922fa04c889e57afe70325",
+    "branch": "main"
+  },
+  "tr-plugin-stripe": {
+    "state": "pushed",
+    "commit": "52e32562670c8db11e8e2dde75ebc81130f41e33",
+    "branch": "main"
+  },
+  "tr-plugin-system-monitor": {
+    "state": "pushed",
+    "commit": "d197118bc1e236a5750fc05c62d7d33128f6b130",
+    "branch": "main"
+  },
+  "tr-plugin-text": {
+    "state": "pushed",
+    "commit": "05a72cbeeaf1a0feec1b9d3444050140ea31368a",
+    "branch": "main"
+  },
+  "tr-plugin-tickets": {
+    "state": "pushed",
+    "commit": "a83c9123ec631625ee09e24c0dbdd7147b0c9737",
+    "branch": "main"
+  },
+  "tr-plugin-tr-transcribe": {
+    "state": "pushed",
+    "commit": "0b8961a5740e28dc5d2665a28eb03d8a754ac43e",
+    "branch": "main"
+  },
+  "tr-plugin-translator": {
+    "state": "pushed",
+    "commit": "308d81cd4e2791e0a1aac5584b0515ca356f7669",
+    "branch": "main"
+  },
+  "tr-plugin-user-automations": {
+    "state": "pushed",
+    "commit": "31632f13af0ace0da0e067e421fd1ae18b79d0ae",
+    "branch": "main"
+  },
+  "tr-plugin-cli-agents": {
+    "state": "pushed",
+    "commit": "127b7d6316ba5451599c547d3040e1fbf658a4d5",
+    "branch": "main"
+  }
+}

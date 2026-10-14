@@ -275,3 +275,27 @@ Execution order: use PLUGIN_COMPLETION_CHECKLIST.md as the complete scope; first
 ## Phase: developer-owned Headscale
 
 1. Confirm `headscale --help` flags on the installed version (API keys, preauth). 2. Mesh `server` command group with injectable runner and specs. 3. `new` calls it after init/connect and reports readiness honestly. 4. Mac mini proof in an isolated HOME using a container or a throwaway host; real remote-host proof needs an owner-authorized machine. 5. Docs, skill and OpenWiki updates.
+
+### Current deployment-optimization slice (2026-10-14)
+
+1. Capture an owner baseline on an isolated Mac mini snapshot.
+2. Implement `optimize` inspection and `optimize-clean` reviewed cleanup with explicit path/health/SSH inputs.
+3. Add drift, symlink, file-policy, failed-health, transport, CLI and truthful-panel regressions.
+4. Verify the complete owner suite and exact delivered source hashes on the mini; record actual exit status. No production mutation or partial release.
+
+2026-10-14T04:53:00Z — Codex: Deployment optimizer slice implemented in the deploy owner. Baseline 11/11 and final 24/24 owner tests pass on the sanctioned Mac mini, actual exit 0. All 14 delivered source hashes match; host manifest contract has zero errors/warnings. Real SSH inspection and HTTP 200 health verified. Cleanup tests exercise real HTTP and isolated disposable fixtures only. Panel no longer fabricates release/save success; cards invoke only read commands. CLI help cannot create state. Evidence: [deployment optimizer verification](evidence/deploy-optimize/verification.md). Existing SSSS receipt migration, verified provider credential setup, broader plugin contracts and final release remain open. No production mutation or publication.
+
+2026-10-14T05:04:00Z — Codex: Fresh release-owner sweep: 27/29 suites pass; phone’s existing round-trip fixture still returns legacy exit/output while the current host/adapter uses decoded JSON, failing the contact-name assertion. User-automations cannot load its declared jsdom test environment because jsdom is absent from devDependencies. Repair fixture transport without weakening assertions; declare/install the test dependency and rerun both complete owners on the mini before any push.
+
+2026-10-14T05:07:00Z — Codex: Greg requires a full working CLI for every plugin: all supported actions, settings and secure credential operations, with UI/API parity and failure verification. Saved invariant through Total Recall; surfaces compiled. Fresh owner source-only release sweep now passes all 29 suites after repairing phone’s obsolete transport fixture (all assertions retained) and user-automations’ missing jsdom dependency. Matched all snapshot source hashes; Git/private-target verification in progress. Complete CLI coverage is a separate acceptance item and is not implied by those suites.
+
+2026-10-14T05:17:00Z — Codex: Inventory/library lifecycle acceptance added at Greg’s request. Existing installs write SSSS plugin records and compile, but plugin-store swallows compilation errors; only explicit manifest.commands are registered in composable commands, and no comprehensive plugin operation library is exposed. Implement one generic manifest-derived catalog in the loading boundary, refresh derived inventory/library on compilation and plugin lifecycle, expose discovery through the composable-CLI owner, and keep a compact CLI-first inventory in every generated surface. Verify real install/remove/update, invalid manifests, missing declarations, unchanged-vault freshness and compilation failures on the mini. The latest universal Total Recall/plugins-first rule is saved both globally and in the project; canonical bodies remain intact.
+### Expanded lifecycle/card/agent implementation order (2026-10-14)
+
+Current delivery evidence is consolidated in [plugin library progress](evidence/plugin-library/progress.md). Owner source pushes are verified for the 29 original repositories plus Command Fleet and the latest composable update. Finish the final group-inclusive host suite, source identity and current-source push gates; install the owner through the native plugin lifecycle and verify resulting inventory/surfaces. Keep full integration parity, owner-specific command UI and live provider/runtime verification open until actually proved.
+
+1. Finish automatic composable compilation and actual composed catalog projection; owner 30/30 tests pass on the mini.
+2. Verify activation gates, catalog/surface status, owner card mounting, horizontal command scenes, common menus, busy events and secure forms. Preserve full failure logs; rerun the complete core/dashboard suite after fixes.
+3. Add a standalone CLI-agents plugin with nine documented adapters, bounded process/auth/result tests and remote installed-agent discovery; preserve unknown states and explicit remote cwd selection.
+4. Connect per-command harness/node selection through the owning module, verify actual native/remote routing, and inspect rendered desktop/mobile cards.
+5. Synchronize skill/hub/tracker evidence, verify tested source hashes, run current gates and push completed work. All 29 original owner repositories now have verified private remote pushes. Publication/live daemon rollout remains separately evidenced.

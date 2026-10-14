@@ -1,0 +1,36 @@
+
+> tr-plugin-deploy@0.1.0 test
+> node --test test/*.test.mjs
+
+✔ credentials come only from auth, with explicit command and structured missing response (1.19225ms)
+✔ auth failure and malformed response propagate without alternate credentials (0.15ms)
+✔ writes use stdin and require exact auth readback (0.118792ms)
+✔ empty installation invents no providers, ports or active version (1.967417ms)
+✔ missing execution adapter rejects mutations and leaves state unchanged (0.82625ms)
+✔ health failures and mismatched release identity cannot switch traffic (1.654208ms)
+✔ verified adapter receipts and matching real response contract support switch and rollback (1.685792ms)
+✔ unverified execution receipts cannot change active state (0.87075ms)
+✔ corrupt and legacy synthetic deployment state is rejected (0.799792ms)
+✔ providers can be registered on any host, validated and stored without secrets (0.932917ms)
+✔ real inspection is read-only and limits eligible files to the dedicated cache (16.741625ms)
+✔ cleanup requires exact review and healthy serving, removes only reviewed files (13.775125ms)
+✔ content, file identity and new candidates invalidate the reviewed digest (24.266667ms)
+✔ symlink directories reject inspection; symlink/hardlink files are excluded (14.327459ms)
+✔ drift during health check prevents mutation and failed post-health reports failure (27.685667ms)
+✔ validation and unavailable process inspection fail honestly (0.565666ms)
+✔ cleanup rejects missing health and a replaced cache directory (27.794041ms)
+✔ cache policy is bounded and cleanup cannot admit serving resources (13.06ms)
+✔ SSH sends code and options via stdin and refuses failures/malformed responses (0.523917ms)
+✔ CLI inspection performs no state initialization (118.012792ms)
+✔ real HTTP health is checked before and after cache cleanup (26.365041ms)
+✔ deployment UI starts unknown, renders recorded releases and clears stale success after failure (12.414792ms)
+✔ panel never fabricates release or credential save success and clears stale status (3.102584ms)
+✔ panel inspection uses CLI parity and displays failures; card has only read commands (4.804125ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 388.718834

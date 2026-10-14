@@ -81,6 +81,7 @@ export interface PluginInfo {
   store_deployed?: boolean
   secrets?: Array<{ key: string; description?: string; required?: boolean }>
   manifest?: Record<string, unknown>
+  activation?: { state: 'active' | 'inactive'; enabled: boolean }
   ui?: { elements: Array<{ id: string; kind: string; tag: string; module: string; description?: string }> } | null
 }
 
@@ -233,9 +234,9 @@ export async function runPluginCommand(
   id: string,
   subcommand = "",
   args: string[] = [],
-  options?: { stdin: string }
+  options?: { stdin?: string; execution?: PluginExecution }
 ): Promise<{ success: boolean; output?: string; error?: string; exitCode?: number | null; timedOut?: boolean }> {
-  const res = await post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/run`, { subcommand, args, ...(options ? { stdin: options.stdin } : {}) })
+  const res = await post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/run`, { subcommand, args, ...(options || {}) })
   if (res.error) return { success: false, error: res.error }
   return { success: !!res.ok, output: res.output || "", exitCode: res.exitCode, timedOut: res.timedOut }
 }
@@ -329,4 +330,8 @@ export async function fetchPluginConformance(id: string): Promise<ConformanceRes
   } catch {
     return null
   }
+}
+export interface PluginExecution {
+  agent: string; node: string; cwd?: string; allowUnknownAuth?: boolean;
+  permissions: { read: boolean; write: boolean; send: boolean; destructive: boolean };
 }

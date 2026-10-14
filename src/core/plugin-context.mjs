@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest, resolveProjectRoot, resolvePluginFile, PACKAGE_ROOT } from './plugin-loader.mjs';
+import { pluginActivation } from './plugin-state.mjs';
 
 export { discoverPlugins, getPluginWatchPaths, getPlugin, getPluginCategories, validatePluginManifest };
 
@@ -17,7 +18,7 @@ export async function assemblePluginContexts({ projectRoot = process.cwd(), vaul
   const blocks = [];
 
   for (const plugin of plugins) {
-    if (!plugin.valid) continue;
+    if (!plugin.valid || !pluginActivation(plugin).enabled) continue;
     const { manifest, dir, id } = plugin;
     const name = manifest.name || id;
 

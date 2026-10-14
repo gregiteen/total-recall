@@ -1,0 +1,232 @@
+[
+  {
+    "plugin": "auth",
+    "commands": 10,
+    "uiCalls": [
+      "status"
+    ],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "code-quality",
+    "commands": 6,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "composable-cli",
+    "commands": 12,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "creative-search",
+    "commands": 8,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "decision",
+    "commands": 5,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "deploy",
+    "commands": 10,
+    "uiCalls": [
+      "optimize",
+      "status"
+    ],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 2
+  },
+  {
+    "plugin": "design",
+    "commands": 4,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "domains",
+    "commands": 51,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "dsh",
+    "commands": 5,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "git-sentinel",
+    "commands": 2,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "image-generator",
+    "commands": 2,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "maps",
+    "commands": 7,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "mesh",
+    "commands": 18,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "okf",
+    "commands": 4,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "openwiki",
+    "commands": 4,
+    "uiCalls": [
+      "hubs",
+      "ingest"
+    ],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "operator-alerts",
+    "commands": 4,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "phone",
+    "commands": 13,
+    "uiCalls": [
+      "numbers",
+      "secret"
+    ],
+    "undeclaredUiCalls": [
+      "secret"
+    ],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "phone-companion",
+    "commands": 2,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "security",
+    "commands": 20,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "signing",
+    "commands": 4,
+    "uiCalls": [
+      "account",
+      "status",
+      "token"
+    ],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "skill-manager",
+    "commands": 5,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "sticker-generator",
+    "commands": 7,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "stripe",
+    "commands": 7,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "system-monitor",
+    "commands": 2,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "text",
+    "commands": 9,
+    "uiCalls": [
+      "history",
+      "send",
+      "status",
+      "threads"
+    ],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "tickets",
+    "commands": 9,
+    "uiCalls": [
+      "secret",
+      "tiers"
+    ],
+    "undeclaredUiCalls": [
+      "secret"
+    ],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "tr-transcribe",
+    "commands": 2,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "translator",
+    "commands": 6,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  },
+  {
+    "plugin": "user-automations",
+    "commands": 1,
+    "uiCalls": [],
+    "undeclaredUiCalls": [],
+    "argsDeclared": 0
+  }
+]

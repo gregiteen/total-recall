@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PACKAGE_ROOT, resolvePluginFile } from './plugin-loader.mjs';
 import { readPluginRecord } from './plugin-store.mjs';
+import { setPluginActive } from './plugin-activation.mjs';
 
 const CHILD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plugin-runner-child.mjs');
 export const DEFAULT_TIMEOUT_MS = 30_000;
@@ -39,6 +40,15 @@ export function runPluginCommand(plugin, options = {}) {
   try { validatePluginSecretInput(plugin, subcommand, stdinText); }
   catch (err) { return Promise.reject(err); }
   const operation = subcommand || args[0];
+  if (operation === 'on' || operation === 'off') {
+    return setPluginActive(plugin.id, operation === 'on', { projectRoot: cwd }).then(result => ({
+      ok: result.compilation.ok, exitCode: result.compilation.ok ? 0 : 1,
+      output: JSON.stringify(result), durationMs: 0, timedOut: false,
+    }));
+  }
+  if (readPluginRecord(plugin)?.runtime_enabled === false && !['status', 'health', 'jobs', '--help', '-h', 'help'].includes(operation)) {
+    return Promise.reject(new Error(`Plugin ${plugin.id} is inactive; run total-recall plugin on ${plugin.id}`));
+  }
   const declaredTimeout = plugin?.manifest?.cli?.subcommands?.find(item => item.name === operation)?.timeout_ms;
   const timeoutMs = requestedTimeoutMs ?? declaredTimeout ?? DEFAULT_TIMEOUT_MS;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) return Promise.reject(new Error('Plugin timeout must be 1..600000 ms'));

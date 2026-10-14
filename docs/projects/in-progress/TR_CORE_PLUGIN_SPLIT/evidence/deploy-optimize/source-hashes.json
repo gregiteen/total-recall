@@ -1,0 +1,16 @@
+{
+  "README.md": "feba849227e079acfc67793e8339f250d6fd4b294c66c6472e748c8f4633b5a1",
+  "cli.mjs": "7f5a8fae82ce845acadb62f6a3446cc241d499365024315151de8e47361781a2",
+  "plugin.json": "c8b97b26f2b387b0eac4714d84cdfa0fbae604ae917cfa360cc9f0f250c798e6",
+  "package.json": "9ef683258c34a1be7a3af9dff69701317c72e048adaf07d3c8230793825b4fd4",
+  "auth-client.mjs": "25472a33f3a7d56033f71eaf933136b520f04da3bf074183a70c02e9d6f01699",
+  "src/deploy-engine.mjs": "3dec9a841b754a2605796f5827f59fa056a5d26cfc93f614ceca023405d3a5f7",
+  "src/optimizer.mjs": "e481f1028396b02e9f55a64453daaf62a07d4ebc7332f75a7def0e16a7ae6c5c",
+  "src/optimizer-transport.mjs": "c0c279f041c5ea884226f33191fbc2d3277fc26048c64ba142eb83bc01bde962",
+  "ui/card.js": "654b20d12453df404f253b79d2db0f6f57d6031d571c678828782a606f21a473",
+  "ui/panel.js": "8fb3256faecea086442fa40ec4a154d99dd92a9952dc774e00d9b2bdb1e9f50d",
+  "test/optimizer.test.mjs": "2879f372b61ad230bfcac083f054880d3e451b8a0ddaddf30880ea1730136bd9",
+  "test/ui.test.mjs": "18a10c4fcfed6b08210b3ae26824e47413730c1a59c4c9245caffaecdca6a0dd",
+  "test/auth-client.test.mjs": "13d36f5a3b71f3d977d7000d7814cfb9fca016df7b093548f23abeb665b3c019",
+  "test/deploy.test.mjs": "4292b3ebb4fcb4e608693f3ece37c818ac5eb0e7223a5e2e35e200d6317b2dcf"
+}

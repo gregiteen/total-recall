@@ -1,0 +1,24 @@
+Actual gate exit: 0
+Source SHA256: 7014b8f53057cdf2c051d70eb655855de0fa52503b5a8930b44977fc440072ed
+🔍 Pre-push: running quality checks...
+{"timestamp":"2026-10-14T08:56:44.960Z","level":"info","subsystem":"throttled-fetch","message":"Loaded network policy: 1 blocked, 0 allowed, 0 limits, 3 rate limits."}
+ℹ  [code-quality] tier=fast: skipping 1 higher-tier check(s): test(remote)
+ [code-quality] javascript — 8 check(s) in <sanctioned-source-snapshot>
+   → memory-package: npm run check:package
+      0 error(s), exit 0 (1.5s)
+   → dist-freshness: npm run check:dist
+      0 error(s), exit 0 (0.1s)
+   → open-source-paths: grep-forbid (4 pattern(s))
+      0 error(s), exit 0 (0.0s)
+   → shipped-package-paths: grep-forbid (4 pattern(s))
+      0 error(s), exit 0 (0.0s)
+   → scaffold-brain-state: node scripts/check-scaffold-state.mjs
+      0 error(s), exit 0 (0.1s)
+   → ssss-registry: npm run check:ssss-registry
+      0 error(s), exit 0 (0.3s)
+   → security-dependencies: npm audit
+      0 error(s), exit 0 (0.5s)
+   → security-frontend-dependencies: npm audit --prefix frontend
+      0 error(s), exit 0 (0.3s)
+ [code-quality] 0 finding(s) in 3.0s — read with: node .agent/skills/total-recall/plugins/code-quality/core/report.mjs
+✅ Current-source remote pre-push gates passed.
