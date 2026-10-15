@@ -15,7 +15,7 @@ import {
   packPublicPlugin,
   patchPluginRecord
 } from './plugin-distribution.mjs';
-import { ensurePluginRecord } from './plugin-store.mjs';
+import { ensurePluginRecord, installPluginDependencies } from './plugin-store.mjs';
 import { projectPluginsDir, globalPluginsDir, listBundledPlugins } from './plugin-loader.mjs';
 
 const FORBIDDEN = /rating|review|install_?count|download|verified|stars?\b/i;
@@ -216,3 +216,82 @@ describe('plugin-store', () => {
     expect(fs.existsSync(path.join(tmp, 'home-agent', 'skills', 'total-recall', 'memory-vault', 'system', 'plugins', 'bundled-one.md'))).toBe(true);
   });
 });
+
+describe('installPluginDependencies', () => {
+  let root;
+  let binDir;
+  let markerFile;
+  let originalPath;
+
+  function writeFakeNpm({ fail = false } = {}) {
+    const script = [
+      '#!/bin/sh',
+      'if [ "$1" = "--version" ]; then echo "10.0.0"; exit 0; fi',
+      `echo "$*" > "${markerFile}"`,
+      fail ? 'exit 1' : 'mkdir -p node_modules && exit 0'
+    ].join('\n');
+    fs.writeFileSync(path.join(binDir, 'npm'), script, { mode: 0o755 });
+  }
+
+  function writePlugin(pkg) {
+    const dir = fs.mkdtempSync(path.join(root, 'plugin-'));
+    if (pkg !== null) fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+    return dir;
+  }
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-plugin-deps-'));
+    binDir = path.join(root, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    markerFile = path.join(root, 'npm-args.txt');
+    originalPath = process.env.PATH;
+    process.env.PATH = `${binDir}${path.delimiter}${originalPath}`;
+  });
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('reports a plugin that ships no package.json', async () => {
+    const dir = writePlugin(null);
+    await expect(installPluginDependencies(dir, 'no-pkg'))
+      .resolves.toEqual({ installed: false, reason: 'no package.json' });
+  });
+
+  it('reports a plugin that declares no dependencies', async () => {
+    const dir = writePlugin({ name: 'x', version: '1.0.0', dependencies: {} });
+    await expect(installPluginDependencies(dir, 'no-deps'))
+      .resolves.toEqual({ installed: false, reason: 'no dependencies declared' });
+  });
+
+  it('installs declared dependencies inside the plugin directory', async () => {
+    writeFakeNpm();
+    const dir = writePlugin({ name: 'x', version: '1.0.0', dependencies: { yaml: '^2.9.0' } });
+
+    const result = await installPluginDependencies(dir, 'with-deps');
+
+    expect(result.installed).toBe(true);
+    expect(result.packages).toEqual(['yaml']);
+    const args = fs.readFileSync(markerFile, 'utf8');
+    expect(args).toContain('install');
+    expect(args).toContain('--omit=dev');
+  });
+
+  it('throws when the dependency install fails', async () => {
+    writeFakeNpm({ fail: true });
+    const dir = writePlugin({ name: 'x', version: '1.0.0', dependencies: { yaml: '^2.9.0' } });
+
+    await expect(installPluginDependencies(dir, 'fails'))
+      .rejects.toThrow(/dependencies \(yaml\) failed to install/);
+  });
+
+  it('skips with a reason when npm is unavailable', async () => {
+    process.env.PATH = '';
+    const dir = writePlugin({ name: 'x', version: '1.0.0', dependencies: { yaml: '^2.9.0' } });
+
+    await expect(installPluginDependencies(dir, 'no-npm'))
+      .resolves.toEqual({ installed: false, reason: 'npm unavailable' });
+  });
+});
+
