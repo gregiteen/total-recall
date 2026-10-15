@@ -218,3 +218,32 @@ describe('readRuleBudgets', () => {
     }
   });
 });
+
+describe('readContextBudget', () => {
+  it('defaults to the fixed totals and lets surface.yml and the env override them', async () => {
+    const { readContextBudget } = await import('./surface.mjs');
+    const skills = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-ctx-budget-'));
+    fs.mkdirSync(path.join(skills, 'total-recall', 'config'), { recursive: true });
+    const prev = process.env.TR_CONTEXT_BUDGET_TOKENS;
+    delete process.env.TR_CONTEXT_BUDGET_TOKENS;
+    try {
+      expect(readContextBudget(skills)).toEqual({ total_tokens: 4000, bootstrap_total_tokens: 2500 });
+
+      fs.writeFileSync(
+        path.join(skills, 'total-recall', 'config', 'surface.yml'),
+        'budget:\n  bootstrap_total_tokens: 12000\n  total_tokens: 0\n',
+      );
+      const fromFile = readContextBudget(skills);
+      expect(fromFile.bootstrap_total_tokens).toBe(12000);
+      expect(fromFile.total_tokens).toBe(4000); // 0 is ignored, falls back to the default
+
+      process.env.TR_CONTEXT_BUDGET_TOKENS = JSON.stringify({ bootstrap_total_tokens: 333 });
+      expect(readContextBudget(skills).bootstrap_total_tokens).toBe(333);
+    } finally {
+      if (prev === undefined) delete process.env.TR_CONTEXT_BUDGET_TOKENS;
+      else process.env.TR_CONTEXT_BUDGET_TOKENS = prev;
+      fs.rmSync(skills, { recursive: true, force: true });
+    }
+  });
+});
+
