@@ -258,5 +258,45 @@
   "status": {
     "command": "status",
     "refresh_seconds": 60
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  },
+  "card_layout": {
+    "template": "vault",
+    "regions": [
+      {
+        "widget": "status",
+        "title": "Status"
+      },
+      {
+        "widget": "live",
+        "title": "Live view"
+      },
+      {
+        "widget": "list",
+        "title": "Details",
+        "source": {
+          "command": "audit"
+        }
+      },
+      {
+        "widget": "actions",
+        "title": "Commands"
+      },
+      {
+        "widget": "settings",
+        "title": "Settings"
+      },
+      {
+        "widget": "credentials",
+        "title": "Credentials"
+      },
+      {
+        "widget": "activity",
+        "title": "Recent activity"
+      }
+    ]
   }
 }

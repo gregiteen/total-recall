@@ -1,7 +1,6 @@
 {
   "name": "tr-plugin-mesh",
   "version": "0.2.0",
-  "private": true,
   "type": "module",
   "description": "Headscale and Tailscale SSH control-server mesh administration and node discovery",
   "scripts": {
@@ -17,5 +16,17 @@
   "license": "MIT",
   "dependencies": {
     "express": "^5.2.1"
+  },
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "LICENSE",
+    "src/",
+    "!src/**/*.spec.mjs",
+    "ui/"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
