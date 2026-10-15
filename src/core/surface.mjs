@@ -343,6 +343,38 @@ export function readRuleBudgets(skillsDir) {
   return out;
 }
 
+const DEFAULT_CONTEXT_BUDGET = { total_tokens: 4000, bootstrap_total_tokens: 2500 };
+
+/**
+ * Instruction-surface token budget from surface.yml files and the environment.
+ *
+ * The rule-section budgets above are characters, so a brain whose required
+ * rules are rich can need more text than the fixed token total allows and then
+ * write no surface at all. A project brain overrides the global brain;
+ * TR_CONTEXT_BUDGET_TOKENS overrides both, as JSON of the same keys.
+ */
+export function readContextBudget(skillsDir) {
+  const out = {};
+  const dirs = [skillsDir ? path.join(skillsDir, 'total-recall') : null, globalBrainDir].filter(Boolean);
+  for (const dir of dirs.reverse()) {
+    try {
+      const cfg = yaml.parse(fs.readFileSync(path.join(dir, 'config', 'surface.yml'), 'utf8')) || {};
+      for (const k of Object.keys(DEFAULT_CONTEXT_BUDGET)) {
+        const v = Number(cfg?.budget?.[k]);
+        if (Number.isFinite(v) && v > 0) out[k] = v;
+      }
+    } catch {
+      /* no surface.yml in this brain */
+    }
+  }
+  try {
+    Object.assign(out, JSON.parse(process.env.TR_CONTEXT_BUDGET_TOKENS || '{}'));
+  } catch {
+    /* ignore a malformed override */
+  }
+  return { ...DEFAULT_CONTEXT_BUDGET, ...out };
+}
+
 export function legacyRuleContributions(skillsDir) {
   if (!skillsDir) return [];
   return ['invariants', 'preferences', 'corrections'].map(name => ({
@@ -373,9 +405,11 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
 }
 
 export async function buildRulesBlock(skillsDir, nodes = [], {
-  consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total = bootstrap ? 2500 : 4000,
+  consumer = 'ide', derivedDir, vaultDir, projectRoot, actions = [], bootstrap = false, total,
 } = {}) {
   const root = projectRoot || (skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd());
+  const budget = readContextBudget(skillsDir);
+  const tokenBudget = total ?? (bootstrap ? budget.bootstrap_total_tokens : budget.total_tokens);
   const rules = selectRules(curatedRules(nodes), { actions, projectRoot: root, bootstrap });
   const contributions = [];
   const counts = category => rules.filter(n => n.category === category).length;
@@ -412,7 +446,7 @@ DO NOT SKIP THIS. Run Total Recall CLI help and context first before doing anyth
     const plugin = await assemblePluginContexts({ projectRoot: root, vaultDir, nodes, derivedDir });
     contributions.push({ id: 'plugins', text: plugin });
   }
-  const result = assembleContext(contributions, { total });
+  const result = assembleContext(contributions, { total: tokenBudget });
   if (derivedDir) {
     fs.mkdirSync(derivedDir, { recursive: true });
     atomicWrite(path.join(derivedDir, bootstrap ? 'bootstrap-accounting.json' : 'context-accounting.json'), JSON.stringify({ ready: result.ready, ...result.stats }, null, 2));
