@@ -471,6 +471,14 @@ function parseArgs(args) {
             .filter(Boolean),
         );
         break;
+      case '--keys':
+        out.keys.push(
+          ...String(args[++i] || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        );
+        break;
       case '--tier':
         out.tier = args[++i];
         break;
