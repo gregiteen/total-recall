@@ -1,3 +1,15 @@
+## 3.39.4 — 2026-10-15
+
+- Ship the corrected bundled `auth` plugin. `secret remote deploy <target>
+  --keys k1,k2` is documented and the deploy path already honoured `opts.keys`,
+  but the argument parser had no case for the flag, so it fell through and a
+  deploy wrote the target's whole key list — 26 keys where the caller asked for
+  one. The bundled copy predated the fix, so every packaged install carried it.
+- Sync the bundled `mesh` plugin with its published copy.
+- Bundled plugin manifests declare `card_layout`. With no layout declared, every
+  dashboard card fell through to one hardcoded live/status/actions/activity
+  fallback, so all plugins rendered identically regardless of what they do.
+
 ## 3.39.3 — 2026-10-15
 
 - Install a copied plugin's declared runtime dependencies. A plugin whose
