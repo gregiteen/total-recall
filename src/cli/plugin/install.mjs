@@ -18,6 +18,11 @@ export async function installPlugin(args = []) {
     console.log(`\n✅ Installed '${result.plugin.name}' (id: ${result.plugin.id}, v${result.plugin.version}) from ${from}`);
     console.log(`   Location: ${result.plugin.dir}`);
     console.log(`   sha256:   ${result.sha256}`);
+    if (result.dependencies?.installed) {
+      console.log(`   Dependencies: installed ${result.dependencies.packages.length} package(s)`);
+    } else if (result.dependencies?.reason && !['no package.json', 'no dependencies declared'].includes(result.dependencies.reason)) {
+      console.log(`   Dependencies: NOT installed (${result.dependencies.reason})`);
+    }
     const cmds = syncPluginCommands(result.plugin.dir, { global: isGlobal });
     if (cmds.created.length) console.log(`   Commands: ${cmds.created.map((c) => `total-recall ${c}`).join(', ')}`);
     for (const c of cmds.skipped) console.log(`   Skipped command '${c.name}': ${c.reason}`);

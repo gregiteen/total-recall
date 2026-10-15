@@ -294,6 +294,50 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
 }
 
 /**
+ * Install a copied plugin's declared runtime dependencies.
+ *
+ * A plugin must carry its dependencies before the loader imports it: a single
+ * unresolvable import from any installed plugin aborts every plugin command in
+ * that scope, not just the plugin that owns it. Linked plugins are developer
+ * checkouts that keep their own `node_modules`, so they are never touched.
+ *
+ * @returns {Promise<{ installed: boolean, packages?: string[], reason?: string }>}
+ */
+export async function installPluginDependencies(dest, id) {
+  const pkgPath = path.join(dest, 'package.json');
+  if (!fs.existsSync(pkgPath)) return { installed: false, reason: 'no package.json' };
+
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  } catch (err) {
+    throw new Error(`Plugin '${id}' was copied but its package.json is unreadable: ${err.message}`);
+  }
+  const packages = Object.keys(pkg.dependencies || {});
+  if (packages.length === 0) return { installed: false, reason: 'no dependencies declared' };
+
+  try {
+    await execFileAsync('npm', ['--version'], { timeout: 20_000 });
+  } catch {
+    console.warn(`⚠️  Plugin '${id}' declares ${packages.length} dependency(ies) but npm is unavailable. Run 'npm install --omit=dev' in ${dest}.`);
+    return { installed: false, reason: 'npm unavailable' };
+  }
+
+  try {
+    await execFileAsync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], {
+      cwd: dest,
+      timeout: 600_000,
+      maxBuffer: 16 * 1024 * 1024
+    });
+  } catch (err) {
+    const detail = (err.stderr || err.stdout || err.message || '').toString().trim()
+      .split('\n').filter(Boolean).slice(-3).join(' ');
+    throw new Error(`Plugin '${id}' was copied but its dependencies (${packages.join(', ')}) failed to install: ${detail}`);
+  }
+  return { installed: true, packages };
+}
+
+/**
  * Install a plugin.
  * @param {string} source  bundled id | public share URL | `peer:<host>/<id>` | git URL | local path
  * @param {{ projectRoot?: string, global?: boolean, link?: boolean, peerDeps?: object, publicDeps?: object }} [options]
@@ -310,6 +354,7 @@ export async function installPlugin(source, options = {}) {
   let dest;
   let sourceRecord;
   let verifiedSha = null;
+  let dependencies = null;
 
   const resolved = resolveBundle ? await resolveBundle(source, options) : null;
   const bundled = !resolved && ID_PATTERN.test(source) ? listBundledPlugins().find((p) => p.id === source) : null;
@@ -361,6 +406,17 @@ export async function installPlugin(source, options = {}) {
     }
   }
 
+  if (sourceRecord.kind !== 'link') {
+    try {
+      dependencies = await installPluginDependencies(dest, manifest.id);
+    } catch (err) {
+      // A plugin copied without its dependencies would break every plugin
+      // command in this scope, so undo the copy instead of leaving it behind.
+      fs.rmSync(dest, { recursive: true, force: true });
+      throw err;
+    }
+  }
+
   const sha256 = verifiedSha || hashPluginDir(dest).sha256;
   const vaultRoot = vaultForPluginsDir(pluginsDir);
   try {
@@ -380,6 +436,7 @@ export async function installPlugin(source, options = {}) {
     plugin: { id: manifest.id, name: manifest.name, version: manifest.version, dir: dest, scope },
     source: sourceRecord,
     sha256,
+    dependencies,
     compilation
   };
 }
