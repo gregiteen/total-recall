@@ -26,12 +26,12 @@ export const FAILOVER_BOUND_MS = 12_000;
  * Operator pin for which node leads.
  *
  * Lowest-online-IP is deterministic, but it says nothing about whether that node
- * can actually run the daemon. On this mesh the shared droplet holds the lowest
- * IP (100.64.0.1) and runs no Total Recall at all — it captured leadership
- * permanently, so it could never serve `/api/secrets/sync` and every other node
- * idled as a follower: no research, no dream cycle, no surface recompile,
- * anywhere. Followers skip the task loop entirely, so "lowest IP" quietly became
- * "nobody works".
+ * can actually run the daemon. A shared or infrastructure node can hold the
+ * lowest address while running no Total Recall at all, so it captures
+ * leadership permanently and can never serve `/api/secrets/sync`; every other
+ * node idles as a follower: no research, no dream cycle, no surface recompile,
+ * anywhere. Followers skip the task loop entirely, so "lowest IP" quietly
+ * became "nobody works".
  *
  * Set `TR_LEADER_IP` to the mesh IP of the machine that owns the canonical brain
  * on EVERY node that runs Total Recall, so they all agree on the answer. A node

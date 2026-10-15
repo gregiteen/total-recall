@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-mesh",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Headscale and Tailscale SSH control-server mesh administration and node discovery",
   "scripts": {

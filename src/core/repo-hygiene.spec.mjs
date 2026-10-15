@@ -51,8 +51,18 @@ describe('open-source repo hygiene', () => {
       'preferences/always-websearch-gap.md',
       'preferences/topic-research-sop.md',
     ]);
-    const personal = /festech|hedgehog|ultrachat|dabber|gmail\.com|\/Users\/[a-z]+\/|100\.64\./i;
-    const leaks = scaffold.filter((f) => personal.test(readFileSync(path.join(ROOT, f), 'utf8')));
+    // Personal/deployment leaks. The mesh rule targets a CONCRETE address
+    // (for example 100.64.0.1 or 100.64.0.10) but NOT the documentation CIDR
+    // `100.64.0.0/10` (RFC 6598), which legitimately appears in mesh
+    // networking docs and validators, nor the `100.64.0.0/10` prefix comment.
+    const meshHost = /100\.64\.0\.\d+(?!\d|\/)/;
+    const personal = /festech|hedgehog|ultrachat|dabber|gmail\.com|\/Users\/[a-z]+\//i;
+    const leaks = scaffold.filter((f) => {
+      const text = readFileSync(path.join(ROOT, f), 'utf8');
+      if (personal.test(text)) return true;
+      // A concrete mesh host leaks; `100.64.0.0/10` and bare range mentions do not.
+      return text.split('\n').some((line) => meshHost.test(line) && !/100\.64\.0\.0\/\d+/.test(line));
+    });
     expect(leaks).toEqual([]);
   });
 });

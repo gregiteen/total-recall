@@ -28,6 +28,70 @@ const retentionDays = () => {
 };
 
 /**
+ * Max bytes a single daily log may reach before it is rotated
+ * (TR_LOG_MAX_BYTES, default 64 MiB, 0 disables). Age-only retention is not
+ * enough: one runaway day reached 1.5 GB and filled the disk, so a size cap is
+ * enforced on every write.
+ */
+const maxLogBytes = () => {
+  const n = Number(process.env.TR_LOG_MAX_BYTES ?? 64 * 1024 * 1024);
+  return Number.isFinite(n) && n >= 0 ? n : 64 * 1024 * 1024;
+};
+
+/** Total bytes allowed across all daily logs (TR_LOG_TOTAL_MAX_BYTES, default 512 MiB, 0 disables). */
+const maxTotalLogBytes = () => {
+  const n = Number(process.env.TR_LOG_TOTAL_MAX_BYTES ?? 512 * 1024 * 1024);
+  return Number.isFinite(n) && n >= 0 ? n : 512 * 1024 * 1024;
+};
+
+/**
+ * Rotates the active log when it passes the size cap, and trims the oldest
+ * daily logs until the total budget is met. Runs at most once per minute per
+ * process; never throws.
+ */
+let lastSizeCheck = 0;
+export function enforceLogSize(now = Date.now()) {
+  if (now - lastSizeCheck < 60000) return 0;
+  lastSizeCheck = now;
+  const perFile = maxLogBytes();
+  const total = maxTotalLogBytes();
+  if (perFile === 0 && total === 0) return 0;
+  let acted = 0;
+  try {
+    const active = getLogFile();
+    if (perFile > 0) {
+      try {
+        const size = fs.statSync(active).size;
+        if (size > perFile) {
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          fs.renameSync(active, `${active}.${stamp}.rotated`);
+          acted++;
+        }
+      } catch { /* not created yet */ }
+    }
+    if (total > 0) {
+      const entries = [];
+      let sum = 0;
+      for (const name of fs.readdirSync(LOG_DIR)) {
+        if (!/^system-\d{4}-\d{2}-\d{2}\.jsonl(\.|$)/.test(name)) continue;
+        const full = path.join(LOG_DIR, name);
+        let st;
+        try { st = fs.statSync(full); } catch { continue; }
+        entries.push({ full, size: st.size, mtime: st.mtimeMs });
+        sum += st.size;
+      }
+      entries.sort((a, b) => a.mtime - b.mtime);
+      for (const e of entries) {
+        if (sum <= total) break;
+        if (e.full === active) continue;
+        try { fs.unlinkSync(e.full); sum -= e.size; acted++; } catch { /* in use */ }
+      }
+    }
+  } catch { /* directory unreadable */ }
+  return acted;
+}
+
+/**
  * Deletes system-YYYY-MM-DD.jsonl files older than the retention window.
  * Runs at most once per calendar day per process; never throws.
  */
@@ -93,6 +157,7 @@ export const logger = {
 
     try {
       pruneOldLogs();
+      enforceLogSize();
       fs.appendFileSync(getLogFile(), line);
     } catch (e) {
       // If we fail to write to log file, we still printed to stderr

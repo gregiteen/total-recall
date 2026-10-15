@@ -8,7 +8,7 @@ Inspect `crm settings` before `settings set --data JSON`; configured host brandi
 
 For portability, inspect `crm vault status`, then `vault export /absolute/file.json`. Import into a new absolute destination with `vault import FILE --destination DIR`; review the dry run before `--commit`. Never merge into an existing directory. Supported export contains canonical business Markdown and attachments, excluding provider/auth credentials, private client state, caches, event/idempotency history and personal TR brains. Reinitialize authentication and provider connections; schedules remain disabled until explicitly configured and verified.
 
-CRM credential routing now requires an explicit absolute selected auth brain and CRM instance. User/operator secrets use structured auth get, stdin writes, exact readback and verified deletion; ambient CRM_API_KEY/DABBER_API_KEY, automatic privileged key issuance, production isolated-memory storage and stale-cache success are removed.
+CRM credential routing now requires an explicit absolute selected auth brain and CRM instance. User/operator secrets use structured auth get, stdin writes, exact readback and verified deletion; ambient CRM_API_KEY/CRM_INSTANCE_API_KEY, automatic privileged key issuance, production isolated-memory storage and stale-cache success are removed.
 
 Local integration settings now route credential fields through instance-scoped CONFIG_<FIELD> auth refs. The settings file and CRM peer sync carry no credential values. Corrupt/nested settings and normal reads of legacy plaintext credentials fail explicitly. Run `total-recall crm credentials migrate-local` only for explicit local_config migration: preflight conflicts, verify every readback, retain original source on errors, refuse cleanup if the source changes, then atomically replace the file. This does not migrate OAuth token files, CLI credential files or vault session/password records.
 
@@ -18,4 +18,4 @@ Verification: 31 isolated Python tests and one Node→Python→auth-port CLI mig
 
 The CRM remote-check transfer now uses an explicit tracked/new-source allowlist, excluding vault/private/credential files and symlinks. The final Node suite passes both CLI migration and archive sentinel tests (2 tests, exit 0); all 19 selected source files match the mini snapshot. This does not certify the whole remote-check pipeline or whole CRM runtime.
 
-Generated CRM API transport now uses auth_headers exclusively, ignores ambient CRM/DABBER API keys, and never starts a local daemon. Its two actual-function boundary tests are included in the 31-test result.
+Generated CRM API transport now uses auth_headers exclusively, ignores ambient CRM/instance API keys, and never starts a local daemon. Its two actual-function boundary tests are included in the 31-test result.
