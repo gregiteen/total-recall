@@ -1,3 +1,21 @@
+## 3.39.3 — 2026-10-15
+
+- Install a copied plugin's declared runtime dependencies. A plugin whose
+  `package.json` declares dependencies was copied without them, and because the
+  loader imports every installed plugin at load time, a single unresolvable
+  import aborted every `total-recall plugin` command in that scope — not just
+  the plugin that owned it. Installing now runs the dependency install, reports
+  how many packages landed, and undoes the copy when the install fails so a
+  plugin can never be left behind in a state that breaks the subsystem. Linked
+  plugins are developer checkouts and are left untouched.
+- Let a brain configure its instruction token budget. The rule sections are
+  measured in characters, but the token total that had to hold them was fixed
+  at 4000 (2500 for the bootstrap shim), so a brain with rich required rules
+  overflowed and wrote no instruction surface at all. `surface.yml`
+  `budget.total_tokens` / `budget.bootstrap_total_tokens` now override it, with
+  `TR_CONTEXT_BUDGET_TOKENS` as the outermost override, using the same
+  precedence as the rule budgets.
+
 ## 3.39.2 — 2026-10-14
 
 - Ship the plugin state and document stores that installed plugins import at
