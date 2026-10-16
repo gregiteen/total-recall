@@ -5,7 +5,7 @@ import yaml from 'yaml';
 import os from 'os';
 import { spawn, spawnSync } from 'node:child_process';
 import { logger } from './logger.mjs';
-import { agentDir, brainDir, googleApiKey, tavilyApiKey, braveApiKey, exaApiKey, serperApiKey, githubToken, embedModel } from './config.mjs';
+import { agentDir, brainDir, googleApiKey, tavilyApiKey, braveApiKey, exaApiKey, serperApiKey, githubToken, embedModel, surfaceDir, instructionsFilePath } from './config.mjs';
 import { checkBudgetSafety } from './usage-tracker.mjs';
 import { validateCommand } from './sandbox.mjs';
 
@@ -154,10 +154,15 @@ export function loadRuntimeConfig(_configPath) {
   }
 
   // Tier D: Check SSSS Compiled Memory Preference Surface
-  // Surfaces live at agent root / repo root — not under brainDir (…/skills/total-recall/)
+  // Surfaces live at the workspace root -- the repo root for a project, and the
+  // agent dir for global. Ask the one owner of that rule first; the remaining
+  // entries are tolerated legacy/alternate spellings, not equal candidates.
   if (!preferredAgent) {
     try {
       const checkPaths = [
+        instructionsFilePath(),
+        path.join(surfaceDir(), 'AGENTS.md'),
+        path.join(surfaceDir(), 'GEMINI.md'),
         path.join(agentDir, 'INSTRUCTIONS.md'),
         path.join(agentDir, 'AGENTS.md'),
         path.join(agentDir, 'GEMINI.md'),

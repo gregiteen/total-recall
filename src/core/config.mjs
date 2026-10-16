@@ -210,6 +210,31 @@ export const {
   remoteVaultSync,
 } = config;
 
+/**
+ * The directory the compiled instruction surface belongs in.
+ *
+ * This is the WORKSPACE ROOT, which is not always the agent dir:
+ *   global  -> <home>/.agent   (there the agent dir IS the workspace root)
+ *   project -> <projectRoot>   (the repo root, NOT <repo>/.agent)
+ *
+ * Harnesses read `AGENTS.md`/`CLAUDE.md` at the workspace root, so a surface
+ * written into `<repo>/.agent/` is never loaded -- yet the write succeeds and
+ * the command reports success. Core modules must use this rather than
+ * `agentDir`, and must not each re-derive the rule.
+ */
+export function surfaceDir() {
+  if (process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR) {
+    return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR;
+  }
+  const project = detectProjectBrain();
+  return project?.projectRoot || agentDir;
+}
+
+/** Absolute path of the canonical instruction surface for the active layer. */
+export function instructionsFilePath() {
+  return path.join(surfaceDir(), 'INSTRUCTIONS.md');
+}
+
 // ─── Layered Brain Resolution ───────────────────────────────────────────────
 
 /**
@@ -234,19 +259,24 @@ export function detectProjectBrain(startDir = process.cwd()) {
   const homeDir = os.homedir();
   while (dir !== path.dirname(dir)) {
     if (dir === homeDir) break; // don't detect global as project
-    const candidate = path.join(dir, '.agent', 'skills', 'total-recall');
-    if (fs.existsSync(path.join(candidate, 'SKILL.md'))) {
-      return {
-        agentDir: path.join(dir, '.agent'),
-        // The project brain lives at the detected candidate — NEVER alias it to
-        // globalBrainDir. This returned `globalBrainDir` while the sibling
-        // implementation in src/cli/agent-dir.mjs returned `candidate`, so the
-        // two disagreed about where the project brain is: anything routed
-        // through this function silently operated on the GLOBAL vault while
-        // reporting itself as the 'project' layer.
-        brainDir: candidate,
-        projectRoot: dir,
-      };
+    // Both `.agent` (canonical) and `.agents` (the upstream harness convention)
+    // are supported. This function used to check only `.agent` while its former
+    // sibling in src/cli/agent-dir.mjs checked both, so the two could disagree
+    // about whether a project brain exists at all. It is now the single
+    // implementation and the sibling delegates here.
+    for (const name of ['.agent', '.agents']) {
+      const candidate = path.join(dir, name, 'skills', 'total-recall');
+      if (fs.existsSync(path.join(candidate, 'SKILL.md')) || fs.existsSync(path.join(candidate, 'memory-vault'))) {
+        return {
+          agentDir: path.join(dir, name),
+          // The project brain lives at the detected candidate — NEVER alias it to
+          // globalBrainDir. This returned `globalBrainDir` once, so anything
+          // routed through here silently operated on the GLOBAL vault while
+          // reporting itself as the 'project' layer.
+          brainDir: candidate,
+          projectRoot: dir,
+        };
+      }
     }
     dir = path.dirname(dir);
   }

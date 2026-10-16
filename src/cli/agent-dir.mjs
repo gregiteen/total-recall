@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { detectProjectBrain as detectProjectBrainInConfig } from '../core/config.mjs';
 
 /**
  * Parse --global / --project layer flags from CLI args.
@@ -39,32 +40,18 @@ export function getGlobalBrainDir() {
 }
 
 /**
- * Detect a project-level brain by checking <cwd>/.agent/skills/total-recall/.
- * Returns { agentDir, brainDir } or null.
+ * Detect a project-level brain by checking `<dir>/.agent/skills/total-recall/`
+ * (and the `.agents` spelling). Returns `{ agentDir, brainDir, projectRoot }`.
+ *
+ * Delegates to core/config.mjs so there is exactly ONE implementation of the
+ * rule. These were two independent copies that had already diverged: one
+ * checked `.agent` only, ignored `AGENT_DIR`, and required `SKILL.md`, so they
+ * could disagree about whether a project brain exists at all — and their
+ * callers then disagreed about where the surface belongs.
  */
 export function detectProjectBrain(startDir = process.cwd()) {
   if (process.env._TR_TEST_AGENT_DIR) return null;
-  let dir = startDir;
-  const homeDir = os.homedir();
-  while (dir !== path.dirname(dir)) {
-    if (dir === homeDir) break; // don't detect global as project
-    const candidates = [
-      { dir: path.join(dir, '.agent'), candidate: path.join(dir, '.agent', 'skills', 'total-recall') },
-      { dir: path.join(dir, '.agents'), candidate: path.join(dir, '.agents', 'skills', 'total-recall') }
-    ];
-    for (const c of candidates) {
-      if (fs.existsSync(path.join(c.candidate, 'SKILL.md')) || fs.existsSync(path.join(c.candidate, 'memory-vault'))) {
-        return {
-          agentDir: c.dir,
-          // Project brain lives at the detected candidate — never alias to global.
-          brainDir: c.candidate,
-          projectRoot: dir,
-        };
-      }
-    }
-    dir = path.dirname(dir);
-  }
-  return null;
+  return detectProjectBrainInConfig(startDir);
 }
 
 /**

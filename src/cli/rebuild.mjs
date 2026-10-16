@@ -97,6 +97,21 @@ export async function runRebuild(options = {}) {
 
     // Verify
     const drift = detectIndexDrift(vaultDir, derivedDir);
+
+    // The surface must exist where the harness reads it. Drift detection only
+    // compares the vault to the jsonl indexes, so it reported "0 drift" for
+    // months while the compiled surface was being written to a directory no
+    // harness reads and the real one stayed frozen. Exit code was not evidence
+    // of a write either. Assert the artifact itself.
+    const surfaceStat = fs.statSync(instructionsFile, { throwIfNoEntry: false });
+    if (!surfaceStat || !surfaceStat.isFile() || surfaceStat.size === 0) {
+      console.error(`❌ No instruction surface was written to ${instructionsFile}.`);
+      console.error('   Harnesses read this file; the vault and indexes are otherwise consistent.');
+      logger.error('rebuild', `Instruction surface missing or empty after compile: ${instructionsFile}`);
+      return 1;
+    }
+    console.log(`✅ Surface written: ${instructionsFile} (${surfaceStat.size} bytes)`);
+
     if (!drift.drifted) {
       console.log('✅ Post-build verification passed: 0 drift.');
       logger.info('rebuild', `Rebuild completed successfully. Processed ${stats.nodesProcessed} nodes.`);
