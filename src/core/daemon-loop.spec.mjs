@@ -66,15 +66,21 @@ describe('daemon-loop.mjs', () => {
       expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('daemon.pid'), String(process.pid), { mode: 0o644 });
     });
 
-    it('exits if existing PID is alive', () => {
+    it('exits 0 when another daemon is already serving', () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('99999');
       process.kill.mockReturnValue(true); // process alive
 
       acquirePidLock();
-      
+
       expect(process.kill).toHaveBeenCalledWith(99999, 0);
-      expect(process.exit).toHaveBeenCalledWith(1);
+      // Exit 0, NOT 1. The desired end state -- one daemon serving this brain --
+      // already holds, so this is a successful no-op. Exiting 1 told the
+      // supervisor the service had crashed, so systemd (`Restart=on-failure`)
+      // restarted it every 10s forever: the cloud unit passed a restart counter
+      // of 85 and filled its journal while the real daemon had been up for over
+      // a day. This assertion previously required 1, i.e. it encoded the bug.
+      expect(process.exit).toHaveBeenCalledWith(0);
     });
   });
 
