@@ -249,6 +249,9 @@ export default async function init(args) {
   if (!fs.existsSync(path.join(authSource, 'plugin.json'))) throw new Error('Required auth scaffold is missing');
   if (!fs.existsSync(authTarget) && !opts.dryRun) fs.cpSync(authSource, authTarget, { recursive: true, errorOnExist: true, force: false });
 
+  // Every scaffold plugin's node_modules are wired in Step 2.5, after the skill
+  // tree has been copied into the brain (see the note there).
+
   // ── Step 2: Seed core skills ──
   logStep('2/4', 'Installing core skills into .agent/skills/');
 
@@ -304,9 +307,19 @@ export default async function init(args) {
   }
 
   // ── Step 2.5: Create data directories inside the meta-skill (brain dir) ──
+  // Wire every scaffold plugin's dependencies AFTER the skill copy above: the
+  // plugin directories only exist once the skill tree has been copied, so an
+  // earlier pass silently skipped everything except auth (copied separately).
+  // A plugin shipped without its node_modules aborts plugin loading for the whole
+  // scope — the symptom was 'Cannot find package express' on an unrelated command.
   if (!opts.dryRun) {
     const { preparePluginDependencies } = await import('../core/plugin-dependencies.mjs');
-    preparePluginDependencies(path.join(brainDir, 'plugins', 'auth'));
+    const installedPluginsDir = path.join(brainDir, 'plugins');
+    for (const id of (fs.existsSync(installedPluginsDir) ? fs.readdirSync(installedPluginsDir) : [])) {
+      const target = path.join(installedPluginsDir, id);
+      if (!fs.existsSync(path.join(target, 'package.json'))) continue;
+      preparePluginDependencies(target);
+    }
   }
   logStep('2.5/4', 'Creating user data directories inside meta-skill');
 

@@ -59,3 +59,36 @@ describe('rebuild derived-index discard', () => {
     expect(src()).toMatch(/Embeddings: \$\{stats\.semanticIndexed\}/);
   });
 });
+
+describe('embedding provenance', () => {
+  const src = () => read('src/core/embeddings.mjs');
+
+  it('exposes the serving provider and model, not just the vector', () => {
+    expect(src()).toMatch(/export async function getEmbeddingWithProvenance/);
+    expect(src()).toMatch(/return \{ embedding, provider, model: servedBy \}/);
+  });
+
+  it('keeps getEmbedding returning a bare vector for existing callers', () => {
+    expect(src()).toMatch(/const \{ embedding \} = await getEmbeddingWithProvenance\(text, model\);\n\s+return embedding;/);
+  });
+
+  it('stamps rows with the model that served them, never the requested default', () => {
+    // Ollama answers first and reports a model discovered from the server, so a
+    // row labelled with the hosted default made provenance — and whether the text
+    // ever left the machine — unreadable.
+    const s = src();
+    expect(s).not.toMatch(/\.run\(node\.slug, model, now, contentHash, embeddingJson\)/);
+    expect(s).toMatch(/\.run\(node\.slug, servedModel \|\| model, now, contentHash, embeddingJson\)/);
+    expect(s).not.toMatch(/snippet, model, new Date\(\)\.toISOString\(\), JSON\.stringify\(embedding\)\)/);
+    expect(s).toMatch(/snippet, servedModel \|\| model, new Date\(\)\.toISOString\(\), JSON\.stringify\(embedding\)\)/);
+  });
+
+  it('labels each provider with the model that provider actually defaults to', () => {
+    const s = src();
+    expect(s).toMatch(/provider = 'ollama'; servedBy = ollamaModel;/);
+    expect(s).toMatch(/provider = 'openrouter'; servedBy = 'openai\/text-embedding-3-small';/);
+    expect(s).toMatch(/provider = 'openai'; servedBy = 'text-embedding-3-small';/);
+    // Google resolves its model internally, so record the resolved name.
+    expect(s).toMatch(/provider = 'google'; servedBy = await resolveEmbeddingModel\(model\);/);
+  });
+});

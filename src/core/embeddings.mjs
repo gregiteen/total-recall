@@ -316,6 +316,23 @@ async function getOpenAIEmbedding(text, model = 'text-embedding-3-small') {
 }
 
 export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
+  const { embedding } = await getEmbeddingWithProvenance(text, model);
+  return embedding;
+}
+
+/**
+ * Resolve an embedding together with the provider and model that actually
+ * served it.
+ *
+ * The requested model name is not the serving model: Ollama is tried first and
+ * answers with a model discovered from the server, so a row labelled with the
+ * hosted default would misreport where the vector came from and whether the
+ * text ever left the machine. Persist the returned `provider`/`model`, never
+ * the requested default.
+ *
+ * @returns {Promise<{embedding: number[], provider: string, model: string}>}
+ */
+export async function getEmbeddingWithProvenance(text, model = DEFAULT_EMBED_MODEL) {
   if (process.env.TR_EMBEDDINGS_DISABLED === '1') {
     throw new Error('Semantic embeddings explicitly disabled; local recall remains available');
   }
@@ -325,6 +342,8 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   const openaiKey = resolveOpenAiApiKey();
 
   let embedding;
+  let provider = null;
+  let servedBy = null;
 
   // Local/mesh Ollama first: no key, no spend, no rate limit, and unaffected by
   // a hosted provider running out of credit. The model is discovered from the
@@ -342,6 +361,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
           model: ollamaModel,
           dims: EMBEDDING_DIMS,
         });
+        if (embedding) { provider = 'ollama'; servedBy = ollamaModel; }
       }
     }
   } catch (err) {
@@ -354,6 +374,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   if (!embedding && openRouterKey) {
     try {
       embedding = await getOpenRouterEmbedding(input);
+      if (embedding) { provider = 'openrouter'; servedBy = 'openai/text-embedding-3-small'; }
     } catch (err) {
       logger.debug('embeddings: OpenRouter failed, trying Google fallback', { err: err.message });
     }
@@ -362,6 +383,9 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   if (!embedding && googleKey) {
     try {
       embedding = await getGoogleEmbedding(input, model);
+      // getGoogleEmbedding resolves the concrete model internally; record that,
+      // not the requested default, so provenance is exact.
+      if (embedding) { provider = 'google'; servedBy = await resolveEmbeddingModel(model); }
     } catch (err) {
       logger.debug('embeddings: Google API failed, trying OpenAI fallback', { err: err.message });
     }
@@ -370,6 +394,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
   if (!embedding && openaiKey) {
     try {
       embedding = await getOpenAIEmbedding(input);
+      if (embedding) { provider = 'openai'; servedBy = 'text-embedding-3-small'; }
     } catch (err) {
       logger.debug('embeddings: OpenAI fallback also failed', { err: err.message });
       throw err;
@@ -383,7 +408,7 @@ export async function getEmbedding(text, _unused, model = DEFAULT_EMBED_MODEL) {
     );
   }
 
-  return embedding;
+  return { embedding, provider, model: servedBy };
 }
 
 export function cosineSimilarity(a, b) {
@@ -511,7 +536,10 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
     }
 
     try {
-      const parentEmbedding = await getEmbedding(text, undefined, model);
+      // Record the provider/model that actually served this vector. The row used
+      // to be stamped with the requested default even when local Ollama answered,
+      // which made provenance — and "did this text leave the machine?" — unreadable.
+      const { embedding: parentEmbedding, model: servedModel } = await getEmbeddingWithProvenance(text, model);
       const now = new Date().toISOString();
       const embeddingJson = JSON.stringify(parentEmbedding);
 
@@ -524,7 +552,7 @@ export async function buildEmbeddingsIndex(nodes, derivedDir, opts = {}) {
             generated_at=excluded.generated_at,
             content_sha256=excluded.content_sha256,
             embedding_json=excluded.embedding_json
-        `).run(node.slug, model, now, contentHash, embeddingJson);
+        `).run(node.slug, servedModel || model, now, contentHash, embeddingJson);
         
         const rowId = db.prepare('SELECT rowid FROM vault_embeddings WHERE slug = ?').get(node.slug).rowid;
         vssReplaceVault(db, rowId, embeddingJson);
@@ -658,7 +686,7 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
 
       for (let i = 0; i < chunks.length; i++) {
         const key = chunks.length === 1 ? sessionId : `${sessionId}:chunk-${i}`;
-        const embedding = await getEmbedding(chunks[i], undefined, model);
+        const { embedding, model: servedModel } = await getEmbeddingWithProvenance(chunks[i], model);
         const snippet = chunks[i].slice(0, 300);
         
         db.transaction(() => {
@@ -670,7 +698,7 @@ export async function buildSessionEmbeddingsIndex(sessionsDir, derivedDir, opts 
               model=excluded.model,
               generated_at=excluded.generated_at,
               embedding_json=excluded.embedding_json
-          `).run(key, sessionId, i, chunks.length, snippet, model, new Date().toISOString(), JSON.stringify(embedding));
+          `).run(key, sessionId, i, chunks.length, snippet, servedModel || model, new Date().toISOString(), JSON.stringify(embedding));
           
           const rowId = db.prepare('SELECT rowid FROM session_embeddings WHERE key = ?').get(key).rowid;
           vssReplaceSession(db, rowId, JSON.stringify(embedding));
