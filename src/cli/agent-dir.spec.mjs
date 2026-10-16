@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
+import fs from 'node:fs';
 import {
   parseLayerFlag,
   getGlobalAgentDir,
@@ -8,6 +9,8 @@ import {
   detectProjectBrain,
   resolveAgentDir,
   resolveBrainDir,
+  resolveSurfaceDir,
+  resolveInstructionsFile,
   getBothBrains,
   defaultLayerForCategory,
 } from './agent-dir.mjs';
@@ -87,6 +90,49 @@ describe('agent-dir.mjs', () => {
         expect(resolveAgentDir(layer)).toBe(process.env._TR_TEST_AGENT_DIR);
         expect(resolveBrainDir(layer)).toBe(path.join(process.env._TR_TEST_AGENT_DIR, 'skills', 'total-recall'));
       }
+    } finally {
+      if (prevAgent === undefined) delete process.env.AGENT_DIR; else process.env.AGENT_DIR = prevAgent;
+      if (prevTest === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = prevTest;
+    }
+  });
+
+  it('places the surface at the workspace root, not inside a project .agent dir', () => {
+    // Regression: callers built `instructionsFile` from resolveAgentDir(), which
+    // yields `<project>/.agent` for a project brain. The surface then went to
+    // `<project>/.agent/INSTRUCTIONS.md` while harnesses read
+    // `<project>/INSTRUCTIONS.md`, so the real surface stayed frozen even though
+    // every compile reported "0 drift".
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-surfacedir-'));
+    const brainDir = path.join(root, '.agent', 'skills', 'total-recall');
+    fs.mkdirSync(path.join(brainDir, 'memory-vault'), { recursive: true });
+    fs.writeFileSync(path.join(brainDir, 'SKILL.md'), '# brain\n');
+    const prevAgent = process.env.AGENT_DIR;
+    const prevTest = process.env._TR_TEST_AGENT_DIR;
+    delete process.env.AGENT_DIR;
+    delete process.env._TR_TEST_AGENT_DIR;
+    try {
+      // The agent dir owns the brain; the surface dir is the repo root.
+      expect(resolveAgentDir('auto', root)).toBe(path.join(root, '.agent'));
+      expect(resolveSurfaceDir('auto', root)).toBe(root);
+      expect(resolveInstructionsFile('auto', root)).toBe(path.join(root, 'INSTRUCTIONS.md'));
+      expect(resolveSurfaceDir('auto', root)).not.toBe(path.join(root, '.agent'));
+    } finally {
+      if (prevAgent === undefined) delete process.env.AGENT_DIR; else process.env.AGENT_DIR = prevAgent;
+      if (prevTest === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = prevTest;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the global surface in the agent dir itself', () => {
+    // The global brain is the opposite shape: `~/.agent` IS the workspace root,
+    // so the agent dir and the surface dir must coincide there.
+    const prevAgent = process.env.AGENT_DIR;
+    const prevTest = process.env._TR_TEST_AGENT_DIR;
+    delete process.env.AGENT_DIR;
+    delete process.env._TR_TEST_AGENT_DIR;
+    try {
+      expect(resolveSurfaceDir('global')).toBe(getGlobalAgentDir());
+      expect(resolveInstructionsFile('global')).toBe(path.join(getGlobalAgentDir(), 'INSTRUCTIONS.md'));
     } finally {
       if (prevAgent === undefined) delete process.env.AGENT_DIR; else process.env.AGENT_DIR = prevAgent;
       if (prevTest === undefined) delete process.env._TR_TEST_AGENT_DIR; else process.env._TR_TEST_AGENT_DIR = prevTest;
