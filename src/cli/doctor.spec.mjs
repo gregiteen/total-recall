@@ -127,3 +127,53 @@ describe('doctor listener ownership', () => {
     }
   });
 });
+
+describe('doctor reports instruction-surface freshness', () => {
+  // Regression: a compiled surface that stopped being rewritten was invisible --
+  // `compile` printed "Post-build verification passed: 0 drift" for months while
+  // the file harnesses read stayed frozen, because drift detection compares the
+  // vault against the jsonl indexes and never inspects the surface itself.
+  let logSpy, origEnv;
+
+  beforeEach(() => {
+    origEnv = { ...process.env };
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(os, 'totalmem').mockReturnValue(16 * 1024 * 1024 * 1024);
+    vi.spyOn(os, 'cpus').mockReturnValue(new Array(8).fill({}));
+  });
+
+  afterEach(() => {
+    process.env = origEnv;
+    vi.restoreAllMocks();
+  });
+
+  const logged = () => logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+
+  it('always reports a surface verdict, never silently omitting the section', async () => {
+    // The test environment has no real brain, so the check may legitimately
+    // report that freshness could not be established. What must never happen is
+    // the section being absent, because that is exactly how a frozen surface
+    // stayed invisible for months.
+    await doctor();
+    const out = logged();
+    expect(out).toContain('INSTRUCTION SURFACE FRESHNESS');
+    expect(out).toMatch(/Surface present:|No instruction surface at|No brain at|freshness could not be determined|freshness not verified/);
+  });
+
+  it('warns when no surface exists at the path harnesses read', async () => {
+    const { instructionsFilePath } = await import('../core/config.mjs');
+    const target = instructionsFilePath();
+    const backup = fs.existsSync(target) ? fs.readFileSync(target) : null;
+    try {
+      if (backup) fs.rmSync(target);
+      await doctor();
+      // With no brain present a missing surface is expected and reported as
+      // such; with a brain present the same condition is a real failure. Either
+      // way the verdict must be stated rather than omitted.
+      expect(logged()).toMatch(/No instruction surface at|No brain at|freshness not verified/);
+    } finally {
+      if (backup) fs.writeFileSync(target, backup);
+    }
+  });
+});

@@ -260,6 +260,63 @@ export default async function doctor() {
     }
   }
 
+  // ── Instruction surface freshness ──
+  hr();
+  logInfo('INSTRUCTION SURFACE FRESHNESS');
+
+  // A surface that stopped being rewritten is invisible from the exit code:
+  // `compile` printed "Post-build verification passed: 0 drift" for months while
+  // the file harnesses actually read stayed frozen, because drift detection
+  // compares the vault to the jsonl indexes and never inspects the surface.
+  // This compares the surface against the vault hash it was built from.
+  try {
+    const { instructionsFilePath } = await import('../core/config.mjs');
+    const { computeVaultHash } = await import('../core/surface.mjs');
+    const { resolveBrainDir } = await import('./agent-dir.mjs');
+
+    const surfacePath = instructionsFilePath();
+    const stat = fs.statSync(surfacePath, { throwIfNoEntry: false });
+
+    // Compare against the vault that OWNS this surface. Using the global brain
+    // unconditionally compared a project surface against the global vault and
+    // warned on every run, even straight after a rebuild.
+    const brainDir = resolveBrainDir();
+    const vaultDir = path.join(brainDir, 'memory-vault');
+    const hashFile = path.join(brainDir, 'memory-derived', 'vault-hash.txt');
+    const brainExists = fs.existsSync(vaultDir);
+
+    if (!stat || !stat.isFile() || stat.size === 0) {
+      if (brainExists) {
+        // A brain exists but produced no surface: exactly the silent failure
+        // this check exists to catch, so it is a real failure.
+        logFail(`No instruction surface at ${surfacePath} — this is the file harnesses read.`);
+        failures++;
+      } else {
+        // Nothing initialised here yet; a missing surface is expected.
+        logOk(`No brain at ${brainDir} yet; no surface required.`);
+      }
+    } else {
+      logOk(`Surface present: ${surfacePath} (${stat.size} bytes)`);
+
+      if (!brainExists || !fs.existsSync(hashFile)) {
+        logWarn(`No compiled vault hash at ${hashFile}; freshness not verified.`);
+        warnings++;
+      } else {
+        const stored = fs.readFileSync(hashFile, 'utf8').trim();
+        const current = computeVaultHash(vaultDir);
+        if (stored && current && stored !== current) {
+          logWarn(`Vault ${brainDir} changed since the surface was compiled — run \`total-recall rebuild\`.`);
+          warnings++;
+        } else {
+          logOk(`Surface is current with ${brainDir}.`);
+        }
+      }
+    }
+  } catch (err) {
+    logWarn(`Surface freshness could not be determined: ${err.message}`);
+    warnings++;
+  }
+
   // ── Diagnostics Summary ──
   hr();
   console.log('\n  ┌─────────────────────────────────────────────────────────┐');
