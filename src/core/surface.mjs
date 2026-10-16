@@ -808,8 +808,12 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
 
 /**
  * Compute vault content hash.
+ *
+ * Exported so diagnostics can tell whether a compiled surface is still current
+ * with the vault it was built from. A surface that stopped being rewritten is
+ * invisible from the exit code, so this is what a freshness check compares.
  */
-function computeVaultHash(vaultDir) {
+export function computeVaultHash(vaultDir) {
   const files = walkMd(vaultDir).sort();
   const hash = crypto.createHash('sha256');
   for (const file of files) {
