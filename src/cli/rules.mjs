@@ -9,10 +9,24 @@ import {
 } from '../core/context-policy.mjs';
 import remember from './remember.mjs';
 import edit from './edit.mjs';
+import { readConfigValue } from './config.mjs';
 
 const POLICY_SLUG = 'context-policy';
 const ALL_ACTIONS = [...CONTEXT_ACTIONS];
 const DEFAULT_BUDGET = 4000;
+
+/** Budget for capsule checks: --budget, else the context_budget setting, else 4000. */
+function resolveBudget(flags) {
+  const explicit = Number(flags.budget);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  for (const layer of ['project', 'global']) {
+    try {
+      const value = readConfigValue('context_budget', layer);
+      if (Number.isFinite(value) && value > 0) return value;
+    } catch { /* fall through to the next layer */ }
+  }
+  return DEFAULT_BUDGET;
+}
 
 function help() {
   console.log(`
@@ -23,8 +37,8 @@ function help() {
     audit   [--budget N] [--top N] [--json]   Capsule size per action, largest rules, curation health
     draft   [--all] [--actions a,b] [--out F]  Write a policy scaffold (original text as directives) to shorten
     apply   <file> [--dry-run] [--allow-exclude]  Validate a policy file and merge it into this repo's policy node
-    verify  [--budget N]                       Exit 1 on stale/orphan curation or an action capsule over budget
-    prune   [--apply] [--archive]              Drop stale policy entries; list (or archive) expired/superseded/duplicate rules
+    verify  [--budget N] [--json]              Exit 1 on stale/orphan curation or an action capsule over budget
+    prune   [--apply] [--archive] [--json]     Drop stale policy entries; list (or archive) expired/superseded/duplicate rules
 
   Workflow: audit -> draft -> shorten each directive by hand (keep every operative
   constraint; history and quotes stay in the original rule) -> apply -> verify.
@@ -95,7 +109,7 @@ function parseFlags(args, valued = []) {
 
 function audit(args) {
   const { flags } = parseFlags(args, ['budget', 'top']);
-  const budget = Number(flags.budget) || DEFAULT_BUDGET;
+  const budget = resolveBudget(flags);
   const state = loadState();
   const curated = curatedRules(state.nodes);
   const rows = curated.filter(n => RULE_CATEGORIES.has(n.category) && n.status === 'active').map(n => {
@@ -212,14 +226,17 @@ async function apply(args) {
 
 function verify(args) {
   const { flags } = parseFlags(args, ['budget']);
-  const budget = Number(flags.budget) || DEFAULT_BUDGET;
+  const budget = resolveBudget(flags);
   const state = loadState();
   const problems = [];
   if (state.health === 'ambiguous' || state.health === 'malformed') problems.push(`policy is ${state.health}; curation is ignored`);
   for (const id of state.stale) problems.push(`stale curation: ${id} (rule edited; full text in use)`);
   for (const id of state.orphan) problems.push(`orphan curation: ${id} (rule no longer exists)`);
-  for (const s of sizes(state)) if (s.actions !== '(none)' && s.tokens > budget) problems.push(`capsule for ${s.actions} is ${s.tokens} tokens > ${budget}`);
-  if (problems.length) { for (const p of problems) console.log(`✖ ${p}`); process.exitCode = 1; return; }
+  const capsules = sizes(state).filter(s => s.actions !== '(none)').map(s => ({ actions: s.actions, tokens: s.tokens, rules: s.count, withinBudget: s.tokens <= budget }));
+  for (const s of capsules) if (!s.withinBudget) problems.push(`capsule for ${s.actions} is ${s.tokens} tokens > ${budget}`);
+  const ok = problems.length === 0;
+  if (flags.json) { console.log(JSON.stringify({ ok, health: state.health, budget, capsules, problems }, null, 1)); if (!ok) process.exitCode = 1; return; }
+  if (!ok) { for (const p of problems) console.log(`✖ ${p}`); process.exitCode = 1; return; }
   console.log(`✔ policy ${state.health}; every action capsule within ${budget} tokens`);
 }
 
@@ -238,6 +255,15 @@ async function prune(args) {
   const expired = active.filter(n => n.expires_at && Date.parse(n.expires_at) <= now);
   const superseded = active.filter(n => n.superseded_by);
   const candidates = [...new Set([...expired, ...superseded, ...dup])].filter(n => n._layer !== 'global');
+  if (flags.json) {
+    console.log(JSON.stringify({
+      stale: state.stale,
+      orphan: state.orphan,
+      candidates: candidates.map(n => ({ slug: n.slug, category: n.category })),
+      counts: { candidates: candidates.length, expired: expired.length, superseded: superseded.length, duplicate: dup.length },
+    }, null, 1));
+    return;
+  }
   console.log(`Stale policy entries: ${state.stale.length}; orphan: ${state.orphan.length}`);
   console.log(`Archive candidates (project rules): ${candidates.length} (expired ${expired.length}, superseded ${superseded.length}, duplicate ${dup.length})`);
   for (const n of candidates) console.log(`  ${n.slug}`);
