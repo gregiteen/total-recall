@@ -19,7 +19,6 @@ Total Recall is working memory and the operation toolbox. Before decisions about
 | Remember, recall, context, compile, dream, proposals, vault | Core portable memory and SSSS contracts | [Memory and instructions](references/memory.md) |
 | Credentials, passwords, sessions, passkeys, PATs, encryption, rotation, projections, sync | `total-recall auth --help`; `auth secret --help` | [Auth and secrets](references/auth.md) |
 | Documentation hubs and graph ingestion | `total-recall openwiki --help`; `openwiki hubs --json` | [OpenWiki](references/openwiki.md) |
-| Accounts, buyers, records, branding, portable CRM instances | `total-recall crm status`; `crm menu` | [CRM](references/crm.md) |
 | Nodes, access, enrollment, control server, presence, dispatch | `total-recall mesh --help` | [Mesh](references/mesh.md) |
 | Install, author, configure and run plugins | `total-recall plugin --help`; `plugin list --json` | [Plugins](references/plugins.md) |
 | Machines, networks, fleet audits and verified hardening | `total-recall security status --json`; owning plugin skill | [Security](references/security.md) |
