@@ -1,0 +1,20 @@
+[
+  {
+    "id": "push-eval-skill-md",
+    "description": "Verify that SKILL.md exists with trigger-optimized description",
+    "command": "test -f .agent/skills/push/SKILL.md",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "push-eval-reference-doc",
+    "description": "Verify that npm publishing reference file exists",
+    "command": "test -f .agent/skills/push/references/npm-publishing.md",
+    "expected_exit_code": 0
+  },
+  {
+    "id": "push-eval-release-script",
+    "description": "Verify that the interactive automation release script exists",
+    "command": "test -f .agent/skills/push/scripts/release.mjs",
+    "expected_exit_code": 0
+  }
+]

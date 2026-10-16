@@ -1,0 +1,6 @@
+[
+  {"name":"thin-overlay","assertion":"Overlay references shared lifecycle and Action Log mechanics, contains only verified Total Recall differences, and never hardcodes active phase, model, CPU load or direct-trunk push authorization.","severity":"error"},
+  {"name":"actual-cli-and-vault-boundary","assertion":"Source checkout operations use node bin/total-recall.mjs where supported; vault mutations use CLI/API while ordinary docs/projects tracker edits remain documentation operations.","severity":"error"},
+  {"name":"actual-test-coverage","assertion":"Overlay names actual package/config gates and sanctioned background test host, distinguishing main Vitest exclusions from separately verified skill helpers and provider/deployment evidence.","severity":"error"},
+  {"name":"shared-helper-delegation","assertion":"Local overlay helpers delegate to the installed shared PM implementation and fail clearly when it is absent, rather than keeping duplicated stale or echo-only validation.","severity":"error"}
+]
