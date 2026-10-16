@@ -300,6 +300,22 @@ export async function run(argv = []) {
   const args = Array.isArray(argv) ? argv.slice(3) : [];
   const sub = args[0] || "status";
   const json = args.includes("--json");
+  const wantsHelp = args.includes("--help") || args.includes("-h");
+
+  if (wantsHelp || sub === "help") {
+    const subs = ["status", ...Object.keys(IMPLEMENTED)];
+    console.log(\`${pluginName} v\${manifest.version}
+
+Usage: total-recall ${id} <subcommand> [options]
+
+Subcommands:
+\${subs.map((s) => \`  \${s}\`).join("\\n")}
+
+Options:
+  --json      Machine-readable output
+  --help, -h  Show this help\`);
+    return;
+  }
 
   if (sub === "status") {
     const status = { plugin: ${JSON.stringify(id)}, implemented: Object.keys(IMPLEMENTED) };
@@ -312,7 +328,7 @@ export async function run(argv = []) {
 
   if (IMPLEMENTED[sub]) return IMPLEMENTED[sub](args.slice(1));
 
-  console.error(\`${pluginName}: "\${sub}" is not implemented.\`);
+  console.error(\`${pluginName}: "\${sub}" is not implemented. Run 'total-recall ${id} --help' for available subcommands.\`);
   process.exitCode = 2;
 }
 export default run;

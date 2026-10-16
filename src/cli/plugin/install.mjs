@@ -33,7 +33,17 @@ export async function installPlugin(args = []) {
       return;
     }
     const { autoCompileSurfaces } = await import('../../core/auto-compile.mjs');
-    if (!await autoCompileSurfaces({ layer: isGlobal ? 'global' : 'project', semantic: false, force: true })) process.exitCode = 1;
+    // Compile the layer the plugin actually landed in. `scope` is not enough on
+    // its own: from a directory with no project brain, projectPluginsDir(cwd)
+    // resolves to the global plugins dir, so a plugin installed into the global
+    // brain still reports scope 'project'. Ask the resolver whether a project
+    // brain exists at all, and otherwise fall back to the global layer — the one
+    // that was really written. Assuming 'project' compiled nothing and printed
+    // "Auto-compile failed: No project brain found" after a successful install.
+    const { resolveBrainDir } = await import('../agent-dir.mjs');
+    let targetLayer = 'global';
+    try { resolveBrainDir('project'); targetLayer = 'project'; } catch { targetLayer = 'global'; }
+    if (!await autoCompileSurfaces({ layer: targetLayer, semantic: false, force: true })) process.exitCode = 1;
   } catch (err) {
     console.error(`❌ ${err.message}`);
     process.exit(1);
