@@ -51,6 +51,27 @@ const SKIP_REL_PREFIXES = [
 ];
 
 /**
+ * Basenames that Total Recall GENERATES and must never ingest back as memory.
+ *
+ * These are the compiled instruction surfaces. They are output, not source: the
+ * brain writes them from the vault, so ingesting them would feed the brain its
+ * own projection — a self-referential loop that grows the vault with copies of
+ * content it already holds. It also fails loudly, because a compiled surface has
+ * no SSSS frontmatter, so every sync logged
+ * "Rejected by SSSS contract: created: Invalid ISO datetime".
+ *
+ * Matched on basename at any depth, since client shims place these at the repo
+ * root and inside per-IDE directories.
+ */
+const GENERATED_SURFACE_FILES = new Set([
+  'INSTRUCTIONS.md',
+  'AGENTS.md',
+  'CLAUDE.md',
+  'GEMINI.md',
+  'COPILOT_INSTRUCTIONS.md',
+]);
+
+/**
  * True when a path relative to the repo root lies inside a projection or
  * generated-output directory.
  */
@@ -58,6 +79,14 @@ function isProjectionPath(relPath) {
   const parts = relPath.split(path.sep);
   // Any path segment named `vault`/`openwiki`/... anywhere in the tree.
   return parts.some((part) => SKIP_REL_PREFIXES.includes(part));
+}
+
+/**
+ * True when a repo file is a Total Recall-generated instruction surface.
+ * Exported so the exclusion rule can be tested directly.
+ */
+export function isGeneratedSurface(relPath) {
+  return GENERATED_SURFACE_FILES.has(path.basename(relPath));
 }
 
 /**
@@ -264,6 +293,16 @@ async function syncRepo(project) {
 
   for (const filePath of mdFiles) {
     const relPath = path.relative(repoPath, filePath);
+
+    // Compiled instruction surfaces are our own output. Record them in the
+    // manifest so a later change is detected normally, but never ingest them.
+    if (isGeneratedSurface(relPath)) {
+      const surfaceHash = hashFile(filePath);
+      if (surfaceHash) newManifest.set(relPath, surfaceHash);
+      skipped++;
+      continue;
+    }
+
     const hash = hashFile(filePath);
     if (!hash) { errors++; continue; }
 
