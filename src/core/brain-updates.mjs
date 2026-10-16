@@ -48,7 +48,13 @@ export function discoverBrainConsumers(roots, { onError } = {}) {
       if (deps.length) consumers.push({ root: real, file, pkg, deps });
     }
     for (const entry of fs.readdirSync(real, { withFileTypes: true })) {
-      if (entry.isDirectory() && !entry.name.startsWith('.') && !ignored.has(entry.name)) walk(path.join(real, entry.name));
+      if (!entry.isDirectory() || ignored.has(entry.name)) continue;
+      // Dot-directories are skipped to avoid descending into .git and similar,
+      // but .agent holds the brain and its plugin installs. A plugin that runs
+      // `npm install` keeps its own node_modules there, and skipping the whole
+      // dot tree left those copies stranded on an old version.
+      if (entry.name.startsWith('.') && entry.name !== '.agent') continue;
+      walk(path.join(real, entry.name));
     }
   }
   for (const root of roots) walk(root);
