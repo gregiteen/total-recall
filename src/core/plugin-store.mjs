@@ -271,11 +271,20 @@ export async function recompileAfterPluginMutation(projectRoot = process.cwd(), 
     // Match the actual destination chosen by install/remove, not an ambient brain override.
     const pluginsDir = isGlobal ? globalPluginsDir() : projectPluginsDir(projectRoot);
     const brainDir = path.dirname(pluginsDir);
+    // `agentDir` is where the brain's own files live: `<project>/.agent` for a
+    // project brain, `~/.agent` for the global one. It owns `skills/` and the
+    // derived catalog, but NOT the instruction surface.
     const agentDir = path.dirname(path.dirname(brainDir));
     const vaultDir = path.join(brainDir, 'memory-vault');
     const skillsDir = path.join(agentDir, 'skills');
     const derivedDir = path.join(brainDir, 'memory-derived');
-    const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
+    // The surface directory is the workspace root, which differs by layer:
+    //   project -> <projectRoot>/INSTRUCTIONS.md  (harnesses read <root>/AGENTS.md)
+    //   global  -> ~/.agent/INSTRUCTIONS.md       (agentDir IS the workspace root)
+    // Using agentDir for both put every project shim in `<project>/.agent/`,
+    // where no harness looks, while compilation still reported success.
+    const surfaceDir = isGlobal ? agentDir : projectRoot;
+    const instructionsFile = path.join(surfaceDir, 'INSTRUCTIONS.md');
     const result = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true, semantic: false });
     if (result.skipped && result.reason === 'stale-surface-code') throw new Error('Instruction compiler is stale; restart the host or run total-recall compile');
     if (isGlobal) {

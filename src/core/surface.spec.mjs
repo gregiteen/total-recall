@@ -72,6 +72,44 @@ describe('compileSurface writes the surface where the harness reads it', () => {
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it('writes client shims beside INSTRUCTIONS.md, never into a nested .agent dir', async () => {
+    // Regression: plugin-store.mjs passed `instructionsFile` as
+    // `<project>/.agent/INSTRUCTIONS.md` for a PROJECT brain, so compilePointers
+    // put `AGENTS.md`/`CLAUDE.md` in `<project>/.agent/` -- a directory no
+    // harness reads. The install still reported `compilation.ok: true`, so every
+    // plugin install silently refreshed nothing the agent actually sees.
+    //
+    // The surface directory is the PROJECT ROOT for a project brain, so all
+    // shims must be siblings of INSTRUCTIONS.md there.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-shimroot-'));
+    const agentDir = path.join(root, '.agent');
+    const skillsDir = path.join(agentDir, 'skills');
+    const vaultDir = path.join(skillsDir, 'total-recall', 'memory-vault');
+    const derivedDir = path.join(skillsDir, 'total-recall', 'memory-derived');
+    const config = path.join(skillsDir, 'total-recall', 'config');
+    for (const d of [vaultDir, derivedDir, path.join(vaultDir, 'invariants'), config]) {
+      fs.mkdirSync(d, { recursive: true });
+    }
+    fs.writeFileSync(path.join(config, 'clients.json'), JSON.stringify(['codex', 'claude-code']));
+    try {
+      await compileSurface({
+        vaultDir, skillsDir, derivedDir,
+        instructionsFile: path.join(root, 'INSTRUCTIONS.md'),
+        force: true, semantic: false,
+      });
+      // Harness-facing shims belong at the project root...
+      for (const file of ['INSTRUCTIONS.md', 'AGENTS.md', 'CLAUDE.md']) {
+        expect(fs.existsSync(path.join(root, file)), `${file} should be at the project root`).toBe(true);
+      }
+      // ...and must NOT be buried in `.agent/`, which is where the bug put them.
+      for (const file of ['AGENTS.md', 'CLAUDE.md', 'INSTRUCTIONS.md']) {
+        expect(fs.existsSync(path.join(agentDir, file)), `${file} must not land in .agent/`).toBe(false);
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 it('renders the same curated operative directive in bootstrap and task surfaces', async () => {

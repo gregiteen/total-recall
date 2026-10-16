@@ -621,6 +621,16 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
   const clientsPath = path.join(brainDirForConfig, 'skills', 'total-recall', 'config', 'clients.json');
   const connectedClients = readConnectedClients(clientsPath);
 
+  // Client shims are written BESIDE INSTRUCTIONS.md, in the same directory, so
+  // the surface directory is decided in exactly one place: `instructionsFile`.
+  //
+  // The two layers place that directory differently, and both are correct:
+  //   global  -> ~/.agent/INSTRUCTIONS.md   (agentDir IS the workspace root)
+  //   project -> <repo>/INSTRUCTIONS.md     (the repo root, not <repo>/.agent)
+  // `plugin-store.mjs` and `rebuild.mjs` are responsible for passing the right
+  // `instructionsFile`; this function must not re-derive or relocate it. Doing
+  // so previously wrote every project shim into `<repo>/.agent/AGENTS.md`, where
+  // no harness looks, while still reporting a successful compilation.
   if (connectedClients !== null) {
     // Only write shims for connected clients
     for (const client of connectedClients) {
