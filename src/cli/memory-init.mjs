@@ -1,7 +1,8 @@
 /** Initialize portable memory without provisioning feature runtimes. */
 import fs from 'node:fs';
 import path from 'node:path';
-import { getGlobalAgentDir, resolveSurfaceDir } from './agent-dir.mjs';
+import { fileURLToPath } from 'node:url';
+import { getGlobalAgentDir } from './agent-dir.mjs';
 import { registerProjectBrain, writeBrainIdentity, VAULT_CATEGORIES } from '../core/memory-brain.mjs';
 
 export default async function init(args = []) {
@@ -25,7 +26,12 @@ export default async function init(args = []) {
   }
   const skillFile = path.join(brainDir, 'SKILL.md');
   if (!fs.existsSync(skillFile)) {
-    fs.copyFileSync(new URL('../../templates/memory/SKILL.md', import.meta.url), skillFile);
+    // Resolve the template by PATH, not `new URL(..., import.meta.url)`. Under a
+    // transform (vitest, and any loader that does not hand back a file: URL)
+    // import.meta.url is not a file URL and the copy throws
+    // "The URL must be of scheme file", which aborted the whole init.
+    const template = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'templates', 'memory', 'SKILL.md');
+    fs.copyFileSync(template, skillFile);
   }
   const existingIdentity = fs.existsSync(path.join(brainDir, 'config', 'brain.json'));
   writeBrainIdentity(brainDir, { name: existingIdentity ? undefined : project ? path.basename(process.cwd()) : 'global',
