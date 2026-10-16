@@ -47,28 +47,29 @@ describe('compileSurface writes the surface where the harness reads it', () => {
     }
   });
 
-  it('still resolves a nested .agent when handed the containing project dir', async () => {
-    // The other legitimate shape: callers that pass the project root, where the
-    // agent dir is `<project>/.agent`. That must keep working.
-    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-proj-'));
-    const agentDir = path.join(project, '.agent');
+  it('keeps the surface inside the agent dir when skillsDir lives there', async () => {
+    // The real global shape: rebuild.mjs computes instructionsFile as
+    // `<agentDir>/INSTRUCTIONS.md` and skillsDir as `<agentDir>/skills`, where
+    // agentDir is `<home>/.agent`. The surface must land IN `.agent`, not in
+    // `<home>`. The buggy code peeled the trailing `.agent` unconditionally.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-proj-'));
+    const agentDir = path.join(home, '.agent');
     const skillsDir = path.join(agentDir, 'skills');
     const vaultDir = path.join(skillsDir, 'total-recall', 'memory-vault');
     const derivedDir = path.join(skillsDir, 'total-recall', 'memory-derived');
     for (const d of [vaultDir, derivedDir, path.join(vaultDir, 'invariants')]) {
       fs.mkdirSync(d, { recursive: true });
     }
-    // Pre-seed the nested surface so the wrapper case is detectable.
-    fs.writeFileSync(path.join(agentDir, 'INSTRUCTIONS.md'), 'placeholder\n');
     try {
       await compileSurface({
         vaultDir, skillsDir, derivedDir,
-        instructionsFile: path.join(project, 'INSTRUCTIONS.md'),
+        instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
         force: true, semantic: false,
       });
       expect(fs.readFileSync(path.join(agentDir, 'INSTRUCTIONS.md'), 'utf8')).toContain('TOTAL RECALL');
+      expect(fs.existsSync(path.join(home, 'INSTRUCTIONS.md'))).toBe(false);
     } finally {
-      fs.rmSync(project, { recursive: true, force: true });
+      fs.rmSync(home, { recursive: true, force: true });
     }
   });
 });

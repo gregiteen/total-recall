@@ -587,27 +587,21 @@ function readConnectedClients(clientsPath) {
  */
 async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const agentDir = path.dirname(instructionsFile);
-  // `instructionsFile` is already `<agentDir>/INSTRUCTIONS.md`, so agentDir is
-  // the directory that must receive the surface. The old code unconditionally
-  // stripped a trailing `.agent`, which relocated the GLOBAL brain's surface:
-  // its instructionsFile is `<home>/.agent/INSTRUCTIONS.md`, whose dirname
-  // basename IS `.agent`, so baseDir became `<home>` and every compile wrote
-  // `<home>/INSTRUCTIONS.md` while `<home>/.agent/INSTRUCTIONS.md` -- the file
-  // the harness actually reads -- stayed frozen at 2026-05-25.
+  // `instructionsFile` is always `<agentDir>/INSTRUCTIONS.md`, so agentDir is
+  // already the directory the surface belongs in. Do not derive it again.
   //
-  // Only peel a wrapper when the caller genuinely handed us a directory that
-  // CONTAINS an agent dir (i.e. agentDir has no INSTRUCTIONS.md but a
-  // `.agent/INSTRUCTIONS.md` exists beneath it). Testing existence of
-  // `agentDir/INSTRUCTIONS.md` alone is not enough: on a first compile that
-  // file does not exist yet, which is exactly when the wrong branch was taken.
-  const baseDir = (() => {
-    const nested = path.join(agentDir, '.agent', 'INSTRUCTIONS.md');
-    const nestedAlt = path.join(agentDir, '.agents', 'INSTRUCTIONS.md');
-    const hasOwnSurface = fs.existsSync(path.join(agentDir, 'INSTRUCTIONS.md'));
-    if (hasOwnSurface) return agentDir;
-    if (fs.existsSync(nested) || fs.existsSync(nestedAlt)) return path.join(agentDir, '.agent');
-    return agentDir;
-  })();
+  // The old code stripped a trailing `.agent` unconditionally. That relocated
+  // the GLOBAL brain's surface: rebuild.mjs (the command Greg actually runs)
+  // sets agentDir to `resolveAgentDir('global')` = `<home>/.agent`, so the
+  // basename IS `.agent`, baseDir became `<home>`, and every compile wrote
+  // `<home>/INSTRUCTIONS.md` while `<home>/.agent/INSTRUCTIONS.md` -- the file
+  // the harness reads -- stayed frozen at 2026-05-25, all while printing
+  // "Post-build verification passed: 0 drift" and exiting 0.
+  //
+  // Both call shapes this repo uses already pass the true surface directory
+  // (rebuild.mjs: `<agentDir>/INSTRUCTIONS.md` with skillsDir `<agentDir>/skills`;
+  // plugin-store.mjs likewise), so the peel was never correct for either.
+  const baseDir = agentDir;
   let injectedCount = 0;
 
   // Always write the canonical INSTRUCTIONS.md
