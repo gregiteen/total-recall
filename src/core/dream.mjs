@@ -7,7 +7,7 @@ import { writeNode, walkMd } from './vault.mjs';
 import { updateNodeInPlace } from './validated-write.mjs';
 import { getNodes } from './vault-cache.mjs';
 import { logger } from './logger.mjs';
-import { agentDir, brainDir } from './config.mjs';
+import { agentDir, brainDir, instructionsFilePath } from './config.mjs';
 import { loadQueue } from './research-queue.mjs';
 
 /**
@@ -596,7 +596,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const skillsDir = path.join(agentDir, 'skills');
   const derivedDir = path.join(brainDir, 'memory-derived');
   const conflictsDir = path.join(brainDir, 'memory-inbox', 'conflicts');
-  const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
+  // Surface belongs at the workspace root (the repo root for a project), not in
+  // the agent dir -- see config.surfaceDir().
+  const instructionsFile = instructionsFilePath();
 
   logger.info('dream', 'Total Recall Dream Cycle Daemon Started');
 

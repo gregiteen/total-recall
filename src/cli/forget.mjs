@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, resolveSurfaceDir } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { isSafeVaultName } from '../core/vault.mjs';
 import { getNodes } from '../core/vault-cache.mjs';
@@ -65,8 +65,10 @@ export default async function forget(args) {
     if (!remainingArgs.includes('--no-compile')) {
       const brainDir = path.dirname(globalVaultDir);
       const agentDir = path.dirname(path.dirname(brainDir));
+      // This branch operates on the GLOBAL vault, so its surface is the global
+      // one. `layer` is not in scope here and must not be invented.
       await compileSurface({ vaultDir: globalVaultDir, skillsDir: path.join(agentDir, 'skills'),
-        derivedDir: path.join(brainDir, 'memory-derived'), instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'), semantic: false });
+        derivedDir: path.join(brainDir, 'memory-derived'), instructionsFile: path.join(resolveSurfaceDir('global'), 'INSTRUCTIONS.md'), semantic: false });
     }
     return;
   }
@@ -109,7 +111,7 @@ export default async function forget(args) {
   const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
   const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
   const skillsDir = path.join(resolvedAgentDir, 'skills');
-  const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
+  const instructionsFile = path.join(resolveSurfaceDir(layer), 'INSTRUCTIONS.md');
   const layerLabel = layer === 'project' ? '[project]' : '[global]';
 
   // Attempt deletion

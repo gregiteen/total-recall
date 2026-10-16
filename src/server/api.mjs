@@ -18,14 +18,17 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import matter from '../core/frontmatter.mjs';
-import { agentDir, brainDir } from '../core/config.mjs';
+import { agentDir, brainDir, surfaceDir, instructionsFilePath } from '../core/config.mjs';
 
 const AGENT_DIR = process.env.AGENT_DIR || agentDir;
 const BRAIN_DIR = process.env.TR_BRAIN || path.join(AGENT_DIR, 'skills', 'total-recall');
 const VAULT_DIR = path.join(BRAIN_DIR, 'memory-vault');
 const SKILLS_DIR = path.join(AGENT_DIR, 'skills');
 const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
-const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+// The surface is the workspace root's INSTRUCTIONS.md, which is NOT the agent
+// dir for a project brain. Serving `<repo>/.agent/INSTRUCTIONS.md` fed the
+// server a file no harness reads.
+const INSTRUCTIONS_FILE = instructionsFilePath();
 const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
 const FILES_DIR = path.join(BRAIN_DIR, 'files');
 const TASKS_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
@@ -526,7 +529,7 @@ You have a REAL browser AND full desktop control. Use them. Navigate, click, typ
     };
 
     try {
-      const instructionsPath = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+      const instructionsPath = instructionsFilePath();
       if (fs.existsSync(instructionsPath)) {
         const instructions = fs.readFileSync(instructionsPath, 'utf8');
         baseSystemPrompt += `\n\n=== TIER 1 HOT MEMORY INSTRUCTIONS ===\n${compressInstructions(instructions)}`;

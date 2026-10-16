@@ -1,7 +1,7 @@
 /** Initialize portable memory without provisioning feature runtimes. */
 import fs from 'node:fs';
 import path from 'node:path';
-import { getGlobalAgentDir } from './agent-dir.mjs';
+import { getGlobalAgentDir, resolveSurfaceDir } from './agent-dir.mjs';
 import { registerProjectBrain, writeBrainIdentity, VAULT_CATEGORIES } from '../core/memory-brain.mjs';
 
 export default async function init(args = []) {
@@ -38,7 +38,10 @@ export default async function init(args = []) {
   const { compileSurface } = await import('../core/surface.mjs');
   const stats = await compileSurface({
     vaultDir: path.join(brainDir, 'memory-vault'), skillsDir: path.join(agentDir, 'skills'),
-    derivedDir: path.join(brainDir, 'memory-derived'), instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+    derivedDir: path.join(brainDir, 'memory-derived'),
+    // This function knows the layer as a boolean, not a `layer` variable, and
+    // already passes projectRoot below. Use the same source of truth.
+    instructionsFile: path.join(project ? process.cwd() : agentDir, 'INSTRUCTIONS.md'),
     projectRoot: project ? process.cwd() : path.dirname(agentDir), semantic: false,
   });
   console.log(`Initialized ${project ? 'project' : 'global'} memory: ${brainDir} (${stats.nodesProcessed} nodes)`);

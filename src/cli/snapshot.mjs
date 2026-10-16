@@ -1,5 +1,5 @@
 import { createSnapshot, listSnapshots, rollbackVault } from '../core/snapshot.mjs';
-import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag, resolveSurfaceDir } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import path from 'path';
 
@@ -92,7 +92,7 @@ export default async function snapshotCli(args) {
         vaultDir: path.join(brainDir, 'memory-vault'),
         skillsDir: path.join(agentDir, 'skills'),
         derivedDir: path.join(brainDir, 'memory-derived'),
-        instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md')
+        instructionsFile: path.join(resolveSurfaceDir(layer), 'INSTRUCTIONS.md')
       });
       
       console.log(`✅ Vault restoration and projection rebuild complete.`);

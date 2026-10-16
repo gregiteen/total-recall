@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { agentDir, brainDir, globalBrainDir } from '../../core/config.mjs';
+import { resolveSurfaceDir } from '../../cli/agent-dir.mjs';
 import { logger } from '../../core/logger.mjs';
 
 export { globalBrainDir };
@@ -20,7 +21,7 @@ export const VAULT_DIR    = path.join(BRAIN_DIR, 'memory-vault');
 export const SKILLS_DIR   = path.join(AGENT_DIR, 'skills');
 export const DERIVED_DIR  = path.join(BRAIN_DIR, 'memory-derived');
 export const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
-export const INSTRUCTIONS = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+export const INSTRUCTIONS = path.join(resolveSurfaceDir(), 'INSTRUCTIONS.md');
 export const FILES_DIR    = path.join(BRAIN_DIR, 'files');
 export const TASKS_DIR    = path.join(BRAIN_DIR, 'scheduler', 'queue');
 export const CONFIG_DIR   = path.join(BRAIN_DIR, 'config');
@@ -123,6 +124,21 @@ export function resolveAllVaultsFromQuery(req, { strict = false } = {}) {
  * @param {string} vaultDir
  * @returns {{ brainDir: string, derivedDir: string, skillsDir: string, instructionsFile: string, sessionsDir: string, inboxDir: string }}
  */
+/**
+ * The workspace root that owns a given agent dir, for surface placement.
+ *
+ * The global brain's agent dir (`~/.agent`) IS its workspace root, but a
+ * project's agent dir (`<repo>/.agent`) is not -- the surface belongs one level
+ * up, at `<repo>`, where harnesses read `AGENTS.md`/`CLAUDE.md`. Choosing
+ * `agentDir` unconditionally buried project surfaces in `<repo>/.agent/`.
+ */
+function surfaceDirForAgentDir(agentDir) {
+  if (path.basename(agentDir) !== '.agent' && path.basename(agentDir) !== '.agents') return agentDir;
+  const parent = path.dirname(agentDir);
+  // `<home>/.agent` is the global brain; anything else is a project root.
+  return parent === os.homedir() ? agentDir : parent;
+}
+
 export function pathsForVault(vaultDir) {
   const brainDir = path.dirname(vaultDir);
   // brainDir = …/.agent/skills/total-recall → agentDir = …/.agent
@@ -132,7 +148,7 @@ export function pathsForVault(vaultDir) {
     brainDir,
     derivedDir: path.join(brainDir, 'memory-derived'),
     skillsDir: path.join(agentDir, 'skills'),
-    instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+    instructionsFile: path.join(surfaceDirForAgentDir(agentDir), 'INSTRUCTIONS.md'),
     sessionsDir: path.join(brainDir, 'sessions'),
     inboxDir: path.join(brainDir, 'memory-inbox'),
   };

@@ -40,6 +40,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { resolveSurfaceDir } from './agent-dir.mjs';
 import yaml from 'yaml';
 import crypto from 'node:crypto';
 import { loadPluginModule } from '../core/plugin-runtime.mjs';
@@ -1689,7 +1690,9 @@ ${fmtLine('Target VFS:   ', '~/.agent/')}
           vaultDir: path.join(BRAIN_DIR, 'memory-vault'),
           skillsDir: path.join(AGENT_DIR, 'skills'),
           derivedDir: path.join(BRAIN_DIR, 'memory-derived'),
-          instructionsFile: path.join(AGENT_DIR, 'INSTRUCTIONS.md'),
+          // This compile reads the hardcoded global brain above, so the surface
+          // must be the global one too; auto-detect would resolve a project.
+          instructionsFile: path.join(resolveSurfaceDir('global'), 'INSTRUCTIONS.md'),
         });
         logOk('Initial compile complete');
       } catch (err) {

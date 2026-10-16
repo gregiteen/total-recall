@@ -62,7 +62,7 @@ export function formatBeautifulDate(isoString) {
  *   7. Accepts direct research instructions from users
  */
 
-import { agentDir, brainDir } from './config.mjs';
+import { agentDir, brainDir, instructionsFilePath } from './config.mjs';
 
 const getAgentDir = () => process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR || agentDir;
 const getBrainDir = () => {
@@ -1311,7 +1311,10 @@ Output ONLY valid JSON.`;
         try {
           const skillsDir = path.join(getAgentDir(), 'skills');
           const derivedDir = path.join(localBrainDir, 'memory-derived');
-          const instructionsFile = path.join(getAgentDir(), 'INSTRUCTIONS.md');
+          // Surface belongs at the workspace root (repo root for a project).
+          // getAgentDir() yields `<repo>/.agent`, so this recompiled a file no
+          // harness reads while reporting success.
+          const instructionsFile = instructionsFilePath();
           const { compileSurface } = await import('./surface.mjs');
           await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile });
           logger.info({

@@ -22,7 +22,7 @@ import crypto from 'node:crypto';
 import { loadQueue } from '../core/research-queue.mjs';
 
 import { totalRecallToken } from '../core/config.mjs';
-import { resolveBrainDir } from './agent-dir.mjs';
+import { resolveBrainDir, resolveSurfaceDir } from './agent-dir.mjs';
 
 function parseArgs(args) {
   const opts = { json: false, brain: null, token: null, help: false };
@@ -123,7 +123,7 @@ export default async function statusCmd(args) {
 
   const brainDir = resolveBrainDir();
   const agentDir = path.dirname(path.dirname(brainDir));
-  const instructionsFile = path.join(path.dirname(agentDir), 'INSTRUCTIONS.md');
+  const instructionsFile = path.join(resolveSurfaceDir(), 'INSTRUCTIONS.md');
   const brainConfig = loadBrainConfig(path.join(brainDir, 'config', 'brain.json'));
   const syncState = loadSyncState(path.join(brainDir, 'config', 'sync-state.json'));
   const clientsRegistry = loadClientsRegistry(path.join(brainDir, 'config', 'clients.json'));

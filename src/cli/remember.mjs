@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag, getBothBrains, defaultLayerForCategory, resolveSurfaceDir } from './agent-dir.mjs';
 import { compileSurface } from '../core/surface.mjs';
 import { writeNodeValidatedAsync } from '../core/validated-write.mjs';
 import { defaultTitleFromBody } from '../core/memory-title.mjs';
@@ -236,7 +236,7 @@ export default async function remember(args) {
   const skillsDir = path.join(resolvedAgentDir, 'skills');
   const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
   const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
-  const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
+  const instructionsFile = path.join(resolveSurfaceDir(layer), 'INSTRUCTIONS.md');
   const layerLabel = layer === 'project' ? '[project]' : '[global]';
 
   // Create individual SSSS v2 node in the vault

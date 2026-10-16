@@ -13,7 +13,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, parseLayerFlag, resolveSurfaceDir } from './agent-dir.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +59,7 @@ export default async function dream(args) {
   const skillsDir = path.join(agentDir, 'skills');
   const derivedDir = path.join(brainDir, 'memory-derived');
   const conflictsDir = path.join(brainDir, 'memory-inbox', 'conflicts');
-  const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
+  const instructionsFile = path.join(resolveSurfaceDir(effectiveLayer), 'INSTRUCTIONS.md');
 
   console.error('\n  🌙 Starting dream cycle...\n');
   const startTime = Date.now();

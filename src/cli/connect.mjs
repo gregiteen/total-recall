@@ -315,6 +315,9 @@ function bootstrapAgentDir(agentDir) {
 }
 
 function readInstructions(cwd, agentDir) {
+  // `cwd` IS the project root the caller means, so read the surface there.
+  // resolveSurfaceDir() would re-detect from process.cwd() and could name a
+  // different project than the caller is operating on.
   const candidates = [
     path.join(cwd, 'INSTRUCTIONS.md'),
     path.join(agentDir, 'INSTRUCTIONS.md')

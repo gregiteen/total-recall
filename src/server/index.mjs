@@ -33,7 +33,7 @@ import { logger, logEvents } from "../core/logger.mjs";
 import { readProcessCommand, entryPathHint, shouldHonorPidLock } from '../core/pid-lock.mjs';
 import { createCoverageCache } from './health-coverage.mjs';
 import { drainActiveEmbeddings } from './routes/sessions.mjs';
-import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv } from '../core/config.mjs';
+import { agentDir as configAgentDir, brainDir as configBrainDir, port as configPort, host as configHost, nodeEnv, instructionsFilePath } from '../core/config.mjs';
 import { getDaemonStatus, ensureDaemonRunning } from '../core/daemon-control.mjs';
 
 
@@ -447,7 +447,10 @@ import os from 'node:os';
 
 app.get('/chat', (req, res) => {
   const agentDir = configAgentDir;
-  const instructionsPath = path.join(configBrainDir, 'INSTRUCTIONS.md');
+  // Was `path.join(configBrainDir, 'INSTRUCTIONS.md')` -- the BRAIN dir, which is
+  // `<agent>/skills/total-recall`, not the workspace root. That path never held
+  // a surface, so this always reported "no instructions".
+  const instructionsPath = instructionsFilePath();
   const hasInstructions = fs.existsSync(instructionsPath);
   const nodeCount = (() => {
     try {
