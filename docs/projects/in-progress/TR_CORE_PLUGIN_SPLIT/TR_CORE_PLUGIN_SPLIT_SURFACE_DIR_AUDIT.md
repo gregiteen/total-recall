@@ -114,11 +114,14 @@ copy of the rule.
       "0 drift" over a frozen file. Verified live. (`71a71e4`)
 - [x] TR-003 is re-opened and tracked against the above.
 
-**Honest gap:** a general "surface is stale relative to the vault over time"
-doctor check was NOT built. What exists is a post-compile assertion that the
-surface was written and is non-empty, which closes the specific silent no-op
-this audit found. A staleness-over-time check remains a real improvement and is
-not claimed here.
+**Staleness check:** BUILT. `total-recall doctor` now compares the surface
+against the vault hash it was built from, using the brain that owns that surface
+(`resolveBrainDir()`), so a surface that went stale over time is reported
+instead of silently passing. Verified on the real system in both directions:
+"Surface is current with …" normally, and a warning when the stored hash is
+deliberately made stale. A missing surface is a failure only when a brain exists
+to have produced one, so a fresh machine does not fail its own diagnostics.
+(`ffab86f`)
 
 ## 6b. Leader topology (found while verifying; not in the original scope)
 
