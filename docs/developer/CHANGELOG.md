@@ -129,6 +129,8 @@
 
 ## Unreleased
 
+- The `context` capsule budget is a setting instead of a fixed 4000: `total-recall config set context_budget 7000` (stored per brain in `config/surface.yml`, project overrides global). Raise it when every rule should load for every action rather than being narrowed by applicability; `--budget` still overrides per call. Previously the 4000 default made an all-rules capsule exit 2 with `ready:false`, so the mandatory `ready:true` gate could not be satisfied without passing `--budget` on every call.
+- `rules verify --json` and `rules prune --json` emit machine-readable reports (`ok`, `budget`, per-action `capsules` with `tokens`/`rules`/`withinBudget`, and `problems`), matching the existing `--json` support in `rules audit` and `rules draft`. `verify` keeps exiting 1 on any violation, including under `--json`.
 - `skill register <path>` is authoritative for `repo_scoped`: a skill whose own SKILL.md no longer declares repo scope clears a stale catalog flag. Discovery stays fail-closed.
 
 ## 3.32.4

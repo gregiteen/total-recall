@@ -128,8 +128,9 @@ action and the largest rules; `draft --out policy.json` scaffolds the policy wit
 each rule's original text; shorten the directives by hand (keep every operative
 constraint), narrow `actions`, or exclude locally with `enabled:false` plus a
 `reason`; `apply policy.json` validates hashes and merges into the single
-`context:policy` decision; `verify` exits 1 on stale or orphan curation or an
-action capsule over budget; `prune [--apply] [--archive]` drops stale entries and
+`context:policy` decision; `verify [--json]` exits 1 on stale or orphan curation or
+an action capsule over budget; `prune [--apply] [--archive] [--json]` drops stale
+entries and
 lists expired, superseded or duplicate rules. Originals are never modified.
 
 ### `recall`

@@ -93,4 +93,35 @@ describe('rules CLI', () => {
     expect(log.mock.calls.flat().join('\n')).toContain('dup-rule');
     expect(writes).toEqual([]);
   });
+
+  it('verify --json emits machine-readable capsule sizes and keeps exit 1 when over budget', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await rules(['verify', '--budget', '10', '--json']);
+    const report = JSON.parse(log.mock.calls.flat().join('\n'));
+    expect(report.ok).toBe(false);
+    expect(report.budget).toBe(10);
+    expect(report.problems.join(' ')).toMatch(/> 10/);
+    expect(report.capsules.every(c => typeof c.tokens === 'number' && typeof c.rules === 'number' && typeof c.withinBudget === 'boolean')).toBe(true);
+    expect(report.capsules.some(c => !c.withinBudget)).toBe(true);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('verify --json reports ok and exits 0 when every capsule fits', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await rules(['verify', '--budget', '100000', '--json']);
+    const report = JSON.parse(log.mock.calls.flat().join('\n'));
+    expect(report.ok).toBe(true);
+    expect(report.problems).toEqual([]);
+    expect(report.capsules.every(c => c.withinBudget)).toBe(true);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('prune --json emits candidates without the dry-run prose', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await rules(['prune', '--json']);
+    const report = JSON.parse(log.mock.calls.flat().join('\n'));
+    expect(report.candidates.map(c => c.slug)).toContain('dup-rule');
+    expect(report.counts.duplicate).toBe(1);
+    expect(writes).toEqual([]);
+  });
 });

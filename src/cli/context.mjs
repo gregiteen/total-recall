@@ -5,6 +5,7 @@ import { mergeGlobalRuleNodes, legacyRuleContributions } from '../core/surface.m
 import { compileContext, capsuleResponse, renderCapsule } from '../core/context-compiler.mjs';
 import { isBrainEnabled } from '../core/brain-registry.mjs';
 import { surfaceInputsHash } from '../core/command-surface.mjs';
+import { readConfigValue } from './config.mjs';
 
 export default async function context(args = []) {
   if (!args.length || args.includes('--help')) {
@@ -13,7 +14,16 @@ export default async function context(args = []) {
   }
   const { layer, remainingArgs } = parseLayerFlag(args);
   const query = remainingArgs[0];
-  let actions = [], budget = 4000, format = 'text', includeKnowledge = false, debug = false;
+  const configuredBudget = (() => {
+    for (const candidate of [layer === 'global' ? 'global' : 'project', 'global']) {
+      try {
+        const value = readConfigValue('context_budget', candidate);
+        if (Number.isFinite(value) && value > 0) return value;
+      } catch { /* fall through to the next layer */ }
+    }
+    return undefined;
+  })();
+  let actions = [], budget = configuredBudget ?? 4000, format = 'text', includeKnowledge = false, debug = false;
   for (let i = 1; i < remainingArgs.length; i++) {
     const flag = remainingArgs[i];
     if (flag === '--knowledge') { includeKnowledge = true; continue; }

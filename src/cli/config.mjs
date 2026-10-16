@@ -25,6 +25,11 @@ const KEY_MAP = {
   'rules_invariants_budget_chars': { file: 'surface', path: 'rules.invariants_budget_chars', type: 'number' },
   'rules_preferences_budget_chars': { file: 'surface', path: 'rules.preferences_budget_chars', type: 'number' },
   'rules_corrections_budget_chars': { file: 'surface', path: 'rules.corrections_budget_chars', type: 'number' },
+
+  // Token budget for the `context` instruction capsule. Raise it above the
+  // default when every rule should load for every action instead of being
+  // narrowed by applicability.
+  'context_budget': { file: 'surface', path: 'context.budget', type: 'number' },
 };
 
 function resolveKeyInfo(key) {
@@ -113,6 +118,23 @@ function castAndValidate(valueStr, type, allowedValues) {
   return valueStr;
 }
 
+export function readConfigValue(key, layer = 'global') {
+  const info = KEY_MAP[key];
+  if (!info) throw new Error(`Unknown config key: ${key}`);
+  const configDir = path.join(resolveBrainDir(layer), 'config');
+  const filePath = path.join(configDir, `${info.file}.yml`);
+  if (!fs.existsSync(filePath)) return undefined;
+  let parsed = {};
+  try { parsed = yaml.parse(fs.readFileSync(filePath, 'utf8')) || {}; } catch { return undefined; }
+  const parts = info.path.split('.');
+  let current = parsed;
+  for (const part of parts) {
+    if (current === null || current === undefined) return undefined;
+    current = current[part];
+  }
+  return current;
+}
+
 export default async function configCommand(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
   const command = remainingArgs[0] || 'get';
@@ -140,6 +162,7 @@ export default async function configCommand(args) {
     rules_invariants_budget_chars    Characters for the invariants section of CLAUDE.md/AGENTS.md (number; default 9000)
     rules_preferences_budget_chars   Same for preferences (default 4000)
     rules_corrections_budget_chars   Same for corrections (default 8000)
+    context_budget               Token budget for the context instruction capsule (number; default 4000)
     allowed_origins              CORS origins (e.g. "http://localhost:5173,http://localhost:3000")
 
   Examples:
