@@ -304,7 +304,7 @@ export async function run(argv = []) {
 
   if (wantsHelp || sub === "help") {
     const subs = ["status", ...Object.keys(IMPLEMENTED)];
-    console.log(\`${pluginName} v\${manifest.version}
+    console.log(\`${pluginName} v${manifest.version}
 
 Usage: total-recall ${id} <subcommand> [options]
 
@@ -510,7 +510,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf
 
 test('manifest identifies the plugin', () => {
   assert.equal(manifest.id, ${JSON.stringify(id)});
-  assert.match(manifest.version, /^\\\\d+\\\\.\\\\d+\\\\.\\\\d+/);
+  assert.match(manifest.version, /^\\d+\\.\\d+\\.\\d+/);
   assert.equal(manifest.license, 'MIT');
 });
 
