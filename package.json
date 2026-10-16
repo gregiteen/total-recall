@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.39.4",
+  "version": "3.39.5",
   "description": "Portable SSSS memory, local retrieval and task instructions with explicit plugin loading.",
   "type": "module",
   "bin": {

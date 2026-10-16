@@ -1,3 +1,39 @@
+## 3.39.5 — 2026-10-16
+
+- Allow skills to live in git. The hygiene spec forbade every path under
+  `.agent/`, but git does not descend into an ignored directory — so a blanket
+  rule left 11 skill directories (~317 files) committed by `9e83665` while the
+  spec, added later, called all 317 violations and the suite went red on `main`.
+  The two are reconcilable because the invariant was never "no skills"; it was
+  "no per-USER state in an open-source package". `.agent/skills/` is now allowed
+  and everything else under those directories is still forbidden, so memory
+  vaults, handoffs, secrets and IDE projections remain blocked — including a
+  `memory-vault/` nested inside a skill directory.
+- Actually ship the daily-log size cap. The cap itself (`TR_LOG_MAX_BYTES`,
+  64 MiB per file, plus `TR_LOG_TOTAL_MAX_BYTES`, 512 MiB across all logs) landed
+  after the 3.39.4 release commit, but the version was never moved past 3.39.4 —
+  so the fix has been carrying a version that npm already had, and no install
+  could ever receive it. The published 3.39.4 tarball's `logger.mjs` is the old
+  age-only version. Because `total-recall update` compares semver ranges rather
+  than file contents, it reported success while every host kept running
+  retention that only deletes by age and has no per-file ceiling. One runaway
+  day wrote 1.5 GB of `system-*.jsonl` and filled a 228 GB disk to 93%; that
+  failure was still reachable on every install that had been told it was fixed.
+- Find the control server when the credential is not in the project brain.
+  `resolveBrainDir('auto')` prefers a project brain when one exists, and a
+  project brain's secrets store is normally empty, so `mesh` searched a store
+  with no `provider: headscale` entry and reported "Headscale API Key not
+  configured in ApiKeysPage" — while the key sat in the global store. Every
+  control-server command then fell back to local discovery and looked merely
+  unconfigured. Node records already treated reachability as a fact about the
+  machine (global brain under `auto`); the credential now comes from the same
+  layer. An explicit `--global` or `--project` still selects the store, so
+  per-project credentials keep working.
+- Import `headscaleFetch` in the mesh CLI. It was called twice and never
+  imported, so any command reaching the control server died with a
+  `ReferenceError: headscaleFetch is not defined` that the catch reported as an
+  unavailable control server.
+
 ## 3.39.4 — 2026-10-15
 
 - Ship the corrected bundled `auth` plugin. `secret remote deploy <target>

@@ -5,13 +5,15 @@ import { discoverPlugins } from './src/core/plugin-loader.mjs'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
-// ── HARD GUARD: the suite is REMOTE ONLY ─────────────────────────────────────
-// 'npm test' / 'npx vitest' runs on the sanctioned test node (the Mac mini),
-// never on the laptop — a full local run once pinned this 8 GB machine at load
-// 600+. `.agent/skills/code-quality/config.json` is machine-local (git-ignored)
-// and declares remoteNode/remoteRepo for exactly the machines that must obey
-// this, so the guard is inert for anyone without that config. Escape hatch for a
-// deliberate, isolated run: TR_ALLOW_LOCAL_TESTS=1.
+// ── GUARD: heavy suites belong on the sanctioned test machine ────────────────
+// The sanctioned test machine is the Mac mini. Since the repos moved onto the
+// mini, its own checkout IS the sanctioned environment, so `npm test` here runs
+// in place and is the PREFERRED path — there is no snapshot to sync and no
+// remote hop to make. This guard therefore only fires on a host whose
+// `.agent/skills/code-quality/config.json` still declares remoteNode/remoteRepo
+// (a machine that must delegate the load elsewhere, e.g. the old laptop).
+// It is inert without that config, and on the mini those keys are absent.
+// Escape hatch for a deliberate isolated run: TR_ALLOW_LOCAL_TESTS=1.
 {
   const hostRoot = fileURLToPath(new URL('.', import.meta.url))
   const configFile = path.join(hostRoot, '.agent/skills/code-quality/config.json')
@@ -35,11 +37,12 @@ import react from '@vitejs/plugin-react'
     if (!onSanctionedNode) {
       console.error(
         '\n❌ REFUSING to run the test suite on this machine.\n' +
-          "   'npm test' / 'npx vitest' is REMOTE ONLY — it runs on the sanctioned test\n" +
-          `   node ("${remoteNode}"), never on the laptop.\n` +
-          '   Run the gate instead:  node scripts/code-quality-gate.mjs   (drives the remote node)\n' +
-          `   …or run the suite inside the sanctioned snapshot: ${remoteRepo}\n` +
-          '   Deliberate local run:  TR_ALLOW_LOCAL_TESTS=1 npm test\n'
+          '   This host delegates heavy suites to the sanctioned test node\n' +
+          `   ("${remoteNode}") — running them here is what pinned a laptop at load 600+.\n` +
+          `   Run it there instead:  total-recall mesh ssh ${remoteNode} "cd ${remoteRepo} && npm test"\n` +
+          '   Deliberate local run:  TR_ALLOW_LOCAL_TESTS=1 npm test\n' +
+          '   If this machine IS the sanctioned test node, remove remoteNode/remoteRepo\n' +
+          '   from .agent/skills/code-quality/config.json — local is then preferred.\n'
       )
       process.exit(1)
     }
