@@ -1,3 +1,20 @@
+## 3.39.6 — 2026-10-16
+
+- Write the project instruction surface at the repository root, not inside
+  `.agent/`. `compile`, `rebuild` and plugin install each built the surface path
+  from the agent directory, which names the *brain's* directory — so a project's
+  rules were written to `<repo>/.agent/INSTRUCTIONS.md` while every harness reads
+  `<repo>/INSTRUCTIONS.md` through the `AGENTS.md`/`CLAUDE.md` symlinks. The
+  surface an agent actually loaded therefore never changed, and the commands
+  still reported "Post-build verification passed: 0 drift", so the failure was
+  invisible from the exit code. The surface directory is now resolved in one
+  place, `resolveSurfaceDir`, instead of being re-derived at each call site. The
+  global brain keeps its surface in `~/.agent`, where the agent directory *is*
+  the workspace root.
+- Keep an installed plugin's record and files even when the surface cannot be
+  written, and report that as a compilation failure rather than an installation
+  failure. The tests pinning this behaviour were failing on `main`.
+
 ## 3.39.5 — 2026-10-16
 
 - Allow skills to live in git. The hygiene spec forbade every path under
