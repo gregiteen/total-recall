@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { compileSurface } from '../core/surface.mjs';
 import { detectIndexDrift } from '../core/drift-detector.mjs';
-import { resolveAgentDir, resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, resolveSurfaceDir, parseLayerFlag } from './agent-dir.mjs';
 import { logger } from '../core/logger.mjs';
 import { listLocalBrains } from '../core/brain-registry.mjs';
 
@@ -21,7 +21,11 @@ export async function runRebuild(options = {}) {
   const vaultDir = path.join(brainDir, 'memory-vault');
   const skillsDir = path.join(agentDir, 'skills');
   const derivedDir = path.join(brainDir, 'memory-derived');
-  const instructionsFile = path.join(agentDir, 'INSTRUCTIONS.md');
+  // The surface belongs at the workspace root, which is the repo root for a
+  // project brain -- not `<repo>/.agent`. Writing it into the agent dir left
+  // `<repo>/INSTRUCTIONS.md` (what harnesses read) frozen for months while the
+  // rebuild still reported "0 drift".
+  const instructionsFile = path.join(resolveSurfaceDir(layer), 'INSTRUCTIONS.md');
 
 
 
@@ -118,13 +122,17 @@ export async function compileRegisteredProjects({ brains = listLocalBrains(), co
   let failed = 0;
   for (const brain of brains) {
     if (brain.kind !== 'project' || !brain.exists) continue;
+    // `<root>/.agent/skills/total-recall` -> agentDir `<root>/.agent`, but the
+    // surface belongs at `<root>`, one level further up. The registered project
+    // root is what harnesses read `AGENTS.md` from.
     const agentDir = path.dirname(path.dirname(brain.brainDir));
+    const surfaceDir = path.dirname(agentDir);
     try {
       const stats = await compile({
         vaultDir: path.join(brain.brainDir, 'memory-vault'),
         skillsDir: path.join(agentDir, 'skills'),
         derivedDir: path.join(brain.brainDir, 'memory-derived'),
-        instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+        instructionsFile: path.join(surfaceDir, 'INSTRUCTIONS.md'),
       });
       console.log(`✅ ${brain.name}: ${stats.skipped ? 'unchanged' : `rules recompiled (${stats.skillsInjected} surfaces)`}`);
     } catch (err) {

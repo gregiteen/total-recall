@@ -25,7 +25,12 @@ describe('compileRegisteredProjects', () => {
       '/repos/app-two/.agent/skills/total-recall/memory-vault',
     ]);
     expect(calls[0].skillsDir).toBe('/repos/app-one/.agent/skills');
-    expect(calls[0].instructionsFile).toBe('/repos/app-one/.agent/INSTRUCTIONS.md');
+    // The surface belongs at the PROJECT ROOT, not in `.agent/`. This assertion
+    // previously expected '/repos/app-one/.agent/INSTRUCTIONS.md', which encoded
+    // the bug: a surface written there is never read by any harness, so the real
+    // `<root>/INSTRUCTIONS.md` stayed frozen while the rebuild reported
+    // "0 drift". `skillsDir` above stays under `.agent/` -- only the surface moves.
+    expect(calls[0].instructionsFile).toBe('/repos/app-one/INSTRUCTIONS.md');
   });
 
   it('keeps going after one project fails and reports the count', async () => {

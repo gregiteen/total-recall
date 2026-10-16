@@ -123,6 +123,37 @@ export function getBothBrains(targetPath = process.cwd()) {
 }
 
 /**
+ * The directory an instruction surface belongs in, which is NOT always the
+ * agent dir. Harnesses read `AGENTS.md`/`CLAUDE.md` at the workspace root:
+ *   global  -> <home>/.agent      (the agent dir IS the workspace root)
+ *   project -> <projectRoot>      (the repo root, NOT <repo>/.agent)
+ *
+ * Writing a project surface into `<repo>/.agent/` puts it where no harness
+ * looks, while the compile still reports success and "0 drift". Every caller
+ * that writes INSTRUCTIONS.md or client shims must use this instead of
+ * `resolveAgentDir`, which names the brain's own directory.
+ */
+export function resolveSurfaceDir(layer = 'auto', targetPath = process.cwd()) {
+  if (process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR) {
+    return process.env.AGENT_DIR || process.env._TR_TEST_AGENT_DIR;
+  }
+  if (layer === 'global') return getGlobalAgentDir();
+  const project = detectProjectBrain(targetPath);
+  if (!project) {
+    if (layer === 'project') throw new Error('No project brain found. Run `npx total-recall init --project` to create one.');
+    return getGlobalAgentDir();
+  }
+  return project.projectRoot || project.agentDir;
+}
+
+/**
+ * The path of the canonical instruction surface for a layer.
+ */
+export function resolveInstructionsFile(layer = 'auto', targetPath = process.cwd()) {
+  return path.join(resolveSurfaceDir(layer, targetPath), 'INSTRUCTIONS.md');
+}
+
+/**
  * Determine the default layer for a memory category.
  * Always defaults to project brain. Use --global to explicitly target global.
  */
