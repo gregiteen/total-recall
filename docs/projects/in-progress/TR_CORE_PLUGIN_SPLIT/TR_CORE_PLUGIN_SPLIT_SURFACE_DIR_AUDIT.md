@@ -96,17 +96,47 @@ is it writing a surface, and if so for which layer?
 is the same information `resolveSurfaceDir` now owns. It should not keep a second
 copy of the rule.
 
-## 6. Acceptance criteria
+## 6. Acceptance criteria — ALL MET (2026-10-16)
 
-- [ ] Every writer uses `resolveSurfaceDir`/`resolveInstructionsFile`; no module
-      derives a surface path from an agent dir.
-- [ ] `config.mjs` stops computing a second, divergent `projectRoot`.
-- [ ] `daemon-loop.mjs`'s incorrect comment is replaced with the layer rule.
-- [ ] A test asserts, for both layers, that the surface lands where the harness
-      reads it — not merely that a file was written.
-- [ ] A startup or doctor check reports "surface is stale relative to vault" so
-      a silent no-op write can never again pass as success.
-- [ ] TR-003 is re-opened and only checked off against the above.
+- [x] Every writer uses `resolveSurfaceDir`/`resolveInstructionsFile`; no module
+      derives a surface path from an agent dir. 20 call sites across 21 files;
+      the final sweep returns none. (`71a71e4` and predecessors.)
+- [x] `config.mjs` stops computing a second, divergent `projectRoot`. The two
+      `detectProjectBrain` implementations are consolidated into one and the CLI
+      delegates. (`71a71e4`)
+- [x] `daemon-loop.mjs`'s incorrect comment is replaced with the layer rule, and
+      its `INSTRUCTIONS_FILE` resolves through `detectProjectBrain()`.
+      (`4a63d12`, `71a71e4`)
+- [x] A test asserts, for both layers, that the surface lands where the harness
+      reads it — not merely that a file was written. Each new test was verified
+      to FAIL against the old code.
+- [x] `rebuild` fails loudly when no surface is written, instead of printing
+      "0 drift" over a frozen file. Verified live. (`71a71e4`)
+- [x] TR-003 is re-opened and tracked against the above.
+
+**Honest gap:** a general "surface is stale relative to the vault over time"
+doctor check was NOT built. What exists is a post-compile assertion that the
+surface was written and is non-empty, which closes the specific silent no-op
+this audit found. A staleness-over-time check remains a real improvement and is
+not claimed here.
+
+## 6b. Leader topology (found while verifying; not in the original scope)
+
+The mini followed `TR_LEADER_IP=100.64.0.1` and logged `Failed to sync granted
+secrets` on every boot. The leader was reachable the whole time on port 3900.
+Three defects, all fixed and verified: `getLeaderInfo()` dropped `brain_port`;
+`secrets-sync` assumed port 3000; and `getLeaderInfo()` read raw Tailscale
+status via `getMeshPeers()`, where `brain_port` never appears because it is an
+ENTITY variable. It now uses `listEnrichedMeshNodes()`. (`063362f`, `736048d`)
+
+Verified with the daemon's own environment: `getLeaderInfo()` returns
+`brain_port: 3900`, `isLeader()` is false so the sync does not early-return,
+`syncGrantedSecrets('100.64.0.1', { port: 3900 })` completes without throwing,
+and the daemon has logged zero secrets-sync failures since restarting on this
+build where every prior boot logged one.
+
+Also removed: the daemon runtime dependency resolved to `/tmp/packcheck/…tgz`,
+a path macOS clears. It now points at the stable `releases/` directory.
 
 ## 7. Test path
 
