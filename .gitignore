@@ -148,12 +148,28 @@ WINDSURF.md
 # modules from inside the project root). Removed by each spec after use.
 .vitest-tmp/
 
-# Open-source hygiene: the canonical repo carries NO skills, commands, memories,
-# IDE projections or session handoffs. Those belong to each user's installation
+# Open-source hygiene: the canonical repo carries NO user memories, IDE
+# projections or session handoffs. Those belong to each user's installation
 # (a machine may have any of them locally; none are committed).
-.agent/
+# `.agent/*` rather than `.agent/`: git does not descend into an ignored
+# directory, so a plain `.agent/` would make every `!` re-include below dead.
+.agent/*
 # The scaffold is what new projects and git-updated hosts start from; its bundled plugins (auth is required) must be in git.
 !/scaffold/.agent/
+# Shipped skills ARE part of the product and are safe to open-source: they are
+# generic, contain no user data, and 11 of them existed in NO repository at all
+# (not here, not in the scaffold, not in the brain backup) — one disk failure
+# from being lost. Each intermediate path needs its own `!` before the leaf
+# rule can apply.
+!.agent/skills/
+.agent/skills/*
+!.agent/skills/*/
+# The private brain lives in its own repo (remote: total-recall-brain-backup)
+# and must stay ignored here, so the re-includes above never re-add it.
+.agent/skills/total-recall/
+.agent/skills/*/sessions/
+.agent/skills/*/memory-derived/
+.agent/skills/*/.check.lock
 .agents/
 .claude/
 .codex/
