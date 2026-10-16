@@ -7,8 +7,71 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale } from './surface.mjs';
+import { replaceFirstManagedInjectionBlock, heuristicCompact, buildRulesBlock, extractWikilinks, mergeGlobalRuleNodes, isSurfaceCodeStale, compileSurface } from './surface.mjs';
 import { ruleFingerprint } from './context-policy.mjs';
+
+describe('compileSurface writes the surface where the harness reads it', () => {
+  // Regression: compilePointers stripped a trailing `.agent` from the
+  // instructions directory, so the GLOBAL brain (whose instructionsFile is
+  // `<home>/.agent/INSTRUCTIONS.md`) computed `<home>` as its base dir and wrote
+  // `<home>/INSTRUCTIONS.md`. `<home>/.agent/INSTRUCTIONS.md` -- the file the
+  // agent harness actually reads -- was never rewritten and stayed frozen at
+  // 2026-05-25 until this was fixed, while compile still reported success and
+  // "0 drift". Any layer whose agent dir is literally named `.agent` must still
+  // resolve into that directory, not its parent.
+  it('writes INSTRUCTIONS.md into an agent dir named .agent, not its parent', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-home-'));
+    const agentDir = path.join(home, '.agent');
+    const skillsDir = path.join(agentDir, 'skills');
+    const vaultDir = path.join(skillsDir, 'total-recall', 'memory-vault');
+    const derivedDir = path.join(skillsDir, 'total-recall', 'memory-derived');
+    for (const d of [vaultDir, derivedDir, path.join(vaultDir, 'invariants')]) {
+      fs.mkdirSync(d, { recursive: true });
+    }
+    try {
+      await compileSurface({
+        vaultDir, skillsDir, derivedDir,
+        instructionsFile: path.join(agentDir, 'INSTRUCTIONS.md'),
+        force: true, semantic: false,
+      });
+      // The surface belongs in the agent dir the harness reads, even on a first
+      // compile where INSTRUCTIONS.md does not exist yet.
+      const canonical = path.join(agentDir, 'INSTRUCTIONS.md');
+      expect(fs.existsSync(canonical)).toBe(true);
+      expect(fs.readFileSync(canonical, 'utf8')).toContain('TOTAL RECALL');
+      // The relocation bug wrote the surface here instead. It must never return.
+      expect(fs.existsSync(path.join(home, 'INSTRUCTIONS.md'))).toBe(false);
+      expect(fs.existsSync(path.join(home, 'AGENTS.md'))).toBe(false);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('still resolves a nested .agent when handed the containing project dir', async () => {
+    // The other legitimate shape: callers that pass the project root, where the
+    // agent dir is `<project>/.agent`. That must keep working.
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-proj-'));
+    const agentDir = path.join(project, '.agent');
+    const skillsDir = path.join(agentDir, 'skills');
+    const vaultDir = path.join(skillsDir, 'total-recall', 'memory-vault');
+    const derivedDir = path.join(skillsDir, 'total-recall', 'memory-derived');
+    for (const d of [vaultDir, derivedDir, path.join(vaultDir, 'invariants')]) {
+      fs.mkdirSync(d, { recursive: true });
+    }
+    // Pre-seed the nested surface so the wrapper case is detectable.
+    fs.writeFileSync(path.join(agentDir, 'INSTRUCTIONS.md'), 'placeholder\n');
+    try {
+      await compileSurface({
+        vaultDir, skillsDir, derivedDir,
+        instructionsFile: path.join(project, 'INSTRUCTIONS.md'),
+        force: true, semantic: false,
+      });
+      expect(fs.readFileSync(path.join(agentDir, 'INSTRUCTIONS.md'), 'utf8')).toContain('TOTAL RECALL');
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
+});
 
 it('renders the same curated operative directive in bootstrap and task surfaces', async () => {
   const rule = { slug: 'short', category: 'invariants', status: 'active', body: 'Historical detail '.repeat(400) };
