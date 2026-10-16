@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getMeshPeers, getMeshSelf } from './mesh.mjs';
+import { getMeshPeers, getMeshSelf, listEnrichedMeshNodes } from './mesh.mjs';
 import { brainDir } from './config.mjs';
 
 /**
@@ -70,7 +70,12 @@ function compareNodes(a, b) {
  * each node wrote a private, node-local lease document and could elect itself.
  */
 export async function getLeaderInfo() {
-  const nodes = getMeshPeers({ includeSelf: true }).filter((node) => node.online);
+  // Use the ENTITY-ENRICHED node list, not getMeshPeers(). `brain_port` is an
+  // entity variable: it lives in the vault's mesh-node document and is absent
+  // from raw Tailscale status. getMeshPeers() reads only that status, so its
+  // `brain_port` was always null and every caller fell back to port 3000 --
+  // while the leader was reachable the whole time on its real port.
+  const nodes = listEnrichedMeshNodes().filter((node) => node.online);
   if (nodes.length === 0) return null;
 
   const pin = leaderPin();
