@@ -156,7 +156,20 @@ async function pullInstructions(brainUrl, token) {
   if (!res.ok) {
     throw new Error(`Failed to pull instructions: HTTP ${res.status}`);
   }
-  return res.json();
+  // `/api/instructions` serves the compiled surface as text/markdown, so parsing
+  // the body as JSON threw "Unexpected token '#'" on the leading heading and made
+  // `total-recall sync` unusable. Read it as text and return the { content }
+  // envelope this caller expects, still accepting one from the server.
+  const body = await res.text();
+  if ((res.headers.get('content-type') || '').includes('application/json')) {
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed && typeof parsed === 'object' && typeof parsed.content === 'string') return parsed;
+    } catch {
+      // A JSON content-type with a non-JSON body is still usable as markdown.
+    }
+  }
+  return { content: body };
 }
 
 async function runOnce(opts) {

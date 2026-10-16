@@ -587,7 +587,19 @@ function readConnectedClients(clientsPath) {
  */
 async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultDir, derivedDir, force = false } = {}) {
   const agentDir = path.dirname(instructionsFile);
-  const baseDir = path.basename(agentDir) === '.agent' ? path.dirname(agentDir) : agentDir;
+  // Strip a trailing `.agent`/`.agents` ONLY when the caller passed the parent
+  // directory itself. `agentDir` is already the directory that holds
+  // INSTRUCTIONS.md, so stripping it again relocated the GLOBAL surface:
+  // the global brain's instructionsFile is `~/.agent/INSTRUCTIONS.md`, whose
+  // dirname basename IS `.agent`, so this computed `~` and every compile wrote
+  // `~/INSTRUCTIONS.md` while `~/.agent/INSTRUCTIONS.md` (the file the agent
+  // harness actually reads) stayed frozen -- from 2026-05-25 to 2026-10-15.
+  // Only peel a wrapper when agentDir is NOT itself the instruction directory.
+  const wrapper = path.basename(agentDir);
+  const baseDir = (wrapper === '.agent' || wrapper === '.agents')
+    && !fs.existsSync(path.join(agentDir, 'INSTRUCTIONS.md'))
+    ? path.dirname(agentDir)
+    : agentDir;
   let injectedCount = 0;
 
   // Always write the canonical INSTRUCTIONS.md
@@ -595,8 +607,16 @@ async function compilePointers(instructionsFile, skillsDir, nodes = [], { vaultD
     injectedCount++;
   }
 
-  // Determine which client shims to write
-  const clientsPath = path.join(baseDir, '.agent', 'skills', 'total-recall', 'config', 'clients.json');
+  // Determine which client shims to write.
+  // `baseDir/.agent/skills/...` only holds for a PROJECT brain. For the global
+  // brain baseDir already IS the agent dir, so that path became
+  // `~/.agent/.agent/skills/...` and clients.json was never found -- every
+  // connected-client shim (CLAUDE.md, GEMINI.md, .cursorrules, ...) silently
+  // stopped updating. Derive the brain dir from the caller's skillsDir instead,
+  // which is correct for both layers. Fall back to the legacy guess only when
+  // skillsDir was not supplied.
+  const brainDirForConfig = skillsDir ? path.dirname(skillsDir) : path.join(baseDir, '.agent');
+  const clientsPath = path.join(brainDirForConfig, 'skills', 'total-recall', 'config', 'clients.json');
   const connectedClients = readConnectedClients(clientsPath);
 
   if (connectedClients !== null) {
