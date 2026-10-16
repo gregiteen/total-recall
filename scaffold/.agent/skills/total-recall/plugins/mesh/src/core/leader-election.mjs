@@ -77,11 +77,15 @@ export async function getLeaderInfo() {
   if (pin) {
     const pinned = nodes.find((node) => node.ip === pin);
     if (!pinned) return null;
-    return { hostname: pinned.hostname, ip: pinned.ip, strategy: 'pinned-mesh-ip' };
+    return { hostname: pinned.hostname, ip: pinned.ip, brain_port: pinned.brain_port ?? null, strategy: 'pinned-mesh-ip' };
   }
 
   const leader = [...nodes].sort(compareNodes)[0];
-  return { hostname: leader.hostname, ip: leader.ip, strategy: 'lowest-mesh-ip' };
+  // `brain_port` is carried through because the leader does not necessarily
+  // serve on the default port. It was dropped here, so callers such as
+  // secrets-sync fell back to 3000 and reported "fetch failed" against a leader
+  // that was up and reachable the whole time on a different port.
+  return { hostname: leader.hostname, ip: leader.ip, brain_port: leader.brain_port ?? null, strategy: 'lowest-mesh-ip' };
 }
 
 /**
