@@ -26,7 +26,39 @@ const SKIP_DIRS = new Set([
   'node_modules', '.git', '.agent', 'memory-vault', 'memory-derived',
   'memory-inbox', '.next', '.turbo', 'dist', 'build', '.cache',
   '.vscode', '.idea', 'coverage', '__pycache__', '.svelte-kit',
+  // A repo's `vault/` is PROJECTION DATA, not canonical memory. Products like
+  // the CRM write every record (users, sales, settings) as markdown, so
+  // ingesting it minted one brain "fact" per database row: one repo contributed
+  // 13,359 of them and the global brain grew by ~24k nodes of nowhere. The
+  // vault is the product's own store; it is neither a source document nor an
+  // SSSS memory node, and it is gitignored in every owning repo for the same
+  // reason.
+  'vault',
 ]);
+
+/**
+ * Directories under a repo root that are projections or generated output and
+ * must never be ingested as canonical memory, regardless of nesting depth.
+ * Matched on the path RELATIVE to the repo root so a nested `vault/` inside a
+ * package is skipped too.
+ */
+const SKIP_REL_PREFIXES = [
+  'vault',
+  'openwiki',
+  'memory-vault',
+  'memory-derived',
+  'memory-inbox',
+];
+
+/**
+ * True when a path relative to the repo root lies inside a projection or
+ * generated-output directory.
+ */
+function isProjectionPath(relPath) {
+  const parts = relPath.split(path.sep);
+  // Any path segment named `vault`/`openwiki`/... anywhere in the tree.
+  return parts.some((part) => SKIP_REL_PREFIXES.includes(part));
+}
 
 /**
  * Load the project registry from the global brain config.
