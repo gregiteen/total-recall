@@ -151,7 +151,14 @@ export function acquirePidLock() {
             subsystem: 'daemon-loop',
             message: `Another daemon is already running (PID: ${existingPid}). Exiting.`,
           });
-          process.exit(1);
+          // Exit 0, not 1: the desired end state -- exactly one daemon serving
+          // this brain -- is already satisfied, so this is a successful no-op,
+          // not a failure. Exiting 1 told a supervisor (systemd `Restart=on-
+          // failure`, launchd KeepAlive) that the service crashed, so it
+          // restarted every RestartSec forever: the cloud unit reached a
+          // restart counter of 85+ and filled its journal, while the real
+          // daemon had been up for over a day the entire time.
+          process.exit(0);
         }
         logger.info({
           subsystem: 'daemon-loop',
