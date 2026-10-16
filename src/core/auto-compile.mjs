@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { resolveAgentDir, resolveBrainDir } from '../cli/agent-dir.mjs';
+import { resolveAgentDir, resolveBrainDir, resolveSurfaceDir } from '../cli/agent-dir.mjs';
 import { compileSurface } from './surface.mjs';
 import { invalidate } from './vault-cache.mjs';
 import { compileRegisteredProjects } from '../cli/rebuild.mjs';
@@ -22,7 +22,12 @@ export async function autoCompileSurfaces({ layer = 'auto', semantic = false, fo
     const skillsDir = path.join(resolvedAgentDir, 'skills');
     const vaultDir = path.join(resolvedBrainDir, 'memory-vault');
     const derivedDir = path.join(resolvedBrainDir, 'memory-derived');
-    const instructionsFile = path.join(resolvedAgentDir, 'INSTRUCTIONS.md');
+    // The surface belongs at the workspace root, which is the repo root for a
+    // project brain -- not `<repo>/.agent`. Using `resolvedAgentDir` here wrote
+    // `<repo>/.agent/INSTRUCTIONS.md` while harnesses read
+    // `<repo>/INSTRUCTIONS.md`, so every rule edit and plugin install refreshed
+    // nothing the agent loads, and still reported success.
+    const instructionsFile = path.join(resolveSurfaceDir(layer), 'INSTRUCTIONS.md');
 
     invalidate(vaultDir);
     await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, semantic, force });

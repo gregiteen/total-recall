@@ -4,6 +4,14 @@
 > **Kanban State**: 🏗️ In Progress
 > **Author**: Antigravity
 > **Date**: 2026-07-14
+> **Correction 2026-10-16 (Claude, DeepSeek Harness)**: This project sat in
+> `completed/` while its central claim did not hold. Phase 3 below reads
+> "Fix `clients.json` path resolution" and "Symlink `AGENTS.md` and `GEMINI.md`
+> to `INSTRUCTIONS.md`" — both were done **inside `<repo>/.agent/`**, a directory
+> no harness reads. So the compilation looked fixed while the real surfaces kept
+> going stale for months. Returned to `in-progress/` because the acceptance is
+> not met. The remaining work is tracked as TR-003 in `TR_CORE_PLUGIN_SPLIT`,
+> with the current-state record in `TR_CORE_PLUGIN_SPLIT_SURFACE_DIR_AUDIT.md`.
 
 ---
 

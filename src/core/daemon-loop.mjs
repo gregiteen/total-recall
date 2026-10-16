@@ -23,7 +23,7 @@ import { syncAllRepos } from './repo-sync.mjs';
 import { refreshProviderUsage } from './usage-fetcher.mjs';
 import { logger } from './logger.mjs';
 import { updateQueueItem } from './research-queue.mjs';
-import { agentDir, brainDir } from './config.mjs';
+import { agentDir, brainDir, detectProjectBrain } from './config.mjs';
 import { runCrons } from './crons.mjs';
 import { dispatchTask as registryDispatch } from './task-executors.mjs';
 import { buildTaskEnvelope } from './task-envelope.mjs';
@@ -36,8 +36,23 @@ const DERIVED_DIR = path.join(BRAIN_DIR, 'memory-derived');
 const CONFLICTS_DIR = path.join(BRAIN_DIR, 'memory-inbox', 'conflicts');
 const SESSIONS_DIR = path.join(BRAIN_DIR, 'sessions');
 const QUEUE_DIR = path.join(BRAIN_DIR, 'scheduler', 'queue');
-// Surface shims resolve from the agent root (.agent/), not brainDir (…/skills/total-recall/)
-const INSTRUCTIONS_FILE = path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+// The surface is the workspace root's INSTRUCTIONS.md, which is NOT the agent
+// root for a project brain. The previous comment here asserted "surface shims
+// resolve from the agent root (.agent/)" -- that was the defect written down as
+// intent, and it made the daemon recompile `<repo>/.agent/INSTRUCTIONS.md` while
+// harnesses read `<repo>/INSTRUCTIONS.md`. For the global brain the two coincide,
+// which is why this looked correct. `detectProjectBrain()` (used just below for
+// the source watcher) already returns the true `projectRoot`.
+function resolveDaemonInstructionsFile() {
+  try {
+    const project = detectProjectBrain();
+    if (project?.projectRoot) return path.join(project.projectRoot, 'INSTRUCTIONS.md');
+  } catch {
+    // Detection is optional; fall through to the agent root (the global shape).
+  }
+  return path.join(AGENT_DIR, 'INSTRUCTIONS.md');
+}
+const INSTRUCTIONS_FILE = resolveDaemonInstructionsFile();
 
 // How often to recompile surfaces (every N task ticks)
 const RECOMPILE_EVERY_N_TASKS = 20;
