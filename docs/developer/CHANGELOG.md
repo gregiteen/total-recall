@@ -129,6 +129,15 @@
 
 ## Unreleased
 
+## 3.39.7
+
+- Embedding rows record the provider and model that actually served the vector. Ollama is tried first and answers with a model discovered from the server, so rows were previously stamped with the requested hosted default even for locally produced vectors — making it impossible to tell from the index whether vault text had left the machine. `getEmbeddingWithProvenance` reports the serving pair and both writers persist it; `getEmbedding` keeps returning the bare vector for existing callers.
+- Every scaffold plugin's dependencies are wired at `init`, not just auth's. `mesh` shipped without `express`, and a single unresolvable import aborts plugin loading for the whole scope, so unrelated commands failed with `Cannot find package 'express'`. The wiring runs after the skill tree is copied, because the plugin directories do not exist before that.
+- `plugin install` compiles the layer it installed into instead of assuming a project brain. From a directory with no project brain the plugin lands in the global brain, and the assumed `project` layer threw, printing `Auto-compile failed: No project brain found` after a successful install.
+- The plugin CLI template emits a working `--help` and points a bad subcommand at it, instead of answering `"--help" is not implemented` with no usage. The scaffolded manifest test's version regex is also un-escaped, so a newly created plugin's own tests pass.
+
+## 3.39.6
+
 - The `context` capsule budget is a setting instead of a fixed 4000: `total-recall config set context_budget 7000` (stored per brain in `config/surface.yml`, project overrides global). Raise it when every rule should load for every action rather than being narrowed by applicability; `--budget` still overrides per call. Previously the 4000 default made an all-rules capsule exit 2 with `ready:false`, so the mandatory `ready:true` gate could not be satisfied without passing `--budget` on every call.
 - `rules verify --json` and `rules prune --json` emit machine-readable reports (`ok`, `budget`, per-action `capsules` with `tokens`/`rules`/`withinBudget`, and `problems`), matching the existing `--json` support in `rules audit` and `rules draft`. `verify` keeps exiting 1 on any violation, including under `--json`.
 - `skill register <path>` is authoritative for `repo_scoped`: a skill whose own SKILL.md no longer declares repo scope clears a stale catalog flag. Discovery stays fail-closed.
