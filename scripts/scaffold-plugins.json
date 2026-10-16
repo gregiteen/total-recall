@@ -76,7 +76,7 @@
   "mesh/src/core/headscale-client.mjs": "98d1d2bc6d440b262ae6f0708db6b123b87685f4b4facee6b0049baecac58814",
   "mesh/src/core/headscale-server.mjs": "4022ec374aedd26afa83ec1067838266f95f6186e30061910d4b28e6c51977d1",
   "mesh/src/core/lan-discovery.mjs": "2aa076d5bd65f384cd13c2ee75c24b4f96090f4cc334e986535c4bcd1151526c",
-  "mesh/src/core/leader-election.mjs": "f4465f86bb63020035d1a9f73eecdba3b12c2f80ba98faca9476eb9a1ce05a3f",
+  "mesh/src/core/leader-election.mjs": "f3863f9ac28fb1042687aeb0c5b2f247da9f6be7a38b270ac251d08eb9d47f4b",
   "mesh/src/core/logger.mjs": "b1d095eebd8f71f0efbb4a4ccdc563bf75a0e77e0bafef3624150d33ef211ef7",
   "mesh/src/core/mesh-access-sync.mjs": "51f9d4c1dfa8ebd12d2fdac0d0748a2a2ddaaba3a7801057b20d3a1b7f365343",
   "mesh/src/core/mesh-access.mjs": "4dfbfd69c6a5b517839629706ea7caccb9f875fb335853fd9c29f829f5369f95",
