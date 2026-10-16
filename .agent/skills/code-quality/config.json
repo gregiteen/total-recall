@@ -2,9 +2,6 @@
   "version": 3,
   "toolchain": "javascript",
   "repoDescription": "Total Recall brain — Node ESM, no TypeScript, no ESLint. Quality here means: dist stays in sync with src, the open-source path invariant holds, and the SSSS reference kernel still passes its own suites.",
-  "remoteNode": "macmini",
-  "remoteRepo": "/Users/gregoryiteen/tr-checks/total-recall",
-  "remotePath": "/opt/homebrew/bin",
   "globalLock": true,
   "memory": {
     "maxOldSpaceMb": 4096
@@ -185,15 +182,14 @@
     },
     {
       "id": "test",
-      "tier": "remote",
-      "description": "Full vitest suite — REMOTE ONLY. Running it locally violates the never-run-heavy-node-processes-on-the-laptop invariant; the v2 daemon incident pinned this 8GB machine at load 644. Run on the Mac Mini.",
+      "tier": "local",
+      "description": "Full vitest suite. LOCAL on the sanctioned test machine (the Mac mini): the repos live here now, so this working tree IS the sanctioned environment and the suite runs in place. The old remote indirection existed because the mini was a separate node driven from a laptop that could not hold the load; that reason is gone.",
       "cmd": [
         "npm",
         "test"
       ],
       "parser": "generic",
-      "timeoutSeconds": 1800,
-      "remoteHint": "Use total-recall mesh ssh <test-node> with its recorded access; run the full suite only on the Mac Mini."
+      "timeoutSeconds": 1800
     }
   ]
 }

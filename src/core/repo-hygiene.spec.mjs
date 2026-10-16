@@ -15,14 +15,24 @@ function tracked() {
 }
 
 describe('open-source repo hygiene', () => {
-  it('commits no per-user skills, commands, memories, IDE projections or handoffs', () => {
+  it('commits no per-user memories, IDE projections or handoffs', () => {
     const files = tracked();
     if (!files) return;
-    const forbidden = files.filter((f) =>
-      /^(\.agent|\.agents|\.claude|\.codex|\.cursor|\.windsurf)\//.test(f) ||
-      /^HANDOFF\.md$/.test(f) ||
-      /(^|\/)memory-(vault|inbox|derived)\/.*\.md$/.test(f) && !f.startsWith('scaffold/'),
-    );
+    // Skills ARE repo content and belong in git: git does not descend into an
+    // ignored directory, so a blanket `.agent/` rule left 11 skill directories
+    // (~317 files) existing in no repository anywhere -- one disk failure from
+    // being lost (commit 9e83665). What must stay out of an open-source package
+    // is per-USER STATE, which is what actually leaks a person's machine:
+    // memories, handoffs, and IDE projections. `.agent/skills/` is allowed;
+    // everything else under those directories is not.
+    const isSkillContent = (f) => /^\.agent\/skills\/[^/]+\//.test(f.replace(/^\.agents\//, '.agent/'));
+    const forbidden = files.filter((f) => {
+      const perUserDir = /^(\.agent|\.agents|\.claude|\.codex|\.cursor|\.windsurf)\//.test(f);
+      if (perUserDir && !isSkillContent(f)) return true;
+      if (/^HANDOFF\.md$/.test(f)) return true;
+      if (/(^|\/)memory-(vault|inbox|derived)\/.*\.md$/.test(f) && !f.startsWith('scaffold/')) return true;
+      return false;
+    });
     expect(forbidden).toEqual([]);
   });
 
