@@ -758,7 +758,10 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     logger.info('surface', 'Semantic embeddings explicitly disabled; local indexes updated.', { derivedDir });
   } else try {
     const { buildEmbeddingsIndex } = await import('./embeddings.mjs');
-    const built = await buildEmbeddingsIndex(nodes, derivedDir);
+    // Forward `force`: the builder is content-hash incremental and skips a node
+    // whose text is unchanged, so without this `compile --force` rebuilt nothing
+    // and rows kept an outdated model label.
+    const built = await buildEmbeddingsIndex(nodes, derivedDir, { force });
     semanticResult = {
       indexed: built.built,
       skipped: built.skipped,

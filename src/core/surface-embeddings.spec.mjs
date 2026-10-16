@@ -26,7 +26,14 @@ describe('compileSurface embedding build', () => {
 
   it('awaits the build instead of detaching it', () => {
     // Detached, the CLI process exits first and nothing is ever written.
-    expect(src()).toMatch(/await buildEmbeddingsIndex\(nodes, derivedDir\)/);
+    expect(src()).toMatch(/await buildEmbeddingsIndex\(nodes, derivedDir, \{ force \}\)/);
+  });
+
+  it('forwards force so an explicit rebuild actually rebuilds', () => {
+    // The builder is content-hash incremental: it skips a node whose text is
+    // unchanged. Dropping `force` here meant `compile --force` reported success
+    // while rebuilding nothing, leaving rows on an outdated model label.
+    expect(src()).toMatch(/buildEmbeddingsIndex\(nodes, derivedDir, \{ force \}\)/);
   });
 
   it('does not swallow embedding errors', () => {

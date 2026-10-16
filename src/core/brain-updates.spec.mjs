@@ -143,4 +143,28 @@ describe('uniform brain updates', () => {
     expect(result.would_update).toBe(1);
     expect(result.results.find(row => row.root === good).status).toBe('would_update');
   });
+
+  it('descends into .agent so plugin installs are updated too', async () => {
+    // A plugin that runs `npm install` keeps its own node_modules under
+    // <repo>/.agent/skills/total-recall/plugins/<id>. Skipping every dot
+    // directory left those copies stranded on an old release: a full
+    // propagation reported success while three plugin installs stayed behind.
+    const pluginRoot = path.join(tmp, 'repo', '.agent', 'skills', 'total-recall', 'plugins', 'mesh');
+    manifest(pluginRoot, { name: 'tr-plugin-mesh', dependencies: { 'total-recall-brain': '3.32.0' } });
+    installed(pluginRoot, 'total-recall-brain', '3.32.0');
+    const result = await run([path.join(tmp, 'repo')], execWithInstall());
+    const row = result.results.find(r => r.root === pluginRoot);
+    expect(row, 'plugin install under .agent was not discovered').toBeTruthy();
+    expect(row.status).toBe('would_update');
+  });
+
+  it('still skips other dot directories such as .git', async () => {
+    // Only .agent is exempt; walking every dot directory would descend into
+    // .git and cost far more than it finds.
+    const gitDir = path.join(tmp, 'repo2', '.git', 'hooks');
+    manifest(gitDir, { name: 'git-hooks', dependencies: { 'total-recall-brain': '3.39.1' } });
+    installed(gitDir, 'total-recall-brain', '3.39.1');
+    const result = await run([path.join(tmp, 'repo2')], execWithInstall());
+    expect(result.results.find(r => r.root === gitDir)).toBeFalsy();
+  });
 });
