@@ -71,8 +71,22 @@ export async function executePluginState(request) {
   }
   // A guard serializes state read/compare/commit across native worker processes.
   const lock = path.join(root, '.mutation-lock');
-  try { fs.mkdirSync(lock, { mode: 0o700 }); }
-  catch { throw new Error('Plugin state mutation is busy or its ownership guard is unreadable'); }
+  try {
+    fs.mkdirSync(lock, { mode: 0o700 });
+  } catch (err) {
+    // Distinguish a genuine concurrent mutation from an environment failure so
+    // callers are not told the store is busy when it is actually inaccessible.
+    if (err && err.code === 'EEXIST') {
+      throw new Error('Plugin state mutation is busy; another mutation holds the guard');
+    }
+    if (err && (err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EROFS')) {
+      throw new Error(
+        `Plugin state store is not writable (${err.code}): cannot create the mutation guard at ${lock}. ` +
+        'Grant write access to this brain root, or point TR_SECRETS_BRAIN at a store you can write to.'
+      );
+    }
+    throw new Error(`Plugin state mutation guard could not be created at ${lock}: ${err?.message || err}`);
+  }
   try {
     const durableKeys = new FileIdempotencyStore(path.join(root, '.idempotency'));
     const intentHash = crypto.createHash('sha256').update(JSON.stringify({ path: relative, action, value, expectedVersion, format: request.format })).digest('hex');
