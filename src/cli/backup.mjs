@@ -17,6 +17,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -64,13 +65,77 @@ function parseArgs(args) {
   return opts;
 }
 
+/**
+ * The backup repo's git directory lives OUTSIDE the project tree, under
+ * ~/.agent/brain-backups. A `.git` inside `<project>/.agent/skills/total-recall`
+ * makes the project repo see an embedded repository: `git add -A` records it as a
+ * gitlink (mode 160000) with no .gitmodules, which cannot be cloned back.
+ */
+export function brainGitDir(skillDir) {
+  const abs = path.resolve(skillDir);
+  const owner = path.basename(path.resolve(abs, '..', '..', '..')) || 'brain';
+  const tag = crypto.createHash('sha1').update(abs).digest('hex').slice(0, 8);
+  return path.join(os.homedir(), '.agent', 'brain-backups', `${owner}-${tag}.git`);
+}
+
 function git(cwd, ...gitArgs) {
-  const result = spawnSync('git', gitArgs, { cwd, stdio: 'pipe' });
+  const env = { ...process.env, GIT_DIR: brainGitDir(cwd), GIT_WORK_TREE: path.resolve(cwd) };
+  const result = spawnSync('git', gitArgs, { cwd, env, stdio: 'pipe' });
   return {
     ok: result.status === 0,
     stdout: result.stdout?.toString().trim() || '',
     stderr: result.stderr?.toString().trim() || '',
   };
+}
+
+/**
+ * Move a legacy in-tree `<brain>/.git` to the external git dir, and keep the
+ * enclosing project repo from absorbing the brain directory. Idempotent.
+ */
+export function adoptExternalGitDir(skillDir) {
+  const inTree = path.join(skillDir, '.git');
+  const external = brainGitDir(skillDir);
+  let moved = false;
+  if (fs.existsSync(inTree) && fs.statSync(inTree).isDirectory() && !fs.existsSync(external)) {
+    fs.mkdirSync(path.dirname(external), { recursive: true });
+    try {
+      fs.renameSync(inTree, external);
+    } catch {
+      fs.cpSync(inTree, external, { recursive: true });
+      fs.rmSync(inTree, { recursive: true, force: true });
+    }
+    spawnSync('git', ['--git-dir', external, 'config', 'core.worktree', path.resolve(skillDir)], { stdio: 'pipe' });
+    moved = true;
+  }
+  if (fs.existsSync(external) && !fs.existsSync(inTree)) excludeFromParentRepo(skillDir);
+  return moved;
+}
+
+/** Add the brain dir to the enclosing repo's local exclude unless that repo tracks it on purpose. */
+function excludeFromParentRepo(skillDir) {
+  try {
+    const top = spawnSync('git', ['-C', skillDir, 'rev-parse', '--show-toplevel'], { stdio: 'pipe' });
+    if (top.status !== 0) return;
+    const root = top.stdout.toString().trim();
+    const rel = path.relative(fs.realpathSync(root), fs.realpathSync(skillDir)).split(path.sep).join('/');
+    if (!rel || rel.startsWith('..')) return;
+    const tracked = spawnSync('git', ['-C', root, 'ls-files', '-s', '--', rel], { stdio: 'pipe' }).stdout.toString().trim();
+    if (/^160000 /.test(tracked) && !tracked.includes('\n')) {
+      // A stale gitlink (embedded repo with no .gitmodules) cannot be cloned back: unstage it.
+      spawnSync('git', ['-C', root, 'rm', '--cached', '-f', '-q', '--', rel], { stdio: 'pipe' });
+    } else if (tracked) {
+      return; // the project repo versions its brain files itself
+    }
+    const excludePath = path.join(root, '.git', 'info', 'exclude');
+    try {
+      const entry = `/${rel}/`;
+      const current = fs.existsSync(excludePath) ? fs.readFileSync(excludePath, 'utf8') : '';
+      if (!current.split('\n').includes(entry)) {
+        fs.mkdirSync(path.dirname(excludePath), { recursive: true });
+        fs.appendFileSync(excludePath, `${current && !current.endsWith('\n') ? '\n' : ''}${entry}\n`);
+      }
+    } catch { /* parent exclude is best effort */ }
+  } catch { /* best effort: never fail a backup over the parent's exclude file */ }
 }
 
 function defaultOutput(encrypt) {
@@ -169,8 +234,10 @@ async function pushGitBackup(remote, layer = 'auto') {
   // rule are corrected on their next backup.
   ensureBrainGitignore(SKILL_DIR);
 
-  // Initialise the skill folder as a git repo if needed
-  const gitDir = path.join(SKILL_DIR, '.git');
+  // Initialise the skill folder as a git repo if needed. The git dir lives outside
+  // the project tree; a legacy in-tree .git is moved there first.
+  adoptExternalGitDir(SKILL_DIR);
+  const gitDir = brainGitDir(SKILL_DIR);
   if (!fs.existsSync(gitDir)) {
     console.error(`  🔧 Initialising git repo in ${SKILL_DIR}`);
     const init = git(SKILL_DIR, 'init', '-b', 'main');
@@ -178,6 +245,7 @@ async function pushGitBackup(remote, layer = 'auto') {
       git(SKILL_DIR, 'init');
       git(SKILL_DIR, 'checkout', '-b', 'main');
     }
+    excludeFromParentRepo(SKILL_DIR);
   }
 
   // Resolve the remote: if the argument is an existing remote name, use its URL.

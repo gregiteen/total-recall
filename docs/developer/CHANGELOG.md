@@ -1,3 +1,15 @@
+## 3.40.1 — 2026-10-19
+
+- Brain backups no longer put a `.git` inside the project tree. The backup repo's
+  git directory now lives under `~/.agent/brain-backups/`, so a project's
+  `git add -A` can never record the brain as an embedded repository (a gitlink
+  with no `.gitmodules`, which cannot be cloned back). Existing in-tree backup
+  repos are moved automatically on the next backup, history and `backup`
+  remotes intact; the brain folder is added to the project's local
+  `.git/info/exclude`, and a stale gitlink to it is unstaged. A project that
+  versions its brain files itself is left alone.
+- Remove the dangling `knowledge-catalog` gitlink from this repo.
+
 ## 3.40.0 — 2026-10-19
 
 - Read and write frontmatter with the SSSS parser (`@ssss/cli/frontmatter`,
