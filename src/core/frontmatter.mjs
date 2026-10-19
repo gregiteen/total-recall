@@ -1,18 +1,21 @@
-/** Markdown metadata is data: YAML/JSON only, with no executable engines. */
-import * as yamlModule from 'js-yaml';
-const yaml = yamlModule.default || yamlModule;
-// Existing source checkouts can still have the legacy CommonJS parser installed.
-const load = yaml.safeLoad || yaml.load;
-const dump = yaml.safeDump || yaml.dump;
-// Preserve the existing YAML 1.2 scalar rules plus dates/merge/collection tags.
-const schema = yaml.CORE_SCHEMA?.withTags
-  ? yaml.CORE_SCHEMA.withTags(yaml.timestampTag, yaml.mergeTag, yaml.binaryTag, yaml.omapTag, yaml.pairsTag, yaml.setTag)
-  : yaml.DEFAULT_SAFE_SCHEMA;
+/**
+ * Markdown metadata is data: YAML/JSON only, with no executable engines.
+ *
+ * YAML frontmatter is read and written by the SSSS parser (@ssss/cli/frontmatter),
+ * the single implementation shared with every SSSS host, so Total Recall and SSSS
+ * can never disagree about a vault file. This wrapper keeps the gray-matter-style
+ * API, the fence/language checks and the CRLF handling.
+ */
+import { parseFrontmatter, serializeDocument, repairEscapedNewlines } from '@ssss/cli/frontmatter';
+
+// YAML tags (`!!js/function`, `!!python/object`, ...) can request code; SSSS reads
+// them as plain text, so refuse them up front instead of storing them as data.
+const YAML_TAG = /(?:^|[:,\[{-])[ \t]*!!\S/m;
 
 export default function matter(input) {
   const original = Buffer.isBuffer(input) ? input.toString('utf8') : typeof input === 'string' ? input : input?.content;
   if (typeof original !== 'string') throw new TypeError('Markdown content must be a string');
-  const text = original.replace(/^\uFEFF/, '');
+  const text = repairEscapedNewlines(original.replace(/^﻿/, ''));
   const file = { data: {}, content: text, excerpt: '', orig: original };
   const opening = /^---([^\r\n]*)\r?\n/.exec(text);
   if (!opening || opening[1].startsWith('-')) return file;
@@ -22,7 +25,8 @@ export default function matter(input) {
   const remainder = text.slice(opening[0].length);
   const closing = /^---(?:\r?\n|$)/m.exec(remainder);
   const metadata = closing ? remainder.slice(0, closing.index) : remainder;
-  file.data = (language === 'json' ? JSON.parse(metadata || '{}') : load(metadata, { schema })) || {};
+  if (language !== 'json' && YAML_TAG.test(metadata)) throw new Error('YAML tags are not allowed in frontmatter');
+  file.data = (language === 'json' ? JSON.parse(metadata || '{}') : parseFrontmatter(metadata.replace(/\r\n/g, '\n'), { strict: true })) || {};
   file.content = closing ? remainder.slice(closing.index + closing[0].length) : '';
   file.matter = metadata;
   file.language = language;
@@ -30,11 +34,14 @@ export default function matter(input) {
 }
 
 const newline = value => value.endsWith('\n') ? value : value + '\n';
-matter.stringify = (input, data, options = {}) => {
+// Dates become ISO strings (SSSS keeps timestamps as strings); undefined is dropped.
+const plain = value => JSON.parse(JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v)));
+
+matter.stringify = (input, data) => {
   if (typeof input === 'string' && data == null) return input;
   const file = typeof input === 'string' ? matter(input) : input;
   if (!file || typeof file.content !== 'string') throw new TypeError('Markdown content must be a string');
-  const metadata = { ...file.data, ...(data ?? {}) };
-  const serialized = dump(metadata, options).trim();
-  return (serialized === '{}' ? '' : `---\n${serialized}\n---\n`) + newline(file.content);
+  const metadata = plain({ ...file.data, ...(data ?? {}) });
+  const head = Object.keys(metadata).length ? serializeDocument(metadata, '') : '';
+  return head + newline(file.content);
 };

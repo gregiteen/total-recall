@@ -182,7 +182,7 @@
     },
     {
       "id": "test",
-      "tier": "local",
+      "tier": "remote",
       "description": "Full vitest suite. LOCAL on the sanctioned test machine (the Mac mini): the repos live here now, so this working tree IS the sanctioned environment and the suite runs in place. The old remote indirection existed because the mini was a separate node driven from a laptop that could not hold the load; that reason is gone.",
       "cmd": [
         "npm",

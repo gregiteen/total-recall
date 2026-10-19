@@ -43,7 +43,15 @@ export const CLIENTS = {
     globalMemoryPath: path.join(os.homedir(), '.dsh', 'memory', 'MEMORY.md'),
     globalUserPath:   path.join(os.homedir(), '.dsh', 'memory', 'user.md'),
     localTarget: 'AGENTS.md',
-    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') },
+    // DSH's default agent preset mounts dsh-skill-filesystem with no config, so
+    // the roots it scans are its own defaults: <dshHome>/skills (user-dsh) plus
+    // <repo>/.agents/skills and <repo>/.dsh/skills. Its host-plane
+    // `skill-filesystem` row is disabled because presets own local discovery, so
+    // a profile patch cannot configure these roots. Projecting Total Recall's
+    // authored skills into <dshHome>/skills is therefore the supported way to
+    // make them reach the `/` slash menu, globally and for every repo.
+    globalSkillsProjection: { dir: path.join('.dsh', 'skills') }
   },
   'deepseek-harness': {
     label: 'DeepSeek Harness',
@@ -51,7 +59,8 @@ export const CLIENTS = {
     globalMemoryPath: path.join(os.homedir(), '.dsh', 'memory', 'MEMORY.md'),
     globalUserPath:   path.join(os.homedir(), '.dsh', 'memory', 'user.md'),
     localTarget: 'AGENTS.md',
-    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
+    skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') },
+    globalSkillsProjection: { dir: path.join('.dsh', 'skills') }
   },
   openclaw: {
     label: 'OpenClaw',
@@ -1030,6 +1039,29 @@ export default async function connect(args) {
           : (path.relative(cwd, destDir) || destDir);
         result.notes.push(
           `  Repo skills projected → ${destLabel}/:\n` +
+          fresh.map(r => `    ${r.name}`).join('\n')
+        );
+      }
+    }
+  }
+
+  // Project GLOBAL skills into the target IDE's home-scoped Agent Skills
+  // directory. Some harnesses read only a home root for skills and never scan a
+  // repo directory, so a client that declares `globalSkillsProjection` needs this
+  // as well as the project projection above. `connect <ide>` must leave a client
+  // usable for both scopes; `init` reaches the same destination through
+  // projectSkillsForScope().
+  if (preset.globalSkillsProjection) {
+    const globalAgentDir = path.join(os.homedir(), '.agent');
+    const skills = discoverRepoSkills(globalAgentDir);
+    if (skills.length > 0) {
+      const destDir = path.join(os.homedir(), preset.globalSkillsProjection.dir);
+      const skillResults = projectSkillsAsCommands(destDir, skills, opts);
+      result.global_skill_commands = skillResults;
+      const fresh = skillResults.filter(r => r.action === 'linked' || r.action === 'copied');
+      if (fresh.length > 0) {
+        result.notes.push(
+          `  Global skills projected → ${destDir}/:\n` +
           fresh.map(r => `    ${r.name}`).join('\n')
         );
       }
