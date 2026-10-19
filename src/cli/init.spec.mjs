@@ -38,6 +38,29 @@ describe('connectDetectedClients', () => {
 });
 
 
+describe('plugin dependency wiring failure isolation', () => {
+  it('init source guards preparePluginDependencies so one bad plugin cannot abort later steps', () => {
+    // Regression: an unguarded preparePluginDependencies() threw
+    // "Cannot find module '@gregiteen/ssss-cli'" for a vendored plugin and killed
+    // `init` before step 3.7, so global skills were never projected into any
+    // IDE's skill root, and their slash menus stayed empty with no error the
+    // user could connect to the cause. The call site must stay inside try/catch.
+    const source = fs.readFileSync(fileURLToPath(new URL('./init.mjs', import.meta.url)), 'utf8');
+    const callIndex = source.indexOf('preparePluginDependencies(target)');
+    expect(callIndex).toBeGreaterThan(-1);
+
+    const before = source.slice(0, callIndex);
+    const tryIndex = before.lastIndexOf('try {');
+    const catchIndex = source.indexOf('} catch', callIndex);
+    expect(tryIndex).toBeGreaterThan(-1);
+    expect(catchIndex).toBeGreaterThan(callIndex);
+
+    // The guard must be the immediately enclosing block, not a distant earlier one.
+    expect(before.slice(tryIndex)).not.toContain('}\n  }');
+  });
+});
+
+
 describe('compatibility initialization explicit root isolation', () => {
   for (const layer of ['global', 'project']) {
     it(`initializes the explicit ${layer} root without writing HOME/.agent`, () => {

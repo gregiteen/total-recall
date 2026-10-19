@@ -1,3 +1,15 @@
+## 3.40.0 — 2026-10-19
+
+- Read and write frontmatter with the SSSS parser (`@ssss/cli/frontmatter`,
+  pinned to 0.11.2) instead of a separate js-yaml reader, so Total Recall and
+  SSSS can no longer disagree about a vault file. Verified on 30,518 files
+  across 57 vaults. Malformed YAML still fails loudly (strict mode), YAML tags
+  such as `!!js/function` are still rejected, and CRLF is unchanged.
+- Behavior changes: timestamps in frontmatter are now strings, not `Date`
+  objects (schemas already accept strings); leading-zero codes such as
+  `zip: 07885` keep their zero; vault files flattened onto one line with
+  literal `\n` text are repaired when read.
+
 ## 3.39.1 — 2026-10-08
 
 - Enforce mandatory Total Recall first-step directives across IDE instruction

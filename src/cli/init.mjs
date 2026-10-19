@@ -318,7 +318,18 @@ export default async function init(args) {
     for (const id of (fs.existsSync(installedPluginsDir) ? fs.readdirSync(installedPluginsDir) : [])) {
       const target = path.join(installedPluginsDir, id);
       if (!fs.existsSync(path.join(target, 'package.json'))) continue;
-      preparePluginDependencies(target);
+      // One plugin whose declared dependency cannot be wired must not abort the
+      // whole run: the steps after this one — global skill projection into each
+      // IDE, then the vault compile — are independent of it. Before this guard a
+      // single unresolvable optional dependency (observed: '@gregiteen/ssss-cli'
+      // in a vendored plugin) killed `init` before skill projection, so no IDE
+      // ever received the global skills and their slash menus stayed empty with
+      // no error the user could connect to the cause.
+      try {
+        preparePluginDependencies(target);
+      } catch (err) {
+        logWarn(`Could not wire dependencies for plugin '${id}': ${err.message}`);
+      }
     }
   }
   logStep('2.5/4', 'Creating user data directories inside meta-skill');
