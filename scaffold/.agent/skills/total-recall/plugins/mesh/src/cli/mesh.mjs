@@ -19,6 +19,7 @@ import { spawnSync } from 'node:child_process';
 import { resolveBrainDir, parseLayerFlag } from './agent-dir.mjs';
 import {
   describeHeadscaleAvailability,
+  headscaleFetch,
   createHeadscalePreAuthKey,
   getHeadscalePolicy,
   setHeadscalePolicy,
