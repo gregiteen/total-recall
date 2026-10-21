@@ -333,7 +333,7 @@ export const PROVIDER_CATALOG = [
     id: 'telnyx',
     name: 'Telnyx',
     docs_url: 'https://developers.telnyx.com/api',
-    console_url: 'https://portal.telnyx.com/#/app/api-keys',
+    console_url: 'https://portal.telnyx.com/#/api-keys',
     key_patterns: ['TELNYX_API_KEY', 'TELNYX_SIP_PASSWORD'],
     schema: { auth: 'bearer', header: 'Authorization: Bearer <key>', env_keys: ['TELNYX_API_KEY'] },
     rotation: { class: 'provider_browser' },

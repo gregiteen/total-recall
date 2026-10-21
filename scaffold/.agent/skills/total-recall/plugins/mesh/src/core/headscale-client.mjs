@@ -272,8 +272,12 @@ export function buildMeshSshPolicy({ allowRoot = false } = {}) {
     ssh: [
       {
         action: 'accept',
+        // autogroup:member, not autogroup:self. 'self' limits a member to SSH on their own
+        // devices, so no node on the mesh could reach any other one and every cross-machine
+        // operation fell back to key auth that had never been set up — which reads as the peer
+        // being unreachable. The point of this policy is that members reach each other.
         src: ['autogroup:member'],
-        dst: ['autogroup:self'],
+        dst: ['autogroup:member'],
         users: allowRoot ? ['autogroup:nonroot', 'root'] : ['autogroup:nonroot'],
       },
     ],
