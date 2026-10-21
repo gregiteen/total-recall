@@ -20,6 +20,7 @@ import { selectRules, assembleContext, curatedRules } from './context-policy.mjs
 import { discoverPlugins } from './plugin-loader.mjs';
 import { refreshPluginCatalog } from './plugin-catalog.mjs';
 import { pluginActivation } from './plugin-state.mjs';
+import { CLI_QUICK_REFERENCE } from './cli-quick-reference.mjs';
 
 // Long-lived processes (server, daemon, vault watcher) import this module once.
 // If the rule builder is edited or upgraded after they start, their in-memory
@@ -383,6 +384,8 @@ export function legacyRuleContributions(skillsDir) {
   })).filter(item => item.text);
 }
 
+const PLUGIN_OPERATIONS_SHOWN = 14;
+
 export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
   try {
     const plugins = discoverPlugins(projectRoot).filter((p) => p.valid);
@@ -396,7 +399,10 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
     for (const p of plugins) {
       const cmd = p.manifest.cli?.command || p.id;
       const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').slice(0, 30).trimEnd();
-      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p).state} · \`${cmd}\` · ${p.manifest.cli?.subcommands?.length || 0} operations: ${desc}`);
+      const ops = (p.manifest.cli?.subcommands || []).map(sub => sub.name).filter(Boolean);
+      const shown = ops.slice(0, PLUGIN_OPERATIONS_SHOWN).join(' | ');
+      const more = ops.length > PLUGIN_OPERATIONS_SHOWN ? ` | +${ops.length - PLUGIN_OPERATIONS_SHOWN} more (\`${cmd} --help\`)` : '';
+      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p).state} · \`total-recall ${cmd}\` ${shown ? `[${shown}${more}]` : '(no operations)'}: ${desc}`);
     }
     return lines.join('\n') + '\n';
   } catch {
@@ -427,15 +433,16 @@ Read the complete returned capsule and require ready:true. Unknown rule applicab
 Total Recall is the agent's working memory, toolset, and single source of truth across all decisions. Refresh at every changed task, action or project, and after a memory/skill edit. Do not infer applicability from semantic similarity. CLI retrieval is local and works without the server. Skills have compact entrypoints; load only relevant references. Canonical vault writes use the validated CLI.
 
 DO NOT SKIP THIS. Run Total Recall CLI help and context first before doing anything else.
-` :
+
+${CLI_QUICK_REFERENCE}` :
     `## Active Rules: ${counts('invariants')} invariants, ${counts('preferences')} preferences, ${counts('anti-patterns')} corrections`;
   contributions.push({ id: 'routing', text: header, required: true });
-  for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
-    text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
   const pluginsSummary = buildInstalledPluginsSummary(root);
   if (pluginsSummary) {
     contributions.push({ id: 'installed-plugins', text: pluginsSummary, required: true });
   }
+  for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
+    text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
   contributions.push({ id: 'commands', text: buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir))) });
   if (!bootstrap) {
     if (skillsDir) {

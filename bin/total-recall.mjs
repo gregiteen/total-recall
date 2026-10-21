@@ -135,6 +135,8 @@ async function printHelp() {
     connect <client>    Wire IDE surface (Cursor, Claude, Codex, Grok, Replit, Lovable)
     remember / forget / edit   Write-path memory (SSSS vault)
     recall              Read-path hybrid search
+    context "<task>"    Required-rule capsule to read before acting (require ready:true)
+    auth secret <cmd>   Credentials (the only secrets path): list|get|set|rotate|remote deploy|diff-env|export-env
     compile             Rebuild instruction surfaces
     dream               Memory consolidation cycle
     proposals <cmd>     Review / apply optimizer proposals (list|apply|revert)
