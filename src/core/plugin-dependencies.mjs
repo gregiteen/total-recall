@@ -12,7 +12,8 @@ export function preparePluginDependencies(pluginDir) {
     let source;
     if (name === host.name) source = PACKAGE_ROOT;
     else {
-      source = path.dirname(require.resolve(name));
+      const alias = Object.entries(host.dependencies || {}).find(([, spec]) => typeof spec === 'string' && spec.startsWith(`npm:${name}@`))?.[0];
+      source = path.dirname(require.resolve(alias || name));
       while (true) {
         const file = path.join(source, 'package.json');
         if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).name === name) break;

@@ -49,7 +49,7 @@ export function buildBrowserRotatePrompt(secretMeta) {
     '3. Create a NEW API key (do not delete the old one yet).',
     '4. Copy the new key value ONCE — never paste into chat logs or vault markdown.',
     '5. Tell the human to run (or run via tool if value is only in a secure channel):',
-    `   npx total-recall secret rotate ${secretMeta.key} "<NEW_VALUE>" --export-env`,
+    `   npx total-recall auth secret rotate ${secretMeta.key} "<NEW_VALUE>" --export-env`,
     '6. After TR confirms export succeeded, revoke/disable the OLD key in the console.',
     '',
     docsUrl ? `API docs: ${docsUrl}` : '',
@@ -124,7 +124,7 @@ export async function enqueueRotationDueTasks(brainDir, opts = {}) {
       `## After new value is obtained`,
       ``,
       '```bash',
-      `npx total-recall secret rotate ${secret.key} "<NEW_VALUE>" --export-env`,
+      `npx total-recall auth secret rotate ${secret.key} "<NEW_VALUE>" --export-env`,
       '```',
     ].join('\n');
 

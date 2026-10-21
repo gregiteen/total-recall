@@ -40,76 +40,7 @@ import path from 'node:path';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_DIR = path.join(__dirname, '..', 'src', 'cli');
 
-const COMMANDS = {
-  app:      'app/index.mjs',
-  init:     'init.mjs',
-  setup:    'setup.mjs',
-  start:    'start.mjs',
-  startup:  'startup.mjs',
-  deploy:   'deploy.mjs',
-  doctor:   'doctor.mjs',
-  backup:   'backup.mjs',
-  dream:    'dream.mjs',
-  lint:     'lint.mjs',
-  daemon:   'daemon.mjs',
-  restore:  'restore.mjs',
-  upgrade:  'upgrade.mjs',
-  update:   'update.mjs',
-  friction: 'friction.mjs',
-  chat:     'chat.mjs',
-  status:   'status.mjs',
-  remember: 'remember.mjs',
-  forget:   'forget.mjs',
-  edit:     'edit.mjs',
-  recall:   'recall.mjs',
-  context:  'context.mjs',
-  rules:    'rules.mjs',
-  search:   'recall.mjs',
-  research: 'research.mjs',
-  proposals: 'proposals.mjs',
-  proposal:  'proposals.mjs',
-  task:     'task.mjs',
-  share:    'share.mjs',
-  'generate-pat': 'generate-pat.mjs',
-  key:      'key.mjs',
-  keys:     'key.mjs',
-  pat:      'key.mjs',
-  'hash-password': 'hash-password.mjs',
-  'reset-password': 'reset-password.mjs',
-  compile:  'rebuild.mjs',
-  rebuild:  'rebuild.mjs',
-  snapshot: 'snapshot.mjs',
-  migrate:  'migrate.mjs',
-  backfill: 'backfill.mjs',
-  ingest:   'ingest.mjs',
-  import:   'import-rules.mjs',
-  connect:  'connect.mjs',
-  sync:     'sync.mjs',
-  relay:    'relay.mjs',
-  uninstall: 'uninstall.mjs',
-  map:      'map.mjs',
-  brain:    'brain.mjs',
-  config:   'config.mjs',
-  skill:    'skill.mjs',
-  'project-id': 'project-id.mjs',
-  api:      'api.mjs',
-  brief:    'brief.mjs',
-  group:    'group.mjs',
-  groups:   'group.mjs',
-  help:     'help.mjs',
-  collab:   'collab.mjs',
-  command:  'command.mjs',
-  export:   'export.mjs',
-  harness:  'harness.mjs',
-  watch:    'rebuild.mjs',
-  agent:    'agent.mjs',
-  agents:   'agent.mjs',
-  new:      'new.mjs',
-  plugin:   'plugin/index.mjs',
-  plugins:  'plugin/index.mjs',
-  scaffold: 'plugin/scaffold-cmd.mjs',
-  'scaffold-plugin': 'plugin/scaffold-cmd.mjs',
-};
+import { CLI_COMMANDS as COMMANDS } from '../src/core/cli-commands.mjs';
 async function printHelp() {
   let pluginsSection = '';
   try {
@@ -165,17 +96,23 @@ ${pluginsSection}
     npx total-recall remember fact "The API uses port 3000."
     npx total-recall dream
     npx total-recall skill track .
-    npx total-recall secret list
+    npx total-recall auth secret list
 
   Options:
     --help, -h          Show this help
     --version, -v       Show version
 `);
+  console.log(`  Complete built-in command list:\n    ${Object.keys(COMMANDS).join(', ')}\n`);
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
+  // These names must not reappear through generic API or composed routing.
+  if (command === 'secret' || command === 'secrets') {
+    console.error('Credential commands belong to the auth plugin. Use total-recall auth secret --help.');
+    process.exit(1);
+  }
 
   if (!command || command === '--help' || command === '-h') {
     await printHelp();
@@ -203,15 +140,16 @@ async function main() {
       const { discoverPlugins } = await import('../src/core/plugin-loader.mjs');
       const plugins = discoverPlugins(process.cwd());
       for (const p of plugins) {
-        if (p.valid && (p.manifest.cli?.command === command || (p.id === 'auth' && (command === 'secret' || command === 'secrets')))) {
+        if (p.valid && p.manifest.cli?.command === command) {
           const handlerRel = p.manifest.cli.handler;
           if (handlerRel) {
             const { runPluginCommand } = await import('../src/core/plugin-runner.mjs');
-            const pluginArgs = (command === 'secret' || command === 'secrets')
-              ? ['secret', ...args.slice(1)]
-              : args.slice(1);
+            const pluginArgs = args.slice(1);
             const result = await runPluginCommand(p, { args: pluginArgs, stdin: 'inherit' });
-            if (result.output) process.stdout.write(result.output);
+            if (result.stdout !== undefined) {
+              if(result.stdout)process.stdout.write(result.stdout);
+              if(result.stderr)process.stderr.write(result.stderr);
+            }else if(result.output)process.stdout.write(result.output);
             process.exit(result.ok ? 0 : (result.exitCode || 1));
           }
         }

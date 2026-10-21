@@ -63,7 +63,10 @@ describe('context optimization populated synthetic walkthrough', () => {
   try {
    const nodes=Array.from({length:100},(_,i)=>({slug:`rule-${i}`,title:`Rule ${i}`,category:'invariants',status:'active',body:`constraint ${i} `.repeat(30),tags:[`context:action:${i%2?'test':'publish'}`]}));
    const block=await buildRulesBlock(null,nodes,{bootstrap:true,projectRoot:root});
-   expect(block.length).toBeLessThan(4000);
+   // The bootstrap includes the complete built-in inventory, but no action-only rules.
+   expect(block.length).toBeLessThan(6000);
+   expect(block).toContain('Built-in commands:');
+   expect(block).not.toContain('constraint 0');
    expect(block).toContain('BEFORE ACTING');
    const capsule=await compileContext({nodes,actions:['test'],budget:{total:16000}});
    expect(capsule.ready).toBe(true);

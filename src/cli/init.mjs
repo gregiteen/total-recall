@@ -244,10 +244,10 @@ export default async function init(args) {
   logOk(`Base directory structure ready (${created} created, ${dirs.length - created} already existed)`);
 
   // Auth is a required scaffold plugin. Existing installations are preserved.
-  const authSource = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins', 'auth');
-  const authTarget = path.join(brainDir, 'plugins', 'auth');
-  if (!fs.existsSync(path.join(authSource, 'plugin.json'))) throw new Error('Required auth scaffold is missing');
-  if (!fs.existsSync(authTarget) && !opts.dryRun) fs.cpSync(authSource, authTarget, { recursive: true, errorOnExist: true, force: false });
+  if (!opts.dryRun) {
+    const { ensureRequiredPlugins } = await import('../core/required-plugins.mjs');
+    ensureRequiredPlugins(brainDir);
+  }
 
   // Every scaffold plugin's node_modules are wired in Step 2.5, after the skill
   // tree has been copied into the brain (see the note there).

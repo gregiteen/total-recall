@@ -56,8 +56,10 @@ function printHelp() {
 
   Commands:
     start     Start the background Active Intelligence Daemon
+    ensure    Enable the managed daemon; --restart reloads current source
     stop      Stop the background daemon
     status    Show daemon status + recent log entries
+    logs      Read daemon logs (--lines N, default 50)
 
   The daemon runs a durable task loop that:
     • Ingests IDE conversation logs (Claude Code, Codex, Gemini, etc.)
@@ -207,6 +209,39 @@ export default async function daemon(args) {
   const useLaunchd = !useSystemd && hasLaunchd();
 
   switch (subcommand) {
+    case 'ensure': {
+      if(!useSystemd)throw new Error('Managed daemon ensure currently requires systemd on the daemon host');
+      // A detached worker can hold the same brain lock while systemd reports a
+      // successful short-lived start. Stop that verified owner before takeover.
+      const managed=spawnSync('systemctl',['show','total-recall-daemon','--property=MainPID','--value'],{encoding:'utf8'});
+      if(managed.status!==0)throw new Error('Cannot inspect managed daemon');
+      const owner=readPid(),managedPid=Number(managed.stdout.trim());
+      if(owner && (owner!==managedPid || args.includes('--restart'))){
+        if(owner===managedPid)execFileSync('systemctl',['stop','total-recall-daemon'],{stdio:'inherit'});
+        else if(!await stopDaemon())throw new Error('Cannot stop verified detached daemon');
+      }
+      execFileSync('systemctl',['enable','--now','total-recall-daemon'],{stdio:'inherit'});
+      await new Promise(resolve=>setTimeout(resolve,3000));
+      const active=spawnSync('systemctl',['is-active','--quiet','total-recall-daemon']);
+      const current=spawnSync('systemctl',['show','total-recall-daemon','--property=MainPID','--value'],{encoding:'utf8'});
+      const pid=readPid();
+      if(active.status!==0 || !pid || pid!==Number(current.stdout?.trim()))throw new Error('Managed daemon did not retain ownership of the brain lock');
+      console.log(JSON.stringify({ok:true,manager:'systemd',pid,enabled:true}));
+      break;
+    }
+    case 'logs': {
+      const index = args.indexOf('--lines');
+      const lines = index < 0 ? 50 : Number(args[index + 1]);
+      if (!Number.isInteger(lines) || lines < 1 || lines > 10000) throw new Error('--lines must be an integer from 1 to 10000');
+      if (useSystemd) {
+        const result = spawnSync('journalctl', ['-u', 'total-recall-daemon.service', '-n', String(lines), '--no-pager'], { stdio: 'inherit' });
+        if (result.error || result.status !== 0) throw new Error('Could not read the daemon journal');
+      } else {
+        if (!fs.existsSync(LOG_FILE)) throw new Error('No daemon log exists');
+        console.log(fs.readFileSync(LOG_FILE, 'utf8').trimEnd().split('\n').slice(-lines).join('\n'));
+      }
+      break;
+    }
     case 'start':
       if (useSystemd) systemdStart();
       else if (useLaunchd) launchctlStart();
@@ -224,7 +259,7 @@ export default async function daemon(args) {
       break;
     default:
       console.error(`  Unknown daemon command: ${subcommand}`);
-      console.error(`  Valid commands: start, stop, status`);
+      console.error(`  Valid commands: start, ensure, stop, status, logs`);
       process.exit(1);
   }
 }

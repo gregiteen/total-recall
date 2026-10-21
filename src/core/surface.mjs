@@ -344,7 +344,7 @@ export function readRuleBudgets(skillsDir) {
   return out;
 }
 
-const DEFAULT_CONTEXT_BUDGET = { total_tokens: 4000, bootstrap_total_tokens: 2500 };
+const DEFAULT_CONTEXT_BUDGET = { total_tokens: 4000, bootstrap_total_tokens: 16000 };
 
 /**
  * Instruction-surface token budget from surface.yml files and the environment.
@@ -384,8 +384,6 @@ export function legacyRuleContributions(skillsDir) {
   })).filter(item => item.text);
 }
 
-const PLUGIN_OPERATIONS_SHOWN = 14;
-
 export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
   try {
     const plugins = discoverPlugins(projectRoot).filter((p) => p.valid);
@@ -400,9 +398,8 @@ export function buildInstalledPluginsSummary(projectRoot = process.cwd()) {
       const cmd = p.manifest.cli?.command || p.id;
       const desc = (p.manifest.description || 'Plugin capability').replace(/\s+/g, ' ').slice(0, 30).trimEnd();
       const ops = (p.manifest.cli?.subcommands || []).map(sub => sub.name).filter(Boolean);
-      const shown = ops.slice(0, PLUGIN_OPERATIONS_SHOWN).join(' | ');
-      const more = ops.length > PLUGIN_OPERATIONS_SHOWN ? ` | +${ops.length - PLUGIN_OPERATIONS_SHOWN} more (\`${cmd} --help\`)` : '';
-      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p).state} · \`total-recall ${cmd}\` ${shown ? `[${shown}${more}]` : '(no operations)'}: ${desc}`);
+      const shown = ops.join(' | ');
+      lines.push(`- **${p.id}** v${p.manifest.version || 'unknown'} · ${pluginActivation(p).state} · \`total-recall ${cmd}\` ${shown ? `[${shown}]` : '(no operations)'}: ${desc}`);
     }
     return lines.join('\n') + '\n';
   } catch {
@@ -419,7 +416,8 @@ export async function buildRulesBlock(skillsDir, nodes = [], {
   const rules = selectRules(curatedRules(nodes), { actions, projectRoot: root, bootstrap });
   const contributions = [];
   const counts = category => rules.filter(n => n.category === category).length;
-  const header = bootstrap ? `# 🔴 MANDATORY FIRST STEP: TOTAL RECALL CLI & TASK ROUTING
+  const commands = buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir)));
+  const header = bootstrap ? `${CLI_QUICK_REFERENCE}\n${buildInstalledPluginsSummary(root)}\n${commands}\n# 🔴 MANDATORY FIRST STEP: TOTAL RECALL CLI & TASK ROUTING
 
 1. RUN TOTAL RECALL CLI HELP FIRST:
 \`total-recall --help\`
@@ -434,16 +432,16 @@ Total Recall is the agent's working memory, toolset, and single source of truth 
 
 DO NOT SKIP THIS. Run Total Recall CLI help and context first before doing anything else.
 
-${CLI_QUICK_REFERENCE}` :
+` :
     `## Active Rules: ${counts('invariants')} invariants, ${counts('preferences')} preferences, ${counts('anti-patterns')} corrections`;
   contributions.push({ id: 'routing', text: header, required: true });
   const pluginsSummary = buildInstalledPluginsSummary(root);
-  if (pluginsSummary) {
+  if (pluginsSummary && !bootstrap) {
     contributions.push({ id: 'installed-plugins', text: pluginsSummary, required: true });
   }
   for (const node of rules) contributions.push({ id: `${node._layer || 'project'}:${node.slug}`, required: true,
     text: node._directive ? `[${node.slug}] ${node._directive}` : `### ${node.title || node.slug} [${node.slug}]\n\n${node.body || node.content || ''}` });
-  contributions.push({ id: 'commands', text: buildCommandsSection(listSurfaceCommands(commandDirsFor(skillsDir))) });
+  if (!bootstrap) contributions.push({ id: 'commands', text: commands });
   if (!bootstrap) {
     if (skillsDir) {
       contributions.push(...legacyRuleContributions(skillsDir));
@@ -467,7 +465,8 @@ function injectDirectives(fileContent, rulesBlock) {
   const endIdx = fileContent.indexOf(DIRECTIVES_END);
   
   if (beginIdx !== -1 && endIdx !== -1 && endIdx > beginIdx) {
-    return fileContent.slice(0, beginIdx) + DIRECTIVES_BEGIN + '\n' + rulesBlock + '\n' + DIRECTIVES_END + fileContent.slice(endIdx + DIRECTIVES_END.length);
+    const authored = fileContent.slice(0, beginIdx) + fileContent.slice(endIdx + DIRECTIVES_END.length);
+    return prependDirectives(authored, rulesBlock);
   }
   
   let content = fileContent.trimEnd();
@@ -476,7 +475,15 @@ function injectDirectives(fileContent, rulesBlock) {
     content = baseline + '\n\n' + content;
   }
   
-  return content.trimEnd() + '\n\n' + DIRECTIVES_BEGIN + '\n' + rulesBlock + '\n' + DIRECTIVES_END + '\n';
+  return prependDirectives(content, rulesBlock);
+}
+
+function prependDirectives(authored, rulesBlock) {
+  // YAML metadata must remain first for clients that parse .mdc frontmatter.
+  const frontmatter = authored.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/);
+  const prefix = frontmatter?.[0] || '';
+  const body = authored.slice(prefix.length).trim();
+  return `${prefix}${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n\n${body}\n`;
 }
 
 /**
@@ -489,7 +496,7 @@ async function writeShim(shimPath, skillsDir, nodes = [], { vaultDir, derivedDir
   const mdcHeader = shimPath.endsWith('.mdc')
     ? '---\ndescription: "Total Recall — Auto-generated behavioral memory surface."\nglobs:\nalwaysApply: true\n---\n\n'
     : '';
-  const fullContent = `${mdcHeader}${baseline}\n${DIRECTIVES_BEGIN}\n${rulesBlock}\n${DIRECTIVES_END}\n`;
+  const fullContent = prependDirectives(`${mdcHeader}${baseline}`, rulesBlock);
 
   try {
     const stat = fs.lstatSync(shimPath, { throwIfNoEntry: false });

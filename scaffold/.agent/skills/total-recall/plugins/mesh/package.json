@@ -1,17 +1,11 @@
 {
   "name": "tr-plugin-mesh",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Headscale and Tailscale SSH control-server mesh administration and node discovery",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "test:runtime": "vitest run"
-  },
-  "devDependencies": {
-    "total-recall-brain": "^3.39.1",
-    "vitest": "^4.1.11",
-    "supertest": "^7.2.2",
-    "jsdom": "^29.1.1"
   },
   "license": "MIT",
   "dependencies": {

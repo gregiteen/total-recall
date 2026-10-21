@@ -1,0 +1,186 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "code-quality",
+  "name": "Code Quality Gates",
+  "version": "0.2.1",
+  "description": "Fail-closed deterministic code-quality gates, lint rules, and test compliance reporting.",
+  "author": "Total Recall contributors",
+  "license": "MIT",
+  "use_cases": [
+    "software-development"
+  ],
+  "cli": {
+    "command": "code-quality",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "report",
+        "description": "Print the latest gate report (views: worst, type, file, count, raw, json); never starts a check",
+        "effect": "read"
+      },
+      {
+        "name": "snapshot",
+        "description": "Copy the exact source under test (git file lists of this repo and linked plugin repos, secrets refused) to the test node, with a SHA-256 manifest",
+        "effect": "write"
+      },
+      {
+        "name": "gate",
+        "description": "List, add or remove this repository's gates (validated, recorded in the project vault)",
+        "effect": "write"
+      },
+      {
+        "name": "config",
+        "description": "Get, set, validate, check, rebuild or import the repo-layer config",
+        "effect": "write"
+      },
+      {
+        "name": "detect",
+        "description": "Propose gates from the repository (--apply to record them)",
+        "effect": "write"
+      },
+      {
+        "name": "init",
+        "description": "Create the repo-layer config from defaults, detection and prompts",
+        "effect": "write"
+      }
+    ]
+  },
+  "commands": [
+    {
+      "name": "code-quality-check",
+      "handler": "./commands/check.mjs",
+      "description": "Run this repo's gates once and write reports/latest.json (--tier fast|full|remote, --only <id>).",
+      "background": true
+    },
+    {
+      "name": "code-quality-report",
+      "handler": "./commands/report.mjs",
+      "description": "Read the latest gate report and whether it is still current."
+    }
+  ],
+  "ui": {
+    "elements": [
+      {
+        "id": "code-quality-report",
+        "kind": "panel",
+        "tag": "code-quality-report",
+        "module": "ui/code-quality-report.mjs",
+        "description": "Latest gate report with honest status: revision, coverage, skipped gates, timings, stale/missing/infrastructure errors. Data comes from `code-quality report json`.",
+        "props": {
+          "view": {
+            "type": "object",
+            "description": "JSON printed by `total-recall code-quality report json`. Absent view renders as no data, never as passing."
+          }
+        },
+        "events": [
+          "run-check",
+          "reload"
+        ],
+        "optional_tokens": [
+          "font-body",
+          "color-text",
+          "color-border",
+          "color-surface",
+          "color-success",
+          "color-warning",
+          "color-danger",
+          "radius-md",
+          "space-4"
+        ]
+      },
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-code-quality-card",
+        "module": "ui/card.js",
+        "description": "Gatekeeper Card Face"
+      }
+    ]
+  },
+  "card_face": {
+    "skin": "winamp-classic",
+    "theme": "vibrant",
+    "headline": "Deterministic Code Gates & Lint",
+    "primary_color": "#06b6d4",
+    "secondary_color": "#164e63",
+    "accent_color": "#22d3ee",
+    "touch_layout": "comfortable",
+    "interactive": true,
+    "quick_actions": [
+      {
+        "subcommand": "report",
+        "label": "REPORT"
+      },
+      {
+        "subcommand": "gate",
+        "label": "GATE"
+      },
+      {
+        "subcommand": "config",
+        "label": "CONFIG"
+      },
+      {
+        "subcommand": "detect",
+        "label": "DETECT"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "branding": {
+    "name": "Code Quality Gates",
+    "color": "#eab308",
+    "badge": "Quality Gate",
+    "font": "space-grotesk"
+  },
+  "status": {
+    "command": "report",
+    "refresh_seconds": 30
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  },
+  "card_layout": {
+    "template": "workbench",
+    "regions": [
+      {
+        "widget": "status",
+        "title": "Status"
+      },
+      {
+        "widget": "live",
+        "title": "Live view"
+      },
+      {
+        "widget": "actions",
+        "title": "Commands"
+      },
+      {
+        "widget": "activity",
+        "title": "Recent activity"
+      }
+    ]
+  }
+}

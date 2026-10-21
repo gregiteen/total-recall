@@ -18,6 +18,7 @@ vi.mock('./github-sync.mjs', () => ({
 vi.mock('./package-auto-update.mjs', () => ({
   runPackageAutoUpdate: vi.fn().mockResolvedValue({ skipped: true, reason: 'test', results: [] }),
 }));
+vi.mock('./automatic-brain-updates.mjs',()=>({runAutomaticBrainUpdates:vi.fn().mockResolvedValue({skipped:true,reason:'test',results:[]})}));
 
 vi.mock('./secrets-store.mjs', () => ({
   getSecret: vi.fn().mockResolvedValue({ found: false }),

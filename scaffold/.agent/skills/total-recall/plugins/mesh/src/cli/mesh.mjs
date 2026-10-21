@@ -55,6 +55,10 @@ function printHelp() {
                            Record how to reach a node
     access import          Propose access from ~/.ssh/config (--apply to save)
     access sync            Learn login accounts from every peer already reachable
+    access verify [--all-pairs] [--json]
+                           Prove execution from each configured machine to every other
+    file put <node> <source> <destination> [--mode 600]
+                           Atomically transfer a file and verify its SHA-256
     access discover [node] Find a working login with this machine's keys and record it
     ping [node]            Measure round-trip latency to a node (or all nodes) (--json)
     leader                 Show cluster leader election status and current leader (--json)
@@ -428,6 +432,11 @@ export default async function meshCli(argv = []) {
 
     if (command === 'access') {
       const target = args.shift();
+      if(target==='verify'){
+        const {verifyMeshAccess}=await import('../core/mesh-access-verify.mjs');
+        const report=await verifyMeshAccess({allPairs:args.includes('--all-pairs')});
+        console.log(JSON.stringify(report,null,2));if(!report.ok)process.exitCode=1;return;
+      }
       if (!target) {
         fail('`access` requires a node name, or `import`.');
         return;

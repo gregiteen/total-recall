@@ -40,6 +40,14 @@ describe('plugin-runner', () => {
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
   });
 
+  it('keeps structured stdout separate from diagnostics for nested CLI consumers',async()=>{
+    const plugin=makePlugin(root,'streams','export function run(){console.error("diagnostic");console.log(JSON.stringify({ok:true}));}');
+    const result=await runPluginCommand(plugin,{cwd:root});
+    expect(JSON.parse(result.stdout)).toEqual({ok:true});
+    expect(result.stderr).toContain('diagnostic');
+    expect(result.output).toContain('diagnostic');
+  });
+
   it('reports thrown errors as a failed run', async () => {
     const p = makePlugin(root, 'thrower', 'export async function run() { throw new Error("boom"); }');
     const res = await runPluginCommand(p, { cwd: root });

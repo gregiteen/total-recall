@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-vi.mock('./plugin-loader.mjs', () => ({ discoverPlugins: () => [] }));
+vi.mock('./plugin-loader.mjs', async importOriginal => ({ ...await importOriginal(), discoverPlugins: () => [] }));
 vi.mock('./logger.mjs', () => ({ logger: { info() {}, warn() {}, debug() {} } }));
 vi.mock('./config.mjs', () => ({ brainDir: '/tmp/brain-update-test', ROOT: '/tmp/brain-update-test' }));
 vi.mock('./autopull-install.mjs', () => ({ installAutoPull: vi.fn() }));
@@ -45,6 +45,14 @@ describe('uniform brain updates', () => {
     expect(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).toBe(before);
     expect(exec.mock.calls.every(([, args]) => args[0] === 'view')).toBe(true);
     expect(fs.existsSync(path.join(root, '.total-recall-update.lock'))).toBe(false);
+  });
+
+  it('fails a registered brain with missing auth even when packages need no update', async () => {
+    const root = manifest(path.join(tmp, 'missing-auth'), {});
+    fs.mkdirSync(path.join(root, '.agent/skills/total-recall'), { recursive: true });
+    const result = await run([root], execWithInstall());
+    expect(result.failed).toBe(1);
+    expect(result.results[0].error).toMatch(/auth plugin/);
   });
 
   it('pins aliases in their original section and verifies the actual install', async () => {

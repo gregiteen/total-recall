@@ -115,6 +115,11 @@ export const CLIENTS = {
     // Grok discovers repository skills in <project>/.agents/skills.
     skillsProjection: { scope: 'project', dir: path.join('.agents', 'skills') }
   },
+  muse: {
+    label: 'Muse Code',
+    mode: 'symlink',
+    target: 'AGENTS.md'
+  },
   replit: {
     label: 'Replit Agent',
     mode: 'file',

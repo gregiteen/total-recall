@@ -18,6 +18,7 @@ import {
 import { brainDir } from '../core/config.mjs';
 import { installAutoPull } from '../core/autopull-install.mjs';
 import { updateAllBrains } from '../core/brain-updates.mjs';
+import { automaticUpdateStatus, runAutomaticBrainUpdates } from '../core/automatic-brain-updates.mjs';
 
 /** @param {string[]} args */
 export function parseArgs(args) {
@@ -32,6 +33,9 @@ export function parseArgs(args) {
     noBuild: false,
     allBrains: false,
     json: false,
+    automatic: false,
+    status: false,
+    localOnly: false,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -45,6 +49,9 @@ export function parseArgs(args) {
     else if (a === '--no-build') opts.noBuild = true;
     else if (a === '--all-brains') opts.allBrains = true;
     else if (a === '--json') opts.json = true;
+    else if (a === '--automatic') opts.automatic = true;
+    else if (a === '--status') opts.status = true;
+    else if (a === '--local-only') opts.localOnly = true;
   }
   return opts;
 }
@@ -64,6 +71,10 @@ function printHelp() {
     total-recall update --all-brains --apply [--json]
         Pin the same published versions, use npm/pnpm, replace shared dependency
         links with independent local installs, and verify every resolved version.
+    total-recall update --automatic [--json]
+        Daemon maintenance: update both packages, ensure defaults and refresh surfaces.
+    total-recall update --status [--json]
+        Read the actual last automatic maintenance report without starting work.
 
   This brain's own checkout (git):
     total-recall update --install-autopull [--port N] [--no-build] [--dry-run]
@@ -87,6 +98,14 @@ export default async function update(args = []) {
   if (opts.help) {
     printHelp();
     return;
+  }
+
+  if(opts.status){const status=automaticUpdateStatus(brainDir);console.log(JSON.stringify(status,null,2));return status;}
+  if(opts.automatic){
+    const report=await runAutomaticBrainUpdates({brainDir,force:opts.force,fleet:!opts.localOnly});
+    console.log(JSON.stringify(report,null,2));
+    if(report.failed)process.exitCode=1;
+    return report;
   }
 
   if (opts.allBrains) {

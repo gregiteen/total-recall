@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import init from './memory-init.mjs';
+import { inspectRequiredPlugins } from '../core/required-plugins.mjs';
 
 /**
  * `init --project` creates a brain and compiles its first surface. It derived
@@ -35,6 +36,9 @@ describe('memory-init writes a project surface at the repo root', () => {
     const atRoot = path.join(root, 'INSTRUCTIONS.md');
     expect(fs.existsSync(atRoot), 'project surface belongs at the repo root').toBe(true);
     expect(fs.readFileSync(atRoot, 'utf8')).toContain('TOTAL RECALL');
+    expect(inspectRequiredPlugins(path.join(root, '.agent/skills/total-recall')).status).toBe('ready');
+    const content = fs.readFileSync(atRoot, 'utf8');
+    expect(content.indexOf('Built-in commands:')).toBeLessThan(content.indexOf('MANDATORY FIRST STEP'));
 
     // The bug wrote the surface here instead; it must never return.
     expect(

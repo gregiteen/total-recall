@@ -701,6 +701,8 @@ export async function execMeshCommand(target, command, options = {}) {
 
   return new Promise((resolve, reject) => {
     const proc = spawn('ssh', sshArgs);
+    proc.stdin.on('error', error => { if(error.code!=='EPIPE') logger.error('mesh', 'Mesh stdin transport failed'); });
+    proc.stdin.end(options.input || '');
     let stdout = '';
     let stderr = '';
     let timedOut = false;

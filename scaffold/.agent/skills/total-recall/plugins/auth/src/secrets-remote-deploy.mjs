@@ -164,7 +164,7 @@ export async function deployEnvToRemote(brainDir, targetName, opts = {}) {
   const target = targets.find((t) => t.name === targetName);
   if (!target) {
     throw new Error(
-      `Unknown remote target "${targetName}". Configure one first: npx total-recall secret remote add ${targetName} --host <host> --path </remote/dir>`,
+      `Unknown remote target "${targetName}". Configure one first: npx total-recall auth secret remote add ${targetName} --host <host> --path </remote/dir>`,
     );
   }
 

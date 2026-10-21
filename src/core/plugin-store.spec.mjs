@@ -16,7 +16,7 @@ import {
   patchPluginRecord
 } from './plugin-distribution.mjs';
 import { ensurePluginRecord, installPluginDependencies } from './plugin-store.mjs';
-import { projectPluginsDir, globalPluginsDir, listBundledPlugins } from './plugin-loader.mjs';
+import { projectPluginsDir, globalPluginsDir, listBundledPlugins, discoverPlugins } from './plugin-loader.mjs';
 
 const FORBIDDEN = /rating|review|install_?count|download|verified|stars?\b/i;
 
@@ -203,6 +203,21 @@ describe('plugin-store', () => {
 
   it('explains an unknown source instead of guessing', async () => {
     await expect(installPlugin('no-such-plugin', { projectRoot: projA })).rejects.toThrow(/No bundled plugin, share link, peer source, git URL or directory/);
+  });
+
+  it('replaces source explicitly, retaining original files and operator configuration',async()=>{
+    const source=path.join(tmp,'replacement');fs.mkdirSync(source);
+    fs.writeFileSync(path.join(source,'plugin.json'),JSON.stringify({id:'replacement',name:'Replacement',version:'0.1.0',description:'Fixture'}));
+    fs.writeFileSync(path.join(source,'content.txt'),'first');
+    await installPlugin(source,{projectRoot:projA});
+    const plugin=discoverPlugins(projA).find(plugin=>plugin.id==='replacement');
+    await patchPluginRecord(plugin,{configuration:{preserved:true}});
+    fs.writeFileSync(path.join(source,'content.txt'),'second');
+    const result=await installPlugin(source,{projectRoot:projA,replace:true});
+    expect(fs.readFileSync(path.join(result.previousDirectory,'content.txt'),'utf8')).toBe('first');
+    expect(fs.readFileSync(path.join(result.plugin.dir,'content.txt'),'utf8')).toBe('second');
+    const {readPluginRecord}=await import('./plugin-store.mjs');
+    expect(readPluginRecord(discoverPlugins(projA).find(plugin=>plugin.id==='replacement')).configuration).toEqual({preserved:true});
   });
 
   it('keeps the record of a bundled scaffold plugin out of the shipped package', async () => {

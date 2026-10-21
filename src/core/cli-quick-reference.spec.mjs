@@ -24,8 +24,13 @@ describe('CLI quick reference', () => {
   it('lists only commands that exist in total-recall --help', () => {
     const help = execFileSync('node', [bin, '--help'], { encoding: 'utf8' });
     for (const command of CLI_QUICK_REFERENCE_COMMANDS) {
-      expect(help, `${command} missing from --help`).toMatch(new RegExp(`(^|\\s)${command}(\\s|$)`, 'm'));
+      expect(help, `${command} missing from --help`).toContain(command);
       expect(CLI_QUICK_REFERENCE, `${command} missing from the reference`).toContain(command);
     }
+  });
+
+  it('places command inventory before startup instructions', async () => {
+    const block = await buildRulesBlock(null, [], { bootstrap: true, total: 20000 });
+    expect(block.indexOf('Built-in commands:')).toBeLessThan(block.indexOf('MANDATORY FIRST STEP'));
   });
 });

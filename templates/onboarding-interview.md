@@ -37,7 +37,7 @@ npx total-recall remember preference "..." --tags "user,profile,onboarding" --im
 
 6. **Background work** — "Want dream consolidation and optional daemon tasks running in the background, or on-demand only?"
 
-7. **Secrets** — "API keys never go in the vault. Use `npx total-recall secret set`. Any keys you want to set up next?"
+7. **Secrets** — "API keys never go in the vault. Use `npx total-recall auth secret set`. Any keys you want to set up next?"
 
 8. **Notifications (optional)** — "Want Telegram pings when background tasks finish? If yes, BotFather token + chat ID."
 

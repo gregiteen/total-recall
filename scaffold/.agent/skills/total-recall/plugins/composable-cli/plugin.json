@@ -1,0 +1,221 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "composable-cli",
+  "name": "Composable CLI",
+  "version": "0.2.1",
+  "description": "Dynamic agent command composition engine with pipeline registration, versioning, and execution.",
+  "author": "Total Recall contributors",
+  "license": "MIT",
+  "branding": {
+    "name": "CmdSmith",
+    "color": "#0891b2",
+    "badge": "Pipeline Forge",
+    "font": "space-grotesk"
+  },
+  "secrets": [
+    {
+      "key": "COMPOSABLE_CLI_AUTH_TOKEN",
+      "description": "Optional token for distributed command runners",
+      "required": false
+    }
+  ],
+  "cli": {
+    "command": "composable-cli",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "status",
+        "description": "Show which Composable CLI subcommands are implemented",
+        "effect": "read"
+      },
+      {
+        "name": "create",
+        "description": "Create a new custom CLI command",
+        "effect": "write"
+      },
+      {
+        "name": "read",
+        "description": "Show the source of a custom command",
+        "effect": "read"
+      },
+      {
+        "name": "update",
+        "description": "Update an existing custom command",
+        "effect": "write"
+      },
+      {
+        "name": "remove",
+        "description": "Delete a custom command",
+        "effect": "destructive"
+      },
+      {
+        "name": "list",
+        "description": "List all custom commands in scope",
+        "effect": "read"
+      },
+      {
+        "name": "show",
+        "description": "Show command metadata and source",
+        "effect": "read"
+      },
+      {
+        "name": "history",
+        "description": "Show version history of a command",
+        "effect": "read"
+      },
+      {
+        "name": "rollback",
+        "description": "Roll back a command to a previous version",
+        "effect": "write"
+      },
+      {
+        "name": "test",
+        "description": "Show the test file for a command",
+        "effect": "read"
+      },
+      {
+        "name": "promote",
+        "description": "Promote a command into a plugin directory",
+        "effect": "write"
+      },
+      {
+        "name": "library",
+        "description": "Discover installed plugin operations and scoped composed commands without execution",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "plugin",
+            "label": "Plugin ID",
+            "type": "string",
+            "flag": "--plugin",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "skills": [
+    {
+      "id": "composable-cli",
+      "path": "./skills/composable-cli/SKILL.md",
+      "description": "Total Recall composable CLI plugin: create, compose, register, test and safely run custom verbs; every command listed in the instruction surfaces."
+    }
+  ],
+  "card_face": {
+    "skin": "studio-rack",
+    "theme": "vibrant",
+    "headline": "Dynamic Agent Command Composition",
+    "primary_color": "#14b8a6",
+    "secondary_color": "#134e4a",
+    "accent_color": "#2dd4bf",
+    "touch_layout": "comfortable",
+    "interactive": true,
+    "quick_actions": [
+      {
+        "subcommand": "status",
+        "label": "STATUS"
+      },
+      {
+        "subcommand": "create",
+        "label": "CREATE"
+      },
+      {
+        "subcommand": "read",
+        "label": "READ"
+      },
+      {
+        "subcommand": "update",
+        "label": "UPDATE"
+      }
+    ]
+  },
+  "ui": {
+    "elements": [
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-composable-cli-card",
+        "module": "ui/card.js",
+        "description": "Pipeline Card Face"
+      }
+    ]
+  },
+  "ssss_schemas": {
+    "categories": [
+      {
+        "name": "composable-commands",
+        "description": "Registered composable CLI commands and aliases",
+        "node_type": "memory"
+      },
+      {
+        "name": "composed-workflows",
+        "description": "Composed multi-step CLI workflow definitions",
+        "node_type": "memory"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "status": {
+    "command": "status",
+    "refresh_seconds": 300
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  },
+  "card_layout": {
+    "template": "workbench",
+    "regions": [
+      {
+        "widget": "status",
+        "title": "Status"
+      },
+      {
+        "widget": "live",
+        "title": "Live view"
+      },
+      {
+        "widget": "list",
+        "title": "Details",
+        "source": {
+          "command": "list"
+        }
+      },
+      {
+        "widget": "actions",
+        "title": "Commands"
+      },
+      {
+        "widget": "credentials",
+        "title": "Credentials"
+      },
+      {
+        "widget": "activity",
+        "title": "Recent activity"
+      }
+    ]
+  }
+}

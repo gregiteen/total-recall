@@ -1,0 +1,19 @@
+{
+  "name": "tr-plugin-cli-agents",
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "src/",
+    "!src/**/*.spec.mjs",
+    "ui/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

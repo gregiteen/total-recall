@@ -183,13 +183,14 @@
     {
       "id": "test",
       "tier": "remote",
-      "description": "Full vitest suite. LOCAL on the sanctioned test machine (the Mac mini): the repos live here now, so this working tree IS the sanctioned environment and the suite runs in place. The old remote indirection existed because the mini was a separate node driven from a laptop that could not hold the load; that reason is gone.",
+      "description": "Full vitest suite — REMOTE ONLY. Running it locally violates the never-run-heavy-node-processes-on-the-laptop invariant; the v2 daemon incident pinned this 8GB machine at load 644. Run on the Mac Mini.",
       "cmd": [
         "npm",
         "test"
       ],
       "parser": "generic",
-      "timeoutSeconds": 1800
+      "timeoutSeconds": 1800,
+      "remoteHint": "Use total-recall mesh ssh <test-node> with its recorded access; run the full suite only on the Mac Mini."
     }
   ]
 }

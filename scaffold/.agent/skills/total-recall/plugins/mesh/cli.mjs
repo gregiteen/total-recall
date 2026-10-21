@@ -12,6 +12,12 @@ export async function run(argv = []) {
   const args = argv.slice(3);
   const sub = args[0] || 'status';
   if (args.includes('--help') || args.includes('-h')) return meshCli(['--help']);
+  if(sub==='file'){
+    if(args[1]!=='put')throw new Error('file put <node> <source> <destination> [--mode 600]');
+    const {putMeshFile}=await import('./src/core/mesh-files.mjs');
+    const at=args.indexOf('--mode');const mode=at<0?0o600:Number.parseInt(args[at+1],8);
+    console.log(JSON.stringify(await putMeshFile({node:args[2],source:args[3],destination:args[4],mode})));return;
+  }
   if (sub === 'status' || sub === 'view' || sub === 'probe') {
     const result = await meshStatus();
     console.log(JSON.stringify(result));

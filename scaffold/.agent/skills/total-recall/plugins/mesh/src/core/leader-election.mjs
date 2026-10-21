@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getMeshPeers, getMeshSelf, listEnrichedMeshNodes } from './mesh.mjs';
+import { getMeshPeers, getMeshSelf } from './mesh.mjs';
 import { brainDir } from './config.mjs';
 
 /**
@@ -70,27 +70,18 @@ function compareNodes(a, b) {
  * each node wrote a private, node-local lease document and could elect itself.
  */
 export async function getLeaderInfo() {
-  // Use the ENTITY-ENRICHED node list, not getMeshPeers(). `brain_port` is an
-  // entity variable: it lives in the vault's mesh-node document and is absent
-  // from raw Tailscale status. getMeshPeers() reads only that status, so its
-  // `brain_port` was always null and every caller fell back to port 3000 --
-  // while the leader was reachable the whole time on its real port.
-  const nodes = listEnrichedMeshNodes().filter((node) => node.online);
+  const nodes = getMeshPeers({ includeSelf: true }).filter((node) => node.online);
   if (nodes.length === 0) return null;
 
   const pin = leaderPin();
   if (pin) {
     const pinned = nodes.find((node) => node.ip === pin);
     if (!pinned) return null;
-    return { hostname: pinned.hostname, ip: pinned.ip, brain_port: pinned.brain_port ?? null, strategy: 'pinned-mesh-ip' };
+    return { hostname: pinned.hostname, ip: pinned.ip, strategy: 'pinned-mesh-ip' };
   }
 
   const leader = [...nodes].sort(compareNodes)[0];
-  // `brain_port` is carried through because the leader does not necessarily
-  // serve on the default port. It was dropped here, so callers such as
-  // secrets-sync fell back to 3000 and reported "fetch failed" against a leader
-  // that was up and reachable the whole time on a different port.
-  return { hostname: leader.hostname, ip: leader.ip, brain_port: leader.brain_port ?? null, strategy: 'lowest-mesh-ip' };
+  return { hostname: leader.hostname, ip: leader.ip, strategy: 'lowest-mesh-ip' };
 }
 
 /**

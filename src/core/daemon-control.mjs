@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { logger } from './logger.mjs';
 import { agentDir, brainDir } from './config.mjs';
+import { readProcessCommand } from './pid-lock.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..', '..');
@@ -29,6 +30,9 @@ export function readPid() {
     // Check if the process is alive using signal 0
     try {
       process.kill(pid, 0);
+      const command=readProcessCommand(pid);
+      if(!command)throw new Error('Cannot verify daemon process identity');
+      if(!command.includes(path.join('core','daemon-loop.mjs')) && !command.includes(path.join('core','dream.mjs')))return null;
       return pid;
     } catch {
       return null;
@@ -130,10 +134,8 @@ export function startDaemon() {
 export async function stopDaemon({ graceMs = 35_000, pollMs = 250 } = {}) {
   const pid = readPid();
   if (!pid) {
-    // Clear PID file in case it was a stale/dead record
-    try {
-      if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
-    } catch {}
+    // Startup owns stale-lock recovery. A live process with unreadable identity
+    // is not ours to signal or unlink.
     return false;
   }
 

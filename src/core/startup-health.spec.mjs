@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('./required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
+import { inspectRequiredPlugins } from './required-plugins.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,6 +9,12 @@ const health = { status: 'healthy', version: '1', uptime_seconds: 1, embedding_c
 const run = async () => ({ code: 0, output: 'SSSS tooling', reason: null });
 const fetchGood = async url => url.pathname === '/health' ? new Response(JSON.stringify(health)) : new Response('# Instructions');
 describe('startup health truth and boundaries', () => {
+  it('fails readiness when required auth is missing despite healthy services', async () => {
+    inspectRequiredPlugins.mockReturnValueOnce({ status: 'failed', errors: ['auth missing'] });
+    const report = await startupHealth({ brainDir: '/missing', brainUrl: 'https://example.invalid', identity: () => ({ status: 'running' }), fetchImpl: fetchGood, run });
+    expect(report.ready).toBe(false);
+    expect(report.required_plugins.errors).toEqual(['auth missing']);
+  });
   it('retries a transient transport failure without restarting a running service', async () => {
     let healthCalls = 0, instructionCalls = 0;
     const report = await startupHealth({ brainDir: '/missing', brainUrl: 'http://localhost:3000', ensure: true,

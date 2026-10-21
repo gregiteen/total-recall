@@ -1,0 +1,297 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "security",
+  "name": "Security Assessments",
+  "version": "0.3.1",
+  "description": "Machine and device security assessments for macOS, Linux, Windows, Android, Chromebook, iPhone and iPad, with explicit measured and manual coverage.",
+  "license": "MIT",
+  "branding": {
+    "name": "Security Assessments",
+    "color": "#f43f5e",
+    "badge": "Security Enclave",
+    "font": "chivo-mono"
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "card_face": {
+    "skin": "winamp-classic",
+    "theme": "vibrant",
+    "headline": "Security & Hardening Suite",
+    "quick_actions": [
+      {
+        "subcommand": "machine",
+        "label": "THIS MACHINE"
+      },
+      {
+        "subcommand": "fleet",
+        "label": "MESH FLEET"
+      },
+      {
+        "subcommand": "plugins",
+        "label": "PLUGINS"
+      },
+      {
+        "subcommand": "harden",
+        "label": "HARDENING PLAN"
+      }
+    ],
+    "touch_layout": "comfortable",
+    "interactive": true
+  },
+  "ssss_schemas": {
+    "categories": [
+      {
+        "name": "security-audits",
+        "description": "Security audit reports, static analysis findings, and compliance baseline records",
+        "node_type": "memory"
+      },
+      {
+        "name": "security-hardening",
+        "description": "Applied hardening profiles, permission policies, and egress firewall rules",
+        "node_type": "memory"
+      },
+      {
+        "name": "security-events",
+        "description": "SSSS security events, rotation logs, and threat telemetry",
+        "node_type": "memory"
+      }
+    ]
+  },
+  "deploy": {
+    "targets": [
+      "ssss-app",
+      "nextjs",
+      "react",
+      "flask"
+    ],
+    "required_ssss_version": ">=0.9.3",
+    "access_grants": [
+      "auth:session:verify",
+      "ssss:vault:read",
+      "ssss:vault:write",
+      "ssss:events:append"
+    ]
+  },
+  "secrets": [
+    {
+      "key": "SECURITY_MASTER_KEY",
+      "description": "Master encryption key for envelope encryption and credential hardening",
+      "required": false
+    },
+    {
+      "key": "CHALLENGE_SECRET_KEY",
+      "required": false,
+      "description": "Provider challenge verification credential; managed exclusively by auth"
+    }
+  ],
+  "cli": {
+    "command": "security",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "platforms",
+        "description": "List native collectors and guided device review coverage",
+        "effect": "read"
+      },
+      {
+        "name": "device",
+        "description": "Guided review: --platform ios|ipados|android|chromeos|chromeos-flex|windows --device label [--stdin|--answers-json JSON]; never automatically verified",
+        "effect": "write"
+      },
+      {
+        "name": "android",
+        "description": "Limited device-property reads: --serial existing-authorized-adb-serial; never enables debugging",
+        "timeout_ms": 60000,
+        "effect": "read"
+      },
+      {
+        "name": "machine",
+        "description": "Inspect local firewall, disk protection, effective SSH policy and listeners; --apply-permissions verifies local SSH permission repair",
+        "timeout_ms": 120000,
+        "effect": "write"
+      },
+      {
+        "name": "network",
+        "description": "Inspect local network listeners and host security posture",
+        "timeout_ms": 120000,
+        "effect": "read"
+      },
+      {
+        "name": "fleet",
+        "description": "Audit discovered mesh machines; optional --target hostname",
+        "timeout_ms": 600000,
+        "effect": "read"
+      },
+      {
+        "name": "status",
+        "description": "Display active security suite modules and crypto status",
+        "effect": "read"
+      },
+      {
+        "name": "audit",
+        "description": "Execute comprehensive file permission, egress policy, and SAST audit",
+        "timeout_ms": 120000,
+        "effect": "read"
+      },
+      {
+        "name": "scan",
+        "description": "Run static analysis scanner for code injection and token leaks",
+        "effect": "read"
+      },
+      {
+        "name": "harden",
+        "description": "Prepare observed hardening plan; --apply-permissions repairs recognized local SSH metadata",
+        "timeout_ms": 120000,
+        "effect": "write"
+      },
+      {
+        "name": "plugins",
+        "description": "Audit installed plugin source and auth declarations; manifests are never auto-rewritten",
+        "timeout_ms": 120000,
+        "effect": "read"
+      },
+      {
+        "name": "secure-all",
+        "description": "Audit entire discovered mesh fleet with explicit coverage and remediation; no blanket secured claims",
+        "timeout_ms": 600000,
+        "effect": "write"
+      },
+      {
+        "name": "encrypt",
+        "description": "Perform AES-256-GCM authenticated envelope encryption",
+        "effect": "write"
+      },
+      {
+        "name": "decrypt",
+        "description": "Decrypt AES-256-GCM envelope payload",
+        "effect": "read"
+      },
+      {
+        "name": "probe",
+        "description": "Real HTTPS response and security-header presence check; requires --url",
+        "effect": "read"
+      },
+      {
+        "name": "token",
+        "description": "Inspect or save the auth-managed security master key through stdin",
+        "effect": "write"
+      },
+      {
+        "name": "challenge",
+        "description": "Create, solve or verify authenticated proof-of-work challenges",
+        "effect": "write"
+      },
+      {
+        "name": "bot-mitigate",
+        "description": "Evaluate submission risk with optional provider challenge verification",
+        "effect": "read"
+      },
+      {
+        "name": "site-audit",
+        "description": "Review actual website security headers on an authorized HTTPS target",
+        "effect": "read"
+      },
+      {
+        "name": "site-shield",
+        "description": "Generate application middleware for review; does not claim installation",
+        "effect": "write"
+      }
+    ]
+  },
+  "ui": {
+    "design_tokens": "ui/DESIGN.md",
+    "elements": [
+      {
+        "id": "panel",
+        "kind": "panel",
+        "tag": "security-panel",
+        "module": "ui/panel.js",
+        "description": "Machine, network and mesh security audit console",
+        "events": [],
+        "tokens": [
+          "color-text",
+          "color-surface",
+          "color-border",
+          "spacing-md",
+          "radius-md"
+        ],
+        "optional_tokens": [],
+        "props": {
+          "view": {
+            "type": "object",
+            "description": "Printed by `total-recall security token status --json`: { present, secretKey }"
+          }
+        }
+      },
+      {
+        "id": "card",
+        "kind": "card",
+        "tag": "tr-security-card",
+        "module": "ui/card.js",
+        "description": "Fortress Card Face"
+      }
+    ]
+  },
+  "skills": [
+    {
+      "path": "skills/security/SKILL.md",
+      "id": "security"
+    }
+  ],
+  "runtime": {
+    "modules": {
+      "machines": "src/machines.mjs",
+      "scanner": "src/scanner.mjs",
+      "website": "cli.mjs",
+      "devices": "src/devices.mjs",
+      "windows": "src/windows.mjs",
+      "android": "src/android.mjs"
+    }
+  },
+  "status": {
+    "command": "status",
+    "refresh_seconds": 60
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  },
+  "card_layout": {
+    "template": "vault",
+    "regions": [
+      {
+        "widget": "status",
+        "title": "Status"
+      },
+      {
+        "widget": "live",
+        "title": "Live view"
+      },
+      {
+        "widget": "list",
+        "title": "Details",
+        "source": {
+          "command": "platforms"
+        }
+      },
+      {
+        "widget": "actions",
+        "title": "Commands"
+      },
+      {
+        "widget": "credentials",
+        "title": "Credentials"
+      },
+      {
+        "widget": "activity",
+        "title": "Recent activity"
+      }
+    ]
+  }
+}

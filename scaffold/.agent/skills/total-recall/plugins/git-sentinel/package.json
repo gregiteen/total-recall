@@ -1,0 +1,20 @@
+{
+  "name": "tr-plugin-git-sentinel",
+  "version": "1.1.1",
+  "type": "module",
+  "description": "Reports the state of the current git repository: branch, dirty files, unpushed commits and stashes.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "LICENSE",
+    "ui/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

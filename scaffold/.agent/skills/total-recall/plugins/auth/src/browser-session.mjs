@@ -20,12 +20,12 @@ const PROFILE_DIRNAME = 'browser-profile';
 const PROFILE_README = `# TR browser profile — DO NOT SYNC, DO NOT COPY
 
 This directory holds live authenticated sessions (Stripe, GitHub, cloud consoles)
-used by \`total-recall secret rotate-auto\`.
+used by \`total-recall auth secret rotate-auto\`.
 
 Treat it as equivalent to secrets.enc:
   - never commit it
   - never include it in backups that leave this machine
-  - delete it with \`total-recall secret browser-logout\` when no longer needed
+  - delete it with \`total-recall auth secret browser-logout\` when no longer needed
 `;
 
 /**
@@ -94,7 +94,7 @@ export async function launchRotationContext(brainDir, opts = {}) {
   // browser has been closed" for every candidate browser. That reads as "no browser installed"
   // and left the operator with a live, un-rotated credential. With no display there is nothing
   // for a human to see anyway, so fall back to headless rather than fail.
-  const headless = opts.headless === true || !process.env.DISPLAY;
+  const headless = opts.headless === true || (process.platform === 'linux' && !process.env.DISPLAY);
 
   const base = {
     headless,

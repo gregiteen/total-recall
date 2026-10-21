@@ -30,6 +30,7 @@ const KEY_MAP = {
   // default when every rule should load for every action instead of being
   // narrowed by applicability.
   'context_budget': { file: 'surface', path: 'context.budget', type: 'number' },
+  'surface_bootstrap_budget': { file: 'surface', path: 'budget.bootstrap_total_tokens', type: 'number' },
 };
 
 function resolveKeyInfo(key) {
