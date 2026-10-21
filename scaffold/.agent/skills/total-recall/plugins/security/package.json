@@ -1,0 +1,25 @@
+{
+  "name": "tr-plugin-security",
+  "version": "0.3.1",
+  "type": "module",
+  "description": "Standalone security suite for Total Recall: static analysis, file and permission hardening schemes, AES-256-GCM encryption tools, and egress audit controls",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build:ui": "node scripts/build-ui.mjs"
+  },
+  "license": "MIT",
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "LICENSE",
+    "src/",
+    "!src/**/*.spec.mjs",
+    "skills/",
+    "scripts/",
+    "ui/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

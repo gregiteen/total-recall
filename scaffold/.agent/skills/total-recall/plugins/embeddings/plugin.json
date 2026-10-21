@@ -1,0 +1,52 @@
+{
+  "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
+  "id": "embeddings",
+  "name": "Embeddings",
+  "version": "0.1.0",
+  "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
+  "license": "MIT",
+  "use_cases": [
+    "operations",
+    "ai"
+  ],
+  "cli": {
+    "command": "embeddings",
+    "handler": "./cli.mjs",
+    "subcommands": [
+      {
+        "name": "status",
+        "description": "Provider, model, locality and vault coverage in one view",
+        "effect": "read",
+        "output": "json"
+      },
+      {
+        "name": "models",
+        "description": "List models on the endpoint and which can produce embeddings",
+        "effect": "read",
+        "output": "json"
+      },
+      {
+        "name": "pull",
+        "description": "Pull an embedding model (default nomic-embed-text)",
+        "effect": "write",
+        "output": "json"
+      },
+      {
+        "name": "benchmark",
+        "description": "Measure ms per embedding and project full-vault time",
+        "effect": "read",
+        "output": "json"
+      },
+      {
+        "name": "coverage",
+        "description": "How much of the vault has vectors, and which model produced them",
+        "effect": "read",
+        "output": "json"
+      }
+    ]
+  },
+  "status": {
+    "command": "status",
+    "refresh_seconds": 60
+  }
+}

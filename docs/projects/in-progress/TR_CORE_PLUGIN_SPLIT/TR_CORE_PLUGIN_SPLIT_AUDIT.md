@@ -1,5 +1,7 @@
 # TR_CORE_PLUGIN_SPLIT — Audit
 
+2026-10-21 continuation audit: task-count crons cannot guarantee idle-daemon updates; add a daemon wall-clock child runner. Global/mesh propagation and independently verified reports remain required. Live cloud-to-Mini and cloud-to-MacBook shell probes succeeded after recording their known accounts. MacBook remote TR fails to unlock auth; its owner-only LaunchAgent contains the existing carrier, while noninteractive Keychain resolution returns no password. Default cross-machine access must preserve explicit restrictions. The requested cross-project status inventory is missing from `brief`; add a read-only registered-root tracker/task report with source paths, dates and explicit unknowns.
+
 > **Project Prefix**: `TR_CORE_PLUGIN_SPLIT`
 > **Kanban State**: In Progress
 > **Audit Status**: Complete
@@ -350,3 +352,16 @@ Core current full verification passed 349 files/2140 tests; actual native code-q
 ## Native-only plugin requirement (2026-10-14)
 
 Greg explicitly rejects legacy support for these new plugins. Native SSSS records and the shared auth owner are the sole product-state/auth contracts. Remove legacy state/credential migrations, old mesh-brain reads, obsolete control-server endpoint retries and whole-store credential replication. Scaffolds must contain the same native-only owner source. This supersedes prior migration acceptance; existing device files are outside source-cleanup scope. Verify native corruption, scope enforcement and independent-node grants instead of legacy import preservation.
+
+
+## 2026-10-21 CLI-first/auth-only handoff audit
+
+Scope: root HANDOFF.md, source commit 6bb3e0b, clean working tree on Gregorys-Mac-mini. Read CLI routing, surface generator, project-brain, startup, doctor and update ownership paths. No credential values inspected.
+
+Findings: bin/total-recall.mjs retains secret/secrets aliases and an obsolete help example; src/cli/brief.mjs invokes the aliases. surface.mjs truncates operations at 14 and puts startup prose before the command reference. plugin-loader.mjs points bundled discovery at absent package plugins/, whereas native auth ships under scaffold/.agent/skills/total-recall/plugins/auth. init copies auth, but existing project brains and readiness/update paths do not enforce its contract. Context default 7000 is below the observed 10319 required tokens. Existing publish helper imports removed core credential storage.
+
+Baseline: eight fast gates executed; seven pass, npm audit fails for direct Vite 8.2.2 (high advisory, fix available). Full sanctioned remote-tier gate started in background, raw report 5558133c-149e-4b51-9313-668c5fdf36af. No frontend change planned. Runtime mutations, credentials and audit history remain plugin-owned; no vault files may be edited directly. All findings block release and will be fixed in this continuation. Release requires package checks, full tests, native isolated health, registry verification and fleet propagation. Other projects in the parent/cloud handoffs supply context only.
+
+
+## 2026-10-21 unified agent owner audit
+CLI-agents currently owns nine execution adapters in src/worker.mjs, command permissions/mesh execution in src/executor.mjs, and five CLI operations. Baseline owner suite passed seven tests on the Mini. Dedicated Hermes duplicates discovery/dispatch, writes projected credentials during status, calls the now-removed top-level secret alias, and exposes gateway/auth/skills/plugins. Dedicated DSH owns observed process/port discovery, model defaults/cache, provider/tool/plugin inventory and sessions. Its --help incorrectly attempts runtime discovery. Worker dispatch currently passes only the requested task, without obtaining a ready Total Recall capsule or complete command inventory. Existing adapter URLs are documentation links without cached content or recurring refresh. No agent execution is claimed by baseline unit tests. Official Claude/Cursor/OpenAI indexes and NousResearch Hermes command reference were retrieved on 2026-10-21; remaining adapter primary sources must be verified before enabling docs freshness claims. Previous full core run reports init/dependency failures after scaffold auth pinned the previous host version; repair that contract and aliases before release. User approved consolidation, automatic bootstrap/configuration, full inventories, complete official docs and automatic maintenance. Source ownership stays in tr-plugin-cli-agents; core only handles generic lifecycle.

@@ -19,6 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
+import { ensureRequiredPlugins } from './required-plugins.mjs';
 import { VAULT_CATEGORIES, writeBrainIdentity, registerProjectBrain } from './memory-brain.mjs';
 export { VAULT_CATEGORIES, writeBrainIdentity, registerProjectBrain } from './memory-brain.mjs';
 
@@ -96,6 +97,7 @@ export function ensureOpenWiki(brainDir) {
  * Ensure core total-recall skill package files exist (SKILL.md minimum).
  */
 export function ensureCoreSkillPackage(brainDir) {
+  ensureRequiredPlugins(brainDir);
   const skillMd = path.join(brainDir, 'SKILL.md');
   if (fs.existsSync(skillMd)) return { seeded: false };
   const scaffold = path.join(ROOT, 'scaffold', '.agent', 'skills', 'total-recall');

@@ -1,5 +1,7 @@
 # TR_CORE_PLUGIN_SPLIT — PRD
 
+2026-10-21 requirements: every enrolled agent can reach every enrolled machine unless explicitly limited; auth must resolve its existing secure host carriers noninteractively without exposing values. The cloud TR daemon automatically maintains both TR and SSSS consumers and surfaces. `brief --all-projects` reports every registered root's outstanding trackers and daemon tasks; recorded status is distinguished from live verification.
+
 > **Project Prefix**: `TR_CORE_PLUGIN_SPLIT`
 > **Kanban State**: In Progress
 > **Date**: 2026-10-07
@@ -272,3 +274,11 @@ Finish SSSS compliance of every supported plugin persistence path: validated Mar
 ## Native-only plugin requirement (2026-10-14)
 
 Greg explicitly rejects legacy support for these new plugins. Native SSSS records and the shared auth owner are the sole product-state/auth contracts. Remove legacy state/credential migrations, old mesh-brain reads, obsolete control-server endpoint retries and whole-store credential replication. Scaffolds must contain the same native-only owner source. This supersedes prior migration acceptance; existing device files are outside source-cleanup scope. Verify native corruption, scope enforcement and independent-node grants instead of legacy import preservation.
+
+
+## 2026-10-21 handoff acceptance
+Every compiled instruction surface begins with complete core CLI discovery and every installed plugin operation. Credentials have only the auth namespace; top-level secret/secrets must fail. New and existing brains require valid bundled auth. Doctor, startup and all-brain updates report missing/invalid auth as failure. Required context is preserved with an explicit sufficient budget. Release and all consumer propagation require independent verification.
+
+
+## Unified CLI-agents acceptance (2026-10-21)
+One owner manages all nine agent adapters and preserves Hermes gateway/auth/skills/plugins/dispatch and DSH status/sessions/tools/models/model-cache/plugins. Every dispatch obtains ready Total Recall context, CLI help, plugin library and composed library automatically. Instruction surfaces configure supported clients automatically. Documentation must be downloaded, hashed, coverage-checked and refreshed automatically; failed/missing/stale sources remain explicit. Scheduled maintenance must execute on the configured cloud node with observed success. Retire separate plugins only after replacement tests and source deployment. Native agent binaries/authentication remain independent readiness requirements. Default bundle includes the runtime foundation plus routine development plugins; agent-specific integrations are adapters inside CLI-agents.

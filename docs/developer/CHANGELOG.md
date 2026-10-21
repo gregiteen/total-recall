@@ -1,3 +1,10 @@
+## 3.40.2 — 2026-10-21
+
+- Lead every compiled instruction surface with the complete built-in CLI inventory, installed plugin operations and composed commands; preserve authored text after the managed block.
+- Remove top-level credential aliases, including generic API rediscovery. Credentials use `total-recall auth secret` exclusively. Update help, briefing callers, bundled auth instructions and release tooling.
+- Require valid native auth in fresh/existing brain bootstrap, doctor, startup readiness and all-brain update checks. Discover bundled plugins from the shipped scaffold.
+- Expose the bootstrap surface budget through CLI configuration and update vulnerable Vite dependencies.
+
 ## 3.40.1 — 2026-10-19
 
 - Brain backups no longer put a `.git` inside the project tree. The backup repo's

@@ -329,7 +329,7 @@ describe('readContextBudget', () => {
     const prev = process.env.TR_CONTEXT_BUDGET_TOKENS;
     delete process.env.TR_CONTEXT_BUDGET_TOKENS;
     try {
-      expect(readContextBudget(skills)).toEqual({ total_tokens: 4000, bootstrap_total_tokens: 2500 });
+      expect(readContextBudget(skills)).toEqual({ total_tokens: 4000, bootstrap_total_tokens: 16000 });
 
       fs.writeFileSync(
         path.join(skills, 'total-recall', 'config', 'surface.yml'),

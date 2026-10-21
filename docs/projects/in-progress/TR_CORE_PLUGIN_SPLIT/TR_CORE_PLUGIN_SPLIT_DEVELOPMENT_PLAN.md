@@ -1,5 +1,7 @@
 # TR_CORE_PLUGIN_SPLIT — Development Plan
 
+2026-10-21 active continuation: finish automatic local/global/mesh updates, test elapsed-time scheduling and failures, finish secure auth carrier resolution, verify all machine pairs and explicit limits, and deliver the complete outstanding-project/task inventory. Then finish owner docs, source gates, package publication and independently verified propagation. Remains in progress.
+
 ## Canonical Plugin Architecture & Functional Acceptance (2026-10-09)
 
 - [x] Strict Core Repository Boundary:
@@ -313,3 +315,15 @@ Complete all 30 owner development brain layouts through supported CLI, inspect e
 ## Native-only plugin requirement (2026-10-14)
 
 Greg explicitly rejects legacy support for these new plugins. Native SSSS records and the shared auth owner are the sole product-state/auth contracts. Remove legacy state/credential migrations, old mesh-brain reads, obsolete control-server endpoint retries and whole-store credential replication. Scaffolds must contain the same native-only owner source. This supersedes prior migration acceptance; existing device files are outside source-cleanup scope. Verify native corruption, scope enforcement and independent-node grants instead of legacy import preservation.
+
+
+## 2026-10-21 CLI/auth continuation
+1. Remove native aliases and update executable callers/documentation.
+2. Complete CLI-first inventory; preserve all operations.
+3. Validate required bundled auth during bootstrap, readiness and fleet update, with failure regressions.
+4. Raise explicit local context/surface budgets; repair Vite audit finding and publish helper ownership.
+5. Run full gates, package/native health verification, publish, propagate and recompile consumers; independently verify versions and push all changes.
+
+
+## Unified agent work
+Audit official interfaces and inventory both old plugins; implement automatic bootstrap and unified runtime adapters; implement downloaded official docs with coverage/integrity/freshness and recurring refresh; declare every operation in CLI/UI contracts; test failures and actual installed clients; ship owner and bundle sources; migrate installations and retire old plugins after replacement verification; verify scheduled cloud run and publish/propagate with full source gates.

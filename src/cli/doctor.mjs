@@ -18,6 +18,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { getGlobalBrainDir } from './agent-dir.mjs';
 import { processIdentity, verifyListener } from '../core/startup-health.mjs';
 import { loadKnownRepoRoots } from '../core/skills-registry.mjs';
+import { inspectRequiredPlugins } from '../core/required-plugins.mjs';
 
 // ─── Formatting & UI Helpers ────────────────────────────────────────────────
 function log(msg)     { console.log(`  ${msg}`); }
@@ -91,6 +92,11 @@ export default async function doctor() {
 
   let warnings = 0;
   let failures = 0;
+  const { resolveBrainDir } = await import('./agent-dir.mjs');
+  for (const brain of new Set([getGlobalBrainDir(), resolveBrainDir()])) {
+    const required = inspectRequiredPlugins(brain);
+    if (required.status !== 'ready') { logFail(`${brain}: ${required.errors.join('; ')}`); failures++; }
+  }
 
   // ── Step 1: System Hardware Check ──
   hr();

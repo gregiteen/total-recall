@@ -69,6 +69,7 @@ describe('daemon-control', () => {
     fs.renameSync.mockReturnValue(undefined);
 
     child_process.spawn.mockReturnValue({ pid: 12345, unref: vi.fn() });
+    child_process.spawnSync.mockReturnValue({status:0,stdout:'node /fixture/src/core/daemon-loop.mjs'});
 
     killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
 
@@ -218,6 +219,15 @@ describe('daemon-control', () => {
   // stopDaemon
   // ---------------------------------------------------------------------------
   describe('stopDaemon', () => {
+    it('does not signal or unlink a live unrelated or unidentifiable process',async()=>{
+      fs.existsSync.mockReturnValue(true);fs.readFileSync.mockReturnValue('9876\n');
+      for(const stdout of ['node /other/service.mjs','']){
+        child_process.spawnSync.mockReturnValue({status:0,stdout});
+        expect(await stopDaemon()).toBe(false);
+      }
+      expect(killSpy).not.toHaveBeenCalledWith(9876,'SIGTERM');
+      expect(fs.unlinkSync).not.toHaveBeenCalled();
+    });
     it('sends SIGTERM, waits for the process to exit, and returns true', async () => {
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue('9876\n');

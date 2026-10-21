@@ -240,7 +240,7 @@ git ls-files | grep -iE "^\.env$|\.env\.|secrets\.enc|\.pem$|id_rsa|id_ed25519"
 ```
 
 ```bash
-npx total-recall secret rotation-status
+npx total-recall auth secret rotation-status
 ```
 
 Check for pathless auth mounts before shipping a route:

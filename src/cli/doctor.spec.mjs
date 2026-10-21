@@ -9,6 +9,8 @@ import net from 'node:net';
 import child_process from 'node:child_process';
 import * as startupHealth from '../core/startup-health.mjs';
 import doctor, { isOwnedServerPort } from './doctor.mjs';
+import { inspectRequiredPlugins } from '../core/required-plugins.mjs';
+vi.mock('../core/required-plugins.mjs', () => ({ inspectRequiredPlugins: vi.fn(() => ({ status: 'ready', errors: [] })) }));
 vi.mock('../core/plugin-runtime.mjs', () => ({ loadPluginModule: vi.fn(async (_owner, module) => module === 'configuration' ? { runtimeConfiguration: () => ({}) } : module === 'runtime-credentials' ? { runtimeCredentials: () => ({ google_api_key: 'auth-fixture' }) } : { defaultBrainDir: () => '/fixture/auth' }) }));
 
 describe('doctor command', () => {
@@ -112,6 +114,14 @@ describe('doctor command', () => {
     expect(logs).toContain('Diagnostics failed with');
     
     // Cleanup exitCode
+    process.exitCode = undefined;
+  });
+
+  it('reports missing auth as a critical failure', async () => {
+    inspectRequiredPlugins.mockReturnValueOnce({ status: 'failed', errors: ['Required auth plugin is missing'] });
+    await doctor();
+    expect(process.exitCode).toBe(1);
+    expect(logSpy.mock.calls.flat().join('\n')).toContain('Required auth plugin is missing');
     process.exitCode = undefined;
   });
 });

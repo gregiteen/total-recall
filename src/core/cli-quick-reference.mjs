@@ -6,12 +6,11 @@
  * `cli-quick-reference.spec.mjs` fails when a listed command stops existing in
  * `total-recall --help`.
  */
-export const CLI_QUICK_REFERENCE_COMMANDS = [
-  'context', 'recall', 'remember', 'edit', 'compile', 'brief', 'status', 'doctor',
-  'auth', 'mesh', 'plugin', 'skill', 'harness', 'agent', 'task', 'brain', 'daemon', 'update',
-];
+import { CLI_COMMANDS } from './cli-commands.mjs';
+export const CLI_QUICK_REFERENCE_COMMANDS = Object.keys(CLI_COMMANDS);
 
 export const CLI_QUICK_REFERENCE = `## TOTAL RECALL CLI — USE IT FOR EVERYTHING (run \`total-recall <command> --help\` before guessing)
+- Built-in commands: ${CLI_QUICK_REFERENCE_COMMANDS.map(command => `\`${command}\``).join(' · ')}
 - Memory: \`context "<task>" --action <a>\` · \`recall "<q>" --local\` · \`remember <category> "<text>" --global|--project\` · \`edit <slug>\` · \`compile\` · \`brief\` · \`status\` / \`doctor\`
 - CREDENTIALS GO THROUGH THE AUTH PLUGIN ONLY (Total Recall has no native secrets store; never hand-roll curl/sed/ssh for keys): \`auth secret list|get <K>|set <K> --stdin|rotate <K> --stdin|--from-clipboard [--remote <t>]|rotate-auto <K>|rotation-due|shared|meta|catalog|audit|diff-env|export-env\`; remote targets: \`auth secret remote add|list|deploy <t> [--keys a,b] [--dry-run]\`. The store follows \`TR_SECRETS_BRAIN\`.
 - Auth: \`auth status|audit|key list|issue|revoke|password set --stdin|passkey|google status\`

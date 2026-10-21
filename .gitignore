@@ -175,5 +175,6 @@ WINDSURF.md
 .codex/
 .cursor/
 .windsurf/
+.hermes/
 HANDOFF.md
 .deploy-state.json

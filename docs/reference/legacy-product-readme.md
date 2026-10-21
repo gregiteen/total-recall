@@ -72,9 +72,9 @@ Roots come only from: project registry, install map, `TR_SYNC_REPOS`, CLI `--rep
 ### Secrets
 
 ```bash
-npx total-recall secret set some_api_key "$KEY" --provider example
-npx total-recall secret list                 # metadata only
-npx total-recall secret check-surfaces       # fail if values leaked into surfaces
+npx total-recall auth secret set some_api_key "$KEY" --provider example
+npx total-recall auth secret list                 # metadata only
+npx total-recall auth secret check-surfaces       # fail if values leaked into surfaces
 ```
 
 Optional AES: `TR_SECRETS_PASSWORD`. Values never belong in vault markdown or openwiki.

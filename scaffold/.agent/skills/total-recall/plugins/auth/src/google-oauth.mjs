@@ -23,7 +23,8 @@ export function createGoogleOAuth({ brainDir, load = loadSecretsSync, save = sav
     if (!values.GOOGLE_CLIENT_ID || !values.GOOGLE_CLIENT_SECRET) throw new Error('Google OAuth is not configured');
     const redirect = new URL(values.GOOGLE_REDIRECT_URI || '');
     if ((redirect.protocol !== 'https:' && !(redirect.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(redirect.hostname))) || redirect.username || redirect.password || redirect.search || redirect.hash || redirect.pathname !== '/auth/google/callback') throw new Error('Configure a trusted GOOGLE_REDIRECT_URI ending in /auth/google/callback');
-    return { clientId: values.GOOGLE_CLIENT_ID, clientSecret: values.GOOGLE_CLIENT_SECRET, redirectUri: redirect.href };
+    const scope = values.GOOGLE_SCOPES || 'openid email profile';
+    return { clientId: values.GOOGLE_CLIENT_ID, clientSecret: values.GOOGLE_CLIENT_SECRET, redirectUri: redirect.href, scope };
   };
   const status = () => {
     const rows = state.read({}); assertNoSecretValues(rows);
@@ -69,16 +70,17 @@ export function createGoogleOAuth({ brainDir, load = loadSecretsSync, save = sav
   };
   return {
     config, status,
-    begin() {
+    begin(options = {}) {
       const cfg = config();
       for (const [key, value] of pending) if (value.expires <= now()) pending.delete(key);
       if (pending.size >= 1000) throw new Error('Too many pending authorizations');
       const stateValue = crypto.randomBytes(32).toString('base64url');
       const browser = crypto.randomBytes(32).toString('base64url');
       const verifier = crypto.randomBytes(48).toString('base64url');
+      const scope = options.scope || cfg.scope;
       pending.set(stateValue, { browser: digest(browser), verifier, expires: now() + 600000, redirectUri: cfg.redirectUri });
       const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-      for (const [key, value] of Object.entries({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code', scope: 'openid email profile',
+      for (const [key, value] of Object.entries({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code', scope,
         state: stateValue, access_type: 'offline', prompt: 'consent select_account', code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' })) url.searchParams.set(key, value);
       return { url: url.href, redirectUri: cfg.redirectUri, browser };
     },
@@ -95,7 +97,7 @@ export function createGoogleOAuth({ brainDir, load = loadSecretsSync, save = sav
       if (user.email_verified !== true || typeof user.email !== 'string' || !user.email.includes('@')) throw new Error('Google identity is not verified');
       const allowed = load(brainDir).GOOGLE_ALLOWED_EMAILS;
       const emails = Array.isArray(allowed) ? allowed : typeof allowed === 'string' ? allowed.split(',') : [];
-      if (!emails.some(email => typeof email === 'string' && email.trim().toLowerCase() === user.email.toLowerCase())) throw new Error('Google account is not authorized for this dashboard');
+      if (emails.length > 0 && !emails.some(email => typeof email === 'string' && email.trim().toLowerCase() === user.email.toLowerCase())) throw new Error('Google account is not authorized for this dashboard');
       commit(id, { ...tokens, email: user.email, name: typeof user.name === 'string' ? user.name : '' }, 'connected');
       return { sub: id, email: user.email, name: typeof user.name === 'string' ? user.name : '' };
     },

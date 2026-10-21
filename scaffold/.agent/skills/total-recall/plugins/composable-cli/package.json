@@ -1,0 +1,31 @@
+{
+  "name": "tr-plugin-composable-cli",
+  "version": "0.2.1",
+  "type": "module",
+  "description": "Total Recall composable CLI plugin: create, compose, register, test and safely run custom verbs; every command listed in the instruction surfaces.",
+  "scripts": {
+    "ssss": "ssss",
+    "test": "node --test test/*.test.mjs",
+    "export": "ssss export vault --profile sale --out dist/bundle.ucw.json",
+    "validate": "ssss conformance --engine"
+  },
+  "dependencies": {
+    "@gregiteen/ssss-cli": "0.11.2"
+  },
+  "license": "MIT",
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "LICENSE",
+    "examples/",
+    "schemas/",
+    "skills/",
+    "src/",
+    "!src/**/*.spec.mjs",
+    "ui/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

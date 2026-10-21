@@ -4,7 +4,8 @@ import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 // publish.mjs lives at .agent/skills/push/scripts/ → four levels up to repo root
-import { loadSecrets } from '../../../../src/core/secrets-store.mjs';
+import { loadPluginModule } from '../../../../src/core/plugin-runtime.mjs';
+const { loadSecrets } = await loadPluginModule('auth', 'secrets-store');
 
 const ROOT = process.cwd();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +18,8 @@ console.error('🚀 Starting Direct NPM Publish Automation...');
  */
 async function loadNpmToken() {
   const candidates = [
-    path.join(ROOT, '.agent'),
+    path.join(ROOT, '.agent', 'skills', 'total-recall'),
+    path.join(path.dirname(ROOT), '.agent', 'skills', 'total-recall'),
     path.join(os.homedir(), '.agent', 'skills', 'total-recall'),
   ];
   const errors = [];
@@ -70,13 +72,18 @@ try {
     throw new Error('Failed to publish package to NPM registry.');
   }
 
-  console.error('\n🎉 Package successfully published to NPM registry!');
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const registry = spawnSync('npm', ['view', `${pkg.name}@${pkg.version}`, 'version'], { encoding: 'utf8', timeout: 30000 });
+  if (registry.status !== 0 || registry.stdout.trim() !== pkg.version) {
+    throw new Error('Registry does not serve the release; publication may be staged and requires npm approval.');
+  }
+  console.error(`\nPackage ${pkg.name}@${pkg.version} verified on the NPM registry.`);
 
   // 6. Automatically update all registered project brains immediately
   console.error('\n🔄 Automatically updating all registered project brains to latest release...');
   const updateScript = path.join(ROOT, 'bin', 'total-recall.mjs');
   if (!runCommand(process.execPath, [updateScript, 'update', '--apply', '--force'])) {
-    console.warn('⚠️  Automatic post-publish update encountered an issue; check output above.');
+    throw new Error('Post-publish propagation failed; release is incomplete.');
   } else {
     console.error('✅ All registered project brains updated successfully!');
   }

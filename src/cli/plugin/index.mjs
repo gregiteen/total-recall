@@ -25,6 +25,7 @@ Usage:
 Commands:
   list                      Installed plugins (project & global) with source and sharing
   library [--plugin ID]      Installed CLI operation library (--json for agents)
+  refresh                   Rebuild installed command inventories and instruction surfaces
   on <id> / off <id>         Enable/disable host execution; compile catalogs and surfaces
   available [query]         Plugins bundled with this Total Recall package
   peers [query]             Plugins your mesh peers share (queried live)
@@ -38,6 +39,7 @@ Commands:
                               <git-url>           a git repository with plugin.json
                               <path>              a local directory
                               --link, -l    Symlink a local directory instead of copying
+                              --replace     Replace an install, retain previous source and restore on failure
                               --global, -g  Install for every project on this machine
    share <id>                Offer an installed plugin by direct link and mesh
   unshare <id>              Stop offering it
@@ -83,6 +85,15 @@ export async function run(argv = []) {
 
   const command = args[0];
   const rest = args.slice(1);
+  if (command === 'refresh') {
+    const { recompileAfterPluginMutation } = await import('../../core/plugin-store.mjs');
+    const result = await recompileAfterPluginMutation(process.cwd(), rest.includes('--global'));
+    const { setupInstalledPlugins } = await import('../../core/plugin-setup.mjs');
+    const setup = result.ok ? await setupInstalledPlugins() : {ok:false,results:[]};
+    console.log(JSON.stringify({...result,setup,ok:result.ok && setup.ok}));
+    if (!result.ok || !setup.ok) process.exitCode = 1;
+    return;
+  }
   if (command === 'on' || command === 'off') {
     const result = await setPluginActive(rest[0], command === 'on');
     console.log(JSON.stringify(result));

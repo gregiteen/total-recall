@@ -14,7 +14,10 @@ const argl = Array.isArray(args) ? args : [];
 const asJson = argl.includes('--json');
 const withMesh = argl.includes('--mesh');
 if (argl.includes('--help') || argl.includes('-h')) {
-  console.log(`Usage: total-recall brief [--json] [--mesh]
+  console.log(`Usage: total-recall brief [--json] [--mesh] [--all-projects]
+
+--all-projects inventories outstanding trackers and daemon tasks across every
+registered root, with source paths and dates; it does not claim live readiness.
 
 Read-only brief for the start of a session in the current repo. Composes:
 project-id, group, command list, secret catalog/rotation-due/shared/tracking-health
@@ -22,6 +25,27 @@ project-id, group, command list, secret catalog/rotation-due/shared/tracking-hea
 the compiled rules line, docs/projects trackers, openwiki, and the repo's own
 .agent/skills/start/SKILL.md, which you follow next when it exists.`);
   return;
+}
+if(argl.includes('--all-projects')){
+  const {outstandingProjectStatus,formatOutstandingProjectStatus}=await import('../core/project-status.mjs');
+  const report=outstandingProjectStatus();
+  if(argl.includes('--output')){
+    const at=argl.indexOf('--output');if(!argl[at+1] || argl[at+1].startsWith('--'))throw new Error('--output requires a file path');
+    const output=path.resolve(argl[at+1]);fs.mkdirSync(path.dirname(output),{recursive:true,mode:0o700});
+    fs.writeFileSync(output,output.endsWith('.json')?JSON.stringify(report,null,2):formatOutstandingProjectStatus(report),{mode:0o600});
+    console.log(JSON.stringify({output,rootCount:report.rootCount,projectCount:report.projectCount,taskCount:report.tasks.length}));return report;
+  }
+  if(argl.includes('--summary')){
+    console.log(JSON.stringify({generatedAt:report.generatedAt,rootCount:report.rootCount,projectCount:report.projectCount,openCheckboxCount:report.openCheckboxCount,evidence:report.evidence,projects:report.projects.filter(row=>row.projects.length).map(row=>({name:row.name,projects:row.projects.map(p=>({id:p.id,state:p.state,status:p.status,open:p.openCount,modifiedAt:p.modifiedAt}))})),tasks:report.tasks.reduce((counts,task)=>{const key=task.slug==='onboarding-interview'?'onboarding-template':`${task.status}:${task.executor}`;counts[key]=(counts[key] || 0)+1;return counts;},{}),missing:report.missing},null,2));return report;
+  }
+  if(asJson)console.log(JSON.stringify(report,null,2));
+  else {
+    console.log(`${report.rootCount} roots; ${report.projectCount} outstanding project trackers; ${report.openCheckboxCount} unchecked items; ${report.tasks.length} outstanding daemon tasks.\n${report.evidence}`);
+    for(const repo of report.projects.filter(row=>row.projects.length))for(const project of repo.projects)console.log(`${repo.name} / ${project.id}: ${project.state}, ${project.status}, ${project.openCount ?? '?'} open — ${project.tracker || project.folder}`);
+    for(const task of report.tasks)console.log(`Task ${task.slug}: ${task.status} — ${task.intent}`);
+    for(const row of report.missing)console.log(`Missing root: ${row.root}`);
+  }
+  return report;
 }
 
 // Run a Total Recall verb (async, bounded). Output is parsed for counts only.
@@ -51,12 +75,12 @@ const [pid, groupsRes, cmds, catalog, due, shared, tracking, tasks, secretList, 
   tr(['project-id', '--json']),
   tr(['group', 'list', '--json']),
   tr(['command', 'list', '--json']),
-  tr(['secret', 'catalog']),
-  tr(['secret', 'rotation-due']),
-  tr(['secret', 'shared']),
-  tr(['secret', 'tracking-health']),
+  tr(['auth', 'secret', 'catalog']),
+  tr(['auth', 'secret', 'rotation-due']),
+  tr(['auth', 'secret', 'shared']),
+  tr(['auth', 'secret', 'tracking-health']),
   tr(['task', 'list']),
-  tr(['secret', 'list']),
+  tr(['auth', 'secret', 'list']),
   tr(['mesh', 'status', '--json']),
   withMesh ? tr(['mesh', 'ping', '--json'], 60000) : Promise.resolve(null),
 ]);
@@ -154,9 +178,9 @@ const harnesses = await queryHarnessUsage().catch(() => []);
 const warnings = [];
 if (!runtime.ready) warnings.push('Shared runtime readiness failed or unknown: total-recall startup check --json.');
 if (!project?.project_id) warnings.push('No project brain here (total-recall init) — memory, secrets and rules are global-only.');
-if (secrets.rotation_due && secrets.rotation_due !== 0) warnings.push(`Secrets overdue for rotation: ${secrets.rotation_due} (total-recall secret rotation-due).`);
-if (secrets.shared_values && secrets.shared_values !== 0) warnings.push(`Credential values reused across keys/apps: ${secrets.shared_values} group(s) (total-recall secret shared).`);
-if (secrets.untracked && secrets.untracked !== 0) warnings.push(`Secrets without usage/account tracking: ${secrets.untracked} (total-recall secret tracking-health).`);
+if (secrets.rotation_due && secrets.rotation_due !== 0) warnings.push(`Secrets overdue for rotation: ${secrets.rotation_due} (total-recall auth secret rotation-due).`);
+if (secrets.shared_values && secrets.shared_values !== 0) warnings.push(`Credential values reused across keys/apps: ${secrets.shared_values} group(s) (total-recall auth secret shared).`);
+if (secrets.untracked && secrets.untracked !== 0) warnings.push(`Secrets without usage/account tracking: ${secrets.untracked} (total-recall auth secret tracking-health).`);
 if (rules && (now - new Date(rules.compiled)) > 7 * 86400000) warnings.push(`Instruction surfaces last compiled ${rules.compiled.slice(0, 10)} — run total-recall compile.`);
 for (const w of openwiki) if (w.updated && (now - new Date(w.updated)) > 30 * 86400000) warnings.push(`OpenWiki ${w.dir} last updated ${w.updated.slice(0, 10)} — may be stale.`);
 if (meshStatus && meshStatus.configured === false) warnings.push(`Mesh not configured: ${meshStatus.reason || 'unknown'}.`);

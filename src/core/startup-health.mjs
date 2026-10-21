@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readProcessCommand } from './pid-lock.mjs';
+import { CLI_COMMANDS } from './cli-commands.mjs';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const cliEntry = path.join(packageRoot, 'bin/total-recall.mjs');
@@ -63,8 +64,7 @@ export function appVerdict(result) {
 }
 
 function projectCommand(cwd, name) {
-  const dispatcher = fs.readFileSync(cliEntry, 'utf8').match(/^const COMMANDS = \{([\s\S]*?)^\};/m)?.[1] || '';
-  const reserved = new Set([...dispatcher.matchAll(/^\s+'?([a-z][a-z0-9-]*)'?\s*:/gm)].map(m => m[1]));
+  const reserved = new Set(Object.keys(CLI_COMMANDS));
   if (reserved.has(name) || !/^[a-z][a-z0-9-]{0,63}$/.test(name || '')) return false;
   const file = path.join(cwd, '.agent', 'commands', name + '.mjs');
   try { return fs.statSync(file).isFile() && fs.realpathSync(file).startsWith(fs.realpathSync(cwd) + path.sep) ? file : false; } catch { return false; }
@@ -167,7 +167,9 @@ export async function startupHealth({ cwd = process.cwd(), brainDir, brainUrl = 
       }
     }
   }
-  report.shared_ready = report.server.status === 'ready' && report.brain.status === 'ready' && report.daemon.status === 'running' && report.ssss.status === 'available';
+  const { inspectRequiredPlugins } = await import('./required-plugins.mjs');
+  report.required_plugins = inspectRequiredPlugins(brainDir);
+  report.shared_ready = report.required_plugins.status === 'ready' && report.server.status === 'ready' && report.brain.status === 'ready' && report.daemon.status === 'running' && report.ssss.status === 'available';
   report.ready_scope = appCheck ? 'shared-and-declared-current-repo-app' : 'shared-runtime-only';
   report.ready = report.shared_ready && (!appCheck || report.app.status === 'ready');
   return report;

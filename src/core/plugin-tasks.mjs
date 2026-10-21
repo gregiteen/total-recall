@@ -99,7 +99,7 @@ export async function runDuePluginTasks(options = {}) {
       const slot = latestDueSlot(cron, runs[task.command], now);
       if (!slot) continue;
 
-      const result = await runner(plugin, { subcommand: task.command, cwd: projectRoot, timeoutMs: TASK_TIMEOUT_MS })
+      const result = await runner(plugin, { subcommand: task.command, cwd: projectRoot, timeoutMs: task.timeout_ms || TASK_TIMEOUT_MS })
         .catch((err) => ({ ok: false, exitCode: null, output: err.message, durationMs: 0, timedOut: false }));
       runs[task.command] = slot;
       changed = true;

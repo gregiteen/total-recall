@@ -26,6 +26,7 @@ const handlers = {
 
 export async function main(args = []) {
   const [command, ...rest] = args;
+  if (command === 'secret' || command === 'secrets') throw new Error('Credential commands belong to total-recall auth secret');
   if (!command || ['help', '--help', '-h'].includes(command)) {
     console.log(`Total Recall — portable memory and instructions
 Usage: total-recall <command> [options]

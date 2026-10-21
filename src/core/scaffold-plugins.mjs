@@ -10,6 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { isBrainState } from './brain-state.mjs';
+import { discoverPlugins } from './plugin-loader.mjs';
 
 export const TEST_PATTERNS = [/^test\//, /^tests\//, /(^|\/)[^/]+\.(spec|test)\.[cm]?[jt]sx?$/, /^vitest\.config\.[cm]?[jt]s$/];
 
@@ -35,6 +36,15 @@ export function releaseFiles(pluginDir, run = spawnSync) {
 }
 
 const digest = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+function releaseContent(file,rel) {
+  const raw=fs.readFileSync(file);
+  if(rel!=='package.json')return raw;
+  const pkg=JSON.parse(raw);
+  // Runtime bundles exclude tests and development installs; do not install a
+  // complete extra host package merely to satisfy a stripped test dependency.
+  delete pkg.devDependencies;
+  return Buffer.from(JSON.stringify(pkg,null,2)+'\n');
+}
 
 /** Compare (and with write:true, update) the scaffold copies and the pin. */
 export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync }) {
@@ -43,7 +53,10 @@ export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync 
   const changes = [];
   // Validate every owner before copying any source or replacing the release pin.
   const plans = ids.map(id => {
-    const source = fs.realpathSync(path.join(root, '.agent', 'skills', 'total-recall', 'plugins', id));
+    const local = path.join(root, '.agent', 'skills', 'total-recall', 'plugins', id);
+    const selected = fs.existsSync(local) ? local : discoverPlugins(root).find(plugin => plugin.id === id && plugin.valid)?.dir;
+    if (!selected) throw new Error(`Required default plugin ${id} is not installed`);
+    const source = fs.realpathSync(selected);
     const files = releaseFiles(source, run);
     return { id, source, files };
   });
@@ -52,11 +65,12 @@ export function syncScaffoldPlugins({ root, ids, write = false, run = spawnSync 
     for (const rel of files) {
       const from = path.join(source, rel);
       const to = path.join(target, rel);
-      const sha = digest(from);
+      const content=releaseContent(from,rel);
+      const sha = crypto.createHash('sha256').update(content).digest('hex');
       lock[`${id}/${rel}`] = sha;
       if (!fs.existsSync(to)) changes.push({ file: `${id}/${rel}`, change: 'added' });
       else if (digest(to) !== sha) changes.push({ file: `${id}/${rel}`, change: 'updated' });
-      if (write) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(from, to); }
+      if (write) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.writeFileSync(to,content); }
     }
     const keep = new Set(files);
     const walk = (dir) => {

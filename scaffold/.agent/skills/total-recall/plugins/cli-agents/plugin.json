@@ -1,0 +1,290 @@
+{
+  "id": "cli-agents",
+  "name": "Command Fleet",
+  "version": "0.2.0",
+  "description": "Discover, configure, document and run CLI agents through Total Recall on selected mesh nodes.",
+  "cli": {
+    "command": "cli-agents",
+    "handler": "cli.mjs",
+    "subcommands": [
+      {
+        "name": "status",
+        "description": "Inspect local agent binaries and authentication metadata",
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "catalog",
+        "description": "List documented adapter contracts and source references",
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "nodes",
+        "description": "List recorded mesh targets without probing or changing them",
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "inspect",
+        "description": "Inspect installed harnesses on a selected node",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "node",
+            "flag": "--node",
+            "type": "string",
+            "label": "Mesh node"
+          }
+        ],
+        "timeout_ms": 120000
+      },
+      {
+        "name": "run-command",
+        "description": "Run an explicit plugin command through the selected agent and node using a JSON request on stdin",
+        "effect": "write",
+        "output": "json",
+        "args": [],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "runtime",
+        "description": "Manage any agent runtime; includes Hermes gateway/auth/skills/plugins and DSH observations",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "agent",
+            "type": "string",
+            "label": "Agent adapter",
+            "required": true,
+            "positional": true
+          },
+          {
+            "name": "operation",
+            "type": "string",
+            "label": "Native operation",
+            "required": true,
+            "positional": true
+          }
+        ],
+        "timeout_ms": 120000
+      },
+      {
+        "name": "dispatch",
+        "description": "Run a task from stdin after automatic Total Recall bootstrap",
+        "effect": "write",
+        "output": "json",
+        "args": [],
+        "timeout_ms": 120000
+      },
+      {
+        "name": "docs-status",
+        "description": "Verify cached official documentation coverage freshness and hashes",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "agent",
+            "flag": "--agent",
+            "type": "string",
+            "label": "Agent adapter"
+          }
+        ],
+        "timeout_ms": 120000
+      },
+      {
+        "name": "docs-refresh",
+        "description": "Download complete official agent documentation and retain last-good content on failure",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "agent",
+            "flag": "--agent",
+            "type": "string",
+            "label": "Agent adapter"
+          }
+        ],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "docs-ensure",
+        "description": "Refresh missing or stale documentation automatically",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "agent",
+            "flag": "--agent",
+            "type": "string",
+            "label": "Agent adapter"
+          }
+        ],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "maintenance",
+        "description": "Total Recall daemon maintenance: current official documentation and integration surfaces",
+        "effect": "write",
+        "output": "json",
+        "args": [],
+        "timeout_ms": 600000
+      },
+      {
+        "name": "setup",
+        "description": "Configure supported agent instruction surfaces and daemon task placement",
+        "effect": "write",
+        "output": "json",
+        "args": [
+          {
+            "name": "node",
+            "flag": "--node",
+            "type": "string",
+            "label": "Maintenance mesh node"
+          }
+        ],
+        "timeout_ms": 120000
+      },
+      {
+        "name": "docs-sources",
+        "description": "List approved official documentation sources",
+        "effect": "read",
+        "output": "json",
+        "args": []
+      },
+      {
+        "name": "docs-read",
+        "description": "Read integrity-checked cached official documentation",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "agent",
+            "flag": "--agent",
+            "type": "string",
+            "label": "Agent"
+          },
+          {
+            "name": "url",
+            "flag": "--url",
+            "type": "string",
+            "label": "Url"
+          }
+        ]
+      },
+      {
+        "name": "docs-search",
+        "description": "Search downloaded official documentation",
+        "effect": "read",
+        "output": "json",
+        "args": [
+          {
+            "name": "agent",
+            "flag": "--agent",
+            "type": "string",
+            "label": "Agent"
+          },
+          {
+            "name": "query",
+            "flag": "--query",
+            "type": "string",
+            "required": true,
+            "label": "Query"
+          }
+        ]
+      }
+    ]
+  },
+  "runtime": {
+    "modules": {
+      "command-executor": "src/executor.mjs",
+      "documentation": "src/documentation.mjs",
+      "agent-runtime": "src/runtime.mjs"
+    },
+    "setup_command": "setup"
+  },
+  "branding": {
+    "name": "Command Fleet",
+    "color": "#184e47",
+    "accent": "#dbb76a",
+    "background": "#f3eee3",
+    "font": "system"
+  },
+  "ui": {
+    "elements": [
+      {
+        "id": "fleet-card",
+        "kind": "card",
+        "tag": "command-fleet-card",
+        "module": "ui/card.js",
+        "description": "Installed agent fleet"
+      }
+    ]
+  },
+  "card_face": {
+    "quick_actions": [
+      {
+        "subcommand": "status",
+        "label": "Local agents"
+      },
+      {
+        "subcommand": "nodes",
+        "label": "Mesh nodes"
+      },
+      {
+        "subcommand": "catalog",
+        "label": "Adapters"
+      }
+    ]
+  },
+  "auth": {
+    "plugin": "auth",
+    "methods": [
+      "passkey",
+      "google-oauth2"
+    ],
+    "session_verification": true
+  },
+  "distribution": {
+    "tier": "official",
+    "license": "open"
+  },
+  "card_layout": {
+    "template": "workbench",
+    "regions": [
+      {
+        "widget": "live",
+        "title": "Live view"
+      },
+      {
+        "widget": "list",
+        "title": "Details",
+        "source": {
+          "command": "status"
+        }
+      },
+      {
+        "widget": "actions",
+        "title": "Commands"
+      },
+      {
+        "widget": "activity",
+        "title": "Recent activity"
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "intent": "Keep official agent documentation and Total Recall integrations current",
+      "schedule": "*/15 * * * *",
+      "command": "maintenance",
+      "placement": "selected-node",
+      "timeout_ms": 600000
+    }
+  ]
+}

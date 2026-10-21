@@ -376,18 +376,18 @@ Issue labels and grant scoped Bearer Personal Access Tokens (PATs).
 Manage API keys and credentials (stored in `secrets.enc`, not in the memory vault).
 - **Usage**:
   ```bash
-  npx total-recall secret set <key> <value> [options]
-  npx total-recall secret generate <key> [--bytes 32] [--format hex|base64url]
-  npx total-recall secret get <key>
-  npx total-recall secret list
-  npx total-recall secret rotate <key> <value>
-  npx total-recall secret delete <key>
+  npx total-recall auth secret set <key> <value> [options]
+  npx total-recall auth secret generate <key> [--bytes 32] [--format hex|base64url]
+  npx total-recall auth secret get <key>
+  npx total-recall auth secret list
+  npx total-recall auth secret rotate <key> <value>
+  npx total-recall auth secret delete <key>
 
   # Executed rotation (3.22.0+)
-  npx total-recall secret rotation-status [--json]
-  npx total-recall secret rotate-auto <key> [--export-env]
-  npx total-recall secret rotate-browser <key> [--headless] [--print-only]
-  npx total-recall secret browser-logout
+  npx total-recall auth secret rotation-status [--json]
+  npx total-recall auth secret rotate-auto <key> [--export-env]
+  npx total-recall auth secret rotate-browser <key> [--headless] [--print-only]
+  npx total-recall auth secret browser-logout
   ```
 - **Options for set**:
   - `--provider <name>`: E.g., openai, anthropic.

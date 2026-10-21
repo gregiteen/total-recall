@@ -14,6 +14,9 @@ describe('update CLI', () => {
       noBuild: false,
       allBrains: false,
       json: false,
+      automatic: false,
+      status: false,
+      localOnly: false,
     });
   });
 

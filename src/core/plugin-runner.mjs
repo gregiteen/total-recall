@@ -67,6 +67,7 @@ export function runPluginCommand(plugin, options = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     const chunks = [];
+    const stdoutChunks=[],stderrChunks=[];
     let bytes = 0;
     let truncated = false;
     let timedOut = false;
@@ -90,21 +91,22 @@ export function runPluginCommand(plugin, options = {}) {
       stdio: [stdinText !== undefined ? 'pipe' : stdin === 'inherit' ? 'inherit' : 'ignore', 'pipe', 'pipe']
     });
 
-    const collect = (buf) => {
+    const collect = (buf,stream) => {
       // Even a faulty owner that echoes stdin cannot return credential material.
       if (stdinText !== undefined) return;
       if (truncated) return;
       if (bytes + buf.length > MAX_OUTPUT_BYTES) {
-        chunks.push(buf.subarray(0, MAX_OUTPUT_BYTES - bytes));
+        const partial=buf.subarray(0, MAX_OUTPUT_BYTES - bytes);chunks.push(partial);stream.push(partial);
         bytes = MAX_OUTPUT_BYTES;
         truncated = true;
         return;
       }
       chunks.push(buf);
+      stream.push(buf);
       bytes += buf.length;
     };
-    child.stdout.on('data', collect);
-    child.stderr.on('data', collect);
+    child.stdout.on('data', buf=>collect(buf,stdoutChunks));
+    child.stderr.on('data', buf=>collect(buf,stderrChunks));
     if (stdinText !== undefined) {
       // A handler may exit without reading; EPIPE must not crash the server.
       child.stdin.on('error', () => {});
@@ -124,6 +126,10 @@ export function runPluginCommand(plugin, options = {}) {
       if (spawnError) output += `${output ? '\n' : ''}[runner] ${spawnError.message}`;
       if (truncated) output += `\n[runner] output truncated at ${MAX_OUTPUT_BYTES} bytes`;
       if (timedOut) output += `\n[runner] killed after ${timeoutMs} ms`;
+      let stderr=Buffer.concat(stderrChunks).toString('utf8');
+      if(spawnError)stderr+=`\n[runner] ${spawnError.message}`;
+      if(truncated)stderr+=`\n[runner] output truncated at ${MAX_OUTPUT_BYTES} bytes`;
+      if(timedOut)stderr+=`\n[runner] killed after ${timeoutMs} ms`;
       resolve({
         ok: !spawnError && !timedOut && exitCode === 0,
         exitCode,
@@ -131,6 +137,8 @@ export function runPluginCommand(plugin, options = {}) {
         timedOut,
         truncated,
         output,
+        stdout:Buffer.concat(stdoutChunks).toString('utf8'),
+        stderr,
         durationMs: Date.now() - started
       });
     };

@@ -29,7 +29,7 @@ export function globalPluginsDir() {
 }
 
 export function bundledPluginsDir() {
-  return process.env._TR_TEST_BUNDLED_PLUGINS_DIR || path.join(PACKAGE_ROOT, 'plugins');
+  return process.env._TR_TEST_BUNDLED_PLUGINS_DIR || path.join(PACKAGE_ROOT, 'scaffold', '.agent', 'skills', 'total-recall', 'plugins');
 }
 
 /** The vault that owns records for plugins installed in `pluginsDir` (`<brain>/plugins` → `<brain>/memory-vault`). */
@@ -165,6 +165,7 @@ export function validatePluginManifest(manifest) {
         if (t.placement !== undefined && !['per-node', 'selected-node'].includes(t.placement)) {
           errors.push(`Task '${t.intent}' has unsupported placement '${t.placement}'`);
         }
+        if (t.timeout_ms !== undefined && (!Number.isInteger(t.timeout_ms) || t.timeout_ms < 1 || t.timeout_ms > 600000)) errors.push(`Task '${t.intent}' timeout_ms must be 1..600000`);
       }
     }
   }

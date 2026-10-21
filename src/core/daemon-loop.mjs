@@ -258,6 +258,8 @@ import { releaseLease } from './leader-election.mjs';
  * even a wedged iteration cannot keep the daemon alive indefinitely.
  */
 let stopPluginTasks = null;
+let stopCliMaintenance = null;
+let stopAutomaticUpdates = null;
 
 function shutdown(signal) {
   if (shuttingDown) return;
@@ -266,6 +268,8 @@ function shutdown(signal) {
   running = false;
   if (vaultWatcher) vaultWatcher.stop();
   if (stopPluginTasks) stopPluginTasks();
+  stopCliMaintenance?.();
+  stopAutomaticUpdates?.();
 
   const fallback = setTimeout(() => {
     logger.info({
@@ -329,6 +333,11 @@ async function main() {
 
   // Start source watcher (auto-regenerates repo-expert on code changes)
   try {
+    const { startCliSurfaceMaintenance } = await import('./cli-maintenance.mjs');
+    const maintenance=startCliSurfaceMaintenance({brainDir:BRAIN_DIR});
+    stopCliMaintenance=()=>maintenance.stop();
+  } catch(error) { logger.error('daemon-loop', `CLI surface maintenance failed: ${error.message}`); }
+  try {
     const { detectProjectBrain } = await import('./config.mjs');
     const project = detectProjectBrain();
     if (project && project.projectRoot) {
@@ -388,14 +397,9 @@ async function main() {
 
   // npm total-recall-brain auto-update for registered projects (throttled thereafter via crons)
   try {
-    const { runPackageAutoUpdate } = await import('./package-auto-update.mjs');
-    const pkg = await runPackageAutoUpdate({ brainDir: BRAIN_DIR, skipThrottle: true });
-    if (!pkg.skipped) {
-      logger.info({
-        subsystem: 'daemon-loop',
-        message: `Boot package-auto-update: latest=${pkg.latest} updated=${pkg.updated || 0} failed=${pkg.failed || 0}`,
-      });
-    }
+    const { startAutomaticBrainUpdates } = await import('./automatic-brain-updates.mjs');
+    const maintenance=startAutomaticBrainUpdates({brainDir:BRAIN_DIR});
+    stopAutomaticUpdates=()=>maintenance.stop();
   } catch (err) {
     logger.info({ subsystem: 'daemon-loop', message: `Boot package-auto-update failed: ${err.message}` });
   }

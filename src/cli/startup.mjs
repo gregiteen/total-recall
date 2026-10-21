@@ -35,7 +35,8 @@ export default async function startup(args = []) {
   const report = await inspectStartup(options);
   if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
   else {
-    console.log(`Startup: server ${report.server?.status || 'unknown'}; brain ${report.brain?.status || 'unknown'}; daemon ${report.daemon?.status || 'unknown'}; SSSS tooling ${report.ssss?.status || 'unknown'}; app ${report.app?.status || 'unknown'}`);
+    console.log(`Startup: required plugins ${report.required_plugins?.status || 'unknown'}; server ${report.server?.status || 'unknown'}; brain ${report.brain?.status || 'unknown'}; daemon ${report.daemon?.status || 'unknown'}; SSSS tooling ${report.ssss?.status || 'unknown'}; app ${report.app?.status || 'unknown'}`);
+    for (const error of report.required_plugins?.errors || []) console.log(`Required plugin: ${error}`);
     const harnesses = await queryHarnessUsage().catch(() => []);
     const availH = harnesses.filter(h => h.available);
     const readyH = availH.filter(h => h.authed);

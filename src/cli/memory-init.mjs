@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getGlobalAgentDir } from './agent-dir.mjs';
 import { registerProjectBrain, writeBrainIdentity, VAULT_CATEGORIES } from '../core/memory-brain.mjs';
+import { ensureRequiredPlugins } from '../core/required-plugins.mjs';
 
 export default async function init(args = []) {
   if (args.includes('--help') || args.includes('-h')) {
@@ -24,6 +25,7 @@ export default async function init(args = []) {
   for (const relative of ['config', 'plugins', 'memory-derived', ...VAULT_CATEGORIES.map(c => `memory-vault/${c}`)]) {
     fs.mkdirSync(path.join(brainDir, relative), { recursive: true });
   }
+  ensureRequiredPlugins(brainDir);
   const skillFile = path.join(brainDir, 'SKILL.md');
   if (!fs.existsSync(skillFile)) {
     // Resolve the template by PATH, not `new URL(..., import.meta.url)`. Under a

@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { resolveBrainLayer } from '../core/config.mjs';
 import { isSafeRelativePath, validatePluginManifest } from '../core/plugin-loader.mjs';
+import { CLI_COMMANDS } from '../core/cli-commands.mjs';
 
 const COMMAND_NAME = /^[a-z][a-z0-9-]{0,63}$/;
 
@@ -204,13 +205,7 @@ export async function run(argv = []) {
  * dispatcher itself so this list cannot drift.
  */
 export function builtinCommandNames() {
-  try {
-    const bin = fs.readFileSync(new URL('../../bin/total-recall.mjs', import.meta.url), 'utf8');
-    const block = bin.match(/^const COMMANDS = \{([\s\S]*?)^\};/m)?.[1] || '';
-    return new Set([...block.matchAll(/^\s+'?([a-z][a-z0-9-]*)'?\s*:/gm)].map((m) => m[1]));
-  } catch {
-    return new Set();
-  }
+  return new Set(Object.keys(CLI_COMMANDS));
 }
 
 const RISKS = new Set(['read', 'write', 'money', 'dns-cert', 'production-deploy', 'secret-revoke']);

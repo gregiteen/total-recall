@@ -1,15 +1,15 @@
 /**
- * total-recall secret — manage API keys and credentials (not in the memory vault).
+ * total-recall auth secret — manage API keys and credentials (not in the memory vault).
  *
  * Usage:
- *   npx total-recall secret set <key> <value> [--provider name] [--scope global|project]
- *   npx total-recall secret get <key>          # prints value (use carefully)
- *   npx total-recall secret list
- *   npx total-recall secret rotate <key>       # prompts for the value
- *   npx total-recall secret delete <key>
- *   npx total-recall secret audit [--limit N]
- *   npx total-recall secret usage [--days N]
- *   npx total-recall secret usage-record --provider x --cost 0.01
+ *   npx total-recall auth secret set <key> <value> [--provider name] [--scope global|project]
+ *   npx total-recall auth secret get <key>          # prints value (use carefully)
+ *   npx total-recall auth secret list
+ *   npx total-recall auth secret rotate <key>       # prompts for the value
+ *   npx total-recall auth secret delete <key>
+ *   npx total-recall auth secret audit [--limit N]
+ *   npx total-recall auth secret usage [--days N]
+ *   npx total-recall auth secret usage-record --provider x --cost 0.01
  */
 
 import {
@@ -184,9 +184,9 @@ function readSecretValue(label) {
 
 function printHelp() {
   console.log(`
-  total-recall secret — Secrets store (separate from memory vault)
+  total-recall auth secret — Secrets store (separate from memory vault)
 
-  Usage: total-recall secret <command> [options]
+  Usage: total-recall auth secret <command> [options]
 
   Commands:
     set <key> [value]     Store a secret (encrypted, unlock required; 0600 file)
@@ -220,7 +220,7 @@ function printHelp() {
       --no-global         Only keys bound to this repo (skip unbound)
       --replace-all       Overwrite entire .env (default: merge TR block only)
       --remote <name>     Also push the SSOT projection to a configured remote
-                           target over SSH (see 'secret remote') instead of
+                           target over SSH (see 'auth secret remote') instead of
                            (or in addition to) a local file
       --dry-run           Show keys that would be written
     remote <cmd>          Manage remote (production) deploy targets — generic,
@@ -282,7 +282,7 @@ function printHelp() {
     --export-env          After rotate, write .env to bound repos (and cwd if unbound)
     --export-all          After rotate, export-env to all project-registry paths
     --remote <name>       After rotate, also push to a configured remote target
-                           (production, etc.) over SSH — see 'secret remote'
+                           (production, etc.) over SSH — see 'auth secret remote'
 
   set / rotate options:
     --provider <name>     Optional provider tag (e.g. openai, anthropic)
@@ -647,7 +647,7 @@ export default async function secretCli(argv) {
       process.exit(1);
     }
     if (opts.command !== 'rekey' && !opts.key) {
-      console.error(`Usage: total-recall secret ${opts.command} <key> --stdin`);
+      console.error(`Usage: total-recall auth secret ${opts.command} <key> --stdin`);
       process.exit(1);
     }
     opts.value = readStdinValue();
@@ -750,7 +750,7 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'set') {
       if (!opts.key || opts.value == null) {
-        console.error('Usage: total-recall secret set <key> <value>');
+        console.error('Usage: total-recall auth secret set <key> <value>');
         process.exit(1);
       }
       await setSecret(brainDir, opts.key, opts.value, {
@@ -778,7 +778,7 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'generate') {
       if (!opts.key) {
-        console.error('Usage: total-recall secret generate <key> [--bytes 32] [--format hex|base64|base64url]');
+        console.error('Usage: total-recall auth secret generate <key> [--bytes 32] [--format hex|base64|base64url]');
         process.exit(1);
       }
       const crypto = await import('node:crypto');
@@ -831,7 +831,7 @@ export default async function secretCli(argv) {
       if (multiError.length) {
         console.log(
           `  ❌ ${multiError.length} key(s) bound to multiple repos — fix with:\n` +
-            `     secret meta <KEY> --repo <one-repo>\n` +
+            `     auth secret meta <KEY> --repo <one-repo>\n` +
             `     or clear repos for Developer secrets\n`,
         );
       }
@@ -975,10 +975,10 @@ export default async function secretCli(argv) {
           }
           if (g.error) console.log(`      → ${g.error}`);
           console.log(
-            `      fix: rotate each key to a unique value, then: secret rotate <key> <new> --export-env`,
+            `      fix: rotate each key to a unique value, then: auth secret rotate <key> <new> --export-env`,
           );
           console.log(
-            `      waive (rare): secret meta <key> --shared-ok   # only if intentional mirror`,
+            `      waive (rare): auth secret meta <key> --shared-ok   # only if intentional mirror`,
           );
           console.log('');
         }
@@ -991,7 +991,7 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'meta') {
       if (!opts.key) {
-        console.error('Usage: total-recall secret meta <key> [--repo ...] [--tier ...]');
+        console.error('Usage: total-recall auth secret meta <key> [--repo ...] [--tier ...]');
         process.exit(1);
       }
       const patch = {};
@@ -1046,15 +1046,15 @@ export default async function secretCli(argv) {
         const r = await enqueueRotationDueTasks(brainDir, { autoOnly: false });
         console.log(`\n  📋 Enqueued ${r.tasks.filter((t) => t.status === 'created').length} rotation assist task(s)`);
       }
-      console.log('\n  Rotate:        npx total-recall secret rotate <key> <new> --export-env');
-      console.log('  Browser assist: npx total-recall secret rotate-browser <key>');
-      console.log('  Enqueue tasks:  npx total-recall secret rotation-due --enqueue\n');
+      console.log('\n  Rotate:        npx total-recall auth secret rotate <key> <new> --export-env');
+      console.log('  Browser assist: npx total-recall auth secret rotate-browser <key>');
+      console.log('  Enqueue tasks:  npx total-recall auth secret rotation-due --enqueue\n');
       return;
     }
 
     if (opts.command === 'get') {
       if (!opts.key) {
-        console.error('Usage: total-recall secret get <key>');
+        console.error('Usage: total-recall auth secret get <key>');
         process.exit(1);
       }
       const project_id = currentProjectId();
@@ -1105,7 +1105,7 @@ export default async function secretCli(argv) {
     if (opts.command === 'remote') {
       if (!opts.subcommand) {
         console.error(
-          'Usage: total-recall secret remote <add|list|remove|deploy> [...]\n' +
+          'Usage: total-recall auth secret remote <add|list|remove|deploy> [...]\n' +
             '  add <name> --host <h> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]\n' +
             '  list\n' +
             '  remove <name>\n' +
@@ -1117,7 +1117,7 @@ export default async function secretCli(argv) {
       if (opts.subcommand === 'add') {
         if (!opts.key || !opts.remoteHost || !opts.path) {
           console.error(
-            'Usage: total-recall secret remote add <name> --host <host> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]',
+            'Usage: total-recall auth secret remote add <name> --host <host> --path </remote/dir> [--user root] [--port 22] [--filename .env] [--restart-cmd "..."]',
           );
           process.exit(1);
         }
@@ -1158,7 +1158,7 @@ export default async function secretCli(argv) {
 
       if (opts.subcommand === 'remove' || opts.subcommand === 'rm') {
         if (!opts.key) {
-          console.error('Usage: total-recall secret remote remove <name>');
+          console.error('Usage: total-recall auth secret remote remove <name>');
           process.exit(1);
         }
         const r = removeRemoteTarget(brainDir, opts.key);
@@ -1168,7 +1168,7 @@ export default async function secretCli(argv) {
 
       if (opts.subcommand === 'deploy') {
         if (!opts.key) {
-          console.error('Usage: total-recall secret remote deploy <name> [--dry-run] [--keys k1,k2]');
+          console.error('Usage: total-recall auth secret remote deploy <name> [--dry-run] [--keys k1,k2]');
           process.exit(1);
         }
         const r = await deployEnvToRemote(brainDir, opts.key, {
@@ -1193,7 +1193,7 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'rotate') {
       if (!opts.key) {
-        console.error('Usage: total-recall secret rotate <key> [--export-env|--export-all|--remote <name>]');
+        console.error('Usage: total-recall auth secret rotate <key> [--export-env|--export-all|--remote <name>]');
         console.error('       The new value is read from a prompt or stdin — never from argv.');
         process.exit(1);
       }
@@ -1220,7 +1220,7 @@ export default async function secretCli(argv) {
           `\n  ⚠️  WARNING: the value was passed as a command-line argument.\n` +
             `     It is now in your shell history and was visible to any user\n` +
             `     running \`ps\` on this machine. Treat it as already disclosed\n` +
-            `     and rotate again using the prompt: total-recall secret rotate ${opts.key}\n`,
+            `     and rotate again using the prompt: total-recall auth secret rotate ${opts.key}\n`,
         );
       }
       if (!opts.value) {
@@ -1277,7 +1277,7 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'rotate-browser' || opts.command === 'rotate-auto') {
       if (!opts.key) {
-        console.error(`Usage: total-recall secret ${opts.command} <key>`);
+        console.error(`Usage: total-recall auth secret ${opts.command} <key>`);
         process.exit(1);
       }
 
@@ -1347,7 +1347,7 @@ export default async function secretCli(argv) {
 
     if (opts.command === 'delete' || opts.command === 'rm') {
       if (!opts.key) {
-        console.error('Usage: total-recall secret delete <key>');
+        console.error('Usage: total-recall auth secret delete <key>');
         process.exit(1);
       }
       const r = await deleteSecret(brainDir, opts.key);
@@ -1634,7 +1634,7 @@ export default async function secretCli(argv) {
       }
       if (opts.dryRun || (!opts.all && !opts.keys.length)) {
         console.log(
-          '\n  Dry-run / preview. Import with:\n    npx total-recall secret import-env --all\n    npx total-recall secret import-env OPENAI_API_KEY ANTHROPIC_API_KEY\n',
+          '\n  Dry-run / preview. Import with:\n    npx total-recall auth secret import-env --all\n    npx total-recall auth secret import-env OPENAI_API_KEY ANTHROPIC_API_KEY\n',
         );
         return;
       }

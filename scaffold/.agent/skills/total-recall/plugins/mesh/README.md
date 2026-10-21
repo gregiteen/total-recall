@@ -1,5 +1,14 @@
 # Mesh
 
+`total-recall mesh access verify --all-pairs --json` executes actual shell
+identity probes in every direction between configured SSH machines. Offline
+machines and devices without an account remain explicitly unverified. Existing
+network restrictions continue to apply.
+
+`total-recall mesh file put <node> <source> <destination> --mode 600` transfers
+bounded files through the recorded SSH connection, with payload on stdin and
+SHA-256 readback verification. It never copies vaults or provisions accounts.
+
 > Headscale and Tailscale SSH control-server mesh administration and node discovery
 
 ## Sharing

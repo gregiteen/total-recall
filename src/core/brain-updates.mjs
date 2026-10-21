@@ -8,11 +8,14 @@ import { createHash } from 'node:crypto';
 import { listUpdateRoots, resolveRegistryFiles, readRegistryEntries, rootsFromEnv } from './package-auto-update.mjs';
 import { discoverPlugins } from './plugin-loader.mjs';
 import { comparePackageVersions } from './package-version.mjs';
+import { inspectRequiredPlugins } from './required-plugins.mjs';
+import { ensureRequiredPlugins } from './required-plugins.mjs';
+import YAML from 'yaml';
 
 export const BRAIN_PACKAGES = ['total-recall-brain', '@gregiteen/ssss-cli'];
 const sections = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 const ignored = new Set(['node_modules', 'vendor', 'dist', 'build', 'coverage', 'venv',
-  'test', 'tests', '__tests__', 'fixtures', 'tmp', 'scratch']);
+  'test', 'tests', '__tests__', 'fixtures', 'tmp', 'scratch', 'scaffold']);
 const canonical = key => key === '@ssss/cli' ? '@gregiteen/ssss-cli' : key;
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const isLink = file => { try { return fs.lstatSync(file).isSymbolicLink(); } catch { return false; } };
@@ -68,7 +71,12 @@ export function brainInstallOwner(root) {
     const file = path.join(dir, 'package.json');
     if (fs.existsSync(file)) {
       const pkg = read(file);
-      if (dir === root || pkg.workspaces || fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) owner = dir;
+      let patterns=Array.isArray(pkg.workspaces)?pkg.workspaces:pkg.workspaces?.packages || [];
+      const pnpm=path.join(dir,'pnpm-workspace.yaml');
+      if(fs.existsSync(pnpm))patterns=[...patterns,...(YAML.parse(fs.readFileSync(pnpm,'utf8'))?.packages || [])];
+      const relative=path.relative(dir,root).split(path.sep).join('/');
+      const belongs=patterns.some(pattern=>typeof pattern==='string' && !pattern.startsWith('!') && new RegExp('^'+pattern.split('/').map(part=>part==='**'?'.*':part.split('*').map(chunk=>chunk.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('[^/]*')).join('/')+'$').test(relative));
+      if (dir === root || belongs) owner = dir;
     }
     if (dir === path.dirname(dir)) break;
   }
@@ -90,6 +98,17 @@ export async function updateAllBrains(opts = {}) {
   const exec = opts.exec || spawnSync;
   const roots = listUpdateRoots(opts).map(row => row.root);
   const errors = [];
+  const brains = roots.map(root => ({ root, brain: path.join(root, '.agent', 'skills', 'total-recall') }))
+    .filter(({ brain }) => fs.existsSync(brain));
+  if (opts.brainDir) brains.push({ root: opts.brainDir, brain: opts.brainDir });
+  for (const { root, brain } of brains) {
+    if (!dryRun && opts.ensureDefaults === true) {
+      try { ensureRequiredPlugins(brain); }
+      catch(error){errors.push({root,status:'failed',error:error.message});continue;}
+    }
+    const required = inspectRequiredPlugins(brain);
+    if (required.status !== 'ready') errors.push({ root, status: 'failed', error: required.errors.join('; ') });
+  }
   const requested = [...(opts.roots || []), ...rootsFromEnv(),
     ...resolveRegistryFiles(opts).flatMap(file => readRegistryEntries(file).map(row => row.path)).filter(Boolean)];
   for (const root of new Set(requested.map(root => path.resolve(root)))) {

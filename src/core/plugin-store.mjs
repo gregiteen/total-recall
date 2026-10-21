@@ -364,6 +364,16 @@ export async function installPlugin(source, options = {}) {
   let sourceRecord;
   let verifiedSha = null;
   let dependencies = null;
+  let previousDirectory=null;
+  const prepareDestination=id=>{
+    const target=path.join(pluginsDir,id);
+    if(!options.replace || !fs.existsSync(target))return assertNotInstalled(id,pluginsDir);
+    const archive=path.join(path.dirname(pluginsDir),'memory-derived/plugin-replacements',`${id}-${crypto.randomUUID()}`);
+    fs.mkdirSync(path.dirname(archive),{recursive:true});
+    fs.renameSync(target,archive);previousDirectory={target,archive};
+  };
+
+  try {
 
   const resolved = resolveBundle ? await resolveBundle(source, options) : null;
   const bundled = !resolved && ID_PATTERN.test(source) ? listBundledPlugins().find((p) => p.id === source) : null;
@@ -372,14 +382,14 @@ export async function installPlugin(source, options = {}) {
     manifest = resolved.manifest;
     const validation = validatePluginManifest(manifest);
     if (!validation.valid) throw new Error(`Invalid plugin manifest: ${validation.errors.join('; ')}`);
-    assertNotInstalled(manifest.id, pluginsDir);
+    prepareDestination(manifest.id);
     dest = writeEntriesAtomic(pluginsDir, manifest.id, resolved.entries);
     verifiedSha = resolved.sha256;
     sourceRecord = resolved.source;
   } else if (bundled) {
     if (!bundled.valid) throw new Error(`Bundled plugin '${source}' is invalid: ${bundled.errors.join('; ')}`);
     manifest = bundled.manifest;
-    assertNotInstalled(manifest.id, pluginsDir);
+    prepareDestination(manifest.id);
     dest = copyPluginAtomic(bundled.dir, pluginsDir, manifest.id);
     sourceRecord = { kind: 'bundled', ref: manifest.id };
   } else if (isGitSource(source)) {
@@ -391,7 +401,7 @@ export async function installPlugin(source, options = {}) {
         throw new Error(`Failed to clone ${source}: ${(err.stderr || err.message || '').toString().trim()}`);
       }
       manifest = readManifestFrom(tmp);
-      assertNotInstalled(manifest.id, pluginsDir);
+      prepareDestination(manifest.id);
       dest = copyPluginAtomic(tmp, pluginsDir, manifest.id);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -403,7 +413,7 @@ export async function installPlugin(source, options = {}) {
       throw new Error(`No bundled plugin, share link, peer source, git URL or directory matches '${source}'`);
     }
     manifest = readManifestFrom(abs);
-    assertNotInstalled(manifest.id, pluginsDir);
+    prepareDestination(manifest.id);
     if (link) {
       fs.mkdirSync(pluginsDir, { recursive: true });
       dest = path.join(pluginsDir, manifest.id);
@@ -446,8 +456,16 @@ export async function installPlugin(source, options = {}) {
     source: sourceRecord,
     sha256,
     dependencies,
+    previousDirectory:previousDirectory?.archive || null,
     compilation
   };
+  }catch(error){
+    if(previousDirectory){
+      if(fs.existsSync(previousDirectory.target))fs.rmSync(previousDirectory.target,{recursive:true,force:true});
+      fs.renameSync(previousDirectory.archive,previousDirectory.target);
+    }
+    throw error;
+  }
 }
 
 export function findInstalled(id, { projectRoot = process.cwd(), global: isGlobal } = {}) {

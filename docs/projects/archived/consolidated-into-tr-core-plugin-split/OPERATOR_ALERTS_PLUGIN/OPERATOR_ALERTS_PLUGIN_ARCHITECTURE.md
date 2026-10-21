@@ -24,7 +24,7 @@ tags: [project-management, plugins, corrections]
 `send` → merge config (`~/.total-recall/notifications/config.json`, `<repo>/.agent/notify.json`, `--config`) → per channel: unknown? → quiet hours? → already sent for this event id? → adapter → record `{event_id, channel, status, provider_id, error, at}` in `sent.jsonl` → append `notification-log.md`.
 
 ## Secrets
-`*_secret` config fields name secrets; read in-process with `total-recall secret get` (env var of the same name wins). Never printed, never in argv, never in request bodies (SMTP2GO key travels in a header).
+`*_secret` config fields name secrets; read in-process with `total-recall auth secret get` (env var of the same name wins). Never printed, never in argv, never in request bodies (SMTP2GO key travels in a header).
 
 ## Statuses
 `accepted` · `dry-run` · `duplicate` · `suppressed` · `stub` · `failed`. Stubs are not recorded in the ledger.

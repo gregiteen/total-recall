@@ -13,11 +13,12 @@ export async function installPlugin(args = []) {
   }
 
   try {
-    const result = await install(source, { projectRoot: process.cwd(), global: isGlobal, link: isLink });
+    const result = await install(source, { projectRoot: process.cwd(), global: isGlobal, link: isLink, replace:args.includes('--replace') });
     const from = result.source.kind === 'peer' ? `peer ${result.source.peer_hostname}` : result.source.kind;
     console.log(`\n✅ Installed '${result.plugin.name}' (id: ${result.plugin.id}, v${result.plugin.version}) from ${from}`);
     console.log(`   Location: ${result.plugin.dir}`);
     console.log(`   sha256:   ${result.sha256}`);
+    if(result.previousDirectory)console.log(`   Previous source retained: ${result.previousDirectory}`);
     if (result.dependencies?.installed) {
       console.log(`   Dependencies: installed ${result.dependencies.packages.length} package(s)`);
     } else if (result.dependencies?.reason && !['no package.json', 'no dependencies declared'].includes(result.dependencies.reason)) {

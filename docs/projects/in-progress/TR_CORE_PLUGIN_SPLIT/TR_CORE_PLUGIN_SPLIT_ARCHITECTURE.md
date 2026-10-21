@@ -1,5 +1,7 @@
 # TR_CORE_PLUGIN_SPLIT — Architecture
 
+2026-10-21 continuation: daemon-owned elapsed-time maintenance dispatches bounded CLI children; package-manager work never blocks the daemon event loop. Auth owns secure LaunchAgent carrier resolution. Mesh owns access discovery, limits and verified execution. Cross-project reporting reads the registry, ordinary five-file project docs and validated task envelopes through their owners; it never treats filesystem timestamps or checked boxes as production proof.
+
 > **Project Prefix**: `TR_CORE_PLUGIN_SPLIT`
 > **Kanban State**: In Progress
 > **Date**: 2026-10-07
@@ -305,3 +307,11 @@ The auth owner implements Google OAuth and access-key/role APIs. Core binds nati
 ## Native-only plugin requirement (2026-10-14)
 
 Greg explicitly rejects legacy support for these new plugins. Native SSSS records and the shared auth owner are the sole product-state/auth contracts. Remove legacy state/credential migrations, old mesh-brain reads, obsolete control-server endpoint retries and whole-store credential replication. Scaffolds must contain the same native-only owner source. This supersedes prior migration acceptance; existing device files are outside source-cleanup scope. Verify native corruption, scope enforcement and independent-node grants instead of legacy import preservation.
+
+
+## 2026-10-21 auth installation boundary
+The shipped scaffold is the canonical bundled plugin source. A generic required-plugin contract validates auth manifest, declared runtime files and command handler without reading credentials. Brain bootstrap seeds missing auth; readiness/update validate it explicitly. Credential implementation remains in the auth owner. CLI inventory and plugin operations precede rules and startup prose.
+
+
+## Unified agent adapters
+CLI-agents owns adapter registry, bounded runtime operations, selected-node execution, Total Recall bootstrap and official documentation maintenance. Bootstrap is generated at dispatch time from the selected workspace; user task text remains plain data. Documentation is an integrity-checked derived cache, sourced only from approved official domains/repositories, with last-good copies retained on failure. Runtime/config operations are explicit and bounded; credential values stay with auth and never enter prompts/status/logs. Core exposes generic install/update/task hooks.

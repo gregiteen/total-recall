@@ -1,6 +1,6 @@
 {
   "name": "total-recall-brain",
-  "version": "3.40.1",
+  "version": "3.40.2",
   "description": "Portable SSSS memory, local retrieval and task instructions with explicit plugin loading.",
   "type": "module",
   "bin": {
@@ -99,7 +99,8 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^6.0.3",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
+    "gray-matter": "^4.0.3",
     "jsdom": "^29.1.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -107,8 +108,7 @@
     "recharts": "^3.9.2",
     "skills": "^1.5.7",
     "supertest": "^7.2.2",
-    "vitest": "^4.1.11",
-    "gray-matter": "^4.0.3"
+    "vitest": "^4.1.12"
   },
   "workspaces": [
     "frontend"
