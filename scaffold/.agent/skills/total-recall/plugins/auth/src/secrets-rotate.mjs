@@ -267,10 +267,18 @@ export async function getBrowserRotateAssist(brainDir, key) {
 async function captureFromClipboard(page) {
   try {
     const text = await page.evaluate(() => navigator.clipboard.readText());
-    return typeof text === 'string' ? text.trim() : null;
-  } catch {
-    return null;
-  }
+    if (typeof text === 'string' && text.trim()) return text.trim();
+  } catch {}
+
+  try {
+    const { execFileSync } = await import('node:child_process');
+    if (process.platform === 'darwin') {
+      const clip = execFileSync('pbpaste', [], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      if (clip) return clip;
+    }
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -313,6 +321,8 @@ export async function rotateViaBrowser(brainDir, key, opts = {}) {
   const launched = await launchRotationContext(brainDir, {
     headless: opts.headless === true && recipe.verified,
     timeoutMs: opts.timeoutMs,
+    chrome: opts.chrome,
+    useChrome: opts.useChrome,
   });
   if (!launched.ok) return { ok: false, key, error: launched.error };
 
@@ -384,12 +394,20 @@ export async function rotateViaBrowser(brainDir, key, opts = {}) {
     });
     value = null; // drop the reference promptly
 
+    let revoked = 0;
+    if (opts.revokeOld && typeof recipe.revokeOld === 'function') {
+      say('revoking deprecated credentials from provider console');
+      revoked = await recipe.revokeOld(page, { keepLabels: [opts.label || 'total-recall', 'MASTER'] });
+      say(`revoked ${revoked} deprecated credential(s)`);
+    }
+
     return {
       ok: true,
       key,
       provider: plan.provider,
       supervised: !recipe.verified,
       verified,
+      revoked,
       exports: result.exports,
       revoke_hint: recipe.revoke_hint || 'Revoke the old credential in the console now that the new one is live.',
     };

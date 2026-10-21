@@ -165,10 +165,124 @@ export const ROTATION_RECIPES = {
 
   telnyx: {
     provider: 'telnyx',
-    console_url: 'https://portal.telnyx.com/#/app/api-keys',
-    verified: false,
-    create_hint: 'Create API Key → copy the KEY… value shown once.',
-    verify: (v) => probe('https://api.telnyx.com/v2/whoami', bearer(v)),
+    console_url: 'https://portal.telnyx.com/#/api-keys',
+    verified: true,
+    signed_in: 'button:has-text("Create API Key")',
+    signed_out: 'a:has-text("Log In"), input[name="email"]',
+    create_hint: 'Click "Create API Key", set tag, and copy the new key.',
+    revoke_hint: 'Click the Delete button on deprecated keys in the table.',
+    value_pattern: /^KEY[0-9A-Za-z_-]{30,}$/,
+    async create(page, { label }) {
+      // 1. Click Create API Key
+      await page.evaluate(() => {
+        const createBtn = Array.from(document.querySelectorAll('button')).find(
+          (b) => b.innerText.trim().toLowerCase() === 'create api key'
+        );
+        if (createBtn) createBtn.click();
+      });
+
+      // 2. Wait for dialog
+      let dialogReady = false;
+      for (let i = 0; i < 40; i++) {
+        await page.waitForTimeout(250);
+        dialogReady = await page.evaluate(() => {
+          const d = document.querySelector('[role=dialog]');
+          return !!(d && d.querySelector('input'));
+        });
+        if (dialogReady) break;
+      }
+      if (!dialogReady) return null;
+
+      // 3. Fill tag if provided
+      if (label) {
+        await page.evaluate(() => {
+          const d = document.querySelector('[role=dialog]');
+          const input = d?.querySelector('input');
+          if (input) input.focus();
+        });
+        if (typeof page.trustedKeystroke === 'function') {
+          await page.trustedKeystroke(label);
+          await page.waitForTimeout(300);
+          await page.trustedPress('return');
+        } else if (page.keyboard) {
+          await page.keyboard.type(label);
+          await page.keyboard.press('Enter');
+        }
+        await page.waitForTimeout(500);
+      }
+
+      // 4. Click Create inside dialog
+      await page.evaluate(() => {
+        const d = document.querySelector('[role=dialog]');
+        const confirmBtn = Array.from(d?.querySelectorAll('button') || []).find(
+          (b) => b.innerText.trim().toLowerCase() === 'create'
+        );
+        if (confirmBtn) confirmBtn.click();
+      });
+
+      // 5. Wait for "Copy to clipboard and close"
+      let copyReady = false;
+      for (let i = 0; i < 40; i++) {
+        await page.waitForTimeout(250);
+        copyReady = await page.evaluate(() => {
+          const d = document.querySelector('[role=dialog]');
+          const copyBtn = Array.from(d?.querySelectorAll('button') || []).find((b) =>
+            b.innerText.toLowerCase().includes('copy to clipboard')
+          );
+          if (copyBtn) {
+            copyBtn.focus();
+            return true;
+          }
+          return false;
+        });
+        if (copyReady) break;
+      }
+      if (!copyReady) return null;
+
+      // 6. Trigger trusted press to copy token to OS clipboard
+      if (typeof page.trustedPress === 'function') {
+        await page.trustedPress('space');
+      } else if (page.keyboard) {
+        await page.keyboard.press('Space');
+      }
+      await page.waitForTimeout(600);
+
+      // 7. Capture from clipboard
+      try {
+        const { execFileSync } = await import('node:child_process');
+        if (process.platform === 'darwin') {
+          const clip = execFileSync('pbpaste', [], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+          if (clip && /^KEY[0-9A-Za-z_-]{30,}$/.test(clip)) return clip;
+        }
+      } catch {}
+
+      return null;
+    },
+    async revokeOld(page, { keepLabels = ['MASTER'] }) {
+      return await page.evaluate(async (labelsToKeep) => {
+        let deleted = 0;
+        const deleteBtns = Array.from(document.querySelectorAll('button[aria-label=Delete]'));
+        for (const btn of deleteBtns) {
+          const row = btn.closest('div[class*=xlaxlx]') || btn.parentElement?.parentElement?.parentElement?.parentElement;
+          const text = row ? (row.innerText || '') : '';
+          const shouldKeep = labelsToKeep.some((l) => text.includes(l));
+          if (!shouldKeep && (text.includes('23 Sep 2026') || text.includes('Never used') || text.includes('2026'))) {
+            btn.click();
+            await new Promise((r) => setTimeout(r, 600));
+            const confirmBtn = Array.from(document.querySelectorAll('[role=dialog] button')).find(
+              (b) => b.innerText.trim().toLowerCase() === 'continue'
+            );
+            if (confirmBtn) {
+              confirmBtn.click();
+              deleted++;
+              await new Promise((r) => setTimeout(r, 1200));
+            }
+          }
+        }
+        return deleted;
+      }, keepLabels);
+    },
+    verify: (v) => probe('https://api.telnyx.com/v2/balance', bearer(v)),
   },
 
   fal: {

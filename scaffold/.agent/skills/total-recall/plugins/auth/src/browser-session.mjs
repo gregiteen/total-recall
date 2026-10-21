@@ -14,6 +14,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const PROFILE_DIRNAME = 'browser-profile';
 
@@ -27,6 +28,282 @@ Treat it as equivalent to secrets.enc:
   - never include it in backups that leave this machine
   - delete it with \`total-recall auth secret browser-logout\` when no longer needed
 `;
+
+/**
+ * Check if Google Chrome is currently running on macOS.
+ * @returns {boolean}
+ */
+export function isMacChromeRunning() {
+  if (process.platform !== 'darwin') return false;
+  try {
+    const res = execFileSync('pgrep', ['-x', 'Google Chrome'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return !!res.trim();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Native macOS Chrome driver using AppleScript/JXA. Connects to the operator's
+ * already-running, authenticated Google Chrome instance so rotations can drive
+ * authenticated consoles without needing to re-login.
+ */
+export function createMacChromeContext(opts = {}) {
+  let activeUrl = '';
+
+  const runJxa = (js) => {
+    return execFileSync('osascript', ['-l', 'JavaScript', '-e', js], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  };
+
+  const page = {
+    async goto(url) {
+      activeUrl = url;
+      let host = '';
+      try {
+        host = new URL(url).hostname;
+      } catch {}
+      const script = `
+        const chrome = Application("Google Chrome");
+        let target = null;
+        for (const w of chrome.windows()) {
+          for (const t of w.tabs()) {
+            if (t.url().includes("${host}")) {
+              target = t;
+              w.activeTabIndex = w.tabs.indexOf(t) + 1;
+              break;
+            }
+          }
+          if (target) break;
+        }
+        if (!target) {
+          const w = chrome.windows()[0] || chrome.Window().make();
+          target = chrome.Tab({ url: "${url}" });
+          w.tabs.push(target);
+        } else if (target.url() !== "${url}") {
+          target.url = "${url}";
+        }
+        target.url();
+      `;
+      try {
+        runJxa(script);
+      } catch {}
+      await page.waitForTimeout(1500);
+    },
+
+    async url() {
+      let host = '';
+      try {
+        host = new URL(activeUrl || 'https://portal.telnyx.com').hostname;
+      } catch {}
+      const script = `
+        const chrome = Application("Google Chrome");
+        let u = "";
+        for (const w of chrome.windows()) {
+          for (const t of w.tabs()) {
+            if (t.url().includes("${host}")) {
+              u = t.url();
+              break;
+            }
+          }
+          if (u) break;
+        }
+        u;
+      `;
+      try {
+        const res = runJxa(script);
+        if (res) return res;
+      } catch {}
+      return activeUrl;
+    },
+
+    async waitForTimeout(ms) {
+      return new Promise((r) => setTimeout(r, ms));
+    },
+
+    async trustedKeystroke(text) {
+      if (process.platform === 'darwin') {
+        const escaped = String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const script = `
+          tell application "Google Chrome" to activate
+          delay 0.1
+          tell application "System Events"
+            keystroke "${escaped}"
+          end tell
+        `;
+        try {
+          execFileSync('osascript', ['-e', script], { stdio: 'ignore' });
+        } catch {}
+      }
+    },
+
+    async trustedPress(keyName) {
+      if (process.platform === 'darwin') {
+        let code = 'space';
+        if (keyName === 'Enter' || keyName === 'return') code = 'return';
+        else if (keyName === 'space' || keyName === 'Space') code = 'space';
+        const script = `
+          tell application "Google Chrome" to activate
+          delay 0.1
+          tell application "System Events"
+            keystroke ${code}
+          end tell
+        `;
+        try {
+          execFileSync('osascript', ['-e', script], { stdio: 'ignore' });
+        } catch {}
+      }
+    },
+
+    async evaluate(fn, ...args) {
+      let host = '';
+      try {
+        host = new URL(activeUrl || 'https://portal.telnyx.com').hostname;
+      } catch {}
+
+      const evalChrome = (code) => {
+        const script = `
+          const chrome = Application("Google Chrome");
+          let res = null;
+          for (const w of chrome.windows()) {
+            for (const t of w.tabs()) {
+              if (t.url().includes("${host}")) {
+                res = t.execute({ javascript: ${JSON.stringify(code)} });
+                break;
+              }
+            }
+            if (res !== null) break;
+          }
+          JSON.stringify(res);
+        `;
+        try {
+          const out = runJxa(script);
+          return out ? JSON.parse(out) : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const fnStr = typeof fn === 'function' ? `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(',')})` : String(fn);
+      const wrapped = `
+        (() => {
+          window.__tr_pending = true;
+          window.__tr_result = null;
+          window.__tr_error = null;
+          try {
+            const out = ${fnStr};
+            if (out && typeof out.then === 'function') {
+              out.then(
+                r => { window.__tr_result = r; window.__tr_pending = false; },
+                e => { window.__tr_error = String(e); window.__tr_pending = false; }
+              );
+            } else {
+              window.__tr_result = out;
+              window.__tr_pending = false;
+            }
+          } catch (err) {
+            window.__tr_error = String(err);
+            window.__tr_pending = false;
+          }
+        })()
+      `;
+
+      evalChrome(wrapped);
+
+      const deadline = Date.now() + 35_000;
+      while (Date.now() < deadline) {
+        const pending = evalChrome('window.__tr_pending');
+        if (pending === false) {
+          const err = evalChrome('window.__tr_error');
+          if (err) throw new Error(err);
+          return evalChrome('window.__tr_result');
+        }
+        await page.waitForTimeout(200);
+      }
+      return null;
+    },
+
+    locator(selector) {
+      return {
+        first() {
+          return this;
+        },
+        filter() {
+          return this;
+        },
+        async isVisible() {
+          return (
+            (await page.evaluate((sel) => {
+              const el = document.querySelector(sel);
+              return !!(el && (el.offsetWidth || el.offsetHeight || el.getClientRects().length));
+            }, selector)) || false
+          );
+        },
+        async waitFor(options = {}) {
+          const timeout = options.timeout ?? 10_000;
+          const started = Date.now();
+          while (Date.now() - started < timeout) {
+            const vis = await this.isVisible();
+            if (vis) return true;
+            await page.waitForTimeout(250);
+          }
+          return false;
+        },
+        async count() {
+          return (await page.evaluate((sel) => document.querySelectorAll(sel).length, selector)) || 0;
+        },
+        async click() {
+          return await page.evaluate((sel) => {
+            const el = document.querySelector(sel);
+            if (el) el.click();
+          }, selector);
+        },
+        async fill(text) {
+          return await page.evaluate(
+            ({ sel, text }) => {
+              const el = document.querySelector(sel);
+              if (el) {
+                el.focus();
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+                if (setter) setter.call(el, text);
+                else el.value = text;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            },
+            { sel: selector, text }
+          );
+        },
+        async press(key) {
+          return await page.evaluate(
+            ({ sel, key }) => {
+              const el = document.querySelector(sel);
+              if (el) {
+                el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+                el.dispatchEvent(new KeyboardEvent('keyup', { key, bubbles: true }));
+              }
+            },
+            { sel: selector, key }
+          );
+        },
+      };
+    },
+  };
+
+  return {
+    isMacChrome: true,
+    pages: () => [page],
+    newPage: async () => page,
+    grantPermissions: async () => {},
+    close: async () => {},
+    setDefaultTimeout: () => {},
+  };
+}
 
 /**
  * Load chromium if playwright is installed. Mirrors source-adapters.getPlaywright
@@ -76,6 +353,16 @@ export function ensureProfileDir(brainDir) {
  * @returns {Promise<{ ok: boolean, context?: any, error?: string, profileDir?: string }>}
  */
 export async function launchRotationContext(brainDir, opts = {}) {
+  // If Chrome is already running on macOS and not opted out, use the operator's active session
+  if (opts.useChrome !== false && (opts.chrome || isMacChromeRunning())) {
+    return {
+      ok: true,
+      context: createMacChromeContext(opts),
+      profileDir: 'running-google-chrome',
+      browser: 'running Google Chrome (macOS active session)',
+    };
+  }
+
   const chromium = await getChromium();
   if (!chromium) {
     return {

@@ -549,6 +549,12 @@ function parseArgs(args) {
       case '--headless':
         out.headless = true;
         break;
+      case '--chrome':
+        out.chrome = true;
+        break;
+      case '--revoke-old':
+        out.revokeOld = true;
+        break;
       case '--json':
         out.json = true;
         break;
@@ -1296,6 +1302,9 @@ export default async function secretCli(argv) {
       console.log(`\n  🔐 Rotating ${opts.key}…\n`);
       const r = await run(brainDir, opts.key, {
         headless: !!opts.headless,
+        chrome: !!opts.chrome,
+        label: opts.label,
+        revokeOld: !!opts.revokeOld,
         exportEnv: opts.exportEnv !== false,
         onStatus: (m) => console.log(`     · ${m}`),
       });
@@ -1307,9 +1316,10 @@ export default async function secretCli(argv) {
       }
       console.log(`\n  ✅ Rotated ${r.key}` + (r.method ? ` via ${r.method}` : ''));
       if (r.verified === true) console.log('     verified against provider API');
+      if (r.revoked) console.log(`     revoked ${r.revoked} deprecated credential(s) from provider console`);
       if (r.supervised) console.log('     (supervised — recipe not yet auto-verified)');
       if (r.exports?.length) console.log(`     exported to ${r.exports.length} project(s)`);
-      if (r.revoke_hint) console.log(`\n  ⚠️  ${r.revoke_hint}`);
+      if (r.revoke_hint && !r.revoked) console.log(`\n  ⚠️  ${r.revoke_hint}`);
       return;
     }
 
