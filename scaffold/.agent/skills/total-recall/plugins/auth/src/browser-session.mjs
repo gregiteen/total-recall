@@ -88,12 +88,30 @@ export async function launchRotationContext(brainDir, opts = {}) {
   const profileDir = ensureProfileDir(brainDir);
   // Headed by default: provider logins routinely require human 2FA, and a
   // headless first-run would simply hang on an invisible challenge.
-  const headless = opts.headless === true;
+  //
+  // But a headed launch needs a display, and a server usually has none: the window cannot open,
+  // Chromium exits at once, and launchPersistentContext reports only "Target page, context or
+  // browser has been closed" for every candidate browser. That reads as "no browser installed"
+  // and left the operator with a live, un-rotated credential. With no display there is nothing
+  // for a human to see anyway, so fall back to headless rather than fail.
+  const headless = opts.headless === true || !process.env.DISPLAY;
 
   const base = {
     headless,
     viewport: { width: 1440, height: 900 },
-    args: ['--disable-blink-features=AutomationControlled', '--no-first-run'],
+    // Chromium refuses to start as root with its sandbox on, and it dies so fast that
+    // launchPersistentContext reports only "Target page, context or browser has been closed" —
+    // the exact failure every rotation attempt hit on this host, from every candidate browser,
+    // which reads as "no browser installed" and is why the key was never rotated. Add the flags
+    // root needs, and keep /dev/shm out of it because it is small in a container and stalls the
+    // renderer.
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--no-first-run',
+      ...(typeof process.getuid === 'function' && process.getuid() === 0
+        ? ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        : []),
+    ],
   };
 
   // Playwright's bundled Chromium is not available on every host — it has

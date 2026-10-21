@@ -134,8 +134,8 @@ authRouter.get('/auth/google/callback', async (req, res) => {
     res.cookie('session', token, sessionCookieOptions(req, ttlHours * 60 * 60 * 1000));
     if (req.query.format === 'json' || req.headers.accept?.includes('application/json')) return res.json({ success: true, user: user.email, method: 'google_oauth2' });
     return res.redirect('/');
-  } catch (err) {
-    logger.warn('auth', `Google OAuth callback verification failed: ${err.message}`);
+  } catch {
+    logger.warn('auth', 'Google OAuth callback verification failed');
     return res.status(401).json({ error: 'Google authentication failed; restart sign-in' });
   }
 });
