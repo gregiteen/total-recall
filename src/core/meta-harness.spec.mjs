@@ -21,6 +21,9 @@ describe('Meta Harness & Multi-Agent Manager', () => {
     expect(HARNESS_SPECS).toHaveProperty('gemini');
     expect(HARNESS_SPECS).toHaveProperty('ollama');
     expect(HARNESS_SPECS).toHaveProperty('grok');
+    expect(HARNESS_SPECS).toHaveProperty('hermes');
+    expect(HARNESS_SPECS).toHaveProperty('dsh');
+    expect(HARNESS_SPECS).toHaveProperty('openclaw');
 
     expect(HARNESS_SPECS.agy.defaultFlags).toContain('-p');
     expect(HARNESS_SPECS.claude.defaultFlags).toContain('--permission-mode');
@@ -28,12 +31,15 @@ describe('Meta Harness & Multi-Agent Manager', () => {
     expect(HARNESS_SPECS.gemini.defaultFlags).toContain('--sandbox=false');
     expect(HARNESS_SPECS.ollama.defaultFlags).toContain('run');
     expect(HARNESS_SPECS.grok.defaultFlags).toContain('-p');
+    expect(HARNESS_SPECS.hermes.defaultFlags).toContain('-p');
+    expect(HARNESS_SPECS.dsh.defaultFlags).toContain('-p');
+    expect(HARNESS_SPECS.openclaw.defaultFlags).toContain('status');
   });
 
   it('detects available harnesses without crashing', () => {
     const detected = detectHarnesses();
     expect(Array.isArray(detected)).toBe(true);
-    expect(detected.length).toBe(6);
+    expect(detected.length).toBe(9);
     for (const h of detected) {
       expect(h).toHaveProperty('id');
       expect(h).toHaveProperty('name');
@@ -135,7 +141,7 @@ describe('Harness version currency and quota usage inspection', () => {
   it('queries harness usage and returns 5h and weekly quota percentages', async () => {
     const reports = await queryHarnessUsage();
     expect(Array.isArray(reports)).toBe(true);
-    expect(reports.length).toBe(6);
+    expect(reports.length).toBe(9);
 
     for (const r of reports) {
       expect(r).toHaveProperty('id');

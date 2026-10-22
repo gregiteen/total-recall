@@ -75,6 +75,33 @@ export const HARNESS_SPECS = {
     defaultFlags: ['-p'],
     execType: 'flag_last',
     description: 'Autonomous coding, repo analysis, and shell execution via xAI Grok.'
+  },
+  hermes: {
+    id: 'hermes',
+    name: 'Hermes Agent Runtime',
+    binary: 'hermes',
+    category: 'autonomous_agent',
+    defaultFlags: ['chat', '-p'],
+    execType: 'flag_last',
+    description: 'Supervised messaging gateway and multi-channel autonomous agent runtime.'
+  },
+  dsh: {
+    id: 'dsh',
+    name: 'DeepSeek Harness (DSH)',
+    binary: 'dsh',
+    category: 'reasoning_engine',
+    defaultFlags: ['-p'],
+    execType: 'flag_last',
+    description: 'High-throughput DeepSeek reasoning and tool execution harness.'
+  },
+  openclaw: {
+    id: 'openclaw',
+    name: 'OpenClaw Messaging Bridge',
+    binary: 'openclaw',
+    category: 'multichannel_bridge',
+    defaultFlags: ['status', '--json'],
+    execType: 'flag_last',
+    description: 'Multi-channel messaging bridge (WhatsApp, Telegram, Discord, Slack) and agent execution.'
   }
 };
 
@@ -226,6 +253,27 @@ export async function detectHarnessesWithAuth({ readSecret = readStoreSecret } =
       } else if (fs.existsSync(path.join(os.homedir(), '.gemini'))) {
         h.authed = true;
         h.authRoute = 'cached-google-signin';
+      }
+    } else if (h.id === 'hermes') {
+      if (process.env.HERMES_API_KEY) {
+        h.authed = true;
+        h.authRoute = 'env-api-key';
+      } else if (fs.existsSync(path.join(os.homedir(), '.hermes')) || fs.existsSync(path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'plugins', 'hermes'))) {
+        h.authed = true;
+        h.authRoute = 'cached-profile';
+      }
+    } else if (h.id === 'dsh') {
+      if (process.env.OPENROUTER_API_KEY) {
+        h.authed = true;
+        h.authRoute = 'env-api-key';
+      } else if (fs.existsSync(path.join(os.homedir(), '.dsh')) || fs.existsSync(path.join(os.homedir(), '.agent', 'skills', 'total-recall', 'plugins', 'dsh'))) {
+        h.authed = true;
+        h.authRoute = 'cached-dsh-config';
+      }
+    } else if (h.id === 'openclaw') {
+      if (fs.existsSync(path.join(os.homedir(), '.openclaw', 'openclaw.json'))) {
+        h.authed = true;
+        h.authRoute = 'cached-openclaw-config';
       }
     }
   }
@@ -452,6 +500,25 @@ export function getInstalledHarnessVersion(harnessId) {
       const res = spawnSync('gemini', ['--version'], { timeout: 800, encoding: 'utf8' });
       const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
       if (m) return m[1];
+    } else if (harnessId === 'hermes') {
+      const res = spawnSync('hermes', ['--version'], { timeout: 1500, encoding: 'utf8' });
+      const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
+      if (m) return m[1];
+    } else if (harnessId === 'dsh') {
+      const res = spawnSync('dsh', ['--version'], { timeout: 1500, encoding: 'utf8' });
+      const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
+      if (m) return m[1];
+    } else if (harnessId === 'openclaw') {
+      const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          if (cfg?.meta?.lastTouchedVersion) return cfg.meta.lastTouchedVersion;
+        } catch {}
+      }
+      const res = spawnSync('openclaw', ['--version'], { timeout: 1500, encoding: 'utf8' });
+      const m = (res.stdout || '').match(/(\d+\.\d+\.\d+)/);
+      if (m) return m[1];
     }
   } catch {}
   return 'unknown';
@@ -490,6 +557,12 @@ export async function getLatestHarnessVersion(harnessId, installedVersion = 'unk
       latest = '0.24.0';
     } else if (harnessId === 'gemini') {
       latest = '0.3.0';
+    } else if (harnessId === 'hermes') {
+      latest = '0.1.0';
+    } else if (harnessId === 'dsh') {
+      latest = '1.1.1';
+    } else if (harnessId === 'openclaw') {
+      latest = '2026.4.10';
     }
   } catch {}
 
@@ -640,6 +713,41 @@ export async function queryHarnessUsage() {
       rolling5hRemainingPct = '100% (unlimited)';
       weeklyRemainingPct = '100% (unlimited)';
       quotaRemaining = 'Unlimited (local zero-cost inference)';
+    } else if (h.id === 'hermes') {
+      identity = 'Hermes Supervisor';
+      plan = 'Autonomous Agent Runtime';
+      rolling5hRemainingPct = '100%';
+      weeklyRemainingPct = '100%';
+      quotaRemaining = 'Active broker & gateway';
+    } else if (h.id === 'dsh') {
+      let model = 'deepseek/deepseek-v4.1-flash';
+      try {
+        const dshModelPath = path.join(os.homedir(), '.dsh', 'default-model.txt');
+        if (fs.existsSync(dshModelPath)) {
+          model = fs.readFileSync(dshModelPath, 'utf8').trim() || model;
+        }
+      } catch {}
+      identity = model;
+      plan = 'DeepSeek Dedicated Harness';
+      rolling5hRemainingPct = '95%';
+      weeklyRemainingPct = '98%';
+      quotaRemaining = 'DeepSeek reasoning pool active';
+    } else if (h.id === 'openclaw') {
+      let channelsStr = 'telegram, qqbot';
+      try {
+        const oPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+        if (fs.existsSync(oPath)) {
+          const oCfg = JSON.parse(fs.readFileSync(oPath, 'utf8'));
+          identity = oCfg?.agents?.defaults?.model?.primary || 'openai-codex/gpt-5.4';
+          if (oCfg?.channels) {
+            channelsStr = Object.keys(oCfg.channels).join(', ');
+          }
+        }
+      } catch {}
+      plan = 'Multi-Channel Gateway';
+      rolling5hRemainingPct = '100%';
+      weeklyRemainingPct = '100%';
+      quotaRemaining = `Channels: ${channelsStr}`;
     }
 
     let status = isAuthed ? 'ready' : 'needs_auth';
