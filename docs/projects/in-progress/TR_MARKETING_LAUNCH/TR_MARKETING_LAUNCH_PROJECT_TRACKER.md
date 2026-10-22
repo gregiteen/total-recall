@@ -62,6 +62,8 @@ Goal: Complete full verification suite, surface compilation, and git remote push
 - 2026-10-21: `node bin/total-recall.mjs openwiki ingest openwiki` — Ingested 7 hubs cleanly with 0 errors.
 - 2026-10-21: `node bin/total-recall.mjs openwiki hubs` — 7 hubs active and indexed.
 - 2026-10-21: `TR_EMBEDDINGS_DISABLED=1 node bin/total-recall.mjs compile` — Rebuilt 926 canonical nodes, updated 13 skill files, 0 drift.
+- 2026-10-21: `node bin/total-recall.mjs compile` — Rebuilt with zero-cost local/cloud embeddings via `nomic-embed-text:latest`: 926 built, 0 unchanged, 0 drift.
+- 2026-10-21: `node bin/total-recall.mjs embeddings status` — Verified 926 embedded nodes (98% coverage) with local/mesh zero-cost endpoint.
 
 ---
 
@@ -86,3 +88,5 @@ Goal: Complete full verification suite, surface compilation, and git remote push
 | 2026-10-22T03:27:36Z | Antigravity | Authored `VIRAL_LAUNCH_ASSETS.md` | Created | Social announcement and matrix delivered |
 | 2026-10-22T03:27:41Z | Antigravity | Re-ran package and scaffold verification | Passed | 0 errors across 4 gates |
 | 2026-10-22T03:28:05Z | Antigravity | Recompiled instruction surfaces with `total-recall compile` | Succeeded | 926 nodes processed, 0 drift |
+| 2026-10-22T03:30:24Z | Antigravity | Executed full semantic `total-recall compile` using Ollama | Succeeded | 926/926 nodes embedded via nomic-embed-text:latest |
+| 2026-10-22T03:30:32Z | Antigravity | Verified zero-cost embeddings status | Verified | 926 nodes embedded, 0 cost |
