@@ -10,7 +10,10 @@ export async function setupIntegrations({ node, cwd = process.cwd(), env = proce
   const connected=[];
   for(const client of ['claude-code','codex','antigravity','cursor','dsh','grok','muse','pi','hermes']) {
     const result=await probe(binary,['connect',client],{cwd,env:agentEnvironment(env),timeoutMs:120000});
-    if(result.exitCode!==0 || result.reason)throw new Error(`Total Recall connect ${client} failed`);
+    if(result.exitCode!==0 || result.reason) {
+      if(/Unknown client/i.test(result.stderr || result.stdout || '')) continue;
+      throw new Error(`Total Recall connect ${client} failed`);
+    }
     connected.push(client);
   }
   const root=env.TR_PACKAGE_ROOT;

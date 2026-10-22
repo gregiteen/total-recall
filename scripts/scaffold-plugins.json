@@ -68,7 +68,7 @@
   "cli-agents/src/documentation.mjs": "6580bdbcd6f034a0da0d396895c827c61236b140ac1f184fc31d2f81c04f83c4",
   "cli-agents/src/executor.mjs": "75565c464f964299e24ae6332cdf420f1e37a1ef1fcda3c5987e4b5375ebe326",
   "cli-agents/src/runtime.mjs": "a536232f842c05044f63f78692ec61813e198877f9d610dda5d90abb58bdfdb8",
-  "cli-agents/src/setup.mjs": "b620e9d750aecd32bbfcc1b07a6b071d2f2906e841c6194c73df15640e99e664",
+  "cli-agents/src/setup.mjs": "c75aabab634dbdc362fc1afdfd277d7730cf7278e4690b332bb71aad9e68358f",
   "cli-agents/src/worker.mjs": "b35d62e4118498bc4e15095286d7d1b60ea14c19e8f7c45ecd9e06401d862d57",
   "cli-agents/ui/card.js": "dbd8979df4b9e06bbccc1004d55b5340c3291a4f886da8e519981bc224cca61b",
   "code-quality/LICENSE": "be530ee93ef3dc13212d09de8279c4c6de81232f8e02e105b44bb6ddf03f211a",
