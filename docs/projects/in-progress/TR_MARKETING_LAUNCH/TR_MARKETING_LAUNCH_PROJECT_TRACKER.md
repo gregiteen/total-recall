@@ -20,49 +20,49 @@ Goal: Establish comprehensive, evidence-based process and product audit, execute
 - [x] Author unified system architecture in [TR_MARKETING_LAUNCH_ARCHITECTURE.md](/Users/gregoryiteen/github/total-recall/docs/projects/in-progress/TR_MARKETING_LAUNCH/TR_MARKETING_LAUNCH_ARCHITECTURE.md)
 - [x] Author phased development plan in [TR_MARKETING_LAUNCH_DEVELOPMENT_PLAN.md](/Users/gregoryiteen/github/total-recall/docs/projects/in-progress/TR_MARKETING_LAUNCH/TR_MARKETING_LAUNCH_DEVELOPMENT_PLAN.md)
 
-## ⏳ Phase 1: Automatic Semantic CLI & Verb Index
+## ✅ Phase 1: Automatic Semantic CLI & Verb Index
 
 Goal: Implement automatic zero-cost semantic vector indexing over all 415+ built-in commands, plugin operations, and composed commands (`A-011`, `D-002`).
 
-- [ ] Create `src/core/cli-semantic-index.mjs` to harvest, hash, and index all built-in commands, plugin operations, and composed commands
-- [ ] Integrate automatic index rebuild into `compileSurface` (`src/core/surface.mjs`) using zero-cost Ollama `nomic-embed-text:latest` vectors
-- [ ] Enrich `total-recall context "<task>"` to inject the top matched CLI and plugin verbs automatically
-- [ ] Update `src/cli/help.mjs` to support natural-language queries and unknown-command fallback via the semantic index
-- [ ] Add unit tests verifying index rebuilds, vector queries, and context enrichment
+- [x] Create `src/core/cli-semantic-index.mjs` to harvest, hash, and index all built-in commands, plugin operations, and composed commands
+- [x] Integrate automatic index rebuild into `compileSurface` (`src/core/surface.mjs`) using zero-cost Ollama `nomic-embed-text:latest` vectors
+- [x] Enrich `total-recall context "<task>"` to inject the top matched CLI and plugin verbs automatically
+- [x] Update `src/cli/help.mjs` to support natural-language queries and unknown-command fallback via the semantic index
+- [x] Add unit tests verifying index rebuilds, vector queries, and context enrichment
 
-## ⏳ Phase 2: Official Marketing Plugin (`tr-plugin-marketing`)
+## ✅ Phase 2: Official Marketing Plugin (`tr-plugin-marketing`)
 
 Goal: Build and integrate `tr-plugin-marketing` (`total-recall marketing`) as an official plugin and vendorable brick (`A-012`, `D-003`).
 
-- [ ] Initialize repository at `/Users/gregoryiteen/github/tr-plugin-marketing` with `plugin.json` and package manifest
-- [ ] Implement SSSS brand positioning storage (`brand` subcommand)
-- [ ] Implement deterministic copy compliance gate (`lint` subcommand) checking banned terms (`A-007`) and trailing prepositions (`A-008`)
-- [ ] Implement SEO/OpenGraph auditor (`seo-audit` subcommand) and UTM click attribution (`links` subcommand)
-- [ ] Implement bespoke interactive JavaScript card (`ui/card.js`)
-- [ ] Symlink into project and global brain plugin roots and register with Total Recall CLI
+- [x] Initialize repository at `/Users/gregoryiteen/github/tr-plugin-marketing` with `plugin.json` and package manifest
+- [x] Implement SSSS brand positioning storage (`brand` subcommand)
+- [x] Implement deterministic copy compliance gate (`lint` subcommand) checking banned terms (`A-007`) and trailing prepositions (`A-008`)
+- [x] Implement SEO/OpenGraph auditor (`seo-audit` subcommand) and UTM click attribution (`links` subcommand)
+- [x] Implement bespoke interactive JavaScript card (`ui/card.js`)
+- [x] Symlink into project and global brain plugin roots and register with Total Recall CLI
 
-## ⏳ Phase 3: Plugin, Scaffold & Multi-Root Parity Alignment
+## ✅ Phase 3: Plugin, Scaffold & Multi-Root Parity Alignment
 
 Goal: Resolve repository path discrepancies and complete visual card coverage across all plugins (`A-003`–`A-007`).
 
-- [ ] Relocate `/Users/gregoryiteen/tr-plugin-embeddings` to `/Users/gregoryiteen/github/tr-plugin-embeddings`
-- [ ] Align symlinks in `.agent/skills/total-recall/plugins/` and `~/.agent/skills/total-recall/plugins/` to guarantee full parity
-- [ ] Author bespoke functional `ui/card.js` cards for `embeddings` and `hermes`
+- [x] Relocate `/Users/gregoryiteen/tr-plugin-embeddings` to `/Users/gregoryiteen/github/tr-plugin-embeddings`
+- [x] Align symlinks in `.agent/skills/total-recall/plugins/` and `~/.agent/skills/total-recall/plugins/` to guarantee full parity
+- [x] Author bespoke functional `ui/card.js` cards for `embeddings` and `hermes`
 
-## ⏳ Phase 4: Public Positioning, OpenWiki Hubs & Launch Assets
+## ✅ Phase 4: Public Positioning, OpenWiki Hubs & Launch Assets
 
 Goal: Overhaul public onboarding surfaces and author viral launch campaigns (`A-002`, `A-010`).
 
-- [ ] Rewrite `README.md` and `package.json` to showcase the Software Factory, Daily Driver, 32 plugins, and zero-cost embeddings
-- [ ] Sanitize OpenWiki templates and update `openwiki/` hubs with complete plugin and software factory documentation
-- [ ] Author persona-specific launch threads for Makers, Builders, Founders, and Sellers
+- [x] Rewrite `README.md` and `package.json` to showcase the Software Factory, Daily Driver, 32 plugins, and zero-cost embeddings
+- [x] Sanitize OpenWiki templates and update `openwiki/` hubs with complete plugin and software factory documentation
+- [x] Author persona-specific launch threads for Makers, Builders, Founders, and Sellers
 
 ## ⏳ Phase 5: Quality Gate & Verification Walkthrough
 
 Goal: Complete full verification suite, surface compilation, and git remote push.
 
-- [ ] Run `check:package`, `check:dist`, `check:ssss-registry`, and scaffold state validation
-- [ ] Recompile all instruction surfaces with `total-recall compile`
+- [x] Run `check:package`, `check:dist`, `check:ssss-registry`, and scaffold state validation
+- [x] Recompile all instruction surfaces with `total-recall compile`
 - [ ] Verify clean working tree and push all commits to remote origin
 
 ---
@@ -109,3 +109,20 @@ Goal: Complete full verification suite, surface compilation, and git remote push
 | 2026-10-22T03:51:10Z | Antigravity | Added SSSS question-set deterministic fallback to `tr-plugin-decision` | Fixed | Pushed commit 337dbe4 to tr-plugin-decision |
 | 2026-10-22T03:51:16Z | Antigravity | Ran `total-recall decision run --set marketing-launch-strategy` | Succeeded | Fallback recorded in .events/decisions.jsonl |
 | 2026-10-22T03:51:47Z | Antigravity | Updated `TR_MARKETING_LAUNCH_DEVELOPMENT_PLAN.md` | Updated | Six-phase execution roadmap defined |
+| 2026-10-22T03:56:36Z | Antigravity | Implemented `src/core/cli-semantic-index.mjs` | Created | Vector harvest across 381 CLI verbs |
+| 2026-10-22T03:56:57Z | Antigravity | Authored `src/core/cli-semantic-index.spec.mjs` | Passed | 5/5 unit tests passed |
+| 2026-10-22T03:57:37Z | Antigravity | Wired semantic index into `surface.mjs`, `context-compiler.mjs`, and `help.mjs` | Integrated | Task context surfaces top recommended CLI verbs |
+| 2026-10-22T04:00:03Z | Antigravity | Executed `total-recall compile` with Ollama embeddings | Verified | 374 verbs indexed, 0 drift |
+| 2026-10-22T04:00:59Z | Antigravity | Scaffolded `tr-plugin-marketing` repository | Initialized | Created /Users/gregoryiteen/github/tr-plugin-marketing |
+| 2026-10-22T04:02:56Z | Antigravity | Built SSSS brand, copy linter, SEO auditor, and UTM link modules | Completed | Full CLI implementation in cli.mjs |
+| 2026-10-22T04:03:25Z | Antigravity | Authored bespoke animated card `ui/card.js` for marketing | Created | Web component `tr-marketing-card` |
+| 2026-10-22T04:03:38Z | Antigravity | Executed `marketing.spec.mjs` unit tests | Passed | 7/7 unit tests passed in 70ms |
+| 2026-10-22T04:05:13Z | Antigravity | Relocated `tr-plugin-embeddings` to `/Users/gregoryiteen/github/` | Aligned | Updated global & project symlinks |
+| 2026-10-22T04:05:32Z | Antigravity | Linked `cli-agents`, `hermes`, and `embeddings` into project plugins | Aligned | All 33 plugins active in project |
+| 2026-10-22T04:06:29Z | Antigravity | Created bespoke animated card `ui/card.js` for `embeddings` | Created | Web component `tr-embeddings-card` |
+| 2026-10-22T04:06:57Z | Antigravity | Created bespoke animated card `ui/card.js` for `hermes` | Created | Web component `tr-hermes-card` |
+| 2026-10-22T04:07:40Z | Antigravity | Rewrote `README.md` and updated `package.json` | Updated | Featured Software Factory and Daily Driver |
+| 2026-10-22T04:08:11Z | Antigravity | Authored and ingested `openwiki/software-factory.md` | Ingested | 8 OpenWiki hubs indexed |
+| 2026-10-22T04:08:35Z | Antigravity | Authored 4 persona launch threads in `tr-plugin-marketing` | Created | Clean compliance verified |
+| 2026-10-22T04:09:11Z | Antigravity | Synchronized scaffold plugins with `sync-scaffold-plugins.mjs` | Clean | 210 pinned files synced |
+| 2026-10-22T04:09:34Z | Antigravity | Ran final `total-recall compile` | Succeeded | 928 nodes, 381 verbs, 0 drift |

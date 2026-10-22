@@ -792,6 +792,25 @@ export async function compileSurface({ vaultDir, skillsDir, derivedDir, instruct
     semanticResult = { indexed: 0, skipped: nodes.length, unavailable: true, error: err.message };
   }
 
+  // 3b. Build or update the CLI semantic index.
+  let cliIndexResult = { built: 0, skipped: 0, failed: 0 };
+  try {
+    const { buildCliSemanticIndex } = await import('./cli-semantic-index.mjs');
+    const projectRoot = skillsDir ? path.dirname(path.dirname(skillsDir)) : process.cwd();
+    cliIndexResult = await buildCliSemanticIndex({
+      derivedDir,
+      skillsDir,
+      projectRoot,
+      force,
+      semantic: semantic && process.env.TR_EMBEDDINGS_DISABLED !== '1',
+    });
+    if (cliIndexResult.built > 0) {
+      logger.info('surface', `CLI semantic index: ${cliIndexResult.built} indexed, ${cliIndexResult.skipped} skipped.`, { derivedDir });
+    }
+  } catch (err) {
+    logger.warn('surface', `CLI semantic index build non-fatal warning: ${err.message}`, { derivedDir });
+  }
+
   // 4. Generate Obsidian Canvas
   try {
     generateCanvas(nodes, vaultDir);
@@ -855,6 +874,7 @@ function writeProjectionManifest(derivedDir, vaultHash) {
       { file: 'memory-layers.jsonl', disposable: true },
       { file: 'local-search.json', disposable: true },
       { file: 'embeddings.jsonl', disposable: true },
+      { file: 'cli-semantic-index.json', disposable: true },
       { file: 'vault-hash.txt', disposable: true }
     ],
     rebuild_command: 'npx total-recall compile'

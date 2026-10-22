@@ -72,13 +72,14 @@ export async function runRebuild(options = {}) {
   if (fs.existsSync(derivedDir)) {
     for (const entry of fs.readdirSync(derivedDir)) {
       if (entry.startsWith('embeddings.db')) continue; // also skips -wal / -shm
+      if (entry === 'cli-semantic-index.json') continue;
       fs.rmSync(path.join(derivedDir, entry), { recursive: true, force: true });
     }
   }
 
   console.log('🏗️  Recompiling surface from canonical vault...');
   try {
-    const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: true });
+    const stats = await compileSurface({ vaultDir, skillsDir, derivedDir, instructionsFile, force: Boolean(options.force) });
     console.log(`✅ Processed ${stats.nodesProcessed} canonical memory nodes.`);
     console.log(`✅ Injected memory into ${stats.skillsInjected} skill files.`);
     console.log(`✅ Rebuilt graph-index.jsonl, memory-layers.jsonl, and skill-routes.jsonl.`);
@@ -163,6 +164,7 @@ export default async function cli(args) {
   const { layer, remainingArgs } = parseLayerFlag(args);
   const options = {
     check: remainingArgs.includes('--check'),
+    force: remainingArgs.includes('--force'),
     layer,
   };
   let code = await runRebuild(options);
