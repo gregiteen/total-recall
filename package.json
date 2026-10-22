@@ -5,6 +5,7 @@
   "type": "module",
   "bin": {
     "total-recall": "bin/total-recall.mjs",
+    "vibebrain": "bin/total-recall.mjs",
     "antigravity": "bin/antigravity.mjs",
     "total-recall-memory": "bin/total-recall-memory.mjs"
   },
