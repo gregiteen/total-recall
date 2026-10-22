@@ -226,6 +226,10 @@ export function setPluginLocked(id: string, locked: boolean): Promise<Result> {
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/lock`, { locked })
 }
 
+export function setPluginActivation(id: string, enabled: boolean): Promise<Result & { activation?: { enabled: boolean; state: string } }> {
+  return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/activation`, { enabled }, "PUT")
+}
+
 export function deployPluginToStore(id: string, autoLock = true): Promise<Result & { storePackage?: any }> {
   return post(`${API_BASE}/api/plugins/${encodeURIComponent(id)}/deploy-store`, { autoLock })
 }

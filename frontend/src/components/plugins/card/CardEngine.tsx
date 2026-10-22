@@ -102,7 +102,8 @@ export function CardEngine({ plugin }: { plugin: PluginInfo }) {
   const [drawer, setDrawer] = useState(false)
   return <CardRunner card={card}>
     <section className={`card card-${card.template}${owned ? ' card-owned' : ''}`} style={brandStyle(card.branding)} data-density={card.branding.density} aria-label={`${card.title} card`}>
-      {owned ? <button type="button" className="card-link" onClick={() => setDrawer(true)}>{card.workspace ? 'Open workspace' : 'Settings & usage'}</button> : <><Header card={card} onOpenDrawer={() => setDrawer(true)} /><p className="card-muted card-description">{card.description}</p></>}
+      <Header card={card} onOpenDrawer={() => setDrawer(true)} />
+      {card.description && <p className="card-muted card-description">{card.description}</p>}
       <CardScenes plugin={plugin}><div className="card-regions">
         {card.regions.filter(region => !['actions', 'form', 'keypad'].includes(region.widget)).map((region, i) => <section key={i} className={`card-region card-region-${region.widget}`} style={{ gridColumn: `span ${Math.min(12, Math.max(1, region.span || 12))}` }}>
           {region.title && <h3>{region.title}</h3>}<Region region={region} plugin={plugin} />
