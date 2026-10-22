@@ -258,7 +258,7 @@ export const ROTATION_RECIPES = {
 
       return null;
     },
-    async revokeOld(page, { keepLabels = ['MASTER'] }) {
+    async revokeOld(page, { keepLabels = ['MASTER', 'FESTECH-PROD', 'FESTECH-LIVE', 'ULTRACHAT-PROD', 'GROCRM-PROD'] } = {}) {
       return await page.evaluate(async (labelsToKeep) => {
         let deleted = 0;
         const deleteBtns = Array.from(document.querySelectorAll('button[aria-label=Delete]'));
