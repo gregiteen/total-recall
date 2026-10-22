@@ -7,14 +7,26 @@
 
 ---
 
-## Phases
+## Phases & Deliverables
 
-### Phase 1: Core CardEngine Shell Hardening
-- Audit and repair [`CardEngine.tsx`](file:///Users/gregoryiteen/github/total-recall/frontend/src/components/plugins/card/CardEngine.tsx) so plugin identity, title, and status are consistently visible across all cards.
-- Ensure uniform card layout metrics and spacing across all templates.
+### Phase 1: Core Shell & Navigation Overhaul
+1. **Workspace Separation in [`PluginsPage.tsx`](file:///Users/gregoryiteen/github/total-recall/frontend/src/pages/PluginsPage.tsx)**:
+   - **My Cards Tab**: Renders ONLY plugins that are user-owned and activated in the current workspace.
+   - **Plugin Store Tab**: Organizes unowned, bundled, and mesh plugins into a catalog with category filters, descriptions, permissions, live previews, and 1-click install.
+2. **Guaranteed Identity Header in [`CardEngine.tsx`](file:///Users/gregoryiteen/github/total-recall/frontend/src/components/plugins/card/CardEngine.tsx)**:
+   - Ensure the standardized top Header (Icon, Title, Version, Active Pill, Settings Drawer) renders on all cards.
+   - Remove destructive CSS that stripped borders and backgrounds on owned elements.
 
-### Phase 2: One-By-One Plugin Card Audits & Improvements (Plugins 1–34)
-Audit each plugin individually with Greg, presenting concrete findings and proposed upgrades for user alignment:
+### Phase 2: Agent Plugin Recipe Specification & Workflow
+1. **Recipe Contract**:
+   - Establish declarative recipe schema defining manifest fields, CLI verbs, layout templates, brand tokens, and custom UI components.
+2. **Private Use vs. Store Publishing**:
+   - Integrate one-click "Publish to Store" (`deploy-store`) vs. private workspace ownership.
+3. **Agent Action Interface**:
+   - Provide a direct "Create Plugin with Agent" action in the UI generating pre-filled recipe briefs for coding agents.
+
+### Phase 3: The 34-Plugin Recipes & Card Overhauls
+Refactor and align all 34 plugins to the Recipe standard (authentic domain data, direct operational buttons, zero fake Winamp skins or audio equalizers):
 - [ ] 01. `auth` (Auth & Secrets)
 - [ ] 02. `cli-agents` (Command Fleet)
 - [ ] 03. `code-quality` (Code Quality Gates)
@@ -50,7 +62,8 @@ Audit each plugin individually with Greg, presenting concrete findings and propo
 - [ ] 33. `translator` (BabelStone Multilingual)
 - [ ] 34. `user-automations` (Scheduled Tasks)
 
-### Phase 3: Verification & Test Gates
-- Run frontend typecheck and tests.
-- Verify responsive layout across all 34 cards.
-- Full git commit and push.
+### Phase 4: Verification, Gates & Delivery
+- Frontend Vitest suite and TypeScript typecheck.
+- Responsive layout verification at mobile (360px), tablet (768px), and desktop (1280px).
+- Verification of unowned cards residing strictly in the Plugin Store.
+- Clean git commit and push.
