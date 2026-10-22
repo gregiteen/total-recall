@@ -28,10 +28,35 @@
   }
 
   async function getConfig() {
+    const pre = (typeof self !== 'undefined' && self.TOTAL_RECALL_CONFIG) || {};
     const [local, sync] = await Promise.all([
-      chrome.storage.local.get(['brainUrl', 'pat']),
+      chrome.storage.local.get(['brainUrl', 'pat', 'activeBrainId']),
       chrome.storage.sync.get(['brainUrl', 'pat', 'activeBrainId']),
     ]);
+
+    let pat = local.pat || sync.pat || pre.pat || '';
+    let brainUrl = normalizeUrl(local.brainUrl || sync.brainUrl || pre.brainUrl || DEFAULT_BRAIN_URL);
+    let activeBrainId = local.activeBrainId || sync.activeBrainId || pre.activeBrainId || 'global';
+
+    // If local storage is empty, attempt to read bundled config.json fallback
+    if (!pat && typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
+      try {
+        const res = await fetch(chrome.runtime.getURL('config.json'));
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.pat) {
+            pat = json.pat;
+            if (json.brainUrl) brainUrl = normalizeUrl(json.brainUrl);
+            if (json.activeBrainId) activeBrainId = json.activeBrainId;
+          }
+        }
+      } catch { /* config.json is optional */ }
+    }
+
+    // Automatically initialize local storage with pre-configured settings
+    if (!local.pat && pat) {
+      await chrome.storage.local.set({ pat, brainUrl, activeBrainId });
+    }
 
     // PATs belong in extension-local storage only; migrate any legacy synced copy.
     if (sync.pat && !local.pat) {
@@ -41,9 +66,9 @@
     if (sync.pat) await chrome.storage.sync.remove('pat');
 
     return {
-      brainUrl: normalizeUrl(local.brainUrl || sync.brainUrl),
-      pat: local.pat || '',
-      activeBrainId: sync.activeBrainId || 'global',
+      brainUrl,
+      pat,
+      activeBrainId,
     };
   }
 

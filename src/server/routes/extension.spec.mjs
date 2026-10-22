@@ -26,7 +26,7 @@ app.use(extensionRouter);
 
 describe('Extension Router', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('GET /api/extension/status returns expected shape', async () => {
@@ -57,5 +57,12 @@ describe('Extension Router', () => {
     const res = await request(app).get('/api/extension/download');
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/not found/i);
+  });
+
+  it('GET /api/extension/download streams zip with pre-configured token when extension exists', async () => {
+    const res = await request(app).get('/api/extension/download');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/zip|gzip/);
+    expect(res.headers['content-disposition']).toMatch(/total-recall-extension/);
   });
 });
