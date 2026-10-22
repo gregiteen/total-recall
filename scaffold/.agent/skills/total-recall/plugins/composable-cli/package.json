@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-composable-cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "Total Recall composable CLI plugin: create, compose, register, test and safely run custom verbs; every command listed in the instruction surfaces.",
   "scripts": {

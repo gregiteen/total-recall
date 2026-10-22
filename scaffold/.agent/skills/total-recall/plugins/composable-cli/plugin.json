@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "composable-cli",
   "name": "Composable CLI",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Dynamic agent command composition engine with pipeline registration, versioning, and execution.",
   "author": "Total Recall contributors",
   "license": "MIT",

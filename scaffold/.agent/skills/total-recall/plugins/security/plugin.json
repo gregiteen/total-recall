@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "security",
   "name": "Security Assessments",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Machine and device security assessments for macOS, Linux, Windows, Android, Chromebook, iPhone and iPad, with explicit measured and manual coverage.",
   "license": "MIT",
   "branding": {

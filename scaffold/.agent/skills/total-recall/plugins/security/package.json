@@ -1,6 +1,6 @@
 {
   "name": "tr-plugin-security",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "type": "module",
   "description": "Standalone security suite for Total Recall: static analysis, file and permission hardening schemes, AES-256-GCM encryption tools, and egress audit controls",
   "scripts": {

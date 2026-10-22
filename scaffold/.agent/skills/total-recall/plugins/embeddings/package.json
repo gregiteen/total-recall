@@ -1,11 +1,17 @@
 {
   "name": "tr-plugin-embeddings",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "cli.mjs",
+    "plugin.json",
+    "README.md",
+    "LICENSE",
+    "ui/"
+  ]
 }

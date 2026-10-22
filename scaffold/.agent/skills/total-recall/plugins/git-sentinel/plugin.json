@@ -2,7 +2,7 @@
   "$schema": "https://github.com/gregiteen/total-recall/blob/main/metadata.plugin.schema.json",
   "id": "git-sentinel",
   "name": "Git Hygiene",
-  "version": "1.2.1",
+  "version": "1.1.2",
   "description": "Worktree hygiene, branch inspection, unpushed commits, and stash tracker.",
   "author": "Total Recall",
   "license": "MIT",
