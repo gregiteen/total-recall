@@ -50,6 +50,10 @@
 - [x] Plugin 32/34: `tr-transcribe` recipe & card overhaul (purged fake waterfall canvas and studio skin, acoustic model telemetry, word timestamp alignment, audio input)
 - [x] Plugin 33/34: `translator` recipe & card overhaul (purged fake lexical wave canvas and winamp skin, Rosetta Stone theme, 10 Festech locales, SSSS v2 frontmatter)
 - [x] Plugin 34/34: `user-automations` recipe & card overhaul (purged fake clock canvas and pocket arcade skin, Chronos theme, mesh-wide cron schedule matrix, 2 verbs)
+- [x] Visual Inspection: Real Google Chrome headless Playwright verification across all 34 custom element cards (dimensions, shadow DOM, touch targets >= 44px, button dispatch, 0 console errors)
+- [x] Bug Fixes: Resolved Chromium `CustomElementRegistry` duplicate constructor collisions across 5 plugins (`creative-search`, `decision`, `openwiki`, `translator`, `user-automations`), and added missing card declarations in `hermes` and `sticker-generator`
+- [x] Publication: Published all 34 plugins to the public npm registry under `gregiteen` and `@gregiteen/signed-gi-client`, and published `total-recall-brain@3.40.4`
+- [x] Mesh Propagation: Deployed `total-recall-brain@3.40.4` to all 179 project brains across the workspace, and updated global CLIs on Mac Mini, Cloud Droplet, and MacBook
 
 ---
 
@@ -102,3 +106,7 @@
 | 2026-10-22T16:43:00Z | Antigravity | Overhauled Plugin 32 (tr-transcribe) card face | Purged fake waterfall canvas and studio skin, implemented acoustic model telemetry, word timestamp alignment, all 2 tests pass |
 | 2026-10-22T16:45:00Z | Antigravity | Overhauled Plugin 33 (translator) card face | Purged fake lexical wave canvas and winamp skin, implemented Rosetta Stone theme, 10 Festech locales, SSSS v2 frontmatter, all 5 tests pass |
 | 2026-10-22T16:46:00Z | Antigravity | Overhauled Plugin 34 (user-automations) card face | Purged fake clock canvas and pocket arcade skin, implemented Chronos theme, mesh-wide cron schedule matrix, all 3 tests pass |
+| 2026-10-22T17:15:00Z | Antigravity | Headless Chrome visual inspection across all 34 custom element cards | Rendered each card in real Google Chrome via Playwright, verified dimensions, shadow DOM, touch targets, and captured 34 screenshots |
+| 2026-10-22T17:22:00Z | Antigravity | Resolved CustomElementRegistry constructor collisions | Subclassed duplicate custom element tag constructors across 5 plugins, eliminating Chromium registration errors |
+| 2026-10-22T17:28:00Z | Antigravity | Published all 34 plugins and total-recall-brain@3.40.4 to npm registry | Public packages live on npm under gregiteen and @gregiteen/signed-gi-client |
+| 2026-10-22T17:33:00Z | Antigravity | Cluster-wide propagation and independent version verification | Deployed total-recall-brain@3.40.4 across all 179 project brains, updated global CLIs on Mac Mini, Cloud Droplet, and MacBook |
