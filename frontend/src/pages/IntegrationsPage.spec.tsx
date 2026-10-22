@@ -28,6 +28,39 @@ describe('IntegrationsPage', () => {
 
     expect((await screen.findAllByText(/Antigravity/i, undefined, { timeout: 4000 }))[0]).toBeInTheDocument();
     expect((await screen.findAllByText(/Connected/i, undefined, { timeout: 4000 })).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Personal Access Tokens/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Generate Extension Token/i)).toBeInTheDocument();
+  }, 10000);
+
+  it('handles generating an extension token', async () => {
+    vi.mocked(api.getApiBase).mockReturnValue('http://localhost:3000');
+    vi.mocked(api.listApiKeys).mockResolvedValue({ keys: [] } as never);
+    vi.mocked(api.fetchActiveIntegrations).mockResolvedValue({ success: true, active: [] } as never);
+    vi.mocked(api.fetchExtensionStatus).mockResolvedValue({ available: true, connected: false } as never);
+    vi.mocked(api.issueApiKey).mockResolvedValue({
+      id: 'ext-key',
+      name: 'Chrome Extension',
+      token: 'tr_mock_extension_token_12345',
+      token_prefix: 'tr_mock',
+      scopes: ['*'],
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      hit_count: 0,
+      revoked: false,
+    } as never);
+
+    await act(async () => {
+      render(<IntegrationsPage />);
+    });
+
+    const genButton = await screen.findByText(/Generate Extension Token/i);
+    await act(async () => {
+      genButton.click();
+    });
+
+    expect(api.issueApiKey).toHaveBeenCalledWith('Chrome Extension', ['*']);
+    expect(await screen.findByDisplayValue(/tr_mock_extension_token_12345/i)).toBeInTheDocument();
   }, 10000);
 
   it('handles connect', async () => {

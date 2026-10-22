@@ -7,7 +7,8 @@ import { apiFetch, API_BASE } from './_base'
 export interface ApiKey {
   id: string
   name: string
-  token_preview: string
+  token_preview?: string
+  token_prefix?: string
   scopes: string[]
   expires_at: string | null
   created_at: string
@@ -29,7 +30,13 @@ export async function listApiKeys(): Promise<ApiKeyListResponse> {
   const res = await apiFetch(`${API_BASE}/api/keys`)
   if (!res.ok) throw new Error(`Keys API error: ${res.status}`)
   const data = await res.json()
-  return Array.isArray(data) ? { keys: data, available_scopes: ['*'] } : data
+  if (Array.isArray(data)) {
+    return { keys: data, available_scopes: ['*'] }
+  }
+  return {
+    keys: data.keys || [],
+    available_scopes: data.available_scopes || ['*']
+  }
 }
 
 export async function issueApiKey(name: string, scopes?: string[], expiresAt?: string | null): Promise<IssuedApiKey> {
