@@ -1,7 +1,7 @@
 # PLUGIN_UI_OVERHAUL — Project Tracker
 
 > **Project Prefix**: `PLUGIN_UI_OVERHAUL`
-> **Status**: In Progress
+> **Status**: Completed
 > **Date**: 2026-10-22
 > **Author**: Antigravity
 
@@ -25,31 +25,31 @@
 - [x] Plugin 07/34: `deploy` recipe & card overhaul (purged fake orbital canvas, live dual-slot Blue/Green visualizer, fail-safe traffic inspection)
 - [x] Plugin 08/34: `design` recipe & card overhaul (purged fake spectrum canvas, live DESIGN.md token telemetry, real swatch deck, CSS/Tailwind export)
 - [x] Plugin 09/34: `domains` recipe & card overhaul (purged fake propagation canvas, live Vercel DNS team telemetry, target domain selector, DNS records)
-- [x] Plugin 10/34: `dsh` recipe & card overhaul (purged fake synapse canvas and winamp skin, live profile telemetry, tool inventory, 6 verbs)
+- [x] Plugin 10/34: `dsh` recipe & card overhaul (purged fake synapse canvas and winamp-classic skin, live profile telemetry, tool inventory, 6 verbs)
 - [x] Plugin 11/34: `embeddings` recipe & card overhaul (purged fake vector scatter canvas, live local model telemetry, vault coverage inspector, 6 verbs)
 - [x] Plugin 12/34: `git-sentinel` recipe & card overhaul (purged fake pulse canvas, live branch and worktree hygiene telemetry, diffstat, 4 verbs)
 - [x] Plugin 13/34: `hermes` recipe & card overhaul (purged fake pulse canvas, live runtime and gateway supervisor telemetry, task dispatch, 6 verbs)
 - [x] Plugin 14/34: `image-generator` recipe & card overhaul (purged fake prism canvas, live fal.ai model profiles, aspect ratio chips, prompt generator)
 - [x] Plugin 15/34: `maps` recipe & card overhaul (purged fake radar canvas and winamp skin, live Google Maps telemetry, location input, geocoding & routing)
-- [ ] Plugin 16/34: `marketing` recipe & card overhaul
-- [ ] Plugin 17/34: `mesh` recipe & card overhaul
-- [ ] Plugin 18/34: `okf` recipe & card overhaul
-- [ ] Plugin 19/34: `openclaw` recipe & card overhaul
-- [ ] Plugin 20/34: `openwiki` recipe & card overhaul
-- [ ] Plugin 21/34: `operator-alerts` recipe & card overhaul
-- [ ] Plugin 22/34: `phone` recipe & card overhaul
-- [ ] Plugin 23/34: `phone-companion` recipe & card overhaul
-- [ ] Plugin 24/34: `security` recipe & card overhaul
-- [ ] Plugin 25/34: `signing` recipe & card overhaul
-- [ ] Plugin 26/34: `skill-manager` recipe & card overhaul
-- [ ] Plugin 27/34: `sticker-generator` recipe & card overhaul
-- [ ] Plugin 28/34: `stripe` recipe & card overhaul
-- [ ] Plugin 29/34: `system-monitor` recipe & card overhaul
-- [ ] Plugin 30/34: `text` recipe & card overhaul
-- [ ] Plugin 31/34: `tickets` recipe & card overhaul
-- [ ] Plugin 32/34: `tr-transcribe` recipe & card overhaul
-- [ ] Plugin 33/34: `translator` recipe & card overhaul
-- [ ] Plugin 34/34: `user-automations` recipe & card overhaul
+- [x] Plugin 16/34: `marketing` recipe & card overhaul (purged fake canvas and winamp skin, live brand tone telemetry, SEO audit targets, 6 verbs)
+- [x] Plugin 17/34: `mesh` recipe & card overhaul (purged fake mesh canvas and winamp skin, live Headscale telemetry, preauth key minting, 6 verbs)
+- [x] Plugin 18/34: `okf` recipe & card overhaul (purged fake lattice canvas and winamp skin, live schema validation matrix, target selector, 4 verbs)
+- [x] Plugin 19/34: `openclaw` recipe & card overhaul (purged fake lobster radar canvas, live WebSocket gateway telemetry, channels matrix, 4 verbs)
+- [x] Plugin 20/34: `openwiki` recipe & card overhaul (purged fake constellation canvas and winamp skin, live hubs counter, ingest bar, 4 verbs)
+- [x] Plugin 21/34: `operator-alerts` recipe & card overhaul (purged fake RF canvas, live channel matrix, severity selector, dispatch bar, 4 verbs)
+- [x] Plugin 22/34: `phone` recipe & card overhaul (purged fake VU equalizer canvas and winamp skin, live Telnyx inventory, E.164 dial bar, 5 verbs)
+- [x] Plugin 23/34: `phone-companion` recipe & card overhaul (purged fake wireless canvas and mobile skin, live Gro CRM runtime telemetry, push form, 4 verbs)
+- [x] Plugin 24/34: `security` recipe & card overhaul (purged winamp skin, touch-ergonomic assessment actions, mesh fleet target selector, 5 verbs)
+- [x] Plugin 25/34: `signing` recipe & card overhaul (purged fake wax seal canvas and hifi skin, Documenso Seal telemetry, SHA-256 audit, 4 verbs)
+- [x] Plugin 26/34: `skill-manager` recipe & card overhaul (purged fake convergence canvas, target mesh node telemetry, single-skill routing bar, 4 verbs)
+- [x] Plugin 27/34: `sticker-generator` recipe & card overhaul (purged fake audio equalizer bars and winamp skin, 300 DPI production specs, shape chips, quote calculator)
+- [x] Plugin 28/34: `stripe` recipe & card overhaul (purged fake ledger velocity canvas and winamp skin, live merchant API telemetry, currency switcher, 5 verbs)
+- [x] Plugin 29/34: `system-monitor` recipe & card overhaul (purged fake dual-trace CPU/RAM canvas, real host metrics, live load averages, dynamic RAM bar gauge)
+- [x] Plugin 30/34: `text` recipe & card overhaul (purged fake carrier wave dots canvas and synth skin, fixed invalid data-cmd, Telnyx 10DLC route telemetry, SMS form)
+- [x] Plugin 31/34: `tickets` recipe & card overhaul (purged fake laser scan canvas and arcade skin, configured signing secret, box office admissions telemetry, QR token bar)
+- [x] Plugin 32/34: `tr-transcribe` recipe & card overhaul (purged fake waterfall canvas and studio skin, acoustic model telemetry, word timestamp alignment, audio input)
+- [x] Plugin 33/34: `translator` recipe & card overhaul (purged fake lexical wave canvas and winamp skin, Rosetta Stone theme, 10 Festech locales, SSSS v2 frontmatter)
+- [x] Plugin 34/34: `user-automations` recipe & card overhaul (purged fake clock canvas and pocket arcade skin, Chronos theme, mesh-wide cron schedule matrix, 2 verbs)
 
 ---
 
@@ -83,3 +83,22 @@
 | 2026-10-22T16:18:00Z | Antigravity | Overhauled Plugin 13 (hermes) card face | Purged fake pulse canvas, implemented live supervisor and gateway telemetry, task dispatch, all 2 tests pass |
 | 2026-10-22T16:19:00Z | Antigravity | Overhauled Plugin 14 (image-generator) card face | Purged fake prism canvas, implemented live fal model profiles, aspect ratio chips, all 7 tests pass |
 | 2026-10-22T16:20:00Z | Antigravity | Overhauled Plugin 15 (maps) card face | Purged fake radar canvas and winamp skin, implemented live Google Maps telemetry, location input and geocoding, all 11 tests pass |
+| 2026-10-22T16:22:00Z | Antigravity | Overhauled Plugin 16 (marketing) card face | Purged fake canvas and winamp skin, added live brand voice telemetry and SEO audit targets, all 4 tests pass |
+| 2026-10-22T16:24:00Z | Antigravity | Overhauled Plugin 17 (mesh) card face | Purged fake mesh canvas and winamp skin, added Headscale control server telemetry and preauth key issuance, all 7 tests pass |
+| 2026-10-22T16:26:00Z | Antigravity | Overhauled Plugin 18 (okf) card face | Purged fake lattice canvas and winamp skin, added live OKF schema matrix and directory target picker, all 2 tests pass |
+| 2026-10-22T16:27:00Z | Antigravity | Overhauled Plugin 19 (openclaw) card face | Purged fake lobster radar pulse canvas, implemented real WebSocket gateway telemetry, channel matrix, all 2 tests pass |
+| 2026-10-22T16:29:00Z | Antigravity | Overhauled Plugin 20 (openwiki) card face | Purged fake constellation canvas and winamp skin, added live documentation hubs counter and ingest bar, all 4 tests pass |
+| 2026-10-22T16:30:00Z | Antigravity | Overhauled Plugin 21 (operator-alerts) card face | Purged fake RF canvas, added active notification channels matrix, severity selector, dispatch bar, all 12 tests pass |
+| 2026-10-22T16:32:00Z | Antigravity | Overhauled Plugin 22 (phone) card face | Purged fake audio VU equalizer canvas and winamp skin, implemented live Telnyx number inventory, dialer bar, all 78 tests pass |
+| 2026-10-22T16:33:00Z | Antigravity | Overhauled Plugin 23 (phone-companion) card face | Purged fake wireless canvas and mobile skin, implemented Gro CRM target telemetry, Expo mobile runtime, push form, all 7 tests pass |
+| 2026-10-22T16:35:00Z | Antigravity | Overhauled Plugin 24 (security) card face | Purged winamp-classic skin, implemented touch-ergonomic assessment actions, mesh fleet selector, finding table, all 28 tests pass |
+| 2026-10-22T16:36:00Z | Antigravity | Overhauled Plugin 25 (signing) card face | Purged fake wax seal canvas and hifi skin, implemented Documenso Seal telemetry, SHA-256 audit, token vault, all 91 tests pass |
+| 2026-10-22T16:37:00Z | Antigravity | Overhauled Plugin 26 (skill-manager) card face | Purged fake convergence curve canvas, added target mesh node telemetry, single-skill routing query bar, all 11 tests pass |
+| 2026-10-22T16:38:00Z | Antigravity | Overhauled Plugin 27 (sticker-generator) card face | Purged fake audio equalizer bars and winamp skin, added 300 DPI production specs, shape chips, quote calculator, all 4 tests pass |
+| 2026-10-22T16:39:00Z | Antigravity | Overhauled Plugin 28 (stripe) card face | Purged fake ledger velocity canvas and winamp skin, added live merchant API telemetry, currency switcher, checkout, all 11 tests pass |
+| 2026-10-22T16:40:00Z | Antigravity | Overhauled Plugin 29 (system-monitor) card face | Purged fake dual-trace CPU/RAM canvas, implemented real Darwin/Apple M4 host metrics, load averages, RAM gauge, all 4 tests pass |
+| 2026-10-22T16:41:00Z | Antigravity | Overhauled Plugin 30 (text) card face | Purged fake carrier wave dots canvas and synth skin, fixed invalid command button, Telnyx 10DLC route telemetry, all 49 tests pass |
+| 2026-10-22T16:42:00Z | Antigravity | Overhauled Plugin 31 (tickets) card face | Purged fake laser scan canvas and arcade skin, configured signing secret, box office admissions telemetry, QR check-in, all 14 tests pass |
+| 2026-10-22T16:43:00Z | Antigravity | Overhauled Plugin 32 (tr-transcribe) card face | Purged fake waterfall canvas and studio skin, implemented acoustic model telemetry, word timestamp alignment, all 2 tests pass |
+| 2026-10-22T16:45:00Z | Antigravity | Overhauled Plugin 33 (translator) card face | Purged fake lexical wave canvas and winamp skin, implemented Rosetta Stone theme, 10 Festech locales, SSSS v2 frontmatter, all 5 tests pass |
+| 2026-10-22T16:46:00Z | Antigravity | Overhauled Plugin 34 (user-automations) card face | Purged fake clock canvas and pocket arcade skin, implemented Chronos theme, mesh-wide cron schedule matrix, all 3 tests pass |

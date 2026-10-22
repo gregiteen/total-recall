@@ -12,9 +12,9 @@ export class MeshlinkControlCard extends HTMLElement {
     super();
     this.executing = false;
     this.telemetry = {
-      nodesCount: '4 Nodes',
-      cloudPeer: '100.64.0.1',
-      miniPeer: '100.64.0.2'
+      nodesCount: 'Mesh Active',
+      cloudPeer: 'Cloud Gateway',
+      miniPeer: 'Local Node'
     };
   }
 
@@ -39,14 +39,14 @@ export class MeshlinkControlCard extends HTMLElement {
 
       this.telemetry = {
         nodesCount: `${count} Nodes`,
-        cloudPeer: '100.64.0.1 (Cloud)',
-        miniPeer: '100.64.0.2 (Mini)'
+        cloudPeer: 'Cloud Gateway',
+        miniPeer: 'Local Node'
       };
       this.updateView();
     } catch {
       this.telemetry = {
         nodesCount: 'Mesh Active',
-        cloudPeer: '100.64.0.1',
+        cloudPeer: 'Cloud Gateway',
         miniPeer: 'Local Host'
       };
       this.updateView();
@@ -379,18 +379,18 @@ export class MeshlinkControlCard extends HTMLElement {
           <span id="stat-nodes" class="metric-value">4 Nodes</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Cloud Peer</span>
-          <span id="stat-cloud" class="metric-value">100.64.0.1</span>
+          <span class="metric-label">Control Node</span>
+          <span id="stat-cloud" class="metric-value">Connected</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Mini Peer</span>
-          <span id="stat-mini" class="metric-value">100.64.0.2</span>
+          <span class="metric-label">Local Node</span>
+          <span id="stat-mini" class="metric-value">Enrolled</span>
         </div>
       </div>
 
       <div class="target-box">
         <span class="target-label">Target Peer:</span>
-        <input id="node-input" class="target-input" type="text" value="100.64.0.1" placeholder="IP e.g. 100.64.0.1 or 100.64.0.6" />
+        <input id="node-input" class="target-input" type="text" value="cloud" placeholder="Node name or IP e.g. cloud or 100.64.0.0/10" />
       </div>
 
       <div class="actions-grid">
@@ -413,7 +413,7 @@ export class MeshlinkControlCard extends HTMLElement {
 
     const getNode = () => {
       const input = root.querySelector('#node-input');
-      return (input?.value || '100.64.0.1').trim();
+      return (input?.value || 'cloud').trim();
     };
 
     root.querySelector('#btn-nodes')?.addEventListener('click', () => {
