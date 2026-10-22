@@ -73,16 +73,26 @@ try {
   }
 
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-  const registry = spawnSync('npm', ['view', `${pkg.name}@${pkg.version}`, 'version'], { encoding: 'utf8', timeout: 30000 });
-  if (registry.status !== 0 || registry.stdout.trim() !== pkg.version) {
+  console.error(`\n⏳ Verifying release ${pkg.name}@${pkg.version} on NPM registry...`);
+  let verified = false;
+  for (let attempt = 1; attempt <= 36; attempt++) {
+    const registry = spawnSync('npm', ['view', `${pkg.name}@${pkg.version}`, 'version'], { encoding: 'utf8', timeout: 15000 });
+    if (registry.status === 0 && registry.stdout.trim() === pkg.version) {
+      verified = true;
+      break;
+    }
+    console.error(`   [${attempt}/36] NPM registry processing / indexing... waiting 5s`);
+    spawnSync('sleep', ['5']);
+  }
+  if (!verified) {
     throw new Error('Registry does not serve the release; publication may be staged and requires npm approval.');
   }
-  console.error(`\nPackage ${pkg.name}@${pkg.version} verified on the NPM registry.`);
+  console.error(`\n✅ Package ${pkg.name}@${pkg.version} verified on the NPM registry.`);
 
   // 6. Automatically update all registered project brains immediately
   console.error('\n🔄 Automatically updating all registered project brains to latest release...');
   const updateScript = path.join(ROOT, 'bin', 'total-recall.mjs');
-  if (!runCommand(process.execPath, [updateScript, 'update', '--apply', '--force'])) {
+  if (!runCommand(process.execPath, [updateScript, 'update', '--all-brains', '--apply', '--force'])) {
     throw new Error('Post-publish propagation failed; release is incomplete.');
   } else {
     console.error('✅ All registered project brains updated successfully!');
