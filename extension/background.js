@@ -3,7 +3,7 @@
 // badge, and capture. The side panel and content script talk to the brain
 // through here or through BrainClient directly.
 
-importScripts('lib/brain-client.js', 'lib/ui-helpers.js');
+importScripts('config.js', 'lib/brain-client.js', 'lib/ui-helpers.js');
 
 const Brain = self.BrainClient;
 const UI = self.TRUi;
@@ -36,7 +36,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   for (const menu of menus) {
     chrome.contextMenus.create({ ...menu, documentUrlPatterns: ['http://*/*', 'https://*/*'] });
   }
-  if (details.reason === 'install') chrome.runtime.openOptionsPage();
+  // If already pre-configured with a token, do not interrupt with the options page.
+  const config = await Brain.getConfig();
+  if (details.reason === 'install' && !config.pat) {
+    chrome.runtime.openOptionsPage();
+  }
 });
 
 // ---------------------------------------------------------------------------

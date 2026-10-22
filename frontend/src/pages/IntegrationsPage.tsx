@@ -342,7 +342,7 @@ export default function IntegrationsPage({ activeBrainId }: { activeBrainId?: st
             color: 'var(--text-secondary)',
             lineHeight: '1.4'
           }}>
-            Install the Total Recall extension to passively capture context, store quick notes, and access the active brain search overlay inside any Chrome tab.
+            Download the extension package with your active brain address and access token automatically baked inside. Zero manual token entry required.
           </div>
 
           <div style={{
@@ -358,7 +358,8 @@ export default function IntegrationsPage({ activeBrainId }: { activeBrainId?: st
             1. Download zip & unzip locally.{"\n"}
             2. Go to chrome://extensions in browser.{"\n"}
             3. Enable "Developer mode" (top right).{"\n"}
-            4. Click "Load unpacked" & select unzipped folder.
+            4. Click "Load unpacked" & select unzipped folder.{"\n"}
+            ✓ Token and brain address are pre-configured automatically.
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 'auto', paddingTop: 8, flexWrap: 'wrap' }}>
@@ -367,34 +368,33 @@ export default function IntegrationsPage({ activeBrainId }: { activeBrainId?: st
               download
               className="btn btn-sm btn-primary"
               style={{
-                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
                 border: 'none',
-                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
+                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
                 fontWeight: 600,
                 cursor: 'pointer',
                 textDecoration: 'none',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '6px 12px',
+                padding: '8px 14px',
                 borderRadius: '6px',
                 color: '#fff',
                 fontSize: '12px'
               }}
             >
-              ⬇ Download Extension Zip
+              ⬇ Download Pre-Configured Extension Zip
             </a>
             <button
               className="btn btn-sm"
               onClick={() => handleCreateToken('Chrome Extension', ['*'])}
               disabled={isIssuingToken}
               style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #047857 100%)',
-                border: 'none',
-                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)',
-                fontWeight: 600,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border)',
+                fontWeight: 500,
                 cursor: isIssuingToken ? 'default' : 'pointer',
-                color: '#fff',
+                color: 'var(--text-secondary)',
                 fontSize: '12px'
               }}
             >
