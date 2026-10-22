@@ -4,79 +4,81 @@
 > **Kanban State**: 🏗️ In Progress
 > **Author**: Greg & Antigravity
 > **Date**: 2026-10-21
-> **Based on audit**: `TR_MARKETING_LAUNCH_AUDIT.md` (Complete, 65427222385b0a55c72fe93782a0ede791845311)
+> **Based on audit**: `TR_MARKETING_LAUNCH_AUDIT.md` (Complete, d7fc0bc16f0c9c6b4d2a15f0b81031e410d7e423)
 
 ---
 
-## 1. Executive Summary & Brand Vision
+## 1. Executive Summary & Category Vision (Addressing `A-001`, `A-002`)
 
-The software development ecosystem has undergone an irreversible phase change. In late 2026, prompt-driven software development ("vibe coding") represents the dominant method of code generation. Tens of millions of makers, builders, founders, and digital sellers now assemble applications through natural language dialogue.
+Total Recall is not merely a memory utility; it is **The Vibe Brain & Autonomous Software Factory** — a personal AI operating system and daily driver that manages plugins, memory, instructions, deterministic rules, and encrypted secrets **automatically across all of your devices**.
 
-However, the industry faces an existential crisis: **The Goldfish Problem**. Autonomous coding agents operate within ephemeral conversation context. When context windows exhaust, tokens compress, or new sessions start, agents lose architectural comprehension. They overwrite existing conventions, reintroduce solved security vulnerabilities, and forget database relationships.
+In late 2026, makers, builders, founders, and digital sellers face two broken extremes:
+1. **Stateless Vibe Coding Toys:** Tools that generate rapid prototypes but suffer from severe context amnesia, forgetting architecture, breaking rules, and leaking secrets across sessions.
+2. **Closed Cloud Factories:** Expensive, locked-in SaaS platforms that trap intellectual property inside remote vendor databases and force developers into a single rigid interface.
 
-**Total Recall** establishes the definitive solution: **The Sovereign Vibe Brain**. 
+Total Recall unifies both worlds into one sovereign, local-first system:
+- **The Daily Driver Workbench:** Work from any interface (terminal CLI, Claude Code, Codex, Gemini, Hermes, DSH, the visual React/Preact Web Dashboard, or the mobile companion). Your memory, rules, secrets, and 32 functional plugins reside in the exact place where you need them.
+- **The Autonomous Software Factory:** Bootstrap complete production applications in seconds (`total-recall new <app> --with <bricks>`). Vendor any of the 32 battle-tested plugins as owned project bricks (`bricks/<id>`) and provision a dedicated Headscale mesh server automatically, with zero runtime lock-in.
+- **Zero-Cost Bundled Intelligence:** Ships with `tr-plugin-embeddings` driving `nomic-embed-text:latest` (768 dimensions) across local and cloud mesh nodes at zero API spend.
+- **100% Automatic Management:** The system learns your patterns during the background `dream` cycle, proposes conservative skill optimizations (`proposals`, `skill-manager`), composes new CLI verbs (`composable-cli`), auto-compiles instruction surfaces on every change, semantically indexes every CLI verb so nothing gets lost (`A-011`), and propagates updates across every device on your mesh automatically.
 
-Our vision elevates vibe coding from precarious prompting into sovereign architectural engineering. Total Recall provides the persistent cognitive runtime that accompanies every builder across every machine, session, and project.
+---
 
-## 2. Core Brand Architecture
+## 2. Brand Architecture: Vision, Promise, and Trust
 
-### The Brand Hook: What Do We Call It?
-To capture immediate attention and maximize organic click-through rates across tech communities (addressing finding F-003), we deploy a dual-tier naming framework:
-
-1. **The Campaign Hook: VibeBrain™ (or The Vibe Brain)**
-   - Tagline: *"Vibe coding without amnesia."*
-   - Sub-hook: *"Stop re-explaining your stack to your agent."*
-   - Purpose: Designed for high-velocity social virality, developer discourse, and search engine acquisition.
-2. **The Sovereign Engine: Total Recall**
-   - Anchor: *"The Open-Source Memory Vault and Cognitive OS for Autonomous Agents."*
-   - Purpose: Establishes institutional credibility, security provenance, and enduring technical authority.
+### Brand Naming & High-Click Positioning (`D-001`, `A-002`)
+- **Primary Brand Name:** **Total Recall — The Vibe Brain & Autonomous Software Factory**
+- **Viral Shorthand Hook:** **VibeBrain**
+- **Headline Hook:** *"Your AI Daily Driver & Software Factory: Memory, Rules, Secrets, and 32 Visual Plugins — Automatically Managed Across All Your Devices."*
+- **Click Hooks by Segment:**
+  - *"Stop vibe coding with amnesia. Give every agent one permanent brain across every device."*
+  - *"From prompt to production factory: 32 visual plugins you can run daily or vendor into any app in 10 seconds."*
 
 ### The Brand Promise
-Total Recall delivers one foundational promise to every creator:
-> *"Your agent will never forget what you built, how you designed it, or what rules govern your system."*
+> *"Use any interface on any device: your agents remember every rule, your secrets stay encrypted, your 400+ CLI and plugin verbs surface automatically, and your projects ship as owned code."*
 
-### The Pillars of Trust
-Trust forms the bedrock of developer memory infrastructure. Total Recall establishes trust through four uncompromising principles:
-1. **Local Sovereignty:** Memory belongs entirely to the developer. Markdown files and local SQLite databases reside on disk, never held hostage within proprietary corporate clouds.
-2. **Zero-Drift Determinism:** The `context` command guarantees fail-closed enforcement of critical architectural rules before any model executes code.
-3. **Transparent Open Architecture:** The core runtime remains open source, verifiable, and free from telemetry surveillance.
-4. **Resilient Portability:** Total Recall synchronizes seamlessly across private mesh networks, providing continuous memory without vendor lock-in.
+### The Five Pillars of Trust
+1. **Total Automation (Zero Manual Upkeep):** Surface compilation, semantic verb indexing, scaffold synchronization, Dream memory consolidation, CLI agent doc refreshes, and multi-device mesh updates run automatically (`A-003`, `A-006`, `A-007`, `A-011`).
+2. **Real, Visual, Functional Plugins (Zero Mock State):** Every plugin includes a bespoke interactive JavaScript interface (`ui/card.js` and `ui/panel.js`) operating inside a confined iframe with real CLI/API controls and zero simulated state (`A-005`, `invariants-1933916a`).
+3. **Sovereign Data & Zero-Cost Embeddings:** Canonical data lives in human-readable SSSS Markdown and local SQLite indexes powered by local/cloud Ollama `nomic-embed-text:latest` vectors that never leave your mesh.
+4. **Software Factory Ownership (`total-recall new` & `plugin vendor`):** When you vendor plugins into a product, your application owns the source code in `bricks/` with SHA-256 provenance and zero runtime dependency on Total Recall.
+5. **Fail-Closed Deterministic Governance:** `total-recall context` enforces mandatory rules before an agent acts, while `total-recall auth secret` keeps credentials inside encrypted stores (`secrets.enc`).
 
-## 3. Market Analysis & Strategic 2026 Predictions
+---
 
-Extensive market research into developer telemetry and agent dynamics yields three core predictions that dictate our go-to-market strategy:
+## 3. Market Predictions (2026–2028) & How Total Recall Leads
 
-### Prediction 1: The Collapse of Ephemeral Context
-Token context windows expanded dramatically, yet long-context latency, runaway inference costs, and reasoning degradation ("lost in the middle") prevent prompt stuffing from serving as permanent storage. By late 2027, every professional development environment will mandate a distinct cognitive memory tier separating long-term knowledge from short-term reasoning. Total Recall captures this category early.
+1. **From Prompting to Personal Software Factories:** Individual makers, builders, founders, and sellers will operate 5–20 production apps simultaneously. They will abandon standalone chat wrappers in favor of unified software factories that scaffold apps with pre-built auth, payments, DNS, telephony, ticketing, deployment, and marketing bricks (`A-002`, `A-012`).
+2. **Semantic Tool & Verb Routing Replaces Static Help:** As personal agent ecosystems grow past 400+ CLI commands and plugin operations, static `--help` menus fail. Automatic semantic CLI indexing (`A-011`) that injects the exact relevant verbs into every task context capsule becomes mandatory infrastructure.
+3. **Self-Improving Multi-Device Meshes:** Developers work across desktop workstations, laptops, cloud servers, and phones. Private Headscale/Tailscale meshes with separate device vaults, shared encrypted secrets, and background Dream consolidation will become the gold standard for personal AI infrastructure.
 
-### Prediction 2: The Bifurcation of Builders
-The market divides into two groups:
-- **Casual Prototypers:** Users who abandon projects when hallucinations create insurmountable friction.
-- **Sovereign Builders:** Operators who harness agents to govern multi-million-dollar software operations.
-Total Recall converts casual prototypers into sovereign builders by preserving institutional system knowledge.
+---
 
-### Prediction 3: Open Knowledge Graph Convergence
-Text logs and vector embeddings alone fail to capture semantic relationships. The future belongs to hybrid retrieval engines that unite structured rule vaults, local vector similarity, and hyperlinked documentation graphs. The integration of OpenWiki alongside Total Recall memory vaults delivers this unified architecture today.
+## 4. Core Functional Requirements (Mapped to Audit Findings)
 
-## 4. Audience Segment Strategies
+### FR-1: Automatic Semantic CLI & Verb Index (`A-011`, `D-002`)
+- Automatically index all built-in CLI commands (`src/core/cli-commands.mjs`), all installed plugin operations (`plugin.json` across project and global roots), and all composed commands (`composable-cli`) during `compileSurface` (`src/core/surface.mjs`).
+- Embed every command signature, description, and argument summary using the zero-cost `nomic-embed-text:latest` vector pipeline (`src/core/embeddings.mjs`) with hybrid BM25/keyword fallback.
+- **Automatic Context Injection:** When `total-recall context "<task>"` executes, automatically match `"<task>"` against the Semantic CLI Index and include the top relevant CLI and plugin verbs inside the emitted capsule so agents never lose a verb.
+- **Automatic Help & Unknown-Verb Fallback:** When `total-recall help "<query>"` runs on a natural-language query or plugin/composed verb (or when an unrecognized verb is invoked), automatically query the Semantic CLI Index and return the ranked matching commands.
 
-| Segment | Pain Point | Core Message | Flagship Feature Hook |
-|---|---|---|---|
-| **Makers** | Rapid prototyping stalls when agents break the original concept | *"Build at the speed of thought without losing your vision."* | Zero-config project brain bootstrap (`total-recall init --project`) |
-| **Builders** | Technical debt, rule violations, and fragile refactoring | *"Deterministic rule enforcement for autonomous coding."* | Fail-closed context capsules (`total-recall context`) |
-| **Founders** | Engineering context disappears across disjointed tools | *"The persistent operating system for your entire digital company."* | Mesh-wide synchronization and private team vaults |
-| **Sellers** | Store operations, inventory logic, and marketing integrations drift | *"Automate your revenue engines with an agent that remembers your business."* | Plugin ecosystem spanning payments, telephony, and alerts |
+### FR-2: Automatic Plugin, Scaffold, and Multi-Root Synchronization (`A-003`–`A-007`)
+- Relocate `/Users/gregoryiteen/tr-plugin-embeddings` into `/Users/gregoryiteen/github/tr-plugin-embeddings` and update symlinks (`A-003`, `A-006`).
+- Ensure the project brain (`.agent/skills/total-recall/plugins/`) and global brain (`~/.agent/skills/total-recall/plugins/`) stay automatically synchronized with `/Users/gregoryiteen/github/tr-plugin-*`, eliminating version drift on `mesh` and `skill-manager` (`A-004`, `A-007`).
+- Add bespoke, functional `ui/card.js` interfaces for `embeddings` and `hermes` so all 32 plugins meet the visual card invariant (`A-005`).
+- Automatically keep `scaffold/.agent/skills/total-recall/plugins/` synchronized whenever default plugins change (`A-003`).
 
-## 5. Functional Requirements & Deliverables
+### FR-3: Dedicated Marketing Plugin (`tr-plugin-marketing` / `total-recall marketing`) (`A-012`, `D-003`)
+- Build `tr-plugin-marketing` at `/Users/gregoryiteen/github/tr-plugin-marketing` as both the engine that markets Total Recall and a reusable brick for any project (`total-recall new <app> --with marketing`).
+- Capabilities required in `total-recall marketing`:
+  - `status` / `probe`: Inspect active brand profile, campaigns, copy compliance status, and channel readiness.
+  - `brand`: Manage canonical SSSS brand positioning (`vision`, `promise`, `trust`, `personas`, `hooks`, `banned-terms`, `style-rules`).
+  - `lint`: Deterministic copy compliance gate that scans Markdown, READMEs, OpenWiki pages, and campaign drafts, failing closed on banned competitor names (`A-007`, `A-009`) or sentence-ending prepositions (`A-008`).
+  - `campaigns` / `draft`: Generate and track persona-targeted launch assets for Makers, Builders, Founders, and Sellers.
+  - `seo-audit`: Inspect repository READMEs, OpenWiki hubs, and live web URLs for OpenGraph tags, meta descriptions, title lengths, and call-to-action links.
+  - `links` / `clicks`: Manage campaign UTM shortlinks and inspect click/conversion telemetry.
+  - Bespoke `ui/card.js` and `ui/panel.js`: Functional visual marketing console inside the Total Recall dashboard.
 
-1. **FR-1: Viral Brand Narrative & Positioning Assets**
-   - High-conversion landing copy for developers, makers, and founders.
-   - Comprehensive comparison matrix contrasting stateless prompting against Total Recall memory architectures.
-2. **FR-2: OpenWiki Knowledge Hub Integration (Addressing Finding F-004)**
-   - Direct integration between project memory vaults and OpenWiki documentation hubs.
-   - Public knowledge blueprints detailing how builders structure long-term system memory.
-3. **FR-3: Onboarding Streamlining**
-   - Single-command developer onboarding verifying memory initialization, CLI readiness, and agent wiring.
-4. **FR-4: Rigorous Quality & Syntax Compliance (Addressing Findings F-001 & F-002)**
-   - Complete exclusion of prohibited competitor names across all marketing materials.
-   - Strict adherence to grammatical standards prohibiting sentence-ending prepositions.
+### FR-4: Public README, OpenWiki Hubs, and Compliance Overhaul (`A-002`, `A-004`, `A-007`–`A-010`)
+- Overhaul `README.md`, `package.json` description/keywords, `templates/openwiki/`, `scaffold/openwiki/`, and local `openwiki/` hubs to present the full **Vibe Brain + Software Factory + Daily Driver** story and the 32-plugin catalog.
+- Purge all banned competitor IDE mentions (`A-004`, `A-007`, `A-009`) and enforce zero sentence-ending prepositions across all touched documents (`A-008`).
