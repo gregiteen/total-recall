@@ -98,7 +98,6 @@
     ]
   },
   "card_face": {
-    "skin": "winamp-classic",
     "theme": "vibrant",
     "headline": "Deterministic Code Gates & Lint",
     "primary_color": "#06b6d4",

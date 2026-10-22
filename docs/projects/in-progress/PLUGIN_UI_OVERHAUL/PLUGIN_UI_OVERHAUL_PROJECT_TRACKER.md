@@ -10,10 +10,10 @@
 ## Active Checklist
 
 ### Architectural Foundations
-- [ ] Core CardEngine Shell: Ensure guaranteed title, badge, and status presence across all plugin modes.
-- [ ] UI Workspace Separation: Display ONLY user-owned cards on the main workspace; route unowned cards to the Plugin Store.
-- [ ] Agent Plugin Recipe Specification: Document the standardized Recipe format used by coding agents to author plugins.
-- [ ] Private vs. Store Lifecycle: Support private local usage versus one-click hash-pinned store publishing.
+- [x] Core CardEngine Shell: Ensure guaranteed title, badge, and status presence across all plugin modes.
+- [x] UI Workspace Separation: Display ONLY user-owned cards on the main workspace; route unowned cards to the Plugin Store.
+- [x] Agent Plugin Recipe Specification: Document the standardized Recipe format used by coding agents to author plugins.
+- [x] Private vs. Store Lifecycle: Support private local usage versus one-click hash-pinned store publishing.
 
 ### 34-Plugin Recipes & Proposals (1–34)
 - [ ] Plugin 01/34: `auth` recipe & card overhaul
@@ -64,3 +64,7 @@
 | 2026-10-22T14:44:00Z | Antigravity | Integrated user direction on owned cards vs plugin store | Clarified that only user-owned cards display in workspace, unowned cards live in store |
 | 2026-10-22T14:46:00Z | Antigravity | Incorporated agent recipe architecture per user mandate | Codified that users' agents build plugins from recipes, supporting private use or store deployment |
 | 2026-10-22T14:53:00Z | Antigravity | Generated exhaustive individual audit and bespoke recipe plan for all 34 plugins | Documented in PLUGIN_UI_OVERHAUL_AUDIT.md covering 1,317 lines of ground-truth evidence |
+| 2026-10-22T15:08:00Z | Antigravity | Overhauled PluginsPage.tsx with strict Workspace vs. Plugin Store separation | Display only user-owned active cards on workspace; optional plugins routed to catalog with + Add to Workspace |
+| 2026-10-22T15:10:00Z | Antigravity | Added Agent Plugin Recipe modal and copy prompt workflow | Implemented hero banner and recipe modal supporting private local vs. store deployment paths |
+| 2026-10-22T15:12:00Z | Antigravity | Purged winamp-classic skins across scaffold plugin manifests | Removed legacy skin keys in auth, mesh, security, code-quality, and openwiki |
+| 2026-10-22T15:14:00Z | Antigravity | Verified complete test suite and production build | 50 test files passed (220 tests), tsc and vite build succeeded with exit code 0 |

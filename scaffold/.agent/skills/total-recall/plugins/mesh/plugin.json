@@ -17,7 +17,6 @@
     }
   },
   "card_face": {
-    "skin": "winamp-classic",
     "theme": "vibrant",
     "headline": "Mesh Control Deck",
     "quick_actions": [

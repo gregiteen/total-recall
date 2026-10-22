@@ -13,6 +13,7 @@ import {
   deployPluginToStore,
   runPluginCommand,
   fetchPluginReadme,
+  setPluginActivation,
   type PluginInfo,
   type BundledPlugin,
   type PeersResponse,
@@ -42,6 +43,41 @@ const PEER_STATUS_LABEL: Record<PeerNode["status"], string> = {
 
 const mono: CSSProperties = { fontFamily: "var(--font-mono)", fontSize: "12px" }
 const muted: CSSProperties = { color: "var(--text-secondary)", fontSize: "13px", lineHeight: 1.5 }
+
+const DEFAULT_CORE_PLUGINS = new Set([
+  "auth",
+  "mesh",
+  "openwiki",
+  "composable-cli",
+  "cli-agents",
+  "code-quality",
+  "security",
+  "embeddings",
+  "git-sentinel"
+])
+
+const AGENT_RECIPE_PROMPT = `You are my coding agent. Author a bespoke Total Recall plugin for [DOMAIN] following the Total Recall Plugin Recipe:
+
+1. Scaffold:
+   total-recall scaffold-plugin <id> --title "<Name>" --description "<Description>"
+
+2. Manifest (plugin.json):
+   - id: lowercase kebab-case
+   - name: Clear Title
+   - branding: { name, color, badge }
+   - cli: command name and subcommands with effect (read/write)
+   - ui: elements declaring the Web Component tag <tr-plugin-<id>-card>
+   - secrets: declare required keys, never store plain text
+
+3. Web Component (ui/card.js):
+   - Register <tr-plugin-<id>-card>
+   - Standardized layout with clean borders and >=44px touch targets
+   - Authentic purpose-built domain tools (NO fake audio equalizers or fake skins)
+   - Real interactive controls executing plugin subcommands via host.run(subcommand, args)
+
+4. Distribution:
+   - Private: keep in .agent/skills/total-recall/plugins/<id>
+   - Store: publish via total-recall deploy-store <id>`
 
 function resolvePluginBranding(p: { id: string; branding?: { icon?: string | null; color?: string | null; badge?: string | null } }) {
   const custom = p.branding || {}
@@ -334,6 +370,17 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   const [output, setOutput] = useState<{ text: string; ok: boolean } | null>(null)
   const [readme, setReadme] = useState("")
 
+  // Agent Plugin Recipe & Workspace State
+  const [recipeOpen, setRecipeOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<"workspace" | "all">("workspace")
+  const [workspaceActiveIds, setWorkspaceActiveIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem("tr_workspace_plugins")
+      if (stored) return new Set(JSON.parse(stored))
+    } catch {}
+    return new Set<string>()
+  })
+
   // Branding Customization Modal state
   const [brandingOpen, setBrandingOpen] = useState(false)
   const [brandingPlugin, setBrandingPlugin] = useState<PluginInfo | null>(null)
@@ -419,6 +466,52 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
     if (!q) return true
     return [p.id, p.name, p.description, ...p.use_cases].some((v) => v.toLowerCase().includes(q))
   }, [query, useCase])
+
+  const isWorkspaceCard = useCallback((p: { id: string; scope?: string }) => {
+    if (p.scope === "project") return true
+    if (DEFAULT_CORE_PLUGINS.has(p.id)) return true
+    if (workspaceActiveIds.has(p.id)) return true
+    return false
+  }, [workspaceActiveIds])
+
+  const addToWorkspace = async (p: { id: string; name: string }) => {
+    setBusy(p.id)
+    try {
+      const next = new Set(workspaceActiveIds)
+      next.add(p.id)
+      setWorkspaceActiveIds(next)
+      try { localStorage.setItem("tr_workspace_plugins", JSON.stringify([...next])) } catch {}
+      await setPluginActivation(p.id, true)
+      setAlert({ type: "success", message: `Added ${p.name} to workspace dashboard` })
+      await loadLocal()
+    } catch (err: any) {
+      setAlert({ type: "error", message: err?.message || `Could not activate ${p.name}` })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const removeFromWorkspace = async (p: { id: string; name: string }) => {
+    setBusy(p.id)
+    try {
+      const next = new Set(workspaceActiveIds)
+      next.delete(p.id)
+      setWorkspaceActiveIds(next)
+      try { localStorage.setItem("tr_workspace_plugins", JSON.stringify([...next])) } catch {}
+      await setPluginActivation(p.id, false)
+      setAlert({ type: "success", message: `Moved ${p.name} from workspace to Plugin Store` })
+      await loadLocal()
+    } catch (err: any) {
+      setAlert({ type: "error", message: err?.message || `Could not deactivate ${p.name}` })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const copyAgentPrompt = () => {
+    void navigator.clipboard?.writeText(AGENT_RECIPE_PROMPT)
+    setAlert({ type: "success", message: "Copied Agent Plugin Recipe prompt to clipboard" })
+  }
 
   const doInstall = async (source: string, opts: { link?: boolean; global?: boolean } = {}) => {
     setBusy(source)
@@ -572,7 +665,68 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
   }
 
   const filteredInstalled = installed.filter(matches)
-  const filteredBundled = bundled.filter(matches)
+  const myCards = filteredInstalled.filter(isWorkspaceCard)
+  const shownInstalled = viewMode === "workspace" ? myCards : filteredInstalled
+
+  const storeCatalog = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      name: string;
+      version: string;
+      description: string;
+      use_cases: string[];
+      installed: boolean;
+      inWorkspace: boolean;
+      sourcePlugin?: PluginInfo;
+      branding?: { icon?: string | null; color?: string | null; badge?: string | null };
+      cli?: { command: string | null; subcommands?: Array<{ name: string; description?: string }> } | null;
+      tasks?: any[];
+      secrets?: any[];
+    }>()
+
+    // Add bundled plugins
+    for (const b of bundled) {
+      const inst = installed.find((i) => i.id === b.id)
+      map.set(b.id, {
+        id: b.id,
+        name: b.name,
+        version: b.version,
+        description: b.description,
+        use_cases: b.use_cases || [],
+        installed: b.installed || !!inst,
+        inWorkspace: inst ? isWorkspaceCard(inst) : false,
+        sourcePlugin: inst,
+        branding: b.branding || (inst ? inst.branding : undefined),
+        cli: b.cli || (inst ? inst.cli : null),
+        tasks: b.tasks || (inst ? inst.tasks : []),
+        secrets: inst?.secrets || []
+      })
+    }
+
+    // Add any installed plugins that aren't in bundled
+    for (const inst of installed) {
+      if (!map.has(inst.id)) {
+        map.set(inst.id, {
+          id: inst.id,
+          name: inst.name,
+          version: inst.version,
+          description: inst.description,
+          use_cases: inst.use_cases || [],
+          installed: true,
+          inWorkspace: isWorkspaceCard(inst),
+          sourcePlugin: inst,
+          branding: inst.branding,
+          cli: inst.cli,
+          tasks: inst.tasks,
+          secrets: inst.secrets || []
+        })
+      }
+    }
+
+    return Array.from(map.values())
+  }, [bundled, installed, isWorkspaceCard])
+
+  const filteredStoreCatalog = storeCatalog.filter(matches)
 
   const tabButton = (id: Tab, label: string, count?: number) => (
     <button
@@ -583,7 +737,7 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
       onClick={() => setTab(id)}
     >
       {label}
-      {count !== undefined && <span style={{ opacity: 0.75, fontWeight: 500 }}>{count}</span>}
+      {count !== undefined && <span style={{ opacity: 0.75, fontWeight: 500, marginLeft: "4px" }}>{count}</span>}
     </button>
   )
 
@@ -593,13 +747,18 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
         <div>
           <h1>Plugins</h1>
           <p>
-            Plugins deliver modular capabilities into Total Recall and SSSS apps — memory categories, agent context, commands, and design-token UI.
+            Modular capability system for Total Recall and SSSS apps — memory categories, agent context, commands, and design-token UI.
             Customizable branding, locked release status, and direct store deployment are managed on each card.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setInstallOpen(true); setAlert(null) }}>
-          Install from source…
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button className="btn btn-ghost" onClick={() => setRecipeOpen(true)}>
+            Agent Recipe
+          </button>
+          <button className="btn btn-primary" onClick={() => { setInstallOpen(true); setAlert(null) }}>
+            Install from source…
+          </button>
+        </div>
       </div>
 
       {alert && (
@@ -612,8 +771,8 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", marginBottom: "20px" }}>
         <div role="tablist" style={{ display: "flex", gap: "8px" }}>
-          {tabButton("installed", "Installed", installed.length)}
-          {tabButton("bundled", "Bundled", bundled.length)}
+          {tabButton("installed", "My Cards", myCards.length)}
+          {tabButton("bundled", "Plugin Store (Bundled)", filteredStoreCatalog.length)}
           {tabButton("mesh", "On the mesh")}
         </div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -627,96 +786,311 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
       </div>
 
       {tab === "installed" && (
-        loading ? <div style={muted}>Loading…</div> :
-        filteredInstalled.length === 0 ? (
-          <Empty title={installed.length ? "No installed plugins match" : "No plugins installed"}>
-            {!installed.length && <>Start with a <button className="btn btn-ghost btn-sm" onClick={() => setTab("bundled")}>bundled plugin</button> or see what your peers share.</>}
-          </Empty>
-        ) : (
-          <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 360px), 1fr))", gap: "22px" }}>
-            {filteredInstalled.map((p) => {
-              return (
-                <div
-                  key={`${p.scope}:${p.id}`}
-                  onContextMenu={(e) => handleContextMenu(p, e)}
-                  onTouchStart={(e) => handleTouchStart(p, e)}
-                  onTouchEnd={cancelLongPress}
-                  style={{ display: "flex", flexDirection: "column", gap: "8px" }}
-                >
-                  <CardEngine plugin={p} />
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "0 4px", fontSize: "11px", color: "var(--text-tertiary)" }}>
-                    <span className="badge">{p.scope}</span>
-                    <span className="badge">{sourceLabel(p)}</span>
-                    {p.shared && <span className="badge badge-accent">shared</span>}
-                    {!p.valid && <span className="badge badge-error">invalid manifest</span>}
-                    {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
-                  </div>
+        loading ? <div style={muted}>Loading…</div> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: "15px" }}>
+                  {viewMode === "workspace" ? "Active Workspace Cards" : "All Installed Plugins"}
                 </div>
-              )
-            })}
+                <div style={muted}>
+                  {viewMode === "workspace"
+                    ? "Core runtime foundation and activated repository cards. Optional tools live in the Plugin Store."
+                    : "All plugin packages installed on this host."}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button
+                  type="button"
+                  className={`btn btn-xs ${viewMode === "workspace" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setViewMode("workspace")}
+                >
+                  Workspace ({myCards.length})
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-xs ${viewMode === "all" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setViewMode("all")}
+                >
+                  All Installed ({installed.length})
+                </button>
+              </div>
+            </div>
+
+            {shownInstalled.length === 0 ? (
+              <Empty title={viewMode === "workspace" ? "No workspace cards active" : "No plugins installed"}>
+                {viewMode === "workspace" ? (
+                  <>
+                    Explore the <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTab("bundled")}>Plugin Store</button> to add capabilities or ask your agent to author one.
+                  </>
+                ) : (
+                  <>Start with a <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTab("bundled")}>bundled plugin</button> or see what your peers share.</>
+                )}
+              </Empty>
+            ) : (
+              <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 360px), 1fr))", gap: "22px" }}>
+                {shownInstalled.map((p) => {
+                  return (
+                    <div
+                      key={`${p.scope}:${p.id}`}
+                      onContextMenu={(e) => handleContextMenu(p, e)}
+                      onTouchStart={(e) => handleTouchStart(p, e)}
+                      onTouchEnd={cancelLongPress}
+                      style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+                    >
+                      <CardEngine plugin={p} />
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px", fontSize: "11px", color: "var(--text-tertiary)", flexWrap: "wrap", gap: "6px" }}>
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                          <span className="badge">{p.scope}</span>
+                          <span className="badge">{sourceLabel(p)}</span>
+                          {p.shared && <span className="badge badge-accent">shared</span>}
+                          {!p.valid && <span className="badge badge-error">invalid manifest</span>}
+                          {p.modified_since_install && <span className="badge badge-warning">changed since install</span>}
+                        </div>
+                        {!DEFAULT_CORE_PLUGINS.has(p.id) && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            onClick={() => removeFromWorkspace(p)}
+                            style={{ fontSize: "11px", color: "var(--text-secondary)" }}
+                            title="Move back to Plugin Store"
+                          >
+                            Remove from Workspace
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )
       )}
 
       {tab === "bundled" && (
-        loading ? <div style={muted}>Loading…</div> :
-        filteredBundled.length === 0 ? <Empty title="No bundled plugins match" /> : (
-          <>
-            <p style={{ ...muted, marginBottom: "16px" }}>Shipped with this version of Total Recall, installable on any node.</p>
-            <div className="card-grid">
-              {filteredBundled.map((p) => {
-                const branding = resolvePluginBranding(p)
-                return (
-                  <div key={p.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "10px", borderTop: `3px solid ${branding.color}` }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
-                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                        <div
-                          style={{
-                            width: "32px",
-                            height: "32px",
-                            borderRadius: "6px",
-                            background: `${branding.color}20`,
-                            border: `1px solid ${branding.color}40`,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                          }}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={branding.color} strokeWidth="2">
-                            <rect x="3" y="3" width="18" height="18" rx="4" />
-                            <circle cx="12" cy="12" r="3" fill={branding.color} />
-                          </svg>
+        loading ? <div style={muted}>Loading…</div> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Agent Plugin Recipe Hero Banner */}
+            <div className="card" style={{
+              background: "linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%)",
+              border: "1px solid rgba(99, 102, 241, 0.3)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                    <span className="badge" style={{ background: "rgba(99, 102, 241, 0.2)", color: "#818cf8", borderColor: "rgba(99, 102, 241, 0.4)", fontSize: "11px" }}>
+                      AGENT RECIPE ARCHITECTURE
+                    </span>
+                    <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                      Declarative Recipes · Private or Store
+                    </span>
+                  </div>
+                  <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0, color: "#f8fafc" }}>
+                    Build Bespoke Plugins with Your Coding Agent
+                  </h2>
+                  <p style={{ ...muted, margin: "6px 0 0 0", maxWidth: "640px" }}>
+                    Total Recall plugins are not generated by closed system templates; your contextual coding agent (Antigravity, Claude, Codex, DSH) builds them from a declarative Recipe. Run them privately in your workspace or publish them to the Plugin Store.
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setRecipeOpen(true)}
+                  >
+                    View Agent Recipe
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={copyAgentPrompt}
+                  >
+                    Copy Agent Prompt
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => { setInstallOpen(true); setAlert(null) }}
+                  >
+                    Install from source…
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {filteredStoreCatalog.length === 0 ? (
+              <Empty title="No plugins match in store" />
+            ) : (
+              <div className="card-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))", gap: "16px" }}>
+                {filteredStoreCatalog.map((item) => {
+                  const branding = resolvePluginBranding(item)
+                  return (
+                    <div
+                      key={item.id}
+                      className="card"
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px",
+                        borderTop: `3px solid ${branding.color}`,
+                        background: "var(--bg-secondary)"
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                          <div
+                            style={{
+                              width: "34px",
+                              height: "34px",
+                              borderRadius: "8px",
+                              background: `${branding.color}20`,
+                              border: `1px solid ${branding.color}40`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: 700,
+                              fontSize: "12px",
+                              color: branding.color
+                            }}
+                          >
+                            {branding.icon || item.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: "14px", lineHeight: 1.2 }}>{item.name}</div>
+                            <div style={{ ...mono, color: "var(--text-tertiary)", fontSize: "11px" }}>
+                              {item.id} · v{item.version}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <span style={{ fontWeight: 600, fontSize: "15px" }}>{p.name}</span>
-                          <div style={{ ...mono, color: "var(--text-tertiary)" }}>v{p.version}</div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                          <span className="badge" style={{ background: `${branding.color}15`, color: branding.color, borderColor: `${branding.color}35`, fontSize: "10px" }}>
+                            {branding.badge}
+                          </span>
+                          {item.inWorkspace && (
+                            <span className="badge badge-success" style={{ fontSize: "10px" }}>
+                              ✓ In Workspace
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <span className="badge" style={{ background: `${branding.color}15`, color: branding.color }}>{branding.badge}</span>
-                    </div>
-                    <div style={muted}>{p.description}</div>
-                    <UseCaseChips useCases={p.use_cases} />
-                    <div style={{ ...muted, fontSize: "12px" }}>
-                      {[
-                        p.cli && `command: total-recall ${p.cli.command}`,
-                        p.tasks.length > 0 && `${p.tasks.length} scheduled task${p.tasks.length > 1 ? "s" : ""}`,
-                        p.categories.length > 0 && `${p.categories.length} memory categor${p.categories.length > 1 ? "ies" : "y"}`
-                      ].filter(Boolean).join(" · ")}
-                    </div>
-                    <div style={{ marginTop: "auto", display: "flex", gap: "8px" }}>
-                      {p.installed ? (
-                        <span className="badge badge-success">installed</span>
-                      ) : (
-                        <button className="btn btn-primary btn-sm" disabled={busy === p.id} onClick={() => doInstall(p.id)}>
-                          {busy === p.id ? "Installing…" : "Install"}
+
+                      <div style={{ ...muted, fontSize: "12px", minHeight: "36px" }}>
+                        {item.description}
+                      </div>
+
+                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", fontSize: "10px" }}>
+                        {item.cli && (
+                          <span className="badge" style={{ fontFamily: "var(--font-mono)" }}>
+                            CLI ({item.cli.subcommands?.length || 1})
+                          </span>
+                        )}
+                        {item.tasks && item.tasks.length > 0 && (
+                          <span className="badge" style={{ fontFamily: "var(--font-mono)" }}>
+                            {item.tasks.length} {item.tasks.length === 1 ? "task" : "tasks"}
+                          </span>
+                        )}
+                        {item.secrets && item.secrets.length > 0 && (
+                          <span className="badge" style={{ fontFamily: "var(--font-mono)" }}>
+                            {item.secrets.length} {item.secrets.length === 1 ? "secret" : "secrets"}
+                          </span>
+                        )}
+                        {DEFAULT_CORE_PLUGINS.has(item.id) && (
+                          <span className="badge" style={{ background: "rgba(59, 130, 246, 0.15)", color: "#60a5fa" }}>
+                            Core Bundle
+                          </span>
+                        )}
+                      </div>
+
+                      <UseCaseChips useCases={item.use_cases} />
+
+                      <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", paddingTop: "8px", borderTop: "1px solid var(--border)" }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            if (item.sourcePlugin) {
+                              openDetail(item.sourcePlugin, "preview")
+                            } else {
+                              openDetail({
+                                id: item.id,
+                                name: item.name,
+                                version: item.version,
+                                description: item.description,
+                                author: null,
+                                license: null,
+                                homepage: null,
+                                use_cases: item.use_cases,
+                                valid: true,
+                                errors: [],
+                                scope: "global",
+                                linked: false,
+                                dir: "",
+                                shared: false,
+                                mesh_shared: false,
+                                share_url: null,
+                                source: { kind: "bundled", ref: item.id },
+                                installed_at: null,
+                                sha256: null,
+                                installed_sha256: null,
+                                modified_since_install: false,
+                                file_count: null,
+                                size_bytes: null,
+                                categories: [],
+                                tasks: item.tasks || [],
+                                openwiki_hubs: [],
+                                cli: item.cli as any,
+                                has_generator: false,
+                                branding: item.branding
+                              }, "preview")
+                            }
+                          }}
+                        >
+                          Preview
                         </button>
-                      )}
+
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          {!item.installed ? (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={busy === item.id}
+                              onClick={() => doInstall(item.id)}
+                            >
+                              {busy === item.id ? "Installing…" : "Install"}
+                            </button>
+                          ) : item.inWorkspace ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={busy === item.id}
+                              onClick={() => removeFromWorkspace(item.sourcePlugin || item)}
+                              style={{ fontSize: "11px" }}
+                            >
+                              Remove from Workspace
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={busy === item.id}
+                              onClick={() => addToWorkspace(item.sourcePlugin || item)}
+                            >
+                              {busy === item.id ? "Adding…" : "+ Add to Workspace"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
-          </>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         )
       )}
 
@@ -904,6 +1278,77 @@ export default function PluginsPage({ activeBrainId }: PluginsPageProps) {
               >
                 Save Branding
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Plugin Recipe Modal */}
+      {recipeOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Agent Plugin Recipe"
+          onClick={() => setRecipeOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "16px" }}
+        >
+          <div
+            className="card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: "680px", maxHeight: "90vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>Agent Plugin Recipe</h3>
+                <div style={{ ...muted, fontSize: "12px" }}>How your coding agent authors private or store plugins</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setRecipeOpen(false)}>✕</button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "13px" }}>
+              <div style={{ background: "var(--bg-tertiary)", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                <div style={{ fontWeight: 600, marginBottom: "4px" }}>1. Command your agent</div>
+                <div style={muted}>
+                  Copy and send this instruction to your coding agent (Antigravity, Claude, Codex, DSH):
+                </div>
+                <pre style={{ ...mono, background: "rgba(0,0,0,0.4)", padding: "10px", borderRadius: "6px", marginTop: "8px", whiteSpace: "pre-wrap", overflowX: "auto", fontSize: "11px", color: "#a5b4fc" }}>
+{AGENT_RECIPE_PROMPT}
+                </pre>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => copyAgentPrompt()}>
+                    Copy Agent Prompt
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div style={{ background: "var(--bg-tertiary)", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                  <div style={{ fontWeight: 600, color: "#38bdf8", marginBottom: "4px" }}>🔒 Private Plugins</div>
+                  <div style={{ ...muted, fontSize: "12px", lineHeight: 1.4 }}>
+                    Store directly inside <code style={mono}>.agent/skills/total-recall/plugins/&lt;id&gt;</code> or link locally. Never shared outside this machine or project. Zero cloud exposure.
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--bg-tertiary)", padding: "12px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                  <div style={{ fontWeight: 600, color: "#a855f7", marginBottom: "4px" }}>🌐 Plugin Store Distribution</div>
+                  <div style={{ ...muted, fontSize: "12px", lineHeight: 1.4 }}>
+                    Deploy to the store via <code style={mono}>total-recall deploy-store &lt;id&gt;</code>. Cryptographically signed and distributed across the mesh for team consumption.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: "rgba(16, 185, 129, 0.08)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                <div style={{ fontWeight: 600, color: "#10b981", marginBottom: "4px" }}>Quality Invariants Enforced</div>
+                <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "12px", color: "var(--text-secondary)" }}>
+                  <li>Guaranteed Title, Brand Glyph, Version, and Settings drawer trigger on every card</li>
+                  <li>Authentic domain tools only — zero fake audio equalizers or fake skins</li>
+                  <li>Touch-first ergonomics with minimum 44px tap targets</li>
+                </ul>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setRecipeOpen(false)}>Close</button>
             </div>
           </div>
         </div>

@@ -17,7 +17,6 @@
     "font": "chivo-mono"
   },
   "card_face": {
-    "skin": "winamp-classic",
     "theme": "vibrant",
     "headline": "Passkey & Google OAuth2 Authentication Engine",
     "primary_color": "#6366f1",
