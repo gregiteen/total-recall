@@ -22,9 +22,9 @@
 - [x] Plugin 04/34: `composable-cli` recipe & card overhaul (purged fake canvas animation, live command inventory, target input, 6 verbs)
 - [x] Plugin 05/34: `creative-search` recipe & card overhaul (purged fake radar canvas and winamp skin, live SearXNG health, multi-category chips, 6 verbs)
 - [x] Plugin 06/34: `decision` recipe & card overhaul (purged fake radar sweep, live decision sets, provider-neutral Field Copilot telemetry, 6 verbs)
-- [ ] Plugin 07/34: `deploy` recipe & card overhaul
-- [ ] Plugin 08/34: `design` recipe & card overhaul
-- [ ] Plugin 09/34: `domains` recipe & card overhaul
+- [x] Plugin 07/34: `deploy` recipe & card overhaul (purged fake orbital canvas, live dual-slot Blue/Green visualizer, fail-safe traffic inspection)
+- [x] Plugin 08/34: `design` recipe & card overhaul (purged fake spectrum canvas, live DESIGN.md token telemetry, real swatch deck, CSS/Tailwind export)
+- [x] Plugin 09/34: `domains` recipe & card overhaul (purged fake propagation canvas, live Vercel DNS team telemetry, target domain selector, DNS records)
 - [ ] Plugin 10/34: `dsh` recipe & card overhaul
 - [ ] Plugin 11/34: `embeddings` recipe & card overhaul
 - [ ] Plugin 12/34: `git-sentinel` recipe & card overhaul
@@ -74,3 +74,6 @@
 | 2026-10-22T16:04:00Z | Antigravity | Overhauled Plugin 04 (composable-cli) card face | Purged fake canvas flow animation, built bespoke CmdSmith UI with live inventory, target selector, 6 verbs, all 28 tests pass |
 | 2026-10-22T16:07:00Z | Antigravity | Overhauled Plugin 05 (creative-search) card face | Purged fake radar canvas and winamp-classic skin, fixed legacy engineGroups config breakage, live SearXNG health and categories |
 | 2026-10-22T16:09:00Z | Antigravity | Overhauled Plugin 06 (decision) card face | Purged fake radar sweep, fixed auth-client test breakage, implemented provider-neutral Field Copilot telemetry, all 32 tests pass |
+| 2026-10-22T16:10:00Z | Antigravity | Overhauled Plugin 07 (deploy) card face | Purged fake orbital canvas, implemented dual-slot Blue/Green visualizer, fail-safe traffic inspection, all 27 tests pass |
+| 2026-10-22T16:11:00Z | Antigravity | Overhauled Plugin 08 (design) card face | Purged fake spectrum canvas, implemented live DESIGN.md token telemetry, real swatch deck, CSS/Tailwind export, all 43 tests pass |
+| 2026-10-22T16:13:00Z | Antigravity | Overhauled Plugin 09 (domains) card face | Purged fake propagation canvas, implemented live Vercel DNS team telemetry, target domain selector, DNS records, all 75 tests pass |
