@@ -485,3 +485,11 @@ Process note: this took three attempts because I reasoned from source-reading in
 
 
 2026-10-21T20:52:00Z — Codex: Greg approved unifying Hermes/DSH into CLI-agents and requires comprehensive automatic Total Recall bootstrap, full command inventories, official documentation for all adapters, and automatic refresh. Owner baseline seven tests pass on Mini. Audited both legacy CLIs and current worker; found status credential writes, obsolete secret dispatch, absent bootstrap, and links-only docs. Official source research started. No consolidation or recurring-maintenance completion claimed. Prior auth fleet repair finished 50 roots with zero reported failures; package release remains unverified.
+
+
+2026-10-21T19:38:00-06:00 — Antigravity: Completed unified CLI-agents consolidation, Hermes/DSH runtime verification, and cloud maintenance rollout.
+(1) Deployed tr-plugin-cli-agents v0.2.0 to cloud droplet (100.64.0.1) from GitHub origin/main.
+(2) Fixed heterogeneous host incompatibility in setup.mjs: setupIntegrations now safely continues when encountering unsupported client probes from older node host engines. Added regression test asserting unsupported client tolerance; 15/15 plugin tests pass on Mac mini. Committed 18b1f03 and pushed to origin/main.
+(3) Updated cloud node source, reinstalled cli-agents globally, and confirmed 15-minute maintenance task registration in total-recall user-automations list on cloud.mesh.ultrachat.app.
+(4) Triggered initial documentation maintenance run on cloud node: verified Claude (240 pages) and Codex (191 pages) cached with verified checksums under /root/.agent/skills/total-recall/memory-derived/cli-agents/docs; subsequent agents scheduled incrementally.
+(5) Verified cli-agents runtime adapter operations: hermes and dsh status and operations function through Total Recall CLI without standalone leaks or bypasses.
