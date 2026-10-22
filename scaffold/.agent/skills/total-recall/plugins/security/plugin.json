@@ -20,8 +20,6 @@
     "session_verification": true
   },
   "card_face": {
-    "skin": "winamp-classic",
-    "theme": "vibrant",
     "headline": "Security & Hardening Suite",
     "quick_actions": [
       {

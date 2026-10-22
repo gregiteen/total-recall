@@ -2,18 +2,291 @@ export class SecuritySecurityCard extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) return;
     const root = this.attachShadow({ mode: 'open' });
-    root.innerHTML = `<style>
-      :host{display:block;color:#edf3fa;background:#16222e;font:14px system-ui;border-radius:12px;padding:18px}header{display:flex;align-items:center;gap:12px}svg{width:32px;height:38px;color:#73d6bf}h2{margin:0;font-size:20px}p{color:#bbcad6;line-height:1.5}nav{display:flex;gap:8px;flex-wrap:wrap}button,input,select{min-height:44px;border:1px solid #71928e;border-radius:6px;padding:8px 12px;background:#213644;color:inherit}button{cursor:pointer}button:disabled{opacity:.5}input{min-width:0;flex:1}#state{margin:14px 0;color:#73d6bf}table{width:100%;border-collapse:collapse}td,th{padding:10px 6px;text-align:left;border-bottom:1px solid #3a4e5c;vertical-align:top}td:last-child{line-height:1.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto}.scroll{overflow:auto}
-      </style><header><svg viewBox="0 0 32 38" fill="none" aria-hidden="true"><path d="M16 2 29 8v11c0 8-7 14-13 17C10 33 3 27 3 19V8Z" stroke="currentColor" stroke-width="2"/><path d="m9 19 5 5 10-12" stroke="currentColor" stroke-width="2"/></svg><h2>Security Assessments</h2></header>
-      <p>Inspect this machine or your mesh. Review firewall, SSH, disk protection, and listening services with concrete remediation.</p>
-      <nav><button data-action="machine">This machine</button><button data-action="fleet">Mesh fleet</button><button data-action="plugins">Plugin audit</button><button data-action="harden">Hardening plan</button></nav>
-      <nav style="margin-top:10px"><input id="target" aria-label="Machine name" placeholder="Optional mesh machine name"><button id="selected">Audit selected</button></nav>
-      <nav style="margin-top:10px"><input id="website" type="url" aria-label="Authorized HTTPS website" placeholder="https://your-site.example"><button id="probe">Check website</button></nav>
-      <nav style="margin-top:10px"><input id="source" aria-label="Source directory" placeholder="Source directory"><button id="scan">Scan source</button><button id="permissions">Repair local SSH permissions</button></nav>
-      <nav style="margin-top:10px"><select id="platform" aria-label="Device platform"><option value="ios">iPhone</option><option value="ipados">iPad</option><option value="android">Android</option><option value="chromeos">Chromebook</option><option value="chromeos-flex">ChromeOS Flex</option><option value="windows">Windows</option></select><input id="device" aria-label="Device label" placeholder="Device label (no passwords)"><button id="review-device">Review device</button></nav>
-      <section id="device-review" hidden><p>Manual device review — answers are your observations, not an automatic scan. Unknown checks remain unverified. Never enter passwords or recovery keys.</p><div id="device-checks"></div><button id="evaluate-device">Evaluate review</button></section>
-      <nav style="margin-top:10px"><input id="android-serial" aria-label="Already authorized Android serial" placeholder="Already authorized Android serial"><button id="android-check">Read Android properties</button></nav>
-      <div id="state" role="status">Not audited</div><div class="scroll"><table hidden><thead><tr><th>Check / machine</th><th>State</th><th>Remediation / coverage</th></tr></thead><tbody></tbody></table></div><pre id="details"></pre>`;
+    root.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+          color: #f1f5f9;
+          background: #180d11;
+          border: 1px solid rgba(244, 63, 94, 0.35);
+          border-radius: 10px;
+          padding: 18px;
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+          box-sizing: border-box;
+          overflow: hidden;
+        }
+
+        header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .brand-icon {
+          width: 32px;
+          height: 38px;
+          color: #f43f5e;
+          flex-shrink: 0;
+        }
+
+        .title-block {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        h2 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          color: #fecdd3;
+        }
+
+        p.desc {
+          margin: 0 0 14px 0;
+          color: #fda4af;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        nav {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-top: 8px;
+        }
+
+        nav:first-of-type {
+          margin-top: 0;
+        }
+
+        button, input, select {
+          min-height: 44px;
+          border: 1px solid rgba(244, 63, 94, 0.28);
+          border-radius: 6px;
+          padding: 8px 12px;
+          background: #251017;
+          color: #f1f5f9;
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          box-sizing: border-box;
+        }
+
+        button {
+          cursor: pointer;
+          text-transform: uppercase;
+          transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        button:hover {
+          background: rgba(244, 63, 94, 0.22);
+          border-color: #f43f5e;
+        }
+
+        button:active {
+          transform: translateY(1px);
+        }
+
+        button:disabled, input:disabled, select:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        input {
+          min-width: 0;
+          flex: 1;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          background: #11070a;
+        }
+
+        input:focus, select:focus {
+          border-color: #f43f5e;
+          outline: none;
+          box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.3);
+        }
+
+        select {
+          background: #11070a;
+          cursor: pointer;
+        }
+
+        #state {
+          margin: 14px 0 8px 0;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 11px;
+          font-weight: 700;
+          color: #fb7185;
+          background: #11070a;
+          padding: 6px 10px;
+          border-radius: 4px;
+          border: 1px solid rgba(244, 63, 94, 0.2);
+        }
+
+        .scroll {
+          overflow-x: auto;
+          margin-bottom: 10px;
+          border-radius: 6px;
+          border: 1px solid rgba(244, 63, 94, 0.2);
+        }
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11px;
+          background: #0d0508;
+        }
+
+        th {
+          background: #251017;
+          color: #fecdd3;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          padding: 8px 10px;
+          border-bottom: 1px solid rgba(244, 63, 94, 0.3);
+          text-align: left;
+        }
+
+        td {
+          padding: 8px 10px;
+          text-align: left;
+          border-bottom: 1px solid rgba(244, 63, 94, 0.15);
+          vertical-align: top;
+          color: #f8fafc;
+        }
+
+        td:first-child {
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-weight: 600;
+          color: #fda4af;
+        }
+
+        td:last-child {
+          line-height: 1.45;
+          color: #cbd5e1;
+        }
+
+        pre {
+          background: #0a0406;
+          border: 1px solid rgba(244, 63, 94, 0.2);
+          border-radius: 6px;
+          padding: 8px 10px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 10.5px;
+          line-height: 1.45;
+          color: #fb7185;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+          max-height: 160px;
+          overflow-y: auto;
+          margin: 0;
+        }
+
+        #device-review {
+          background: #11070a;
+          border: 1px solid rgba(244, 63, 94, 0.25);
+          border-radius: 6px;
+          padding: 10px;
+          margin-top: 10px;
+        }
+
+        #device-review p {
+          margin: 0 0 8px 0;
+          font-size: 11px;
+          color: #fca5a5;
+        }
+
+        #device-checks label {
+          display: block;
+          margin-bottom: 8px;
+        }
+
+        #device-checks label p {
+          margin: 0 0 4px 0;
+          font-size: 11px;
+          color: #fecdd3;
+          font-weight: 600;
+        }
+      </style>
+
+      <header>
+        <svg class="brand-icon" viewBox="0 0 32 38" fill="none" aria-hidden="true">
+          <path d="M16 2 29 8v11c0 8-7 14-13 17C10 33 3 27 3 19V8Z" stroke="currentColor" stroke-width="2"/>
+          <path d="m9 19 5 5 10-12" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <div class="title-block">
+          <h2>Security Assessments</h2>
+        </div>
+      </header>
+
+      <p class="desc">Inspect this machine or your mesh. Review firewall, SSH, disk protection, and listening services with concrete remediation.</p>
+
+      <nav>
+        <button data-action="machine">This machine</button>
+        <button data-action="fleet">Mesh fleet</button>
+        <button data-action="plugins">Plugin audit</button>
+        <button data-action="harden">Hardening plan</button>
+      </nav>
+
+      <nav>
+        <input id="target" aria-label="Machine name" placeholder="Optional mesh machine name">
+        <button id="selected">Audit selected</button>
+      </nav>
+
+      <nav>
+        <input id="website" type="url" aria-label="Authorized HTTPS website" placeholder="https://your-site.example">
+        <button id="probe">Check website</button>
+      </nav>
+
+      <nav>
+        <input id="source" aria-label="Source directory" placeholder="Source directory">
+        <button id="scan">Scan source</button>
+        <button id="permissions">Repair SSH permissions</button>
+      </nav>
+
+      <nav>
+        <select id="platform" aria-label="Device platform">
+          <option value="ios">iPhone</option>
+          <option value="ipados">iPad</option>
+          <option value="android">Android</option>
+          <option value="chromeos">Chromebook</option>
+          <option value="chromeos-flex">ChromeOS Flex</option>
+          <option value="windows">Windows</option>
+        </select>
+        <input id="device" aria-label="Device label" placeholder="Device label (no passwords)">
+        <button id="review-device">Review device</button>
+      </nav>
+
+      <section id="device-review" hidden>
+        <p>Manual device review — answers are your observations, not an automatic scan. Unknown checks remain unverified. Never enter passwords or recovery keys.</p>
+        <div id="device-checks"></div>
+        <button id="evaluate-device">Evaluate review</button>
+      </section>
+
+      <nav>
+        <input id="android-serial" aria-label="Already authorized Android serial" placeholder="Already authorized Android serial">
+        <button id="android-check">Read Android properties</button>
+      </nav>
+
+      <div id="state" role="status">Not audited</div>
+
+      <div class="scroll">
+        <table hidden>
+          <thead>
+            <tr><th>Check / machine</th><th>State</th><th>Remediation / coverage</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <pre id="details"></pre>
+    `;
+
     root.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => this.execute(button.dataset.action)));
     root.querySelector('#selected').addEventListener('click', () => {
       const target = root.querySelector('#target').value.trim();
@@ -46,6 +319,7 @@ export class SecuritySecurityCard extends HTMLElement {
     });
     root.querySelector('#android-check').addEventListener('click', () => this.execute('android', ['--serial', root.querySelector('#android-serial').value.trim()]));
   }
+
   async execute(action, args = []) {
     const root = this.shadowRoot;
     const state = root.querySelector('#state');
@@ -92,4 +366,5 @@ export class SecuritySecurityCard extends HTMLElement {
     finally { root.querySelectorAll('button,input,select').forEach(button => { button.disabled = false; }); }
   }
 }
+
 if (!customElements.get('tr-security-card')) customElements.define('tr-security-card', SecuritySecurityCard);

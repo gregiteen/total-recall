@@ -100,7 +100,10 @@ export async function updateAllBrains(opts = {}) {
   const errors = [];
   const brains = roots.map(root => ({ root, brain: path.join(root, '.agent', 'skills', 'total-recall') }))
     .filter(({ brain }) => fs.existsSync(brain));
-  if (opts.brainDir) brains.push({ root: opts.brainDir, brain: opts.brainDir });
+  if (opts.brainDir) {
+    brains.push({ root: opts.brainDir, brain: opts.brainDir });
+    roots.push(opts.brainDir);
+  }
   for (const { root, brain } of brains) {
     if (!dryRun && opts.ensureDefaults === true) {
       try { ensureRequiredPlugins(brain); }

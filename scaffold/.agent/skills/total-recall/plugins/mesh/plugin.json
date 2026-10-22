@@ -17,9 +17,12 @@
     }
   },
   "card_face": {
-    "skin": "winamp-classic",
+    "skin": "mesh-telemetry",
     "theme": "vibrant",
     "headline": "Mesh Control Deck",
+    "primary_color": "#2563eb",
+    "secondary_color": "#1e3a8a",
+    "accent_color": "#3b82f6",
     "quick_actions": [
       {
         "subcommand": "status",
@@ -30,12 +33,12 @@
         "label": "NODES"
       },
       {
-        "subcommand": "enroll",
-        "label": "ENROLL"
+        "subcommand": "doctor",
+        "label": "DOCTOR"
       },
       {
-        "subcommand": "probe",
-        "label": "200 PROBE"
+        "subcommand": "leader",
+        "label": "LEADER"
       }
     ],
     "touch_layout": "comfortable",
