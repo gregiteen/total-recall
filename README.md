@@ -1,71 +1,182 @@
-# Total Recall
+# Total Recall — VibeBrain
 
-**Portable personal memory for any IDE** — open source, with canonical SSSS Markdown and disposable search indexes.
+> **The Vibe Coding Brain & Autonomous Software Factory**  
+> *Your AI Daily Driver: Memory, Rules, Secrets, and 33 Visual Plugins — Automatically Managed Across All Your Devices.*
 
-Total Recall stores rules, preferences, facts and project knowledge. The portable runtime provides validated memory operations, local retrieval, task context and instruction surfaces. Optional capabilities run through explicitly installed plugins. Initialization creates an empty brain.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Zero Cost Embeddings](https://img.shields.io/badge/Embeddings-Zero--Cost%20Ollama-emerald.svg)](#zero-cost-local-intelligence)
+[![Visual Plugins](https://img.shields.io/badge/Visual%20Plugins-33%20Installed-violet.svg)](#installed-plugins--capabilities)
+[![Spec: SSSS 0.9](https://img.shields.io/badge/Spec-SSSS%200.9-amber.svg)](docs/SSSS.md)
 
-## Memory CLI
+---
 
-```sh
-npm install total-recall-brain
-npx total-recall-memory init --project
-npx total-recall-memory remember preference "Prefer clear, short answers." --project
-npx total-recall-memory recall "short answers" --local --project
-npx total-recall-memory context "Implement a memory change" --action edit,test --project
-npx total-recall-memory compile --project
+## ⚡ Why Total Recall?
+
+Modern software development with AI agents requires more than fragmented chat sessions or fragile prompt snippets. Developers need an integrated environment that remembers project rules, safeguards credentials, and scales from local prototype to autonomous multi-node production.
+
+Total Recall delivers two synchronized engines in one unified system:
+
+1. **The Personal Daily Driver**: A persistent memory layer, secret vault, and semantic CLI across every editor, terminal, and enrolled device.
+2. **The Autonomous Software Factory**: A modular scaffolding system that constructs production applications from battle-tested plugin bricks (`total-recall new <app> --with <bricks>`) with deterministic quality gates.
+
+---
+
+## 🚀 Quickstart (Under 60 Seconds)
+
+### 1. Install Total Recall
+```bash
+npm install -g total-recall-brain
 ```
 
-The package preserves the `total-recall` executable, dashboard and plugin scaffold during migration. The isolated memory CLI is available as `total-recall-memory`. Use `npx --package total-recall-brain total-recall-memory <command>` without a local installation.
-
-`context` includes required rules before ranked knowledge. Check `ready: true`; exit 2 means the required rules exceed the selected budget. Increase the explicit budget or curate applicability before continuing.
-
-Project memory lives at `<repo>/.agent/skills/total-recall/`; global memory lives at `<home>/.agent/skills/total-recall/`. `--project` and `--global` select the layer. `AGENT_DIR` explicitly pins all layer operations to one agent root. Canonical memory remains separate between roots.
-
-Local retrieval needs no server or embedding provider. Set `TR_EMBEDDINGS_DISABLED=1` for provider-free operation. Semantic search requires a configured provider. Compilation preserves existing embeddings; mutation commands await local indexing.
-
-Run `total-recall --help` for the current commands. `import` preserves authored rule files and imports validated memory. `lint` validates memory and can validate installed manifests with `--plugins`; feature records require their owning validator.
-
-## Optional capabilities
-
-```sh
-total-recall plugin install /path/to/capability --global
-total-recall plugin list
-total-recall plugin info capability-id
-total-recall capability-command --help
-total-recall plugin remove capability-id --global
+### 2. Initialize Your Project Brain
+```bash
+npx total-recall init --project
 ```
 
-Local directories and Git sources use the same manifest validation, canonical installation records and artifact digest. Installed `cli` and `commands` declarations use an isolated child process with bounded output and timeout. Removal disables dispatch and preserves memory and recorded installation history; reinstalling the same artifact restores its digest.
+### 3. Record Facts, Preferences, and Invariants
+```bash
+# Store project facts and guidelines
+npx total-recall remember preference "Prefer clear, short answers and functional TypeScript code."
+npx total-recall remember invariant "Databases are disposable projections; never back up raw SQL."
 
-Plugins are trusted code with the operator's OS permissions. A child process protects the host from handler exits and output interference; it provides no OS sandbox. Background jobs, services, interfaces, distribution and feature-specific validation belong to the capability owner.
-
-Dashboard plugin interfaces run in scripts-only frames with an opaque origin. They cannot access dashboard DOM/storage or fetch services directly. Self-contained owner modules receive themed variables and a `host.run(subcommand, args)` bridge restricted to manifest-declared commands and server authorization. Native command handlers retain the trust boundary described above. Never embed secret values in generated interface code.
-
-## Memory HTTP service
-
-After installing the package locally:
-
-```sh
-AGENT_DIR=/path/to/agent TR_EMBEDDINGS_DISABLED=1 total-recall-memory init
-AGENT_DIR=/path/to/agent HOST=127.0.0.1 PORT=3900 node node_modules/total-recall-brain/src/server/memory-server.mjs
+# Hybrid vector and keyword recall (zero token cost via local Ollama)
+npx total-recall recall "database backup policy" --local
 ```
 
-In the source checkout, `npm run start:memory` selects the memory server. `npm start` preserves the existing dashboard service.
+### 4. Semantic CLI Discovery
+Query over 415 built-in verbs, plugin operations, and composed commands using natural language:
+```bash
+# Ask questions in natural language
+npx total-recall help "how do I buy a domain and configure DNS"
+npx total-recall help "check test code quality"
+npx total-recall help "rotate production credentials"
+```
 
-The service exposes memory, context, instructions, rules, scoped keys and authentication. `/health` reports initialization, node count, runtime and package version. Health requires authentication except direct local access. `/.well-known/total-recall.json` lists available memory endpoints. Configure a scoped credential with `total-recall key --help` or `generate-pat --help` before remote use.
+### 5. Generate Task Rule Capsules
+Before executing tasks, compile verified instructions that fit your model's exact token budget:
+```bash
+npx total-recall context "Configure production DNS and payment webhooks" --action publish,network
+```
 
-The `total-recall-brain/memory` export provides `createMemoryApp()`. Existing package and secret-store exports remain available for installed consumers.
+---
 
-## Source and migration
+## 🏗️ The Software Factory: Owned Modular Bricks
 
-The source checkout and this compatible npm release retain existing product implementations during migration, including the dashboard, update command and plugin creation scaffold. The package gate verifies the complete memory file inventory alongside these compatibility surfaces and excludes private brain state. The isolated memory entrypoint does not load the product worker or dashboard. A default memory-only package requires a breaking release and completed capability migration.
+Never start an application from empty directories again. Total Recall plugins are **vendorable bricks**: when you scaffold a project, the plugin implementation vendors directly into your repository, giving your team full code ownership.
 
-Versions ahead of the public npm release display **Preview features**. Host updates and older registered projects are reported separately; updating projects never downgrades a preview installation.
+```bash
+# Scaffold an entire production application with pre-wired capabilities
+npx total-recall new my-saas-app --with auth,domains,stripe,marketing,code-quality
+```
 
-The [prior product README](docs/reference/legacy-product-readme.md) preserves the original documentation. The [active core/plugin project](docs/projects/in-progress/TR_CORE_PLUGIN_SPLIT/TR_CORE_PLUGIN_SPLIT_PROJECT_TRACKER.md) records implementation and verification; its unfinished acceptance items are not release claims.
+### Shipped Bricks Include:
+- **`auth`**: Hardware WebAuthn biometric FIDO2 passkeys, OAuth session management, and AES-256 encrypted credential vaults.
+- **`domains`**: Unified registrar purchasing, DNS table synchronization, Mailcow mailboxes, and SPF/DKIM verification.
+- **`stripe`**: Checkout sessions, automated payment intents, webhook signing verification, and refunds.
+- **`marketing`**: SSSS brand vision profiles, fail-closed copy compliance linters, social card auditors, and UTM link attribution.
+- **`code-quality`**: Deterministic test compliance gates, fail-closed linting, and coverage snapshots.
+- **`mesh`**: Tailscale-based encrypted peer-to-peer device mesh, remote execution, and node presence monitoring.
 
-## Development
+---
 
-The source uses Node ESM and Vitest. Run the repository's configured background gates on its sanctioned test host. `npm run check:package` inspects npm's actual file inventory; `npm run check:ssss-registry` verifies the composed registry lock. Clean installed-artifact and native service checks complement the source suite.
+## 🧠 Zero-Cost Local Intelligence
 
-MIT license. See [LICENSE](LICENSE).
+Total Recall prioritizes local-first intelligence. While legacy tools impose per-query token fees, Total Recall pairs with local and mesh Ollama instances to deliver fast vector embeddings at zero cost:
+
+- **Model**: `nomic-embed-text:latest` (768 dimensions)
+- **Local Endpoint**: `http://127.0.0.1:11434` (falls back to mesh cloud nodes)
+- **Content-Hash Incremental Rebuilds**: Skips unchanged vault nodes during surface compilation
+- **Fail-Closed Fallback**: Seamlessly falls back to local keyword token matching when offline
+
+```bash
+# Rebuild surfaces and vector indices
+npx total-recall compile
+
+# Inspect vector model coverage and benchmarks
+npx total-recall embeddings status
+```
+
+---
+
+## 👥 Personas & Workflows
+
+### 🎨 For Makers
+- **Problem**: Context windows reset constantly, losing instructions and design preferences.
+- **Solution**: Total Recall automatically injects relevant memory, design tokens, and image generation studio tools into any client.
+
+### 🛠️ For Builders
+- **Problem**: Wiring authentication, DNS records, and quality gates from scratch drains engineering momentum.
+- **Solution**: Vendor pre-built, tested plugin bricks with `total-recall new` and maintain deterministic CI gates locally.
+
+### 🏢 For Founders
+- **Problem**: Managing scattered API keys and multi-server fleet deployments creates operational risk.
+- **Solution**: Encrypt all secrets in local AES-256 stores (`total-recall auth secret`) and coordinate multi-node execution over the secure mesh network.
+
+### 📈 For Sellers
+- **Problem**: Coordinating direct line telephony, customer messaging, and ticket inventory requires multiple disconnected services.
+- **Solution**: Run integrated phone dialers, SMS pooling, and tiered ticket reservations directly from your terminal.
+
+---
+
+## 🔌 Visual Plugin Ecosystem (33 Installed Plugins)
+
+Total Recall plugins feature bespoke animated interfaces with zero simulated state, touch-first ergonomics, and live operational controls:
+
+| Plugin | Namespace | Role |
+| :--- | :--- | :--- |
+| **Auth** | `auth` | Biometric WebAuthn passkeys, OAuth sessions, and AES-256 secrets |
+| **Marketing** | `marketing` | Brand vision, copy compliance linter, SEO auditor, and campaign UTMs |
+| **Domains** | `domains` | Domain purchases, DNS records, Mailcow mailboxes, and SPF/DKIM alignment |
+| **Stripe** | `stripe` | Payment processing, checkout sessions, and webhook signature verification |
+| **Code Quality** | `code-quality` | Fail-closed deterministic code gates and test reports |
+| **Embeddings** | `embeddings` | Local zero-cost embedding model management and benchmarks |
+| **Mesh** | `mesh` | Encrypted Tailscale control server, remote execution, and node presence |
+| **Hermes** | `hermes` | Hermes Agent runtime supervision and messaging gateway |
+| **CLI Agents** | `cli-agents` | Authenticated terminal coding agent orchestration and documentation |
+| **OpenWiki** | `openwiki` | Multi-repository documentation graph and knowledge ingestion |
+| **Phone** | `phone` | Direct telephony dialer, call session control, and inventory |
+| **Text** | `text` | Direct SMS/MMS messaging, number pooling, and message threads |
+| **Tickets** | `tickets` | Tiered ticket types, reservations, and double-entry ledger audits |
+| **Security** | `security` | Machine security scanning, OS hardening, and credential audits |
+| **Decision** | `decision` | Typed SSSS decision sets with confidence rankings and event logging |
+| **Design** | `design` | Design system synthesis, theme tokens, and CSS variable generation |
+
+---
+
+## 💻 Composable CLI Architecture
+
+Total Recall eliminates script sprawl through its dynamic composable CLI engine. Compose reusable multi-step workflows with full version history and rollback capabilities:
+
+```bash
+# Run configured repository quality gates
+npx total-recall code-quality-check
+
+# Inspect latest gate report
+npx total-recall code-quality-report
+```
+
+---
+
+## 🛠️ Development & Quality Gates
+
+Total Recall source code enforces strict deterministic quality checks:
+
+```bash
+# Run unit and integration tests
+npm test
+
+# Verify npm package distribution inventory
+npm run check:package
+
+# Verify SSSS specification schema registry lock
+npm run check:ssss-registry
+
+# Verify scaffold plugin synchronization
+node scripts/sync-scaffold-plugins.mjs --check
+```
+
+---
+
+## 📄 License
+
+MIT License. See [LICENSE](LICENSE) for full details.

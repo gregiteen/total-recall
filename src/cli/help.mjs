@@ -122,6 +122,32 @@ export default async function run(argv) {
       console.log('\n' + '─'.repeat(60) + '\n');
     }
   } else {
+    // Semantic CLI search fallback across all core, plugin, and composed verbs
+    try {
+      const { queryCliSemanticIndex } = await import('../core/cli-semantic-index.mjs');
+      const matches = await queryCliSemanticIndex(requestedTopic || topic, { limit: 6, minScore: 0.25 });
+      if (matches.length > 0) {
+        if (isJson) {
+          console.log(JSON.stringify({ topic: requestedTopic || topic, matches }, null, 2));
+          return;
+        }
+        console.log(`\n\x1b[34m=== Total Recall Semantic Help: "${requestedTopic || topic}" ===\x1b[0m\n`);
+        console.log('  Top matching CLI verbs:\n');
+        for (const m of matches) {
+          const badge = m.category === 'plugin'
+            ? `\x1b[35m[plugin:${m.namespace}]\x1b[0m`
+            : (m.category === 'composed' ? `\x1b[36m[composed]\x1b[0m` : `\x1b[32m[core]\x1b[0m`);
+          console.log(`  • \x1b[1m${m.verb}\x1b[0m ${badge}`);
+          console.log(`    ${m.description}`);
+          console.log(`    \x1b[2mUsage: ${m.usage}\x1b[0m\n`);
+        }
+        console.log('─'.repeat(60) + '\n');
+        return;
+      }
+    } catch {
+      /* Fallback to default not found message */
+    }
+
     console.error(`  ❌ Error: No help section found for topic or command: "${topic}"`);
     console.error(`  Run 'npx total-recall help' to see the complete list of commands.`);
     process.exit(1);

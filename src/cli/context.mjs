@@ -41,8 +41,9 @@ export default async function context(args = []) {
   const nodes = own ? mergeGlobalRuleNodes(getNodes(path.join(own, 'memory-vault')), global ? getNodes(path.join(global, 'memory-vault')) : []) :
     getNodes(path.join(global, 'memory-vault')).map(n => ({ ...n, _layer: 'global' }));
   const skillsDir = path.dirname(own || global);
+  const derivedDir = own ? path.join(own, 'memory-derived') : (global ? path.join(global, 'memory-derived') : null);
   const result = await compileContext({ query, actions, nodes, includeKnowledge, budget: { total: budget }, projectRoot: process.cwd(),
-    contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
+    derivedDir, contributions: legacyRuleContributions(skillsDir), versionInputs: surfaceInputsHash({ skillsDir }) });
   if (debug && format === 'text') throw new Error('--debug requires --format json');
   const response = capsuleResponse(result, { total: budget, debug, format });
   if (!response.ready && !debug) {

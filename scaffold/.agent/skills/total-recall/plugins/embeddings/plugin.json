@@ -5,6 +5,12 @@
   "version": "0.1.0",
   "description": "Local embedding model management: provider/model status, benchmark, index build and coverage",
   "license": "MIT",
+  "branding": {
+    "name": "Embeddings",
+    "color": "#10b981",
+    "badge": "Ollama Vector Engine",
+    "font": "space-grotesk"
+  },
   "use_cases": [
     "operations",
     "ai"
@@ -44,6 +50,10 @@
         "output": "json"
       }
     ]
+  },
+  "card": {
+    "handler": "./ui/card.js",
+    "element": "tr-embeddings-card"
   },
   "status": {
     "command": "status",

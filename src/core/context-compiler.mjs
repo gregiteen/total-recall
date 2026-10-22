@@ -93,7 +93,33 @@ export async function compileContext({
   }).filter(candidate => candidate.relevant).sort((a, b) => b.score - a.score);
   const optional = candidates.map(({ node: n }) => ({ id: `${n._layer || 'project'}:${n.slug}`,
     text: `## ${n.title || n.slug} [${n.slug}]\n\n${(n.body || n.content || '').trim()}` }));
-  const result = assembleContext([...required, ...optional, ...contributions], { total: b.total });
+
+  // CLI Semantic Index recommendations: top task-matched runnable CLI verbs
+  let cliVerbContribution = null;
+  if (query && String(query).trim()) {
+    try {
+      const { queryCliSemanticIndex } = await import('./cli-semantic-index.mjs');
+      const matchedVerbs = await queryCliSemanticIndex(query, {
+        derivedDir,
+        projectRoot,
+        limit: 5,
+        minScore: 0.35,
+      });
+      if (matchedVerbs.length > 0) {
+        const verbLines = matchedVerbs.map(v => `- \`${v.usage || v.verb}\` — ${v.description}`);
+        cliVerbContribution = {
+          id: 'cli:recommended-verbs',
+          required: false,
+          text: `### Recommended Task Verbs\n\n${verbLines.join('\n')}`,
+        };
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  const cliContributions = cliVerbContribution ? [cliVerbContribution] : [];
+  const result = assembleContext([...required, ...cliContributions, ...optional, ...contributions], { total: b.total });
   result.stats.total_nodes = allNodes.length;
   result.stats.compile_ms = Date.now() - startTime;
   result.stats.consumer = consumer;
