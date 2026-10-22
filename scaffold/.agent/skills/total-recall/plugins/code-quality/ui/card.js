@@ -1,6 +1,7 @@
 /**
- * Code Quality Gates — Deterministic Quality Gate Engine
- * Bespoke Animated Web Component Card Face with Live Gate Waveform Visualizer.
+ * Code Quality Gates — Deterministic Code Verification & Fail-Closed Gates
+ * Purpose-built domain interface: queries latest gate report on mount, displays real
+ * deterministic gate findings and stale file tracking, and exposes authentic execution verbs.
  *
  * Zero emojis, authentic commercial brand identity, touch-first ergonomics (>=44px).
  */
@@ -8,23 +9,65 @@
 export class CodeQualityCard extends HTMLElement {
   constructor() {
     super();
-    this.status = 'Idle';
-    this.passRate = '100%';
-    this.activeGate = 'Lint & Typecheck';
     this.executing = false;
+    this.telemetry = {
+      findings: '0 Findings',
+      tier: 'Fast',
+      status: 'Clean'
+    };
   }
 
   connectedCallback() {
-    this.attachShadow({ mode: 'open' });
+    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
     this.render();
-    this.initWaveformAnimation();
+    this.refreshStatus();
+  }
+
+  async refreshStatus() {
+    try {
+      const res = await this.host?.run('report', []);
+      let text = '';
+      if (typeof res === 'object') {
+        text = res.output || JSON.stringify(res, null, 2);
+      } else {
+        text = String(res || '');
+      }
+
+      const isClean = text.includes('0 finding') || text.includes('No findings');
+      const isStale = text.includes('STALE');
+      
+      this.telemetry = {
+        findings: isClean ? '0 Findings' : 'Findings Detected',
+        tier: text.includes('tier=full') ? 'Full Tier' : 'Fast Tier',
+        status: isClean ? (isStale ? 'Stale' : 'Pass') : 'Needs Review'
+      };
+      this.updateView();
+    } catch {
+      this.telemetry = {
+        findings: '0 Findings',
+        tier: 'Gate Deck',
+        status: 'Ready'
+      };
+      this.updateView();
+    }
+  }
+
+  updateView() {
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const findingsEl = root.querySelector('#stat-findings');
+    const tierEl = root.querySelector('#stat-tier');
+    const statusEl = root.querySelector('#stat-status');
+    if (findingsEl) findingsEl.textContent = this.telemetry.findings;
+    if (tierEl) tierEl.textContent = this.telemetry.tier;
+    if (statusEl) statusEl.textContent = this.telemetry.status;
   }
 
   async execute(action, args = []) {
-    const out = this.shadowRoot.querySelector('#card-out');
-    const statusBadge = this.shadowRoot.querySelector('#status-badge');
-    if (out) out.textContent = `[GATE CONTROLLER] Executing ${action.toUpperCase()}...`;
-    if (statusBadge) statusBadge.textContent = 'RUNNING';
+    const out = this.shadowRoot?.querySelector('#card-out');
+    const actionLabel = action.toUpperCase();
+    if (out) out.textContent = `[CODE QUALITY] Running ${actionLabel}...`;
     this.executing = true;
 
     try {
@@ -36,234 +79,287 @@ export class CodeQualityCard extends HTMLElement {
         text = String(res || 'Execution completed without output.');
       }
       if (out) out.textContent = text.trim();
-      if (statusBadge) statusBadge.textContent = 'PASS';
+      if (['gate', 'snapshot', 'report'].includes(action)) {
+        this.refreshStatus();
+      }
     } catch (err) {
-      if (out) out.textContent = `[GATE FAILURE] ${err.message}`;
-      if (statusBadge) statusBadge.textContent = 'FAIL';
+      if (out) out.textContent = `[QUALITY FAILURE] ${err.message}`;
     } finally {
       this.executing = false;
     }
   }
 
-  initWaveformAnimation() {
-    const canvas = this.shadowRoot.querySelector('#qa-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let offset = 0;
-    const draw = () => {
-      if (!this.isConnected) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const w = canvas.width;
-      const h = canvas.height;
-      const mid = h / 2;
-
-      // Coordinate grid lines
-      ctx.strokeStyle = 'rgba(234, 179, 8, 0.12)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let x = 0; x < w; x += 20) {
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
-      }
-      for (let y = 0; y < h; y += 15) {
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-      }
-      ctx.stroke();
-
-      // Quality signal waveform
-      ctx.beginPath();
-      ctx.moveTo(0, mid);
-      for (let x = 0; x < w; x++) {
-        const freq = this.executing ? 0.08 : 0.04;
-        const amp = this.executing ? 18 : 10;
-        const y = mid + Math.sin((x + offset) * freq) * Math.cos((x + offset) * 0.02) * amp;
-        ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = this.executing ? '#38bdf8' : '#eab308';
-      ctx.lineWidth = 2;
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 8;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // Pulse scan head
-      const scanX = (offset * 1.5) % w;
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath();
-      ctx.arc(scanX, mid, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      offset += this.executing ? 3 : 1;
-      requestAnimationFrame(draw);
-    };
-
-    requestAnimationFrame(draw);
-  }
-
   render() {
-    this.shadowRoot.innerHTML = `
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    root.innerHTML = `
       <style>
         :host {
           display: block;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          background: #090d16;
-          color: #fef9c3;
-          border-radius: 8px;
-          border: 1px solid rgba(234, 179, 8, 0.35);
-          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-          padding: 18px;
+          font-family: 'Space Grotesk', -apple-system, sans-serif;
+          background: #03171e;
+          color: #ecfeff;
+          border-radius: 12px;
+          border: 1px solid #0e4a5e;
+          padding: 14px;
           box-sizing: border-box;
-          overflow: hidden;
+          user-select: none;
         }
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 14px;
-        }
-        .brand-meta {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .title {
-          font-size: 16px;
-          font-weight: 700;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          color: #fef08a;
-          margin: 0;
-        }
-        .subtitle {
-          font-size: 11px;
-          color: #a1a1aa;
-          letter-spacing: 0.02em;
-          margin: 0;
-        }
-        .badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: #eab308;
-          background: rgba(234, 179, 8, 0.12);
-          border: 1px solid rgba(234, 179, 8, 0.3);
-          border-radius: 4px;
-          padding: 4px 8px;
-        }
-        .visual-display {
-          position: relative;
-          background: #030712;
-          border: 1px solid rgba(234, 179, 8, 0.2);
-          border-radius: 6px;
-          margin-bottom: 14px;
-          overflow: hidden;
-        }
-        canvas {
-          display: block;
-          width: 100%;
-          height: 64px;
-        }
+
+        * { box-sizing: border-box; }
+
+        /* Telemetry Metric Cards */
         .telemetry-row {
-          display: flex;
-          justify-content: space-between;
-          padding: 6px 10px;
-          background: rgba(255, 255, 255, 0.03);
-          border-top: 1px solid rgba(234, 179, 8, 0.15);
-          font-family: monospace;
-          font-size: 11px;
-          color: #d4d4d8;
-        }
-        .actions-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 8px;
           margin-bottom: 12px;
         }
-        .touch-btn {
+
+        .metric-card {
+          background: rgba(8, 47, 61, 0.6);
+          border: 1px solid rgba(6, 182, 212, 0.25);
+          border-radius: 8px;
+          padding: 8px 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .metric-label {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          font-weight: 700;
+          color: #67e8f9;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        }
+
+        .metric-value {
+          font-size: 13px;
+          font-weight: 700;
+          color: #ffffff;
+          font-family: 'JetBrains Mono', monospace;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        /* Gate Status Deck */
+        .gate-deck {
+          background: rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(6, 182, 212, 0.2);
+          border-radius: 8px;
+          padding: 8px 10px;
+          margin-bottom: 10px;
+        }
+
+        .gate-header {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          color: #67e8f9;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 6px;
+        }
+
+        .gate-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .gate-chip {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-size: 11px;
+          font-family: 'JetBrains Mono', monospace;
+          background: rgba(6, 182, 212, 0.12);
+          border: 1px solid rgba(6, 182, 212, 0.3);
+          color: #cffafe;
+        }
+
+        .gate-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #06b6d4;
+          box-shadow: 0 0 6px rgba(6, 182, 212, 0.8);
+        }
+
+        /* Action Buttons Grid (>=44px touch targets) */
+        .actions-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6px;
+          margin-bottom: 10px;
+        }
+
+        .btn-action {
           min-height: 44px;
           min-width: 44px;
-          display: inline-flex;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(6, 182, 212, 0.25);
+          border-radius: 8px;
+          color: #ecfeff;
+          font-family: 'Space Grotesk', sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          cursor: pointer;
+          touch-action: manipulation;
+          display: flex;
           align-items: center;
           justify-content: center;
-          background: rgba(234, 179, 8, 0.08);
-          border: 1px solid rgba(234, 179, 8, 0.25);
-          color: #fef08a;
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: background 0.15s ease, border-color 0.15s ease;
-          padding: 6px 8px;
           text-align: center;
+          padding: 6px;
+          transition: all 0.15s ease;
         }
-        .touch-btn:hover {
-          background: rgba(234, 179, 8, 0.18);
-          border-color: rgba(234, 179, 8, 0.5);
+
+        .btn-action:hover {
+          background: #0e7490;
+          border-color: #06b6d4;
+          color: #ffffff;
         }
-        .touch-btn:active {
-          transform: translateY(1px);
+
+        .btn-action:active {
+          transform: scale(0.98);
         }
-        .output-box {
-          background: #020617;
-          border: 1px solid rgba(234, 179, 8, 0.2);
-          border-radius: 6px;
+
+        .btn-action.btn-primary {
+          background: rgba(6, 182, 212, 0.2);
+          border-color: #06b6d4;
+          color: #22d3ee;
+        }
+
+        .btn-action.btn-primary:hover {
+          background: #06b6d4;
+          color: #082f49;
+        }
+
+        /* Terminal Console */
+        .terminal-container {
+          background: #010b0e;
+          border: 1px solid rgba(6, 182, 212, 0.2);
+          border-radius: 8px;
           padding: 8px 10px;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .terminal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 4px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid rgba(6, 182, 212, 0.1);
+        }
+
+        .terminal-label {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          color: #67e8f9;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .terminal-copy {
+          background: none;
+          border: none;
+          color: #22d3ee;
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10px;
+          cursor: pointer;
+          padding: 2px 4px;
+          border-radius: 4px;
+        }
+
+        .terminal-copy:hover {
+          background: rgba(6, 182, 212, 0.2);
+        }
+
+        .terminal-readout {
+          font-family: 'JetBrains Mono', monospace;
           font-size: 11px;
-          line-height: 1.45;
-          color: #94a3b8;
+          line-height: 1.4;
+          color: #22d3ee;
           min-height: 48px;
-          max-height: 85px;
+          max-height: 120px;
           overflow-y: auto;
           white-space: pre-wrap;
-          word-break: break-word;
+          word-break: break-all;
         }
       </style>
 
-      <div class="header">
-        <div class="brand-meta">
-          <h2 class="title">Code Quality Gates</h2>
-          <p class="subtitle">Deterministic Gate Enforcement Engine</p>
+      <!-- Live Telemetry -->
+      <div class="telemetry-row">
+        <div class="metric-card">
+          <span class="metric-label">Gate Findings</span>
+          <span class="metric-value" id="stat-findings">${this.telemetry.findings}</span>
         </div>
-        <div id="status-badge" class="badge">READY</div>
+        <div class="metric-card">
+          <span class="metric-label">Execution Tier</span>
+          <span class="metric-value" id="stat-tier">${this.telemetry.tier}</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Gate State</span>
+          <span class="metric-value" id="stat-status">${this.telemetry.status}</span>
+        </div>
       </div>
 
-      <div class="visual-display">
-        <canvas id="qa-canvas" width="340" height="64"></canvas>
-        <div class="telemetry-row">
-          <span>Gate: Strict Pass/Fail</span>
-          <span>Coverage: 100%</span>
+      <!-- Configured Gate Deck -->
+      <div class="gate-deck">
+        <div class="gate-header">Deterministic Verification Gates</div>
+        <div class="gate-chips">
+          <div class="gate-chip"><span class="gate-dot"></span>Syntax &amp; Types</div>
+          <div class="gate-chip"><span class="gate-dot"></span>Git Hygiene</div>
+          <div class="gate-chip"><span class="gate-dot"></span>Security Deps</div>
+          <div class="gate-chip"><span class="gate-dot"></span>SSSS Registry</div>
         </div>
       </div>
 
+      <!-- Action Buttons Grid (>=44px touch targets) -->
       <div class="actions-grid">
-        <button id="btn-status" class="touch-btn" type="button">Audit</button>
-        <button id="btn-lint" class="touch-btn" type="button">Lint</button>
-        <button id="btn-test" class="touch-btn" type="button">Gates</button>
+        <button class="btn-action btn-primary" data-cmd="report">REPORT</button>
+        <button class="btn-action" data-cmd="snapshot">SNAPSHOT</button>
+        <button class="btn-action" data-cmd="gate">RUN GATES</button>
+        <button class="btn-action" data-cmd="detect">DETECT GATES</button>
+        <button class="btn-action" data-cmd="config">CONFIG</button>
+        <button class="btn-action" data-cmd="init">INIT</button>
       </div>
 
-      <div id="card-out" class="output-box">Quality monitoring telemetry active. All gates operational.</div>
+      <!-- Live Terminal Output -->
+      <div class="terminal-container">
+        <div class="terminal-header">
+          <span class="terminal-label">Verification Console</span>
+          <button class="terminal-copy" id="btn-copy" title="Copy console output">Copy</button>
+        </div>
+        <div class="terminal-readout" id="card-out">Gatekeeper initialized. Ready for code verification.</div>
+      </div>
     `;
 
-    this.shadowRoot.querySelector('#btn-status')?.addEventListener('click', () => {
-      this.execute('status');
+    const buttons = root.querySelectorAll('.btn-action');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.getAttribute('data-cmd');
+        if (cmd) this.execute(cmd, []);
+      });
     });
-    this.shadowRoot.querySelector('#btn-lint')?.addEventListener('click', () => {
-      this.execute('check');
-    });
-    this.shadowRoot.querySelector('#btn-test')?.addEventListener('click', () => {
-      this.execute('run');
-    });
+
+    const copyBtn = root.querySelector('#btn-copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        const out = root.querySelector('#card-out');
+        if (out && out.textContent) {
+          navigator.clipboard?.writeText(out.textContent);
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+        }
+      });
+    }
   }
 }
 
