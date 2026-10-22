@@ -19,9 +19,9 @@
 - [x] Plugin 01/34: `auth` recipe & card overhaul (live passkey/OAuth status, 6 domain controls, console copy)
 - [x] Plugin 02/34: `cli-agents` recipe & card overhaul (discovered agent matrix, node target telemetry, 6 verbs)
 - [x] Plugin 03/34: `code-quality` recipe & card overhaul (purged fake oscilloscope, deterministic gate matrix, fail-closed telemetry)
-- [ ] Plugin 04/34: `composable-cli` recipe & card overhaul
-- [ ] Plugin 05/34: `creative-search` recipe & card overhaul
-- [ ] Plugin 06/34: `decision` recipe & card overhaul
+- [x] Plugin 04/34: `composable-cli` recipe & card overhaul (purged fake canvas animation, live command inventory, target input, 6 verbs)
+- [x] Plugin 05/34: `creative-search` recipe & card overhaul (purged fake radar canvas and winamp skin, live SearXNG health, multi-category chips, 6 verbs)
+- [x] Plugin 06/34: `decision` recipe & card overhaul (purged fake radar sweep, live decision sets, provider-neutral Field Copilot telemetry, 6 verbs)
 - [ ] Plugin 07/34: `deploy` recipe & card overhaul
 - [ ] Plugin 08/34: `design` recipe & card overhaul
 - [ ] Plugin 09/34: `domains` recipe & card overhaul
@@ -71,3 +71,6 @@
 | 2026-10-22T15:58:00Z | Antigravity | Overhauled Plugin 01 (auth) card face | Live telemetry for passkeys and OAuth, 6 administrative actions, live terminal copy |
 | 2026-10-22T16:00:00Z | Antigravity | Overhauled Plugin 02 (cli-agents) card face | Multi-agent discovery matrix, target node telemetry, 6 management actions |
 | 2026-10-22T16:01:00Z | Antigravity | Overhauled Plugin 03 (code-quality) card face | Purged illegal fake waveform canvas, added real deterministic gate matrix and fail-closed telemetry |
+| 2026-10-22T16:04:00Z | Antigravity | Overhauled Plugin 04 (composable-cli) card face | Purged fake canvas flow animation, built bespoke CmdSmith UI with live inventory, target selector, 6 verbs, all 28 tests pass |
+| 2026-10-22T16:07:00Z | Antigravity | Overhauled Plugin 05 (creative-search) card face | Purged fake radar canvas and winamp-classic skin, fixed legacy engineGroups config breakage, live SearXNG health and categories |
+| 2026-10-22T16:09:00Z | Antigravity | Overhauled Plugin 06 (decision) card face | Purged fake radar sweep, fixed auth-client test breakage, implemented provider-neutral Field Copilot telemetry, all 32 tests pass |

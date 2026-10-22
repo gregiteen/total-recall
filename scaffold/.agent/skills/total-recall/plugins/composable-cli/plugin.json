@@ -118,30 +118,30 @@
     }
   ],
   "card_face": {
-    "skin": "studio-rack",
+    "skin": "cyber-forge",
     "theme": "vibrant",
     "headline": "Dynamic Agent Command Composition",
-    "primary_color": "#14b8a6",
-    "secondary_color": "#134e4a",
-    "accent_color": "#2dd4bf",
+    "primary_color": "#0891b2",
+    "secondary_color": "#083344",
+    "accent_color": "#06b6d4",
     "touch_layout": "comfortable",
     "interactive": true,
     "quick_actions": [
       {
-        "subcommand": "status",
-        "label": "STATUS"
+        "subcommand": "library",
+        "label": "LIBRARY"
       },
       {
-        "subcommand": "create",
-        "label": "CREATE"
+        "subcommand": "list",
+        "label": "LIST"
       },
       {
-        "subcommand": "read",
-        "label": "READ"
+        "subcommand": "show",
+        "label": "SHOW"
       },
       {
-        "subcommand": "update",
-        "label": "UPDATE"
+        "subcommand": "history",
+        "label": "HISTORY"
       }
     ]
   },
