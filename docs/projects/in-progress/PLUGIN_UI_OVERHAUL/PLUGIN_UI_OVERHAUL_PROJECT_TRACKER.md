@@ -28,9 +28,9 @@
 - [x] Plugin 10/34: `dsh` recipe & card overhaul (purged fake synapse canvas and winamp skin, live profile telemetry, tool inventory, 6 verbs)
 - [x] Plugin 11/34: `embeddings` recipe & card overhaul (purged fake vector scatter canvas, live local model telemetry, vault coverage inspector, 6 verbs)
 - [x] Plugin 12/34: `git-sentinel` recipe & card overhaul (purged fake pulse canvas, live branch and worktree hygiene telemetry, diffstat, 4 verbs)
-- [ ] Plugin 13/34: `hermes` recipe & card overhaul
-- [ ] Plugin 14/34: `image-generator` recipe & card overhaul
-- [ ] Plugin 15/34: `maps` recipe & card overhaul
+- [x] Plugin 13/34: `hermes` recipe & card overhaul (purged fake pulse canvas, live runtime and gateway supervisor telemetry, task dispatch, 6 verbs)
+- [x] Plugin 14/34: `image-generator` recipe & card overhaul (purged fake prism canvas, live fal.ai model profiles, aspect ratio chips, prompt generator)
+- [x] Plugin 15/34: `maps` recipe & card overhaul (purged fake radar canvas and winamp skin, live Google Maps telemetry, location input, geocoding & routing)
 - [ ] Plugin 16/34: `marketing` recipe & card overhaul
 - [ ] Plugin 17/34: `mesh` recipe & card overhaul
 - [ ] Plugin 18/34: `okf` recipe & card overhaul
@@ -80,3 +80,6 @@
 | 2026-10-22T16:14:00Z | Antigravity | Overhauled Plugin 10 (dsh) card face | Purged fake synapse canvas and winamp-classic skin, implemented neutral Field Copilot harness telemetry, all 4 tests pass |
 | 2026-10-22T16:15:00Z | Antigravity | Overhauled Plugin 11 (embeddings) card face | Purged fake vector scatter canvas, implemented local Ollama model telemetry, vault coverage inspector, all 11 tests pass |
 | 2026-10-22T16:16:00Z | Antigravity | Overhauled Plugin 12 (git-sentinel) card face | Purged fake pulse canvas, implemented live worktree hygiene and branch telemetry, all 9 tests pass |
+| 2026-10-22T16:18:00Z | Antigravity | Overhauled Plugin 13 (hermes) card face | Purged fake pulse canvas, implemented live supervisor and gateway telemetry, task dispatch, all 2 tests pass |
+| 2026-10-22T16:19:00Z | Antigravity | Overhauled Plugin 14 (image-generator) card face | Purged fake prism canvas, implemented live fal model profiles, aspect ratio chips, all 7 tests pass |
+| 2026-10-22T16:20:00Z | Antigravity | Overhauled Plugin 15 (maps) card face | Purged fake radar canvas and winamp skin, implemented live Google Maps telemetry, location input and geocoding, all 11 tests pass |
