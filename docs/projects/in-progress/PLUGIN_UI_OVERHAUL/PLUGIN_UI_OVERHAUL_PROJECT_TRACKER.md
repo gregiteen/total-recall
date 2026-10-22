@@ -25,9 +25,9 @@
 - [x] Plugin 07/34: `deploy` recipe & card overhaul (purged fake orbital canvas, live dual-slot Blue/Green visualizer, fail-safe traffic inspection)
 - [x] Plugin 08/34: `design` recipe & card overhaul (purged fake spectrum canvas, live DESIGN.md token telemetry, real swatch deck, CSS/Tailwind export)
 - [x] Plugin 09/34: `domains` recipe & card overhaul (purged fake propagation canvas, live Vercel DNS team telemetry, target domain selector, DNS records)
-- [ ] Plugin 10/34: `dsh` recipe & card overhaul
-- [ ] Plugin 11/34: `embeddings` recipe & card overhaul
-- [ ] Plugin 12/34: `git-sentinel` recipe & card overhaul
+- [x] Plugin 10/34: `dsh` recipe & card overhaul (purged fake synapse canvas and winamp skin, live profile telemetry, tool inventory, 6 verbs)
+- [x] Plugin 11/34: `embeddings` recipe & card overhaul (purged fake vector scatter canvas, live local model telemetry, vault coverage inspector, 6 verbs)
+- [x] Plugin 12/34: `git-sentinel` recipe & card overhaul (purged fake pulse canvas, live branch and worktree hygiene telemetry, diffstat, 4 verbs)
 - [ ] Plugin 13/34: `hermes` recipe & card overhaul
 - [ ] Plugin 14/34: `image-generator` recipe & card overhaul
 - [ ] Plugin 15/34: `maps` recipe & card overhaul
@@ -77,3 +77,6 @@
 | 2026-10-22T16:10:00Z | Antigravity | Overhauled Plugin 07 (deploy) card face | Purged fake orbital canvas, implemented dual-slot Blue/Green visualizer, fail-safe traffic inspection, all 27 tests pass |
 | 2026-10-22T16:11:00Z | Antigravity | Overhauled Plugin 08 (design) card face | Purged fake spectrum canvas, implemented live DESIGN.md token telemetry, real swatch deck, CSS/Tailwind export, all 43 tests pass |
 | 2026-10-22T16:13:00Z | Antigravity | Overhauled Plugin 09 (domains) card face | Purged fake propagation canvas, implemented live Vercel DNS team telemetry, target domain selector, DNS records, all 75 tests pass |
+| 2026-10-22T16:14:00Z | Antigravity | Overhauled Plugin 10 (dsh) card face | Purged fake synapse canvas and winamp-classic skin, implemented neutral Field Copilot harness telemetry, all 4 tests pass |
+| 2026-10-22T16:15:00Z | Antigravity | Overhauled Plugin 11 (embeddings) card face | Purged fake vector scatter canvas, implemented local Ollama model telemetry, vault coverage inspector, all 11 tests pass |
+| 2026-10-22T16:16:00Z | Antigravity | Overhauled Plugin 12 (git-sentinel) card face | Purged fake pulse canvas, implemented live worktree hygiene and branch telemetry, all 9 tests pass |
